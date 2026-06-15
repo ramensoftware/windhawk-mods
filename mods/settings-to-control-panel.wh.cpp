@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **NEW in 10.0.2: Option to redirect Audio & Network system tray icons to classic panels**
+- **NEW in 10.0.2: Option to redirect Audio & Network system tray icons to classic panels (Tested in Windows 10 21H2)**
 
 ---
 
@@ -70,7 +70,6 @@ Control Panel target instead of the modern Settings app.
 - m417z – Code reviews and feedback
 - Anixx – Testing on Windows 11 23H2
 - dbilanoski – CLSID documentation
-- cerdopalo & AI – System tray redirect logic
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -104,12 +103,6 @@ Control Panel target instead of the modern Settings app.
 #include <windows.h>
 #include <objbase.h>
 #include <shellapi.h>
-#include <string>
-#include <algorithm>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-#include <mutex>   
 #include <initguid.h>  
 
 // Dynamic COM handling - no linking required
@@ -151,16 +144,30 @@ static constexpr UINT CMD_OPEN_SOUND_SETTINGS   = 40012;
 static constexpr UINT CMD_SOUNDS                = 40007;
 static constexpr UINT CMD_OPEN_NETWORK_SETTINGS = 3109;
 
-// Mappatura dei comandi del menu contestuale della tray
-static const std::unordered_map<UINT, std::wstring> g_trayCommandMappings = {
-    {CMD_OPEN_SOUND_SETTINGS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
-    {CMD_SOUNDS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
-    {CMD_OPEN_NETWORK_SETTINGS, L"control.exe ncpa.cpl"}
+// Struttura per la mappatura dei comandi del menu contestuale della tray
+struct TrayCommandMapping {
+    UINT commandId;
+    const wchar_t* target;
 };
 
-// Core resolve logic struct - MUST be defined before use
+static const TrayCommandMapping g_trayCommandMappings[] = {
+    {CMD_OPEN_SOUND_SETTINGS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
+    {CMD_SOUNDS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
+    {CMD_OPEN_NETWORK_SETTINGS, L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"}
+};
+
+static const wchar_t* FindTrayCommand(UINT cmd) {
+    for (size_t i = 0; i < sizeof(g_trayCommandMappings)/sizeof(g_trayCommandMappings[0]); i++) {
+        if (g_trayCommandMappings[i].commandId == cmd) {
+            return g_trayCommandMappings[i].target;
+        }
+    }
+    return nullptr;
+}
+
+// Core resolve logic struct
 struct ResolveResult {
-    std::wstring target;
+    const wchar_t* target;
     bool intercept;
 };
 
@@ -174,24 +181,27 @@ struct HookGuard {
 };
 
 // Cross-process reentry guard
-static std::wstring g_childEnvBlock;
-
+static wchar_t g_childEnvBlock[32768] = {0};
 static void BuildChildEnvironment() {
     LPWCH curEnv = GetEnvironmentStringsW();
+    size_t pos = 0;
     if (curEnv) {
         LPWCH p = curEnv;
-        while (*p) {
-            std::wstring entry(p);
-            if (entry.find(L"WH_STC_NOREDIRECT=") != 0) {
-                g_childEnvBlock += entry + L'\0';
+        while (*p && pos < sizeof(g_childEnvBlock)/sizeof(wchar_t) - 100) {
+            size_t len = wcslen(p);
+            if (wcsncmp(p, L"WH_STC_NOREDIRECT=", 19) != 0) {
+                wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, p);
+                pos += len;
+                g_childEnvBlock[pos++] = L'\0';
             }
-            p += entry.length() + 1;
+            p += len + 1;
         }
         FreeEnvironmentStringsW(curEnv);
     }
-    g_childEnvBlock += L"WH_STC_NOREDIRECT=1\0\0";
+    wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, L"WH_STC_NOREDIRECT=1\0");
+    g_childEnvBlock[pos + 19] = L'\0';
+    g_childEnvBlock[pos + 20] = L'\0';
 }
-
 static bool IsChildProcess() {
     return GetEnvironmentVariableW(L"WH_STC_NOREDIRECT", nullptr, 0) > 0;
 }
@@ -199,7 +209,7 @@ static bool IsChildProcess() {
 // Settings
 struct ModSettings {
     bool enableRedirects = true;
-    bool redirectSystemTray = false; // Nuova opzione
+    bool redirectSystemTray = false;
     bool uiOnlyRedirects = false;
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
@@ -210,7 +220,7 @@ static ModSettings g_settings;
 
 static void LoadSettings() {
     g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
-    g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0; // Carica la nuova opzione
+    g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0;
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
 
     PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
@@ -249,486 +259,501 @@ static void DetectWindowsVersion() {
     Wh_Log(L"Build %lu IsWin11=%d", osvi.dwBuildNumber, (int)g_isWin11);
 }
 
-// Bounce-back guard
+// Bounce-back guard using simple arrays
+#define MAX_BOUNCE_RECORDS 100
 struct BounceRecord {
-    DWORD lastRedirectTick = 0;
+    wchar_t uri[256];
+    DWORD lastRedirectTick;
 };
 
-static std::mutex g_bounceGuardMtx;
-static std::unordered_map<std::wstring, BounceRecord> g_bounceGuard;
+static BounceRecord g_bounceGuard[MAX_BOUNCE_RECORDS];
+static int g_bounceCount = 0;
+static CRITICAL_SECTION g_bounceGuardCs;
 
 static constexpr DWORD BOUNCE_WINDOW_MS = 3000;
 
-static void BounceGuardRecord(const std::wstring& uri) {
-    std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
-    g_bounceGuard[uri].lastRedirectTick = GetTickCount();
+static void BounceGuardRecord(const wchar_t* uri) {
+    EnterCriticalSection(&g_bounceGuardCs);
+    
+    for (int i = 0; i < g_bounceCount; i++) {
+        if (wcscmp(g_bounceGuard[i].uri, uri) == 0) {
+            g_bounceGuard[i].lastRedirectTick = GetTickCount();
+            LeaveCriticalSection(&g_bounceGuardCs);
+            return;
+        }
+    }
+    
+    if (g_bounceCount < MAX_BOUNCE_RECORDS) {
+        wcscpy_s(g_bounceGuard[g_bounceCount].uri, 256, uri);
+        g_bounceGuard[g_bounceCount].lastRedirectTick = GetTickCount();
+        g_bounceCount++;
+    }
+    LeaveCriticalSection(&g_bounceGuardCs);
 }
 
-static bool BounceGuardIsBounce(const std::wstring& uri) {
-    std::lock_guard<std::mutex> lk(g_bounceGuardMtx);
-    auto it = g_bounceGuard.find(uri);
-    if (it == g_bounceGuard.end()) return false;
-    DWORD elapsed = GetTickCount() - it->second.lastRedirectTick;
-    if (elapsed < BOUNCE_WINDOW_MS) {
-        Wh_Log(L"BOUNCE-BACK: '%s' returned %lu ms after redirect — target is dead, routing to fallback",
-               uri.c_str(), elapsed);
-        it->second.lastRedirectTick = 0;
-        return true;
+static bool BounceGuardIsBounce(const wchar_t* uri) {
+    EnterCriticalSection(&g_bounceGuardCs);
+    for (int i = 0; i < g_bounceCount; i++) {
+        if (wcscmp(g_bounceGuard[i].uri, uri) == 0) {
+            DWORD elapsed = GetTickCount() - g_bounceGuard[i].lastRedirectTick;
+            if (elapsed < BOUNCE_WINDOW_MS) {
+                Wh_Log(L"BOUNCE-BACK: '%s' returned %lu ms after redirect", uri, elapsed);
+                g_bounceGuard[i].lastRedirectTick = 0;
+                LeaveCriticalSection(&g_bounceGuardCs);
+                return true;
+            }
+            LeaveCriticalSection(&g_bounceGuardCs);
+            return false;
+        }
     }
+    LeaveCriticalSection(&g_bounceGuardCs);
     return false;
 }
 
-// Loop guard
+// Loop guard using simple arrays
+#define MAX_LAUNCH_RECORDS 100
 struct LaunchRecord {
-    int count = 0;
-    DWORD firstTick = 0;
+    wchar_t target[256];
+    int count;
+    DWORD firstTick;
 };
 
-static std::mutex g_loopGuardMtx;
-static std::unordered_map<std::wstring, LaunchRecord> g_loopGuard;
+static LaunchRecord g_loopGuard[MAX_LAUNCH_RECORDS];
+static int g_loopCount = 0;
+static CRITICAL_SECTION g_loopGuardCs;
 
 static constexpr DWORD LOOP_WINDOW_MS = 5000;
 
-static bool LoopGuardAllow(const std::wstring& target) {
+static bool LoopGuardAllow(const wchar_t* target) {
     if (g_settings.maxLaunchesPerUri <= 0) return true;
 
-    std::lock_guard<std::mutex> lk(g_loopGuardMtx);
+    EnterCriticalSection(&g_loopGuardCs);
     DWORD now = GetTickCount();
-    auto& rec = g_loopGuard[target];
-
-    if (rec.count == 0 || (now - rec.firstTick) >= LOOP_WINDOW_MS) {
-        rec.count = 1;
-        rec.firstTick = now;
+    
+    for (int i = 0; i < g_loopCount; i++) {
+        if (wcscmp(g_loopGuard[i].target, target) == 0) {
+            if (g_loopGuard[i].count == 0 || (now - g_loopGuard[i].firstTick) >= LOOP_WINDOW_MS) {
+                g_loopGuard[i].count = 1;
+                g_loopGuard[i].firstTick = now;
+                LeaveCriticalSection(&g_loopGuardCs);
+                return true;
+            }
+            
+            if (g_loopGuard[i].count < g_settings.maxLaunchesPerUri) {
+                g_loopGuard[i].count++;
+                LeaveCriticalSection(&g_loopGuardCs);
+                return true;
+            }
+            
+            Wh_Log(L"LOOP GUARD: suppressing launch of '%s' (%d times in %lu ms)", 
+                   target, g_loopGuard[i].count, (now - g_loopGuard[i].firstTick));
+            LeaveCriticalSection(&g_loopGuardCs);
+            return false;
+        }
+    }
+    
+    if (g_loopCount < MAX_LAUNCH_RECORDS) {
+        wcscpy_s(g_loopGuard[g_loopCount].target, 256, target);
+        g_loopGuard[g_loopCount].count = 1;
+        g_loopGuard[g_loopCount].firstTick = now;
+        g_loopCount++;
+        LeaveCriticalSection(&g_loopGuardCs);
         return true;
     }
-
-    if (rec.count < g_settings.maxLaunchesPerUri) {
-        rec.count++;
-        return true;
-    }
-
-    Wh_Log(L"LOOP GUARD: suppressing launch of '%s' (%d times in %lu ms)", target.c_str(), rec.count, (now - rec.firstTick));
-    return false;
+    
+    LeaveCriticalSection(&g_loopGuardCs);
+    return true;
 }
 
 // CLSID classification
-static const std::unordered_set<std::wstring> g_win11SafeClsids = {
-    L"shell:::{8e908fc9-becc-40f6-915b-f4ca0e70d03d}",
-    L"shell:::{7007acc7-3202-11d1-aad2-00805fc1270e}",
-    L"shell:::{a8a91a66-3a7d-4424-8d24-04e180695c7a}",
-    L"shell:::{4026492f-2f69-46b8-b9bf-5654fc07e423}",
-    L"shell:::{20d04fe0-3aea-1069-a2d8-08002b30309d}",
-    L"shell:::{60632754-c523-4b62-b45c-4172da012619}",
-    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}",
-    L"shell:::{2227a280-3aea-1069-a2de-08002b30309d}",
-    L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}",
-    L"shell:::{9c60de1e-e5fc-40f4-a487-460851a8d915}",
-    L"shell:::{b98a2bea-7d42-4558-8bd1-832f41bac6fd}",
-    L"shell:::{bd84b380-8ca2-1069-ab1d-08000948f534}",
-    L"shell:::{d9ef8727-cac2-4e60-809e-86f80a666c91}",
-    L"shell:::{c58c4893-3be0-4b45-abb5-a63e4b8c8651}",
-    L"shell:::{6dfd7c5c-2451-11d3-a299-00c04f8ef6af}",
-    L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}",
-    L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}",
-    L"shell:::{26ee0668-a00a-44d7-9371-beb064c98683}",
-    L"shell:::{725be8f7-668e-4c7b-8f90-46bdb0936430}",
-    L"shell:::{f02c1a0d-be21-4350-88b0-7367fc96ef3c}",
-    L"shell:::{bb64f8a7-bee7-4e1a-ab8d-7d8273f7fdb6}",
+static const wchar_t* g_win11SafeClsids[] = {
     L"shell:::{025a5937-a6be-4686-a844-36fe4bec8b6d}",
-    L"shell:::{d17d1d6d-cc3f-4815-8fe3-607e7d5d10b3}",
+    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}",
+    L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}",
+    L"shell:::{20d04fe0-3aea-1069-a2d8-08002b30309d}",
+    L"shell:::{2227a280-3aea-1069-a2de-08002b30309d}",
+    L"shell:::{26ee0668-a00a-44d7-9371-beb064c98683}",
+    L"shell:::{4026492f-2f69-46b8-b9bf-5654fc07e423}",
+    L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}",
+    L"shell:::{60632754-c523-4b62-b45c-4172da012619}",
+    L"shell:::{6dfd7c5c-2451-11d3-a299-00c04f8ef6af}",
+    L"shell:::{7007acc7-3202-11d1-aad2-00805fc1270e}",
+    L"shell:::{725be8f7-668e-4c7b-8f90-46bdb0936430}",
     L"shell:::{7a9d77bd-5403-11d2-8785-2e0420524153}",
+    L"shell:::{8e908fc9-becc-40f6-915b-f4ca0e70d03d}",
+    L"shell:::{9c60de1e-e5fc-40f4-a487-460851a8d915}",
+    L"shell:::{a8a91a66-3a7d-4424-8d24-04e180695c7a}",
+    L"shell:::{b98a2bea-7d42-4558-8bd1-832f41bac6fd}",
+    L"shell:::{bb64f8a7-bee7-4e1a-ab8d-7d8273f7fdb6}",
+    L"shell:::{bd84b380-8ca2-1069-ab1d-08000948f534}",
+    L"shell:::{c58c4893-3be0-4b45-abb5-a63e4b8c8651}",
+    L"shell:::{d17d1d6d-cc3f-4815-8fe3-607e7d5d10b3}",
+    L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}",
+    L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}",
+    L"shell:::{d9ef8727-cac2-4e60-809e-86f80a666c91}",
     L"shell:::{ecd0924-4208-451e-8ee0-373c0956de16}",
     L"shell:::{ed7ba470-8e54-465e-825c-99712043e01c}",
-    L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}",
+    L"shell:::{f02c1a0d-be21-4350-88b0-7367fc96ef3c}",
 };
 
-static const std::unordered_set<std::wstring> g_win11LoopClsids = {
-    L"shell:::{bb06c0e4-d293-4f75-8a90-cb05b6477eee}",
-    L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}",
+static const wchar_t* g_win11LoopClsids[] = {
     L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}",
     L"shell:::{80f3f1d5-feca-45f3-bc32-752c152e456e}",
     L"shell:::{9fe63afd-59cf-4419-9775-abcc3849f861}",
+    L"shell:::{bb06c0e4-d293-4f75-8a90-cb05b6477eee}",
+    L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}",
 };
 
-static const std::unordered_set<std::wstring> g_win11NoForceRedirect = {
-    L"ms-settings:defaultapps",
-    L"ms-settings:appsfeatures",
-    L"ms-settings:network",
-    L"ms-settings:bluetooth",
-    L"ms-settings:printers",
-};
-
-static bool IsClsidSafeOnWin11(const std::wstring& lowerTarget) {
-    return g_win11SafeClsids.count(lowerTarget) > 0;
+static bool IsInArray(const wchar_t* const* arr, size_t count, const wchar_t* value) {
+    for (size_t i = 0; i < count; i++) {
+        if (wcscmp(arr[i], value) == 0) return true;
+    }
+    return false;
 }
 
-static bool IsClsidLoopOnWin11(const std::wstring& lowerTarget) {
-    std::wstring base = lowerTarget;
-    size_t brace = base.rfind(L'}');
-    if (brace != std::wstring::npos && brace + 1 < base.size())
-        base = base.substr(0, brace + 1);
-    return g_win11LoopClsids.count(base) > 0;
+static bool IsClsidSafeOnWin11(const wchar_t* lowerTarget) {
+    return IsInArray(g_win11SafeClsids, sizeof(g_win11SafeClsids)/sizeof(g_win11SafeClsids[0]), lowerTarget);
+}
+
+static bool IsClsidLoopOnWin11(const wchar_t* lowerTarget) {
+    wchar_t base[256];
+    wcscpy_s(base, 256, lowerTarget);
+    wchar_t* brace = wcsrchr(base, L'}');
+    if (brace && *(brace + 1) != L'\0') {
+        *(brace + 1) = L'\0';
+    }
+    return IsInArray(g_win11LoopClsids, sizeof(g_win11LoopClsids)/sizeof(g_win11LoopClsids[0]), base);
 }
 
 // String utilities
-static std::wstring ToLower(std::wstring s) {
-    std::transform(s.begin(), s.end(), s.begin(), ::towlower);
-    return s;
+static void ToLowerC(wchar_t* s) {
+    while (*s) {
+        if (*s >= L'A' && *s <= L'Z') *s += 32;
+        s++;
+    }
 }
 
-// Mappings
-static std::unordered_map<std::wstring, std::wstring> g_mappings;
+static wchar_t* ToLowerCopy(const wchar_t* s) {
+    static thread_local wchar_t buf[512];
+    wcscpy_s(buf, 512, s);
+    ToLowerC(buf);
+    return buf;
+}
 
-static void InitMappings() {
+// URI mapping structure
+struct UriMapping {
+    const wchar_t* uri;
+    const wchar_t* target;
+};
+
+// All mappings as static array
+static const UriMapping g_allMappings[] = {
+    // Personalization
+    {L"ms-settings:personalization", PERS_ROOT},
+    {L"ms-settings:personalization-colors", PERS_COLORS},
+    {L"ms-settings:colors", PERS_COLORS},
+    {L"ms-settings:themes", PERS_ROOT},
+    {L"ms-settings:lockscreen", PERS_ROOT},
+    {L"ms-settings:personalization-start", PERS_ROOT},
+    {L"ms-settings:personalization-start-places", PERS_ROOT},
+    {L"ms-settings:background", PERS_WALLPAPER},
+    {L"ms-settings:personalization-background-wallpaper", PERS_WALLPAPER},
+    {L"ms-settings:personalization-background-slideshow", PERS_WALLPAPER},
+    
+    // Fonts & Color
+    {L"ms-settings:fonts", L"shell:::{BD84B380-8CA2-1069-AB1D-08000948F534}"},
+    {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
+    {L"ms-settings:colorcpl", L"colorcpl.exe"},
+    
+    // Display
+    {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+    {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+    {L"ms-settings:display-adapter-properties", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+    {L"ms-settings:display-resolution", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+    {L"ms-settings:screenrotation", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
+    
+    // System
+    {L"ms-settings:about", nullptr},
+    {L"ms-settings:system", nullptr},
+    {L"ms-settings:sysinfo", nullptr},
+    {L"ms-settings:system-about", nullptr},
+    {L"ms-settings:system-protection", L"sysdm.cpl,,4"},
+    {L"ms-settings:system-remotedesktop", L"sysdm.cpl,,5"},
+    {L"ms-settings:remotedesktop", L"sysdm.cpl,,5"},
+    {L"ms-settings:devicemanager", L"devmgmt.msc"},
+    {L"ms-settings:system-devicemanager", L"devmgmt.msc"},
+    {L"ms-settings:computermanagement", L"compmgmt.msc"},
+    {L"ms-settings:activation", L"slui.exe"},
+    {L"ms-settings:appsfeatures", L"appwiz.cpl"},
+    {L"ms-settings:appsforwebsites", L"appwiz.cpl"},
+    {L"ms-settings:optionalfeatures", L"OptionalFeatures.exe"},
+    {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
+    
+    // Power
+    {L"ms-settings:powersleep", L"powercfg.cpl"},
+    {L"ms-settings:battery", L"powercfg.cpl"},
+    {L"ms-settings:batterysaver", L"powercfg.cpl"},
+    {L"ms-settings:batterysaver-settings", L"powercfg.cpl"},
+    {L"ms-settings:batterysaver-usagedetails", L"powercfg.cpl"},
+    
+    // Sound
+    {L"ms-settings:audio", L"mmsys.cpl"},
+    {L"ms-settings:sound-control-panel", L"control.exe /name Microsoft.Sound"},
+    {L"ms-settings:sound-playback", L"control.exe mmsys.cpl,,0"},
+    {L"ms-settings:sound-recording", L"control.exe mmsys.cpl,,1"},
+    {L"ms-settings:sound-sounds", L"control.exe mmsys.cpl,,2"},
+    {L"ms-settings:sound-volume-flyout", L"sndvol.exe -f"},
+    {L"ms-settings:sound-devices", L"control.exe mmsys.cpl,,0"},
+    {L"ms-settings:sound-output", L"control.exe mmsys.cpl,,0"},
+    {L"ms-settings:sound-input", L"control.exe mmsys.cpl,,1"},
+    {L"ms-settings:apps-volume", L"control.exe mmsys.cpl,,0"},
+    {L"ms-settings:sound", L"control.exe mmsys.cpl,,0"},
+    
+    // Notifications / Taskbar
+    {L"ms-settings:notifications", NOTIF_AREA_CLSID},
+    {L"ms-settings:taskbar-notifications", NOTIF_AREA_CLSID},
+    {L"ms-settings:taskbar-systemtray", NOTIF_AREA_CLSID},
+    {L"ms-settings:notifications-systemtray", NOTIF_AREA_CLSID},
+    {L"ms-settings:systemtray", NOTIF_AREA_CLSID},
+    {L"ms-settings:notificationiconpreferences", NOTIF_AREA_CLSID},
+    
+    // Input devices
+    {L"ms-settings:mousetouchpad", L"main.cpl"},
+    {L"ms-settings:devices-touchpad", L"main.cpl"},
+    {L"ms-settings:keyboard", L"main.cpl,,1"},
+    {L"ms-settings:typing", L"main.cpl,,1"},
+    {L"ms-settings:pen", nullptr},
+    {L"ms-settings:pen-windowsink", nullptr},
+    {L"ms-settings:pen-windowsinksettings", nullptr},
+    {L"ms-settings:devices-touch", nullptr},
+    {L"ms-settings:autoplay", L"shell:::{9C60DE1E-E5FC-40f4-A487-460851A8D915}"},
+    
+    // Devices / Printers
+    {L"ms-settings:printers", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:printers-scanners", L"shell:::{2227A280-3AEA-1069-A2DE-08002B30309D}"},
+    {L"ms-settings:bluetooth", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:usb", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:connecteddevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:mobile-devices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:camera", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    {L"ms-settings:privacy-customdevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
+    
+    // Network - CORRETTI con "explorer shell:::"
+    {L"ms-settings:network", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-wifi", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-ethernet", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-vpn", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-airplanemode", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-mobilehotspot", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-cellular", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:datausage", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:network-proxy", L"inetcpl.cpl,,4"},
+    {L"ms-settings:network-status", L"explorer shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-dialup", L"explorer shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-advancedsettings", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    {L"ms-settings:firewall", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:network-firewall", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:windowsdefender", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:network-places", L"explorer shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
+    
+    // Accounts
+    {L"ms-settings:yourinfo", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
+    {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
+    {L"ms-settings:emailandaccounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
+    {L"ms-settings:accounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
+    {L"ms-settings:startupapps", L"msconfig.exe"},
+    {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
+    {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
+    
+    // Default Apps
+    {L"ms-settings:defaultapps", nullptr},
+    
+    // Time & Language
+    {L"ms-settings:dateandtime", L"timedate.cpl"},
+    {L"ms-settings:dateandtime-region", L"timedate.cpl"},
+    {L"ms-settings:dateandtime-addclocks", L"timedate.cpl,,1"},
+    {L"ms-settings:regionlanguage", L"intl.cpl"},
+    {L"ms-settings:regionformatting", L"intl.cpl"},
+    {L"ms-settings:language", L"intl.cpl"},
+    
+    // Ease of Access
+    {L"ms-settings:easeofaccess", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-narrator", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-magnifier", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-speech", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-colorfilter", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-display", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-uiaccess", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-highcontrast", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-closedcaptioning", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-audio", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-mouse", EASE_OF_ACCESS},
+    {L"ms-settings:easeofaccess-keyboard", EASE_OF_ACCESS},
+    
+    // Recovery / Backup / Troubleshooting
+    {L"ms-settings:backup", L"shell:::{B98A2BEA-7D42-4558-8BD1-832F41BAC6FD}"},
+    {L"ms-settings:recovery", nullptr},
+    {L"ms-settings:troubleshoot", nullptr},
+    {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
+    
+    // Gaming
+    {L"ms-settings:gaming-gamebar", L"joy.cpl"},
+    
+    // File Explorer Options
+    {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
+    
+    // Get Programs (modern: Apps & Features)
+    {L"ms-settings:appsfeatures-app", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
+    
+    // Installed Updates
+    {L"ms-settings:windowsupdate-history", L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}"},
+    
+    // Troubleshoot history
+    {L"ms-settings:troubleshoot-history", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
+    
+    // Keyboard
+    {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+    {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
+    
+    // Problem Details / Reports
+    {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
+    {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
+    {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
+    {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
+    
+    // Speech Properties
+    {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
+    
+    // Search Troubleshooting
+    {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
+    
+    // Control Panel All Tasks
+    {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
+    
+    // Sign-in options
+    {L"ms-settings:signinoptions", L"netplwiz"},
+    {L"ms-settings:accounts-signinoptions", L"netplwiz"},
+    {L"ms-settings:accounts-users", L"netplwiz"},
+    {L"ms-settings:family-users", L"netplwiz"},
+};
+
+static const wchar_t* g_dynamicSystemTarget = nullptr;
+static const wchar_t* g_dynamicPenTarget = nullptr;
+static const wchar_t* g_dynamicDefaultAppsTarget = nullptr;
+static const wchar_t* g_dynamicRecoveryTarget = nullptr;
+static const wchar_t* g_dynamicTroubleshootTarget = nullptr;
+
+static void InitDynamicMappings() {
     const bool w11 = g_isWin11;
+    g_dynamicSystemTarget = w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID;
+    g_dynamicPenTarget = w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}";
+    g_dynamicDefaultAppsTarget = w11 ? WIN11_PASSTHROUGH : L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}";
+    g_dynamicRecoveryTarget = w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
+    g_dynamicTroubleshootTarget = w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}";
+}
 
-    g_mappings = {
-        // Personalization
-        {L"ms-settings:personalization", PERS_ROOT},
-        {L"ms-settings:personalization-colors", PERS_COLORS},
-        {L"ms-settings:colors", PERS_COLORS},
-        {L"ms-settings:themes", PERS_ROOT},
-        {L"ms-settings:lockscreen", PERS_ROOT},
-        {L"ms-settings:personalization-start", PERS_ROOT},
-        {L"ms-settings:personalization-start-places", PERS_ROOT},
-        {L"ms-settings:background", PERS_WALLPAPER},
-        {L"ms-settings:personalization-background-wallpaper", PERS_WALLPAPER},
-        {L"ms-settings:personalization-background-slideshow", PERS_WALLPAPER},
-        
-        // Fonts & Color
-        {L"ms-settings:fonts", L"shell:::{BD84B380-8CA2-1069-AB1D-08000948F534}"},
-        {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
-        {L"ms-settings:colorcpl", L"colorcpl.exe"},
-        
-        // Display - reindirizzamento a Impostazioni schermo classiche (rundll32)
-        {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:graphics-settings", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:display-adapter-properties", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:display-resolution", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        {L"ms-settings:screenrotation", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        
-        // System
-        {L"ms-settings:about", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
-        {L"ms-settings:sysinfo", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system-about", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
-        {L"ms-settings:system-protection", L"sysdm.cpl,,4"},
-        {L"ms-settings:system-remotedesktop", L"sysdm.cpl,,5"},
-        {L"ms-settings:remotedesktop", L"sysdm.cpl,,5"},
-        {L"ms-settings:devicemanager", L"devmgmt.msc"},
-        {L"ms-settings:system-devicemanager", L"devmgmt.msc"},
-        {L"ms-settings:computermanagement", L"compmgmt.msc"},
-        {L"ms-settings:activation", L"slui.exe"},
-        {L"ms-settings:appsfeatures", L"appwiz.cpl"},
-        {L"ms-settings:appsforwebsites", L"appwiz.cpl"},
-        {L"ms-settings:optionalfeatures", L"OptionalFeatures.exe"},
-        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
-        
-        // Power
-        {L"ms-settings:powersleep", L"powercfg.cpl"},
-        {L"ms-settings:battery", L"powercfg.cpl"},
-        {L"ms-settings:batterysaver", L"powercfg.cpl"},
-        {L"ms-settings:batterysaver-settings", L"powercfg.cpl"},
-        {L"ms-settings:batterysaver-usagedetails", L"powercfg.cpl"},
-        
-        // Sound
-        {L"ms-settings:audio", L"mmsys.cpl"},
-        {L"ms-settings:sound-control-panel", L"control.exe /name Microsoft.Sound"},
-        {L"ms-settings:sound-playback", L"control.exe mmsys.cpl,,0"},
-        {L"ms-settings:sound-recording", L"control.exe mmsys.cpl,,1"},
-        {L"ms-settings:sound-sounds", L"control.exe mmsys.cpl,,2"},
-        {L"ms-settings:sound-volume-flyout", L"sndvol.exe -f"},
-        {L"ms-settings:sound-devices", L"control.exe mmsys.cpl,,0"},
-        {L"ms-settings:sound-output", L"control.exe mmsys.cpl,,0"},
-        {L"ms-settings:sound-input", L"control.exe mmsys.cpl,,1"},
-        {L"ms-settings:apps-volume", L"control.exe mmsys.cpl,,0"},
-        {L"ms-settings:sound", L"control.exe mmsys.cpl,,0"},
-        
-        // Notifications / Taskbar
-        {L"ms-settings:notifications", NOTIF_AREA_CLSID},
-        {L"ms-settings:taskbar-notifications", NOTIF_AREA_CLSID},
-        {L"ms-settings:taskbar-systemtray", NOTIF_AREA_CLSID},
-        {L"ms-settings:notifications-systemtray", NOTIF_AREA_CLSID},
-        {L"ms-settings:systemtray", NOTIF_AREA_CLSID},
-        {L"ms-settings:notificationiconpreferences", NOTIF_AREA_CLSID},
-        
-        // Input devices
-        {L"ms-settings:mousetouchpad", L"main.cpl"},
-        {L"ms-settings:devices-touchpad", L"main.cpl"},
-        {L"ms-settings:keyboard", L"main.cpl,,1"},
-        {L"ms-settings:typing", L"main.cpl,,1"},
-        {L"ms-settings:pen", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
-        {L"ms-settings:pen-windowsink", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
-        {L"ms-settings:pen-windowsinksettings", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
-        {L"ms-settings:devices-touch", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
-        {L"ms-settings:autoplay", L"shell:::{9C60DE1E-E5FC-40f4-A487-460851A8D915}"},
-        
-        // Devices / Printers
-        {L"ms-settings:printers", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:printers-scanners", L"shell:::{2227A280-3AEA-1069-A2DE-08002B30309D}"},
-        {L"ms-settings:bluetooth", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:usb", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:connecteddevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:mobile-devices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:camera", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        {L"ms-settings:privacy-customdevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        
-        // Network
-        {L"ms-settings:network", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-wifi", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-ethernet", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-vpn", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-airplanemode", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-mobilehotspot", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-cellular", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:datausage", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:network-proxy", L"inetcpl.cpl,,4"},
-        {L"ms-settings:network-status", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-        {L"ms-settings:network-dialup", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-        {L"ms-settings:network-advancedsettings", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-        {L"ms-settings:firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-        {L"ms-settings:network-firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-        {L"ms-settings:windowsdefender", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
-        
-        // Accounts
-        {L"ms-settings:yourinfo", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
-        {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
-        {L"ms-settings:emailandaccounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
-        {L"ms-settings:accounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
-        {L"ms-settings:startupapps", L"msconfig.exe"},
-        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
-        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
-        
-        // Default Apps
-        {L"ms-settings:defaultapps", w11 ? WIN11_PASSTHROUGH : L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}"},
-        
-        // Time & Language
-        {L"ms-settings:dateandtime", L"timedate.cpl"},
-        {L"ms-settings:dateandtime-region", L"timedate.cpl"},
-        {L"ms-settings:dateandtime-addclocks", L"timedate.cpl,,1"},
-        {L"ms-settings:regionlanguage", L"intl.cpl"},
-        {L"ms-settings:regionformatting", L"intl.cpl"},
-        {L"ms-settings:language", L"intl.cpl"},
-        
-        // Ease of Access
-        {L"ms-settings:easeofaccess", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-narrator", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-magnifier", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-speech", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-colorfilter", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-display", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-uiaccess", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-highcontrast", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-closedcaptioning", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-audio", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-mouse", EASE_OF_ACCESS},
-        {L"ms-settings:easeofaccess-keyboard", EASE_OF_ACCESS},
-        
-        // Recovery / Backup / Troubleshooting
-        {L"ms-settings:backup", L"shell:::{B98A2BEA-7D42-4558-8BD1-832F41BAC6FD}"},
-        {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
-        {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
-        {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
-        
-        // Gaming
-        {L"ms-settings:gaming-gamebar", L"joy.cpl"},
-        
-        // File Explorer Options
-        {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
-        
-        // Get Programs (modern: Apps & Features)
-        {L"ms-settings:appsfeatures-app", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
-        
-        // Installed Updates
-        {L"ms-settings:windowsupdate-history", L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}"},
-        
-        // History - doubled like as how it was in 10.0.0
-        {L"ms-settings:troubleshoot", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
-        
-        // Keyboard
-        {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Keyboard Properties
-        {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Problem Details / Reports
-        {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
-        
-        // Problem Reporting Settings
-        {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
-        
-        // Problem Reports (list)
-        {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
-        
-        // Reliability Monitor
-        {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
-        
-        // Speech Properties
-        {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
-        
-        // Search Troubleshooting
-        {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
-        
-        // Control Panel All Tasks
-        {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
-        // Redirects to netplwiz
-        {L"ms-settings:signinoptions", L"netplwiz"},
-        {L"ms-settings:accounts-signinoptions", L"netplwiz"},
-        {L"ms-settings:accounts-users", L"netplwiz"},
-        {L"ms-settings:family-users", L"netplwiz"},
-                // Sound Control Panel
-        {L"ms-settings:sound-control-panel", L"control.exe /name Microsoft.Sound"},
-        
-        // Sound Playback
-        {L"ms-settings:sound-playback", L"control.exe mmsys.cpl,,0"},
-        
-        // Sound Recording
-        {L"ms-settings:sound-recording", L"control.exe mmsys.cpl,,1"},
-        
-        // Sound Sounds
-        {L"ms-settings:sound-sounds", L"control.exe mmsys.cpl,,2"},
-        
-        // Sound Volume Flyout
-        {L"ms-settings:sound-volume-flyout", L"sndvol.exe -f"},
-        
-        // Sound Devices
-        {L"ms-settings:sound-devices", L"control.exe mmsys.cpl,,0"},
-        
-        // Sound Output
-        {L"ms-settings:sound-output", L"control.exe mmsys.cpl,,0"},
-        
-        // Sound Input
-        {L"ms-settings:sound-input", L"control.exe mmsys.cpl,,1"},
-        
-        // Apps Volume
-        {L"ms-settings:apps-volume", L"control.exe mmsys.cpl,,0"},
-        
-        // Sound (generic)
-        {L"ms-settings:sound", L"control.exe mmsys.cpl,,0"},
-        
-        // System Settings
-        {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
-        
-        // Network Places
-        {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
-        
-        // Your Info Profile
-        {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
-        
-        // Netplwiz
-        {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
-        
-        // Workplace
-        {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
-        
-        // Date and Time Region
-        {L"ms-settings:dateandtime-region", L"timedate.cpl"},
-        
-        // Date and Time Add Clocks
-        {L"ms-settings:dateandtime-addclocks", L"timedate.cpl,,1"},
-        
-        // Keyboard Advanced
-        {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Keyboard Properties
-        {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Privacy Feedback
-        {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
-        
-        // Problem Reporting Settings
-        {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
-        
-        // Problem Reports (list)
-        {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
-        
-        // Reliability Monitor
-        {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
-        
-        // Speech Properties
-        {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
-        
-        // Search Diagnostics
-        {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
-        
-        // Control Panel All Tasks
-        {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
-        
-    };
-    
-    // Additional Windows 11 24H2 specific mappings
-    if (g_isWin11) {
-        g_mappings[L"ms-settings:power"] = L"powercfg.cpl";
-        g_mappings[L"ms-settings:display-hdr"] = L"colorcpl.exe";
-        g_mappings[L"ms-settings:personalization-taskbar"] = NOTIF_AREA_CLSID;
-        g_mappings[L"ms-settings:multitasking"] = L"control.exe";
-        g_mappings[L"ms-settings:storage"] = L"control.exe";
-        g_mappings[L"ms-settings:storagesense"] = L"control.exe";
-        g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
-        g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
-        g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
-    // New mappings
-    
+static const wchar_t* FindMapping(const wchar_t* uri) {
+    for (size_t i = 0; i < sizeof(g_allMappings)/sizeof(g_allMappings[0]); i++) {
+        if (wcscmp(g_allMappings[i].uri, uri) == 0) {
+            if (wcscmp(uri, L"ms-settings:about") == 0 ||
+                wcscmp(uri, L"ms-settings:system") == 0 ||
+                wcscmp(uri, L"ms-settings:sysinfo") == 0 ||
+                wcscmp(uri, L"ms-settings:system-about") == 0) {
+                return g_dynamicSystemTarget;
+            }
+            if (wcscmp(uri, L"ms-settings:pen") == 0 ||
+                wcscmp(uri, L"ms-settings:pen-windowsink") == 0 ||
+                wcscmp(uri, L"ms-settings:pen-windowsinksettings") == 0 ||
+                wcscmp(uri, L"ms-settings:devices-touch") == 0) {
+                return g_dynamicPenTarget;
+            }
+            if (wcscmp(uri, L"ms-settings:defaultapps") == 0) {
+                return g_dynamicDefaultAppsTarget;
+            }
+            if (wcscmp(uri, L"ms-settings:recovery") == 0) {
+                return g_dynamicRecoveryTarget;
+            }
+            if (wcscmp(uri, L"ms-settings:troubleshoot") == 0) {
+                return g_dynamicTroubleshootTarget;
+            }
+            return g_allMappings[i].target;
+        }
     }
+    return nullptr;
 }
 
 // URI normalization
-static std::wstring NormalizeUri(const std::wstring& uri) {
-    std::wstring result = ToLower(uri);
-    const std::wstring PROTOCOL = L"ms-settings://";
-    size_t pos = result.find(PROTOCOL);
-    if (pos != std::wstring::npos) {
-        result = L"ms-settings:" + result.substr(pos + PROTOCOL.length());
+static void NormalizeUri(const wchar_t* uri, wchar_t* out, size_t outSize) {
+    wcscpy_s(out, outSize, uri);
+    ToLowerC(out);
+    
+    const wchar_t PROTOCOL[] = L"ms-settings://";
+    size_t protoLen = wcslen(PROTOCOL);
+    if (wcsncmp(out, PROTOCOL, protoLen) == 0) {
+        wchar_t temp[512];
+        wcscpy_s(temp, 512, L"ms-settings:");
+        wcscat_s(temp, 512, out + protoLen);
+        wcscpy_s(out, outSize, temp);
     }
-    pos = result.find(L'?');
-    if (pos != std::wstring::npos) {
-        result = result.substr(0, pos);
+    
+    wchar_t* qmark = wcschr(out, L'?');
+    if (qmark) *qmark = L'\0';
+    
+    size_t len = wcslen(out);
+    while (len > 0 && out[len-1] == L'/') {
+        out[--len] = L'\0';
     }
-    while (!result.empty() && result.back() == L'/') {
-        result.pop_back();
-    }
-    return result;
 }
 
 static bool IsMsSettings(const wchar_t* s) {
     if (!s) return false;
-    return ToLower(s).find(L"ms-settings:") != std::wstring::npos;
+    wchar_t lower[512];
+    wcscpy_s(lower, 512, s);
+    ToLowerC(lower);
+    return wcsstr(lower, L"ms-settings:") != nullptr;
 }
 
 static bool IsShellClsid(const wchar_t* s) {
     if (!s) return false;
-    return ToLower(s).find(L"shell:::") != std::wstring::npos;
+    wchar_t lower[512];
+    wcscpy_s(lower, 512, s);
+    ToLowerC(lower);
+    return wcsstr(lower, L"shell:::") != nullptr;
 }
 
 // Win11 CLSID filter
-static std::wstring ApplyWin11Filter(const std::wstring& target) {
+static const wchar_t* ApplyWin11Filter(const wchar_t* target) {
     if (!g_isWin11) return target;
 
-    std::wstring lower = ToLower(target);
-    if (lower.find(L"shell:::") != 0) return target;
+    wchar_t lower[256];
+    wcscpy_s(lower, 256, target);
+    ToLowerC(lower);
+    
+    if (wcsncmp(lower, L"shell:::", 8) != 0 && wcsncmp(lower, L"explorer shell:::", 17) != 0) return target;
+    
+    // Estrai la parte CLSID
+    const wchar_t* clsPart = lower;
+    if (wcsncmp(lower, L"explorer ", 9) == 0) clsPart = lower + 9;
 
-    if (IsClsidLoopOnWin11(lower)) {
-        if (lower.find(L"ed834ed6") != std::wstring::npos) {
-            if (lower.find(L"pagewallpaper") != std::wstring::npos) {
+    if (IsClsidLoopOnWin11(clsPart)) {
+        if (wcsstr(lower, L"ed834ed6")) {
+            if (wcsstr(lower, L"pagewallpaper")) {
                 Wh_Log(L"Win11 loop-guard: {ED834ED6}\\pageWallpaper -> PERS_WALLPAPER");
                 return PERS_WALLPAPER;
             }
             Wh_Log(L"Win11 loop-guard: {ED834ED6} -> PERS_ROOT");
             return PERS_ROOT;
         }
-        if (lower.find(L"bb06c0e4") != std::wstring::npos) {
+        if (wcsstr(lower, L"bb06c0e4")) {
             Wh_Log(L"Win11 loop-guard: {BB06C0E4} -> sysdm.cpl");
             return L"sysdm.cpl";
         }
-        Wh_Log(L"Win11 loop-guard: replacing loop CLSID '%s' with control.exe", target.c_str());
+        Wh_Log(L"Win11 loop-guard: replacing loop CLSID '%s' with control.exe", target);
         return L"control.exe";
     }
 
-    if (g_settings.win11CompatibilityMode && !IsClsidSafeOnWin11(lower)) {
-        Wh_Log(L"Win11 compat: replacing unconfirmed CLSID '%s' with control.exe", target.c_str());
+    if (g_settings.win11CompatibilityMode && !IsClsidSafeOnWin11(clsPart)) {
+        Wh_Log(L"Win11 compat: replacing unconfirmed CLSID '%s' with control.exe", target);
         return L"control.exe";
     }
 
@@ -736,50 +761,50 @@ static std::wstring ApplyWin11Filter(const std::wstring& target) {
 }
 
 // Fallback handling
-static bool HandleFallback(const std::wstring& uri) {
+static bool HandleFallback(const wchar_t* uri) {
     switch (g_settings.fallbackMode) {
         case 0:
-            Wh_Log(L"Fallback: ignoring unmapped URI: %s", uri.c_str());
+            Wh_Log(L"Fallback: ignoring unmapped URI: %s", uri);
             return true;
         case 1: {
-            Wh_Log(L"Fallback: opening control.exe for unmapped URI: %s", uri.c_str());
-            std::wstring cmd = L"control.exe";
+            Wh_Log(L"Fallback: opening control.exe for unmapped URI: %s", uri);
+            wchar_t cmd[] = L"control.exe";
             STARTUPINFOW si = {};
             si.cb = sizeof(si);
             si.dwFlags = STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_SHOWNORMAL;
             PROCESS_INFORMATION pi = {};
-            if (CreateProcessW_orig(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            if (CreateProcessW_orig(nullptr, cmd, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
             return true;
         }
         default:
-            Wh_Log(L"Fallback: passing through unmapped URI: %s", uri.c_str());
+            Wh_Log(L"Fallback: passing through unmapped URI: %s", uri);
             return false;
     }
 }
 
-
-static void LaunchTarget(const std::wstring& command) {
-    Wh_Log(L"Launching: %s", command.c_str());
+static void LaunchTarget(const wchar_t* command) {
+    Wh_Log(L"Launching: %s", command);
 
     if (!LoopGuardAllow(command)) {
-        Wh_Log(L"Launch suppressed by loop guard: %s", command.c_str());
+        Wh_Log(L"Launch suppressed by loop guard: %s", command);
         return;
     }
 
-    std::wstring lower = ToLower(command);
+    wchar_t lower[512];
+    wcscpy_s(lower, 512, command);
+    ToLowerC(lower);
     
-    // PER I COMANDI "explorer shell:::" USA ShellExecuteExW
-    if (lower.find(L"explorer shell:::") != std::wstring::npos) {
+    if (wcsstr(lower, L"explorer shell:::")) {
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"open";
         sei.lpFile = L"explorer.exe";
-        sei.lpParameters = command.c_str() + 9; // Salta "explorer " (9 caratteri)
+        sei.lpParameters = command + 9;
         sei.nShow = SW_SHOWNORMAL;
         
         Wh_Log(L"Using ShellExecuteExW: explorer.exe params='%s'", sei.lpParameters);
@@ -787,43 +812,32 @@ static void LaunchTarget(const std::wstring& command) {
         return;
     }
     
-    // Gestione speciale per rundll32.exe e comandi con parametri
-    if (lower.find(L"rundll32.exe ") == 0 || 
-        (lower.find(L"rundll32.exe") == 0 && lower.length() > 12)) {
-        Wh_Log(L"Detected rundll32 command: %s", command.c_str());
+    if (wcsncmp(lower, L"rundll32.exe ", 13) == 0) {
+        Wh_Log(L"Detected rundll32 command: %s", command);
         
-        std::wstring rundll32Path;
-        wchar_t sysDir[MAX_PATH];
-        if (GetSystemDirectoryW(sysDir, MAX_PATH)) {
-            rundll32Path = std::wstring(sysDir) + L"\\rundll32.exe";
+        wchar_t rundll32Path[MAX_PATH];
+        if (GetSystemDirectoryW(rundll32Path, MAX_PATH)) {
+            wcscat_s(rundll32Path, MAX_PATH, L"\\rundll32.exe");
         } else {
-            rundll32Path = L"rundll32.exe";
-        }
-        
-        std::wstring params;
-        if (lower.find(L"rundll32.exe ") != std::wstring::npos) {
-            params = command.substr(13);
-        } else {
-            params = command.substr(12);
+            wcscpy_s(rundll32Path, MAX_PATH, L"rundll32.exe");
         }
         
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"open";
-        sei.lpFile = rundll32Path.c_str();
-        sei.lpParameters = params.c_str();
+        sei.lpFile = rundll32Path;
+        sei.lpParameters = command + 13;
         sei.nShow = SW_SHOWNORMAL;
         
-        Wh_Log(L"Using ShellExecuteExW: %s params='%s'", rundll32Path.c_str(), params.c_str());
+        Wh_Log(L"Using ShellExecuteExW: %s params='%s'", rundll32Path, sei.lpParameters);
         ShellExecuteExW_orig(&sei);
         return;
     }
     
-    // Comandi completi con percorso eseguibile
     bool isFullCmdLine =
-        (lower.find(L"explorer.exe ") != std::wstring::npos) ||
-        (lower.find(L"control.exe /") != std::wstring::npos);
+        (wcsstr(lower, L"explorer.exe ") != nullptr) ||
+        (wcsstr(lower, L"control.exe /") != nullptr);
 
     if (isFullCmdLine) {
         STARTUPINFOW si = {};
@@ -831,13 +845,13 @@ static void LaunchTarget(const std::wstring& command) {
         si.dwFlags = STARTF_USESHOWWINDOW;
         si.wShowWindow = SW_SHOWNORMAL;
         PROCESS_INFORMATION pi = {};
-        std::wstring mutable_cmd = command;
-        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
+        wchar_t mutable_cmd[512];
+        wcscpy_s(mutable_cmd, 512, command);
+        if (!CreateProcessW_orig(nullptr, mutable_cmd, nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
-                                 (LPVOID)g_childEnvBlock.c_str(),
+                                 g_childEnvBlock,
                                  nullptr, &si, &pi)) {
-            Wh_Log(L"CreateProcess failed for '%s' (%lu)",
-                   command.c_str(), GetLastError());
+            Wh_Log(L"CreateProcess failed for '%s' (%lu)", command, GetLastError());
         } else {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
@@ -845,55 +859,54 @@ static void LaunchTarget(const std::wstring& command) {
         return;
     }
 
-    // UAC targets
-    if (command == L"devmgmt.msc" || command == L"compmgmt.msc" ||
-        command == L"slui.exe" || command == L"OptionalFeatures.exe") {
-        ShellExecuteW_orig(nullptr, L"open", command.c_str(),
-                           nullptr, nullptr, SW_SHOWNORMAL);
+    if (wcscmp(command, L"devmgmt.msc") == 0 || 
+        wcscmp(command, L"compmgmt.msc") == 0 ||
+        wcscmp(command, L"slui.exe") == 0 || 
+        wcscmp(command, L"OptionalFeatures.exe") == 0) {
+        ShellExecuteW_orig(nullptr, L"open", command, nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
 
-    // Generic router
     STARTUPINFOW si = {};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_SHOWNORMAL;
     PROCESS_INFORMATION pi = {};
-    std::wstring cmdLine;
+    wchar_t cmdLine[512] = {0};
 
-    if (command.find(L".msc") != std::wstring::npos) {
-        cmdLine = L"mmc.exe \"" + command + L"\"";
-    } else if (command.find(L".cpl") != std::wstring::npos) {
-        // Usa ShellExecuteW per i .cpl - molto più affidabile
-        Wh_Log(L"Using ShellExecuteW for .cpl: control.exe %s", command.c_str());
-        ShellExecuteW_orig(nullptr, L"open", L"control.exe", command.c_str(), nullptr, SW_SHOWNORMAL);
+    if (wcsstr(command, L".msc")) {
+        wcscpy_s(cmdLine, 512, L"mmc.exe \"");
+        wcscat_s(cmdLine, 512, command);
+        wcscat_s(cmdLine, 512, L"\"");
+    } else if (wcsstr(command, L".cpl")) {
+        Wh_Log(L"Using ShellExecuteW for .cpl: control.exe %s", command);
+        ShellExecuteW_orig(nullptr, L"open", L"control.exe", command, nullptr, SW_SHOWNORMAL);
         return;
-    } else if (command.find(L".exe") != std::wstring::npos) {
-        cmdLine = command;
-    } else if (command.find(L"shell:::") == 0) {
+    } else if (wcsstr(command, L".exe")) {
+        wcscpy_s(cmdLine, 512, command);
+    } else if (wcsncmp(command, L"shell:::", 8) == 0) {
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
         sei.lpVerb = L"open";
         sei.lpFile = L"explorer.exe";
-        sei.lpParameters = command.c_str();
+        sei.lpParameters = command;
         sei.nShow = SW_SHOWNORMAL;
         ShellExecuteExW_orig(&sei);
         return;
-    } else if (command.empty()) {
-        cmdLine = L"control.exe";
+    } else if (command[0] == L'\0') {
+        wcscpy_s(cmdLine, 512, L"control.exe");
     } else {
-        cmdLine = L"control.exe " + command;
+        wcscpy_s(cmdLine, 512, L"control.exe ");
+        wcscat_s(cmdLine, 512, command);
     }
 
-    if (!cmdLine.empty()) {
-        std::wstring mutableCmd = cmdLine;
-        if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
+    if (cmdLine[0] != L'\0') {
+        if (!CreateProcessW_orig(nullptr, cmdLine, nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
-                                 (LPVOID)g_childEnvBlock.c_str(),
+                                 g_childEnvBlock,
                                  nullptr, &si, &pi)) {
-            Wh_Log(L"CreateProcess failed for '%s' (error %lu)",
-                   cmdLine.c_str(), GetLastError());
+            Wh_Log(L"CreateProcess failed for '%s' (error %lu)", cmdLine, GetLastError());
             return;
         }
         CloseHandle(pi.hProcess);
@@ -901,30 +914,28 @@ static void LaunchTarget(const std::wstring& command) {
     }
 }
 
-// Funzione per eseguire il comando mappato dal menu contestuale della tray
-static void ExecuteMappedCommand(const std::wstring& command) {
+static void ExecuteMappedCommand(const wchar_t* command) {
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.lpVerb = L"open";
     sei.nShow = SW_SHOWNORMAL;
     
-    // Separa il programma dai parametri
-    size_t spacePos = command.find(L' ');
-    if (spacePos != std::wstring::npos) {
-        std::wstring program = command.substr(0, spacePos);
-        std::wstring params = command.substr(spacePos + 1);
-        sei.lpFile = program.c_str();
-        sei.lpParameters = params.c_str();
+    const wchar_t* spacePos = wcschr(command, L' ');
+    if (spacePos) {
+        wchar_t program[256];
+        size_t progLen = spacePos - command;
+        wcsncpy_s(program, 256, command, progLen);
+        program[progLen] = L'\0';
+        sei.lpFile = program;
+        sei.lpParameters = spacePos + 1;
     } else {
-        sei.lpFile = command.c_str();
+        sei.lpFile = command;
     }
     
     ShellExecuteExW_orig(&sei);
 }
 
-// Hook per il menu contestuale della tray
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                   HWND hWnd, const TPMPARAMS* lptpm) {
-    // Se il redirect della tray non è abilitato o siamo in un processo figlio, comportamento standard
     if (!g_settings.redirectSystemTray || IsChildProcess()) {
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
     }
@@ -940,14 +951,12 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
     if (result > 0) {
         UINT cmd = (UINT)result;
         
-        // Verifica se il comando è nei nostri mapping
-        auto it = g_trayCommandMappings.find(cmd);
-        if (it != g_trayCommandMappings.end()) {
-            ExecuteMappedCommand(it->second);
+        const wchar_t* mappedCmd = FindTrayCommand(cmd);
+        if (mappedCmd) {
+            ExecuteMappedCommand(mappedCmd);
             return 0;
         }
         
-        // Ripristino comportamento originale per gli altri comandi
         if (!(uFlags & TPM_RETURNCMD)) {
             SendMessageW(hWnd, WM_COMMAND, (WPARAM)cmd, 0);
             return TRUE;
@@ -956,147 +965,130 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
     return result;
 }
 
-// Personalization detection
 static bool IsPersonalizationWindow(HWND hwnd) {
-    if (!hwnd) {
-        Wh_Log(L"HWND null -> desktop context menu path");
-        return false;
-    }
+    if (!hwnd) return false;
 
     HWND h = hwnd;
     while (h) {
-        wchar_t cls[256]   = {};
+        wchar_t cls[256] = {};
         wchar_t title[512] = {};
         GetClassNameW(h, cls, 256);
         GetWindowTextW(h, title, 512);
 
-        std::wstring c = ToLower(cls);
-        std::wstring t = ToLower(title);
+        wchar_t cLower[256], tLower[512];
+        wcscpy_s(cLower, 256, cls); ToLowerC(cLower);
+        wcscpy_s(tLower, 512, title); ToLowerC(tLower);
 
-        if (c == L"progman" || c == L"workerw" || c == L"shelldll_defview") {
-            Wh_Log(L"HWND: desktop class '%s' -> context menu", cls);
+        if (wcscmp(cLower, L"progman") == 0 || wcscmp(cLower, L"workerw") == 0 || wcscmp(cLower, L"shelldll_defview") == 0)
             return false;
-        }
-        if (c == L"cabinetwclass") {
-            return true;
-        }
-        if (t.find(L"personaliz") != std::wstring::npos) {
-            Wh_Log(L"HWND: title match 'personaliz' -> Personalization window");
-            return true;
-        }
+        if (wcscmp(cLower, L"cabinetwclass") == 0) return true;
+        if (wcsstr(tLower, L"personaliz")) return true;
 
         HWND parent = GetParent(h);
         if (!parent || parent == h) break;
         h = parent;
     }
-
-    Wh_Log(L"HWND: no personalization window found -> context menu");
     return false;
 }
 
-static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
-    if (IsPersonalizationWindow(hwnd)) {
-        Wh_Log(L"personalization-background -> wallpaper page");
-        return PERS_WALLPAPER;
-    }
-    Wh_Log(L"personalization-background -> Personalization root");
-    return PERS_ROOT;
+static const wchar_t* ResolvePersonalizationBackground(HWND hwnd) {
+    return IsPersonalizationWindow(hwnd) ? PERS_WALLPAPER : PERS_ROOT;
 }
 
-static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
-    if (uri == L"ms-settings:personalization-background") {
+static ResolveResult ResolveUri(const wchar_t* uri, HWND hwnd) {
+    if (wcscmp(uri, L"ms-settings:personalization-background") == 0) {
         if (BounceGuardIsBounce(uri)) {
-            Wh_Log(L"Bounce-back on personalization-background - suppressing duplicate, target is opening");
-            return {L"", true};
+            ResolveResult r = {L"", true}; return r;
         }
-        std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
+        const wchar_t* t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
         BounceGuardRecord(uri);
-        return {t, true};
+        ResolveResult r = {t, true}; return r;
     }
 
-    auto it = g_mappings.find(uri);
-    if (it != g_mappings.end()) {
+    const wchar_t* mapped = FindMapping(uri);
+    if (mapped) {
         if (BounceGuardIsBounce(uri)) {
-            Wh_Log(L"Bounce-back on '%s', routing to fallback", uri.c_str());
             bool handled = HandleFallback(uri);
-            return {L"", handled};
+            ResolveResult r = {L"", handled}; return r;
         }
-
-        std::wstring t = ApplyWin11Filter(it->second);
-
-        if (t == WIN11_PASSTHROUGH) {
-            Wh_Log(L"Passthrough sentinel for '%s', routing to fallback", uri.c_str());
+        const wchar_t* t = ApplyWin11Filter(mapped);
+        if (wcscmp(t, WIN11_PASSTHROUGH) == 0) {
             bool handled = HandleFallback(uri);
-            return {L"", handled};
+            ResolveResult r = {L"", handled}; return r;
         }
-
-        Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
+        Wh_Log(L"Mapped: %s -> %s", uri, t);
         BounceGuardRecord(uri);
-        return {t, true};
+        ResolveResult r = {t, true}; return r;
     }
 
-    if (uri.find(L"ms-settings:") == 0) {
+    if (wcsncmp(uri, L"ms-settings:", 12) == 0) {
         bool handled = HandleFallback(uri);
-        return {L"", handled};
+        ResolveResult r = {L"", handled}; return r;
     }
 
-    if (uri.find(L"shell:::") == 0) {
+    if (wcsncmp(uri, L"shell:::", 8) == 0) {
         if (g_isWin11 && IsClsidLoopOnWin11(uri)) {
-            std::wstring t = ApplyWin11Filter(uri);
-            Wh_Log(L"Win11 loop-CLSID intercepted: %s -> %s", uri.c_str(), t.c_str());
-            return {t, true};
+            const wchar_t* t = ApplyWin11Filter(uri);
+            ResolveResult r = {t, true}; return r;
         }
     }
 
-    Wh_Log(L"Unmapped, passing through: %s", uri.c_str());
-    return {L"", false};
+    ResolveResult r = {L"", false}; return r;
 }
 
-// Control system detection helpers
-static std::wstring BaseNameLower(const std::wstring& path) {
-    size_t pos = path.rfind(L'\\');
-    return ToLower((pos != std::wstring::npos) ? path.substr(pos + 1) : path);
+static const wchar_t* BaseNameLower(const wchar_t* path) {
+    const wchar_t* lastSlash = wcsrchr(path, L'\\');
+    return ToLowerCopy(lastSlash ? lastSlash + 1 : path);
 }
 
 static bool IsControlSystemParams(const wchar_t* file, const wchar_t* params) {
     if (!file || !params) return false;
-    std::wstring exe = BaseNameLower(file);
-    if (exe != L"control.exe" && exe != L"control") return false;
-    std::wstring arg = ToLower(params);
-    return (arg == L"system" || arg == L"microsoft.system");
+    const wchar_t* exe = BaseNameLower(file);
+    if (wcscmp(exe, L"control.exe") != 0 && wcscmp(exe, L"control") != 0) return false;
+    wchar_t argLower[256];
+    wcscpy_s(argLower, 256, params);
+    ToLowerC(argLower);
+    return (wcscmp(argLower, L"system") == 0 || wcscmp(argLower, L"microsoft.system") == 0);
 }
 
-static bool IsControlSystemCommand(const std::wstring& cmdLine) {
-    std::vector<std::wstring> tokens;
-    std::wstring current;
+static bool IsControlSystemCommand(const wchar_t* cmdLine) {
+    wchar_t tokens[3][256] = {{0}};
+    int tokenCount = 0;
+    wchar_t current[256] = {0};
+    int curPos = 0;
     bool inQuotes = false;
 
-    for (wchar_t c : cmdLine) {
-        if (c == L'"') {
-            inQuotes = !inQuotes;
-        } else if (c == L' ' && !inQuotes) {
-            if (!current.empty()) {
-                tokens.push_back(current);
-                current.clear();
+    for (const wchar_t* c = cmdLine; *c; c++) {
+        if (*c == L'"') { inQuotes = !inQuotes; }
+        else if (*c == L' ' && !inQuotes) {
+            if (curPos > 0) {
+                current[curPos] = L'\0';
+                wcscpy_s(tokens[tokenCount], 256, current);
+                tokenCount++;
+                if (tokenCount >= 3) break;
+                curPos = 0;
             }
         } else {
-            current += c;
+            if (curPos < 255) current[curPos++] = *c;
         }
     }
-    if (!current.empty()) tokens.push_back(current);
+    if (curPos > 0 && tokenCount < 3) {
+        current[curPos] = L'\0';
+        wcscpy_s(tokens[tokenCount], 256, current);
+        tokenCount++;
+    }
+    if (tokenCount != 2) return false;
 
-    if (tokens.size() != 2) return false;
+    const wchar_t* exe = BaseNameLower(tokens[0]);
+    if (wcscmp(exe, L"control.exe") != 0 && wcscmp(exe, L"control") != 0) return false;
 
-    std::wstring exe = BaseNameLower(tokens[0]);
-    if (exe != L"control.exe" && exe != L"control") return false;
-
-    std::wstring arg = ToLower(tokens[1]);
-    return (arg == L"system" || arg == L"microsoft.system");
+    wchar_t argLower[256];
+    wcscpy_s(argLower, 256, tokens[1]);
+    ToLowerC(argLower);
+    return (wcscmp(argLower, L"system") == 0 || wcscmp(argLower, L"microsoft.system") == 0);
 }
 
-// Helper function to open sound panel
 static bool OpenSoundPanel() {
-    Wh_Log(L"Opening sound panel via LaunchTarget");
     LaunchTarget(L"control.exe mmsys.cpl,,0");
     return true;
 }
@@ -1104,71 +1096,46 @@ static bool OpenSoundPanel() {
 // Hook: ShellExecuteExW
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
-
     HookGuard guard;
-    if (guard.IsReentrant()) {
-        Wh_Log(L"ShellExecuteExW: reentrant call, passing through");
-        return ShellExecuteExW_orig(pei);
-    }
-
+    if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
     if (!g_settings.enableRedirects || !pei) return ShellExecuteExW_orig(pei);
 
     if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
-        Wh_Log(L"ShellExecuteExW: intercepted control system");
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
         return TRUE;
     }
-    // exception for taskbar properties
-    std::wstring checkUri;
-    if (IsMsSettings(pei->lpFile))
-        checkUri = NormalizeUri(pei->lpFile);
-    else if (IsMsSettings(pei->lpParameters))
-        checkUri = NormalizeUri(pei->lpParameters);
     
-    if (!checkUri.empty() && checkUri.find(L"ms-settings:taskbar") == 0) {
-        Wh_Log(L"ShellExecuteExW: passing through ms-settings:taskbar for Classic Taskbar Properties mod");
+    wchar_t checkUri[256] = {0};
+    if (IsMsSettings(pei->lpFile)) NormalizeUri(pei->lpFile, checkUri, 256);
+    else if (IsMsSettings(pei->lpParameters)) NormalizeUri(pei->lpParameters, checkUri, 256);
+    if (checkUri[0] && wcsncmp(checkUri, L"ms-settings:taskbar", 18) == 0)
         return ShellExecuteExW_orig(pei);
-    }
-    // FINE ECCEZIONE
-    std::wstring uri;
-    if (IsMsSettings(pei->lpFile))
-        uri = NormalizeUri(pei->lpFile);
-    else if (IsMsSettings(pei->lpParameters))
-        uri = NormalizeUri(pei->lpParameters);
-    else if (IsShellClsid(pei->lpFile))
-        uri = ToLower(pei->lpFile);
-    else if (IsShellClsid(pei->lpParameters))
-        uri = ToLower(pei->lpParameters);
+    
+    wchar_t uri[256] = {0};
+    if (IsMsSettings(pei->lpFile)) NormalizeUri(pei->lpFile, uri, 256);
+    else if (IsMsSettings(pei->lpParameters)) NormalizeUri(pei->lpParameters, uri, 256);
+    else if (IsShellClsid(pei->lpFile)) wcscpy_s(uri, 256, ToLowerCopy(pei->lpFile));
+    else if (IsShellClsid(pei->lpParameters)) wcscpy_s(uri, 256, ToLowerCopy(pei->lpParameters));
 
-    // Audio URI handling
-    if (!uri.empty() && (uri.find(L"ms-settings:sound") == 0 ||
-        uri.find(L"ms-settings:audio") == 0 ||
-        uri.find(L"ms-settings:apps-volume") == 0 ||
-        uri.find(L"ms-settings:sound-devices") == 0 ||
-        uri.find(L"ms-settings:sound-output") == 0 ||
-        uri.find(L"ms-settings:sound-input") == 0)) {
-        
-        if (OpenSoundPanel()) {
-            if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
-            return TRUE;
-        }
+    if (uri[0] && (wcsncmp(uri, L"ms-settings:sound", 17) == 0 ||
+        wcsncmp(uri, L"ms-settings:audio", 17) == 0 ||
+        wcsncmp(uri, L"ms-settings:apps-volume", 23) == 0)) {
+        if (OpenSoundPanel()) { if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr; return TRUE; }
     }
 
-    // Display URI handling - questo intercetta anche i clic dal menu contestuale del desktop
-    if (!uri.empty() && (uri.find(L"ms-settings:display") == 0 ||
-        uri.find(L"ms-settings:screenrotation") == 0 ||
-        uri.find(L"ms-settings:graphics-settings") == 0)) {
-        Wh_Log(L"ShellExecuteExW: intercepted display settings, launching classic Display Properties");
+    if (uri[0] && (wcsncmp(uri, L"ms-settings:display", 19) == 0 ||
+        wcsncmp(uri, L"ms-settings:screenrotation", 26) == 0 ||
+        wcsncmp(uri, L"ms-settings:graphics-settings", 29) == 0)) {
         LaunchTarget(L"rundll32.exe display.dll,ShowAdapterSettings 0");
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
         return TRUE;
     }
 
-    if (!uri.empty()) {
+    if (uri[0]) {
         auto result = ResolveUri(uri, pei->hwnd);
         if (result.intercept) {
-            if (!result.target.empty()) LaunchTarget(result.target);
+            if (result.target[0]) LaunchTarget(result.target);
             if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
             return TRUE;
         }
@@ -1179,67 +1146,44 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
 // Hook: ShellExecuteW
 HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR params, LPCWSTR dir, INT show) {
     if (IsChildProcess()) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
-
     HookGuard guard;
-    if (guard.IsReentrant()) {
-        Wh_Log(L"ShellExecuteW: reentrant call, passing through");
-        return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
-    }
-
+    if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
     if (!g_settings.enableRedirects) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
     if (IsControlSystemParams(file, params)) {
-        Wh_Log(L"ShellExecuteW: intercepted control system");
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         return SHELL_EXECUTE_SUCCESS;
     }
-    // exception for ms-settings:taskbar 
-    std::wstring checkUri;
-    if (IsMsSettings(file))
-        checkUri = NormalizeUri(file);
-    else if (IsMsSettings(params))
-        checkUri = NormalizeUri(params);
     
-    if (!checkUri.empty() && checkUri.find(L"ms-settings:taskbar") == 0) {
-        Wh_Log(L"ShellExecuteW: passing through ms-settings:taskbar for Classic Taskbar Properties mod");
+    wchar_t checkUri[256] = {0};
+    if (IsMsSettings(file)) NormalizeUri(file, checkUri, 256);
+    else if (IsMsSettings(params)) NormalizeUri(params, checkUri, 256);
+    if (checkUri[0] && wcsncmp(checkUri, L"ms-settings:taskbar", 18) == 0)
         return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
-    }
-    std::wstring uri;
-    if (IsMsSettings(file))
-        uri = NormalizeUri(file);
-    else if (IsMsSettings(params))
-        uri = NormalizeUri(params);
-    else if (IsShellClsid(file))
-        uri = ToLower(file);
-    else if (IsShellClsid(params))
-        uri = ToLower(params);
+    
+    wchar_t uri[256] = {0};
+    if (IsMsSettings(file)) NormalizeUri(file, uri, 256);
+    else if (IsMsSettings(params)) NormalizeUri(params, uri, 256);
+    else if (IsShellClsid(file)) wcscpy_s(uri, 256, ToLowerCopy(file));
+    else if (IsShellClsid(params)) wcscpy_s(uri, 256, ToLowerCopy(params));
 
-    // Audio URI handling
-    if (!uri.empty() && (uri.find(L"ms-settings:sound") == 0 ||
-        uri.find(L"ms-settings:audio") == 0 ||
-        uri.find(L"ms-settings:apps-volume") == 0 ||
-        uri.find(L"ms-settings:sound-devices") == 0 ||
-        uri.find(L"ms-settings:sound-output") == 0 ||
-        uri.find(L"ms-settings:sound-input") == 0)) {
-        
-        if (OpenSoundPanel()) {
-            return SHELL_EXECUTE_SUCCESS;
-        }
+    if (uri[0] && (wcsncmp(uri, L"ms-settings:sound", 17) == 0 ||
+        wcsncmp(uri, L"ms-settings:audio", 17) == 0 ||
+        wcsncmp(uri, L"ms-settings:apps-volume", 23) == 0)) {
+        if (OpenSoundPanel()) return SHELL_EXECUTE_SUCCESS;
     }
 
-    // Display URI handling - questo intercetta anche i clic dal menu contestuale del desktop
-    if (!uri.empty() && (uri.find(L"ms-settings:display") == 0 ||
-        uri.find(L"ms-settings:screenrotation") == 0 ||
-        uri.find(L"ms-settings:graphics-settings") == 0)) {
-        Wh_Log(L"ShellExecuteW: intercepted display settings, launching classic Display Properties");
+    if (uri[0] && (wcsncmp(uri, L"ms-settings:display", 19) == 0 ||
+        wcsncmp(uri, L"ms-settings:screenrotation", 26) == 0 ||
+        wcsncmp(uri, L"ms-settings:graphics-settings", 29) == 0)) {
         LaunchTarget(L"rundll32.exe display.dll,ShowAdapterSettings 0");
         return SHELL_EXECUTE_SUCCESS;
     }
 
-    if (!uri.empty()) {
+    if (uri[0]) {
         auto result = ResolveUri(uri, hwnd);
         if (result.intercept) {
-            if (!result.target.empty()) LaunchTarget(result.target);
+            if (result.target[0]) LaunchTarget(result.target);
             return SHELL_EXECUTE_SUCCESS;
         }
     }
@@ -1252,73 +1196,38 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
                                  BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
                                  LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
                                  LPPROCESS_INFORMATION lpProcessInformation) {
-    if (IsChildProcess()) {
-        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
-                                   lpStartupInfo, lpProcessInformation);
-    }
-
+    if (IsChildProcess()) return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
     HookGuard guard;
-    if (guard.IsReentrant()) {
-        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
-                                   lpStartupInfo, lpProcessInformation);
-    }
+    if (guard.IsReentrant()) return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+    if (!g_settings.enableRedirects || g_settings.uiOnlyRedirects) return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 
-    if (!g_settings.enableRedirects || g_settings.uiOnlyRedirects) {
-        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
-                                   lpStartupInfo, lpProcessInformation);
-    }
-
-    std::wstring cmdLine = lpCommandLine ? std::wstring(lpCommandLine) : L"";
-
-    if (IsControlSystemCommand(cmdLine)) {
-        Wh_Log(L"CreateProcessW: intercepted 'control system': %s", lpCommandLine);
+    if (lpCommandLine && IsControlSystemCommand(lpCommandLine)) {
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
         SetLastError(ERROR_SUCCESS);
         return TRUE;
     }
-
-    return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                               bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
-                               lpStartupInfo, lpProcessInformation);
+    return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
 
 // Hook: IShellDispatch2::ShellExecute
-HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
-    void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow)
-{
-    if (IsChildProcess()) {
-        return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-    }
-
+HRESULT WINAPI IShellDispatch2_ShellExecute_hook(void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow) {
+    if (IsChildProcess()) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
     HookGuard guard;
-    if (guard.IsReentrant()) {
-        return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-    }
+    if (guard.IsReentrant()) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
+    if (!g_settings.enableRedirects || !File) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
 
-    if (!g_settings.enableRedirects || !File) {
-        return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-    }
+    wchar_t uri[256] = {0};
+    if (IsMsSettings(File)) NormalizeUri(File, uri, 256);
+    else if (IsShellClsid(File)) wcscpy_s(uri, 256, ToLowerCopy(File));
 
-    std::wstring fileStr(File);
-    std::wstring uri;
-
-    if (IsMsSettings(fileStr.c_str()))
-        uri = NormalizeUri(fileStr);
-    else if (IsShellClsid(fileStr.c_str()))
-        uri = ToLower(fileStr);
-
-    if (!uri.empty()) {
+    if (uri[0]) {
         auto result = ResolveUri(uri, nullptr);
         if (result.intercept) {
-            if (!result.target.empty()) LaunchTarget(result.target);
+            if (result.target[0]) LaunchTarget(result.target);
             return S_OK;
         }
     }
-
     return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
 }
 
@@ -1326,91 +1235,62 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(
 BOOL Wh_ModInit() {
     Wh_Log(L"Redirect Settings to Control Panel v10.0.2");
     
-    // Load COM dynamically for IShellDispatch2 hook
+    InitializeCriticalSection(&g_bounceGuardCs);
+    InitializeCriticalSection(&g_loopGuardCs);
+    
     g_hOle32 = LoadLibraryW(L"ole32.dll");
     if (g_hOle32) {
         dyn_CoCreateInstance = (CoCreateInstance_t)GetProcAddress(g_hOle32, "CoCreateInstance");
-        if (!dyn_CoCreateInstance) {
-            Wh_Log(L"Warning: CoCreateInstance not found");
-        }
     }
 
     DetectWindowsVersion();
     LoadSettings();
     BuildChildEnvironment();
-    InitMappings();
-    Wh_Log(L"%zu URI mappings loaded", g_mappings.size());
+    InitDynamicMappings();
+    Wh_Log(L"URI mappings loaded");
 
-    // Install ShellExecute hooks
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32) {
-        Wh_Log(L"ERROR: could not load shell32.dll");
-        return FALSE;
-    }
+    if (!hShell32) { Wh_Log(L"ERROR: could not load shell32.dll"); return FALSE; }
 
     FARPROC pExW = GetProcAddress(hShell32, "ShellExecuteExW");
     FARPROC pW = GetProcAddress(hShell32, "ShellExecuteW");
-    if (!pExW || !pW) {
-        Wh_Log(L"ERROR: required exports not found in shell32.dll");
-        return FALSE;
-    }
+    if (!pExW || !pW) { Wh_Log(L"ERROR: required exports not found"); return FALSE; }
 
     bool ok1 = Wh_SetFunctionHook((void*)pExW, (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
     bool ok2 = Wh_SetFunctionHook((void*)pW, (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
     Wh_Log(L"ShellExecuteExW hook=%d ShellExecuteW hook=%d", ok1, ok2);
+    if (!ok1 && !ok2) { Wh_Log(L"ERROR: failed to install any hooks"); return FALSE; }
 
-    if (!ok1 && !ok2) {
-        Wh_Log(L"ERROR: failed to install any hooks");
-        return FALSE;
-    }
-
-    // Install CreateProcessW hook
     HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
     if (!hKernel32) hKernel32 = LoadLibraryW(L"kernel32.dll");
     if (hKernel32) {
         FARPROC pCPW = GetProcAddress(hKernel32, "CreateProcessW");
-        if (pCPW) {
-            bool ok3 = Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
-            Wh_Log(L"CreateProcessW hook=%d", ok3);
-        }
+        if (pCPW) Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
     }
 
-    // Install TrackPopupMenuEx hook for system tray redirect
     if (g_settings.redirectSystemTray) {
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
         if (hUser32) {
             void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
-            if (pTrackPopupMenuEx) {
-                if (Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx)) {
-                    Wh_Log(L"TrackPopupMenuEx hook installed for system tray redirect");
-                } else {
-                    Wh_Log(L"ERROR: Failed to install TrackPopupMenuEx hook");
-                }
-            } else {
-                Wh_Log(L"TrackPopupMenuEx not found in user32.dll");
-            }
+            if (pTrackPopupMenuEx) Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
         }
     }
 
-    Wh_Log(L"Ready — EnableRedirects=%d RedirectSystemTray=%d UIOnly=%d SmartPers=always_active Fallback=%d Win11Compat=%d MaxLaunches=%d",
-        (int)g_settings.enableRedirects, (int)g_settings.redirectSystemTray, (int)g_settings.uiOnlyRedirects,
-        g_settings.fallbackMode, (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
-
+    Wh_Log(L"Ready");
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (g_hOle32) {
-        FreeLibrary(g_hOle32);
-        g_hOle32 = nullptr;
-    }
+    DeleteCriticalSection(&g_bounceGuardCs);
+    DeleteCriticalSection(&g_loopGuardCs);
+    if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
     Wh_Log(L"Redirect Settings to Control Panel v10.0.2 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading");
     LoadSettings();
-    InitMappings();
+    InitDynamicMappings();
 }
