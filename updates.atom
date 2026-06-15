@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-15T16:21:31.000Z</updated>
+    <updated>2026-06-15T17:39:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 2.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-properties#29bacda66445835d5b79e6657d124ca107540575</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-properties"/>
+        <updated>2026-06-15T17:39:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictaskbarandstartmenuproperties">Classic Taskbar and Start Menu Properties</h1>
+<p>This Windhawk mod restores the classic "Taskbar and Start Menu Properties" dialog inspired by Windows 7.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Lock/Unlock the taskbar</strong></li>
+<li><strong>Auto-hide the taskbar</strong></li>
+<li><strong>Use small icons</strong></li>
+<li><strong>Configure taskbar button grouping</strong> (Always combine, Combine when full, Never combine)</li>
+<li><strong>Configure Aero Peek</strong></li>
+<li><strong>Start Menu customization</strong> — only settings that actually work on Windows 10 are included</li>
+<li><strong>Toolbars tab</strong> — Address, Links, Tablet PC Input Panel, Desktop</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/pic.PNG" alt="Classic Taskbar Properties Dialog" /></p>
+<h2 id="startmenusettingswindows10">Start Menu Settings (Windows 10)</h2>
+<p>| Setting | Registry Key | Notes |
+|---------|-------------|-------|
+| Show more tiles | Start<em>ShowMoreTiles | Works on Win10 |
+| Show app list | Start</em>ShowAppList | Works on Win10 |
+| Show recently added apps | Start<em>TrackProgs | Works on Win10 |
+| Use Start full screen | ForceStartSize | Works on Win10 |
+| Show recently opened items | Start</em>TrackDocs | Works on Win10 |
+| Show account notifications | Start<em>NotifyNewApps | Works on Win10 |
+| Search programs | Start</em>SearchPrograms | Works on Win10 |
+| Search files | Start_SearchFiles | Works on Win10 |
+| Folders on Start | Per-folder registry values | Win10 HKCU...\Start |</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>| Feature | Windows 10 21H2 | Windows 11 |
+|---------|----------------|------------|
+| Taskbar tab | Full support | Partial |
+| Start Menu tab | Full support | May vary |
+| Toolbars tab | Full support | Limited |
+| Position change | Not available | Not available |</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li>Changing taskbar position is unavailable (risk of Explorer instability).</li>
+<li>Classic toolbars (Address, Links, Desktop) have limited support on newer Windows versions.</li>
+<li>Some Start Menu settings may require an Explorer restart or logout to take full effect.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Folder Hover Menu 1.0.1]]></title>
         <id>https://windhawk.net/mods/explorer-folder-hover-menu#b472df5c5691d1a660d2e77cd61e142bf448d59e</id>
@@ -693,39 +742,6 @@ ShellExecute runas launch.</li>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Settings Styler 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-settings-styler#6ae9513b383f5e9a7870a5d22696203d4657bcec</id>
-        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
-        <updated>2026-06-10T19:13:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11settingsstyler">Windows 11 Settings Styler</h1>
-<p>Customize the Windows Settings app (Win+I) with themes contributed by others or
-create your own.</p>
-<p>Also check out the <strong>Windows 11 Start Menu Styler</strong>, <strong>Windows 11 Taskbar
-Styler</strong>, <strong>Windows 11 Notification Center Styler</strong> mods.</p>
-<h2 id="themes">Themes</h2>
-<p>Themes are collections of styles. The following themes are integrated into the
-mod and can be selected in the settings:</p>
-<p>[<img src="https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot.png" alt="Densy" /></p>
-<p>Densy](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Densy/README.md)</p>
-<p>More themes can be found in the <strong>Themes</strong> section of <a href="https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/README.md#themes">The Windows 11 Settings
-styling
-guide</a></p>
-<h2 id="advancedstyling">Advanced styling</h2>
-<p>See the same section of the <strong>Windows 11 Start Menu Styler</strong>
-<a href="https://windhawk.net/mods/windows-11-start-menu-styler">mod</a></p>
-<h2 id="implementationnotes">Implementation notes</h2>
-<p>The VisualTreeWatcher implementation is based on the
-<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
-code from the <strong>TranslucentTB</strong> project.</p>
-<p>The <code>WindhawkBlur</code> brush object implementation is based on
-<a href="https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp">XamlBlurBrush</a>
-from the <strong>TranslucentTB</strong> project.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

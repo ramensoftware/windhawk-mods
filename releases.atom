@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-15T14:16:18.000Z</updated>
+    <updated>2026-06-15T17:39:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 2.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-properties#29bacda66445835d5b79e6657d124ca107540575</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-properties"/>
+        <updated>2026-06-15T17:39:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictaskbarandstartmenuproperties">Classic Taskbar and Start Menu Properties</h1>
+<p>This Windhawk mod restores the classic "Taskbar and Start Menu Properties" dialog inspired by Windows 7.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Lock/Unlock the taskbar</strong></li>
+<li><strong>Auto-hide the taskbar</strong></li>
+<li><strong>Use small icons</strong></li>
+<li><strong>Configure taskbar button grouping</strong> (Always combine, Combine when full, Never combine)</li>
+<li><strong>Configure Aero Peek</strong></li>
+<li><strong>Start Menu customization</strong> — only settings that actually work on Windows 10 are included</li>
+<li><strong>Toolbars tab</strong> — Address, Links, Tablet PC Input Panel, Desktop</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/pic.PNG" alt="Classic Taskbar Properties Dialog" /></p>
+<h2 id="startmenusettingswindows10">Start Menu Settings (Windows 10)</h2>
+<p>| Setting | Registry Key | Notes |
+|---------|-------------|-------|
+| Show more tiles | Start<em>ShowMoreTiles | Works on Win10 |
+| Show app list | Start</em>ShowAppList | Works on Win10 |
+| Show recently added apps | Start<em>TrackProgs | Works on Win10 |
+| Use Start full screen | ForceStartSize | Works on Win10 |
+| Show recently opened items | Start</em>TrackDocs | Works on Win10 |
+| Show account notifications | Start<em>NotifyNewApps | Works on Win10 |
+| Search programs | Start</em>SearchPrograms | Works on Win10 |
+| Search files | Start_SearchFiles | Works on Win10 |
+| Folders on Start | Per-folder registry values | Win10 HKCU...\Start |</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>| Feature | Windows 10 21H2 | Windows 11 |
+|---------|----------------|------------|
+| Taskbar tab | Full support | Partial |
+| Start Menu tab | Full support | May vary |
+| Toolbars tab | Full support | Limited |
+| Position change | Not available | Not available |</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li>Changing taskbar position is unavailable (risk of Explorer instability).</li>
+<li>Classic toolbars (Address, Links, Desktop) have limited support on newer Windows versions.</li>
+<li>Some Start Menu settings may require an Explorer restart or logout to take full effect.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mouse Button Remapper 1.7.2]]></title>
         <id>https://windhawk.net/mods/mouse-button-remap#073f0f0f798ceab2c0f67e6d7fb2a9a1b11ac201</id>
@@ -933,56 +982,6 @@ It does not currently support live/animated wallpapers (e.g., Wallpaper Engine, 
         <author>
             <name>Asteski</name>
             <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Nav DragOver Fix 1.1.9]]></title>
-        <id>https://windhawk.net/mods/explorer-nav-dragover-fix#e10c123d95f10be617ff01eb586b41851294c2fb</id>
-        <link href="https://windhawk.net/mods/explorer-nav-dragover-fix"/>
-        <updated>2026-06-01T20:34:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorernavdragoverfix">Explorer Nav DragOver Fix</h1>
-<p>Two fixes for File Explorer's drag-over behavior:</p>
-<ol>
-<li><p><strong>Stops the jump.</strong> When you drag a file or folder onto a root-level entry
-in the nav pane (drives, pinned folders, the "This PC" grouping), Explorer
-auto-expands that entry after a short hover delay -- and the auto-expand
-often scrolls the pane, sending the row you were aiming at off-screen.
-This mod pins the TreeView's first-visible item to its pre-expand position
-and keeps the drop highlight on the original parent row. Protection
-releases as soon as the cursor leaves the captured row, so deeper folders
-continue to behave normally.</p></li>
-<li><p><strong>Re-enables the mouse wheel.</strong> Windows normally swallows wheel input
-during drag-and-drop. This mod intercepts the wheel and forwards it to
-the Explorer navigation pane (left tree) and the main file list on the
-right (Details / ItemsView on Win11 25H2, and classic Large icons / List
-views via SysListView32). Scrolling prefers UI Automation so wheel messages
-are not sent to SHELLDLL_DefView during a drag. Disable the corresponding
-setting to fall back to native behavior.</p></li>
-</ol>
-<h2 id="demo">Demo</h2>
-<p><img src="https://raw.githubusercontent.com/tonythethompson/windhawk-mods/main/mods_assets/explorer-nav-dragover-fix-demo.gif" alt="Without Mod vs With Mod" /></p>
-<p>Left: default Explorer behavior. Right: with this mod enabled (stable hover
-expand and mouse-wheel scrolling during drag).</p>
-<p>The mod hooks <code>DoDragDrop</code> (to track drag generations across threads),
-subclasses each nav-pane <code>SysTreeView32</code>, and watches <code>EVENT_OBJECT_CREATE</code>
-on a dedicated helper thread to pick up new Explorer windows. No state is
-persisted between drags; everything is scoped to the active drag loop.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If you disable the mod and see a log line like <strong>"WinEvent helper thread did
-not exit within 10s"</strong>, an Explorer thread was wedged mid-callback (for
-example while subclassing a nav tree). The mod intentionally leaks that
-helper handle rather than calling <code>TerminateThread</code>, which would be unsafe.
-<strong>Restart File Explorer</strong> (or sign out) to clear the state. This is rare in
-normal use.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>File Explorer (<code>explorer.exe</code>) on Windows 11 (tested on 23H2 / 24H2).</li>
-<li>Architectures: x64, arm64.</li>
-<li>No effect on any other process.</li>
-</ul>]]></content>
-        <author>
-            <name>tonythethompson</name>
-            <uri>https://github.com/tonythethompson</uri>
         </author>
     </entry>
 </feed>
