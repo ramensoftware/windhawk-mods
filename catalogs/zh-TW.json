@@ -4260,7 +4260,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1781540491000,
+                "updated": 1781552855000,
                 "users": 55
             },
             "metadata": {
@@ -4274,7 +4274,7 @@
                 ],
                 "name": "Folder Hover Menu",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "explorer-font-changer": {
