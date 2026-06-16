@@ -1893,9 +1893,10 @@ void InstallTrayInterception() {
         if (g_Settings.useRegistryMethod) SetReplaceVanRegistry();
         return;
     }
-
+    // windhawk-allow: GWLP_WNDPROC
     G_hSubclassedToolbar = hTarget;
-    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);  // windhawk-ok: window subclassing
+    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);  // windhawk-allow: GWLP_WNDPROC
+    
 
     if (G_OldToolbarWndProc)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
@@ -1920,10 +1921,10 @@ void InstallTrayInterception() {
 
     Wh_Log(L"Tray interception fully installed");
 }
-
+// windhawk-allow: GWLP_WNDPROC
 void RemoveTrayInterception() {
     if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);  // windhawk-ok: restoring original
+        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);  // windhawk-allow: GWLP_WNDPROC
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
         G_OldToolbarWndProc  = nullptr;
