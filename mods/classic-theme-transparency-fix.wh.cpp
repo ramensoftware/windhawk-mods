@@ -3,7 +3,7 @@
 // @name            Classic theme transparency fix
 // @description     Fixes transparency glitches in Classic theme
 // @version         1.2
-// @author          anixx
+// @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // @include         dllhost.exe
