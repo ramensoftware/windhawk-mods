@@ -5423,6 +5423,38 @@
                 "version": "1.4.0"
             }
         },
+        "fix-missing-taskbar-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781639036000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781639036000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "therealgorgan",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lversion",
+                "description": "On resume from sleep or hibernate, momentarily pulses the taskbar height by 1px and reverts it, forcing a re-layout that brings back icons that go missing on wake (Windows 11)",
+                "github": "https://github.com/therealgorgan",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0-or-later",
+                "name": "Fix missing taskbar icons after sleep",
+                "version": "2.0.0"
+            }
+        },
         "fix-qt-scrollbar-grippers": {
             "details": {
                 "defaultSorting": 750,

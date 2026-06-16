@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-15T17:39:49.000Z</updated>
+    <updated>2026-06-16T19:43:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix missing taskbar icons after sleep 2.0.0]]></title>
+        <id>https://windhawk.net/mods/fix-missing-taskbar-icons#b804f7b6f8902516a34c3af5dd7688e849d2e8fe</id>
+        <link href="https://windhawk.net/mods/fix-missing-taskbar-icons"/>
+        <updated>2026-06-16T19:43:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixmissingtaskbariconsaftersleep">Fix missing taskbar icons after sleep</h1>
+<p>Works around a Windows 11 bug where some taskbar icons go missing after the PC
+wakes from <strong>sleep or hibernate</strong>, normally requiring a manual <code>explorer.exe</code>
+restart.</p>
+<p>Instead of restarting explorer, this mod reproduces the exact refresh mechanism
+that the <em>Taskbar height and icon size</em> mod (m417z) uses: when triggered, it
+<strong>momentarily changes the taskbar height by 1 pixel and immediately reverts it</strong>.
+That tiny real change forces the taskbar's XAML layout to fully re-measure and
+re-render, which rebuilds the missing icons. A no-op message (which an earlier
+version tried) does <em>not</em> work — the layout has to actually change.</p>
+<ul>
+<li>In steady state the mod changes <strong>nothing</strong> — all of its hooks pass straight
+through to Windows, so your taskbar height, icon size, and dynamic icon
+scaling are untouched.</li>
+<li>On every resume it fires the 1px pulse a few times on a staggered schedule
+(configurable), to catch the taskbar whenever it settles into the broken state.</li>
+<li>Toggling the mod on triggers one pulse immediately, so the on/off switch
+doubles as a manual "refresh now" button for testing.</li>
+</ul>
+<p>This is a stripped-down fork of the <em>Taskbar height and icon size</em> mod: only the
+taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</p>
+<p>Only Windows 11 is supported.</p>]]></content>
+        <author>
+            <name>therealgorgan</name>
+            <uri>https://github.com/therealgorgan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 2.0.2]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-properties#29bacda66445835d5b79e6657d124ca107540575</id>
@@ -943,45 +975,6 @@ It does not currently support live/animated wallpapers (e.g., Wallpaper Engine, 
         <author>
             <name>drgutman</name>
             <uri>https://github.com/drgutman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Toggle Hidden Files 1.0.0]]></title>
-        <id>https://windhawk.net/mods/toggle-hidden-files#72576e59a6cee399c10d601d49cc36b666c26191</id>
-        <link href="https://windhawk.net/mods/toggle-hidden-files"/>
-        <updated>2026-06-01T21:37:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="togglehiddenfiles">Toggle Hidden Files</h1>
-<p>This mod allows you to toggle the visibility of hidden files in Windows Explorer using the Ctrl+H keyboard shortcut.</p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/refs/heads/main/img/toggle-hidden-files/toggle-hidden-files.gif" alt="toggle-hidden-files-gif" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Ctrl+H hotkey that works only when Explorer windows are focused</li>
-<li>Toggles the "Show hidden files" setting</li>
-<li>Optional: Also toggle protected OS files</li>
-<li>Applies changes immediately to Explorer windows</li>
-<li>Works with all Windows Explorer windows</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<ol>
-<li><strong>Focus an Explorer window</strong> - Click on or open any File Explorer window</li>
-<li><strong>Press Ctrl+H</strong> - Use the keyboard shortcut to toggle hidden files visibility</li>
-<li><strong>The setting will be applied immediately</strong> to all Explorer windows</li>
-</ol>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Also toggle protected OS files</strong>: When enabled, Ctrl+H will also show/hide protected operating system files</li>
-</ul>
-<h2 id="technicaldetails">Technical Details</h2>
-<ul>
-<li>Only activates when Windows Explorer windows are in focus</li>
-<li>Queues toggle work to a worker thread to keep input handling responsive</li>
-<li>Uses Windows shell APIs to update hidden-file visibility live</li>
-<li>Notifies the shell to refresh views after toggling</li>
-<li>Handles proper cleanup when the mod is unloaded</li>
-</ul>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
         </author>
     </entry>
 </feed>
