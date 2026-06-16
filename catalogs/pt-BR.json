@@ -2159,11 +2159,11 @@
                     2
                 ],
                 "ratingUsers": 3,
-                "updated": 1751147133000,
+                "updated": 1781634229000,
                 "users": 929
             },
             "metadata": {
-                "author": "anixx",
+                "author": "Anixx",
                 "description": "Fixes transparency glitches in Classic theme",
                 "github": "https://github.com/Anixx",
                 "include": [
@@ -2171,7 +2171,7 @@
                     "dllhost.exe"
                 ],
                 "name": "Classic theme transparency fix",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "classic-theme-uifile-fix": {
@@ -9250,7 +9250,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1780846084000,
+                "updated": 1781634178000,
                 "users": 99
             },
             "metadata": {
@@ -9265,7 +9265,7 @@
                     "explorer.exe"
                 ],
                 "name": "ExplorerFrame and menubar fixes fork",
-                "version": "2.0.0"
+                "version": "2.0.1"
             }
         },
         "ribbon-caption-icon-fix": {

@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-15T19:47:35.000Z</updated>
+    <updated>2026-06-16T18:23:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic theme transparency fix 1.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-transparency-fix#e7cf22e460b4514dc6dab1c2d897e8e7ebc3fbd3</id>
+        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
+        <updated>2026-06-16T18:23:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Add a fix for Internet Download Manager</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 2.0.1]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#7b38cda60dbdd9dad527334fc61be76dcfd1db12</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-06-16T18:22:58.000Z</updated>
+        <content type="html"><![CDATA[<p>remove redunant argument</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Folder Hover Menu 1.0.2]]></title>
         <id>https://windhawk.net/mods/explorer-folder-hover-menu#625c479f1d6f59a39cfde77301a4895444fdf429</id>
@@ -670,57 +692,6 @@ and RAM usage, plus the single top-consuming process for each.</p>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Saved Run Commands 1.0.0]]></title>
-        <id>https://windhawk.net/mods/saved-run-commands#3fea50c0b2dad77305ca50376a7683b232443903</id>
-        <link href="https://windhawk.net/mods/saved-run-commands"/>
-        <updated>2026-06-13T09:21:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="savedruncommands">Saved Run Commands</h1>
-<p>Adds a small button to the standard Windows Run dialog. The button opens a
-compact "Saved Commands" window. A double click on a saved command inserts it
-into the Run edit box and immediately executes it.
-The Saved Commands window can also save either the current Run command or a
-command typed directly into its own input field.
-Saved commands can be edited with the "Update selected" button.
-Multiple saved commands can be selected and deleted at once.
-Each saved command has a per-row "Run as administrator" checkbox.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28button%29.png" alt="Windows Run dialog with the Saved Run Commands button" /></p>
-<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28window%29.png" alt="Saved Commands window" /></p>
-<p>Notes:</p>
-<ul>
-<li>Commands are stored as one line per command in the mod storage folder.</li>
-<li>Elevated commands expand environment variables before a best-effort
-ShellExecute runas launch.</li>
-<li>The UI added by this mod is intentionally English-only.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Context Menu Custom Items 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-context-menu-custom-items#19bc5c4ed26f7fae503df45a5415ab60fec6311e</id>
-        <link href="https://windhawk.net/mods/explorer-context-menu-custom-items"/>
-        <updated>2026-06-12T16:23:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorercontextmenucustomitems">Explorer Context Menu Custom Items</h1>
-<p>Easily add, filter, and manage custom shortcut actions inside the classic context menu (<strong>Show more options</strong>).</p>
-<h3 id="keyfeatures">Key Features:</h3>
-<ul>
-<li><strong>Dynamic Commands:</strong> Run any CLI tool or executable (like <code>whisperx</code>, <code>ffmpeg</code>, or <code>python</code>) directly on a highlighted file.</li>
-<li><strong>Extension Filtering:</strong> Restrict commands to specific formats (e.g., <code>.mp4, .mkv</code>) so your menu stays clean and relevant.</li>
-<li><strong>Folder Toggle:</strong> Choose whether specific shortcuts show up when right-clicking folders or folder backdrops.</li>
-</ul>
-<h3 id="howtousevariables">How to use variables:</h3>
-<ul>
-<li>Use <code>%1</code> in your command string to automatically pass the absolute file path of your selected file. It is recommended to use double quotes around it in your command settings (e.g., whisperx "%1") to handle spaces in file paths properly.</li>
-</ul>]]></content>
-        <author>
-            <name>Deepak</name>
-            <uri>https://github.com/deepak-raven</uri>
         </author>
     </entry>
 </feed>

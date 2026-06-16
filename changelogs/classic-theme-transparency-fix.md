@@ -1,3 +1,7 @@
+## 1.2 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e7cf22e460b4514dc6dab1c2d897e8e7ebc3fbd3/mods/classic-theme-transparency-fix.wh.cpp))
+
+Add a fix for Internet Download Manager
+
 ## 1.1 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/aaf906578b278f95bd23e745832c4e30719e185e/mods/classic-theme-transparency-fix.wh.cpp))
 
 Fix LoadLibrary https://github.com/ramensoftware/windhawk-mods/issues/2063

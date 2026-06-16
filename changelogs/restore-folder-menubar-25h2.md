@@ -1,3 +1,7 @@
+## 2.0.1 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7b38cda60dbdd9dad527334fc61be76dcfd1db12/mods/restore-folder-menubar-25h2.wh.cpp))
+
+remove redunant argument
+
 ## 2.0.0 ([Jun 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d212cd2fcc4140d1f06f96e590548ddace6d455a/mods/restore-folder-menubar-25h2.wh.cpp))
 
 Seriously expand the mod and add compatibility fixes
