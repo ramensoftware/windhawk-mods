@@ -4148,14 +4148,14 @@
                     1655
                 ],
                 "ratingUsers": 1801,
-                "updated": 1769882688000,
+                "updated": 1781641244000,
                 "users": 178550
             },
             "featured": true,
             "metadata": {
                 "author": "m417z",
                 "compilerOptions": "-lole32 -loleaut32 -lpropsys",
-                "description": "Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)",
+                "description": "Enhances file size display in Explorer details with folder sizes, human-readable units (MB/GB), and optional IEC notation (KiB/MiB)",
                 "exclude": [
                     "conhost.exe",
                     "Plex*.exe",
@@ -4163,7 +4163,10 @@
                     "LockApp.exe",
                     "SearchHost.exe",
                     "ShellExperienceHost.exe",
-                    "StartMenuExperienceHost.exe"
+                    "StartMenuExperienceHost.exe",
+                    "msedgewebview2.exe",
+                    "windhawk.exe",
+                    "*\\UI\\VSCodium.exe"
                 ],
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -4172,7 +4175,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.5"
+                "version": "1.5.1"
             }
         },
         "explorer-double-click-up": {

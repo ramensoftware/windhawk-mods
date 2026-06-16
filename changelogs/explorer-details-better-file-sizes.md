@@ -1,3 +1,10 @@
+## 1.5.1 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3379f54d9f26eff3b9b09528addff47bf6a87248/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed the IEC terms option not working in some cases.
+* Fixed slow file list loading with mapped network drives.
+* Excluded msedgewebview2.exe to work around a reported incompatibility with Bitdefender which could cause the Start menu search to load indefinitely.
+* Excluded Windhawk as an additional safety measure to allow disabling the mod if it's stuck on init.
+
 ## 1.5 ([Jan 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cecaca7b6506e55b663a4a7ee391cb5763a7285c/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * When showing folder sizes, the sizes are now shown in Tiles and Content folder view, not only in Details view. In addition, folder sizes are shown in the status bar, and in the details pane (enabled via OldNewExplorer). Note: An explorer restart might be required to apply these changes.
