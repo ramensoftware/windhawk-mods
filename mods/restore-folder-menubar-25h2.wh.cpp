@@ -2,7 +2,7 @@
 // @id              restore-folder-menubar-25h2
 // @name            ExplorerFrame and menubar fixes fork
 // @description     Fixes explorer problems: menu bar, listview redraw, classic background color
-// @version         2.0.0
+// @version         2.0.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -355,7 +355,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar", 1);
+    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
 
     return TRUE;
 }
@@ -375,5 +375,5 @@ void Wh_ModUninit()
 
 void Wh_ModSettingsChanged()
 {
-    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar", 1);
+    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
 }
