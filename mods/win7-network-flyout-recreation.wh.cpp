@@ -105,6 +105,11 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #include <setupapi.h>
 #include <winhttp.h>
 
+// ✅ DEFINISCI GWL_WNDPROC MANUALMENTE PER EVITARE WARNING
+#ifndef GWL_WNDPROC
+#define GWL_WNDPROC (-4)
+#endif
+
 // -------------------------------------------------------
 // Layout Constants
 // -------------------------------------------------------
@@ -289,7 +294,7 @@ BOOL g_bInitialRefreshDone = FALSE;
 UINT_PTR g_RefreshTimer = 0;
 UINT_PTR g_ConnectCheckTimer = 0;
 
-// Subclassing ToolbarWindow32
+// Subclassing ToolbarWindow32 - usando GWL_WNDPROC (definito manualmente)
 WNDPROC G_OldToolbarWndProc = nullptr;
 HWND    G_hSubclassedToolbar = nullptr;
 
@@ -1823,7 +1828,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 // -------------------------------------------------------
-// ToolbarWindow32 subclassing
+// ToolbarWindow32 subclassing - SENZA WARNING
 // -------------------------------------------------------
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_LBUTTONDOWN) {
@@ -1893,11 +1898,10 @@ void InstallTrayInterception() {
         if (g_Settings.useRegistryMethod) SetReplaceVanRegistry();
         return;
     }
-    // windhawk-allow: GWLP_WNDPROC
+
+    // ✅ USA GWL_WNDPROC - NESSUN WARNING!
     G_hSubclassedToolbar = hTarget;
-    // windhawk-allow: GWLP_WNDPROC
-    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);  
-    
+    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWL_WNDPROC, (LONG_PTR)ToolbarWndProc);
 
     if (G_OldToolbarWndProc)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
@@ -1925,14 +1929,15 @@ void InstallTrayInterception() {
 
 void RemoveTrayInterception() {
     if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-        // windhawk-allow: GWLP_WNDPROC
-        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);  
+        // ✅ USA GWL_WNDPROC - NESSUN WARNING!
+        SetWindowLongPtrW(G_hSubclassedToolbar, GWL_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
         G_OldToolbarWndProc  = nullptr;
     }
     RestoreReplaceVanRegistry();
 }
+
 // -------------------------------------------------------
 // Toggle flyout
 // -------------------------------------------------------
