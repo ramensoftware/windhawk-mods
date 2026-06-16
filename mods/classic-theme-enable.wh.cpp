@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.5
+// @version         1.3
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -266,7 +266,7 @@ DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
     }
 
     Wh_Log(L"All attempts failed");
-    return 1;
+    return FALSE;
 }
 
 BOOL Wh_ModInit() {
@@ -282,12 +282,7 @@ BOOL Wh_ModInit() {
     g_bStopThread = FALSE;
     g_hThread = CreateThread(NULL, 0, RetryThreadProc, NULL, 0, NULL);
     
-    if (g_hThread == NULL) {
-        Wh_Log(L"Failed to create retry thread");
-        return FALSE;
-    }
-
-    return TRUE;
+    return FALSE;
 }
 
 void Wh_ModUninit() {
