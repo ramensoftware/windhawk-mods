@@ -43,8 +43,6 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
     SIZE_T cbData;
 };
 
-BOOL g_removeDialogTransparency=TRUE;
-
 typedef BOOL (WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
 // --- DWM / composition hooks ---
@@ -71,21 +69,20 @@ ShowWindow_t ShowWindow_Original;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow)
 {
-    if (g_removeDialogTransparency) {
-        if (nCmdShow != SW_HIDE && hWnd) {
-            WCHAR className[64];
-            if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
-                auto SetWCA = (pSetWindowCompositionAttribute)GetProcAddress(
-                    GetModuleHandle(L"user32.dll"), "SetWindowCompositionAttribute");
+    if (nCmdShow != SW_HIDE && hWnd) {
+        WCHAR className[64];
+        if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
+            auto SetWCA = (pSetWindowCompositionAttribute)GetProcAddress(
+                GetModuleHandle(L"user32.dll"), "SetWindowCompositionAttribute");
 
-                if (SetWCA) {
-                    ACCENT_POLICY accent = {1};
-                    WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-                    SetWCA(hWnd, &data);
-                }
+            if (SetWCA) {
+                ACCENT_POLICY accent = {1};
+                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+                SetWCA(hWnd, &data);
             }
         }
     }
+
     return ShowWindow_Original(hWnd, nCmdShow);
 }
 
@@ -101,22 +98,11 @@ BOOL Wh_ModInit()
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
     Wh_SetFunctionHook((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
     
-    g_removeDialogTransparency=Wh_GetIntSetting(L"removeDialogTransparency");
-
-    if (g_removeDialogTransparency) {
+    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
         Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     }
 
     return TRUE;
 }
 
-void Wh_ModSettingsChanged()
-{
-    g_removeDialogTransparency=Wh_GetIntSetting(L"removeDialogTransparency");
-    if (g_removeDialogTransparency) {
-        // Enable the hook if not already hooked
-        if (!ShowWindow_Original) {
-            Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
-        }
-    }
-}
+BOOL Wh_ModSettingsChanged(BOOL* bReload){return TRUE;};
