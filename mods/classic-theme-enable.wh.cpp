@@ -266,7 +266,7 @@ DWORD WINAPI RetryThreadProc(LPVOID lpParam) {
     }
 
     Wh_Log(L"All attempts failed");
-    return FALSE;
+    return 1;
 }
 
 BOOL Wh_ModInit() {
@@ -275,14 +275,14 @@ BOOL Wh_ModInit() {
     // Сначала пробуем сразу — может, секция уже доступна
     if (TrySetThemeSectionSecurity()) {
         Wh_Log(L"Success on first try");
-        return TRUE;
+        return FALSE;
     }
 
     // Если не получилось, запускаем фоновый поток для повторных попыток
     g_bStopThread = FALSE;
     g_hThread = CreateThread(NULL, 0, RetryThreadProc, NULL, 0, NULL);
     
-    return FALSE;
+    return TRUE;
 }
 
 void Wh_ModUninit() {
