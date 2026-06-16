@@ -69,16 +69,18 @@ ShowWindow_t ShowWindow_Original;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow)
 {
-    if (nCmdShow != SW_HIDE && hWnd) {
-        WCHAR className[64];
-        if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
-            auto SetWCA = (pSetWindowCompositionAttribute)GetProcAddress(
-                GetModuleHandle(L"user32.dll"), "SetWindowCompositionAttribute");
+    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
+        if (nCmdShow != SW_HIDE && hWnd) {
+            WCHAR className[64];
+            if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
+                auto SetWCA = (pSetWindowCompositionAttribute)GetProcAddress(
+                    GetModuleHandle(L"user32.dll"), "SetWindowCompositionAttribute");
 
-            if (SetWCA) {
-                ACCENT_POLICY accent = {1};
-                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-                SetWCA(hWnd, &data);
+                if (SetWCA) {
+                    ACCENT_POLICY accent = {1};
+                    WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+                    SetWCA(hWnd, &data);
+                }
             }
         }
     }
@@ -91,15 +93,25 @@ BOOL Wh_ModInit()
 {
     HMODULE dwmapiModule = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     FARPROC pFunction = GetProcAddress(dwmapiModule, "DwmIsCompositionEnabled");
-    WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)DwmIsCompositionEnabled_hook, (void**)&DwmIsCompositionEnabled_orig);
+    Wh_SetFunctionHook((void*)pFunction, (void*)DwmIsCompositionEnabled_hook, (void**)&DwmIsCompositionEnabled_orig);
 
     HMODULE uxthemeModule = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
-    WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
+    Wh_SetFunctionHook((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
 
     if (Wh_GetIntSetting(L"removeDialogTransparency")) {
         Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     }
 
     return TRUE;
+}
+
+void Wh_ModSettingsChanged()
+{
+    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
+        // Enable the hook if not already hooked
+        if (!ShowWindow_Original) {
+            Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
+        }
+    }
 }
