@@ -2,7 +2,7 @@
 // @id              no-properties-icon
 // @name            No Properties Icon
 // @description     Removes the window icon from property sheets like previous Windows versions
-// @version         1.0.2
+// @version         1.0.3
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -202,6 +202,17 @@ BOOL Wh_ModInit(void)
             _SetPropertySheetIcon_hook,
             false
         },
+          {
+            {
+            #ifdef _WIN64
+            L"__int64 __cdecl StubWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+            #else
+            L"long __stdcall StubWndProc(struct HWND__ *,unsigned int,unsigned int,long)"
+            #endif
+            },
+            &WndProc_orig,
+            WndProc_hook
+        }
     };
 
     WindhawkUtils::SYMBOL_HOOK comCtl32Dllhook = {
