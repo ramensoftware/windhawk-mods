@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          Leymonaide
 // @github          https://github.com/Leymonaide
-// @twitter         https://twitter.com/Lem0naide
+// @twitter         https://twitter.com/Leym0naide
 // @homepage        https://leymonaide.github.io/
 // @include         *
 // @compilerOptions -lcomdlg32 -lgdi32
@@ -20,6 +20,9 @@ Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dial
 
 This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
 make the icon look like the Windows 7 glyph.
+
+This mod is currently tested and known to work on Windows 10 builds 19041 through 19045.. It is not tested on other
+versions.
 
 ![Preview image](https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png)
 */
@@ -89,7 +92,8 @@ void (__thiscall *CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_orig)(cla
 class CFileOpenSave
 {
 public:
-    // The current offsets are applicable for 19041.1806
+    // The current offsets are applicable for 19041.1806, and reportedly works
+    // on other 19041 variants. Support for other builds will be added later.
     HWND get_hwndToggleBar()
     {
 #ifdef _WIN64
@@ -149,7 +153,7 @@ void __thiscall CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_hook(class 
 }
 
 // comdlg32.dll
-const WindhawkUtils::SYMBOL_HOOK kComdlg32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK c_rghkComdlg32[] = {
     {
         {
 #ifdef _WIN64
@@ -193,7 +197,7 @@ BOOL Wh_ModInit()
     HMODULE hmodComdlg32_10 = LoadLibraryExW(L"comdlg32.dll", nullptr,
         LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    if (!WindhawkUtils::HookSymbols(hmodComdlg32_10, kComdlg32Hooks, ARRAYSIZE(kComdlg32Hooks)))
+    if (!WindhawkUtils::HookSymbols(hmodComdlg32_10, c_rghkComdlg32, ARRAYSIZE(c_rghkComdlg32)))
     {
         Wh_Log(L"Failed to hook symbols in comdlg32.dll.");
     }
@@ -216,8 +220,9 @@ void Wh_ModUninit()
 }
 
 // The mod setting were changed, reload them.
-void Wh_ModSettingsChanged(BOOL *pbReload)
+BOOL Wh_ModSettingsChanged(BOOL *pbReload)
 {
     Wh_Log(L"SettingsChanged");
     *pbReload = TRUE;
+    return TRUE;
 }
