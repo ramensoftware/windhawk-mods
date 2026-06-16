@@ -20,6 +20,8 @@ Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dial
 
 This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
 make the icon look like the Windows 7 glyph.
+
+![Preview image](https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png)
 */
 // ==/WindhawkModReadme==
 
