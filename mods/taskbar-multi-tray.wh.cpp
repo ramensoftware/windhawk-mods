@@ -3835,7 +3835,7 @@ void ClearStaleFlyoutContextBeforeTaskbarClick(HWND taskbarWnd) {
 
 /// Drops an armed context when right-click/context input arrives : context menus must stay fully native and never inherit a left-click flyout's monitor redirection
 void ClearFlyoutMonitorContextForContextMenu(UINT uMsg, WPARAM wParam, PCWSTR reason) {
-    bool contextInput = IsRightClickOrContextMenuMessage(uMsg, wParam) IsSecondButtonPointerMessage(uMsg, wParam);
+    bool contextInput = IsRightClickOrContextMenuMessage(uMsg, wParam) || IsSecondButtonPointerMessage(uMsg, wParam);
 
     if (!contextInput || !GetActiveProxyFlyoutMonitor()) {
         return;
