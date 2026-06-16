@@ -103,7 +103,7 @@ BOOL Wh_ModInit()
     
     g_removeDialogTransparency=Wh_GetIntSetting(L"removeDialogTransparency");
 
-     if (g_removeDialogTransparency) {
+    if (g_removeDialogTransparency) {
         Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     }
 
