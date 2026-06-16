@@ -2,11 +2,12 @@
 // @id              classic-theme-transparency-fix
 // @name            Classic theme transparency fix
 // @description     Fixes transparency glitches in Classic theme
-// @version         1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // @include         dllhost.exe
+// @exclude         UniGetUI.Avalonia.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
