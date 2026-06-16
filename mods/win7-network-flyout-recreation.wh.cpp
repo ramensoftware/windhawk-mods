@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.1.2
+// @version        1.1.3
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -105,10 +105,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #include <setupapi.h>
 #include <winhttp.h>
 
-// ✅ DEFINISCI GWL_WNDPROC MANUALMENTE PER EVITARE WARNING
-#ifndef GWL_WNDPROC
-#define GWL_WNDPROC (-4)
-#endif
+
 
 // -------------------------------------------------------
 // Layout Constants
@@ -1901,8 +1898,7 @@ void InstallTrayInterception() {
 
     // ✅ USA GWL_WNDPROC - NESSUN WARNING!
     G_hSubclassedToolbar = hTarget;
-    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWL_WNDPROC, (LONG_PTR)ToolbarWndProc);
-
+    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);
     if (G_OldToolbarWndProc)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
     else {
@@ -1929,8 +1925,7 @@ void InstallTrayInterception() {
 
 void RemoveTrayInterception() {
     if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-        // ✅ USA GWL_WNDPROC - NESSUN WARNING!
-        SetWindowLongPtrW(G_hSubclassedToolbar, GWL_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);
+        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);        
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
         G_OldToolbarWndProc  = nullptr;
