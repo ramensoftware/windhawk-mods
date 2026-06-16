@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id             win7-network-flyout
+// @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
 // @version        1.1.2
@@ -1860,9 +1860,6 @@ static bool IsExplorerProcess() {
     return _wcsicmp(name, L"explorer.exe") == 0;
 }
 
-// -------------------------------------------------------
-// InstallTrayInterception
-// -------------------------------------------------------
 void InstallTrayInterception() {
     Wh_Log(L"Installing ToolbarWindow32 interception...");
 
@@ -1898,7 +1895,7 @@ void InstallTrayInterception() {
     }
 
     G_hSubclassedToolbar = hTarget;
-    G_OldToolbarWndProc  = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);
+    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, GWLP_WNDPROC, (LONG_PTR)ToolbarWndProc);  // windhawk-ok: window subclassing
 
     if (G_OldToolbarWndProc)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
@@ -1926,14 +1923,13 @@ void InstallTrayInterception() {
 
 void RemoveTrayInterception() {
     if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);
+        SetWindowLongPtrW(G_hSubclassedToolbar, GWLP_WNDPROC, (LONG_PTR)G_OldToolbarWndProc);  // windhawk-ok: restoring original
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
         G_OldToolbarWndProc  = nullptr;
     }
     RestoreReplaceVanRegistry();
 }
-
 // -------------------------------------------------------
 // Toggle flyout
 // -------------------------------------------------------
