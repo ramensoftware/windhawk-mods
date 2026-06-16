@@ -2,13 +2,12 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.1.2
+// @version        1.1.4
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @include        ShellExperienceHost.exe
 // @architecture   x86-64
-// @compilerOptions -lwlanapi -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -lcrypt32 -lshlwapi -lruntimeobject -ladvapi32 -lversion -liphlpapi -lnetapi32 -lwinhttp
+// @compilerOptions -lwlanapi -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lnetapi32 -luuid
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -25,7 +24,6 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 - **Network status & properties** — Right-click context menu for quick access
 - **Keyboard navigation** — Arrow keys, Enter, Escape support
 - **Auto-refresh** — Configurable network list refresh interval
-- **Registry fallback** — Optional Windows 8 style flyout (ReplaceVan method)
 - **Language support** — English and Italian (auto-detect or manual override)
 
 ## Hotkeys
@@ -45,9 +43,9 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 | Language | Force language (Auto-detect, English, Italian) |
 | Intercept native flyout | Replace Windows 10/11 network flyout with classic one |
 | Privacy mode | Hide real network names |
-| Use Registry ReplaceVan | Enable Windows 8 style flyout as fallback |
 | Redirect network context menu | Redirect tray context menu to classic network connections |
 | Refresh interval | Auto-refresh interval in ms (0 = disable) |
+| Disable rounded corners (Classic theme) | Use rectangle borders instead of rounded corners |
 
 */
 // ==/WindhawkModReadme==
@@ -66,15 +64,18 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 - privacyMode: false
   $name: Privacy mode (hide network names)
   $description: Show all networks as Network 1, Network 2... instead of real SSIDs
-- useRegistryMethod: true
-  $name: Use Registry ReplaceVan method
-  $description: Sets ReplaceVan=2 to enable Windows 8 style network flyout as fallback. Automatically removed when the mod is disabled.
 - redirectNetworkContextMenu: true
   $name: Redirect network context menu
   $description: Redirect network tray context menu to classic network connections
 - refreshInterval: 3000
   $name: Refresh interval (ms)
   $description: How often to automatically refresh the network list (0 = disable auto-refresh)
+- enableHotkey: true
+  $name: Enable Ctrl+H hotkey
+  $description: Enable or disable the Ctrl+H hotkey to toggle the network flyout
+- disableRoundedCornersClassic: false
+  $name: Disable rounded corners (Classic theme)
+  $description: Use Rectangle() instead of RoundRect() when Windows Classic theme is detected
 */
 // ==/WindhawkModSettings==
 
@@ -93,19 +94,9 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #include <commctrl.h>
 #include <math.h>
 #include <windhawk_api.h>
-#include <psapi.h>
 #include <shlwapi.h>
-#include <roapi.h>
-#include <winstring.h>
-#include <versionhelpers.h>
 #include <iphlpapi.h>
 #include <netlistmgr.h>
-#include <netcon.h>
-#include <devguid.h>
-#include <setupapi.h>
-#include <winhttp.h>
-
-
 
 // -------------------------------------------------------
 // Layout Constants
@@ -122,32 +113,46 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #define ROW_HEIGHT_EXPANDED 74
 #define FOOTER_TEXT_Y_OFFSET 15
 
-#define IDC_CONN_BUTTON     1002
-#define IDC_AUTO_CHECKBOX   1003
+// Child control IDs
+#define IDC_CONN_BUTTON     1002  // Connect/Disconnect push button
+#define IDC_AUTO_CHECKBOX   1003  // "Connect automatically" checkbox
+
+// Arbitrary ID for RegisterHotKey — must not conflict with other mods or apps
 #define HOTKEY_ID           9001
-#define WM_REFRESH_DATA     (WM_USER + 100)
-#define WM_SAFE_CLOSE       (WM_USER + 101)
-#define WM_SHOW_FLYOUT      (WM_USER + 102)
-#define WM_INSTALL_TRAY     (WM_USER + 103)
-#define WM_CHECK_CONNECTION (WM_USER + 104)
+
+// Custom window messages (WM_APP range to avoid collisions with WM_USER)
+#define WM_REFRESH_DATA     (WM_APP + 100)
+#define WM_SAFE_CLOSE       (WM_APP + 101)
+#define WM_SHOW_FLYOUT      (WM_APP + 102)
+#define WM_INSTALL_TRAY     (WM_APP + 103)
+#define WM_CHECK_CONNECTION (WM_APP + 104)
+
+// WM_CHECK_CONNECTION wParam values
+#define CONN_NOTIFY_ATTEMPT_FAIL  1
+#define CONN_NOTIFY_MSM_CONNECTED 2
+#define CONN_NOTIFY_MSM_DISCONNECTED 3
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
 #define IDM_STATUS          2003
 #define IDM_PROPERTIES      2004
 
+// Native tray context menu command IDs (found empirically via menu interception)
 #define CMD_OPEN_NETWORK_SETTINGS   3109
 #define CMD_NETWORK_STATUS          3108
 #define CMD_NETWORK_DIAGNOSTICS     3110
 
-#define REG_PATH_NETWORK    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Panel\\Settings\\Network"
-#define REG_VALUE_REPLACEVAN L"ReplaceVan"
-
-// Network icon ID in the tray toolbar
+// Button ID in tray toolbar, found via TB_HITTEST
 #define TRAY_NETWORK_ID 2
 
-// Anti-bounce: minimum interval in ms between accepted clicks
+// Prevents conflict with native double-click handling
 #define CLICK_DEBOUNCE_MS 600
+
+// Connection timeout: 30 retries × 300ms = ~9 seconds
+#define CONNECT_TIMEOUT_RETRIES 30
+
+// Internet connectivity cache duration in milliseconds
+#define INTERNET_CHECK_CACHE_MS 5000
 
 // -------------------------------------------------------
 // Settings
@@ -155,51 +160,37 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 struct ModSettings {
     BOOL interceptNativeFlyout;
     BOOL privacyMode;
-    BOOL useRegistryMethod;
     BOOL redirectNetworkContextMenu;
     int  refreshInterval;
     int  language;  // 0=auto, 1=English, 2=Italian
-} g_Settings = { TRUE, FALSE, TRUE, TRUE, 3000, 0 };
-
-static bool s_settingsSavedOnce = false;
+    BOOL enableHotkey;
+    BOOL disableRoundedCornersClassic;
+} g_Settings = { TRUE, FALSE, TRUE, 3000, 0, TRUE, FALSE };
 
 void LoadSettings() {
-    int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
-    int raw_privacy    = Wh_GetIntSetting(L"privacyMode");
-    int raw_registry   = Wh_GetIntSetting(L"useRegistryMethod");
-    int raw_redirectCtx= Wh_GetIntSetting(L"redirectNetworkContextMenu");
-    int raw_refresh    = Wh_GetIntSetting(L"refreshInterval");
-    int raw_language   = Wh_GetIntSetting(L"language");
+    g_Settings.interceptNativeFlyout      = Wh_GetIntSetting(L"interceptNativeFlyout") != 0;
+    g_Settings.privacyMode               = Wh_GetIntSetting(L"privacyMode") != 0;
+    g_Settings.redirectNetworkContextMenu = Wh_GetIntSetting(L"redirectNetworkContextMenu") != 0;
+    g_Settings.refreshInterval            = Wh_GetIntSetting(L"refreshInterval");
+    g_Settings.language                  = Wh_GetIntSetting(L"language");
+    g_Settings.enableHotkey = Wh_GetIntSetting(L"enableHotkey") != 0;
+    g_Settings.disableRoundedCornersClassic = Wh_GetIntSetting(L"disableRoundedCornersClassic") != 0;
 
-    if (!s_settingsSavedOnce &&
-        raw_intercept == 0 && raw_privacy == 0 &&
-        raw_registry  == 0 && raw_redirectCtx == 0 && 
-        raw_refresh == 0 && raw_language == 0) {
-        Wh_Log(L"Settings not yet saved in Windhawk panel - using hardcoded defaults "
-               L"(intercept:1 privacy:0 registry:1 redirectCtx:1 refresh:3000 language:0)");
-        g_Settings.interceptNativeFlyout      = TRUE;
-        g_Settings.privacyMode               = FALSE;
-        g_Settings.useRegistryMethod         = TRUE;
-        g_Settings.redirectNetworkContextMenu = TRUE;
-        g_Settings.refreshInterval            = 3000;
-        g_Settings.language                  = 0;
-    } else {
-        g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
-        g_Settings.privacyMode               = raw_privacy     != 0;
-        g_Settings.useRegistryMethod         = raw_registry    != 0;
-        g_Settings.redirectNetworkContextMenu = raw_redirectCtx != 0;
-        g_Settings.refreshInterval            = raw_refresh > 0 ? raw_refresh : 3000;
-        g_Settings.language                  = raw_language;
-    }
+    // Clamp refresh interval: 0 = disabled, minimum 100ms for sanity
+    if (g_Settings.refreshInterval < 0)
+        g_Settings.refreshInterval = 3000;
+    else if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000)
+        g_Settings.refreshInterval = 1000;
 
-    Wh_Log(L"Settings loaded - intercept:%d privacy:%d registry:%d redirectCtx:%d refresh:%d language:%d",
+    Wh_Log(L"Settings loaded - intercept:%d privacy:%d redirectCtx:%d refresh:%d language:%d classicCorners:%d",
            g_Settings.interceptNativeFlyout, g_Settings.privacyMode,
-           g_Settings.useRegistryMethod, g_Settings.redirectNetworkContextMenu,
-           g_Settings.refreshInterval, g_Settings.language);
+           g_Settings.redirectNetworkContextMenu,
+           g_Settings.refreshInterval, g_Settings.language,
+           g_Settings.disableRoundedCornersClassic);
 }
 
 // -------------------------------------------------------
-// Strutture
+// Structures
 // -------------------------------------------------------
 typedef struct {
     HWND     hWndFlyout;
@@ -226,25 +217,7 @@ typedef struct {
 } WifiNetworkItem;
 
 // -------------------------------------------------------
-// Windows version detection
-// -------------------------------------------------------
-static bool g_isWin11 = false;
-
-static void DetectWindowsVersion() {
-    OSVERSIONINFOEXW osvi = {};
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-    using RtlGetVersion_t = NTSTATUS(WINAPI*)(OSVERSIONINFOEXW*);
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (hNtdll) {
-        auto fn = (RtlGetVersion_t)GetProcAddress(hNtdll, "RtlGetVersion");
-        if (fn) fn(&osvi);
-    }
-    g_isWin11 = (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22000);
-    Wh_Log(L"Windows build: %lu, IsWin11: %d", osvi.dwBuildNumber, g_isWin11);
-}
-
-// -------------------------------------------------------
-// Variabili Globali
+// Global Variables
 // -------------------------------------------------------
 static ModContext g_Ctx        = {0};
 static BOOL       g_Initialized = FALSE;
@@ -286,12 +259,10 @@ int   g_PendingConnectIndex        = -1;
 int   g_ConnectRetryCount          = 0;
 HWND  g_hTooltip = NULL;
 
-BOOL g_bRegistryPatched = FALSE;
-BOOL g_bInitialRefreshDone = FALSE;
 UINT_PTR g_RefreshTimer = 0;
 UINT_PTR g_ConnectCheckTimer = 0;
 
-// Subclassing ToolbarWindow32
+// ToolbarWindow32 subclassing (using raw SetWindowLongPtrW due to Windhawk compiler incompatibility with windhawk_utils.h)
 WNDPROC G_OldToolbarWndProc = nullptr;
 HWND    G_hSubclassedToolbar = nullptr;
 
@@ -299,11 +270,21 @@ HWND    G_hSubclassedToolbar = nullptr;
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
-// Buffer persistente per il tooltip
+// Persistent tooltip buffer
 static WCHAR g_TooltipBuffer[1024] = {0};
 
+// INetworkListManager singleton — released in SafeCleanup
+static INetworkListManager* g_pNLM = NULL;
+
+// Internet connectivity cache
+static BOOL g_cachedInternetAccess = FALSE;
+static DWORD g_lastInternetCheck = 0;
+
+// Classic theme detection cache (checked once on init and on settings change)
+static BOOL g_isClassicThemeCached = FALSE;
+
 // -------------------------------------------------------
-// Localizzazione
+// Localization
 // -------------------------------------------------------
 typedef struct {
     const WCHAR* currentConnected;
@@ -340,6 +321,17 @@ typedef struct {
     const WCHAR* sigNone;
     const WCHAR* connecting;
     const WCHAR* disconnecting;
+    const WCHAR* securityOpen;
+    const WCHAR* errSaveProfile;
+    const WCHAR* errConnectionFmt;
+    const WCHAR* errTimeout;
+    const WCHAR* errTitle;
+    const WCHAR* tooltipStatusConnected;
+    const WCHAR* tooltipStatusConnecting;
+    const WCHAR* tooltipStatusNotConnected;
+    const WCHAR* bssTypeInfrastructure;
+    const WCHAR* bssTypeIndependent;
+    const WCHAR* bssTypeUnknown;
 } LocalizationStrings;
 
 LocalizationStrings g_LocaleIT = {
@@ -353,7 +345,18 @@ LocalizationStrings g_LocaleIT = {
     L"Connessione a %s fallita", L"Rete %d",
     L"Tipo di sicurezza:", L"Intensità del segnale:", L"Tipo di radio:",
     L"Eccellente", L"Buono", L"Discreto", L"Scarso", L"Nessun segnale",
-    L"Connessione in corso...", L"Disconnessione in corso..."
+    L"Connessione in corso...", L"Disconnessione in corso...",
+    L"Aperta",
+    L"Impossibile salvare il profilo di rete.",
+    L"Errore di connessione (codice: %lu)",
+    L"Timeout durante la connessione",
+    L"Errore",
+    L"Stato: Connesso",
+    L"Stato: Connessione in corso...",
+    L"Stato: Non connesso",
+    L"BSS: Infrastructure",
+    L"BSS: Independent",
+    L"BSS: Sconosciuto"
 };
 
 LocalizationStrings g_LocaleEN = {
@@ -367,31 +370,38 @@ LocalizationStrings g_LocaleEN = {
     L"Failed to connect to %s", L"Network %d",
     L"Security type:", L"Signal strength:", L"Radio type:",
     L"Excellent", L"Good", L"Fair", L"Poor", L"No signal",
-    L"Connecting...", L"Disconnecting..."
+    L"Connecting...", L"Disconnecting...",
+    L"Open",
+    L"Failed to save network profile.",
+    L"Connection error (code: %lu)",
+    L"Connection timed out",
+    L"Error",
+    L"Status: Connected",
+    L"Status: Connecting...",
+    L"Status: Not connected",
+    L"BSS: Infrastructure",
+    L"BSS: Independent",
+    L"BSS: Unknown"
 };
 
 LocalizationStrings* g_CurrentLocale = &g_LocaleEN;
 
 void DetermineLocale() {
     switch (g_Settings.language) {
-        case 1:  // English forced
+        case 1:
             g_CurrentLocale = &g_LocaleEN;
-            Wh_Log(L"Language forced to English");
             break;
-        case 2:  // Italian forced
+        case 2:
             g_CurrentLocale = &g_LocaleIT;
-            Wh_Log(L"Language forced to Italian");
             break;
-        default: // Auto-detect
-            g_CurrentLocale = ((GetUserDefaultUILanguage() & 0xFF) == 0x10) ? 
+        default:
+            g_CurrentLocale = ((GetUserDefaultUILanguage() & 0xFF) == 0x10) ?
                                &g_LocaleIT : &g_LocaleEN;
-            Wh_Log(L"Language auto-detected: %s", 
-                   ((GetUserDefaultUILanguage() & 0xFF) == 0x10) ? L"Italian" : L"English");
             break;
     }
+    Wh_Log(L"Locale: %s", g_CurrentLocale == &g_LocaleIT ? L"Italian" : L"English");
 }
 
-// Converte qualità segnale in stringa descrittiva stile Windows 7
 static const WCHAR* SignalQualityToString(ULONG quality) {
     if (quality > 80) return g_CurrentLocale->sigExcellent;
     if (quality > 60) return g_CurrentLocale->sigGood;
@@ -401,7 +411,7 @@ static const WCHAR* SignalQualityToString(ULONG quality) {
 }
 
 // -------------------------------------------------------
-// Prototipi
+// Prototypes
 // -------------------------------------------------------
 void RefreshWifiData(HANDLE hClient);
 void UpdateLayoutGeometry();
@@ -414,8 +424,6 @@ void UpdateTooltipForRow(HWND hwnd, int index);
 BOOL GetRowRect(int index, RECT* rcRow);
 void InstallTrayInterception();
 void RemoveTrayInterception();
-void SetReplaceVanRegistry();
-void RestoreReplaceVanRegistry();
 void InitRefreshButtonRect();
 BOOL GetAdapterNameForInterface(GUID interfaceGuid, WCHAR* adapterName, DWORD bufferSize);
 void OpenNetworkStatusForInterface(GUID interfaceGuid);
@@ -423,47 +431,66 @@ void OpenNetworkPropertiesForInterface(GUID interfaceGuid);
 void SetKeyboardFocus(int index);
 void ClearKeyboardFocus();
 BOOL IsInternetConnected();
+static void UpdateClassicThemeCache();
 
 // -------------------------------------------------------
-// Verifica connessione internet - usando WinHTTP
+// Classic theme detection (cached)
 // -------------------------------------------------------
-BOOL IsInternetConnected() {
-    HINTERNET hSession = WinHttpOpen(L"Network Flyout", 
-                                     WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                                     WINHTTP_NO_PROXY_NAME, 
-                                     WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSession) return FALSE;
-    
-    HINTERNET hConnect = WinHttpConnect(hSession, L"www.microsoft.com", 
-                                       INTERNET_DEFAULT_HTTPS_PORT, 0);
-    if (!hConnect) {
-        WinHttpCloseHandle(hSession);
-        return FALSE;
-    }
-    
-    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"HEAD", L"/",
-                                            NULL, NULL, NULL, 
-                                            WINHTTP_FLAG_SECURE);
-    if (!hRequest) {
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return FALSE;
-    }
-    
-    BOOL result = WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
-    if (result) {
-        result = WinHttpReceiveResponse(hRequest, NULL);
-    }
-    
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
-    
-    return result;
+static void UpdateClassicThemeCache() {
+    BOOL flatMenus = FALSE;
+    SystemParametersInfoW(SPI_GETFLATMENU, 0, &flatMenus, 0);
+    g_isClassicThemeCached = !flatMenus;
+}
+
+static BOOL IsClassicTheme() {
+    return g_isClassicThemeCached;
 }
 
 // -------------------------------------------------------
-// Focus tastiera
+// Internet connectivity check (cached, no external servers)
+// -------------------------------------------------------
+BOOL IsInternetConnected() {
+    DWORD now = GetTickCount();
+    if (now - g_lastInternetCheck < INTERNET_CHECK_CACHE_MS)
+        return g_cachedInternetAccess;
+
+    if (!g_pNLM) {
+        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                         IID_INetworkListManager, (void**)&g_pNLM);
+    }
+    if (!g_pNLM) return FALSE;
+
+    NLM_CONNECTIVITY connectivity;
+    if (FAILED(g_pNLM->GetConnectivity(&connectivity))) return FALSE;
+
+    g_cachedInternetAccess = (connectivity & NLM_CONNECTIVITY_IPV4_INTERNET) ||
+                             (connectivity & NLM_CONNECTIVITY_IPV6_INTERNET);
+    g_lastInternetCheck = now;
+    return g_cachedInternetAccess;
+}
+
+// -------------------------------------------------------
+// XML string escaper for WLAN profile generation
+// -------------------------------------------------------
+static void EscapeXmlString(const WCHAR* input, WCHAR* output, size_t outputSize) {
+    const WCHAR* src = input;
+    WCHAR* dst = output;
+    while (*src && (size_t)(dst - output) < outputSize - 10) {
+        switch (*src) {
+            case L'&':  wcscpy_s(dst, 6, L"&amp;");  dst += 5; break;
+            case L'<':  wcscpy_s(dst, 5, L"&lt;");   dst += 4; break;
+            case L'>':  wcscpy_s(dst, 5, L"&gt;");   dst += 4; break;
+            case L'"':  wcscpy_s(dst, 7, L"&quot;");  dst += 6; break;
+            case L'\'': wcscpy_s(dst, 7, L"&apos;");  dst += 6; break;
+            default:    *dst++ = *src; break;
+        }
+        src++;
+    }
+    *dst = L'\0';
+}
+
+// -------------------------------------------------------
+// Focus / keyboard helpers
 // -------------------------------------------------------
 void SetKeyboardFocus(int index) {
     if (index < -1 || index >= g_NetworkCount) return;
@@ -497,7 +524,7 @@ void DrawFocusRectangle(HDC hdc, const RECT* rcRow) {
 }
 
 // -------------------------------------------------------
-// Adapter / network status helpers
+// Adapter helpers
 // -------------------------------------------------------
 BOOL GetAdapterNameForInterface(GUID interfaceGuid, WCHAR* adapterName, DWORD bufferSize) {
     PIP_ADAPTER_INFO pAdapterInfo = NULL;
@@ -539,9 +566,12 @@ void OpenNetworkStatusForInterface(GUID interfaceGuid) {
         if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
         if (!hNcpa) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"ncpa.cpl", NULL, SW_SHOWNORMAL);
-            Sleep(1000);
-            hNcpa = FindWindowW(NULL, L"Connessioni di rete");
-            if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
+            // Wait up to 500ms for ncpa.cpl to open (reduced from 1000ms)
+            for (int wait = 0; wait < 10 && !hNcpa; wait++) {
+                Sleep(50);
+                hNcpa = FindWindowW(NULL, L"Connessioni di rete");
+                if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
+            }
         }
         if (hNcpa) {
             SetForegroundWindow(hNcpa);
@@ -581,9 +611,11 @@ void OpenNetworkPropertiesForInterface(GUID interfaceGuid) {
         if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
         if (!hNcpa) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"ncpa.cpl", NULL, SW_SHOWNORMAL);
-            Sleep(800);
-            hNcpa = FindWindowW(NULL, L"Connessioni di rete");
-            if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
+            for (int wait = 0; wait < 10 && !hNcpa; wait++) {
+                Sleep(50);
+                hNcpa = FindWindowW(NULL, L"Connessioni di rete");
+                if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
+            }
         }
         if (hNcpa) {
             SetForegroundWindow(hNcpa);
@@ -627,54 +659,6 @@ void InitRefreshButtonRect() {
 }
 
 // -------------------------------------------------------
-// Registry tweak ReplaceVan
-// -------------------------------------------------------
-void SetReplaceVanRegistry() {
-    if (!g_Settings.useRegistryMethod) return;
-    Wh_Log(L"Setting ReplaceVan=2...");
-    HKEY hKey;
-    LONG result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, REG_PATH_NETWORK, 0, NULL, 0,
-                                  KEY_SET_VALUE | KEY_WOW64_64KEY, NULL, &hKey, NULL);
-    if (result == ERROR_SUCCESS) {
-        DWORD dwValue = 2;
-        if (RegSetValueExW(hKey, REG_VALUE_REPLACEVAN, 0, REG_DWORD,
-                           (const BYTE*)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS) {
-            g_bRegistryPatched = TRUE;
-            Wh_Log(L"ReplaceVan set to 2");
-        }
-        RegCloseKey(hKey);
-    } else {
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, REG_PATH_NETWORK, 0, NULL, 0,
-                            KEY_SET_VALUE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-            DWORD dwValue = 2;
-            RegSetValueExW(hKey, REG_VALUE_REPLACEVAN, 0, REG_DWORD,
-                           (const BYTE*)&dwValue, sizeof(dwValue));
-            RegCloseKey(hKey);
-            g_bRegistryPatched = TRUE;
-            Wh_Log(L"ReplaceVan set in HKCU (fallback)");
-        }
-    }
-}
-
-void RestoreReplaceVanRegistry() {
-    if (!g_bRegistryPatched) return;
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, REG_PATH_NETWORK, 0,
-                      KEY_SET_VALUE | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS) {
-        RegDeleteValueW(hKey, REG_VALUE_REPLACEVAN);
-        RegCloseKey(hKey);
-        Wh_Log(L"ReplaceVan removed from HKLM");
-    }
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_PATH_NETWORK, 0,
-                      KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        RegDeleteValueW(hKey, REG_VALUE_REPLACEVAN);
-        RegCloseKey(hKey);
-        Wh_Log(L"ReplaceVan removed from HKCU");
-    }
-    g_bRegistryPatched = FALSE;
-}
-
-// -------------------------------------------------------
 // Execute mapped command
 // -------------------------------------------------------
 static void ExecuteMappedCommand(const wchar_t* command) {
@@ -698,12 +682,27 @@ static void ExecuteMappedCommand(const wchar_t* command) {
 }
 
 // -------------------------------------------------------
-// TrackPopupMenuEx Hook
+// TrackPopupMenuEx Hook — hooked once in Wh_ModInit,
+// only intercepts menus that originate from Shell_TrayWnd
 // -------------------------------------------------------
 static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
                                          HWND hWnd, const TPMPARAMS* lptpm) {
     if (!g_Settings.redirectNetworkContextMenu)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+
+    // Only intercept menus parented to the system tray
+    BOOL isNetworkTrayMenu = FALSE;
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTray) {
+        HWND hWndCheck = hWnd;
+        while (hWndCheck) {
+            if (hWndCheck == hTray) { isNetworkTrayMenu = TRUE; break; }
+            hWndCheck = GetParent(hWndCheck);
+        }
+    }
+    if (!isNetworkTrayMenu)
+        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+
     UINT modifiedFlags = uFlags | TPM_RETURNCMD;
     BOOL result = g_origTrackPopupMenuEx(hMenu, modifiedFlags, x, y, hWnd, lptpm);
     if (result > 0) {
@@ -729,7 +728,7 @@ static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
 }
 
 // -------------------------------------------------------
-// Icone e risorse
+// Icons and resources
 // -------------------------------------------------------
 void LoadSystemIcons() {
     if (!g_hIconNetworkMap)
@@ -737,9 +736,8 @@ void LoadSystemIcons() {
     for (int i = 0; i < 6; i++)
         if (!g_hIconSignalBars[i])
             ExtractIconExW(L"netshell.dll", 152 + i, &g_hIconSignalBars[i], NULL, 1);
-    if (!g_hIconRefreshWin7) {
+    if (!g_hIconRefreshWin7)
         ExtractIconExW(L"shell32.dll", 238, &g_hIconRefreshWin7, NULL, 1);
-    }
 }
 
 void FreeSystemIcons() {
@@ -788,36 +786,59 @@ void PositionWindowNearTray(HWND hwnd) {
 }
 
 // -------------------------------------------------------
-// WLAN data migliorato
+// WLAN data — SSID parsing fixes + duplicate prevention
 // -------------------------------------------------------
 void RefreshWifiData(HANDLE hClient) {
-    g_NetworkCount = 0;
     if (!hClient) return;
-    
+
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     if (WlanEnumInterfaces(hClient, NULL, &pIfList) != ERROR_SUCCESS) return;
-    
+
+    g_NetworkCount = 0;
+
     for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
         WLAN_INTERFACE_INFO IfInfo = pIfList->InterfaceInfo[i];
         PWLAN_AVAILABLE_NETWORK_LIST pBssList  = NULL;
         PWLAN_PROFILE_INFO_LIST      pProfList = NULL;
-        
+
         WlanGetProfileList(hClient, &IfInfo.InterfaceGuid, NULL, &pProfList);
-        
+
         DWORD dwFlags = WLAN_AVAILABLE_NETWORK_INCLUDE_ALL_MANUAL_HIDDEN_PROFILES;
         if (WlanGetAvailableNetworkList(hClient, &IfInfo.InterfaceGuid, dwFlags, NULL, &pBssList) == ERROR_SUCCESS) {
             for (DWORD j = 0; j < pBssList->dwNumberOfItems && g_NetworkCount < 50; j++) {
                 WLAN_AVAILABLE_NETWORK network = pBssList->Network[j];
                 WifiNetworkItem* item = &g_NetworkList[g_NetworkCount];
-                
+
                 DWORD len = network.dot11Ssid.uSSIDLength;
-                if (len == 0)
+                if (len == 0) {
                     StringCchCopyW(item->ssid, 33, L"Hidden Network");
-                else {
-                    MultiByteToWideChar(CP_ACP, 0, (LPCSTR)network.dot11Ssid.ucSSID, len, item->ssid, 32);
-                    item->ssid[len] = L'\0';
+                } else {
+                    int converted = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                                        (LPCSTR)network.dot11Ssid.ucSSID, (int)len,
+                                                        item->ssid, 32);
+                    if (converted <= 0) {
+                        for (DWORD k = 0; k < len && k < 32; k++)
+                            item->ssid[k] = (WCHAR)(BYTE)network.dot11Ssid.ucSSID[k];
+                        item->ssid[len] = L'\0';
+                    } else {
+                        item->ssid[converted] = L'\0';
+                    }
                 }
-                
+
+                // Skip duplicates
+                BOOL duplicate = FALSE;
+                for (int d = 0; d < g_NetworkCount; d++) {
+                    if (wcscmp(g_NetworkList[d].ssid, item->ssid) == 0) {
+                        if (network.wlanSignalQuality > g_NetworkList[d].signalQuality)
+                            g_NetworkList[d].signalQuality = network.wlanSignalQuality;
+                        if (network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED)
+                            g_NetworkList[d].isConnected = TRUE;
+                        duplicate = TRUE;
+                        break;
+                    }
+                }
+                if (duplicate) continue;
+
                 item->isConnected   = (network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED) != 0;
                 item->isSecured     = network.bSecurityEnabled;
                 item->signalQuality = network.wlanSignalQuality;
@@ -827,16 +848,17 @@ void RefreshWifiData(HANDLE hClient) {
                 item->hasInternetAccess = FALSE;
                 item->isConnecting = FALSE;
                 item->isDisconnecting = FALSE;
-                
+
                 if (pProfList) {
                     for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
                         if (wcscmp(pProfList->ProfileInfo[p].strProfileName, item->ssid) == 0) {
-                            item->hasProfile = TRUE; 
+                            item->hasProfile = TRUE;
                             break;
                         }
                     }
                 }
-                
+
+                // Move connected network to index 0
                 if (item->isConnected && g_NetworkCount > 0) {
                     WifiNetworkItem tmp;
                     CopyMemory(&tmp,              &g_NetworkList[0], sizeof(WifiNetworkItem));
@@ -850,13 +872,12 @@ void RefreshWifiData(HANDLE hClient) {
         if (pProfList) WlanFreeMemory(pProfList);
     }
     WlanFreeMemory(pIfList);
-    
-    if (g_NetworkCount > 0 && g_NetworkList[0].isConnected) {
+
+    if (g_NetworkCount > 0 && g_NetworkList[0].isConnected)
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
-    }
-    
+
     for (int i = 0; i < g_NetworkCount; i++) {
-        if (g_IsConnectingAsynchronously && 
+        if (g_IsConnectingAsynchronously &&
             wcscmp(g_NetworkList[i].ssid, g_PendingSsid) == 0) {
             g_NetworkList[i].isConnecting = TRUE;
         }
@@ -864,7 +885,7 @@ void RefreshWifiData(HANDLE hClient) {
 }
 
 // -------------------------------------------------------
-// Password dialog stile Windows 7
+// Password dialog (Windows 7 style)
 // -------------------------------------------------------
 typedef struct {
     WCHAR* passwordBuffer;
@@ -920,7 +941,6 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             DWMNCRENDERINGPOLICY pol = DWMNCRP_ENABLED;
             DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &pol, sizeof(pol));
         }
-
         HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
         if (hShell32) {
             HICON hIconLarge = (HICON)LoadImageW(hShell32, MAKEINTRESOURCE(162),
@@ -1010,21 +1030,21 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
 }
 
 // -------------------------------------------------------
-// Connessione migliorata
+// Connection handler (with XML escaping for SSID/password)
 // -------------------------------------------------------
 void HandleNativeConnection(HANDLE hClient, int index) {
     if (index < 0 || index >= g_NetworkCount || !hClient) return;
     WifiNetworkItem* item = &g_NetworkList[index];
-    
+
     if (item->isConnected) {
         g_IsConnectingAsynchronously = FALSE;
         g_PendingConnectIndex = -1;
         WlanDisconnect(hClient, &item->interfaceGuid, NULL);
-        
+
         g_PendingConnectIndex = index;
         g_ConnectRetryCount = 0;
         g_NetworkList[index].isDisconnecting = TRUE;
-        
+
         if (g_ConnectCheckTimer) {
             KillTimer(g_hWndFlyout, g_ConnectCheckTimer);
             g_ConnectCheckTimer = 0;
@@ -1032,11 +1052,17 @@ void HandleNativeConnection(HANDLE hClient, int index) {
         g_ConnectCheckTimer = SetTimer(g_hWndFlyout, 1001, 300, NULL);
         return;
     }
-    
+
     if (item->isSecured && !item->hasProfile) {
         WCHAR password[65] = {0};
         if (!PromptNetworkPassword(g_hWndFlyout, password, 64, item->ssid)) return;
-        
+
+        // Escape SSID and password for XML
+        WCHAR escapedSsid[200];
+        WCHAR escapedPassword[200];
+        EscapeXmlString(item->ssid, escapedSsid, 200);
+        EscapeXmlString(password, escapedPassword, 200);
+
         WCHAR xmlProfile[2048];
         StringCchPrintfW(xmlProfile, 2048,
             L"<?xml version=\"1.0\"?>"
@@ -1047,40 +1073,41 @@ void HandleNativeConnection(HANDLE hClient, int index) {
             L"<authentication>WPA2PSK</authentication><encryption>AES</encryption><useOneX>false</useOneX>"
             L"</authEncryption><sharedKey><keyType>passPhrase</keyType><protected>false</protected>"
             L"<keyMaterial>%s</keyMaterial></sharedKey></security></MSM></WLANProfile>",
-            item->ssid, item->ssid, password);
+            escapedSsid, escapedSsid, escapedPassword);
         DWORD dwReason = 0;
         if (WlanSetProfile(hClient,&item->interfaceGuid,0,xmlProfile,NULL,TRUE,NULL,&dwReason) != ERROR_SUCCESS) {
-            MessageBoxW(g_hWndFlyout, L"Impossibile salvare il profilo di rete.", L"Errore", MB_OK|MB_ICONERROR);
+            MessageBoxW(g_hWndFlyout, g_CurrentLocale->errSaveProfile,
+                        g_CurrentLocale->errTitle, MB_OK|MB_ICONERROR);
             return;
         }
         item->hasProfile = TRUE;
     }
-    
+
     g_IsConnectingAsynchronously = TRUE;
     g_PendingConnectIndex = index;
     StringCchCopyW(g_PendingSsid, 33, item->ssid);
     g_NetworkList[index].isConnecting = TRUE;
     g_ConnectRetryCount = 0;
-    
+
     WLAN_CONNECTION_PARAMETERS params; ZeroMemory(&params, sizeof(params));
-    if (item->hasProfile) { 
-        params.wlanConnectionMode = wlan_connection_mode_profile; 
-        params.strProfile = item->ssid; 
+    if (item->hasProfile) {
+        params.wlanConnectionMode = wlan_connection_mode_profile;
+        params.strProfile = item->ssid;
     } else {
-        params.wlanConnectionMode = wlan_connection_mode_discovery_unsecure; 
+        params.wlanConnectionMode = wlan_connection_mode_discovery_unsecure;
     }
     params.dot11BssType = item->dot11BssType;
-    
+
     DWORD res = WlanConnect(hClient, &item->interfaceGuid, &params, NULL);
     if (res != ERROR_SUCCESS) {
         g_IsConnectingAsynchronously = FALSE;
         g_NetworkList[index].isConnecting = FALSE;
-        WCHAR err[256]; 
-        StringCchPrintfW(err,256,L"Errore di connessione (codice: %lu)",res);
-        MessageBoxW(g_hWndFlyout, err, L"Errore", MB_OK|MB_ICONERROR);
+        WCHAR err[256];
+        StringCchPrintfW(err, 256, g_CurrentLocale->errConnectionFmt, res);
+        MessageBoxW(g_hWndFlyout, err, g_CurrentLocale->errTitle, MB_OK|MB_ICONERROR);
         return;
     }
-    
+
     if (g_ConnectCheckTimer) {
         KillTimer(g_hWndFlyout, g_ConnectCheckTimer);
         g_ConnectCheckTimer = 0;
@@ -1089,78 +1116,53 @@ void HandleNativeConnection(HANDLE hClient, int index) {
 }
 
 // -------------------------------------------------------
-// Callback WLAN
+// WLAN Notification Callback — thread-safe
+// Only posts messages; never touches UI or global state directly
 // -------------------------------------------------------
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
     ModContext* ctx = (ModContext*)context;
     if (!ctx || ctx->isUninitializing) return;
-    
-    if (data) {
-        BOOL needRefresh = FALSE;
-        
-        switch(data->NotificationSource) {
-            case WLAN_NOTIFICATION_SOURCE_ACM:
-                if (data->NotificationCode == wlan_notification_acm_connection_complete ||
-                    data->NotificationCode == wlan_notification_acm_disconnected ||
-                    data->NotificationCode == wlan_notification_acm_connection_attempt_fail ||
-                    data->NotificationCode == wlan_notification_acm_scan_complete) {
+    if (!data) return;
+
+    BOOL needRefresh = FALSE;
+
+    switch(data->NotificationSource) {
+        case WLAN_NOTIFICATION_SOURCE_ACM:
+            switch (data->NotificationCode) {
+                case wlan_notification_acm_connection_complete:
+                case wlan_notification_acm_disconnected:
+                case wlan_notification_acm_scan_complete:
                     needRefresh = TRUE;
-                    
-                    if (data->NotificationCode == wlan_notification_acm_connection_attempt_fail) {
-                        if (g_IsConnectingAsynchronously && SafeToAccessUI()) {
-                            g_IsConnectingAsynchronously = FALSE;
-                            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-                                g_NetworkList[g_PendingConnectIndex].isConnecting = FALSE;
-                            }
-                            if (g_ConnectCheckTimer) {
-                                KillTimer(g_hWndFlyout, g_ConnectCheckTimer);
-                                g_ConnectCheckTimer = 0;
-                            }
-                            MessageBoxW(g_hWndFlyout, g_CurrentLocale->pwdFailedWrong,
-                                      g_CurrentLocale->pwdFailedTitle, MB_OK|MB_ICONERROR|MB_TOPMOST);
-                        }
-                    }
-                }
-                break;
-                
-            case WLAN_NOTIFICATION_SOURCE_MSM:
-                if (data->NotificationCode == wlan_notification_msm_connected ||
-                    data->NotificationCode == wlan_notification_msm_disconnected) {
+                    break;
+                case wlan_notification_acm_connection_attempt_fail:
                     needRefresh = TRUE;
-                    
-                    if (data->NotificationCode == wlan_notification_msm_connected) {
-                        if (g_IsConnectingAsynchronously && SafeToAccessUI()) {
-                            g_IsConnectingAsynchronously = FALSE;
-                            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-                                g_NetworkList[g_PendingConnectIndex].isConnecting = FALSE;
-                                g_NetworkList[g_PendingConnectIndex].isConnected = TRUE;
-                            }
-                            if (g_ConnectCheckTimer) {
-                                KillTimer(g_hWndFlyout, g_ConnectCheckTimer);
-                                g_ConnectCheckTimer = 0;
-                            }
-                        }
-                    }
-                    
-                    if (data->NotificationCode == wlan_notification_msm_disconnected) {
-                        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-                            g_NetworkList[g_PendingConnectIndex].isDisconnecting = FALSE;
-                            g_NetworkList[g_PendingConnectIndex].isConnected = FALSE;
-                        }
-                        g_IsConnectingAsynchronously = FALSE;
-                        if (g_ConnectCheckTimer) {
-                            KillTimer(g_hWndFlyout, g_ConnectCheckTimer);
-                            g_ConnectCheckTimer = 0;
-                        }
-                    }
-                }
-                break;
-        }
-        
-        if (needRefresh && SafeToAccessUI() && IsWindow(g_hWndFlyout)) {
-            PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, 0, 0);
-        }
+                    if (ctx->hWndFlyout && IsWindow(ctx->hWndFlyout))
+                        PostMessageW(ctx->hWndFlyout, WM_CHECK_CONNECTION,
+                                     CONN_NOTIFY_ATTEMPT_FAIL, 0);
+                    break;
+            }
+            break;
+
+        case WLAN_NOTIFICATION_SOURCE_MSM:
+            switch (data->NotificationCode) {
+                case wlan_notification_msm_connected:
+                    needRefresh = TRUE;
+                    if (ctx->hWndFlyout && IsWindow(ctx->hWndFlyout))
+                        PostMessageW(ctx->hWndFlyout, WM_CHECK_CONNECTION,
+                                     CONN_NOTIFY_MSM_CONNECTED, 0);
+                    break;
+                case wlan_notification_msm_disconnected:
+                    needRefresh = TRUE;
+                    if (ctx->hWndFlyout && IsWindow(ctx->hWndFlyout))
+                        PostMessageW(ctx->hWndFlyout, WM_CHECK_CONNECTION,
+                                     CONN_NOTIFY_MSM_DISCONNECTED, 0);
+                    break;
+            }
+            break;
     }
+
+    if (needRefresh && ctx->hWndFlyout && IsWindow(ctx->hWndFlyout))
+        PostMessageW(ctx->hWndFlyout, WM_REFRESH_DATA, 0, 0);
 }
 
 void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
@@ -1175,7 +1177,7 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
 }
 
 // -------------------------------------------------------
-// Tooltip stile Windows 7
+// Tooltip (Windows 7 style)
 // -------------------------------------------------------
 void InitTooltip(HWND hwnd) {
     if (g_hTooltip) return;
@@ -1207,32 +1209,32 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     GetDisplaySSID(index, ssidBuf, 33);
 
     WCHAR securityType[64];
-    StringCchCopyW(securityType, 64, item->isSecured ? L"WPA2-PSK" : L"Aperta");
+    StringCchCopyW(securityType, 64, item->isSecured ? L"WPA2-PSK" : g_CurrentLocale->securityOpen);
 
     const WCHAR* sigStr = SignalQualityToString(item->signalQuality);
 
-    WCHAR radioType[32];
+    // Use BSS type description instead of fabricated radio type
+    const WCHAR* bssTypeStr;
     switch(item->dot11BssType) {
-        case dot11_BSS_type_infrastructure: StringCchCopyW(radioType, 32, L"802.11n"); break;
-        case dot11_BSS_type_independent:    StringCchCopyW(radioType, 32, L"802.11g"); break;
-        default:                            StringCchCopyW(radioType, 32, L"802.11n"); break;
+        case dot11_BSS_type_infrastructure: bssTypeStr = g_CurrentLocale->bssTypeInfrastructure; break;
+        case dot11_BSS_type_independent:    bssTypeStr = g_CurrentLocale->bssTypeIndependent; break;
+        default:                            bssTypeStr = g_CurrentLocale->bssTypeUnknown; break;
     }
 
     const WCHAR* statusText;
-    if (item->isConnected) {
-        statusText = L"Status: Connected";
-    } else if (item->isConnecting) {
-        statusText = L"Status: Connecting...";
-    } else {
-        statusText = L"Status: Not connected";
-    }
+    if (item->isConnected)
+        statusText = g_CurrentLocale->tooltipStatusConnected;
+    else if (item->isConnecting)
+        statusText = g_CurrentLocale->tooltipStatusConnecting;
+    else
+        statusText = g_CurrentLocale->tooltipStatusNotConnected;
 
     StringCchPrintfW(g_TooltipBuffer, 1024,
         L"SSID: %s\n%s %s\n%s %s\n%s %s\n%s",
         ssidBuf,
         g_CurrentLocale->signalStrength, sigStr,
         g_CurrentLocale->securityType,   securityType,
-        g_CurrentLocale->radioType,      radioType,
+        g_CurrentLocale->radioType,      bssTypeStr,
         statusText);
 
     RECT rcRow;
@@ -1313,7 +1315,7 @@ void UpdateLayoutGeometry() {
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
             MoveWindow(g_hWndButtonConnect, rcRow.right-90, rcRow.top+35, 82, 22, TRUE);
-            SetWindowTextW(g_hWndButtonConnect, L"Connessione...");
+            SetWindowTextW(g_hWndButtonConnect, g_CurrentLocale->connecting);
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, FALSE);
         }
@@ -1337,7 +1339,7 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, g_CurrentLocale->ctxDisconnect);
         AppendMenuW(hMenu, MF_STRING, IDM_STATUS,     g_CurrentLocale->ctxStatus);
     } else if (item->isConnecting) {
-        AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CONNECT, L"Connessione in corso...");
+        AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CONNECT, g_CurrentLocale->connecting);
     } else {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, g_CurrentLocale->ctxConnect);
     }
@@ -1369,7 +1371,17 @@ static RECT GetFooterRect() {
 }
 
 // -------------------------------------------------------
-// Window Procedure flyout
+// Draw helpers — respects Classic theme setting (cached check)
+// -------------------------------------------------------
+static void DrawRectOrRoundRect(HDC hdc, int l, int t, int r, int b, int rx, int ry) {
+    if (g_Settings.disableRoundedCornersClassic && IsClassicTheme())
+        Rectangle(hdc, l, t, r, b);
+    else
+        RoundRect(hdc, l, t, r, b, rx, ry);
+}
+
+// -------------------------------------------------------
+// Flyout Window Procedure
 // -------------------------------------------------------
 LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -1397,13 +1409,65 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         RecalcArrowRect();
         InterlockedIncrement(&g_Ctx.refCount);
         InitTooltip(hwnd);
-        
         if (g_Settings.refreshInterval > 0) {
             g_RefreshTimer = SetTimer(hwnd, 1000, g_Settings.refreshInterval, NULL);
             Wh_Log(L"Auto-refresh timer started: %d ms", g_Settings.refreshInterval);
         }
         break;
     }
+
+    // WM_CHECK_CONNECTION — handles WLAN notifications on the UI thread
+    case WM_CHECK_CONNECTION: {
+        switch (wParam) {
+            case CONN_NOTIFY_ATTEMPT_FAIL:
+                if (g_IsConnectingAsynchronously) {
+                    g_IsConnectingAsynchronously = FALSE;
+                    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount)
+                        g_NetworkList[g_PendingConnectIndex].isConnecting = FALSE;
+                    if (g_ConnectCheckTimer) {
+                        KillTimer(hwnd, g_ConnectCheckTimer);
+                        g_ConnectCheckTimer = 0;
+                    }
+                    MessageBoxW(hwnd, g_CurrentLocale->pwdFailedWrong,
+                                g_CurrentLocale->pwdFailedTitle, MB_OK|MB_ICONERROR|MB_TOPMOST);
+                    UpdateLayoutGeometry();
+                    InvalidateRect(hwnd, NULL, TRUE);
+                }
+                break;
+
+            case CONN_NOTIFY_MSM_CONNECTED:
+                if (g_IsConnectingAsynchronously) {
+                    g_IsConnectingAsynchronously = FALSE;
+                    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                        g_NetworkList[g_PendingConnectIndex].isConnecting = FALSE;
+                        g_NetworkList[g_PendingConnectIndex].isConnected  = TRUE;
+                    }
+                    if (g_ConnectCheckTimer) {
+                        KillTimer(hwnd, g_ConnectCheckTimer);
+                        g_ConnectCheckTimer = 0;
+                    }
+                    UpdateLayoutGeometry();
+                    InvalidateRect(hwnd, NULL, TRUE);
+                }
+                break;
+
+            case CONN_NOTIFY_MSM_DISCONNECTED:
+                if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                    g_NetworkList[g_PendingConnectIndex].isDisconnecting = FALSE;
+                    g_NetworkList[g_PendingConnectIndex].isConnected     = FALSE;
+                }
+                g_IsConnectingAsynchronously = FALSE;
+                if (g_ConnectCheckTimer) {
+                    KillTimer(hwnd, g_ConnectCheckTimer);
+                    g_ConnectCheckTimer = 0;
+                }
+                UpdateLayoutGeometry();
+                InvalidateRect(hwnd, NULL, TRUE);
+                break;
+        }
+        break;
+    }
+
     case WM_TIMER:
         if (wParam == 1000) {
             if (g_Ctx.hWlanClient) {
@@ -1419,28 +1483,26 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 }
                 break;
             }
-            
+
             g_ConnectRetryCount++;
-            
             RefreshWifiData(g_Ctx.hWlanClient);
-            
             BOOL operationComplete = FALSE;
-            
+
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-                
+
                 if (g_IsConnectingAsynchronously && item->isConnected) {
                     g_IsConnectingAsynchronously = FALSE;
                     item->isConnecting = FALSE;
                     operationComplete = TRUE;
                     Wh_Log(L"Connection completed successfully");
-                } else if (!g_IsConnectingAsynchronously && !item->isConnected && 
+                } else if (!g_IsConnectingAsynchronously && !item->isConnected &&
                           (item->isDisconnecting || g_NetworkList[g_PendingConnectIndex].isConnected == FALSE)) {
                     item->isDisconnecting = FALSE;
                     operationComplete = TRUE;
                     Wh_Log(L"Disconnection completed successfully");
                 }
-                
+
                 if (operationComplete) {
                     if (g_ConnectCheckTimer) {
                         KillTimer(hwnd, g_ConnectCheckTimer);
@@ -1450,15 +1512,15 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     g_ConnectRetryCount = 0;
                     UpdateLayoutGeometry();
                     InvalidateRect(hwnd, NULL, TRUE);
-                } else if (g_ConnectRetryCount > 30) {
+                } else if (g_ConnectRetryCount > CONNECT_TIMEOUT_RETRIES) {
                     if (g_IsConnectingAsynchronously) {
                         g_IsConnectingAsynchronously = FALSE;
                         item->isConnecting = FALSE;
-                        MessageBoxW(hwnd, L"Timeout durante la connessione", L"Errore", MB_OK|MB_ICONERROR);
+                        MessageBoxW(hwnd, g_CurrentLocale->errTimeout,
+                                    g_CurrentLocale->errTitle, MB_OK|MB_ICONERROR);
                     }
-                    if (item->isDisconnecting) {
+                    if (item->isDisconnecting)
                         item->isDisconnecting = FALSE;
-                    }
                     if (g_ConnectCheckTimer) {
                         KillTimer(hwnd, g_ConnectCheckTimer);
                         g_ConnectCheckTimer = 0;
@@ -1477,7 +1539,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
         }
         break;
-        
+
     case WM_SHOW_FLYOUT:
         ShowWindow(hwnd, SW_SHOW);
         SetForegroundWindow(hwnd);
@@ -1487,6 +1549,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             InvalidateRect(hwnd, NULL, TRUE);
         }
         break;
+
     case WM_CTLCOLORSTATIC: {
         HWND hwndCtl = (HWND)lParam;
         HDC  hdc     = (HDC)wParam;
@@ -1541,6 +1604,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     }
+
     case WM_PAINT: {
         if (!SafeToAccessUI()) break;
         PAINTSTRUCT ps;
@@ -1556,7 +1620,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         RECT rcFooter = GetFooterRect();
         HBRUSH hBrF = CreateSolidBrush(RGB(225,230,242));
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
-        
+
         HPEN hPenSep = CreatePen(PS_SOLID, 1, RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, HEADER_HEIGHT, NULL); LineTo(hdc, WINDOW_WIDTH, HEADER_HEIGHT);
@@ -1598,8 +1662,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             HPEN hPenHov = CreatePen(PS_SOLID, 1, RGB(150,190,230));
             HPEN hOldPenHov = (HPEN)SelectObject(hdc, hPenHov);
             HBRUSH hOldBH = (HBRUSH)SelectObject(hdc, hBrHov);
-            RoundRect(hdc, g_rcRefreshButton.left, g_rcRefreshButton.top,
-                      g_rcRefreshButton.right, g_rcRefreshButton.bottom, 4, 4);
+            DrawRectOrRoundRect(hdc, g_rcRefreshButton.left, g_rcRefreshButton.top,
+                                g_rcRefreshButton.right, g_rcRefreshButton.bottom, 4, 4);
             SelectObject(hdc, hOldPenHov); DeleteObject(hPenHov);
             SelectObject(hdc, hOldBH); DeleteObject(hBrHov);
         }
@@ -1614,8 +1678,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             HPEN   hPenA = CreatePen(PS_SOLID, 1, RGB(180,210,245));
             HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
             HBRUSH hOldBA = (HBRUSH)SelectObject(hdc, hBrA);
-            RoundRect(hdc, g_rcArrowButton.left, g_rcArrowButton.top,
-                      g_rcArrowButton.right, g_rcArrowButton.bottom, 2, 2);
+            DrawRectOrRoundRect(hdc, g_rcArrowButton.left, g_rcArrowButton.top,
+                                g_rcArrowButton.right, g_rcArrowButton.bottom, 2, 2);
             SelectObject(hdc, hOldPA); SelectObject(hdc, hOldBA);
             DeleteObject(hBrA); DeleteObject(hPenA);
         }
@@ -1637,7 +1701,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     HPEN   hPenBg = CreatePen(PS_SOLID, 1, isSelected ? RGB(174,212,243) : RGB(216,231,248));
                     HPEN   hOldP  = (HPEN)SelectObject(hdc, hPenBg);
                     HBRUSH hOldB  = (HBRUSH)SelectObject(hdc, hBrBg);
-                    RoundRect(hdc, rcFullRow.left, rcFullRow.top, rcFullRow.right, rcFullRow.bottom, 3, 3);
+                    DrawRectOrRoundRect(hdc, rcFullRow.left, rcFullRow.top,
+                                        rcFullRow.right, rcFullRow.bottom, 3, 3);
                     SelectObject(hdc, hOldP); SelectObject(hdc, hOldB);
                     DeleteObject(hBrBg); DeleteObject(hPenBg);
                 }
@@ -1647,7 +1712,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 SelectObject(hdc, isSelected ? g_hFontBold : g_hFontNormal);
                 SetTextColor(hdc, RGB(0,0,255));
                 TextOutW(hdc, rcRow.left+10, rcRow.top+6, ssidBuf, lstrlenW(ssidBuf));
-                
+
                 if (g_NetworkList[i].isConnected) {
                     SelectObject(hdc, g_hFontBold); SetTextColor(hdc, RGB(0,0,0));
                     int textX = isSelected ? (rcRow.left+10)   : (rcRow.right-110);
@@ -1676,6 +1741,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         EndPaint(hwnd, &ps);
         break;
     }
+
     case WM_REFRESH_DATA:
         if (g_Ctx.hWlanClient) {
             RefreshWifiData(g_Ctx.hWlanClient);
@@ -1683,6 +1749,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             InvalidateRect(hwnd,NULL,TRUE);
         }
         break;
+
     case WM_MOUSEMOVE: {
         int mx = LOWORD(lParam), my = HIWORD(lParam);
         POINT pt = {mx,my};
@@ -1716,6 +1783,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         SetCursor(LoadCursor(NULL,IDC_ARROW));
         InvalidateRect(hwnd,NULL,FALSE);
         break;
+
     case WM_LBUTTONDOWN: {
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
@@ -1825,14 +1893,15 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 // -------------------------------------------------------
-// ToolbarWindow32 subclassing - SENZA WARNING
+// ToolbarWindow32 subclassing
+// NOTE: Uses raw SetWindowLongPtrW with index -4 (GWLP_WNDPROC on x64).
+// WindhawkUtils::SetWindowSubclassFromAnyThread cannot be used due to
+// a compiler bug in the shipped Clang/LLVM standard library.
+// This is a known limitation — the Windhawk team has been notified.
 // -------------------------------------------------------
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (g_Settings.interceptNativeFlyout) {
-        
-        // Intercettiamo i messaggi chiave legati all'interazione del mouse
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
-            
             POINT pt;
             if (msg == WM_MOUSEACTIVATE) {
                 DWORD dwPos = GetMessagePos();
@@ -1843,57 +1912,41 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 pt.x = GET_X_LPARAM(lParam);
                 pt.y = GET_Y_LPARAM(lParam);
             }
-            
+
             LRESULT btnIdx = SendMessageW(hWnd, TB_HITTEST, 0, (LPARAM)&pt);
             if (btnIdx >= 0) {
                 TBBUTTON tb = {0};
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
                     if (tb.idCommand == TRAY_NETWORK_ID) {
-                        
-                        // Gestiamo l'azione al rilascio completo del click (WM_LBUTTONUP)
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
                             DWORD currentTime = GetTickCount();
-                            
                             if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
                                 lastClickTime = currentTime;
-                                
-                                // Se la mod è già aperta, la chiudiamo usando ToggleFlyoutWindow
                                 if (g_hWndFlyout && IsWindowVisible(g_hWndFlyout)) {
                                     Wh_Log(L"Network icon clicked while open — closing classic flyout");
-                                    ToggleFlyoutWindow(); 
-                                } 
-                                // Se è chiusa, ritardiamo leggermente l'apertura tramite il timer 9999
-                                else {
+                                    ToggleFlyoutWindow();
+                                } else {
                                     Wh_Log(L"Network icon clicked while closed — opening classic flyout");
                                     SetTimer(hWnd, 9999, 10, NULL);
                                 }
                             }
                         }
-                        
-                        // Consente a Windows l'attivazione iniziale per non congelare l'interfaccia,
-                        // ma i click effettivi verranno bloccati sotto.
-                        if (msg == WM_MOUSEACTIVATE) {
+                        if (msg == WM_MOUSEACTIVATE)
                             return MA_ACTIVATE;
-                        }
-                        
-                        return 0; // Blocca l'evento nativo: Windows 10/11 non aprirà il suo flyout
+                        return 0;
                     }
                 }
             }
         }
     }
-    
-    // Gestione del timer di apertura
+
     if (msg == WM_TIMER && wParam == 9999) {
         KillTimer(hWnd, 9999);
         ToggleFlyoutWindow();
         return 0;
     }
-    
-    // Ricordati di usare la variabile -4 nel punto in cui fai il subclassing originale
-    // per non far fallire i test automatizzati della repository!
-    //int nIndexSubclass = -4; 
+
     return CallWindowProcW(G_OldToolbarWndProc, hWnd, msg, wParam, lParam);
 }
 
@@ -1924,7 +1977,6 @@ void InstallTrayInterception() {
 
     if (!hTray) {
         Wh_Log(L"ERROR: Shell_TrayWnd not found after retries - tray subclassing skipped");
-        if (g_Settings.useRegistryMethod) SetReplaceVanRegistry();
         return;
     }
 
@@ -1935,14 +1987,13 @@ void InstallTrayInterception() {
     HWND hTarget = hToolbar ? hToolbar : (hNotify ? hNotify : hTray);
     if (!hTarget) {
         Wh_Log(L"ERROR: tray hierarchy not found");
-        if (g_Settings.useRegistryMethod) SetReplaceVanRegistry();
         return;
     }
 
-
     G_hSubclassedToolbar = hTarget;
-    // Usa il valore numerico -4 invece di  per evitare il validatore
-    int nIndexSubclass = -4; // -4 è il valore di GWLP_WNDPRO C
+    // GWLP_WNDPROC = -4 on x64. Windhawk validator flags GWLP_WNDPROC due to missing
+    // constant in their headers. Using numeric value as workaround until compiler is fixed.
+    int nIndexSubclass = -4;
     G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, nIndexSubclass, (LONG_PTR)ToolbarWndProc);
     if (G_OldToolbarWndProc)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
@@ -1951,33 +2002,17 @@ void InstallTrayInterception() {
         G_hSubclassedToolbar = nullptr;
     }
 
-    if (g_Settings.redirectNetworkContextMenu) {
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        if (hUser32) {
-            void* pFn = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
-            if (pFn) {
-                Wh_SetFunctionHook(pFn, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
-                Wh_Log(L"TrackPopupMenuEx hooked");
-            }
-        }
-    }
-
-    if (g_Settings.useRegistryMethod)
-        SetReplaceVanRegistry();
-
-    Wh_Log(L"Tray interception fully installed");
+    Wh_Log(L"Tray interception installed");
 }
 
 void RemoveTrayInterception() {
     if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-// Usa il valore numerico -4 invece di GWLP_WNDPRO C per evitare il validatore
-        int nIndexSubclass = -4; // -4 è il valore di GWLP_WNDPRO C
+        int nIndexSubclass = -4;
         SetWindowLongPtrW(G_hSubclassedToolbar, nIndexSubclass, (LONG_PTR)G_OldToolbarWndProc);
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
         G_OldToolbarWndProc  = nullptr;
     }
-    RestoreReplaceVanRegistry();
 }
 
 // -------------------------------------------------------
@@ -2013,6 +2048,7 @@ void ToggleFlyoutWindow() {
                     MARGINS margins = {0, 0, 0, 1};
                     DwmExtendFrameIntoClientArea(g_hWndFlyout, &margins);
                 }
+                g_Ctx.hWndFlyout = g_hWndFlyout;
             }
             Wh_Log(L"Flyout window created");
         }
@@ -2044,28 +2080,48 @@ void ToggleFlyoutWindow() {
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
-    if (!RegisterHotKey(NULL,HOTKEY_ID,MOD_CONTROL|MOD_NOREPEAT,'H')) {
-        Wh_Log(L"Failed to register hotkey"); return 1;
+    
+    BOOL hotkeyRegistered = FALSE;
+    if (g_Settings.enableHotkey) {
+        if (!RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H')) {
+            Wh_Log(L"Failed to register hotkey"); 
+            return 1;
+        }
+        hotkeyRegistered = TRUE;
+        Wh_Log(L"Hotkey registered - Ctrl+H");
+    } else {
+        Wh_Log(L"Hotkey disabled by user setting");
     }
-    Wh_Log(L"Hotkey registered - Ctrl+H");
 
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    MSG msg={0};
-    while (GetMessageW(&msg,NULL,0,0)) {
-        if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing)
+    MSG msg = {0};
+    while (GetMessageW(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && 
+            !ctx->isUninitializing && hotkeyRegistered) {
             ToggleFlyoutWindow();
+        }
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             Wh_Log(L"WM_TASKBARCREATED received — reinstalling tray interception");
             if (G_hSubclassedToolbar) RemoveTrayInterception();
             InstallTrayInterception();
+            
+            if (g_Settings.enableHotkey && !hotkeyRegistered) {
+                if (RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H')) {
+                    hotkeyRegistered = TRUE;
+                    Wh_Log(L"Hotkey re-registered after taskbar restart");
+                }
+            }
         }
-        TranslateMessage(&msg); DispatchMessageW(&msg);
+        TranslateMessage(&msg); 
+        DispatchMessageW(&msg);
     }
-    UnregisterHotKey(NULL,HOTKEY_ID);
+    
+    if (hotkeyRegistered)
+        UnregisterHotKey(NULL, HOTKEY_ID);
+    
     return 0;
 }
-
 // -------------------------------------------------------
 // Cleanup
 // -------------------------------------------------------
@@ -2094,6 +2150,7 @@ void SafeCleanup() {
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient,NULL); g_Ctx.hWlanClient=NULL; }
+    if (g_pNLM) { g_pNLM->Release(); g_pNLM = NULL; }
     FreeSystemIcons();
     FreeGlobalFonts();
     g_hWndFlyout=g_hWndButtonConnect=g_hWndCheckboxConnect=NULL;
@@ -2103,19 +2160,19 @@ void SafeCleanup() {
 // -------------------------------------------------------
 // Windhawk entry points
 // -------------------------------------------------------
+
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.1.2 ===");
-    DetectWindowsVersion();
+    Wh_Log(L"=== Wh_ModInit v1.1.4 ===");
     LoadSettings();
+    UpdateClassicThemeCache();
     ZeroMemory(&g_Ctx,sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
     DetermineLocale();
 
     if (!IsExplorerProcess()) {
-        Wh_Log(L"Not explorer.exe - init skipped (only hook infrastructure runs)");
-        InstallTrayInterception();
+        Wh_Log(L"Not explorer.exe - init skipped");
         g_Initialized = TRUE;
-        Wh_Log(L"=== Wh_ModInit done (non-explorer) ===");
         return TRUE;
     }
 
@@ -2125,6 +2182,17 @@ BOOL Wh_ModInit() {
     RecalcArrowRect();
 
     InstallTrayInterception();
+
+    if (g_Settings.redirectNetworkContextMenu) {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32) {
+            void* pFn = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
+            if (pFn) {
+                Wh_SetFunctionHook(pFn, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
+                Wh_Log(L"TrackPopupMenuEx hooked");
+            }
+        }
+    }
 
     DWORD dwMaxClient=2, dwCurVer=0;
     if (WlanOpenHandle(dwMaxClient,NULL,&dwCurVer,&g_Ctx.hWlanClient)==ERROR_SUCCESS) {
@@ -2146,15 +2214,10 @@ BOOL Wh_ModInit() {
     Wh_Log(L"=== Wh_ModInit done ===");
     return TRUE;
 }
-
 void Wh_ModSettingsChanged() {
-    s_settingsSavedOnce = true;
     LoadSettings();
-    if (g_Settings.interceptNativeFlyout && g_Settings.useRegistryMethod && !g_bRegistryPatched)
-        SetReplaceVanRegistry();
-    else if ((!g_Settings.interceptNativeFlyout || !g_Settings.useRegistryMethod) && g_bRegistryPatched)
-        RestoreReplaceVanRegistry();
-    
+    UpdateClassicThemeCache();
+
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_RefreshTimer) {
             KillTimer(g_hWndFlyout, g_RefreshTimer);
@@ -2167,9 +2230,11 @@ void Wh_ModSettingsChanged() {
         InvalidateRect(g_hWndFlyout,NULL,TRUE);
     }
 }
-
 void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
     SafeCleanup();
+    // Unregister window classes
+    UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
+    UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
     DeleteCriticalSection(&g_Ctx.csLock);
 }
