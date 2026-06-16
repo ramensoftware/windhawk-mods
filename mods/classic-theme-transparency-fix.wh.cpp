@@ -105,4 +105,7 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload){return TRUE;};
+BOOL Wh_ModSettingsChanged(BOOL* bReload){
+  *bReload = TRUE;
+  return TRUE;
+}
