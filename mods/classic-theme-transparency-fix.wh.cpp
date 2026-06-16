@@ -43,6 +43,8 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
     SIZE_T cbData;
 };
 
+BOOL g_removeDialogTransparency=TRUE;
+
 typedef BOOL (WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
 // --- DWM / composition hooks ---
@@ -69,7 +71,7 @@ ShowWindow_t ShowWindow_Original;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow)
 {
-    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
+    if (g_removeDialogTransparency) {
         if (nCmdShow != SW_HIDE && hWnd) {
             WCHAR className[64];
             if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
@@ -98,8 +100,10 @@ BOOL Wh_ModInit()
     HMODULE uxthemeModule = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
     Wh_SetFunctionHook((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
+    
+    g_removeDialogTransparency=Wh_GetIntSetting(L"removeDialogTransparency");
 
-    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
+     if (g_removeDialogTransparency) {
         Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     }
 
@@ -108,7 +112,8 @@ BOOL Wh_ModInit()
 
 void Wh_ModSettingsChanged()
 {
-    if (Wh_GetIntSetting(L"removeDialogTransparency")) {
+    g_removeDialogTransparency=Wh_GetIntSetting(L"removeDialogTransparency");
+    if (g_removeDialogTransparency) {
         // Enable the hook if not already hooked
         if (!ShowWindow_Original) {
             Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
