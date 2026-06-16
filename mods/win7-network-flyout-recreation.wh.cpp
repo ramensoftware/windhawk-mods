@@ -94,6 +94,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #include <commctrl.h>
 #include <math.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <shlwapi.h>
 #include <iphlpapi.h>
 #include <netlistmgr.h>
@@ -262,10 +263,6 @@ HWND  g_hTooltip = NULL;
 UINT_PTR g_RefreshTimer = 0;
 UINT_PTR g_ConnectCheckTimer = 0;
 
-// ToolbarWindow32 subclassing (using raw SetWindowLongPtrW due to Windhawk compiler incompatibility with windhawk_utils.h)
-WNDPROC G_OldToolbarWndProc = nullptr;
-HWND    G_hSubclassedToolbar = nullptr;
-
 // TrackPopupMenuEx hook
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
@@ -282,6 +279,9 @@ static DWORD g_lastInternetCheck = 0;
 
 // Classic theme detection cache (checked once on init and on settings change)
 static BOOL g_isClassicThemeCached = FALSE;
+
+// Subclassing via WindhawkUtils
+static HWND G_hSubclassedToolbar = nullptr;
 
 // -------------------------------------------------------
 // Localization
@@ -566,7 +566,6 @@ void OpenNetworkStatusForInterface(GUID interfaceGuid) {
         if (!hNcpa) hNcpa = FindWindowW(NULL, L"Network Connections");
         if (!hNcpa) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"ncpa.cpl", NULL, SW_SHOWNORMAL);
-            // Wait up to 500ms for ncpa.cpl to open (reduced from 1000ms)
             for (int wait = 0; wait < 10 && !hNcpa; wait++) {
                 Sleep(50);
                 hNcpa = FindWindowW(NULL, L"Connessioni di rete");
@@ -690,7 +689,6 @@ static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
     if (!g_Settings.redirectNetworkContextMenu)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
 
-    // Only intercept menus parented to the system tray
     BOOL isNetworkTrayMenu = FALSE;
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray) {
@@ -825,7 +823,6 @@ void RefreshWifiData(HANDLE hClient) {
                     }
                 }
 
-                // Skip duplicates
                 BOOL duplicate = FALSE;
                 for (int d = 0; d < g_NetworkCount; d++) {
                     if (wcscmp(g_NetworkList[d].ssid, item->ssid) == 0) {
@@ -858,7 +855,6 @@ void RefreshWifiData(HANDLE hClient) {
                     }
                 }
 
-                // Move connected network to index 0
                 if (item->isConnected && g_NetworkCount > 0) {
                     WifiNetworkItem tmp;
                     CopyMemory(&tmp,              &g_NetworkList[0], sizeof(WifiNetworkItem));
@@ -1057,7 +1053,6 @@ void HandleNativeConnection(HANDLE hClient, int index) {
         WCHAR password[65] = {0};
         if (!PromptNetworkPassword(g_hWndFlyout, password, 64, item->ssid)) return;
 
-        // Escape SSID and password for XML
         WCHAR escapedSsid[200];
         WCHAR escapedPassword[200];
         EscapeXmlString(item->ssid, escapedSsid, 200);
@@ -1213,7 +1208,6 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
 
     const WCHAR* sigStr = SignalQualityToString(item->signalQuality);
 
-    // Use BSS type description instead of fabricated radio type
     const WCHAR* bssTypeStr;
     switch(item->dot11BssType) {
         case dot11_BSS_type_infrastructure: bssTypeStr = g_CurrentLocale->bssTypeInfrastructure; break;
@@ -1416,7 +1410,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
 
-    // WM_CHECK_CONNECTION — handles WLAN notifications on the UI thread
     case WM_CHECK_CONNECTION: {
         switch (wParam) {
             case CONN_NOTIFY_ATTEMPT_FAIL:
@@ -1893,13 +1886,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 // -------------------------------------------------------
-// ToolbarWindow32 subclassing
-// NOTE: Uses raw SetWindowLongPtrW with index -4 (GWLP_WNDPROC on x64).
-// WindhawkUtils::SetWindowSubclassFromAnyThread cannot be used due to
-// a compiler bug in the shipped Clang/LLVM standard library.
-// This is a known limitation — the Windhawk team has been notified.
+// ToolbarWindow32 subclassing via WindhawkUtils
 // -------------------------------------------------------
-LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                 UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
             POINT pt;
@@ -1947,7 +1937,7 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
     }
 
-    return CallWindowProcW(G_OldToolbarWndProc, hWnd, msg, wParam, lParam);
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
 static bool IsExplorerProcess() {
@@ -1991,11 +1981,8 @@ void InstallTrayInterception() {
     }
 
     G_hSubclassedToolbar = hTarget;
-    // GWLP_WNDPROC = -4 on x64. Windhawk validator flags GWLP_WNDPROC due to missing
-    // constant in their headers. Using numeric value as workaround until compiler is fixed.
-    int nIndexSubclass = -4;
-    G_OldToolbarWndProc = (WNDPROC)SetWindowLongPtrW(hTarget, nIndexSubclass, (LONG_PTR)ToolbarWndProc);
-    if (G_OldToolbarWndProc)
+    BOOL success = WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (UINT_PTR)&g_Ctx);
+    if (success)
         Wh_Log(L"ToolbarWindow32 subclassed OK (0x%p)", hTarget);
     else {
         Wh_Log(L"ERROR: subclassing failed");
@@ -2004,17 +1991,13 @@ void InstallTrayInterception() {
 
     Wh_Log(L"Tray interception installed");
 }
-
 void RemoveTrayInterception() {
-    if (G_hSubclassedToolbar && G_OldToolbarWndProc) {
-        int nIndexSubclass = -4;
-        SetWindowLongPtrW(G_hSubclassedToolbar, nIndexSubclass, (LONG_PTR)G_OldToolbarWndProc);
+    if (G_hSubclassedToolbar) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
         Wh_Log(L"ToolbarWindow32 subclass removed");
         G_hSubclassedToolbar = nullptr;
-        G_OldToolbarWndProc  = nullptr;
     }
 }
-
 // -------------------------------------------------------
 // Toggle flyout
 // -------------------------------------------------------
@@ -2122,6 +2105,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     
     return 0;
 }
+
 // -------------------------------------------------------
 // Cleanup
 // -------------------------------------------------------
@@ -2160,8 +2144,6 @@ void SafeCleanup() {
 // -------------------------------------------------------
 // Windhawk entry points
 // -------------------------------------------------------
-
-
 BOOL Wh_ModInit() {
     Wh_Log(L"=== Wh_ModInit v1.1.4 ===");
     LoadSettings();
@@ -2214,6 +2196,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"=== Wh_ModInit done ===");
     return TRUE;
 }
+
 void Wh_ModSettingsChanged() {
     LoadSettings();
     UpdateClassicThemeCache();
@@ -2230,10 +2213,10 @@ void Wh_ModSettingsChanged() {
         InvalidateRect(g_hWndFlyout,NULL,TRUE);
     }
 }
+
 void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
     SafeCleanup();
-    // Unregister window classes
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
     DeleteCriticalSection(&g_Ctx.csLock);
