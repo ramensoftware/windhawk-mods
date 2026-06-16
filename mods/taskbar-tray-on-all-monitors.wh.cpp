@@ -98,6 +98,7 @@ struct TrayMetrics {
     double notificationCenterButton = 0;
     double showDesktopStack = 0;
     double frameWidth = 0;
+    double stockWidth = 0;  // sum of known stock elements only (excludes injected mod elements)
     bool valid = false;
 };
 
@@ -219,16 +220,35 @@ static void UpdateTrayMetricsFromFrame(FrameworkElement frame,
         metrics.notificationCenterButton +
         metrics.showDesktopStack;
 
+    metrics.stockWidth = measuredWidth;
     metrics.valid = measuredWidth > 0 && metrics.frameWidth > 0;
     g_trayMetrics = metrics;
 
-    Wh_Log(L"[TrayMetrics:%s] frame=%.0f sum=%.0f show=%.0f notif=%.0f "
+    Wh_Log(L"[TrayMetrics:%s] frame=%.0f stock=%.0f show=%.0f notif=%.0f "
            L"cc=%.0f nonAct=%.0f main=%.0f nai=%.0f overflow=%.0f valid=%d",
            reason, metrics.frameWidth, measuredWidth,
            metrics.showDesktopStack, metrics.notificationCenterButton,
            metrics.controlCenterButton, metrics.nonActivatableStack,
            metrics.mainStack, metrics.notificationAreaIcons,
            metrics.notifyIconStack, metrics.valid);
+}
+
+// Returns the width that secondary trays should use. This is the sum of
+// stock tray elements only, excluding any elements injected by other mods
+// (e.g. Taskbar Fluent Media Player). Falls back to the full frame width
+// if metrics haven't been computed yet.
+static double GetStockTrayWidth() {
+    if (g_trayMetrics.valid && g_trayMetrics.stockWidth > 0) {
+        return g_trayMetrics.stockWidth;
+    }
+    // Fallback: use full frame width if we don't have metrics yet
+    if (g_primarySystemTrayFrame) {
+        try {
+            double w = g_primarySystemTrayFrame.ActualWidth();
+            if (w > 0) return w;
+        } catch (...) {}
+    }
+    return g_lastPrimaryFrameSize;
 }
 
 FrameworkElement EnumParentElements(
@@ -673,10 +693,17 @@ static bool TryCursorRescue(HWND hWnd, const RECT& requestedRect) {
 
 // ─── MonitorFrom* hooks — redirect to target monitor ────────────────────────
 
-static bool ShouldForceForPoint(POINT pt, HMONITOR targetMon) {
+static bool ShouldForceForPoint(POINT pt, HMONITOR targetMon, int flyoutKind) {
     if (!targetMon) return false;
-    // Ambiguous origin queries
-    if (pt.x == 0 && pt.y == 0) return true;
+    // For kTrayPopup, do NOT redirect ambiguous origin queries (0,0).
+    // The shell queries MonitorFromPoint(0,0) during tray notification
+    // dispatch to find the primary monitor. Redirecting this corrupts
+    // the icon rect calculation, breaking custom popups (e.g. Steam)
+    // at non-100% DPI.
+    if (pt.x == 0 && pt.y == 0) {
+        if (flyoutKind == kTrayPopup) return false;
+        return true;  // other flyout kinds: redirect ambiguous origin
+    }
     // Only redirect if the point resolves to the target monitor already,
     // or to primary (where the system would normally place the flyout)
     FlyoutRedirectionGuard guard;
@@ -693,11 +720,21 @@ static bool ShouldForceForPoint(POINT pt, HMONITOR targetMon) {
     return force;
 }
 
-static bool ShouldForceForRect(LPCRECT rect, HMONITOR targetMon) {
+static bool ShouldForceForRect(LPCRECT rect, HMONITOR targetMon, int flyoutKind) {
     if (!targetMon) return false;
-    if (!rect || (rect->left == 0 && rect->top == 0 &&
-                  rect->right == 0 && rect->bottom == 0))
-        return true;
+    // For kTrayPopup, do NOT redirect zero/degenerate rects. The shell
+    // uses these internally during tray notification dispatch to look up
+    // the primary monitor and compute icon screen rects. Redirecting them
+    // causes DPI-scaled coordinate corruption for custom popups (Steam).
+    bool isZeroRect = !rect || (rect->left == 0 && rect->top == 0 &&
+                                rect->right == 0 && rect->bottom == 0);
+    bool isDegenerateRect = rect &&
+        (rect->right - rect->left <= 1) && (rect->bottom - rect->top <= 1);
+    if (isZeroRect || isDegenerateRect) {
+        if (flyoutKind == kTrayPopup) return false;
+        if (isZeroRect) return true;  // other flyout kinds: redirect zero rects
+        // Degenerate (1x1 or 0x0 non-zero): check normally below
+    }
     FlyoutRedirectionGuard guard;
     HMONITOR actualMon = MonitorFromRect_Original
         ? MonitorFromRect_Original(rect, MONITOR_DEFAULTTONEAREST)
@@ -716,10 +753,17 @@ static bool ShouldForceForRect(LPCRECT rect, HMONITOR targetMon) {
 static HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
     if (!g_flyoutRedirectionSuppressed && !g_unloading) {
         if (auto* ctx = GetActiveFlyoutContext()) {
-            if (ShouldForceForPoint(pt, ctx->targetMonitor)) {
-                Wh_Log(L"[MFP_Hook] Redirecting pt=(%d,%d) -> mon=%p kind=%d",
-                       pt.x, pt.y, ctx->targetMonitor, ctx->flyoutKind);
-                return ctx->targetMonitor;
+            // For kTrayPopup, skip MonitorFromPoint redirection entirely.
+            // The shell dispatches tray click notifications correctly via
+            // MonitorFromWindow (which we redirect for the taskbar window).
+            // Redirecting MonitorFromPoint during kTrayPopup interferes with
+            // the system's popup window positioning for custom popups (Steam).
+            if (ctx->flyoutKind != kTrayPopup) {
+                if (ShouldForceForPoint(pt, ctx->targetMonitor, ctx->flyoutKind)) {
+                    Wh_Log(L"[MFP_Hook] Redirecting pt=(%d,%d) -> mon=%p kind=%d",
+                           pt.x, pt.y, ctx->targetMonitor, ctx->flyoutKind);
+                    return ctx->targetMonitor;
+                }
             }
         }
     }
@@ -729,12 +773,19 @@ static HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
 static HMONITOR WINAPI MonitorFromRect_Hook(LPCRECT rect, DWORD flags) {
     if (!g_flyoutRedirectionSuppressed && !g_unloading) {
         if (auto* ctx = GetActiveFlyoutContext()) {
-            if (ShouldForceForRect(rect, ctx->targetMonitor)) {
-                Wh_Log(L"[MFR_Hook] Redirecting rect=(%d,%d,%d,%d) -> mon=%p kind=%d",
-                       rect ? rect->left : 0, rect ? rect->top : 0,
-                       rect ? rect->right : 0, rect ? rect->bottom : 0,
-                       ctx->targetMonitor, ctx->flyoutKind);
-                return ctx->targetMonitor;
+            // For kTrayPopup, skip MonitorFromRect redirection entirely.
+            // Same rationale as MonitorFromPoint: the shell only needs
+            // MonitorFromWindow (taskbar window) to dispatch the tray click.
+            // Redirecting MonitorFromRect causes the system to misplace
+            // custom popup windows (e.g. Steam) that compute their own rects.
+            if (ctx->flyoutKind != kTrayPopup) {
+                if (ShouldForceForRect(rect, ctx->targetMonitor, ctx->flyoutKind)) {
+                    Wh_Log(L"[MFR_Hook] Redirecting rect=(%d,%d,%d,%d) -> mon=%p kind=%d",
+                           rect ? rect->left : 0, rect ? rect->top : 0,
+                           rect ? rect->right : 0, rect ? rect->bottom : 0,
+                           ctx->targetMonitor, ctx->flyoutKind);
+                    return ctx->targetMonitor;
+                }
             }
         }
     }
@@ -1543,6 +1594,77 @@ static const wchar_t* g_stackContainers[] = {
     L"ShowDesktopStack",
 };
 
+// Recursively sync Visibility of named elements from primary to secondary.
+// Walks the primary's XAML subtree and for each named child, finds the same-
+// named child in the secondary subtree and copies its Visibility. This ensures
+// individual system tray icons (clock, volume, network, battery, bell, overflow
+// chevron, etc.) match the primary's state on each secondary monitor.
+static void DeepSyncVisibility(FrameworkElement primary,
+                                FrameworkElement secondary,
+                                int depth = 0) {
+    if (depth > 12) return;  // safety limit
+
+    int pCount = Media::VisualTreeHelper::GetChildrenCount(primary);
+    int sCount = Media::VisualTreeHelper::GetChildrenCount(secondary);
+
+    for (int i = 0; i < pCount; i++) {
+        auto pChild = Media::VisualTreeHelper::GetChild(primary, i)
+                          .try_as<FrameworkElement>();
+        if (!pChild) continue;
+
+        // Match by index (same XAML template) — children at the same position
+        // in matching containers correspond to each other
+        FrameworkElement sChild{nullptr};
+        if (i < sCount) {
+            sChild = Media::VisualTreeHelper::GetChild(secondary, i)
+                         .try_as<FrameworkElement>();
+        }
+
+        // If index match failed, try matching by name
+        if (!sChild) {
+            auto name = pChild.Name();
+            if (!name.empty()) {
+                sChild = FindChildByName(secondary, name.c_str());
+            }
+        }
+
+        if (!sChild) continue;
+
+        // Sync visibility
+        auto pVis = pChild.Visibility();
+        auto sVis = sChild.Visibility();
+        if (pVis != sVis) {
+            try { sChild.Visibility(pVis); } catch (...) {}
+        }
+
+        // Sync Width if explicitly set (e.g. ShowDesktop button)
+        try {
+            auto pWidth = pChild.ReadLocalValue(FrameworkElement::WidthProperty());
+            if (pWidth) {
+                auto val = winrt::unbox_value_or<double>(pWidth, -1.0);
+                if (val >= 0) {
+                    sChild.Width(val);
+                }
+            }
+        } catch (...) {}
+
+        // Sync IsEnabled for controls
+        auto pCtrl = pChild.try_as<Controls::Control>();
+        auto sCtrl = sChild.try_as<Controls::Control>();
+        if (pCtrl && sCtrl) {
+            try {
+                bool pEnabled = pCtrl.IsEnabled();
+                if (pEnabled != sCtrl.IsEnabled()) {
+                    sCtrl.IsEnabled(pEnabled);
+                }
+            } catch (...) {}
+        }
+
+        // Recurse into children
+        DeepSyncVisibility(pChild, sChild, depth + 1);
+    }
+}
+
 static void SyncTrayState(SecondaryInfo& si) {
     auto primaryGrid = FindChildByName(g_primarySystemTrayFrame, L"SystemTrayFrameGrid");
     auto secondaryGrid = FindChildByName(si.frame, L"SystemTrayFrameGrid");
@@ -1562,6 +1684,9 @@ static void SyncTrayState(SecondaryInfo& si) {
             secondaryContainer.Visibility(Visibility::Collapsed);
             si.containersUncollapsed = true;
         }
+
+        // Deep-sync individual icon visibility within each container
+        DeepSyncVisibility(primaryContainer, secondaryContainer);
     }
 
     auto primaryNAI = FindChildByName(primaryGrid, L"NotificationAreaIcons");
@@ -1655,13 +1780,17 @@ void TryPopulateSecondaryTray() {
                     UpdateTrayMetricsFromFrame(g_primarySystemTrayFrame,
                                                L"primary-size");
 
+                    // Use stock-only width for secondaries to exclude
+                    // elements injected by other mods (e.g. media player)
+                    double stockWidth = GetStockTrayWidth();
+
                     for (auto& si : g_secondaries) {
                         if (!si.populated || !si.frame) continue;
                         SyncTrayState(si);
                         try {
                             double secWidth = si.frame.Width();
-                            if (secWidth != newWidth) {
-                                si.frame.Width(newWidth);
+                            if (secWidth != stockWidth) {
+                                si.frame.Width(stockWidth);
                                 si.frame.InvalidateMeasure();
                                 si.frame.InvalidateArrange();
                                 auto parent = Media::VisualTreeHelper::GetParent(
@@ -1703,18 +1832,21 @@ void TryPopulateOneSecondary(SecondaryInfo& si) {
 
     si.populated = true;
 
-    double primaryFrameWidth = g_primarySystemTrayFrame.ActualWidth();
+    // Use stock-only width to exclude injected mod elements (e.g. media player)
+    UpdateTrayMetricsFromFrame(g_primarySystemTrayFrame, L"primary-populate");
+    double targetWidth = GetStockTrayWidth();
     double secondaryFrameWidth = si.frame.ActualWidth();
-    Wh_Log(L"Frame widths - primary:%.0f secondary:%.0f",
-           primaryFrameWidth, secondaryFrameWidth);
+    Wh_Log(L"Frame widths - stock:%.0f secondary:%.0f primary-actual:%.0f",
+           targetWidth, secondaryFrameWidth,
+           g_primarySystemTrayFrame.ActualWidth());
 
     SyncTrayState(si);
 
-    // Step 4: Set the secondary frame width to match primary
-    if (primaryFrameWidth > secondaryFrameWidth) {
+    // Step 4: Set the secondary frame width to match stock tray elements
+    if (targetWidth > secondaryFrameWidth) {
         Wh_Log(L"Setting secondary frame Width: %.0f -> %.0f",
-               secondaryFrameWidth, primaryFrameWidth);
-        si.frame.Width(primaryFrameWidth);
+               secondaryFrameWidth, targetWidth);
+        si.frame.Width(targetWidth);
     }
 
     // Force the secondary controller to recalculate frame size
@@ -1953,16 +2085,10 @@ double WINAPI SystemTraySecondaryController_GetFrameSize_Hook(void* pThis, int e
     // Check if this controller's secondary has been populated
     for (auto& si : g_secondaries) {
         if (si.controller == pThis && si.populated) {
-            // Read live primary width to avoid returning stale DPI values
-            double primaryWidth = g_lastPrimaryFrameSize;
-            if (g_primarySystemTrayFrame) {
-                try {
-                    double live = g_primarySystemTrayFrame.ActualWidth();
-                    if (live > 0) primaryWidth = live;
-                } catch (...) {}
-            }
-            if (primaryWidth > originalSize) {
-                return primaryWidth;
+            // Use stock-only width to exclude injected mod elements
+            double stockWidth = GetStockTrayWidth();
+            if (stockWidth > originalSize) {
+                return stockWidth;
             }
         }
     }
@@ -2352,15 +2478,20 @@ static void RefreshSecondaryTrayImpl() {
     try {
         double primaryWidth = g_primarySystemTrayFrame.ActualWidth();
         if (primaryWidth <= 0) return;
-
-        Wh_Log(L"[Refresh] Syncing %zu secondaries to width %.0f",
-               g_secondaries.size(), primaryWidth);
         g_lastPrimaryFrameSize = primaryWidth;
+
+        // Recompute metrics and use stock-only width for secondaries
+        UpdateTrayMetricsFromFrame(g_primarySystemTrayFrame, L"refresh");
+        double stockWidth = GetStockTrayWidth();
+
+        Wh_Log(L"[Refresh] Syncing %zu secondaries to stock width %.0f "
+               L"(primary actual %.0f)",
+               g_secondaries.size(), stockWidth, primaryWidth);
 
         for (auto& si : g_secondaries) {
             if (!si.populated || !si.frame) continue;
             try {
-                si.frame.Width(primaryWidth);
+                si.frame.Width(stockWidth);
                 si.frame.InvalidateMeasure();
                 si.frame.InvalidateArrange();
 
