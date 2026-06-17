@@ -2,7 +2,7 @@
 // @id              common-controls-hook
 // @name            Common Controls Hook
 // @description     Force-enable Common Controls v6 visual styles for legacy Win32 applications
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -35,7 +35,52 @@ user-mode DLL by LuicdLabs.
 
 #include <windhawk_utils.h>
 
+#include <atomic>
+#include <string>
+
 HANDLE g_hActCtx = INVALID_HANDLE_VALUE;
+
+// Reads the versioned window class name that the currently active activation
+// context maps a comctl32-superclassed control (e.g. "Button") to. The comctl32
+// version is encoded in this name, so it can be used to tell which Common
+// Controls version is active. Returns an empty string if there's no
+// redirection.
+std::wstring GetActiveVersionedClassName(PCWSTR className) {
+    ACTCTX_SECTION_KEYED_DATA data = {sizeof(data)};
+    if (!FindActCtxSectionStringW(
+            0, nullptr, ACTIVATION_CONTEXT_SECTION_WINDOW_CLASS_REDIRECTION,
+            className, &data)) {
+        return std::wstring();
+    }
+
+    // data.lpData points to an undocumented record whose name_offset field
+    // locates the (null-terminated) versioned class name. This layout has been
+    // stable since Windows XP and is what the Wine and ReactOS comctl32 tests
+    // rely on to read the redirected class name. Struct definition from:
+    // https://doxygen.reactos.org/d4/d6e/modules_2rostests_2winetests_2comctl32_2button_8c_source.html
+    struct wndclass_redirect_data {
+        ULONG size;
+        DWORD res;
+        ULONG name_len;
+        ULONG name_offset;
+        ULONG module_len;
+        ULONG module_offset;
+    };
+
+    if (data.ulLength < sizeof(wndclass_redirect_data)) {
+        return std::wstring();
+    }
+
+    const auto* redirect =
+        static_cast<const wndclass_redirect_data*>(data.lpData);
+    if (redirect->name_offset >= data.ulLength) {
+        return std::wstring();
+    }
+
+    const auto* name = reinterpret_cast<const WCHAR*>(
+        static_cast<const BYTE*>(data.lpData) + redirect->name_offset);
+    return std::wstring(name);
+}
 
 bool InitActCtx() {
     // shell32.dll ships the Common Controls v6 manifest as resource 124, and
@@ -57,6 +102,19 @@ bool InitActCtx() {
     return g_hActCtx != INVALID_HANDLE_VALUE;
 }
 
+// Set once the versioned v6 class name below has been captured. Lets the guard
+// take a fast path (compare without touching the activation stack) once known.
+std::atomic<bool> g_v6NameReady{false};
+
+// Returns the versioned class name (for "Button") that our Common Controls v6
+// activation context produces. Captured from the active context on first use
+// and cached; the caller must ensure our v6 context is active at that first
+// call. Thread-safe and computed once via the C++ magic-statics guarantee.
+const std::wstring& GetV6VersionedClassName() {
+    static const std::wstring name = GetActiveVersionedClassName(L"Button");
+    return name;
+}
+
 class ActCtxGuard {
     ULONG_PTR cookie = 0;
     BOOL activated = FALSE;
@@ -68,9 +126,44 @@ class ActCtxGuard {
 
    public:
     ActCtxGuard() {
-        if (g_hActCtx != INVALID_HANDLE_VALUE) {
-            activated = ActivateActCtx(g_hActCtx, &cookie);
+        if (g_hActCtx == INVALID_HANDLE_VALUE) {
+            return;
         }
+
+        // The versioned name the ambient context maps "Button" to. Its comctl32
+        // version tells us whether v6 is already available, in which case
+        // activating our own context is unnecessary. Skipping it avoids
+        // churning the activation stack (including on nested, re-entrant
+        // calls), which improves stability.
+        std::wstring ambient = GetActiveVersionedClassName(L"Button");
+
+        if (g_v6NameReady.load(std::memory_order_acquire)) {
+            // Steady state: we already know our v6 name, so decide without
+            // touching the activation stack when v6 is already active.
+            const std::wstring& v6Name = GetV6VersionedClassName();
+            if (v6Name.empty() || ambient != v6Name) {
+                activated = ActivateActCtx(g_hActCtx, &cookie);
+            }
+            return;
+        }
+
+        // First time: activate our context and learn the v6 name from it,
+        // reusing this single activation instead of a throwaway
+        // activate/deactivate pair just to read the name. Keep the activation
+        // unless it turns out v6 was already active.
+        if (!ActivateActCtx(g_hActCtx, &cookie)) {
+            return;
+        }
+
+        const std::wstring& v6Name = GetV6VersionedClassName();
+        g_v6NameReady.store(true, std::memory_order_release);
+
+        if (!v6Name.empty() && ambient == v6Name) {
+            DeactivateActCtx(0, cookie);
+            return;
+        }
+
+        activated = TRUE;
     }
     ~ActCtxGuard() {
         if (activated) {
