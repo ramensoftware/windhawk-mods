@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-16T20:20:44.000Z</updated>
+    <updated>2026-06-17T08:08:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic theme transparency fix 1.3]]></title>
+        <id>https://windhawk.net/mods/classic-theme-transparency-fix#532a39fe8e194463f08db3b2cf0241850f28be4c</id>
+        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
+        <updated>2026-06-17T08:08:45.000Z</updated>
+        <content type="html"><![CDATA[<p>Exclude an Avalonia app. All Avalonia apps cannot tolerate this mod.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.5.1]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#3379f54d9f26eff3b9b09528addff47bf6a87248</id>
@@ -659,32 +670,6 @@ own auth files if requests start returning <code>401</code>.</p>]]></content>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.3.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-fluent-media-player#5a2f0ea730d8c70bfd9a4964909c0b6f29bfcf17</id>
-        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
-        <updated>2026-06-13T18:49:47.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li><strong>Text scrolling for long track titles and artist names</strong></li>
-<li>Enable/disable scrolling for title and artist separately</li>
-<li>Adjustable scroll speed (1-10)</li>
-<li>Two scroll modes: bounce (back and forth) and loop (continuous)</li>
-<li>Configurable pause duration and spacing between repeats</li>
-<li><strong>Individual corner radius control</strong> for player, buttons, and album art</li>
-<li>Use single value (e.g., '4') for uniform corners</li>
-<li>Use four values (e.g., '4 2 4 2') for individual corner customization</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>More compact spacing between title and artist by default</li>
-<li>Improved visual feedback when clicking on the player</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

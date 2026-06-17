@@ -1,3 +1,7 @@
+## 1.3 ([Jun 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/532a39fe8e194463f08db3b2cf0241850f28be4c/mods/classic-theme-transparency-fix.wh.cpp))
+
+Exclude an Avalonia app. All Avalonia apps cannot tolerate this mod.
+
 ## 1.2 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e7cf22e460b4514dc6dab1c2d897e8e7ebc3fbd3/mods/classic-theme-transparency-fix.wh.cpp))
 
 Add a fix for Internet Download Manager
