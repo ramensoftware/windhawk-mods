@@ -8,7 +8,7 @@
 // @twitter         https://twitter.com/Leym0naide
 // @homepage        https://leymonaide.github.io/
 // @include         *
-// @compilerOptions -lcomdlg32 -lgdi32
+// @compilerOptions -lcomdlg32 -lgdi32 -lntdll
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -21,8 +21,9 @@ Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dial
 This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
 make the icon look like the Windows 7 glyph.
 
-This mod is currently tested and known to work on Windows 10 builds 19041 through 19045.. It is not tested on other
-versions.
+This mod is currently tested and known to work on Windows 10 builds 19041 through 19045. It is not tested on other
+versions. Since the mod injects into all processes to function, the mod will silently refuse to load on unsupported
+versions of Windows.
 
 ![Preview image](https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png)
 */
@@ -44,6 +45,8 @@ versions.
 
 #include <string>
 #include <windhawk_utils.h>
+
+EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
 
 HMODULE g_hmodComdlg32_7 = nullptr;
 std::wstring g_spszComdlg32Path;
@@ -180,6 +183,15 @@ BOOL Wh_ModInit()
     Wh_Log(L"Init");
 
     LoadSettings();
+
+    RTL_OSVERSIONINFOW osvi;
+    RtlGetVersion(&osvi);
+
+
+    if (osvi.dwBuildNumber < 19041 || osvi.dwBuildNumber > 19045)
+    {
+        return FALSE;
+    }
 
     HMODULE hUser32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pfnGetDpiForWindow = (decltype(pfnGetDpiForWindow))GetProcAddress(hUser32, "GetDpiForWindow");
