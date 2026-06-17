@@ -7665,7 +7665,7 @@
                     3
                 ],
                 "ratingUsers": 3,
-                "updated": 1758924664000,
+                "updated": 1781714578000,
                 "users": 123
             },
             "metadata": {
@@ -7677,7 +7677,7 @@
                     "*"
                 ],
                 "name": "No Properties Icon",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "no-run-icon": {

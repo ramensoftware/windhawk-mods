@@ -1,3 +1,7 @@
+## 1.0.3 ([Jun 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2dab67866f3b95a3d75a3b4326e82853e75ef515/mods/no-properties-icon.wh.cpp))
+
+* Fix property sheet window showing on the taskbar when focusing on child windows
+
 ## 1.0.2 ([Sep 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0463072820d46c7cdb6ef91b5d8c90b0c9ab3877/mods/no-properties-icon.wh.cpp))
 
 * Fix issue with icon of control panel applets not showing in classic Alt+Tab
