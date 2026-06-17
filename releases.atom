@@ -2,12 +2,63 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-17T17:55:59.000Z</updated>
+    <updated>2026-06-17T19:30:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-vd-switcher#5e4d697db70f4e4ab70fabb8a82bde7abf198f58</id>
+        <link href="https://windhawk.net/mods/taskbar-vd-switcher"/>
+        <updated>2026-06-17T19:30:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarvirtualdesktopswitcher">Taskbar Virtual Desktop Switcher</h1>
+<p>Adds numbered buttons to the taskbar — one per virtual desktop. Click to switch directly.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/simple3.png" alt="Default tray placement — three numbered buttons, first active" /></p>
+<p>Buttons can be arranged into one or more rows with configurable fill order.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/simple4wmaster.png" alt="Four desktops with master button" /></p>
+<p>Works alongside other mods.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/vds-screenshot3.png" alt="Complex setup with other mods active" /></p>
+<p>The compact grid adapts to how many desktops you have.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/gridonrightwlowermaster.png" alt="Taller taskbar with right-side grid and lower master button" /></p>
+<p>The switcher can also sit near the Start button.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/left-of-start.png" alt="Left of Start button" /></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/over-above-start.png" alt="Over Start, nudged above" /></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/right-of-start-hidden-start.png" alt="Right of Start with Start hidden" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Position</strong> — system tray positions plus experimental Start-adjacent and Start-overlay positions</li>
+<li><strong>Start positions</strong> — place buttons left of Start, over Start, or in a reserved space to the right of Start</li>
+<li><strong>Size</strong> — button width × height in pixels; spacing between buttons</li>
+<li><strong>Grid mode</strong> — smart automatic layout, single row/column, fixed rows, fixed columns, or fixed grid</li>
+<li><strong>Smart layout</strong> — balanced, vertical pack, or horizontal pack behavior</li>
+<li><strong>Fill order</strong> — column-first or row-first button order</li>
+<li><strong>Short group alignment</strong> — when the last row/column is shorter, align it to start, center, or end</li>
+<li><strong>Active color</strong> — hex color for the current-desktop button (e.g. <code>#4488FF</code>)</li>
+<li><strong>Inactive color</strong> — hex color for other buttons (empty = system default)</li>
+<li><strong>Opacity</strong> — 0–100; lower values let the taskbar show through</li>
+<li><strong>Shine effect</strong> — subtle gradient highlight (applies when a color is set)</li>
+<li><strong>Label format</strong> — numbers, roman numerals, dots, or custom comma-separated labels</li>
+<li><strong>Padding</strong> — left and right margin around the button grid (px)</li>
+<li><strong>Text color</strong> — foreground color for active and inactive buttons</li>
+<li><strong>Font size</strong> — button label size in pt</li>
+<li><strong>Corner radius</strong> — rounded corners (px)</li>
+<li><strong>Active bold</strong> — bold the current desktop's label</li>
+<li><strong>Border</strong> — border color and thickness</li>
+<li><strong>Hide when single</strong> — hide the bar when only one desktop exists</li>
+<li><strong>Tooltips</strong> — hover a button to see the desktop name</li>
+<li><strong>Master button</strong> — optional extra button that opens Task View (Win+Tab) to preview, create, or close desktops</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Multi-monitor: only the primary taskbar gets buttons.</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.0]]></title>
         <id>https://windhawk.net/mods/resource-aware-task-terminator#31cf6c1d7b3cf7f8ece91354f299cfd165ac54ad</id>
@@ -1005,54 +1056,6 @@ exactly the same name as a <em>folder</em> on the desktop, that file's label wil
         <author>
             <name>kivsak</name>
             <uri>https://github.com/kivsak</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Open in Admin Terminal 1.15]]></title>
-        <id>https://windhawk.net/mods/open-in-admin-terminal#e2b57e7a9131fffb4338dce9a9fb61daae8c85d6</id>
-        <link href="https://windhawk.net/mods/open-in-admin-terminal"/>
-        <updated>2026-06-04T11:19:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="openinadminterminal">Open in Admin Terminal</h1>
-<p><strong>TL;DR:</strong> Right-click any folder or drive in File Explorer and open an elevated terminal there — no more navigating after the fact.</p>
-<h2 id="withthismodyoucan">With this mod you can:</h2>
-<ul>
-<li>Right-click a folder background and open an admin terminal in that location</li>
-<li>Right-click a folder item and open an admin terminal inside it</li>
-<li>Right-click a drive and open an admin terminal at its root</li>
-<li>Optionally show the entry when right-clicking filesystem folders and drives in the navigation pane and Quick access</li>
-<li>Choose your preferred terminal: Auto, Windows Terminal, PowerShell 7, Windows PowerShell, Command Prompt, WSL, Git Bash, WezTerm, Alacritty, ConEmu, or a custom command</li>
-<li>Customize the context menu label, or let the mod use a smart default based on your terminal choice</li>
-<li>Optionally append the terminal name to a custom label (e.g. "Open elevated (Windows Terminal)")</li>
-</ul>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/qEgGpvc.gif" alt="Normal usage — right-click folder background or folder item to open elevated Windows Terminal" /></p>
-<p><em>Right-clicking a folder item to open an elevated terminal in that location (Windows Terminal)</em></p>
-<p><img src="https://i.imgur.com/HziEs16.png" alt="Context menu with Windows Terminal option" /> <img src="https://i.imgur.com/CCE3vlP.png" alt="Context menu with PowerShell 7 option" /></p>
-<p><img src="https://i.imgur.com/8KgCdju.gif" alt="Mod settings showcase" /></p>
-<p><em>Settings panel — choose terminal, customize label, toggle terminal name appending</em></p>
-<p>Screenshots may show earlier builds, but current releases use runtime classic-menu injection. The mod does not write Explorer context menu entries to the registry.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>On Windows 11, Explorer may place this entry under <code>Show more options</code> depending on your context menu setup.</li>
-<li>The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.</li>
-<li>The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.</li>
-<li>Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.</li>
-<li>Diagnostics use Windhawk's built-in logging controls.</li>
-</ul>
-<h2 id="versionlog">Version log</h2>
-<ul>
-<li>1.15: Added optional navigation pane and Quick access support for filesystem folders and drives.</li>
-<li>1.14: Added support for Desktop context menu targets.</li>
-<li>1.13: Fixed elevated terminal launches for folder paths containing spaces.</li>
-<li>1.12: Added Auto fallback and WSL, Git Bash, WezTerm, Alacritty, and ConEmu terminal presets.</li>
-<li>1.11: Fixed Windows Terminal menu icon lookup when wt.exe is an app execution alias.</li>
-<li>1.10: Reduced Explorer menu-open work by limiting selection path reads and caching terminal icon lookup successes and failures.</li>
-<li>1.9: Added quiet-by-default debug logging, improved menu placement, tightened filesystem target eligibility, and refreshed docs for classic-menu runtime injection.</li>
-<li>1.8: Switched to direct Explorer classic-menu injection with no persistent registry writes.</li>
-</ul>]]></content>
-        <author>
-            <name>aimagist</name>
-            <uri>https://github.com/aimagist</uri>
         </author>
     </entry>
 </feed>
