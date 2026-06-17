@@ -1,3 +1,8 @@
+## 1.3 ([Jun 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bc44726efe1559ff69f1b177b48aa0c3000367ed/mods/icon-resource-redirect.wh.cpp))
+
+* Added an option to to disable thumbnails in Explorer folders, making folders use a generic folder icon instead of showing a preview of their contents. Some icon themes may look better with this option enabled.
+* Added the following themes: PaveVista, Pane8.1, Minecraft Axolotle, and 7 other Minecraft themes.
+
 ## 1.2.5 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b16bfcbc7666f2c36e256bbda8370ef78e3f2a63/mods/icon-resource-redirect.wh.cpp))
 
 * Fixed redirection priority: Redirection resource paths take precedence over theme paths, which take precedence over the selected icon theme.
