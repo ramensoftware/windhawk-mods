@@ -2441,7 +2441,7 @@
                     6
                 ],
                 "ratingUsers": 6,
-                "updated": 1781545389000,
+                "updated": 1781721309000,
                 "users": 152
             },
             "metadata": {
@@ -2455,7 +2455,7 @@
                 "license": "MIT",
                 "name": "Common Controls Hook",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "confirm-closing-multiple-explorer-tabs": {
