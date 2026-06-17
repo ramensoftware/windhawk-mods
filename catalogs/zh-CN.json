@@ -11058,6 +11058,42 @@
                 "version": "1.1.4"
             }
         },
+        "taskbar-multi-tray": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781712958000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781712958000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "EDM115",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+                "description": "Windows 11 taskbar tray/control-center visibility controls for all or selected monitors",
+                "donateUrl": "https://paypal.me/8EDM115",
+                "github": "https://github.com/EDM115",
+                "homepage": "https://edm115.dev/",
+                "include": [
+                    "explorer.exe",
+                    "ShellHost.exe"
+                ],
+                "license": "MIT",
+                "name": "Taskbar multi-tray",
+                "twitter": "https://twitter.com/_edm115",
+                "version": "1.2.2"
+            }
+        },
         "taskbar-multirow": {
             "details": {
                 "defaultSorting": 53109,
