@@ -2170,11 +2170,12 @@ static bool HookTaskbarDllSymbols() {
 }
 
 static bool HookSystemTraySymbols(HMODULE hModule) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {{
         {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original, IconView_IconView_Hook,
     }};
-    if (!WindhawkUtils::HookSymbols(hModule, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(hModule, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
         Wh_Log(L"[Hooks] HookSymbols failed");
         return false;
     }
