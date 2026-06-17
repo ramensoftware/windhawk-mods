@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-17T16:15:58.000Z</updated>
+    <updated>2026-06-17T17:55:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.0]]></title>
+        <id>https://windhawk.net/mods/resource-aware-task-terminator#31cf6c1d7b3cf7f8ece91354f299cfd165ac54ad</id>
+        <link href="https://windhawk.net/mods/resource-aware-task-terminator"/>
+        <updated>2026-06-17T17:55:59.000Z</updated>
+        <content type="html"><![CDATA[<p>Resource-Aware Task Terminator</p>
+<ul>
+<li>Press the configured hotkey to terminate a target process or app group.</li>
+<li>Modes:</li>
+<li>foreground: Kill the active window process.</li>
+<li>top_cpu: Sample CPU over a configurable window and show the top PID candidates.</li>
+<li>top_pagefaults: Sample page-fault deltas and show the top PID candidates.</li>
+<li>top<em>disk</em>io: Sample process read/write byte deltas and show the top PID candidates.</li>
+<li>aggregate<em>super</em>score: Group eligible processes by executable path/name and rank app groups by CPU, page faults, disk I/O, and memory.</li>
+<li>top<em>gpu</em>experimental: Disabled in this no-PDH build to avoid loader dependency failures.</li>
+</ul>
+<p>Defaults</p>
+<ul>
+<li>Hotkey: Ctrl + Alt + F4. Pick a different hotkey if another app or Windows reserves it.</li>
+<li>Protected apps: Conservative defaults including explorer.exe, windhawk.exe, taskmgr.exe, conhost.exe, dwm.exe, and critical system processes.</li>
+</ul>
+<p>Notes and Safety</p>
+<ul>
+<li>You may need to run Windhawk elevated to kill elevated targets; otherwise OpenProcess(PROCESS_TERMINATE) can fail with Access Denied.</li>
+<li>Do not remove critical system processes from the protected list. Killing them can destabilize Windows.</li>
+<li>Terminating an app can cause data loss. Save work first.</li>
+<li>Confirmation mode is enabled by default and shows the selected process/app group, mode, sampling evidence, and protection check before termination.</li>
+<li>The chooser supports sortable metric columns, severity-colored metric cells, manual refresh, and optional live refresh.</li>
+</ul>
+<p>Troubleshooting</p>
+<ul>
+<li>If the hotkey does not work, pick a different combo. Some Win+ combos or hotkeys taken by other apps will fail to register.</li>
+<li>GPU mode is disabled in this no-PDH build.</li>
+<li>This build runs the hotkey in a dedicated Windhawk tool process for a persistent per-session host.</li>
+</ul>]]></content>
+        <author>
+            <name>Math Shamenson</name>
+            <uri>https://github.com/insane66613</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar multi-tray 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-multi-tray#dc839cd068c2485f5339538d4c6a64fe809e4282</id>
@@ -1013,31 +1053,6 @@ exactly the same name as a <em>folder</em> on the desktop, that file's label wil
         <author>
             <name>aimagist</name>
             <uri>https://github.com/aimagist</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Add This PC and Desktop to Nav Top 1.2.1]]></title>
-        <id>https://windhawk.net/mods/add-virtual-folders-to-nav-top#da0605c6e036ab19f40fecfa7a367a1084daa6e4</id>
-        <link href="https://windhawk.net/mods/add-virtual-folders-to-nav-top"/>
-        <updated>2026-06-03T07:34:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="addthispcanddesktoptonavtop">Add This PC and Desktop to Nav Top</h1>
-<p>This mod adds two virtual folders to the top of File Explorer's navigation pane and fixes the chevron rendering.</p>
-<ul>
-<li><p><strong>Show This PC at top:</strong> Adds an expandable This PC entry with drives. (Expandable This PC can't be pinned to the top without this mod.)</p></li>
-<li><p><strong>Show Desktop at top:</strong> Adds a Desktop entry for the root namespace object. This includes Recycle Bin, Control Panel, etc. instead of just the items on the desktop. (This target can't be pinned without this mod.)</p></li>
-</ul>
-<p>Both virtual folders have a toggle for whether they are expandable or not. Their position can be swapped. Duplicate entries of Desktop or This PC can be removed from other parts of the nav. Also:</p>
-<ul>
-<li><p><strong>Hide Home/Gallery:</strong> Optional, default-enabled toggles to hide the native Explorer entries. They don't affect Quick Access.</p></li>
-<li><p><strong>Remove separators:</strong> Optionally remove each separator individually.</p></li>
-<li><p><strong>Fix chevron drawing:</strong> Replaces the pixelated and clipped chevron with a smooth anti-aliased versions. The size (which matches other UI elements by default) is configurable.</p></li>
-</ul>
-<p>This mod injects only in processes that use <code>ExplorerFrame.dll</code>, so the include is set to <code>*</code> but it will not touch most processes. You can set it to <code>explorer.exe</code> only, if you don't want the nav in Open/Save dialogs changed. Only "modern" dialogs are affected.</p>
-<p>Before/after:</p>
-<p><img src="https://i.imgur.com/LZuqzMx.png" alt="" /></p>]]></content>
-        <author>
-            <name>Rod Boev</name>
-            <uri>https://github.com/rodboev</uri>
         </author>
     </entry>
 </feed>

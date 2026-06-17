@@ -9196,6 +9196,35 @@
                 "version": "1.0.1"
             }
         },
+        "resource-aware-task-terminator": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1781718959000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1781718959000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Math Shamenson",
+                "compilerOptions": "-lpsapi -lgdi32 -lcomctl32",
+                "description": "Terminate the active window process, a top resource offender, or a weighted resource-heavy app group with confirmation and sortable usage metrics.",
+                "github": "https://github.com/insane66613",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Resource-Aware Task Terminator",
+                "version": "1.0.0"
+            }
+        },
         "restore-autorun-icon-in-drive-properties": {
             "details": {
                 "defaultSorting": 540,
