@@ -269,7 +269,8 @@ static bool IsProcessProtected(DWORD pid) {
     // Quick short-circuit for known criticals by filename (in addition to user list)
     auto isCriticalName = [](const std::wstring& exe) {
         return exe == L"lsass.exe" || exe == L"csrss.exe" || exe == L"wininit.exe" ||
-               exe == L"smss.exe"  || exe == L"services.exe" || exe == L"winlogon.exe";
+               exe == L"smss.exe"  || exe == L"services.exe" || exe == L"winlogon.exe" ||
+               exe == L"windhawk.exe";
     };
 
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -358,53 +359,6 @@ static bool EnumerateProcesses(std::vector<ProcSnapshot>& out) {
 
     CloseHandle(hSnap);
     return true;
-}
-
-[[maybe_unused]] static DWORD PickTopCpuPid(DWORD sampleMs, double* outBestPct = nullptr) {
-    FILETIME idleA{}, kernelA{}, userA{}, idleB{}, kernelB{}, userB{};
-    std::vector<ProcSnapshot> a, b;
-
-    GetSystemTimes(&idleA, &kernelA, &userA);
-    if (!EnumerateProcesses(a)) return 0;
-    Sleep(sampleMs);
-    if (!EnumerateProcesses(b)) return 0;
-    GetSystemTimes(&idleB, &kernelB, &userB);
-
-    auto toUL = [](FILETIME t) { ULARGE_INTEGER x; x.LowPart=t.dwLowDateTime; x.HighPart=t.dwHighDateTime; return x.QuadPart; };
-    ULONGLONG sysDelta = (toUL(kernelB)-toUL(kernelA)) + (toUL(userB)-toUL(userA));
-    if (!sysDelta) sysDelta = 1;
-
-    DWORD bestPid = 0; double bestPct = -1.0;
-    for (const auto& pb : b) {
-        auto it = std::find_if(a.begin(), a.end(), [&](const ProcSnapshot& x){ return x.pid == pb.pid; });
-        if (it == a.end()) continue;
-        ULONGLONG pDelta = (pb.cpuKernel100ns - it->cpuKernel100ns) + (pb.cpuUser100ns - it->cpuUser100ns);
-        double pct = (double)pDelta / (double)sysDelta * 100.0;
-        if (pct > bestPct) {
-            if (!IsProcessProtected(pb.pid)) { bestPct = pct; bestPid = pb.pid; }
-        }
-    }
-    if (outBestPct) *outBestPct = bestPct;
-    return bestPid;
-}
-
-[[maybe_unused]] static DWORD PickTopPageFaultsPid(DWORD sampleMs, long long* outBestDelta = nullptr) {
-    std::vector<ProcSnapshot> a, b;
-    if (!EnumerateProcesses(a)) return 0;
-    Sleep(sampleMs);
-    if (!EnumerateProcesses(b)) return 0;
-
-    DWORD bestPid = 0; long long bestRate = -1;
-    for (const auto& pb : b) {
-        auto it = std::find_if(a.begin(), a.end(), [&](const ProcSnapshot& x){ return x.pid == pb.pid; });
-        if (it == a.end()) continue;
-        long long delta = (long long)pb.pageFaultCount - (long long)it->pageFaultCount;
-        if (delta > bestRate) {
-            if (!IsProcessProtected(pb.pid)) { bestRate = delta; bestPid = pb.pid; }
-        }
-    }
-    if (outBestDelta) *outBestDelta = bestRate;
-    return bestPid;
 }
 
 // Experimental GPU picker disabled in no-PDH build.
@@ -948,7 +902,7 @@ static COLORREF DarkText() { return RGB(235, 235, 235); }
 static COLORREF TargetSelectedBg() { return RGB(0, 95, 170); }
 
 static void TrySetDarkTheme(HWND hwnd) {
-    HMODULE hUx = LoadLibraryW(L"uxtheme.dll");
+    HMODULE hUx = GetModuleHandleW(L"uxtheme.dll");
     if (!hUx) return;
     using SetWindowTheme_t = HRESULT (WINAPI*)(HWND, LPCWSTR, LPCWSTR);
     auto pSetWindowTheme = reinterpret_cast<SetWindowTheme_t>(GetProcAddress(hUx, "SetWindowTheme"));
@@ -1204,7 +1158,7 @@ static LRESULT CALLBACK CandidateChooserProc(HWND hwnd, UINT msg, WPARAM wParam,
     case WM_COMMAND: {
         WORD id = LOWORD(wParam);
         if (id == IDOK) {
-            int idx = state && state->hList ? ListView_GetNextItem(state->hList, -1, LVNI_SELECTED) : -1;
+            int idx = state ? state->visualSelectedRow : -1;
             state->selectedIndex = idx >= 0 ? idx : 0;
             DestroyWindow(hwnd);
             return 0;
@@ -1394,7 +1348,7 @@ static int ShowCandidateChooser(std::vector<KillDecision>& candidates) {
         state.live = g_liveUpdateDefault;
         state.darkUi = g_darkChooserUi;
     }
-    state.sortColumn = (state.mode == KillMode::AggregateSuperScore) ? 3 : 3;
+    state.sortColumn = 3;
     state.sortDescending = true;
 
     RECT rc{0, 0, 1460, 500};
@@ -1430,7 +1384,7 @@ static int ShowCandidateChooser(std::vector<KillDecision>& candidates) {
 
 static std::wstring BuildConfirmationMessage(const KillDecision& decision) {
     std::wstring message;
-    message += L"Sanity Cloud Force Kill is about to terminate a process.\n\n";
+    message += L"Resource-Aware Task Terminator is about to terminate a process.\n\n";
     if (decision.terminateGroup) {
         message += L"Target app group: " + decision.exeName + L"\n";
         message += L"Primary PID: " + std::to_wstring(decision.pid) + L"\n";
@@ -1494,7 +1448,7 @@ static bool ConfirmKillDecision(const KillDecision& decision) {
 static LRESULT CALLBACK HiddenWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_HOTKEY && wParam == HOTKEY_ID) {
         if (g_killInProgress.exchange(true)) {
-            Wh_Log(L"[AI Counsel] Kill already in progress; ignoring hotkey.");
+            Wh_Log(L"Kill already in progress; ignoring hotkey.");
             return 0;
         }
         struct ResetBusy {
@@ -1503,7 +1457,7 @@ static LRESULT CALLBACK HiddenWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
 
         KillDecision decision;
         if (!ResolveTargetDecision(decision)) {
-            Wh_Log(L"[AI Counsel] No suitable target found.");
+            Wh_Log(L"No suitable target found.");
             return 0;
         }
 
@@ -1513,13 +1467,13 @@ static LRESULT CALLBACK HiddenWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
 
         for (DWORD pid : targetPids) {
             if (IsProcessProtected(pid)) {
-                Wh_Log(L"[AI Counsel] Chosen PID %lu is protected. Skipping entire request.", pid);
+                Wh_Log(L"Chosen PID %lu is protected. Skipping entire request.", pid);
                 return 0;
             }
         }
 
         if (!ConfirmKillDecision(decision)) {
-            Wh_Log(L"[AI Counsel] Kill cancelled by user for primary PID: %lu", decision.pid);
+            Wh_Log(L"Kill cancelled by user for primary PID: %lu", decision.pid);
             return 0;
         }
 
@@ -1528,7 +1482,7 @@ static LRESULT CALLBACK HiddenWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
             // Re-check immediately before termination in case the target changed
             // while the confirmation dialog was open.
             if (IsProcessProtected(pid)) {
-                Wh_Log(L"[AI Counsel] PID %lu became protected before termination. Skipping PID.", pid);
+                Wh_Log(L"PID %lu became protected before termination. Skipping PID.", pid);
                 continue;
             }
 
@@ -1537,12 +1491,12 @@ static LRESULT CALLBACK HiddenWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
                 TerminateProcess(hProcess, 1);
                 CloseHandle(hProcess);
                 terminatedCount++;
-                Wh_Log(L"[AI Counsel] Terminated PID: %lu", pid);
+                Wh_Log(L"Terminated PID: %lu", pid);
             } else {
-                Wh_Log(L"[AI Counsel] Failed to terminate PID: %lu (try running Windhawk as admin).", pid);
+                Wh_Log(L"Failed to terminate PID: %lu (try running Windhawk as admin).", pid);
             }
         }
-        Wh_Log(L"[AI Counsel] Termination request finished. Terminated %d/%d process(es).",
+        Wh_Log(L"Termination request finished. Terminated %d/%d process(es).",
                terminatedCount, (int)targetPids.size());
         return 0;
     }
@@ -1553,14 +1507,14 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
     WNDCLASS wc = {0};
     wc.lpfnWndProc = HiddenWindowProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"AI_Counsel_ForceKill_Class";
+    wc.lpszClassName = L"ResourceAwareTaskTerminator_HotkeyHost_Class";
     RegisterClass(&wc);
 
     g_hHiddenWindow =
-        CreateWindowEx(0, wc.lpszClassName, L"AI_Counsel_ForceKill", 0, 0, 0, 0, 0,
+        CreateWindowEx(0, wc.lpszClassName, L"ResourceAwareTaskTerminator_HotkeyHost", 0, 0, 0, 0, 0,
                        HWND_MESSAGE, NULL, wc.hInstance, NULL);
     if (!g_hHiddenWindow) {
-        Wh_Log(L"[AI Counsel] CreateWindowEx failed (error=%lu); aborting hotkey thread.", GetLastError());
+        Wh_Log(L"CreateWindowEx failed (error=%lu); aborting hotkey thread.", GetLastError());
         UnregisterClass(wc.lpszClassName, wc.hInstance);
         return 1;
     }
@@ -1568,9 +1522,9 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         if (!RegisterHotKey(g_hHiddenWindow, HOTKEY_ID, g_modifiers, g_vkCode)) {
-            Wh_Log(L"[AI Counsel] Failed to register hotkey (modifiers=%u, vk=%u, error=%lu).", g_modifiers, g_vkCode, GetLastError());
+            Wh_Log(L"Failed to register hotkey (modifiers=%u, vk=%u, error=%lu).", g_modifiers, g_vkCode, GetLastError());
         } else {
-            Wh_Log(L"[AI Counsel] Registered hotkey (modifiers=%u, vk=%u).", g_modifiers, g_vkCode);
+            Wh_Log(L"Registered hotkey (modifiers=%u, vk=%u).", g_modifiers, g_vkCode);
         }
     }
 
@@ -1582,9 +1536,9 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
             UnregisterHotKey(g_hHiddenWindow, HOTKEY_ID);
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             if (!RegisterHotKey(g_hHiddenWindow, HOTKEY_ID, g_modifiers, g_vkCode)) {
-                Wh_Log(L"[AI Counsel] Failed to re-register hotkey after settings change (modifiers=%u, vk=%u, error=%lu).", g_modifiers, g_vkCode, GetLastError());
+                Wh_Log(L"Failed to re-register hotkey after settings change (modifiers=%u, vk=%u, error=%lu).", g_modifiers, g_vkCode, GetLastError());
             } else {
-                Wh_Log(L"[AI Counsel] Re-registered hotkey (modifiers=%u, vk=%u).", g_modifiers, g_vkCode);
+                Wh_Log(L"Re-registered hotkey (modifiers=%u, vk=%u).", g_modifiers, g_vkCode);
             }
             continue;
         }
@@ -1608,16 +1562,15 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
 }
 
 // ------------------------ Dedicated tool-process host ------------------------
-// The persistent hotkey host runs as:
-//     windhawk.exe -tool-mod "<mod-id>"
-// The normal loaded mod only launches that process. The Local\ mutex is per
-// interactive session, so RDP / fast-user-switch sessions do not block each other.
+// This mod runs as a dedicated Windhawk tool process:
+//     windhawk.exe -tool-mod "resource-aware-task-terminator"
+// The normal loaded mod only launches that process.
 
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = NULL;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 static void WINAPI EntryPoint_Hook() {
-    Wh_Log(L"[AI Counsel] Tool host entry-point hook reached; parking host thread.");
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -1625,10 +1578,10 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     g_hThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, &g_dwThreadId);
     if (!g_hThread) {
-        Wh_Log(L"[AI Counsel] Failed to create hotkey thread in tool host (%lu).", GetLastError());
+        Wh_Log(L"Failed to create hotkey thread (%lu).", GetLastError());
         return FALSE;
     }
-    Wh_Log(L"[AI Counsel] Tool hotkey host started. PID=%lu thread=%lu.", GetCurrentProcessId(), g_dwThreadId);
+    Wh_Log(L"Tool hotkey host started. PID=%lu thread=%lu.", GetCurrentProcessId(), g_dwThreadId);
     return TRUE;
 }
 
@@ -1649,7 +1602,6 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"[AI Counsel] Settings changed. Reloading hotkey.");
     LoadSettings();
     if (g_dwThreadId) {
         PostThreadMessage(g_dwThreadId, WM_RELOAD_HOTKEY, 0, 0);
@@ -1657,24 +1609,18 @@ void WhTool_ModSettingsChanged() {
 }
 
 BOOL Wh_ModInit() {
-    OutputDebugStringW(L"[AI Counsel] Wh_ModInit entered\n");
-    DWORD pid = GetCurrentProcessId();
-    DWORD sessionId = 0;
-    ProcessIdToSessionId(pid, &sessionId);
-    Wh_Log(L"[AI Counsel] Wh_ModInit entered. PID=%lu session=%lu", pid, sessionId);
-
-    if (sessionId == 0) {
-        Wh_Log(L"[AI Counsel] Session 0 skipped. PID=%lu", pid);
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
         return FALSE;
     }
 
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
-        Wh_Log(L"[AI Counsel] CommandLineToArgvW failed (%lu).", GetLastError());
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
@@ -1700,18 +1646,18 @@ BOOL Wh_ModInit() {
     LocalFree(argv);
 
     if (isExcluded) {
-        Wh_Log(L"[AI Counsel] Service command-line skipped. PID=%lu", pid);
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"Local\\sanity-cloud-terminate-tool-host");
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"[AI Counsel] CreateMutex failed in tool host (%lu).", GetLastError());
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"[AI Counsel] Tool host already running in this session. PID=%lu", pid);
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -1719,8 +1665,9 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
@@ -1729,12 +1676,10 @@ BOOL Wh_ModInit() {
     }
 
     if (isToolModProcess) {
-        Wh_Log(L"[AI Counsel] Other tool-mod process skipped. PID=%lu", pid);
         return FALSE;
     }
 
     g_isToolModProcessLauncher = true;
-    Wh_Log(L"[AI Counsel] Launcher armed. PID=%lu session=%lu", pid, sessionId);
     return TRUE;
 }
 
@@ -1743,51 +1688,54 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    WCHAR exePath[MAX_PATH] = {};
-    DWORD n = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    if (n == 0 || n >= ARRAYSIZE(exePath)) {
-        Wh_Log(L"[AI Counsel] GetModuleFileName failed in launcher (%lu).", GetLastError());
-        return;
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    std::wstring cmd = L"\"";
-    cmd += exePath;
-    cmd += L"\" -tool-mod \"";
-    cmd += WH_MOD_ID;
-    cmd += L"\"";
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
-    using CreateProcessInternalW_t = BOOL (WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        BOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-
-    auto pCreateProcessInternalW = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CreateProcessInternalW"));
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(L"[AI Counsel] GetProcAddress(CreateProcessInternalW) failed (%lu).", GetLastError());
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (!pCreateProcessInternalW(nullptr, exePath, cmd.data(), nullptr, nullptr, FALSE,
-                                 NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"[AI Counsel] CreateProcessInternalW tool host failed (%lu).", GetLastError());
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    Wh_Log(L"[AI Counsel] Launched tool host via CreateProcessInternalW. PID=%lu", pi.dwProcessId);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
@@ -1796,6 +1744,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -1803,8 +1752,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
-
-
