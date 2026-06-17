@@ -534,7 +534,7 @@ static std::vector<KillDecision> BuildResourceCandidateDecisions(KillMode mode, 
                                (pb.cpuUser100ns - it->cpuUser100ns);
             value = (double)pDelta / (double)sysDelta * 100.0;
             reason = L"Top CPU mode sampled process CPU deltas and ranked the highest non-protected processes.";
-            metricName = L"CPU share during sample (%)";
+            metricName = L"CPU usage during sample, normalized across all logical processors (%)";
         } else if (mode == KillMode::TopPagefaults) {
             long long delta = (long long)pb.pageFaultCount - (long long)it->pageFaultCount;
             value = (double)delta;
@@ -1094,7 +1094,7 @@ static LRESULT CALLBACK CandidateChooserProc(HWND hwnd, UINT msg, WPARAM wParam,
             InsertListColumn(state->hList, 1, L"Target", 260);
             InsertListColumn(state->hList, 2, L"PID(s)", 90);
             InsertListColumn(state->hList, 3, L"Score", 100);
-            InsertListColumn(state->hList, 4, L"CPU %", 95);
+            InsertListColumn(state->hList, 4, L"CPU total %", 115);
             InsertListColumn(state->hList, 5, L"Page faults", 135);
             InsertListColumn(state->hList, 6, L"Disk MB", 115);
             InsertListColumn(state->hList, 7, L"Mem MB", 115);
@@ -1404,7 +1404,7 @@ static std::wstring BuildConfirmationMessage(const KillDecision& decision) {
     message += L"Evidence: " + decision.metricName + L" = " + FormatDouble(decision.metricValue) + L"\n";
     if (decision.mode == KillMode::AggregateSuperScore) {
         message += L"Aggregate components:\n";
-        message += L"  CPU%: " + FormatDouble(decision.cpuPercent) + L"\n";
+        message += L"  CPU total %: " + FormatDouble(decision.cpuPercent) + L"\n";
         message += L"  Page-fault delta: " + FormatDouble(decision.pageFaultDelta) + L"\n";
         message += L"  Disk I/O bytes: " + FormatDouble(decision.diskIoBytes) + L"\n";
         message += L"  Working set MB: " + FormatDouble(decision.memoryMb) + L"\n";
@@ -1756,3 +1756,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
