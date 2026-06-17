@@ -2,7 +2,7 @@
 // @id              taskbar-multi-tray
 // @name            Taskbar multi-tray
 // @description     Windows 11 taskbar tray/control-center visibility controls for all or selected monitors
-// @version         1.2.0
+// @version         1.2.1
 // @author          EDM115
 // @github          https://github.com/EDM115
 // @twitter         https://twitter.com/_edm115
@@ -29,10 +29,13 @@ The `components` setting chooses which surfaces the mod keeps visible :
 - `tray` : tray icons and hidden icons, the notification/date-time button stays visible because Windows treats it as part of the date/time surface, while the control-center button is hidden
 - `controlCenter` : control center and notification/date-time only, promoted tray icons and the hidden-icons entry point are hidden
 
+`componentsScope` controls whether that choice affects every taskbar or only copied/non-primary taskbars. In copied-taskbars-only mode, the primary taskbar keeps the native tray and control center visible.
+
 ## Settings
 - `monitorMode` : `all` or `selected`
 - `selectedMonitors` : comma-separated one-based monitor numbers, used only with `monitorMode=selected`
 - `components` : `all`, `tray`, or `controlCenter`
+- `componentsScope` : `allTaskbars` or `copiedTaskbars`
 - `enableTreeDump` : adds bounded XAML child-tree dumps when Windhawk logging is enabled
 
 Monitor numbering follows `EnumDisplayMonitors` order for the current session. The numbers can change after hot-plug, docking, display sleep, or reboot.
@@ -52,9 +55,8 @@ Windhawk controls whether log entries are emitted. The mod logs settings, taskba
 
 ### Known issues
 *Those are problems that are identified and will be fixed in future updates*
-- [ ] Click hit-testing is still a right-edge layout heuristic. The control-center and promoted-icon widths are measured, but extra items injected into the tray strip (language selector, emoji icon, stylus menu, other shortcuts, or other mods) won't be duplicated.
-- [ ] Reusing primary tray XAML bindings remains structurally dependent on internal XAML element names/classes, which can drift across Windows updates. Since 1.1.0 every apply/binding path is wrapped in exception boundaries, so drift degrades to a logged skip of that pass instead of risking an Explorer crash, but the mod cannot populate surfaces whose structure it no longer recognizes.
-- [ ] Moving icons from the hidden-icons flyout back to the visible tray on a copied taskbar still needs validation with the 1.1.23 scoped real-tray-owner override. This path can refresh/move tray surfaces during the drag, but the lighter copied-surface-only path did not produce a native drop target on Windows 11 25H2 build 26200.8655.
+- [ ] Moving icons from the hidden-icons flyout back to the visible tray on a copied taskbar doesn't work. Either do it from the primary taskbar or if you have already a copied flyout open, move the icon to the area of the primary taskbar's tray strip and release it there.
+- [ ] Extra items injected into the tray strip (language selector, emoji/keyboard/stylus icon, other shortcuts, or other mods) won't be duplicated
 
 ---
 
@@ -125,10 +127,15 @@ Unload is strictly ordered : the unloading flag flips every hook to pass-through
   - all: Tray and control center
   - tray: Tray icons and hidden icons
   - controlCenter: Control center only
+- componentsScope: allTaskbars
+  $name: Components apply to
+  $options:
+  - allTaskbars: All taskbars
+  - copiedTaskbars: Copied taskbars only
 - enableTreeDump: false
   $name: Dump XAML tree
   $description: >-
-    Very noisy, used only when investigating missing XAML elements
+    [DEV] Very noisy, used only when investigating missing XAML elements
 */
 // ==/WindhawkModSettings==
 
@@ -148,6 +155,7 @@ Unload is strictly ordered : the unloading flag flips every hook to pass-through
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/base.h>
 
+#include <atomic>
 #include <cwctype>
 #include <functional>
 #include <limits>
@@ -192,36 +200,35 @@ enum class Components {
     ControlCenter,
 };
 
+enum class ComponentsScope {
+    AllTaskbars,
+    CopiedTaskbars,
+};
+
 struct Settings {
     MonitorMode monitorMode = MonitorMode::All;
     std::set<int> selectedMonitors;
     std::vector<int> selectedMonitorOrder;
     Components components = Components::All;
+    ComponentsScope componentsScope = ComponentsScope::AllTaskbars;
     bool enableTreeDump = false;
 };
 
 Settings g_defaultSettings;
-void* volatile g_settingsSnapshot = &g_defaultSettings;
+std::atomic<const Settings*> g_settingsSnapshot{&g_defaultSettings};
 
 /// Returns the current immutable settings snapshot. Lock-free : a single atomic read of the published pointer gives hooks on any thread a coherent view. Falls back to defaults before the first publish.
 const Settings& GetSettings() {
-    void* snapshot = InterlockedCompareExchangePointer(
-        reinterpret_cast<PVOID volatile*>(&g_settingsSnapshot),
-        nullptr,
-        nullptr
-    );
+    const Settings* snapshot = g_settingsSnapshot.load(std::memory_order_acquire);
 
-    return *static_cast<const Settings*>(snapshot ? snapshot : &g_defaultSettings);
+    return *(snapshot ? snapshot : &g_defaultSettings);
 }
 
 /// Atomically publishes a new immutable settings snapshot. The previous snapshot is intentionally leaked : a hook on another thread may still be reading it, and settings changes are rare enough that the bytes do not matter.
 void PublishSettings(Settings settings) {
     // Keep old snapshots alive. Hooks can be running concurrently on Explorer or taskbar threads, so freeing a replaced std::set/std::vector would reintroduce the race this snapshot pattern is meant to remove.
     Settings* publishedSettings = new Settings(std::move(settings));
-    InterlockedExchangePointer(
-        reinterpret_cast<PVOID volatile*>(&g_settingsSnapshot),
-        publishedSettings
-    );
+    g_settingsSnapshot.store(publishedSettings, std::memory_order_release);
 }
 
 enum class TargetProcess {
@@ -245,6 +252,26 @@ asm(".section .shared,\"dws\"\n");
 #define SHARED_SECTION __attribute__((section(".shared")))
 
 struct SharedProxyState {
+    std::atomic<HMONITOR> proxyFlyoutMonitor;
+    int proxyFlyoutMonitorIndex;
+    DWORD proxyFlyoutUntilTick;
+    std::atomic<LONG> proxyFlyoutGeneration;
+    int proxyFlyoutKind;
+    LONG_PTR proxyFlyoutTaskbarWnd;
+    int proxyFlyoutAnchorValid;
+    LONG proxyFlyoutAnchorX;
+    LONG proxyFlyoutAnchorY;
+    int proxyFlyoutTaskbarRectValid;
+    LONG proxyFlyoutTaskbarLeft;
+    LONG proxyFlyoutTaskbarTop;
+    LONG proxyFlyoutTaskbarRight;
+    LONG proxyFlyoutTaskbarBottom;
+    UINT proxyFlyoutTargetDpi;
+};
+
+SharedProxyState g_sharedProxyState SHARED_SECTION = {};
+
+struct SharedProxyStateSnapshot {
     HMONITOR proxyFlyoutMonitor;
     int proxyFlyoutMonitorIndex;
     DWORD proxyFlyoutUntilTick;
@@ -262,29 +289,27 @@ struct SharedProxyState {
     UINT proxyFlyoutTargetDpi;
 };
 
-SharedProxyState g_sharedProxyState SHARED_SECTION = {};
-
 /// Starts a seqlock write of the cross-process shared state : bumps the generation to an odd value so concurrent readers know the data is mid-write
 LONG BeginSharedProxyStateWrite() {
-    LONG generation = InterlockedIncrement(reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration));
+    LONG generation = g_sharedProxyState.proxyFlyoutGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
 
     if ((generation & 1) == 0) {
-        generation = InterlockedIncrement(reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration));
+        generation = g_sharedProxyState.proxyFlyoutGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
     }
 
-    MemoryBarrier();
+    std::atomic_thread_fence(std::memory_order_release);
 
     return generation;
 }
 
 /// Completes a seqlock write : bumps the generation back to an even value and returns it (the value a reader must observe unchanged for a consistent snapshot)
 LONG EndSharedProxyStateWrite() {
-    MemoryBarrier();
+    std::atomic_thread_fence(std::memory_order_release);
 
-    LONG generation = InterlockedIncrement(reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration));
+    LONG generation = g_sharedProxyState.proxyFlyoutGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
 
     if (generation & 1) {
-        generation = InterlockedIncrement(reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration));
+        generation = g_sharedProxyState.proxyFlyoutGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
     }
 
     return generation;
@@ -292,13 +317,13 @@ LONG EndSharedProxyStateWrite() {
 
 /// Seqlock read of the cross-process shared state into a local snapshot, retrying when a writer is active (odd generation) or the generation moved mid-copy
 /// @return false when no consistent snapshot could be taken
-bool ReadSharedProxyState(SharedProxyState* snapshot) {
+bool ReadSharedProxyState(SharedProxyStateSnapshot* snapshot) {
     if (!snapshot) {
         return false;
     }
 
     for (int attempt = 0; attempt < 8; attempt++) {
-        LONG generationBefore = g_sharedProxyState.proxyFlyoutGeneration;
+        LONG generationBefore = g_sharedProxyState.proxyFlyoutGeneration.load(std::memory_order_acquire);
 
         if (generationBefore & 1) {
             YieldProcessor();
@@ -306,11 +331,24 @@ bool ReadSharedProxyState(SharedProxyState* snapshot) {
             continue;
         }
 
-        MemoryBarrier();
-        *snapshot = g_sharedProxyState;
-        MemoryBarrier();
+        std::atomic_thread_fence(std::memory_order_acquire);
+        snapshot -> proxyFlyoutMonitor = g_sharedProxyState.proxyFlyoutMonitor.load(std::memory_order_acquire);
+        snapshot -> proxyFlyoutMonitorIndex = g_sharedProxyState.proxyFlyoutMonitorIndex;
+        snapshot -> proxyFlyoutUntilTick = g_sharedProxyState.proxyFlyoutUntilTick;
+        snapshot -> proxyFlyoutKind = g_sharedProxyState.proxyFlyoutKind;
+        snapshot -> proxyFlyoutTaskbarWnd = g_sharedProxyState.proxyFlyoutTaskbarWnd;
+        snapshot -> proxyFlyoutAnchorValid = g_sharedProxyState.proxyFlyoutAnchorValid;
+        snapshot -> proxyFlyoutAnchorX = g_sharedProxyState.proxyFlyoutAnchorX;
+        snapshot -> proxyFlyoutAnchorY = g_sharedProxyState.proxyFlyoutAnchorY;
+        snapshot -> proxyFlyoutTaskbarRectValid = g_sharedProxyState.proxyFlyoutTaskbarRectValid;
+        snapshot -> proxyFlyoutTaskbarLeft = g_sharedProxyState.proxyFlyoutTaskbarLeft;
+        snapshot -> proxyFlyoutTaskbarTop = g_sharedProxyState.proxyFlyoutTaskbarTop;
+        snapshot -> proxyFlyoutTaskbarRight = g_sharedProxyState.proxyFlyoutTaskbarRight;
+        snapshot -> proxyFlyoutTaskbarBottom = g_sharedProxyState.proxyFlyoutTaskbarBottom;
+        snapshot -> proxyFlyoutTargetDpi = g_sharedProxyState.proxyFlyoutTargetDpi;
+        std::atomic_thread_fence(std::memory_order_acquire);
 
-        LONG generationAfter = g_sharedProxyState.proxyFlyoutGeneration;
+        LONG generationAfter = g_sharedProxyState.proxyFlyoutGeneration.load(std::memory_order_acquire);
 
         if (generationBefore == generationAfter && !(generationAfter & 1)) {
             snapshot -> proxyFlyoutGeneration = generationAfter;
@@ -370,9 +408,9 @@ DispatchMessageW_t DispatchMessageW_Original;
 
 bool g_restoringNativeTaskbars = false;
 HMONITOR g_nativePrimaryRestoreMonitor = nullptr;
-volatile LONG g_deferredApplyGeneration = 0;
-volatile LONG g_modUnloading = 0;
-volatile LONG g_activeFlyoutRedirectionSuppressionDepth = 0;
+std::atomic<LONG> g_deferredApplyGeneration{0};
+std::atomic<LONG> g_modUnloading{0};
+std::atomic<LONG> g_activeFlyoutRedirectionSuppressionDepth{0};
 HWND g_deferredApplyTimerWnd = nullptr;
 LONG g_deferredApplyTimerGeneration = 0;
 size_t g_deferredApplyRetryIndex = 0;
@@ -392,7 +430,7 @@ struct ProxyFlyoutContext {
 };
 
 /// Copies a seqlock-protected shared snapshot into a stack context. Hot read paths use this instead of mutating the process-local mirror, so concurrent MonitorFrom*/placement hooks cannot observe half-updated POINT/RECT fields.
-bool ProxyFlyoutContextFromSharedSnapshot(const SharedProxyState& snapshot, ProxyFlyoutContext* context) {
+bool ProxyFlyoutContextFromSharedSnapshot(const SharedProxyStateSnapshot& snapshot, ProxyFlyoutContext* context) {
     if (!context || !snapshot.proxyFlyoutMonitor || !snapshot.proxyFlyoutUntilTick) {
         return false;
     }
@@ -436,7 +474,7 @@ bool g_trayItemsOwnerMayBeStale = false;
 HWND g_controlCenterItemsOwnerTaskbarWnd = nullptr;
 
 // Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks)
-volatile LONG g_flyoutShowAtHooksInstalled = 0;
+std::atomic<bool> g_flyoutShowAtHooksInstalled{false};
 
 // A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show, and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers, and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
 struct ControlCenterProxyFlyoutEntry {
@@ -458,24 +496,25 @@ struct TaskbarTrayMetrics {
 };
 
 std::vector<TaskbarTrayMetrics> g_taskbarTrayMetrics;
+SRWLOCK g_taskbarTrayMetricsLock = SRWLOCK_INIT;
 
 /// True once Wh_ModBeforeUninit has started. Every hook checks it to fall back to fully native behavior during teardown.
 bool IsModUnloading() {
-    return g_modUnloading != 0;
+    return g_modUnloading.load(std::memory_order_acquire) != 0;
 }
 
 /// True while monitor-query redirection must stay off : during unload, and while the mod itself applies/restores taskbar XAML (see ActiveFlyoutRedirectionSuppressor)
 bool IsActiveFlyoutRedirectionSuppressed() {
-    return IsModUnloading() || g_activeFlyoutRedirectionSuppressionDepth > 0;
+    return IsModUnloading() || g_activeFlyoutRedirectionSuppressionDepth.load(std::memory_order_acquire) > 0;
 }
 
 struct ActiveFlyoutRedirectionSuppressor {
     ActiveFlyoutRedirectionSuppressor() {
-        InterlockedIncrement(&g_activeFlyoutRedirectionSuppressionDepth);
+        g_activeFlyoutRedirectionSuppressionDepth.fetch_add(1, std::memory_order_acq_rel);
     }
 
     ~ActiveFlyoutRedirectionSuppressor() {
-        InterlockedDecrement(&g_activeFlyoutRedirectionSuppressionDepth);
+        g_activeFlyoutRedirectionSuppressionDepth.fetch_sub(1, std::memory_order_acq_rel);
     }
 };
 
@@ -485,6 +524,7 @@ double GetCachedControlCenterButtonWidth(HWND hWnd);
 void SetCachedControlCenterButtonWidth(HWND hWnd, double width);
 void RemoveCachedTaskbarTrayMetrics(HWND hWnd);
 bool IsSecondaryTaskbarWindow(HWND hWnd);
+bool IsPrimaryTaskbarWindow(HWND hWnd);
 bool IsRightClickOrContextMenuMessage(UINT uMsg, WPARAM wParam);
 std::wstring GetWindowClassName(HWND hWnd);
 
@@ -510,6 +550,11 @@ PCWSTR ComponentsToString(Components components) {
         default:
             return L"all";
     }
+}
+
+/// Log-formatting helper for ComponentsScope
+PCWSTR ComponentsScopeToString(ComponentsScope scope) {
+    return scope == ComponentsScope::CopiedTaskbars ? L"copiedTaskbars" : L"allTaskbars";
 }
 
 /// Log-formatting helper for XAML Visibility
@@ -643,29 +688,20 @@ std::vector<int> ParseMonitorListInOrder(std::wstring_view value) {
     return result;
 }
 
-/// Reads a Windhawk string setting into a std::wstring and frees the Windhawk buffer
-std::wstring ReadStringSetting(PCWSTR settingName) {
-    PCWSTR value = Wh_GetStringSetting(settingName);
-    std::wstring result = value;
-    Wh_FreeStringSetting(value);
-
-    return result;
-}
-
 /// Loads every mod setting and publishes them as a fresh immutable snapshot
 void LoadSettings() {
     Settings settings;
-    std::wstring monitorMode = ReadStringSetting(L"monitorMode");
+    std::wstring monitorMode = WindhawkUtils::StringSetting::make(L"monitorMode").get();
     settings.monitorMode = _wcsicmp(monitorMode.c_str(), L"selected") == 0 ? MonitorMode::Selected : MonitorMode::All;
 
-    std::wstring selectedMonitors = ReadStringSetting(L"selectedMonitors");
+    std::wstring selectedMonitors = WindhawkUtils::StringSetting::make(L"selectedMonitors").get();
     settings.selectedMonitorOrder = ParseMonitorListInOrder(selectedMonitors);
     settings.selectedMonitors = std::set<int>(
         settings.selectedMonitorOrder.begin(),
         settings.selectedMonitorOrder.end()
     );
 
-    std::wstring components = ReadStringSetting(L"components");
+    std::wstring components = WindhawkUtils::StringSetting::make(L"components").get();
 
     if (_wcsicmp(components.c_str(), L"tray") == 0) {
         settings.components = Components::Tray;
@@ -675,13 +711,17 @@ void LoadSettings() {
         settings.components = Components::All;
     }
 
+    std::wstring componentsScope = WindhawkUtils::StringSetting::make(L"componentsScope").get();
+    settings.componentsScope = _wcsicmp(componentsScope.c_str(), L"copiedTaskbars") == 0 ? ComponentsScope::CopiedTaskbars : ComponentsScope::AllTaskbars;
+
     settings.enableTreeDump = Wh_GetIntSetting(L"enableTreeDump") != 0;
     PublishSettings(settings);
     Wh_Log(
         L"settings monitorMode=%s selectedMonitors=%s "
-        L"components=%s treeDump=%d",
+        L"components=%s componentsScope=%s treeDump=%d",
         MonitorModeToString(settings.monitorMode),
         selectedMonitors.c_str(), ComponentsToString(settings.components),
+        ComponentsScopeToString(settings.componentsScope),
         settings.enableTreeDump
     );
 }
@@ -840,14 +880,29 @@ bool ShouldApplyToTaskbar(HWND hWnd) {
     return monitorIndex > 0 && GetSettings().selectedMonitors.count(monitorIndex) != 0;
 }
 
-/// True when the components setting includes the tray surfaces (promoted icons + hidden-icons chevron)
+/// True when the Components choice should affect this taskbar. In copied-taskbars-only mode the native primary taskbar keeps both surfaces visible.
+bool ComponentsSettingAppliesToTaskbar(HWND hWnd) {
+    return GetSettings().componentsScope == ComponentsScope::AllTaskbars || !IsPrimaryTaskbarWindow(hWnd);
+}
+
+/// True when the components setting includes the tray surfaces (promoted icons + hidden-icons chevron), independent of taskbar scope
 bool WantsTray() {
     return GetSettings().components == Components::All || GetSettings().components == Components::Tray;
 }
 
-/// True when the components setting includes the control-center button
+/// True when this taskbar should expose the tray surfaces
+bool WantsTray(HWND hWnd) {
+    return !ComponentsSettingAppliesToTaskbar(hWnd) || WantsTray();
+}
+
+/// True when the components setting includes the control-center button, independent of taskbar scope
 bool WantsControlCenter() {
     return GetSettings().components == Components::All || GetSettings().components == Components::ControlCenter;
+}
+
+/// True when this taskbar should expose the control-center button
+bool WantsControlCenter(HWND hWnd) {
+    return !ComponentsSettingAppliesToTaskbar(hWnd) || WantsControlCenter();
 }
 
 /// In selected mode, the first configured monitor number : the preferred owner of Windows' singleton real tray surface. Null in all-monitors mode.
@@ -884,11 +939,11 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context);
 /// Returns a coherent stack copy of the currently armed flyout context, or false when none. The read path derives all fields from one shared seqlock snapshot and never writes the process-local mirror.
 bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
     // Fast path for the hot hooks : every MonitorFrom*/placement/dispatch call in two processes funnels through here, and with no shared context one plain read settles it without the full seqlock snapshot. Arming publishes the monitor through the seqlock with barriers, so a racy null read here can only delay redirection by one query.
-    if (!*reinterpret_cast<HMONITOR volatile*>(&g_sharedProxyState.proxyFlyoutMonitor)) {
+    if (!g_sharedProxyState.proxyFlyoutMonitor.load(std::memory_order_acquire)) {
         return false;
     }
 
-    SharedProxyState snapshot = {};
+    SharedProxyStateSnapshot snapshot = {};
     bool hasSharedSnapshot = ReadSharedProxyState(&snapshot);
 
     if (!hasSharedSnapshot || !ProxyFlyoutContextFromSharedSnapshot(snapshot, context)) {
@@ -897,7 +952,7 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
 
     if (static_cast<LONG>(context -> untilTick - GetTickCount()) <= 0) {
         // Clear the shared context only when it is still the generation this read observed. An expiry racing a concurrent click on another monitor (or in the other process) must never wipe the freshly armed context, and a failed snapshot read means a writer is mid-arm right now, so leave the shared state to the next successful read.
-        if (hasSharedSnapshot && *reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration) == snapshot.proxyFlyoutGeneration) {
+        if (hasSharedSnapshot && g_sharedProxyState.proxyFlyoutGeneration.load(std::memory_order_acquire) == snapshot.proxyFlyoutGeneration) {
             ClearSharedProxyFlyoutMonitorState();
         }
 
@@ -918,7 +973,7 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
         InvalidateMonitorCache();
 
         // Same generation guard as the expiry path : never wipe a context another click armed concurrently
-        if (hasSharedSnapshot && *reinterpret_cast<volatile LONG*>(&g_sharedProxyState.proxyFlyoutGeneration) == snapshot.proxyFlyoutGeneration) {
+        if (hasSharedSnapshot && g_sharedProxyState.proxyFlyoutGeneration.load(std::memory_order_acquire) == snapshot.proxyFlyoutGeneration) {
             ClearSharedProxyFlyoutMonitorState();
         }
 
@@ -954,7 +1009,7 @@ void ShortenActiveFlyoutMonitorContext(DWORD durationMs, PCWSTR reason) {
     }
 
     DWORD newUntilTick = GetTickCount() + durationMs;
-    SharedProxyState snapshot = {};
+    SharedProxyStateSnapshot snapshot = {};
 
     if (!ReadSharedProxyState(&snapshot)) {
         return;
@@ -972,7 +1027,7 @@ void ShortenActiveFlyoutMonitorContext(DWORD durationMs, PCWSTR reason) {
     }
 
     BeginSharedProxyStateWrite();
-    g_sharedProxyState.proxyFlyoutMonitor = context.monitor;
+    g_sharedProxyState.proxyFlyoutMonitor.store(context.monitor, std::memory_order_release);
     g_sharedProxyState.proxyFlyoutMonitorIndex = context.monitorIndex;
     g_sharedProxyState.proxyFlyoutUntilTick = newUntilTick;
     g_sharedProxyState.proxyFlyoutKind = context.kind;
@@ -2774,11 +2829,11 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         double frameMinWidth = 0.0;
 
-        if (WantsTray()) {
+        if (WantsTray(taskbarWnd)) {
             frameMinWidth += 32.0;
         }
 
-        if (WantsControlCenter()) {
+        if (WantsControlCenter(taskbarWnd)) {
             frameMinWidth += kControlCenterFallbackWidth;
         }
 
@@ -2789,7 +2844,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
         bool useThisTaskbarAsPrimaryTrayBindingSource = IsRealPrimaryTrayTargetWindow(taskbarWnd);
 
-        if (WantsTray()) {
+        if (WantsTray(taskbarWnd)) {
             changed |= ForceVisibleWithMinWidth(view.notifyIconStack, L"NotifyIconStack", 32.0, false);
             FrameworkElement notifyIconStackChild = FirstChildElement(view.notifyIconStack);
             changed |= ForceVisibleWithMinWidth(notifyIconStackChild, L"NotifyIconStackChild", 32.0, false);
@@ -2818,7 +2873,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
             changed |= SetElementVisibility(view.notificationAreaIcons, L"NotificationAreaIcons", false);
         }
 
-        if (WantsControlCenter()) {
+        if (WantsControlCenter(taskbarWnd)) {
             changed |= ForceVisibleWithMinWidth(view.controlCenterButton, L"ControlCenterButton", kControlCenterMinWidth, false);
 
             void* ccItemsSourceBefore = nullptr;
@@ -2854,7 +2909,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
             UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
         }
 
-        if (WantsControlCenter()) {
+        if (WantsControlCenter(taskbarWnd)) {
             try {
                 double controlCenterButtonWidth = view.controlCenterButton ? view.controlCenterButton.ActualWidth() : 0.0;
                 SetCachedControlCenterButtonWidth(
@@ -2872,7 +2927,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
             }
         }
 
-        if (WantsTray()) {
+        if (WantsTray(taskbarWnd)) {
             // Measure after the single batched layout pass so the cached width feeding the click hit-test reflects this pass, not the previous one (stale widths were the main wrong-monitor flyout cause fixed in 1.0.9)
             try {
                 double notificationAreaIconsWidth = view.notificationAreaIcons ? view.notificationAreaIcons.ActualWidth() : 0.0;
@@ -2908,7 +2963,7 @@ XamlRoot GetSecondaryTaskbarXamlRoot(HWND secondaryTaskbarWnd);
 
 /// Moves tray icon drag/drop ownership to the taskbar island under the pointer by re-attaching the singleton tray ItemsSources locally before native XAML handles the drag/drop message.
 bool PrepareTrayIconDragDropOwnership(HWND taskbarWnd, PCWSTR reason, bool forceRefresh = false) {
-    if (!WantsTray() || !ShouldApplyToTaskbar(taskbarWnd)) {
+    if (!WantsTray(taskbarWnd) || !ShouldApplyToTaskbar(taskbarWnd)) {
         return false;
     }
 
@@ -3019,9 +3074,9 @@ WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
     if (xFromRight >= notificationStart && xFromRight < notificationEnd) {
         // Leave the notification/date-time surface fully native. Windows already opens this flyout on the clicked monitor, and the removed Win+N proxy used to move the real tray around, refreshing every taskbar (most visibly on mixed-DPI monitors).
         inNotificationCenterRange = true;
-    } else if (WantsControlCenter() && xFromRight >= controlStart - hitSlop && xFromRight < controlEnd + hitSlop) {
+    } else if (WantsControlCenter(hWnd) && xFromRight >= controlStart - hitSlop && xFromRight < controlEnd + hitSlop) {
         result = kNativeControlCenter;
-    } else if (WantsTray() && xFromRight >= hiddenTrayStart - hitSlop && xFromRight < hiddenTrayEnd + hitSlop) {
+    } else if (WantsTray(hWnd) && xFromRight >= hiddenTrayStart - hitSlop && xFromRight < hiddenTrayEnd + hitSlop) {
         result = kNativeHiddenTray;
     }
 
@@ -3046,7 +3101,7 @@ WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
 
 /// True when a taskbar client point lies in the control-center strip (same right-edge metrics as HitTestProxyFlyout, valid for any styled taskbar including the primary). Gate order is cheapest-first because the hover pre-arm calls this on cursor movement.
 bool IsControlCenterClientPoint(HWND hWnd, POINT point) {
-    if (!WantsControlCenter() || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
+    if (!WantsControlCenter(hWnd) || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
         return false;
     }
 
@@ -3076,7 +3131,7 @@ bool IsControlCenterClientPoint(HWND hWnd, POINT point) {
 
 /// True when a taskbar client point lies in the managed tray-icon strip (promoted icons plus hidden-icons chevron), valid for primary and secondary taskbars. Used only to refresh drag/drop ownership before native XAML handles the interaction.
 bool IsTrayClientPoint(HWND hWnd, POINT point) {
-    if (!WantsTray() || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
+    if (!WantsTray(hWnd) || !IsTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
         return false;
     }
 
@@ -3098,7 +3153,7 @@ bool IsTrayClientPoint(HWND hWnd, POINT point) {
     int hitSlop = ScaleTaskbarMetricForDpi(dpi, kNativeFlyoutHitSlop);
     int trayStart = ScaleTaskbarMetricForDpi(dpi, kShowDesktopWidth) + ScaleTaskbarMetricForDpi(dpi, kNotificationCenterWidth);
 
-    if (WantsControlCenter()) {
+    if (WantsControlCenter(hWnd)) {
         double cachedControlCenterWidth = GetCachedControlCenterButtonWidth(hWnd);
         trayStart += ScaleTaskbarMetricForDpi(dpi, cachedControlCenterWidth >= 4.0 ? cachedControlCenterWidth : kControlCenterFallbackWidth);
     }
@@ -3595,7 +3650,7 @@ int32_t __stdcall Flyout_ShowAtWithOptions_FunctionHook(void* pThis, void* place
 
 // Must run on the taskbar thread (XAML objects can only be created where a XAML core is initialized). Throwaway MenuFlyout/Flyout instances expose the class vtables shared by every instance of those classes, including the SystemTray-cached menus.
 void EnsureFlyoutShowAtFunctionHooks() {
-    if (g_flyoutShowAtHooksInstalled || IsModUnloading()) {
+    if (g_flyoutShowAtHooksInstalled.load(std::memory_order_acquire) || IsModUnloading()) {
         return;
     }
 
@@ -3637,9 +3692,13 @@ void EnsureFlyoutShowAtFunctionHooks() {
         requested += RequestFlyoutShowAtFunctionHook(winrt::get_abi(plainFlyoutBase), kFlyoutBaseShowAtSlot, reinterpret_cast<void*>(Flyout_ShowAt_FunctionHook), &g_plainFlyoutShowAtSlot, L"Flyout.IFlyoutBase.ShowAt", false);
         requested += RequestFlyoutShowAtFunctionHook(winrt::get_abi(plainFlyoutBase5), kFlyoutBase5ShowAtSlot, reinterpret_cast<void*>(Flyout_ShowAtWithOptions_FunctionHook), &g_plainFlyoutShowAtWithOptionsSlot, L"Flyout.IFlyoutBase5.ShowAt(options)", true);
 
-        g_flyoutShowAtHooksInstalled = 1;
+        if (requested > 0) {
+            Wh_ApplyHookOperations();
+        }
 
-        Wh_Log(L"hooked FlyoutBase ShowAt function targets requested=%d", requested);
+        g_flyoutShowAtHooksInstalled.store(true, std::memory_order_release);
+
+        Wh_Log(L"hooked FlyoutBase ShowAt function targets requested=%d applied=%d", requested, requested > 0);
     } catch (...) {
         Wh_Log(L"failed to hook FlyoutBase ShowAt function targets");
     }
@@ -3651,7 +3710,7 @@ void RemoveFlyoutShowAtFunctionHooks() {
     ReturnAllControlCenterProxyItems();
     g_controlCenterProxyFlyouts.entries.clear();
 
-    g_flyoutShowAtHooksInstalled = 0;
+    g_flyoutShowAtHooksInstalled.store(false, std::memory_order_release);
 }
 
 // The per-glyph control-center context menus (network, volume, battery) resolve their target through per-item state that follows the most recent ItemsSource attach. One shared items source feeds every taskbar's ControlCenterButton, so only the island bound last can open those menus safely : pressing the right button on any other taskbar touches that per-item state from a foreign island and Explorer dies inside native XAML, before the taskbar window receives any parent-level message. Re-attaching the items source moves the ownership to a taskbar's island, the same way the per-taskbar notification/date-time button works natively because Windows gives each island its own items.
@@ -3788,7 +3847,7 @@ bool GetNativeFlyoutAnchorPoint(HWND hWnd, LPARAM lParam, WPARAM flyoutKind, POI
 /// Clears only the cross-process seqlock state. Hot read paths use this on expiry/dead-monitor cleanup so they don't mutate the process-local mirror.
 LONG ClearSharedProxyFlyoutMonitorState() {
     BeginSharedProxyStateWrite();
-    g_sharedProxyState.proxyFlyoutMonitor = nullptr;
+    g_sharedProxyState.proxyFlyoutMonitor.store(nullptr, std::memory_order_release);
     g_sharedProxyState.proxyFlyoutUntilTick = 0;
     g_sharedProxyState.proxyFlyoutMonitorIndex = 0;
     g_sharedProxyState.proxyFlyoutKind = 0;
@@ -4034,66 +4093,93 @@ void ClearCachedXamlBindings() {
 
 /// Cached promoted-icon-area width (DIPs) for a taskbar, 0 when unknown
 double GetCachedNotificationAreaIconsWidth(HWND hWnd) {
+    AcquireSRWLockShared(&g_taskbarTrayMetricsLock);
+
     for (const auto& metrics : g_taskbarTrayMetrics) {
         if (metrics.hWnd == hWnd) {
-            return metrics.notificationAreaIconsWidth;
+            double width = metrics.notificationAreaIconsWidth;
+            ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
+
+            return width;
         }
     }
+
+    ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
 
     return 0.0;
 }
 
 /// Stores the promoted-icon-area width measured during ApplyStyle, used by the click hit-testing
 void SetCachedNotificationAreaIconsWidth(HWND hWnd, double width) {
+    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
+
     for (auto& metrics : g_taskbarTrayMetrics) {
         if (metrics.hWnd == hWnd) {
             metrics.notificationAreaIconsWidth = width;
+            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 
             return;
         }
     }
 
     g_taskbarTrayMetrics.push_back({hWnd, width, 0.0});
+    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 }
 
 /// Cached control-center button width (DIPs) for a taskbar, 0 when unknown
 double GetCachedControlCenterButtonWidth(HWND hWnd) {
+    AcquireSRWLockShared(&g_taskbarTrayMetricsLock);
+
     for (const auto& metrics : g_taskbarTrayMetrics) {
         if (metrics.hWnd == hWnd) {
-            return metrics.controlCenterButtonWidth;
+            double width = metrics.controlCenterButtonWidth;
+            ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
+
+            return width;
         }
     }
+
+    ReleaseSRWLockShared(&g_taskbarTrayMetricsLock);
 
     return 0.0;
 }
 
 /// Stores the control-center width measured during ApplyStyle, used by right-edge hit testing
 void SetCachedControlCenterButtonWidth(HWND hWnd, double width) {
+    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
+
     for (auto& metrics : g_taskbarTrayMetrics) {
         if (metrics.hWnd == hWnd) {
             metrics.controlCenterButtonWidth = width;
+            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 
             return;
         }
     }
 
     g_taskbarTrayMetrics.push_back({hWnd, 0.0, width});
+    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 }
 
 /// Drops the cached metrics of a destroyed taskbar window
 void RemoveCachedTaskbarTrayMetrics(HWND hWnd) {
+    AcquireSRWLockExclusive(&g_taskbarTrayMetricsLock);
+
     for (auto it = g_taskbarTrayMetrics.begin(); it != g_taskbarTrayMetrics.end(); ++it) {
         if (it -> hWnd == hWnd) {
             g_taskbarTrayMetrics.erase(it);
+            ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 
             return;
         }
     }
+
+    ReleaseSRWLockExclusive(&g_taskbarTrayMetricsLock);
 }
 
 /// Invalidates all pending deferred-apply retries by bumping the generation, and kills the active retry timer if any
 void CancelDeferredApplySettings() {
-    InterlockedIncrement(&g_deferredApplyGeneration);
+    g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
 
     if (g_deferredApplyTimerWnd) {
         KillTimer(g_deferredApplyTimerWnd, kDeferredApplySettingsTimerId);
@@ -4158,7 +4244,7 @@ bool ScheduleNextDeferredApplySettingsTimer(HWND taskbarWnd) {
 void HandleDeferredApplySettingsTimer(HWND taskbarWnd) {
     KillTimer(taskbarWnd, kDeferredApplySettingsTimerId);
 
-    if (IsModUnloading() || taskbarWnd != g_deferredApplyTimerWnd || !g_deferredApplyTimerGeneration || g_deferredApplyTimerGeneration != g_deferredApplyGeneration) {
+    if (IsModUnloading() || taskbarWnd != g_deferredApplyTimerWnd || !g_deferredApplyTimerGeneration || g_deferredApplyTimerGeneration != g_deferredApplyGeneration.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -4209,7 +4295,7 @@ bool SetFlyoutMonitorContext(HWND taskbarWnd, DWORD durationMs, PCWSTR reason, W
     RECT proxyFlyoutTaskbarRect = {};
 
     BeginSharedProxyStateWrite();
-    g_sharedProxyState.proxyFlyoutMonitor = monitor;
+    g_sharedProxyState.proxyFlyoutMonitor.store(monitor, std::memory_order_release);
     g_sharedProxyState.proxyFlyoutMonitorIndex = monitorIndex;
     g_sharedProxyState.proxyFlyoutUntilTick = untilTick;
     g_sharedProxyState.proxyFlyoutKind = proxyFlyoutKind;
@@ -4322,12 +4408,12 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
                 PrepareTrayIconDragDropOwnership(hWnd, L"tray drag hover");
             }
 
-            if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter() && GetKeyState(VK_LBUTTON) >= 0 && GetKeyState(VK_RBUTTON) >= 0) {
+            if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter(hWnd) && GetKeyState(VK_LBUTTON) >= 0 && GetKeyState(VK_RBUTTON) >= 0) {
                 PreArmControlCenterContextOwnershipForTaskbar(hWnd, screenPoint, L"hover");
             }
         }
 
-        if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter()) {
+        if (hWnd != g_controlCenterItemsOwnerTaskbarWnd && WantsControlCenter(hWnd)) {
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
     }
@@ -4788,6 +4874,25 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
+void ClearCachedXamlBindingsFromTaskbarThread(void*) {
+    ClearCachedXamlBindings();
+}
+
+/// Releases cached XAML/view-model references on the taskbar thread when Explorer is active, so UI-thread-affine COM objects are not released from Windhawk's arbitrary settings/unload callback thread.
+void ClearCachedXamlBindingsSafely() {
+    if (!IsExplorerTarget()) {
+        ClearCachedXamlBindings();
+
+        return;
+    }
+
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+
+    if (!taskbarWnd || !RunFromWindowThread(taskbarWnd, ClearCachedXamlBindingsFromTaskbarThread, nullptr)) {
+        ClearCachedXamlBindings();
+    }
+}
+
 /// Synchronous apply entry point : finds the taskbar and dispatches the apply pass to its thread
 void ApplySettings() {
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
@@ -4822,7 +4927,7 @@ void QueueDeferredApplySettings() {
 
     CancelDeferredApplySettings();
     g_deferredApplyTimerWnd = taskbarWnd;
-    g_deferredApplyTimerGeneration = InterlockedIncrement(&g_deferredApplyGeneration);
+    g_deferredApplyTimerGeneration = g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
     g_deferredApplyRetryIndex = 0;
     ScheduleNextDeferredApplySettingsTimer(taskbarWnd);
 }
@@ -5015,8 +5120,8 @@ bool HookTwinuiPcshellSymbols() {
 
 /// Mod entry point : detects the host process, loads settings, installs symbol hooks (Explorer only) and the shared user32 hooks
 BOOL Wh_ModInit() {
-    g_modUnloading = 0;
-    g_activeFlyoutRedirectionSuppressionDepth = 0;
+    g_modUnloading.store(0, std::memory_order_release);
+    g_activeFlyoutRedirectionSuppressionDepth.store(0, std::memory_order_release);
     g_targetProcess = GetTargetProcess();
     LoadSettings();
     Wh_Log(L"init target=%s", TargetProcessToString(g_targetProcess));
@@ -5055,12 +5160,12 @@ void Wh_ModAfterInit() {
 /// Ordered teardown : flags unloading so every hook goes pass-through, cancels retries, clears state, then removes subclasses and restores native taskbar state from the taskbar's own thread
 void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit");
-    g_modUnloading = 1;
+    g_modUnloading.store(1, std::memory_order_release);
     CancelDeferredApplySettings();
 
     if (!IsExplorerTarget()) {
         ClearProxyRuntimeState();
-        ClearCachedXamlBindings();
+        ClearCachedXamlBindingsSafely();
 
         return;
     }
@@ -5069,13 +5174,13 @@ void Wh_ModBeforeUninit() {
 
     if (!taskbarWnd) {
         ClearProxyRuntimeState();
-        ClearCachedXamlBindings();
+        ClearCachedXamlBindingsSafely();
 
         return;
     }
 
     ClearProxyRuntimeState();
-    ClearCachedXamlBindings();
+    ClearCachedXamlBindingsSafely();
 
     g_restoringNativeTaskbars = true;
     g_nativePrimaryRestoreMonitor = GetActualMonitorFromWindow(taskbarWnd, MONITOR_DEFAULTTONEAREST);
@@ -5096,7 +5201,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     CancelDeferredApplySettings();
     ClearProxyRuntimeState();
-    ClearCachedXamlBindings();
+    ClearCachedXamlBindingsSafely();
 
     if (IsExplorerTarget()) {
         ApplySettings();
