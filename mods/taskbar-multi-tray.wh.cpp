@@ -2,7 +2,7 @@
 // @id              taskbar-multi-tray
 // @name            Taskbar multi-tray
 // @description     Windows 11 taskbar tray/control-center visibility controls for all or selected monitors
-// @version         1.2.1
+// @version         1.2.2
 // @author          EDM115
 // @github          https://github.com/EDM115
 // @twitter         https://twitter.com/_edm115
@@ -19,7 +19,7 @@
 /*
 # Taskbar multi-tray
 Windows 11 Windhawk mod for controlling taskbar tray and control-center visibility across multi-monitor setups.  
-The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers.
+The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers, and the component filter can target every taskbar or only copied/non-primary taskbars.
 
 ## What it controls
 **Tray** means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, and the XAML containers Windows creates for them.  
@@ -466,17 +466,17 @@ CachedXamlBinding& g_primaryNotifyIconStackBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryNotifyIconStackChildBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryNotifyIconStackListViewBinding = *new CachedXamlBinding();
 CachedXamlBinding& g_primaryControlCenterButtonBinding = *new CachedXamlBinding();
-// Taskbar window whose tray icon ItemsSources were attached last. Drag/drop state follows the active XAML island, so re-attaching on drag hover/drop makes copied tray surfaces behave as local targets.
+/// Taskbar window whose tray icon ItemsSources were attached last. Drag/drop state follows the active XAML island, so re-attaching on drag hover/drop makes copied tray surfaces behave as local targets.
 HWND g_trayItemsOwnerTaskbarWnd = nullptr;
-// Hidden-overflow opens can touch the popup island after the taskbar island was marked owner. Force one fresh re-attach when dragging out of that popup.
+/// Hidden-overflow opens can touch the popup island after the taskbar island was marked owner. Force one fresh re-attach when dragging out of that popup.
 bool g_trayItemsOwnerMayBeStale = false;
-// Taskbar window whose ControlCenterButton items were attached last. The per-glyph context-menu state follows the most recent ItemsSource attach, so only this island can open the native menus safely.
+/// Taskbar window whose ControlCenterButton items were attached last. The per-glyph context-menu state follows the most recent ItemsSource attach, so only this island can open the native menus safely.
 HWND g_controlCenterItemsOwnerTaskbarWnd = nullptr;
 
-// Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks)
+/// Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks).
 std::atomic<bool> g_flyoutShowAtHooksInstalled{false};
 
-// A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show, and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers, and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
+/// A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show, and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers, and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
 struct ControlCenterProxyFlyoutEntry {
     winrt::Windows::UI::Xaml::Controls::MenuFlyout proxy{nullptr};
     winrt::Windows::UI::Xaml::XamlRoot proxyRoot{nullptr};
@@ -931,8 +931,6 @@ HMONITOR GetRealPrimaryTrayTargetMonitor() {
 }
 
 HMONITOR GetActiveProxyFlyoutMonitor();
-HMONITOR GetActiveFlyoutTargetMonitor();
-void ClearProxyFlyoutMonitorState();
 LONG ClearSharedProxyFlyoutMonitorState();
 bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context);
 
@@ -988,11 +986,6 @@ HMONITOR GetActiveProxyFlyoutMonitor() {
     ProxyFlyoutContext context;
 
     return TryGetActiveProxyFlyoutContext(&context) ? context.monitor : nullptr;
-}
-
-// Use the monitor captured when the native flyout context is armed. The previous live-cursor targeting fixed stale contexts in one case, but it can also move a delayed popup to whichever monitor the cursor reaches before placement completes. Stale contexts are cleared on later taskbar clicks, the active placement target itself must stay stable. Opens that never armed a context are handled separately by the placement-time cursor rescue (TryArmCursorRescueFlyoutContext), and contexts whose monitor died after a display change are dropped by GetActiveProxyFlyoutMonitor.
-HMONITOR GetActiveFlyoutTargetMonitor() {
-    return GetActiveProxyFlyoutMonitor();
 }
 
 /// True for the two flyout kinds the mod arms contexts for
@@ -1139,7 +1132,7 @@ bool GetMonitorCenterPoint(HMONITOR monitor, POINT* point) {
 bool WINAPI ImmersiveMonitorHelper_ConnectToMonitor_Hook(void* pThis, HWND hWnd, POINT point) {
     HMONITOR monitor = IsActiveFlyoutRedirectionSuppressed()
         ? nullptr
-        : GetActiveFlyoutTargetMonitor();
+        : GetActiveProxyFlyoutMonitor();
 
     if (!monitor) {
         return ImmersiveMonitorHelper_ConnectToMonitor_Original(pThis, hWnd, point);
@@ -1170,7 +1163,7 @@ ImmersiveMonitorHelper_AdjustMonitorConnectedIfNeeded_Hook(void* pThis) {
 
     HMONITOR monitor = IsActiveFlyoutRedirectionSuppressed()
         ? nullptr
-        : GetActiveFlyoutTargetMonitor();
+        : GetActiveProxyFlyoutMonitor();
 
     if (!monitor) {
         return original();
@@ -1200,7 +1193,7 @@ ImmersiveMonitorHelper_AdjustMonitorConnectedIfNeeded_Hook(void* pThis) {
 /// user32 hook : while a flyout context is active, point-to-monitor queries that pass the target-side filter resolve to the clicked monitor
 HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
     if (!IsActiveFlyoutRedirectionSuppressed()) {
-        if (HMONITOR monitor = GetActiveFlyoutTargetMonitor()) {
+        if (HMONITOR monitor = GetActiveProxyFlyoutMonitor()) {
             if (!ShouldForceActiveFlyoutForPoint(pt, monitor)) {
                 HMONITOR actualMonitor = GetActualMonitorFromPoint(pt, flags);
 
@@ -1233,7 +1226,7 @@ HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
 /// user32 hook : while a flyout context is active, rect-to-monitor queries that pass the target-side filter resolve to the clicked monitor
 HMONITOR WINAPI MonitorFromRect_Hook(LPCRECT rect, DWORD flags) {
     if (!IsActiveFlyoutRedirectionSuppressed()) {
-        if (HMONITOR monitor = GetActiveFlyoutTargetMonitor()) {
+        if (HMONITOR monitor = GetActiveProxyFlyoutMonitor()) {
             if (!ShouldForceActiveFlyoutForRect(rect, monitor)) {
                 HMONITOR actualMonitor = GetActualMonitorFromRect(rect, flags);
                 RECT loggedRect = rect ? *rect : RECT{};
@@ -2549,7 +2542,7 @@ bool IsRealPrimaryTrayTargetWindow(HWND hWnd) {
     HMONITOR targetMonitor = GetRealPrimaryTrayTargetMonitor();
 
     if (targetMonitor) {
-        return MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) == targetMonitor;
+        return GetActualMonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) == targetMonitor;
     }
 
     return IsPrimaryTaskbarWindow(hWnd);
@@ -2561,9 +2554,8 @@ bool IsCurrentPrimaryTrayBindingSource(HWND taskbarWnd, FrameworkElement trayRef
 }
 
 void UpdateSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName);
-void EnableSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName);
 
-// Re-attaches an ItemsControl's current ItemsSource in place. Several taskbar XAML interaction states follow the island that most recently attached the singleton source.
+/// Re-attaches an ItemsControl's current ItemsSource in place. Several taskbar XAML interaction states follow the island that most recently attached the singleton source.
 bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName, PCWSTR reason) {
     try {
         auto itemsControl = element ? element.try_as<Controls::ItemsControl>() : nullptr;
@@ -2584,7 +2576,7 @@ bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName,
     }
 }
 
-// Re-attaches the button's current ItemsSource in place. The per-glyph context-menu state follows the most recent attach, so this moves the single menu ownership to this button's island without changing the rendered content.
+/// Re-attaches the button's current ItemsSource in place. The per-glyph context-menu state follows the most recent attach, so this moves the single menu ownership to this button's island without changing the rendered content.
 bool ReattachControlCenterItemsSource(FrameworkElement controlCenterButton, PCWSTR reason) {
     if (ReattachItemsControlItemsSource(controlCenterButton, L"ControlCenterButton", reason)) {
         UpdateLayoutBestEffort(controlCenterButton, reason);
@@ -2616,9 +2608,9 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
         changed |= ApplyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame", 78.0);
         changed |= ApplyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid", 78.0);
 
-        EnableSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
-        EnableSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
-        EnableSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
+        UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
+        UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
+        UpdateSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
 
         changed |= SetElementVisibility(view.notifyIconStack, L"NotifyIconStack", false);
         changed |= SetElementVisibility(view.notificationAreaIcons, L"NotificationAreaIcons", false);
@@ -2662,9 +2654,9 @@ bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
         changed |= ApplyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame", 0.0);
         changed |= ApplyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid", 0.0);
 
-        EnableSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
-        EnableSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
-        EnableSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
+        UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
+        UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
+        UpdateSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
 
         changed |= ForceVisible(view.notifyIconStack, L"NotifyIconStack");
         changed |= ForceVisible(FirstChildElement(view.notifyIconStack), L"NotifyIconStackChild");
@@ -2707,11 +2699,10 @@ bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
 
 struct ContextGestureCounts {
     int elements = 0;
-    int contextFlyouts = 0;
 };
 
-/// Sets IsRightTapEnabled/IsHoldingEnabled across a bounded subtree. Clearing ContextFlyouts is supported but unused : nulling a flyout is not reliably reversible without rebuilding the subtree.
-ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool enable, bool clearContextFlyouts, int depth, int maxDepth) {
+/// Sets IsRightTapEnabled/IsHoldingEnabled across a bounded subtree, preserving existing ContextFlyout objects because nulling them is not reliably reversible across Windows builds.
+ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool enable, int depth, int maxDepth) {
     ContextGestureCounts counts = {};
 
     if (!element || depth > maxDepth) {
@@ -2729,12 +2720,6 @@ ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool 
             }
 
             counts.elements++;
-
-            // Avoid clearing flyouts. Some Windows builds create these dynamically, and nulling an existing flyout is not reliably reversible without rebuilding the XAML subtree.
-            if (!enable && clearContextFlyouts && uiElement.ContextFlyout()) {
-                uiElement.ContextFlyout(nullptr);
-                counts.contextFlyouts++;
-            }
         }
 
         int childCount = Media::VisualTreeHelper::GetChildrenCount(element);
@@ -2743,12 +2728,10 @@ ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool 
             ContextGestureCounts childCounts = SetContextGesturesRecursive(
                 Media::VisualTreeHelper::GetChild(element, i),
                 enable,
-                clearContextFlyouts,
                 depth + 1,
                 maxDepth
             );
             counts.elements += childCounts.elements;
-            counts.contextFlyouts += childCounts.contextFlyouts;
         }
     } catch (...) { }
 
@@ -2756,22 +2739,21 @@ ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool 
 }
 
 /// Applies SetContextGesturesRecursive to one tray surface, with verbose logging of the touched element count
-void UpdateContextGesturesForElement(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName, bool enable, bool clearContextFlyouts) {
+void UpdateContextGesturesForElement(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName, bool enable) {
     if (!element || !IsTaskbarWindow(taskbarWnd)) {
         return;
     }
 
     try {
-        ContextGestureCounts counts = SetContextGesturesRecursive(element, enable, clearContextFlyouts, 0, 8);
+        ContextGestureCounts counts = SetContextGesturesRecursive(element, enable, 0, 8);
 
         Wh_Log(
             L"%s taskbar %s context gestures "
-            L"monitor=%d elements=%d contextFlyouts=%d",
+            L"monitor=%d elements=%d",
             enable ? L"enabled" : L"disabled",
             debugName ? debugName : L"surface",
             GetMonitorIndexForWindow(taskbarWnd),
-            counts.elements,
-            counts.contextFlyouts
+            counts.elements
         );
     } catch (...) {
         Wh_Log(
@@ -2781,18 +2763,12 @@ void UpdateContextGesturesForElement(FrameworkElement element, HWND taskbarWnd, 
     }
 }
 
-/// Keeps context gestures fully native (enabled) on a shared tray surface. Tray icon right-clicks are forwarded to the owning apps through the notify-icon pipeline, so they are island-safe, unlike the control-center menus.
+/// Keeps context gestures fully native (enabled) on a shared tray surface during apply and restore. Tray icon right-clicks are forwarded to the owning apps through the notify-icon pipeline, so they are island-safe, unlike the control-center menus.
 void UpdateSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName) {
     // Keep local native context gestures enabled on shared tray surfaces (promoted icons, hidden-icons chevron). Their right-clicks are forwarded to the owning apps through the notify-icon pipeline instead of the singleton control-center menu pipeline, and the mod never forwards, synthesizes, re-owns, or suppresses them.
-    UpdateContextGesturesForElement(element, taskbarWnd, debugName, true, false);
+    UpdateContextGesturesForElement(element, taskbarWnd, debugName, true);
 }
 
-/// Restore-path variant : re-enables context gestures on a surface (also undoes the gesture experiments of older mod versions after an upgrade)
-void EnableSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName) {
-    UpdateContextGesturesForElement(element, taskbarWnd, debugName, true, false);
-}
-
-constexpr UINT_PTR kTaskbarSubclassId = 1;
 constexpr int kShowDesktopWidth = 12;
 constexpr int kNotificationCenterWidth = 78;
 constexpr int kControlCenterFallbackWidth = 96;
@@ -3232,7 +3208,7 @@ bool IsElementInsideControlCenterButton(DependencyObject element) {
     return false;
 }
 
-// FlyoutBase::ShowAt is the exact call that kills Explorer when the cached per-glyph menu is anchored to a foreign island, and the cached instance is reachable nowhere else (not on any visual tree, and Windows.UI.Xaml exposes no Popup.AssociatedFlyout, that API is WinUI-only). The mod reads ABI vtable slots only to discover concrete implementation pointers, then installs regular Windhawk function hooks on those functions without patching the vtables.
+/// FlyoutBase::ShowAt is the exact call that kills Explorer when the cached per-glyph menu is anchored to a foreign island, and the cached instance is reachable nowhere else (not on any visual tree, and Windows.UI.Xaml exposes no Popup.AssociatedFlyout, that API is WinUI-only). The mod reads ABI vtable slots only to discover concrete implementation pointers, then installs regular Windhawk function hooks on those functions without patching the vtables.
 struct FlyoutShowAtFunctionHook {
     void* target = nullptr;
     void* original = nullptr;
@@ -3248,7 +3224,7 @@ FlyoutShowAtFunctionHook g_menuFlyoutShowAtWithOptionsSlot;
 FlyoutShowAtFunctionHook g_plainFlyoutShowAtSlot;
 FlyoutShowAtFunctionHook g_plainFlyoutShowAtWithOptionsSlot;
 
-// IInspectable occupies the first 6 vtable slots. IFlyoutBase : get/put_Placement, add/remove_Opened, add/remove_Closed, add/remove_Opening, then ShowAt. IFlyoutBase5 : get/put_ShowMode, get_InputDevicePrefersPrimaryCommands, get/put_AreOpenCloseAnimationsEnabled, get_IsOpen, then ShowAt.
+/// IInspectable occupies the first 6 vtable slots. IFlyoutBase : get/put_Placement, add/remove_Opened, add/remove_Closed, add/remove_Opening, then ShowAt. IFlyoutBase5 : get/put_ShowMode, get_InputDevicePrefersPrimaryCommands, get/put_AreOpenCloseAnimationsEnabled, get_IsOpen, then ShowAt.
 constexpr size_t kFlyoutBaseShowAtSlot = 14;
 constexpr size_t kFlyoutBase5ShowAtSlot = 12;
 
@@ -3262,7 +3238,7 @@ enum class FlyoutReRootResult {
     Error,
 };
 
-// A flyout's XamlRoot is settable only while it has never been shown (logs : the first show on monitor 3 re-rooted fine, the reused instance locked to monitor 3 then threw). The full sequence Hide -> clear to null -> set is tried because clearing the association first is the only chance of unlocking a flyout that has already been shown, whichever step throws is swallowed and the final root is re-read to decide success.
+/// Attempts to assign a flyout to the target XamlRoot before native ShowAt runs. The full Hide -> clear to null -> set sequence is attempted because clearing the association first is the only possible unlock path; thrown steps are swallowed and the final root decides the result.
 FlyoutReRootResult TryReRootFlyout(Controls::Primitives::FlyoutBase const& flyout, XamlRoot const& targetRoot) {
     if (!flyout || !targetRoot) {
         return FlyoutReRootResult::Error;
@@ -3347,7 +3323,7 @@ ControlCenterProxyFlyoutEntry* GetOrCreateControlCenterProxy(XamlRoot const& roo
     }
 }
 
-// Returns every borrowed item set from the proxies back to its original cached flyout. Run before any other control-center menu opens, so the home-island menu (shown natively) is never found empty because its items are sitting in another island's proxy.
+/// Returns any menu items borrowed into per-island proxy flyouts back to their original cached MenuFlyout owners before any other control-center menu opens.
 void ReturnAllControlCenterProxyItems() {
     for (auto& entry : g_controlCenterProxyFlyouts.entries) {
         if (!entry.itemsSource || !entry.proxy) {
@@ -3381,7 +3357,7 @@ void ReturnAllControlCenterProxyItems() {
     }
 }
 
-// Moves the locked cached menu's items into the clicked island's proxy and shows the proxy there. The items carry their native command handlers, so the per-glyph menu works on any monitor. Returns false (so the caller still suppresses the crashy native ShowAt) when the menu is not a MenuFlyout or the move fails.
+/// Shows a locked cached control-center menu through the target island's proxy MenuFlyout, moving native menu items temporarily so command handlers remain intact.
 bool ShowControlCenterMenuViaProxy(Controls::Primitives::FlyoutBase const& cachedFlyout, FrameworkElement const& targetElement, XamlRoot const& targetRoot) {
     auto cachedMenu = cachedFlyout.try_as<Controls::MenuFlyout>();
 
@@ -3431,7 +3407,7 @@ bool ShowControlCenterMenuViaProxy(Controls::Primitives::FlyoutBase const& cache
     }
 }
 
-// Returns true to suppress the native ShowAt. Showing a flyout whose XamlRoot does not match the placement target's island is the exact call that kills Explorer, so a locked cached menu is re-shown through the clicked island's proxy instead, and the native ShowAt is always suppressed for the locked case.
+/// Shared ShowAt-hook implementation for control-center flyouts. Returns true when native ShowAt must be suppressed because the menu was handled through the proxy path or cannot be shown safely.
 bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR source) {
     if (IsModUnloading() || !flyoutAbi || !targetAbi) {
         return false;
@@ -3500,6 +3476,7 @@ bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR s
     return false;
 }
 
+/// Reads a function pointer from a WinRT ABI interface vtable slot, optionally returning the vtable address for diagnostics.
 void* GetAbiVtableSlotFunction(void* interfaceAbi, size_t slotIndex, void*** vtableOut = nullptr) {
     if (!interfaceAbi) {
         return nullptr;
@@ -3514,6 +3491,7 @@ void* GetAbiVtableSlotFunction(void* interfaceAbi, size_t slotIndex, void*** vta
     return vtable ? vtable[slotIndex] : nullptr;
 }
 
+/// Finds an already requested ShowAt hook for a concrete implementation target, used to deduplicate interfaces that share the same function.
 FlyoutShowAtFunctionHook* FindShowAtHookByTarget(void* target) {
     FlyoutShowAtFunctionHook* hooks[] = {
         &g_menuFlyoutShowAtSlot,
@@ -3531,6 +3509,7 @@ FlyoutShowAtFunctionHook* FindShowAtHookByTarget(void* target) {
     return nullptr;
 }
 
+/// Resolves a ShowAt implementation function from a throwaway flyout interface and queues a regular Windhawk function hook for it.
 bool RequestFlyoutShowAtFunctionHook(void* interfaceAbi, size_t slotIndex, void* hookFunction, FlyoutShowAtFunctionHook* state, PCWSTR label, bool withOptions) {
     if (!interfaceAbi || state -> target) {
         return false;
@@ -3648,7 +3627,7 @@ int32_t __stdcall Flyout_ShowAtWithOptions_FunctionHook(void* pThis, void* place
     return reinterpret_cast<FlyoutBase_ShowAtWithOptions_t>(g_plainFlyoutShowAtWithOptionsSlot.original)(pThis, placementTarget, showOptions);
 }
 
-// Must run on the taskbar thread (XAML objects can only be created where a XAML core is initialized). Throwaway MenuFlyout/Flyout instances expose the class vtables shared by every instance of those classes, including the SystemTray-cached menus.
+/// Must run on the taskbar thread because XAML objects can only be created where a XAML core is initialized. Throwaway MenuFlyout/Flyout instances expose the class vtables shared by every instance of those classes, including the SystemTray-cached menus.
 void EnsureFlyoutShowAtFunctionHooks() {
     if (g_flyoutShowAtHooksInstalled.load(std::memory_order_acquire) || IsModUnloading()) {
         return;
@@ -3714,6 +3693,7 @@ void RemoveFlyoutShowAtFunctionHooks() {
 }
 
 // The per-glyph control-center context menus (network, volume, battery) resolve their target through per-item state that follows the most recent ItemsSource attach. One shared items source feeds every taskbar's ControlCenterButton, so only the island bound last can open those menus safely : pressing the right button on any other taskbar touches that per-item state from a foreign island and Explorer dies inside native XAML, before the taskbar window receives any parent-level message. Re-attaching the items source moves the ownership to a taskbar's island, the same way the per-taskbar notification/date-time button works natively because Windows gives each island its own items.
+/// Moves the singleton control-center per-glyph menu ownership to a taskbar island by re-attaching its shared ItemsSource.
 void MoveControlCenterContextOwnershipToTaskbar(HWND taskbarWnd, PCWSTR source) {
     if (g_controlCenterItemsOwnerTaskbarWnd == taskbarWnd) {
         return;
@@ -3740,6 +3720,7 @@ void MoveControlCenterContextOwnershipToTaskbar(HWND taskbarWnd, PCWSTR source) 
 }
 
 // Pre-arms the menu ownership as soon as the pointer reaches a non-owner control-center region. Click-time transfer is too late : crash logs showed the lethal press dying inside the island's input processing before the taskbar window received any message, so the transfer must already be done when the hover or press input reaches the island.
+/// Pre-arms control-center menu ownership for a taskbar when the pointer is inside its control-center strip and no mouse button is currently held.
 void PreArmControlCenterContextOwnershipForTaskbar(HWND taskbarRootWnd, POINT screenPoint, PCWSTR source) {
     if (!taskbarRootWnd || taskbarRootWnd == g_controlCenterItemsOwnerTaskbarWnd || !IsTaskbarWindow(taskbarRootWnd)) {
         return;
@@ -3864,11 +3845,6 @@ LONG ClearSharedProxyFlyoutMonitorState() {
     return EndSharedProxyStateWrite();
 }
 
-/// Clears the armed flyout context in the shared state, so both processes stop redirecting
-void ClearProxyFlyoutMonitorState() {
-    ClearSharedProxyFlyoutMonitorState();
-}
-
 /// Drops an armed context when the user left-clicks outside the copied surfaces, so a stale monitor cannot drag the next flyout to the wrong screen
 void ClearStaleFlyoutContextBeforeTaskbarClick(HWND taskbarWnd) {
     HMONITOR activeMonitor = GetActiveProxyFlyoutMonitor();
@@ -3889,7 +3865,7 @@ void ClearStaleFlyoutContextBeforeTaskbarClick(HWND taskbarWnd) {
         GetMonitorIndex(taskbarMonitor), GetMonitorIndex(activeMonitor)
     );
 
-    ClearProxyFlyoutMonitorState();
+    ClearSharedProxyFlyoutMonitorState();
 }
 
 /// Drops an armed context when right-click/context input arrives : context menus must stay fully native and never inherit a left-click flyout's monitor redirection
@@ -3908,7 +3884,7 @@ void ClearFlyoutMonitorContextForContextMenu(UINT uMsg, WPARAM wParam, PCWSTR re
         uMsg
     );
 
-    ClearProxyFlyoutMonitorState();
+    ClearSharedProxyFlyoutMonitorState();
 }
 
 /// Dispatch-loop guard : clears flyout contexts for right-click messages that travel through child/bridge HWNDs and would bypass the taskbar subclass
@@ -3920,7 +3896,7 @@ void InspectRetrievedMessageForFlyoutCancel(const MSG* msg, PCWSTR source) {
     ClearFlyoutMonitorContextForContextMenu(msg -> message, msg -> wParam, source);
 }
 
-// Runs in the dispatch path, before the target window procedure sees the message. This is the last safe moment to move the control-center menu ownership for hover and right-press input headed into a taskbar island : once the island starts processing a right press over a stale control-center region, Explorer is already dead. Mid-press containers are never re-attached (it would eat the active click), only pure hover moves and the right press itself, which has not been processed yet.
+/// Runs in the dispatch path before the target window procedure sees the message. This is the last safe moment to move the control-center menu ownership for hover and right-press input headed into a taskbar island.
 void PreArmControlCenterContextOwnershipForMessage(const MSG* msg) {
     // The ownership transfer only matters for the control-center per-glyph menus, skip the per-mouse-message work entirely when that surface is not managed
     if (!msg -> hwnd || !IsExplorerTarget() || !WantsControlCenter()) {
@@ -3977,7 +3953,7 @@ void PreArmControlCenterContextOwnershipForMessage(const MSG* msg) {
     PreArmControlCenterContextOwnershipForTaskbar(rootWnd, screenPoint, L"input dispatch");
 }
 
-// Runs in the dispatch path, before the target child island sees the message. This catches tray drags that do not surface as parent notifications early enough for the taskbar subclass.
+/// Runs in the dispatch path before the target child island sees the message. This catches tray drags that do not surface as parent notifications early enough for the taskbar subclass.
 void PreArmTrayIconDragDropOwnershipForMessage(const MSG* msg) {
     if (!msg -> hwnd || !IsExplorerTarget() || !WantsTray()) {
         return;
@@ -4073,7 +4049,7 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
 
 /// Resets per-session interaction state : the armed flyout context and shared-surface ownership tracking
 void ClearProxyRuntimeState() {
-    ClearProxyFlyoutMonitorState();
+    ClearSharedProxyFlyoutMonitorState();
     g_trayItemsOwnerTaskbarWnd = nullptr;
     g_trayItemsOwnerMayBeStale = false;
     g_controlCenterItemsOwnerTaskbarWnd = nullptr;
@@ -4358,7 +4334,7 @@ void BeginNativeFlyoutMonitorContext(HWND taskbarWnd, PCWSTR reason, WPARAM flyo
 }
 
 /// Subclass installed on every managed taskbar window. Handles the deferred-apply timer, the WM_SETCURSOR hover pre-arm, right-click breadcrumbs plus last-resort ownership transfer, left-click flyout-context arming on the copied surfaces, stale-context clearing, and cleanup on WM_NCDESTROY. During unload everything passes through except timer/cleanup handling.
-LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR) {
+LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (IsModUnloading()) {
         if (uMsg == WM_TIMER && wParam == kDeferredApplySettingsTimerId) {
             CancelTaskbarTimers(hWnd);
@@ -4378,7 +4354,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
             RemoveCachedTaskbarTrayMetrics(hWnd);
             CancelTaskbarTimers(hWnd);
-            RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
         }
 
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -4487,7 +4463,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         RemoveCachedTaskbarTrayMetrics(hWnd);
         CancelTaskbarTimers(hWnd);
-        RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -4495,9 +4471,9 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
 /// Installs TaskbarSubclassProc on a taskbar window (logged on failure)
 void InstallTaskbarSubclass(HWND hWnd) {
-    if (!SetWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId, 0)) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc, 0)) {
         Wh_Log(
-            L"SetWindowSubclass failed for hwnd=0x%p "
+            L"SetWindowSubclassFromAnyThread failed for hwnd=0x%p "
             L"error=%lu",
             hWnd, GetLastError()
         );
@@ -4507,7 +4483,7 @@ void InstallTaskbarSubclass(HWND hWnd) {
 /// Cancels this taskbar's timers and removes the subclass
 void RemoveTaskbarSubclass(HWND hWnd) {
     CancelTaskbarTimers(hWnd);
-    RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
 }
 
 /// Extracts the XamlRoot from a TaskbarHost std::shared_ptr without knowing the class layout : the offset of the hosted XAML element is read out of TaskbarHost::FrameHeight's prologue bytes (x64 and ARM64 encodings below), then the shared_ptr's control block is released via std::_Ref_count_base::_Decref
@@ -4874,6 +4850,7 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
+/// Taskbar-thread trampoline for ClearCachedXamlBindings.
 void ClearCachedXamlBindingsFromTaskbarThread(void*) {
     ClearCachedXamlBindings();
 }
