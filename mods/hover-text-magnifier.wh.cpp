@@ -2,7 +2,7 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.3.3
+// @version         1.3.4
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
@@ -521,7 +521,9 @@ static float GetDpiScaleForPoint(POINT pt) {
     typedef HRESULT(WINAPI* GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
     static GetDpiForMonitor_t pGetDpiForMonitor = []() -> GetDpiForMonitor_t {
         HMODULE hShcore = GetModuleHandleW(L"Shcore.dll");
-        if (!hShcore) hShcore = LoadLibraryW(L"Shcore.dll");
+        if (!hShcore) {
+            hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
         if (!hShcore) return nullptr;
         return (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
     }();
@@ -810,7 +812,7 @@ static void UninstallHooks() {
 }
 
 static bool InitMagnification() {
-    g.hMagnification = LoadLibraryW(L"Magnification.dll");
+    g.hMagnification = LoadLibraryExW(L"Magnification.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g.hMagnification) return false;
 
     pfnMagInit = (PFNMAGINIT)GetProcAddress(g.hMagnification, "MagInitialize");
@@ -1267,12 +1269,7 @@ static void UiaWorkerThread() {
         }
 
         std::wstring text;
-        bool success = false;
-        try {
-            success = TryExtractTextAtPoint(request, text);
-        } catch (...) {
-            success = false;
-        }
+        bool success = TryExtractTextAtPoint(request, text);
 
         UiaResult result{};
         result.pt = request.pt;
@@ -1695,10 +1692,12 @@ void WhTool_ModUninit() {
             Sleep(10);
         }
 
-        if (!g.workerFinished.load(std::memory_order_acquire)) {
-            Wh_Log(L"WorkerThread did not report clean shutdown within timeout; joining anyway to avoid DLL unload under a live thread.");
+        if (g.workerFinished.load(std::memory_order_acquire)) {
+            g.worker.join();
+        } else {
+            Wh_Log(L"WorkerThread did not report clean shutdown; detaching because the tool process is exiting.");
+            g.worker.detach();
         }
-        g.worker.join();
     }
 
     g.threadId = 0;
