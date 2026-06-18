@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout. It also includes the Windows 8 flyout as a configurable fallback
-// @version        1.4.0
+// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
+// @version        1.4.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -300,6 +300,28 @@ static void DetectWindowsVersion() {
     Wh_Log(L"Detected %s (build %lu.%lu.%lu)", 
            g_isWin11 ? L"Windows 11" : L"Windows 10",
            osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
+
+    if (g_isWin11) {
+        // Rileva se è presente la barra delle applicazioni Win10 legacy su Win11
+        // (ExplorerPatcher o taskbar remnant da 23H2)
+        HWND hTray    = FindWindowW(L"Shell_TrayWnd", NULL);
+        HWND hNotify  = hTray   ? FindWindowExW(hTray,   NULL, L"TrayNotifyWnd",   NULL) : NULL;
+        HWND hSysPager= hNotify ? FindWindowExW(hNotify, NULL, L"SysPager",        NULL) : NULL;
+        HWND hToolbar = hSysPager? FindWindowExW(hSysPager,NULL,L"ToolbarWindow32", NULL) : NULL;
+
+        if (hToolbar) {
+            int btnCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+            Wh_Log(L"Win11: Win10 legacy taskbar detected (ToolbarWindow32 found, %d buttons)", btnCount);
+        } else if (hSysPager) {
+            Wh_Log(L"Win11: SysPager found but no ToolbarWindow32 — partial legacy taskbar");
+        } else if (hNotify) {
+            Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager — modern taskbar only");
+        } else if (hTray) {
+            Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd — unusual configuration");
+        } else {
+            Wh_Log(L"Win11: Shell_TrayWnd not found — taskbar not ready yet");
+        }
+    }
 }
 // -------------------------------------------------------
 // Global Variables (cleaned up)
@@ -324,7 +346,7 @@ int  g_NetworkCount           = 0;
 BOOL g_IsHoveringLink         = FALSE;
 BOOL g_IsHoveringRefresh      = FALSE;
 BOOL g_IsHoveringArrow        = FALSE;
-
+int g_ScrollPos = 0;
 int  g_SelectedRowIndex       = -1;
 int  g_HoveredRowIndex        = -1;
 int  g_KeyboardSelectedIndex  = -1;
@@ -902,25 +924,23 @@ void RefreshWifiData(HANDLE hClient) {
                 if (len == 0) {
                     StringCchCopyW(tempList[tempCount].ssid, 33, L"Hidden Network");
                 } else {
-                    int converted = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)network.dot11Ssid.ucSSID, (int)len, tempList[tempCount].ssid, 32);
+                    // Sostituiamo i NUL interni nel buffer UTF-8 RAW prima di passarlo
+                    // a MultiByteToWideChar: alcuni hotspot (Xiaomi/Redmi) trasmettono
+                    // SSID con byte \0 incorporati a metà nome. MultiByteToWideChar si
+                    // ferma al primo \0 nel sorgente, troncando il risultato prima ancora
+                    // che il ciclo di correzione successivo possa agire.
+                    BYTE cleanSsid[33] = {0};
+                    size_t cleanLen = (len < 32u) ? len : 32u;
+                    for (size_t k = 0; k < cleanLen; k++)
+                        cleanSsid[k] = (network.dot11Ssid.ucSSID[k] == 0) ? (BYTE)' ' : network.dot11Ssid.ucSSID[k];
+                    cleanSsid[cleanLen] = 0;
+
+                    int converted = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)cleanSsid, (int)cleanLen, tempList[tempCount].ssid, 32);
                     if (converted <= 0) {
-                        size_t copyLen = (len < 32u) ? len : (size_t)32u;
-                        for (size_t k = 0; k < copyLen; k++)
-                            tempList[tempCount].ssid[k] = (WCHAR)(BYTE)network.dot11Ssid.ucSSID[k];
-                        tempList[tempCount].ssid[copyLen] = L'\0';
-                        converted = (int)copyLen;
-                    } else {
-                        tempList[tempCount].ssid[converted] = L'\0';
-                    }
-                    // Alcuni dispositivi (es. hotspot Xiaomi/Redmi) trasmettono SSID
-                    // con un byte NUL incorporato a metà nome ("Redmi 2" arriva come
-                    // "Redmi\0 2"). lstrlenW/wcscmp/TextOutW si fermerebbero al primo
-                    // NUL, troncando il nome a "Redmi". Sostituiamo eventuali NUL
-                    // interni con uno spazio, lasciando il terminatore reale solo
-                    // alla fine della stringa decodificata.
-                    for (int k = 0; k < converted; k++) {
-                        if (tempList[tempCount].ssid[k] == L'\0')
-                            tempList[tempCount].ssid[k] = L' ';
+                        // Fallback byte-per-byte se UTF-8 fallisce (encoding non standard)
+                        for (size_t k = 0; k < cleanLen; k++)
+                            tempList[tempCount].ssid[k] = (WCHAR)cleanSsid[k];
+                        converted = (int)cleanLen;
                     }
                     tempList[tempCount].ssid[converted] = L'\0';
                 }
@@ -1013,11 +1033,6 @@ void RefreshWifiData(HANDLE hClient) {
         CopyMemory(g_NetworkList, tempList, sizeof(WifiNetworkItem) * tempCount);
         g_NetworkCount = tempCount;
 
-        // Riallinea g_PendingConnectIndex al nuovo indice della stessa rete.
-        // Senza questo, WlanNotificationCallback aggiorna lo stato della rete
-        // sbagliata dopo che l'ordine della scansione cambia, e la voce
-        // realmente in connessione resta bloccata su "Connessione in corso..."
-        // fino al timeout.
         if (hadPending) {
             int newIndex = -1;
             for (int n = 0; n < g_NetworkCount; n++) {
@@ -1031,15 +1046,15 @@ void RefreshWifiData(HANDLE hClient) {
             g_NetworkCount = 0;
             g_PendingConnectIndex = -1;
         }
+    } else {
+        lastValidRefresh = now;
     }
-    lastValidRefresh = now;
     LeaveCriticalSection(&g_Ctx.csLock);
 
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
     }
 }
-
 // -------------------------------------------------------
 // Password dialog
 // -------------------------------------------------------
@@ -1420,10 +1435,12 @@ static BOOL AskForPasswordAndConnect(int index) {
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
     
-    if (!g_TimeoutTimer && g_hWndFlyout) {
+    if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
+        Wh_Log(L"Timeout timer started (id=%llu)", (unsigned long long)g_TimeoutTimer);
+    } else if (!g_hWndFlyout || !IsWindow(g_hWndFlyout)) {
+        Wh_Log(L"WARNING: Could not start timeout timer - flyout not ready");
     }
-    
     UpdateLayoutGeometry();
     if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
     
@@ -1468,7 +1485,7 @@ void DisconnectFromNetwork(int index) {
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
     
-    if (!g_TimeoutTimer && g_hWndFlyout) {
+    if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
     }
     
@@ -1534,9 +1551,6 @@ void CheckConnectionTimeouts() {
     }
 }
 
-// -------------------------------------------------------
-// WLAN Notification Callback
-// -------------------------------------------------------
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
     ModContext* ctx = (ModContext*)context;
     if (!ctx || ctx->isUninitializing || !data) return;
@@ -1545,6 +1559,8 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     
     HWND hFlyout = g_hWndFlyout;
     if (!hFlyout || !IsWindow(hFlyout)) return;
+    
+    EnterCriticalSection(&ctx->csLock);
     
     switch (data->NotificationCode) {
         case wlan_notification_acm_connection_start:
@@ -1564,8 +1580,9 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
                     g_PendingConnectIndex = -1;
                     
                     if (g_TimeoutTimer && hFlyout) {
-                        KillTimer(hFlyout, g_TimeoutTimer);
-                        g_TimeoutTimer = 0;
+                        // KillTimer va chiamato dal thread che ha creato il timer (UI thread).
+                        // Usiamo PostMessage per delegare.
+                        PostMessageW(hFlyout, WM_TIMER, 1002, 0); // forza check timeout che lo uccide
                     }
                 }
             }
@@ -1581,7 +1598,6 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             
         case wlan_notification_acm_disconnected:
             Wh_Log(L"WLAN: Disconnected");
-            // Cerca TUTTE le reti in stato DISCONNECTING o CONNECTED e impostale a IDLE
             for (int i = 0; i < g_NetworkCount; i++) {
                 if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
                     g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
@@ -1590,16 +1606,11 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
                 }
             }
             g_PendingConnectIndex = -1;
-            
-            if (g_TimeoutTimer && hFlyout) {
-                KillTimer(hFlyout, g_TimeoutTimer);
-                g_TimeoutTimer = 0;
-            }
             break;
     }
     
-    UpdateLayoutGeometry();
-    InvalidateRect(hFlyout, NULL, FALSE);
+    LeaveCriticalSection(&ctx->csLock);
+    
     PostMessageW(hFlyout, WM_REFRESH_DATA, 0, 0);
 }
 // -------------------------------------------------------
@@ -1674,14 +1685,13 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     SendMessage(g_hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
 }
 
-// -------------------------------------------------------
-// Row layout helpers
-// -------------------------------------------------------
 BOOL GetRowRect(int index, RECT* rcRow) {
     if (index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    y -= g_ScrollPos;
+    if (y + ((index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL) <= LIST_Y_START) return FALSE;
     if (y >= LIST_Y_END) return FALSE;
     rcRow->left   = 10;
     rcRow->top    = y;
@@ -1970,6 +1980,47 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     }
+    case WM_VSCROLL: {
+    int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+    int newPos = g_ScrollPos;
+    
+    switch (LOWORD(wParam)) {
+        case SB_LINEUP:    newPos -= ROW_HEIGHT_NORMAL; break;
+        case SB_LINEDOWN:  newPos += ROW_HEIGHT_NORMAL; break;
+        case SB_PAGEUP:    newPos -= visibleHeight; break;
+        case SB_PAGEDOWN:  newPos += visibleHeight; break;
+        case SB_THUMBTRACK: newPos = HIWORD(wParam); break;
+    }
+    
+    if (newPos < 0) newPos = 0;
+    if (newPos > maxScroll) newPos = maxScroll;
+    
+    if (newPos != g_ScrollPos) {
+        g_ScrollPos = newPos;
+        SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    break;
+}
+
+case WM_MOUSEWHEEL: {
+    int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+    int newPos = g_ScrollPos - (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * ROW_HEIGHT_NORMAL;
+    
+    if (newPos < 0) newPos = 0;
+    if (newPos > maxScroll) newPos = maxScroll;
+    
+    if (newPos != g_ScrollPos) {
+        g_ScrollPos = newPos;
+        SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    break;
+}
     case WM_PAINT: {
         if (!SafeToAccessUI()) break;
         PAINTSTRUCT ps;
@@ -1985,7 +2036,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         RECT rcFooter = GetFooterRect();
         HBRUSH hBrF = CreateSolidBrush(RGB(225,230,242));
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
-        
+        // Configura la scrollbar in base all'altezza totale
+int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+int visibleHeight = LIST_Y_END - LIST_Y_START;
+// int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+
+SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
+SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
         HPEN hPenSep = CreatePen(PS_SOLID, 1, RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, HEADER_HEIGHT, NULL); LineTo(hdc, WINDOW_WIDTH, HEADER_HEIGHT);
@@ -2311,9 +2368,80 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
 }
-// -------------------------------------------------------
-// ToolbarWindow32 subclassing
-// -------------------------------------------------------
+// ID rilevato dinamicamente al momento della subclasse; -1 = non ancora trovato
+static int g_NetworkButtonId = -1;
+
+static void DetectNetworkButtonId(HWND hToolbar) {
+    int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    Wh_Log(L"DetectNetworkButtonId: toolbar has %d buttons", count);
+
+    // Prima prova l'ID classico Win10 (idCommand==2)
+    for (int i = 0; i < count; i++) {
+        TBBUTTON tb = {0};
+        if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+        if (tb.idCommand == TRAY_NETWORK_ID) {
+            g_NetworkButtonId = TRAY_NETWORK_ID;
+            Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d", i);
+            return;
+        }
+    }
+
+    // Fallback: cerca per parole chiave nel tooltip
+    static const WCHAR* networkKeywords[] = {
+        L"network", L"rete", L"wi-fi", L"wifi", L"wlan",
+        L"internet", L"wireless", L"ethernet", L"lan", NULL
+    };
+
+    for (int i = 0; i < count; i++) {
+        TBBUTTON tb = {0};
+        if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+
+        WCHAR tipText[256] = {0};
+        TBBUTTONINFOW tbi = {0};
+        tbi.cbSize  = sizeof(tbi);
+        tbi.dwMask  = TBIF_TEXT | TBIF_BYINDEX;
+        tbi.pszText = tipText;
+        tbi.cchText = ARRAYSIZE(tipText);
+        SendMessageW(hToolbar, TB_GETBUTTONINFOW, (WPARAM)i, (LPARAM)&tbi);
+
+        if (tipText[0] == L'\0') {
+            HWND hTT = (HWND)SendMessageW(hToolbar, TB_GETTOOLTIPS, 0, 0);
+            if (hTT) {
+                TOOLINFOW ti = {0};
+                ti.cbSize   = sizeof(ti);
+                ti.hwnd     = hToolbar;
+                ti.uId      = (UINT_PTR)tb.idCommand;
+                ti.lpszText = tipText;
+                SendMessageW(hTT, TTM_GETTEXTW, ARRAYSIZE(tipText), (LPARAM)&ti);
+            }
+        }
+
+        if (tipText[0] == L'\0') continue;
+
+        WCHAR lower[256] = {0};
+        for (int k = 0; tipText[k] && k < 255; k++)
+            lower[k] = (WCHAR)towlower(tipText[k]);
+
+        for (int k = 0; networkKeywords[k]; k++) {
+            if (wcsstr(lower, networkKeywords[k])) {
+                g_NetworkButtonId = tb.idCommand;
+                Wh_Log(L"DetectNetworkButtonId: found via tooltip '%s', idCommand=%d",
+                       tipText, tb.idCommand);
+                return;
+            }
+        }
+    }
+
+    // Nessun match: dump completo per debug
+    Wh_Log(L"DetectNetworkButtonId: could not identify network button, dumping all:");
+    for (int i = 0; i < count; i++) {
+        TBBUTTON tb = {0};
+        if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+        Wh_Log(L"  button[%d]: idCommand=%d state=0x%02X style=0x%02X",
+               i, tb.idCommand, (unsigned)tb.fsState, (unsigned)tb.fsStyle);
+    }
+}
+
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
@@ -2331,7 +2459,9 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (btnIdx >= 0) {
                 TBBUTTON tb = {0};
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
-                    if (tb.idCommand == TRAY_NETWORK_ID) {
+                    // Usa l'ID rilevato dinamicamente; fallback a TRAY_NETWORK_ID
+                    int targetId = (g_NetworkButtonId >= 0) ? g_NetworkButtonId : TRAY_NETWORK_ID;
+                    if (tb.idCommand == targetId) {
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
                             DWORD currentTime = GetTickCount();
@@ -2386,7 +2516,11 @@ static BOOL InstallTrayInterceptionInternal() {
     Wh_Log(L"Subclassing %s (0x%p)", 
            hToolbar ? L"ToolbarWindow32" : L"TrayNotifyWnd", hTarget);
     
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (DWORD_PTR)&G_SubclassId);
+WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (DWORD_PTR)&G_SubclassId);
+    if (hToolbar) {
+        g_NetworkButtonId = -1;
+        DetectNetworkButtonId(hToolbar);
+    }
     return TRUE;
 }
 BOOL InstallTrayInterception() {
@@ -2437,6 +2571,10 @@ void ToggleFlyoutWindow() {
         } else {
             DetermineLocale();
             LoadSettings();
+            // Ricalcola metriche DPI sul monitor reale prima del primo paint
+            UINT dpi = GetDpiForWindow(g_hWndFlyout);
+            if (dpi < 96) dpi = 96;
+            if (dpi != g_dpi) RecalcDpiMetrics(dpi);
             g_SelectedRowIndex = g_HoveredRowIndex = -1;
             ClearKeyboardFocus();
             g_bListExpanded = TRUE;
@@ -2531,7 +2669,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.0 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.1 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
