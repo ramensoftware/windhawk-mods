@@ -20,13 +20,15 @@ This fixes the 2px light gray bottom edge that can appear when VS Code is maximi
 
 Before:
 
-![Before](https://i.imgur.com/ldT3xJt.png)
+![Before](https://i.imgur.com/DVrOPag.png)
 
 After:
 
-![After](https://i.imgur.com/DVrOPag.png)
+![After](https://i.imgur.com/ldT3xJt.png)
 
-The mod targets only `Code.exe`.
+The mod targets only `Code.exe` by default. Users of VS Code Insiders, VSCodium, or renamed/portable builds can add the relevant executable name to the mod's custom include list.
+
+When the mod is disabled, it stops overriding VS Code's frame mode. Already affected windows may keep their current frame mode until VS Code applies a new value, for example after a theme or window state change.
 */
 // ==/WindhawkModReadme==
 
@@ -36,9 +38,6 @@ The mod targets only `Code.exe`.
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
 DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
 
-HWINEVENTHOOK g_objectCreateHook = nullptr;
-HWINEVENTHOOK g_objectShowHook = nullptr;
-
 BOOL IsCurrentProcessWindow(HWND hWnd) {
     DWORD windowPid = 0;
     GetWindowThreadProcessId(hWnd, &windowPid);
@@ -47,14 +46,14 @@ BOOL IsCurrentProcessWindow(HWND hWnd) {
 }
 
 BOOL IsValidWindow(HWND hWnd) {
-    LONG_PTR dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
+    LONG_PTR style = GetWindowLongPtr(hWnd, GWL_STYLE);
 
-    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME ||
-           (dwStyle & WS_CAPTION) == WS_CAPTION;
+    return (style & WS_THICKFRAME) == WS_THICKFRAME ||
+           (style & WS_CAPTION) == WS_CAPTION;
 }
 
 void ApplyDarkFrame(HWND hWnd) {
-    if (!IsCurrentProcessWindow(hWnd) || !IsValidWindow(hWnd)) {
+    if (!IsValidWindow(hWnd)) {
         return;
     }
 
@@ -96,32 +95,16 @@ HRESULT WINAPI DwmSetWindowAttribute_hook(
 }
 
 BOOL CALLBACK EnableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
-    DWORD pid = lParam;
+    DWORD targetPid = static_cast<DWORD>(lParam);
 
     DWORD windowPid = 0;
     GetWindowThreadProcessId(hWnd, &windowPid);
 
-    if (pid == windowPid) {
+    if (targetPid == windowPid) {
         ApplyDarkFrame(hWnd);
     }
 
     return TRUE;
-}
-
-void CALLBACK WinEventProc(
-    HWINEVENTHOOK,
-    DWORD,
-    HWND hWnd,
-    LONG idObject,
-    LONG idChild,
-    DWORD,
-    DWORD
-) {
-    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
-        return;
-    }
-
-    ApplyDarkFrame(hWnd);
 }
 
 BOOL Wh_ModInit() {
@@ -132,36 +115,6 @@ BOOL Wh_ModInit() {
         (void*)DwmSetWindowAttribute_hook,
         (void**)&DwmSetWindowAttribute_orig
     );
-
-    DWORD currentPid = GetCurrentProcessId();
-
-    g_objectCreateHook = SetWinEventHook(
-        EVENT_OBJECT_CREATE,
-        EVENT_OBJECT_CREATE,
-        nullptr,
-        WinEventProc,
-        currentPid,
-        0,
-        WINEVENT_OUTOFCONTEXT
-    );
-
-    if (!g_objectCreateHook) {
-        Wh_Log(L"Failed to create EVENT_OBJECT_CREATE hook");
-    }
-
-    g_objectShowHook = SetWinEventHook(
-        EVENT_OBJECT_SHOW,
-        EVENT_OBJECT_SHOW,
-        nullptr,
-        WinEventProc,
-        currentPid,
-        0,
-        WINEVENT_OUTOFCONTEXT
-    );
-
-    if (!g_objectShowHook) {
-        Wh_Log(L"Failed to create EVENT_OBJECT_SHOW hook");
-    }
 
     return TRUE;
 }
@@ -174,16 +127,6 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit");
-
-    if (g_objectCreateHook) {
-        UnhookWinEvent(g_objectCreateHook);
-        g_objectCreateHook = nullptr;
-    }
-
-    if (g_objectShowHook) {
-        UnhookWinEvent(g_objectShowHook);
-        g_objectShowHook = nullptr;
-    }
 
     // Do not force DWMWA_USE_IMMERSIVE_DARK_MODE to FALSE here.
     // Disabling the mod should stop overriding VS Code's own value instead of
