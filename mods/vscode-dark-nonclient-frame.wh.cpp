@@ -2,7 +2,7 @@
 // @id              vscode-dark-nonclient-frame
 // @name            VS Code Dark Non-client Frame
 // @description     Forces VS Code's non-client frame into dark mode to remove the light 2px bottom edge in Windows light mode.
-// @version         1.0
+// @version         1.1
 // @author          v1b3s0
 // @github          https://github.com/v1b3s0
 // @license         MIT
