@@ -4266,12 +4266,12 @@
           19
         ],
         "ratingUsers": 19,
-        "updated": 1781552855000,
+        "updated": 1781787131000,
         "users": 207
       },
       "metadata": {
         "author": "m417z",
-        "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lgdiplus -ladvapi32 -luiautomationcore",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lgdiplus -ladvapi32 -luiautomationcore -ldwmapi",
         "description": "Hover a folder in File Explorer to get an expand button that opens a cascading menu of the folder's contents",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -4280,7 +4280,7 @@
         ],
         "name": "Folder Hover Menu",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0.2"
+        "version": "1.1"
       }
     },
     "explorer-font-changer": {

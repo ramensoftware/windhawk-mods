@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-18T09:06:21.000Z</updated>
+    <updated>2026-06-18T12:52:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#453bb94231c97af750e51e2584e73991074cb4fc</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-06-18T12:52:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for rounded corners for the menu.</li>
+<li>Added options for customizing the button position.</li>
+<li>Added options for limiting the amount of shown items and loading time to reduce slow loading and avoid hangs.</li>
+<li>Added mouse wheel scrolling support.</li>
+<li>The default button size was changed from 18 to 20.</li>
+<li>Fixed the hover button not appearing sometimes.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VS Code Dark Non-client Frame 1.1]]></title>
         <id>https://windhawk.net/mods/vscode-dark-nonclient-frame#0a5c79c7fac413ac4f1c98c1221331061b9e7df8</id>
@@ -662,84 +680,6 @@ zablokowania użyj nawigacji klawiaturą (Tab/Enter) albo wyłącz mod w
 Windhawku klawiaturą. Przemapowanie <strong>prawego przycisku</strong> odbiera dostęp
 do menu kontekstowych (działa jeszcze klawisz Menu na klawiaturze). Oba
 są domyślnie wyłączone — włączaj tylko świadomie.</p>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.4.2]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#ed888d43cc5bd73a43fd1f2a1c7acc67801f725b</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-06-15T14:14:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayhoverexpand">Tray hover expand</h1>
-<p><img src="https://i.imgur.com/qsNUNpj.png" alt="Demo" /></p>
-<p>Opens the hidden tray icons flyout (the "Show Hidden Icons" chevron) when you
-hover the cursor over it, instead of having to click. Optionally collapses it
-again once the cursor leaves the opened icons.</p>
-<p>It works through UI Automation, so it does not hook internal shell functions —
-it is relatively safe and resilient across Windows builds. It runs as a tool
-mod in a dedicated process and does not inject into the shell.</p>
-<h2 id="howitdiffersfromsimilarmods">How it differs from similar mods</h2>
-<ul>
-<li><em>Taskbar tray icons hide on hover</em> auto-hides the whole tray area and reveals
-it on hover.</li>
-<li><em>Show all taskbar notification icons</em> forces all hidden icons to always show.</li>
-<li>This mod keeps the standard Windows overflow flyout and simply opens it on
-hover (and optionally closes it when you move away).</li>
-</ul>
-<h2 id="howthechevronisdetected">How the chevron is detected</h2>
-<p>The "Show Hidden Icons" chevron has no language-independent unique identifier on
-Windows 11 (it shares AutomationId <code>SystemTrayIcon</code> with the clock, volume,
-battery, etc., and exposes no ExpandCollapse pattern). So detection is a hybrid:</p>
-<ol>
-<li>Match the button by name (the keyword list covers English and Polish by
-default and can be extended in the settings).</li>
-<li>If no name matches (other languages), fall back to the leftmost tray button
-with the configured AutomationId, which is normally the chevron.</li>
-</ol>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>For unsupported languages, add your locale's chevron name to the "Chevron name
-keywords" setting, or rely on the leftmost-tray-icon fallback.</li>
-<li>If auto-collapse does not work, the flyout window class name may differ on your
-build. Change it in the "Flyout window class" setting.</li>
-</ul>
-<hr />
-<h2 id="opispopolsku">Opis po polsku</h2>
-<p>Otwiera schowek ukrytych ikon zasobnika (strzałkę „Pokaż ukryte ikony") po
-najechaniu kursorem, bez konieczności klikania. Opcjonalnie zwija go z powrotem,
-gdy kursor opuści otwarte ikony.</p>
-<p>Mod działa przez UI Automation, więc nie hookuje wewnętrznych funkcji powłoki —
-jest stosunkowo bezpieczny i odporny na zmiany między kompilacjami Windows.
-Działa jako „tool mod" w osobnym procesie i nie wstrzykuje się do powłoki.</p>
-<h3 id="czymrnisiodpodobnychmodw">Czym różni się od podobnych modów</h3>
-<ul>
-<li><em>Taskbar tray icons hide on hover</em> automatycznie ukrywa cały obszar zasobnika
-i odsłania go po najechaniu.</li>
-<li><em>Show all taskbar notification icons</em> wymusza stałe wyświetlanie wszystkich
-ukrytych ikon.</li>
-<li>Ten mod zachowuje standardowy schowek Windows i po prostu otwiera go po
-najechaniu (a opcjonalnie zamyka po odjechaniu kursorem).</li>
-</ul>
-<h3 id="jakwykrywanajeststrzaka">Jak wykrywana jest strzałka</h3>
-<p>Strzałka „Pokaż ukryte ikony" nie ma w Windows 11 unikalnego, niezależnego od
-języka identyfikatora (dzieli AutomationId <code>SystemTrayIcon</code> z zegarem,
-głośnością, baterią itd. i nie udostępnia wzorca ExpandCollapse). Wykrywanie
-jest więc hybrydowe:</p>
-<ol>
-<li>Dopasowanie przycisku po nazwie (domyślna lista słów kluczowych obejmuje
-angielski i polski; można ją rozszerzyć w ustawieniach).</li>
-<li>Gdy nazwa nie pasuje (inne języki) — pierwszy od lewej przycisk zasobnika ze
-skonfigurowanym AutomationId, którym zwykle jest strzałka.</li>
-</ol>
-<h3 id="uwagi">Uwagi</h3>
-<ul>
-<li>Dla nieobsługiwanych języków dodaj nazwę strzałki w swoim języku do ustawienia
-„Słowa kluczowe nazwy strzałki" albo polegaj na powyższym mechanizmie zapasowym.</li>
-<li>Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
-Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".</li>
-</ul>]]></content>
         <author>
             <name>wygodad</name>
             <uri>https://github.com/wygodad</uri>
