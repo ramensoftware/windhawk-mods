@@ -645,6 +645,7 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
         return false;
     }
 
+    // explorer.exe, ExplorerFrame.dll, MoNotificationUx.exe, museuxdocked.dll, Narrator.exe, pnidui.dll, SecurityHealthSSO.dll, SecurityHealthSsoUdk.dll, SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe, twinui.dll, twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] =
     {
         {
