@@ -20,11 +20,11 @@ This fixes the 2px light gray bottom edge that can appear when VS Code is maximi
 
 Before:
 
-![Before](https://i.imgur.com/DVrOPag.png)
+![Before](https://i.imgur.com/ldT3xJt.png)
 
 After:
 
-![After](https://i.imgur.com/ldT3xJt.png)
+![After](https://i.imgur.com/DVrOPag.png)
 
 The mod targets only `Code.exe` by default. Users of VS Code Insiders, VSCodium, or renamed/portable builds can add the relevant executable name to the mod's custom include list.
 
