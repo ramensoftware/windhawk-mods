@@ -645,14 +645,16 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hook =
+    WindhawkUtils::SYMBOL_HOOK hooks[] =
     {
-        { DRAW_IMMERSIVE_MENU },
-        ppfnOriginal,
-        DrawImmersiveMenu_Hook,
-        true
+        {
+            { DRAW_IMMERSIVE_MENU },
+            ppfnOriginal,
+            DrawImmersiveMenu_Hook,
+            true
+        }
     };
-    if (!WindhawkUtils::HookSymbols(hModule, &hook, 1))
+    if (!WindhawkUtils::HookSymbols(hModule, hooks, ARRAYSIZE(hooks)))
     {
         Wh_Log(
             L"Failed to hook "
