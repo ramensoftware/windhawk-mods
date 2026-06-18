@@ -2,13 +2,13 @@
 // @id              explorer-folder-hover-menu
 // @name            Folder Hover Menu
 // @description     Hover a folder in File Explorer to get an expand button that opens a cascading menu of the folder's contents
-// @version         1.0.2
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lgdiplus -ladvapi32 -luiautomationcore
+// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32 -lgdiplus -ladvapi32 -luiautomationcore -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,9 +28,42 @@ Inspired by [QTTabBar](https://qttabbar.wikidot.com/).
 
 // ==WindhawkModSettings==
 /*
-- iconSize: 18
+- roundedCorners: true
+  $name: Rounded menu corners
+  $description: >-
+    Round the corners of the pop-up menu. This option requires Windows 11.
+- iconSize: 20
   $name: Button size
   $description: The size of the expand button shown on hover.
+- position: rightBottom
+  $name: Button position
+  $description: The corner of the folder item where the expand button is shown.
+  $options:
+  - rightBottom: Bottom-right corner
+  - leftBottom: Bottom-left corner
+  - leftTop: Top-left corner
+  - rightTop: Top-right corner
+- offsetX: 0
+  $name: Horizontal offset
+  $description: >-
+    Shifts the button horizontally from the selected corner, in pixels. Positive
+    values move it right, negative values move it left.
+- offsetY: 0
+  $name: Vertical offset
+  $description: >-
+    Shifts the button vertically from the selected corner, in pixels. Positive
+    values move it down, negative values move it up.
+- maxItems: 500
+  $name: Maximum items
+  $description: >-
+    The most items to load into a single folder's menu. When a folder has more,
+    the list is truncated and a notice item is shown instead. This keeps the
+    menu quick to open for folders that contain a very large number of items.
+- timeoutSeconds: 5
+  $name: Timeout (seconds)
+  $description: >-
+    Stop loading a folder's contents into the menu after this many seconds. A
+    safety net for folders whose contents are slow to enumerate.
 */
 // ==/WindhawkModSettings==
 
@@ -38,8 +71,10 @@ Inspired by [QTTabBar](https://qttabbar.wikidot.com/).
 
 #include <initguid.h>  // Must come first so the shell GUIDs we use get storage.
 
+#include <commctrl.h>
 #include <comutil.h>
 #include <docobj.h>
+#include <dwmapi.h>
 #include <exdisp.h>
 #include <gdiplus.h>
 #include <servprov.h>
@@ -48,9 +83,12 @@ Inspired by [QTTabBar](https://qttabbar.wikidot.com/).
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <uiautomation.h>
+#include <windowsx.h>
 
 #include <winrt/base.h>
 
+#include <climits>
+#include <new>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -92,16 +130,67 @@ DEFINE_GUID(CLSID_MenuDeskBar,
 ////////////////////////////////////////////////////////////////////////////////
 // Settings.
 
-static int g_iconSize = 18;
+// Which corner of the folder item the button is anchored to.
+enum class ButtonPosition {
+    rightBottom,
+    leftBottom,
+    leftTop,
+    rightTop,
+};
+
+struct {
+    bool roundedCorners;
+    int iconSize;
+    ButtonPosition position;
+    int offsetX;
+    int offsetY;
+    int maxEnumItems;
+    int enumTimeoutMs;
+} g_settings;
 
 static void LoadSettings() {
+    g_settings.roundedCorners = Wh_GetIntSetting(L"roundedCorners");
+
     int iconSize = Wh_GetIntSetting(L"iconSize");
     if (iconSize < 10) {
         iconSize = 10;
     } else if (iconSize > 64) {
         iconSize = 64;
     }
-    g_iconSize = iconSize;
+    g_settings.iconSize = iconSize;
+
+    PCWSTR position = Wh_GetStringSetting(L"position");
+    g_settings.position = ButtonPosition::rightBottom;
+    if (wcscmp(position, L"leftBottom") == 0) {
+        g_settings.position = ButtonPosition::leftBottom;
+    } else if (wcscmp(position, L"leftTop") == 0) {
+        g_settings.position = ButtonPosition::leftTop;
+    } else if (wcscmp(position, L"rightTop") == 0) {
+        g_settings.position = ButtonPosition::rightTop;
+    }
+    Wh_FreeStringSetting(position);
+
+    g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
+    g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
+
+    int maxItems = Wh_GetIntSetting(L"maxItems");
+    if (maxItems < 1) {
+        maxItems = 1;
+    }
+    g_settings.maxEnumItems = maxItems;
+
+    int timeoutSeconds = Wh_GetIntSetting(L"timeoutSeconds");
+    if (timeoutSeconds < 1) {
+        timeoutSeconds = 1;
+    }
+    // Multiply in 64-bit and clamp so a large setting can't overflow the int
+    // millisecond field (which would wrap to a tiny/negative timeout and cap
+    // every enumeration immediately).
+    LONGLONG timeoutMs = (LONGLONG)timeoutSeconds * 1000;
+    if (timeoutMs > INT_MAX) {
+        timeoutMs = INT_MAX;
+    }
+    g_settings.enumTimeoutMs = (int)timeoutMs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,18 +232,18 @@ static PIDLIST_ABSOLUTE g_targetPidl;
 
 // How long (ms) a snapshot is trusted before a mouse move triggers a background
 // rebuild. This is not a timer; it only gates work done on actual input events.
-static const ULONGLONG kRefreshTtlMs = 500;
+static constexpr ULONGLONG kRefreshTtlMs = 500;
 
 // Raw input is high frequency; coalesce moves to roughly this interval (ms).
-static const ULONGLONG kInputCoalesceMs = 10;
+static constexpr ULONGLONG kInputCoalesceMs = 10;
 static ULONGLONG g_lastInputTick;
 static BYTE g_rawInputBuffer[1024];
 static bool g_rawInputRegistered;
 
 // While the button is visible, re-check this often so navigation under a
 // stationary cursor (double-click / keyboard Enter) is noticed without a move.
-static const UINT kWatchdogIntervalMs = 500;
-static const UINT_PTR kWatchdogTimerId = 1;
+static constexpr UINT kWatchdogIntervalMs = 500;
+static constexpr UINT_PTR kWatchdogTimerId = 1;
 
 // One visible item in the active view: its rectangle (screen coords) and name.
 struct CachedItem {
@@ -281,7 +370,7 @@ struct DarkColorEntry {
     COLORREF color;
 };
 
-static const DarkColorEntry kDarkColors[] = {
+static constexpr DarkColorEntry kDarkColors[] = {
     {COLOR_MENU, RGB(43, 43, 43)},
     {COLOR_WINDOW, RGB(43, 43, 43)},
     {COLOR_BTNFACE, RGB(43, 43, 43)},
@@ -334,6 +423,13 @@ HBRUSH WINAPI GetSysColorBrush_Hook(int index) {
     return GetSysColorBrush_Orig(index);
 }
 
+// The menu band hosts each menu surface (the top-level popup and every
+// cascading submenu) in a top-level window of this shell class (registered by
+// CMenuDeskBar / CBaseBar). We match it so only the menu's own windows are
+// rounded, not other top-level windows that merely happen to be created while
+// the menu is up (item tooltips, the desktop's WorkerW, etc.).
+static constexpr WCHAR kMenuHostClass[] = L"BaseBar";
+
 // While our dark menu is being built, the only windows this process creates are
 // the menu band's. Dark-allowing each one at creation (before its first paint)
 // makes it render dark from the first frame instead of flashing light then
@@ -357,6 +453,21 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle,
                              height, parent, menu, instance, param);
     if (hwnd && g_menuActive && g_menuDark && g_pAllowDarkModeForWindow) {
         g_pAllowDarkModeForWindow(hwnd, true);
+    }
+    // Round the menu's own surfaces (the top-level popup and each cascading
+    // submenu). Match the host class explicitly rather than rounding every
+    // top-level window created while the menu is up, so other windows the band
+    // spins up meanwhile - notably item tooltips - keep their normal corners.
+    // DWM keeps the preference across resizes; it is a no-op on Windows 10.
+    if (hwnd && g_menuActive && g_settings.roundedCorners &&
+        !(style & WS_CHILD)) {
+        WCHAR cls[64];
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+            wcscmp(cls, kMenuHostClass) == 0) {
+            DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUNDSMALL;
+            DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref,
+                                  sizeof(pref));
+        }
     }
     return hwnd;
 }
@@ -951,6 +1062,372 @@ static DWORD WINAPI WorkerThreadProc(LPVOID param) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Enumeration bound. A folder with a very large number of items makes the menu
+// band take a long time to open: the enumeration is fast, but the band builds
+// one menu entry per item, so a few thousand items cost several seconds. We
+// bound that by wrapping the folder's enumerator (see the EnumObjects hook
+// below): it returns at most g_settings.maxEnumItems real items and then a
+// single synthetic notice entry, after which the menu opens promptly with a
+// truncated list. A time budget (g_settings.enumTimeoutMs) is also enforced as
+// a safety net for folders where the enumeration itself is slow. Both limits
+// are exposed in the "Timeout" settings group.
+
+// Magic stored in the synthetic child pidl so we can recognize it later.
+static constexpr DWORD kTimeoutPidlMagic = 0x544D4F45;  // 'EOMT'.
+
+// Builds the synthetic one-item pidl the bounded enumerator returns when it
+// stops early. Caller frees it with CoTaskMemFree / ILFree (the menu band does
+// so for us).
+static LPITEMIDLIST CreateTimeoutPidl() {
+    // A single SHITEMID carrying our magic, followed by the null terminator.
+    const SIZE_T size = sizeof(USHORT) + sizeof(DWORD) + sizeof(USHORT);
+    BYTE* p = (BYTE*)CoTaskMemAlloc(size);
+    if (!p) {
+        return nullptr;
+    }
+    USHORT cb = (USHORT)(sizeof(USHORT) + sizeof(DWORD));
+    memcpy(p, &cb, sizeof(cb));
+    memcpy(p + sizeof(USHORT), &kTimeoutPidlMagic, sizeof(kTimeoutPidlMagic));
+    USHORT terminator = 0;
+    memcpy(p + sizeof(USHORT) + sizeof(DWORD), &terminator, sizeof(terminator));
+    return (LPITEMIDLIST)p;
+}
+
+static bool IsTimeoutPidl(LPCITEMIDLIST pidl) {
+    if (!pidl || pidl->mkid.cb != sizeof(USHORT) + sizeof(DWORD)) {
+        return false;
+    }
+    DWORD magic;
+    memcpy(&magic, pidl->mkid.abID, sizeof(magic));
+    if (magic != kTimeoutPidlMagic) {
+        return false;
+    }
+    LPCITEMIDLIST next = (LPCITEMIDLIST)((const BYTE*)pidl + pidl->mkid.cb);
+    return next->mkid.cb == 0;
+}
+
+// Wraps the folder's real enumerator and bounds it. While inside the item-count
+// and time budgets it forwards to the inner enumerator; once either is exceeded
+// it returns one synthetic notice item and then reports end-of-enumeration, so
+// the menu band stops asking for more (and ignores the remaining items).
+class CTimeoutEnumIDList final : public IEnumIDList {
+   public:
+    CTimeoutEnumIDList(IEnumIDList* inner) : m_inner(inner) {
+        m_inner->AddRef();
+        m_deadline = GetTickCount64() + g_settings.enumTimeoutMs;
+    }
+
+    // IUnknown.
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) {
+            return E_POINTER;
+        }
+        if (IsEqualIID(riid, IID_IUnknown) ||
+            IsEqualIID(riid, IID_IEnumIDList)) {
+            *ppv = static_cast<IEnumIDList*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    IFACEMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&m_ref);
+    }
+
+    IFACEMETHODIMP_(ULONG) Release() override {
+        LONG ref = InterlockedDecrement(&m_ref);
+        if (ref == 0) {
+            delete this;
+        }
+        return ref;
+    }
+
+    // IEnumIDList.
+    IFACEMETHODIMP Next(ULONG celt,
+                        LPITEMIDLIST* rgelt,
+                        ULONG* pceltFetched) override {
+        if (pceltFetched) {
+            *pceltFetched = 0;
+        }
+        if (celt == 0) {
+            return S_OK;
+        }
+        if (!rgelt) {
+            return E_INVALIDARG;
+        }
+
+        // Stop and emit the notice once either budget is exceeded: the item
+        // count (the band's cost is dominated by building one entry per item,
+        // so a huge folder must be truncated) or, as a safety net, the time
+        // budget (in case the enumeration itself is slow). Checked here,
+        // between items.
+        if (m_count >= (UINT)g_settings.maxEnumItems ||
+            GetTickCount64() >= m_deadline) {
+            if (m_timedOutEmitted) {
+                return S_FALSE;  // Notice already returned; nothing more.
+            }
+            LPITEMIDLIST pidl = CreateTimeoutPidl();
+            if (!pidl) {
+                return E_OUTOFMEMORY;
+            }
+            rgelt[0] = pidl;
+            m_timedOutEmitted = true;
+            if (pceltFetched) {
+                *pceltFetched = 1;
+            }
+            Wh_Log(
+                L"Enumeration capped after %u items (timedOut=%d), emitting "
+                L"notice",
+                m_count, (int)(GetTickCount64() >= m_deadline));
+            return celt == 1 ? S_OK : S_FALSE;
+        }
+
+        HRESULT hr = m_inner->Next(celt, rgelt, pceltFetched);
+        m_count += pceltFetched ? *pceltFetched : (hr == S_OK ? celt : 0);
+        return hr;
+    }
+
+    IFACEMETHODIMP Skip(ULONG celt) override { return m_inner->Skip(celt); }
+
+    IFACEMETHODIMP Reset() override {
+        m_timedOutEmitted = false;
+        m_count = 0;
+        m_deadline = GetTickCount64() + g_settings.enumTimeoutMs;
+        return m_inner->Reset();
+    }
+
+    IFACEMETHODIMP Clone(IEnumIDList** ppenum) override {
+        if (!ppenum) {
+            return E_POINTER;
+        }
+        *ppenum = nullptr;
+        winrt::com_ptr<IEnumIDList> innerClone;
+        HRESULT hr = m_inner->Clone(innerClone.put());
+        if (FAILED(hr)) {
+            return hr;
+        }
+        auto* clone = new (std::nothrow) CTimeoutEnumIDList(innerClone.get());
+        if (!clone) {
+            return E_OUTOFMEMORY;
+        }
+        clone->m_deadline = m_deadline;
+        clone->m_timedOutEmitted = m_timedOutEmitted;
+        clone->m_count = m_count;
+        *ppenum = clone;
+        return S_OK;
+    }
+
+   private:
+    ~CTimeoutEnumIDList() { m_inner->Release(); }
+
+    LONG m_ref = 1;
+    IEnumIDList* m_inner;
+    ULONGLONG m_deadline;
+    bool m_timedOutEmitted = false;
+    UINT m_count = 0;  // Real items returned so far (for the item-count cap).
+};
+
+// The menu band does not enumerate through the IShellFolder we hand it (it uses
+// the real folder it binds from the pidl), so wrapping that folder has no
+// effect. Instead we inline-hook the file-system folder's IShellFolder methods
+// directly. Every CFSFolder instance in this process shares a single vtable, so
+// one hook on EnumObjects bounds every enumeration the menu band drives,
+// cascading sub-folders included. The pidl-handling methods are hooked too so
+// the synthetic "timed out" item the bounded enumerator returns renders cleanly
+// and stays inert - the band calls those on the real folder, not on us.
+
+using EnumObjects_t = HRESULT(STDMETHODCALLTYPE*)(IShellFolder*,
+                                                  HWND,
+                                                  SHCONTF,
+                                                  IEnumIDList**);
+using CompareIDs_t = HRESULT(STDMETHODCALLTYPE*)(IShellFolder*,
+                                                 LPARAM,
+                                                 PCUIDLIST_RELATIVE,
+                                                 PCUIDLIST_RELATIVE);
+using GetAttributesOf_t = HRESULT(STDMETHODCALLTYPE*)(IShellFolder*,
+                                                      UINT,
+                                                      PCUITEMID_CHILD_ARRAY,
+                                                      SFGAOF*);
+using GetUIObjectOf_t = HRESULT(STDMETHODCALLTYPE*)(IShellFolder*,
+                                                    HWND,
+                                                    UINT,
+                                                    PCUITEMID_CHILD_ARRAY,
+                                                    REFIID,
+                                                    UINT*,
+                                                    void**);
+using GetDisplayNameOf_t = HRESULT(STDMETHODCALLTYPE*)(IShellFolder*,
+                                                       PCUITEMID_CHILD,
+                                                       SHGDNF,
+                                                       STRRET*);
+
+EnumObjects_t EnumObjects_Orig;
+CompareIDs_t CompareIDs_Orig;
+GetAttributesOf_t GetAttributesOf_Orig;
+GetUIObjectOf_t GetUIObjectOf_Orig;
+GetDisplayNameOf_t GetDisplayNameOf_Orig;
+
+HRESULT STDMETHODCALLTYPE EnumObjects_Hook(IShellFolder* pThis,
+                                           HWND hwnd,
+                                           SHCONTF grfFlags,
+                                           IEnumIDList** ppenumIDList) {
+    HRESULT hr = EnumObjects_Orig(pThis, hwnd, grfFlags, ppenumIDList);
+
+    // Only the menu band's enumeration is bounded. The background worker also
+    // enumerates folders (to build its hover map) and must see the complete
+    // list, so its own enumeration - and only its - is left untouched.
+    if (hr != S_OK || !ppenumIDList || !*ppenumIDList ||
+        GetCurrentThreadId() == g_workerThreadId) {
+        return hr;
+    }
+
+    IEnumIDList* inner = *ppenumIDList;
+    auto* wrapper = new (std::nothrow) CTimeoutEnumIDList(inner);
+    if (wrapper) {
+        inner->Release();  // The wrapper holds its own reference now.
+        *ppenumIDList = wrapper;
+    }
+    return hr;
+}
+
+HRESULT STDMETHODCALLTYPE CompareIDs_Hook(IShellFolder* pThis,
+                                          LPARAM lParam,
+                                          PCUIDLIST_RELATIVE pidl1,
+                                          PCUIDLIST_RELATIVE pidl2) {
+    bool t1 = IsTimeoutPidl(pidl1);
+    bool t2 = IsTimeoutPidl(pidl2);
+    if (t1 || t2) {
+        // Keep the synthetic item at the bottom of the list (and away from the
+        // real folder's comparer, which would choke on our fake pidl).
+        int order = (t1 == t2) ? 0 : (t1 ? 1 : -1);
+        return MAKE_HRESULT(SEVERITY_SUCCESS, 0, (USHORT)(SHORT)order);
+    }
+    return CompareIDs_Orig(pThis, lParam, pidl1, pidl2);
+}
+
+HRESULT STDMETHODCALLTYPE GetAttributesOf_Hook(IShellFolder* pThis,
+                                               UINT cidl,
+                                               PCUITEMID_CHILD_ARRAY apidl,
+                                               SFGAOF* rgfInOut) {
+    for (UINT i = 0; i < cidl; i++) {
+        if (IsTimeoutPidl(apidl[i])) {
+            // Inert, non-folder entry: no expand arrow, nothing to launch.
+            if (rgfInOut) {
+                *rgfInOut = 0;
+            }
+            return S_OK;
+        }
+    }
+    return GetAttributesOf_Orig(pThis, cidl, apidl, rgfInOut);
+}
+
+HRESULT STDMETHODCALLTYPE GetUIObjectOf_Hook(IShellFolder* pThis,
+                                             HWND hwndOwner,
+                                             UINT cidl,
+                                             PCUITEMID_CHILD_ARRAY apidl,
+                                             REFIID riid,
+                                             UINT* rgfReserved,
+                                             void** ppv) {
+    for (UINT i = 0; i < cidl; i++) {
+        if (IsTimeoutPidl(apidl[i])) {
+            // No icon, context menu or launch object for the notice item.
+            if (ppv) {
+                *ppv = nullptr;
+            }
+            return E_NOINTERFACE;
+        }
+    }
+    return GetUIObjectOf_Orig(pThis, hwndOwner, cidl, apidl, riid, rgfReserved,
+                              ppv);
+}
+
+HRESULT STDMETHODCALLTYPE GetDisplayNameOf_Hook(IShellFolder* pThis,
+                                                PCUITEMID_CHILD pidl,
+                                                SHGDNF uFlags,
+                                                STRRET* pName) {
+    if (IsTimeoutPidl(pidl)) {
+        if (!pName) {
+            return E_POINTER;
+        }
+        static constexpr WCHAR text[] = L"(too many items, list truncated)";
+        LPWSTR copy = (LPWSTR)CoTaskMemAlloc(sizeof(text));
+        if (!copy) {
+            return E_OUTOFMEMORY;
+        }
+        memcpy(copy, text, sizeof(text));
+        pName->uType = STRRET_WSTR;
+        pName->pOleStr = copy;
+        return S_OK;
+    }
+    return GetDisplayNameOf_Orig(pThis, pidl, uFlags, pName);
+}
+
+// IShellFolder vtable slot indices (after the three IUnknown slots).
+enum {
+    kVtblEnumObjects = 4,
+    kVtblCompareIDs = 7,
+    kVtblGetAttributesOf = 9,
+    kVtblGetUIObjectOf = 10,
+    kVtblGetDisplayNameOf = 11,
+};
+
+// Resolves the file-system folder vtable (shared by every CFSFolder instance)
+// and inline-hooks the methods we need. Called once at init; needs a COM
+// apartment to bind the sample folder, so it sets one up temporarily.
+static void InitEnumTimeoutHooks() {
+    bool comInited =
+        SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+
+    // Bind any real file-system folder to reach the shared CFSFolder vtable.
+    // Use the Windows directory rather than a hard-coded "C:\\" so this still
+    // works when Windows lives on another drive.
+    WCHAR fsPath[MAX_PATH];
+    if (!GetWindowsDirectoryW(fsPath, ARRAYSIZE(fsPath))) {
+        fsPath[0] = L'\0';
+    }
+
+    winrt::com_ptr<IShellFolder> desktop;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    winrt::com_ptr<IShellFolder> fsFolder;
+    if (fsPath[0] && SUCCEEDED(SHGetDesktopFolder(desktop.put())) && desktop &&
+        SUCCEEDED(SHParseDisplayName(fsPath, nullptr, &pidl, 0, nullptr)) &&
+        pidl &&
+        SUCCEEDED(desktop->BindToObject(pidl, nullptr,
+                                        IID_PPV_ARGS(fsFolder.put()))) &&
+        fsFolder) {
+        void** vtable = *(void***)fsFolder.get();
+        WindhawkUtils::SetFunctionHook((EnumObjects_t)vtable[kVtblEnumObjects],
+                                       EnumObjects_Hook, &EnumObjects_Orig);
+        WindhawkUtils::SetFunctionHook((CompareIDs_t)vtable[kVtblCompareIDs],
+                                       CompareIDs_Hook, &CompareIDs_Orig);
+        WindhawkUtils::SetFunctionHook(
+            (GetAttributesOf_t)vtable[kVtblGetAttributesOf],
+            GetAttributesOf_Hook, &GetAttributesOf_Orig);
+        WindhawkUtils::SetFunctionHook(
+            (GetUIObjectOf_t)vtable[kVtblGetUIObjectOf], GetUIObjectOf_Hook,
+            &GetUIObjectOf_Orig);
+        WindhawkUtils::SetFunctionHook(
+            (GetDisplayNameOf_t)vtable[kVtblGetDisplayNameOf],
+            GetDisplayNameOf_Hook, &GetDisplayNameOf_Orig);
+        Wh_Log(L"Enumeration timeout hooks installed on CFSFolder vtable %p",
+               vtable);
+    } else {
+        Wh_Log(L"InitEnumTimeoutHooks: failed to resolve CFSFolder vtable");
+    }
+
+    if (pidl) {
+        ILFree(pidl);
+    }
+    fsFolder = nullptr;
+    desktop = nullptr;
+
+    if (comInited) {
+        CoUninitialize();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // The cascading folder menu (adapted from folder_menu.c / "Quick Folder Menu").
 
 // Tears the menu band down. Used both when another window takes the foreground
@@ -972,6 +1449,106 @@ static HWND GetMenuBandWindow(IMenuBand* band) {
         oleWindow->GetWindow(&hwnd);
     }
     return hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+}
+
+// The shell menu band hosts its item toolbar inside a standard Pager control
+// (WC_PAGESCROLLER, class "SysPager"); this is its window class name.
+static constexpr WCHAR kPagerClass[] = L"SysPager";
+
+// Walks up from `hwnd` (inclusive) to the menu's Pager control, or nullptr.
+static HWND FindMenuPagerFromWindow(HWND hwnd) {
+    for (; hwnd; hwnd = GetParent(hwnd)) {
+        WCHAR cls[64];
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+            wcscmp(cls, kPagerClass) == 0) {
+            return hwnd;
+        }
+    }
+    return nullptr;
+}
+
+// Depth-first search for the first descendant of `parent` with the given class.
+static HWND FindDescendantOfClass(HWND parent, PCWSTR className) {
+    for (HWND child = GetWindow(parent, GW_CHILD); child;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        WCHAR cls[64];
+        if (GetClassNameW(child, cls, ARRAYSIZE(cls)) &&
+            wcscmp(cls, className) == 0) {
+            return child;
+        }
+        if (HWND found = FindDescendantOfClass(child, className)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+// Scrolls a long folder menu with the mouse wheel. The menu band has no native
+// wheel support: it parks its (taller-than-screen) item toolbar in a Pager
+// control whose top and bottom arrows are the only built-in way to scroll, and
+// neither the toolbar nor the pager reacts to the wheel. Translate wheel
+// notches into Pager scroll-position changes (PGM_SETPOS), scaled by the
+// toolbar's row height so a notch moves a few items.
+static void ScrollMenuWithWheel(HWND pager, WPARAM wheelWParam) {
+    UINT linesPerNotch = 3;
+    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &linesPerNotch, 0);
+    if (linesPerNotch == 0) {
+        return;  // Wheel scrolling is turned off system-wide.
+    }
+    if (linesPerNotch == WHEEL_PAGESCROLL) {
+        linesPerNotch = 5;  // "One screen" per notch; approximate for a menu.
+    }
+
+    HWND toolbar = GetWindow(pager, GW_CHILD);
+    if (!toolbar) {
+        return;
+    }
+
+    // Nothing to scroll unless the toolbar is taller than the pager's viewport.
+    // maxPos matches the pager's own internal clamp (child height minus pager
+    // client height). Poking PGM_SETPOS when the menu already fits makes the
+    // pager flash a scroll arrow, so bail out (without consuming the delta)
+    // when it is not scrollable.
+    RECT pagerRc = {};
+    RECT toolbarRc = {};
+    GetClientRect(pager, &pagerRc);
+    GetWindowRect(toolbar, &toolbarRc);
+    int maxPos = (toolbarRc.bottom - toolbarRc.top) - pagerRc.bottom;
+    if (maxPos <= 0) {
+        return;
+    }
+
+    // Accumulate sub-notch deltas so high-resolution wheels and touchpads still
+    // step smoothly.
+    static int s_accumulatedDelta;
+    s_accumulatedDelta += GET_WHEEL_DELTA_WPARAM(wheelWParam);
+    int notches = s_accumulatedDelta / WHEEL_DELTA;
+    s_accumulatedDelta -= notches * WHEEL_DELTA;
+    if (notches == 0) {
+        return;
+    }
+
+    // Step by the toolbar's row height; fall back to a sane default.
+    int itemHeight = 20;
+    if (SendMessageW(toolbar, TB_BUTTONCOUNT, 0, 0) > 0) {
+        RECT br = {};
+        if (SendMessageW(toolbar, TB_GETITEMRECT, 0, (LPARAM)&br) &&
+            br.bottom > br.top) {
+            itemHeight = br.bottom - br.top;
+        }
+    }
+
+    // Positive delta (wheel up) scrolls toward the top, i.e. a smaller pos.
+    int pos = (int)SendMessageW(pager, PGM_GETPOS, 0, 0);
+    int newPos = pos - notches * (int)linesPerNotch * itemHeight;
+    if (newPos < 0) {
+        newPos = 0;
+    } else if (newPos > maxPos) {
+        newPos = maxPos;
+    }
+    if (newPos != pos) {
+        SendMessageW(pager, PGM_SETPOS, 0, newPos);
+    }
 }
 
 static VOID CALLBACK ForegroundChangedProc(HWINEVENTHOOK hook,
@@ -1116,6 +1693,33 @@ static void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
                 // it is consumed here, so apply it now.
                 LoadSettings();
                 continue;
+            }
+            if (msg.message == WM_MOUSEWHEEL) {
+                // The shell menu band ignores the wheel; scroll the menu under
+                // the pointer (or, failing that, the focused menu) ourselves by
+                // driving its Pager control. Prefer the menu under the pointer
+                // so a hovered submenu scrolls rather than its parent.
+                // WM_MOUSEWHEEL carries the pointer position (screen coords) at
+                // the moment of the event; use it rather than the current,
+                // possibly-moved, cursor position.
+                POINT pt = {GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam)};
+                HWND under = WindowFromPoint(pt);
+                HWND pager = FindMenuPagerFromWindow(under);
+                if (!pager) {
+                    pager = FindMenuPagerFromWindow(msg.hwnd);
+                }
+                if (!pager) {
+                    HWND root = under ? GetAncestor(under, GA_ROOT) : nullptr;
+                    if (root) {
+                        pager = FindDescendantOfClass(root, kPagerClass);
+                    }
+                }
+                if (pager) {
+                    ScrollMenuWithWheel(pager, msg.wParam);
+                    continue;
+                }
+                // No menu pager to drive; fall through and let the message go
+                // through normal menu handling rather than swallowing it.
             }
 
             LRESULT lr;
@@ -1290,16 +1894,38 @@ static void ShowChevronForItem(PIDLIST_ABSOLUTE childAbs, RECT itemRect) {
     g_hoverItemRect = itemRect;
 
     UINT dpi = GetDpiForRect(itemRect);
-    int size = MulDiv(g_iconSize, dpi, 96);
+    int size = MulDiv(g_settings.iconSize, dpi, 96);
     int margin = MulDiv(2, dpi, 96);
-    int x = itemRect.right - size - margin;
-    int y = itemRect.bottom - size - margin;
-    if (x < itemRect.left) {
-        x = itemRect.left;
+
+    bool left = g_settings.position == ButtonPosition::leftBottom ||
+                g_settings.position == ButtonPosition::leftTop;
+    bool top = g_settings.position == ButtonPosition::leftTop ||
+               g_settings.position == ButtonPosition::rightTop;
+
+    int x;
+    if (left) {
+        x = itemRect.left + margin;
+    } else {
+        x = itemRect.right - size - margin;
+        if (x < itemRect.left) {
+            x = itemRect.left;
+        }
     }
-    if (y < itemRect.top) {
-        y = itemRect.top;
+
+    int y;
+    if (top) {
+        y = itemRect.top + margin;
+    } else {
+        y = itemRect.bottom - size - margin;
+        if (y < itemRect.top) {
+            y = itemRect.top;
+        }
     }
+
+    // Apply the user-configured offset (DPI-scaled). Positive moves right/down.
+    x += MulDiv(g_settings.offsetX, dpi, 96);
+    y += MulDiv(g_settings.offsetY, dpi, 96);
+
     SetRect(&g_chevronRect, x, y, x + size, y + size);
 
     // UpdateLayeredWindow (inside RenderChevron) sets the position, size, and
@@ -1514,17 +2140,34 @@ static VOID CALLBACK ActivationChangedProc(HWINEVENTHOOK hook,
         return;
     }
 
-    // Ignore our own windows (the button or the popup) taking the foreground;
-    // they are part of the mod's UI, so a failed/closing popup must not look
-    // like a switch away from Explorer and deactivate the mod.
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hwnd, &processId);
-    if (processId == GetCurrentProcessId()) {
+    // The EVENT_SYSTEM_FOREGROUND hwnd is only a trigger, not a reliable answer
+    // to "what is the foreground now". It is delivered asynchronously
+    // (WINEVENT_OUTOFCONTEXT), and the shell's foreground-transition windows -
+    // the alt+tab / Task View host (XamlExplorerHostIslandWindow) and the
+    // ForegroundStaging helper - briefly become the foreground window during a
+    // switch, so the event can carry a window that is already superseded by the
+    // time we run, with no later event to correct it. Trusting the event hwnd
+    // then latches the mod off (it stops working after alt+tab). Classify the
+    // *actual* current foreground instead, so the handler is self-correcting
+    // against stale or out-of-order events.
+    HWND fg = GetForegroundWindow();
+    if (!fg) {
+        // Nobody owns the foreground for an instant mid-transition; a later
+        // event reports the settled window. Leave the current state untouched.
+        return;
+    }
+
+    // Ignore our own windows (the button or a closing popup) being foreground;
+    // they are part of the mod's UI, so they must not look like a switch away
+    // from Explorer and deactivate the mod.
+    DWORD fgProcessId = 0;
+    GetWindowThreadProcessId(fg, &fgProcessId);
+    if (fgProcessId == GetCurrentProcessId()) {
         return;
     }
 
     bool isDesktop = false;
-    g_active = hwnd && IsExplorerOrDesktopRoot(hwnd, &isDesktop);
+    g_active = IsExplorerOrDesktopRoot(fg, &isDesktop);
     SetRawInputActive(g_active);
     if (!g_active) {
         HideChevron();
@@ -1635,8 +2278,8 @@ static DWORD WINAPI UiThreadProc(LPVOID param) {
     // rounded button; content is supplied by RenderChevron.
     g_chevronWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED,
-        wcChevron.lpszClassName, L"", WS_POPUP, 0, 0, g_iconSize, g_iconSize,
-        nullptr, nullptr, g_hInst, nullptr);
+        wcChevron.lpszClassName, L"", WS_POPUP, 0, 0, g_settings.iconSize,
+        g_settings.iconSize, nullptr, nullptr, g_hInst, nullptr);
 
     // Hidden window that receives raw mouse input (movement + wheel) even when
     // in the background, replacing any polling. Raw input is only registered
@@ -1730,6 +2373,7 @@ BOOL WhTool_ModInit() {
     LoadSettings();
 
     InitMenuColorHooks();
+    InitEnumTimeoutHooks();
 
     InitializeCriticalSection(&g_snapshotLock);
 
