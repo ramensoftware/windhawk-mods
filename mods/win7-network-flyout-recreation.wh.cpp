@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.3.8
+// @version        1.3.9
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -65,10 +65,13 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 - useRoundedCorners: false
   $name: Use rounded corners
   $description: Apply rounded corners to the flyout window (disabled by default for classic theme compatibility)
+- win11NetworkIconWidth: 40
+  $name: "[Windows 11] Network icon width (px)"
+  $description: Width in pixels (at 100% scaling) of the leftmost icon in the Windows 11 systray cluster, used to detect clicks on the network icon since Windows 11 merges network/volume/battery into one Quick Settings popup. Increase/decrease if clicks are misdetected.
 */
 // ==/WindhawkModSettings==
 
-// Version 1.3.7 - Robust WLAN connection logic with detailed security profiles and full UI synchronization
+// Version 1.3.9 - Win11 23H2 tray click fix (Quick Settings cluster hook), SSID embedded-NUL sanitization, stale pending-index fix for reconnects
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -196,7 +199,8 @@ struct ModSettings {
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
-} g_Settings = { TRUE, FALSE, TRUE, TRUE, 3000, 0, FALSE, FALSE };
+    int  win11NetworkIconWidth;
+} g_Settings = { TRUE, FALSE, TRUE, TRUE, 3000, 0, FALSE, FALSE, 40 };
 
 static bool s_settingsSavedOnce = false;
 
@@ -209,6 +213,7 @@ void LoadSettings() {
     int raw_language   = Wh_GetIntSetting(L"language");
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
+    int raw_win11IconWidth = Wh_GetIntSetting(L"win11NetworkIconWidth");
 
     if (!s_settingsSavedOnce &&
         raw_intercept == 0 && raw_privacy == 0 &&
@@ -222,6 +227,7 @@ void LoadSettings() {
         g_Settings.language                  = 0;
         g_Settings.enableHotkey              = FALSE;
         g_Settings.useRoundedCorners         = FALSE;
+        g_Settings.win11NetworkIconWidth      = 40;
     } else {
         g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
         g_Settings.privacyMode               = raw_privacy     != 0;
@@ -231,6 +237,7 @@ void LoadSettings() {
         g_Settings.language                  = raw_language;
         g_Settings.enableHotkey              = raw_enableHotkey != 0;
         g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
+        g_Settings.win11NetworkIconWidth      = (raw_win11IconWidth > 0) ? raw_win11IconWidth : 40;
     }
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
@@ -341,6 +348,11 @@ UINT_PTR g_TimeoutTimer = 0;  // Single global timeout timer
 
 HWND G_hSubclassedToolbar = nullptr;
 UINT_PTR G_SubclassId = 0;
+
+// --- Windows 11 23H2: rete/volume/batteria sono un unico controllo XAML
+// ("Impostazioni rapide"), non più icone separate in ToolbarWindow32.
+static HHOOK g_hWin11MouseHook = NULL;
+static HWND  g_hWin11TrayCluster = NULL;
 
 // Mutex per prevenire operazioni concorrenti
 static HANDLE g_hConnectMutex = NULL;
@@ -540,6 +552,8 @@ static const WCHAR* SignalQualityToString(ULONG quality) {
 // -------------------------------------------------------
 // Prototypes
 // -------------------------------------------------------
+static bool IsExplorerProcess();
+LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 void RefreshWifiData(HANDLE hClient);
 void UpdateLayoutGeometry();
 void ConnectToNetwork(int index);
@@ -871,8 +885,6 @@ void RefreshWifiData(HANDLE hClient) {
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     if (WlanEnumInterfaces(hClient, NULL, &pIfList) != ERROR_SUCCESS) return;
 
-    
-
     WifiNetworkItem tempList[50];
     int tempCount = 0;
     ZeroMemory(tempList, sizeof(tempList));
@@ -901,9 +913,21 @@ void RefreshWifiData(HANDLE hClient) {
                         for (size_t k = 0; k < copyLen; k++)
                             tempList[tempCount].ssid[k] = (WCHAR)(BYTE)network.dot11Ssid.ucSSID[k];
                         tempList[tempCount].ssid[copyLen] = L'\0';
+                        converted = (int)copyLen;
                     } else {
                         tempList[tempCount].ssid[converted] = L'\0';
                     }
+                    // Alcuni dispositivi (es. hotspot Xiaomi/Redmi) trasmettono SSID
+                    // con un byte NUL incorporato a metà nome ("Redmi 2" arriva come
+                    // "Redmi\0 2"). lstrlenW/wcscmp/TextOutW si fermerebbero al primo
+                    // NUL, troncando il nome a "Redmi". Sostituiamo eventuali NUL
+                    // interni con uno spazio, lasciando il terminatore reale solo
+                    // alla fine della stringa decodificata.
+                    for (int k = 0; k < converted; k++) {
+                        if (tempList[tempCount].ssid[k] == L'\0')
+                            tempList[tempCount].ssid[k] = L' ';
+                    }
+                    tempList[tempCount].ssid[converted] = L'\0';
                 }
 
                 // Check duplicates
@@ -966,6 +990,14 @@ void RefreshWifiData(HANDLE hClient) {
     // Preserve connection state for pending operations
     EnterCriticalSection(&g_Ctx.csLock);
     if (tempCount > 0 && tempCount <= 50) {
+        // Salva l'SSID della rete "in attesa" PRIMA di sovrascrivere l'array:
+        // la scansione Wi-Fi non garantisce lo stesso ordine ad ogni refresh.
+        WCHAR pendingSsid[33] = {0};
+        BOOL hadPending = (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount);
+        if (hadPending) {
+            StringCchCopyW(pendingSsid, ARRAYSIZE(pendingSsid), g_NetworkList[g_PendingConnectIndex].ssid);
+        }
+
         // Keep existing connection states for networks being connected/disconnected
         for (int t = 0; t < tempCount; t++) {
             for (int e = 0; e < g_NetworkCount; e++) {
@@ -985,10 +1017,24 @@ void RefreshWifiData(HANDLE hClient) {
         }
         CopyMemory(g_NetworkList, tempList, sizeof(WifiNetworkItem) * tempCount);
         g_NetworkCount = tempCount;
+
+        // Riallinea g_PendingConnectIndex al nuovo indice della stessa rete.
+        // Senza questo, WlanNotificationCallback aggiorna lo stato della rete
+        // sbagliata dopo che l'ordine della scansione cambia, e la voce
+        // realmente in connessione resta bloccata su "Connessione in corso..."
+        // fino al timeout.
+        if (hadPending) {
+            int newIndex = -1;
+            for (int n = 0; n < g_NetworkCount; n++) {
+                if (wcscmp(g_NetworkList[n].ssid, pendingSsid) == 0) { newIndex = n; break; }
+            }
+            g_PendingConnectIndex = newIndex;
+        }
     } else if (tempCount == 0) {
         if (now - lastValidRefresh > 30000) {
             ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
             g_NetworkCount = 0;
+            g_PendingConnectIndex = -1;
         }
     }
     lastValidRefresh = now;
@@ -1869,13 +1915,20 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONERROR);
                 }
             }
+            // L'operazione è davvero conclusa (con errore): solo qui possiamo
+            // fermare il timer di sicurezza del timeout.
+            if (g_TimeoutTimer) {
+                KillTimer(hwnd, g_TimeoutTimer);
+                g_TimeoutTimer = 0;
+            }
         }
-        // Se opSuccess == TRUE, non fare nulla: WlanNotificationCallback aggiornerà lo stato
+        // Se opSuccess == TRUE, WlanConnect() ha solo "accodato" la richiesta:
+        // la vera connessione arriva più tardi via WlanNotificationCallback.
+        // NON fermare il timer qui: se la notifica non arriva mai (capita
+        // soprattutto su riconnessioni a reti già note), la voce resterebbe
+        // bloccata su "Connessione in corso..." per sempre invece di scattare
+        // il timeout dopo 15s.
         
-        if (g_TimeoutTimer) {
-            KillTimer(hwnd, g_TimeoutTimer);
-            g_TimeoutTimer = 0;
-        }
         RefreshWifiData(g_Ctx.hWlanClient);
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
@@ -2263,9 +2316,8 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
 }
-
 // -------------------------------------------------------
-// ToolbarWindow32 subclassing (unchanged)
+// ToolbarWindow32 subclassing
 // -------------------------------------------------------
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
@@ -2307,7 +2359,71 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
+// -------------------------------------------------------
+// ToolbarWindow32 subclassing
+// -------------------------------------------------------
+static LRESULT CALLBACK Win11TrayMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && wParam == WM_LBUTTONUP && g_Settings.interceptNativeFlyout) {
+        MSLLHOOKSTRUCT* p = (MSLLHOOKSTRUCT*)lParam;
+        if (g_hWin11TrayCluster && IsWindow(g_hWin11TrayCluster)) {
+            RECT rc;
+            if (GetWindowRect(g_hWin11TrayCluster, &rc) && PtInRect(&rc, p->pt)) {
+                UINT dpi = 96;
+                HDC hdc = GetDC(NULL);
+                if (hdc) { dpi = (UINT)GetDeviceCaps(hdc, LOGPIXELSX); ReleaseDC(NULL, hdc); }
+                int iconW = MulDiv(g_Settings.win11NetworkIconWidth, (int)dpi, 96);
+                if (p->pt.x >= rc.left && p->pt.x < rc.left + iconW) {
+                    static DWORD lastClickTime = 0;
+                    DWORD now = GetTickCount();
+                    if (now - lastClickTime > CLICK_DEBOUNCE_MS) {
+                        lastClickTime = now;
+                        if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout)) {
+                            ShowWindow(g_hWndFlyout, SW_HIDE);
+                            ClearKeyboardFocus();
+                        } else {
+                            ToggleFlyoutWindow();
+                        }
+                    }
+                    return 1; // Blocca il click: "Impostazioni rapide" non si apre
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_hWin11MouseHook, nCode, wParam, lParam);
+}
 
+// Cerca solo la finestra del cluster (richiamabile da qualunque thread, anche
+// durante i retry). L'hook va installato una sola volta e solo dal thread
+// dedicato (HotkeyThreadProc), perché un WH_MOUSE_LL viene "pompato"
+// esclusivamente dal thread che lo ha creato.
+static HWND FindWin11TrayClusterWindow() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!hTray) return NULL;
+    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
+    if (!hNotify) return NULL;
+
+    HWND hChild = NULL;
+    while ((hChild = FindWindowExW(hNotify, hChild, NULL, NULL)) != NULL) {
+        WCHAR cls[128] = {0};
+        GetClassNameW(hChild, cls, ARRAYSIZE(cls));
+        if (wcsstr(cls, L"Composition") || wcsstr(cls, L"Xaml") || wcsstr(cls, L"DesktopWindowContentBridge")) {
+            return hChild;
+        }
+    }
+    return NULL;
+}
+
+static void RefreshWin11TrayCluster() {
+    g_hWin11TrayCluster = FindWin11TrayClusterWindow();
+}
+
+static void RemoveWin11TrayMouseHook() {
+    if (g_hWin11MouseHook) {
+        UnhookWindowsHookEx(g_hWin11MouseHook);
+        g_hWin11MouseHook = NULL;
+    }
+    g_hWin11TrayCluster = NULL;
+}
 static bool IsExplorerProcess() {
     WCHAR exePath[MAX_PATH] = {};
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -2315,9 +2431,14 @@ static bool IsExplorerProcess() {
     name = name ? name + 1 : exePath;
     return _wcsicmp(name, L"explorer.exe") == 0;
 }
+static BOOL InstallTrayInterceptionInternal() {
+    if (!IsExplorerProcess()) return TRUE;
 
-BOOL InstallTrayInterception() {
-    if (!IsExplorerProcess()) return TRUE; // non applicabile qui, non deve riprovare
+    if (g_isWin11) {
+        RefreshWin11TrayCluster();
+        return g_hWin11TrayCluster != NULL;
+    }
+
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (!hTray) return FALSE;
     HWND hNotify  = FindWindowExW(hTray,    NULL, L"TrayNotifyWnd",   NULL);
@@ -2330,7 +2451,16 @@ BOOL InstallTrayInterception() {
     return TRUE;
 }
 
+BOOL InstallTrayInterception() {
+    // Wrapper per compatibilità con codice esistente
+    return InstallTrayInterceptionInternal();
+}
+
 void RemoveTrayInterception() {
+    if (g_isWin11) {
+        RemoveWin11TrayMouseHook();
+        return;
+    }
     if (G_hSubclassedToolbar) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
         G_SubclassId = 0;
@@ -2406,14 +2536,21 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
+    // Su Win11 l'hook globale del mouse va installato qui: questo thread ha
+    // un loop di messaggi sempre attivo, requisito per i WH_MOUSE_LL.
+    if (g_isWin11 && !g_hWin11MouseHook) {
+        g_hWin11MouseHook = SetWindowsHookExW(WH_MOUSE_LL, Win11TrayMouseHookProc, NULL, 0);
+    }
+
     // Timer senza HWND: i WM_TIMER finiscono comunque nella coda messaggi del thread.
     // Riprova ad aggganciarsi alla tray ogni 1.5s finché non riesce.
-    UINT_PTR trayRetryTimer = G_hSubclassedToolbar ? 0 : SetTimer(NULL, 0, 1500, NULL);
+    BOOL trayAlreadyHooked = g_isWin11 ? (g_hWin11TrayCluster != NULL) : (G_hSubclassedToolbar != NULL);
+    UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
 
     MSG msg = {0};
     while (GetMessageW(&msg, NULL, 0, 0)) {
         if (trayRetryTimer && msg.message == WM_TIMER && msg.wParam == trayRetryTimer) {
-            if (ctx->isUninitializing || InstallTrayInterception()) {
+            if (ctx->isUninitializing || InstallTrayInterceptionInternal()) {
                 KillTimer(NULL, trayRetryTimer);
                 trayRetryTimer = 0;
             }
@@ -2425,7 +2562,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             if (G_hSubclassedToolbar) RemoveTrayInterception();
             Sleep(1000);
-            if (!InstallTrayInterception() && !trayRetryTimer) {
+            if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
@@ -2468,7 +2605,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.3.7 ===");
+    Wh_Log(L"=== Wh_ModInit v1.3.9 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
@@ -2505,7 +2642,7 @@ BOOL Wh_ModInit() {
     }
     
     if (!IsExplorerProcess()) {
-        InstallTrayInterception();
+        InstallTrayInterceptionInternal();
         g_Initialized = TRUE;
         return TRUE;
     }
@@ -2524,7 +2661,7 @@ BOOL Wh_ModInit() {
         }
     }
     
-    InstallTrayInterception(); // tentativo immediato; se fallisce ci pensa il retry nel thread hotkey
+    InstallTrayInterceptionInternal(); // tentativo immediato; se fallisce ci pensa il retry nel thread hotkey
 
     g_Ctx.hHotkeyThread = CreateThread(NULL,0,HotkeyThreadProc,&g_Ctx,0,&g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
