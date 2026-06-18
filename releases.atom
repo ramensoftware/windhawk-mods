@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-17T19:30:26.000Z</updated>
+    <updated>2026-06-18T08:13:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VS Code Dark Non-client Frame 1.0]]></title>
+        <id>https://windhawk.net/mods/vscode-dark-nonclient-frame#bc3d1c8d2415c4adb2a06b222c6e85883a07342e</id>
+        <link href="https://windhawk.net/mods/vscode-dark-nonclient-frame"/>
+        <updated>2026-06-18T08:13:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="vscodedarknonclientframe">VS Code Dark Non-client Frame</h1>
+<p>Forces Visual Studio Code's Windows non-client frame into immersive dark mode.</p>
+<p>This fixes the 2px light gray bottom edge that can appear when VS Code is maximized with the custom title bar in Windows light mode, especially with a hidden or transparent taskbar.</p>
+<p>Before:</p>
+<p><img src="https://i.imgur.com/DVrOPag.png" alt="Before" /></p>
+<p>After:</p>
+<p><img src="https://i.imgur.com/ldT3xJt.png" alt="After" /></p>
+<p>The mod targets only <code>Code.exe</code> by default. Users of VS Code Insiders, VSCodium, or renamed/portable builds can add the relevant executable name to the mod's custom include list.</p>
+<p>When the mod is disabled, it stops overriding VS Code's frame mode. Already affected windows may keep their current frame mode until VS Code applies a new value, for example after a theme or window state change.</p>]]></content>
+        <author>
+            <name>v1b3s0</name>
+            <uri>https://github.com/v1b3s0</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-vd-switcher#5e4d697db70f4e4ab70fabb8a82bde7abf198f58</id>
@@ -1032,30 +1051,6 @@ list.</p>]]></content>
         <author>
             <name>Asteski</name>
             <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Desktop Icon Text and Shortcut Arrows 1.5.0]]></title>
-        <id>https://windhawk.net/mods/hide-desktop-icon-text#01fbe027ae353a48edeb7cb6c0b74643429f57d6</id>
-        <link href="https://windhawk.net/mods/hide-desktop-icon-text"/>
-        <updated>2026-06-04T11:32:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Hide Icon Text</strong>: Hides text labels for files and shortcuts on the desktop while preserving folder names.</li>
-<li><strong>Hide Shortcut Arrows</strong>: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.</li>
-</ul>
-<h3 id="notes">Notes</h3>
-<ul>
-<li>The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.</li>
-<li>Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.</li>
-</ul>
-<h3 id="knownlimitation">Known limitation</h3>
-<p>Folder detection matches the drawn text against actual desktop folder names. If a <em>file</em> has
-exactly the same name as a <em>folder</em> on the desktop, that file's label will also be kept.</p>]]></content>
-        <author>
-            <name>kivsak</name>
-            <uri>https://github.com/kivsak</uri>
         </author>
     </entry>
 </feed>
