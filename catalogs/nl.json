@@ -13109,7 +13109,7 @@
           0
         ],
         "ratingUsers": 0,
-        "updated": 1781770436000,
+        "updated": 1781773581000,
         "users": 0
       },
       "metadata": {
@@ -13122,7 +13122,7 @@
         ],
         "license": "MIT",
         "name": "VS Code Dark Non-client Frame",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "vscode-tweaker": {
