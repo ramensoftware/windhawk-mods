@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-18T08:13:56.000Z</updated>
+    <updated>2026-06-18T08:29:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hover Text Magnifier (macOS-style) 1.3.4]]></title>
+        <id>https://windhawk.net/mods/hover-text-magnifier#c38ae45e176d59ab0176e9ae39de93e3bf1a8400</id>
+        <link href="https://windhawk.net/mods/hover-text-magnifier"/>
+        <updated>2026-06-18T08:29:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>add shell32 linkage for CommandLineToArgvW</li>
+<li>pass immutable UIA request snapshots instead of reading live settings from the UIA thread</li>
+<li>reject stale UIA results by sequence, point, settings generation, and age</li>
+<li>remove the unload-time worker detach path and join the worker to avoid unloading the DLL under a live thread</li>
+<li>reduce repeated magnifier filter setup and non-erasing repaint invalidation</li>
+</ul>]]></content>
+        <author>
+            <name>Math Shamenson</name>
+            <uri>https://github.com/insane66613</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VS Code Dark Non-client Frame 1.0]]></title>
         <id>https://windhawk.net/mods/vscode-dark-nonclient-frame#bc3d1c8d2415c4adb2a06b222c6e85883a07342e</id>
@@ -753,37 +770,6 @@ re-enter the hook logic.</p>]]></content>
         <author>
             <name>Loerei</name>
             <uri>https://github.com/loerei</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Antigravity IDE Portable 1.0.260614]]></title>
-        <id>https://windhawk.net/mods/antigravity-portable#7b625ccab8e0688bdd65265724b76a02b5e9728d</id>
-        <link href="https://windhawk.net/mods/antigravity-portable"/>
-        <updated>2026-06-15T13:39:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="antigravityideportable">Antigravity IDE Portable</h1>
-<p>Make Antigravity IDE portable by redirecting user data and extensions directories via hooking <code>GetCommandLineW</code>.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Uses <code>../data/</code> relative to the exe directory as the default data directory.</li>
-<li>Automatically converts relative paths to absolute paths to ensure the program recognizes them correctly.</li>
-<li>Keeps original parameters unchanged if <code>--user-data-dir</code> or <code>--extensions-dir</code> is already present.</li>
-<li>Detects and skips child processes (those with <code>--type=</code> or <code>--node-ipc</code> in their command line).</li>
-<li>Supports configuring the data directory in Windhawk settings.</li>
-</ul>
-<hr />
-<h1 id="antigravityide">Antigravity IDE 便携版</h1>
-<p>这个 Mod 为 Antigravity IDE 制作便携版。通过 Hook <code>GetCommandLineW</code> 在启动参数中注入 <code>--user-data-dir</code> 和 <code>--extensions-dir</code>。</p>
-<h2 id="">功能特性：</h2>
-<ul>
-<li>默认使用相对于 exe 所在目录的 <code>../data/</code> 作为数据目录。</li>
-<li>自动将相对路径转换为绝对路径，确保程序能够正确识别。</li>
-<li>如果原启动参数中已经包含了 <code>--user-data-dir</code> 或 <code>--extensions-dir</code>，则不会修改对应的参数。</li>
-<li>自动检测并跳过子进程（即启动参数中含有 <code>--type=</code> 或 <code>--node-ipc</code> 的进程）。</li>
-<li>支持在 Windhawk 设置中自定义数据目录。</li>
-</ul>]]></content>
-        <author>
-            <name>easyatm</name>
-            <uri>https://github.com/easyatm</uri>
         </author>
     </entry>
 </feed>

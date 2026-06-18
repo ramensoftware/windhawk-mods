@@ -6049,7 +6049,7 @@
           7
         ],
         "ratingUsers": 14,
-        "updated": 1769372660000,
+        "updated": 1781771382000,
         "users": 494
       },
       "metadata": {
@@ -6058,7 +6058,7 @@
           "x86-64"
         ],
         "author": "Math Shamenson",
-        "compilerOptions": "-lgdi32 -luxtheme -lole32 -loleaut32 -luuid",
+        "compilerOptions": "-lgdi32 -luxtheme -lole32 -loleaut32 -luuid -lshell32",
         "description": "On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.",
         "github": "https://github.com/insane66613",
         "include": [
@@ -6066,7 +6066,7 @@
         ],
         "license": "MIT",
         "name": "Hover Text Magnifier (macOS-style)",
-        "version": "1.3.2"
+        "version": "1.3.4"
       }
     },
     "icon-customizer": {
