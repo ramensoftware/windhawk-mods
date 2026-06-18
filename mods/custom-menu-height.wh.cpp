@@ -31,12 +31,12 @@ both menu heights to any custom value.
 
 ## Recommended mods
 Enhance the overall context menu experience with these complementary mods:
-| Mod | Author |
-| :-- | :----- |
-| [Classic context menu on Windows 11](https://windhawk.net/mods/explorer-context-menu-classic) | m417z |
-| [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius) | m417z |
-| [Dark mode context menus](https://windhawk.net/mods/dark-menus) | Mgg Sk |
-| [Remove Context Menu Items](https://windhawk.net/mods/remove-context-menu-items) | Armaninyow |
+| Mod | Author | Note |
+| :-- | :----- | :--- |
+| [Classic context menu on Windows 11](https://windhawk.net/mods/explorer-context-menu-classic) | m417z | Windows 11 or later version required |
+| [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius) | m417z | Windows 11 or later version required |
+| [Dark mode context menus](https://windhawk.net/mods/dark-menus) | Mgg Sk | Windows 10 or later version required |
+| [Remove Context Menu Items](https://windhawk.net/mods/remove-context-menu-items) | Armaninyow | - |
 
 ## Compatibility note: Immersive menus
 To ensure the custom context menu item height functions properly within File
