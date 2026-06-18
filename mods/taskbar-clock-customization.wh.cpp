@@ -2563,20 +2563,22 @@ void RefreshMediaData() {
         auto artist = mediaProperties.Artist();
         auto album = mediaProperties.AlbumTitle();
 
+        // Create processed title and artist with bracket removal for individual and combined display
+        std::wstring processedArtist = RemoveBracketsFromString(artist);
+        std::wstring processedTitle = RemoveBracketsFromString(title);
+
         StringCopyTruncatedWithEllipsis(g_mediaTitleFormatted.buffer,
                                         ARRAYSIZE(g_mediaTitleFormatted.buffer),
-                                        title.c_str());
-        StringCopyTruncatedWithEllipsis(
-            g_mediaArtistFormatted.buffer,
-            ARRAYSIZE(g_mediaArtistFormatted.buffer), artist.c_str());
+                                        processedTitle.c_str());
+        StringCopyTruncatedWithEllipsis(g_mediaArtistFormatted.buffer,
+                                        ARRAYSIZE(g_mediaArtistFormatted.buffer),
+                                        processedArtist.c_str());
         StringCopyTruncatedWithEllipsis(g_mediaAlbumFormatted.buffer,
                                         ARRAYSIZE(g_mediaAlbumFormatted.buffer),
                                         album.c_str());
 
         // Create combined info with bracket removal
-        std::wstring processedArtist = RemoveBracketsFromString(artist);
-        std::wstring processedTitle = RemoveBracketsFromString(title);
-
+        
         std::wstring combinedInfo;
         if (!processedArtist.empty() && !processedTitle.empty()) {
             combinedInfo = processedArtist + L" - " + processedTitle;
