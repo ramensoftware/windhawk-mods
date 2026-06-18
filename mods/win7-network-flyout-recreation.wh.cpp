@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.3.9
+// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout. It also includes the Windows 8 flyout as a configurable fallback
+// @version        1.4.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -13,7 +13,7 @@
 /*
 # Windows 7 Network Flyout Recreation
 
-This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout with a classic interface.
+This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the classic Windows 10 taskbar installed).
 
 ## Features
 
@@ -65,13 +65,9 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 - useRoundedCorners: false
   $name: Use rounded corners
   $description: Apply rounded corners to the flyout window (disabled by default for classic theme compatibility)
-- win11NetworkIconWidth: 40
-  $name: "[Windows 11] Network icon width (px)"
-  $description: Width in pixels (at 100% scaling) of the leftmost icon in the Windows 11 systray cluster, used to detect clicks on the network icon since Windows 11 merges network/volume/battery into one Quick Settings popup. Increase/decrease if clicks are misdetected.
 */
 // ==/WindhawkModSettings==
 
-// Version 1.3.9 - Win11 23H2 tray click fix (Quick Settings cluster hook), SSID embedded-NUL sanitization, stale pending-index fix for reconnects
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -301,8 +297,10 @@ static void DetectWindowsVersion() {
         if (fn) fn(&osvi);
     }
     g_isWin11 = (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22000);
+    Wh_Log(L"Detected %s (build %lu.%lu.%lu)", 
+           g_isWin11 ? L"Windows 11" : L"Windows 10",
+           osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
 }
-
 // -------------------------------------------------------
 // Global Variables (cleaned up)
 // -------------------------------------------------------
@@ -349,10 +347,7 @@ UINT_PTR g_TimeoutTimer = 0;  // Single global timeout timer
 HWND G_hSubclassedToolbar = nullptr;
 UINT_PTR G_SubclassId = 0;
 
-// --- Windows 11 23H2: rete/volume/batteria sono un unico controllo XAML
-// ("Impostazioni rapide"), non più icone separate in ToolbarWindow32.
-static HHOOK g_hWin11MouseHook = NULL;
-static HWND  g_hWin11TrayCluster = NULL;
+
 
 // Mutex per prevenire operazioni concorrenti
 static HANDLE g_hConnectMutex = NULL;
@@ -2359,71 +2354,8 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
-// -------------------------------------------------------
-// ToolbarWindow32 subclassing
-// -------------------------------------------------------
-static LRESULT CALLBACK Win11TrayMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && wParam == WM_LBUTTONUP && g_Settings.interceptNativeFlyout) {
-        MSLLHOOKSTRUCT* p = (MSLLHOOKSTRUCT*)lParam;
-        if (g_hWin11TrayCluster && IsWindow(g_hWin11TrayCluster)) {
-            RECT rc;
-            if (GetWindowRect(g_hWin11TrayCluster, &rc) && PtInRect(&rc, p->pt)) {
-                UINT dpi = 96;
-                HDC hdc = GetDC(NULL);
-                if (hdc) { dpi = (UINT)GetDeviceCaps(hdc, LOGPIXELSX); ReleaseDC(NULL, hdc); }
-                int iconW = MulDiv(g_Settings.win11NetworkIconWidth, (int)dpi, 96);
-                if (p->pt.x >= rc.left && p->pt.x < rc.left + iconW) {
-                    static DWORD lastClickTime = 0;
-                    DWORD now = GetTickCount();
-                    if (now - lastClickTime > CLICK_DEBOUNCE_MS) {
-                        lastClickTime = now;
-                        if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout)) {
-                            ShowWindow(g_hWndFlyout, SW_HIDE);
-                            ClearKeyboardFocus();
-                        } else {
-                            ToggleFlyoutWindow();
-                        }
-                    }
-                    return 1; // Blocca il click: "Impostazioni rapide" non si apre
-                }
-            }
-        }
-    }
-    return CallNextHookEx(g_hWin11MouseHook, nCode, wParam, lParam);
-}
 
-// Cerca solo la finestra del cluster (richiamabile da qualunque thread, anche
-// durante i retry). L'hook va installato una sola volta e solo dal thread
-// dedicato (HotkeyThreadProc), perché un WH_MOUSE_LL viene "pompato"
-// esclusivamente dal thread che lo ha creato.
-static HWND FindWin11TrayClusterWindow() {
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray) return NULL;
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (!hNotify) return NULL;
 
-    HWND hChild = NULL;
-    while ((hChild = FindWindowExW(hNotify, hChild, NULL, NULL)) != NULL) {
-        WCHAR cls[128] = {0};
-        GetClassNameW(hChild, cls, ARRAYSIZE(cls));
-        if (wcsstr(cls, L"Composition") || wcsstr(cls, L"Xaml") || wcsstr(cls, L"DesktopWindowContentBridge")) {
-            return hChild;
-        }
-    }
-    return NULL;
-}
-
-static void RefreshWin11TrayCluster() {
-    g_hWin11TrayCluster = FindWin11TrayClusterWindow();
-}
-
-static void RemoveWin11TrayMouseHook() {
-    if (g_hWin11MouseHook) {
-        UnhookWindowsHookEx(g_hWin11MouseHook);
-        g_hWin11MouseHook = NULL;
-    }
-    g_hWin11TrayCluster = NULL;
-}
 static bool IsExplorerProcess() {
     WCHAR exePath[MAX_PATH] = {};
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -2434,33 +2366,35 @@ static bool IsExplorerProcess() {
 static BOOL InstallTrayInterceptionInternal() {
     if (!IsExplorerProcess()) return TRUE;
 
-    if (g_isWin11) {
-        RefreshWin11TrayCluster();
-        return g_hWin11TrayCluster != NULL;
-    }
-
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray) return FALSE;
+    if (!hTray) {
+        Wh_Log(L"Shell_TrayWnd not found");
+        return FALSE;
+    }
+    
     HWND hNotify  = FindWindowExW(hTray,    NULL, L"TrayNotifyWnd",   NULL);
     HWND hSysPager= hNotify ? FindWindowExW(hNotify,  NULL, L"SysPager",        NULL) : NULL;
     HWND hToolbar = hSysPager ? FindWindowExW(hSysPager,NULL, L"ToolbarWindow32", NULL) : NULL;
     HWND hTarget = hToolbar ? hToolbar : (hNotify ? hNotify : hTray);
-    if (!hTarget) return FALSE;
+    
+    if (!hTarget) {
+        Wh_Log(L"No suitable tray window found");
+        return FALSE;
+    }
+    
     G_hSubclassedToolbar = hTarget;
+    Wh_Log(L"Subclassing %s (0x%p)", 
+           hToolbar ? L"ToolbarWindow32" : L"TrayNotifyWnd", hTarget);
+    
     WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (DWORD_PTR)&G_SubclassId);
     return TRUE;
 }
-
 BOOL InstallTrayInterception() {
     // Wrapper per compatibilità con codice esistente
     return InstallTrayInterceptionInternal();
 }
 
 void RemoveTrayInterception() {
-    if (g_isWin11) {
-        RemoveWin11TrayMouseHook();
-        return;
-    }
     if (G_hSubclassedToolbar) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
         G_SubclassId = 0;
@@ -2536,15 +2470,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    // Su Win11 l'hook globale del mouse va installato qui: questo thread ha
-    // un loop di messaggi sempre attivo, requisito per i WH_MOUSE_LL.
-    if (g_isWin11 && !g_hWin11MouseHook) {
-        g_hWin11MouseHook = SetWindowsHookExW(WH_MOUSE_LL, Win11TrayMouseHookProc, NULL, 0);
-    }
-
-    // Timer senza HWND: i WM_TIMER finiscono comunque nella coda messaggi del thread.
-    // Riprova ad aggganciarsi alla tray ogni 1.5s finché non riesce.
-    BOOL trayAlreadyHooked = g_isWin11 ? (g_hWin11TrayCluster != NULL) : (G_hSubclassedToolbar != NULL);
+    BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL);
     UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
 
     MSG msg = {0};
@@ -2605,7 +2531,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.3.9 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
