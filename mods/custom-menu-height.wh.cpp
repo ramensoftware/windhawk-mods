@@ -36,7 +36,7 @@ Enhance the overall context menu experience with these complementary mods:
 | [Classic context menu on Windows 11](https://windhawk.net/mods/explorer-context-menu-classic) | m417z | Requires Windows 11 or later |
 | [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius) | m417z | Requires Windows 11 or later |
 | [Dark mode context menus](https://windhawk.net/mods/dark-menus) | Mgg Sk | Requires Windows 10 version 1809 or later |
-| [Remove Context Menu Items](https://windhawk.net/mods/remove-context-menu-items) | Armaninyow | |
+| [Remove Context Menu Items](https://windhawk.net/mods/remove-context-menu-items) | Armaninyow | - |
 
 ## Compatibility note: Immersive menus
 To ensure the custom context menu item height functions properly within File
