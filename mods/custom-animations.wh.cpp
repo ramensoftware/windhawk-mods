@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id            custom-animations
-// @name          Animation & Wobbly Mod
+// @name          Animation & Wobbly Mod (Pure D2D)
 // @description   Ultra-smooth Open/Close/Minimize animation combined with Wobbly Windows physics. Fully powered by Direct2D.
 // @version       1.3.1
 // @author        Shoaib Hassan
@@ -52,7 +52,7 @@ Both engines are now strictly powered by Direct2D for massive performance gains,
   $name: Bounce Duration (ms)
   $description: How long the bounce effect lasts after the main animation finishes.
 
-- wobbly_enabled: true
+- wobbly_enabled: false
   $name: Enable Wobbly Windows
   $description: Wobble the window when moving or resizing it.
 
@@ -109,6 +109,10 @@ CreateWindowExW_t CreateWindowExW_Original;
 using CreateWindowExA_t = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 CreateWindowExA_t CreateWindowExA_Original;
 
+
+
+
+DWORD WINAPI GhostAnimationThread(LPVOID lpParam);
 // -------------------------------------------------------------------------
 // Globals
 // -------------------------------------------------------------------------
@@ -132,10 +136,21 @@ struct GhostAnimData {
     int bounceDurationMs;
 };
 
-std::unordered_map<HWND, std::pair<HBITMAP, void*>> g_SnapshotCache;
+struct SnapCache { HBITMAP hBmp; void* pBits; int w; int h; };
+std::unordered_map<HWND, SnapCache> g_SnapshotCache;
 std::unordered_map<HWND, RECT> g_RectCache;
 std::unordered_map<HWND, int> g_IconPositions; 
 std::mutex g_CacheMutex;
+std::recursive_mutex g_wobblyMutex;
+
+std::vector<HANDLE> g_animationThreads;
+std::mutex g_threadsMutex;
+std::vector<HWND> g_activeGhosts;
+std::mutex g_ghostMutex;
+std::atomic<bool> g_isUnloading{false};
+HINSTANCE g_hInstance = NULL;
+
+
 
 std::atomic<int> g_durationMs{450};
 std::atomic<int> g_animationStyle{0};
@@ -146,7 +161,7 @@ std::atomic<int> g_bounceDurationMs{300};
 // -------------------------------------------------------------------------
 // Wobbly Windows State
 // -------------------------------------------------------------------------
-bool g_engineInitialized = false;
+std::atomic<bool> g_engineInitialized{false};
 
 UINT g_wmAttach = 0;
 UINT g_wmDetach = 0;
@@ -166,11 +181,11 @@ static const ParameterSet set_3 = { 0.03f, 0.92f, 0.20f, 0.0f, 1000.0f, 0.5f, 0.
 static const ParameterSet set_4 = { 0.01f, 0.97f, 0.25f, 0.0f, 1000.0f, 0.5f, 0.0f, 1000.0f, 0.5f };
 
 static ParameterSet g_params = set_4;
-std::atomic<bool> g_wobblyEnabled{true};
+std::atomic<bool> g_wobblyEnabled{false};
 
 static HWND g_mainHwnd = NULL, g_overlayHwnd = NULL;
 static int g_capX = 0, g_capY = 0, g_capW = 0, g_capH = 0;
-static WobblyInfos g_wwi = { 0 };
+static WobblyInfos g_wwi = {};
 static bool g_isMoving = false, g_isSettling = false;
 static DWORD g_lastTick = 0;
 static LONG_PTR g_oldExStyle = 0;
@@ -385,6 +400,31 @@ void ShowGhostSync(GhostAnimData* data) {
     ReleaseDC(NULL, hScreenDC);
 }
 
+void SpawnAnimationThread(GhostAnimData* data) {
+    
+    std::lock_guard<std::mutex> lock(g_threadsMutex);
+    if (g_isUnloading.load(std::memory_order_relaxed)) {
+        delete data;
+        return;
+    }
+
+    for (auto it = g_animationThreads.begin(); it != g_animationThreads.end(); ) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_animationThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    HANDLE hThread = CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+    if (hThread) {
+        g_animationThreads.push_back(hThread);
+    } else {
+        delete data; // Fallback to prevent memory leak if creation fails
+    }
+}
+
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GhostAnimData* data = (GhostAnimData*)lpParam;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
@@ -467,13 +507,31 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     QueryPerformanceCounter(&qpcStart);
 
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
-    MSG msg;
     BOOL firstFrame = TRUE;
 
-    for (;;) {
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg); DispatchMessage(&msg);
+    if (!rt || !bmpBrush) {
+        if (data->isRising) {
+            SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+            }
         }
+        SetDwmTransitions(data->hRealWnd, TRUE);
+        
+        if (bmpBrush) { bmpBrush->Release(); bmpBrush = nullptr; }
+        if (snapshotBmp) { snapshotBmp->Release(); snapshotBmp = nullptr; }
+        if (rt) { rt->Release(); rt = nullptr; }
+        SelectObject(hMemDC, hOldBmp); DeleteObject(hTargetBmp); DeleteObject(data->hBitmap);
+        DeleteDC(hMemDC); ReleaseDC(NULL, hScreenDC);
+        
+        PostMessage(hGhost, WM_CLOSE, 0, 0);
+        delete data;
+        return 0;
+    }
+
+    for (;;) {
+
+        if (g_isUnloading.load(std::memory_order_relaxed)) break;
 
         QueryPerformanceCounter(&qpcNow);
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
@@ -644,9 +702,9 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
 
     SetDwmTransitions(data->hRealWnd, TRUE);
 
-    if (bmpBrush) bmpBrush->Release();
-    if (snapshotBmp) snapshotBmp->Release();
-    if (rt) rt->Release();
+    if (bmpBrush) { bmpBrush->Release(); bmpBrush = nullptr; }
+    if (snapshotBmp) { snapshotBmp->Release(); snapshotBmp = nullptr; }
+    if (rt) { rt->Release(); rt = nullptr; }
 
     SelectObject(hMemDC, hOldBmp);
     DeleteObject(hTargetBmp);
@@ -661,7 +719,19 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     
     return 0;
 }
-
+static LRESULT CALLBACK GhostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CLOSE) {
+        DestroyWindow(hwnd);
+        return 0;
+    } else if (msg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lock(g_ghostMutex);
+        for (auto it = g_activeGhosts.begin(); it != g_activeGhosts.end(); ) {
+            if (*it == hwnd) it = g_activeGhosts.erase(it);
+            else ++it;
+        }
+    }
+    return DefWindowProcA(hwnd, msg, wp, lp);
+}
 GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
     RECT winRect;
     GetWindowRect(hWnd, &winRect);
@@ -772,32 +842,21 @@ GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
         {
             std::lock_guard<std::mutex> lock(g_CacheMutex);
             if (g_SnapshotCache.count(hWnd)) {
-                void* pCacheBits = g_SnapshotCache[hWnd].second;
-                memcpy(data->pBits, pCacheBits, w * h * 4);
-
-                DeleteObject(g_SnapshotCache[hWnd].first);
+                SnapCache& c = g_SnapshotCache[hWnd];
+                if (c.w == w && c.h == h) {
+                    memcpy(data->pBits, c.pBits, w * h * 4);
+                    fromCache = TRUE;
+                }
+                
+                DeleteObject(c.hBmp);
                 g_SnapshotCache.erase(hWnd);
-                fromCache = TRUE;
             }
         }
-        if (!fromCache) {
-            HDC hTempDC = CreateCompatibleDC(hScreenDC);
-            BITMAPINFO bmiTemp = bmi;
-            bmiTemp.bmiHeader.biWidth = rawW;
-            bmiTemp.bmiHeader.biHeight = -rawH;
-            
-            void* pTempBits = nullptr;
-            HBITMAP hTempBmp = CreateDIBSection(hScreenDC, &bmiTemp, DIB_RGB_COLORS, &pTempBits, NULL, 0);
-            HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
-            
-            PrintWindow(hWnd, hTempDC, PW_CLIENTONLY | 0x00000002);
-            GdiFlush();
-            
-            CopyAndFixAlpha(pTempBits, data->pBits);
-            
-            SelectObject(hTempDC, hOldTempBmp);
-            DeleteObject(hTempBmp);
-            DeleteDC(hTempDC);
+    if (!fromCache) {
+            DeleteObject(data->hBitmap);
+            delete data;
+            ReleaseDC(NULL, hScreenDC);
+            return nullptr;
         }
     } else {
         HDC hTempDC = CreateCompatibleDC(hScreenDC);
@@ -820,7 +879,7 @@ GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
 
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_SnapshotCache.count(hWnd)) {
-            DeleteObject(g_SnapshotCache[hWnd].first);
+            DeleteObject(g_SnapshotCache[hWnd].hBmp);
         }
         
         void* pCacheBits = nullptr;
@@ -828,7 +887,7 @@ GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
         
         memcpy(pCacheBits, data->pBits, w * h * 4);
         
-        g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits };
+        g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits, w, h };
     }
 
     ReleaseDC(NULL, hScreenDC);
@@ -838,13 +897,23 @@ GhostAnimData* PrepareGenieAnim(HWND hWnd, BOOL rising) {
     int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    data->hGhost = CreateWindowExW(
+    data->hGhost = CreateWindowExA(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
-        L"STATIC", NULL, WS_POPUP,
+        "GhostWindowClass", NULL, WS_POPUP,
         vLeft, vTop, vWidth, vHeight,
-        NULL, NULL, NULL, NULL
+        NULL, NULL, g_hInstance, NULL
     );
+    
 
+    if (!data->hGhost) {
+        DeleteObject(data->hBitmap);
+        delete data;
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_ghostMutex);
+    g_activeGhosts.push_back(data->hGhost);
+    
     return data;
 }
 
@@ -891,6 +960,27 @@ static void CaptureWindowForWobbly(HWND hwnd) {
             pRaw[i * 4 + 2] = (pRaw[i * 4 + 2] * a) / 255;
         }
     }
+    static int g_bmpW = 0, g_bmpH = 0;
+    
+    // Fetch fresh screen metrics
+    g_screenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    g_screenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    g_screenW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    g_screenH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    // Reposition the overlay to match current screen size
+    if (g_overlayHwnd) {
+        SetWindowPos(g_overlayHwnd, NULL, g_screenX, g_screenY, g_screenW, g_screenH, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    // Destroy old targets if the resolution changed
+    if (g_bmpW != g_screenW || g_bmpH != g_screenH) {
+        if (g_wobblyMemDC) { DeleteDC(g_wobblyMemDC); g_wobblyMemDC = NULL; }
+        if (g_wobblyTargetBmp) { DeleteObject(g_wobblyTargetBmp); g_wobblyTargetBmp = NULL; }
+        if (g_wobblyRT) { g_wobblyRT->Release(); g_wobblyRT = nullptr; }
+        g_bmpW = g_screenW;
+        g_bmpH = g_screenH;
+    }
 
     if (!g_wobblyMemDC) {
         g_wobblyMemDC = CreateCompatibleDC(hdcScreen);
@@ -907,6 +997,7 @@ static void CaptureWindowForWobbly(HWND hwnd) {
         );
         g_d2dFactory->CreateDCRenderTarget(&rtProps, &g_wobblyRT);
     }
+
 
     if (g_wobblyRT) {
         if (g_wobblyBrush) { g_wobblyBrush->Release(); g_wobblyBrush = nullptr; }
@@ -990,7 +1081,8 @@ static void StepPhysics(float time) {
             if (x > 0) { ax += (g_wwi.position[i - 1].x - g_wwi.position[i].x + x_length) * g_params.stiffness; ay += (g_wwi.position[i - 1].y - g_wwi.position[i].y) * g_params.stiffness; count++; }
             if (y < 3) { ax += (g_wwi.position[i + 4].x - g_wwi.position[i].x) * g_params.stiffness; ay += (g_wwi.position[i + 4].y - g_wwi.position[i].y - y_length) * g_params.stiffness; count++; }
             if (y > 0) { ax += (g_wwi.position[i - 4].x - g_wwi.position[i].x) * g_params.stiffness; ay += (g_wwi.position[i - 4].y - g_wwi.position[i].y + y_length) * g_params.stiffness; count++; }
-            g_wwi.acceleration[i].x = ax / count; g_wwi.acceleration[i].y = ay / count;
+            g_wwi.acceleration[i].x = count > 0 ? ax / count : 0.0f; 
+            g_wwi.acceleration[i].y = count > 0 ? ay / count : 0.0f;
         }
     }
 
@@ -1145,8 +1237,26 @@ static void CleanupWobblyD2D() {
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_TIMER) {
+    if (msg == WM_CLOSE) {
+        KillTimer(hwnd, 1);
+        DestroyWindow(hwnd);
+        return 0;
+    } else if (msg == WM_TIMER) {
+        if (g_isUnloading.load(std::memory_order_relaxed)) {
+            KillTimer(hwnd, 1);
+            return 0;
+        }
+        std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
         if (g_isMoving || g_isSettling) {
+            if (!IsWindow(g_mainHwnd)) {
+                g_isMoving = false;
+                g_isSettling = false;
+                KillTimer(hwnd, 1);
+                ShowWindow(hwnd, SW_HIDE);
+                CleanupWobblyD2D();
+                g_mainHwnd = NULL;
+                return 0;
+            }
             if (!(GetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
                 SetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(g_mainHwnd, 0, 1, LWA_ALPHA);
@@ -1174,6 +1284,7 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     SetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE, g_oldExStyle);
                 }
                 CleanupWobblyD2D();
+                g_mainHwnd = NULL;
             }
         }
         return 0;
@@ -1183,9 +1294,14 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 static void InitializeWobbly(void) {
     if (g_overlayHwnd) return;
+    if (!g_hInstance) {
+        GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+                           (LPCSTR)&OverlayProc, (HMODULE*)&g_hInstance);
+    }
+
     WNDCLASSA oc = {0}; 
     oc.lpfnWndProc = OverlayProc; 
-    oc.hInstance = GetModuleHandle(NULL); 
+    oc.hInstance = g_hInstance;
     oc.lpszClassName = "WobblyOverlayWindow";
     RegisterClassA(&oc);
     
@@ -1206,6 +1322,10 @@ static void OnEnterSizeMove(HWND hwnd) {
     if (!g_wobblyEnabled.load(std::memory_order_relaxed)) return;
     if (IsZoomed(hwnd) || IsIconic(hwnd)) return;
     
+    std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+
+    if ((g_isMoving || g_isSettling) && g_mainHwnd != NULL && g_mainHwnd != hwnd) return;
+
     if (!g_engineInitialized) {
         InitializeWobbly();
         g_engineInitialized = true;
@@ -1253,7 +1373,8 @@ static void OnEnterSizeMove(HWND hwnd) {
 }
 
 static void OnSizingMoving(HWND hwnd, LPRECT r) {
-    if (g_isMoving) {
+    std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+    if (g_isMoving && g_mainHwnd == hwnd) {
         RECT rExt, rWin; 
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rExt, sizeof(rExt)) != S_OK) GetWindowRect(hwnd, &rExt);
         GetWindowRect(hwnd, &rWin);
@@ -1268,6 +1389,7 @@ static void OnSizingMoving(HWND hwnd, LPRECT r) {
 }
 
 static void OnWindowPosChanged(HWND hwnd, WINDOWPOS* wp) {
+    std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
     if (hwnd != g_mainHwnd || g_isMoving) return;
 
     if (g_isSettling && wp) {
@@ -1286,7 +1408,8 @@ static void OnWindowPosChanged(HWND hwnd, WINDOWPOS* wp) {
 }
 
 static void OnExitSizeMove(HWND hwnd) {
-    if (g_isMoving) {
+    std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+    if (g_isMoving && g_mainHwnd == hwnd) {
         g_isMoving = false; 
         g_isSettling = true;
         
@@ -1300,7 +1423,11 @@ static void OnExitSizeMove(HWND hwnd) {
 // Hooks & Subclassing
 // -------------------------------------------------------------------------
 LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (msg == WM_ENTERSIZEMOVE) {
+    if (msg == g_wmDetach) {
+        RemoveWindowSubclass(hwnd, WobblySubclassProc, uIdSubclass);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+    else if (msg == WM_ENTERSIZEMOVE) {
         OnEnterSizeMove(hwnd);
     }
     else if (msg == WM_SIZING || msg == WM_MOVING) {
@@ -1318,15 +1445,26 @@ LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
+static bool IsInternalModClass(HWND hwnd) {
+    char className[256];
+    if (GetClassNameA(hwnd, className, sizeof(className))) {
+        if (strcmp(className, "GhostWindowClass") == 0 || 
+            strcmp(className, "WobblyOverlayWindow") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd && (dwStyle & WS_CHILD) == 0) SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0);
+    if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0);
     return hwnd;
 }
 
 HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hwnd = CreateWindowExA_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd && (dwStyle & WS_CHILD) == 0) SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0);
+    if (hwnd && (dwStyle & WS_CHILD) == 0 && !IsInternalModClass(hwnd)) SetWindowSubclass(hwnd, WobblySubclassProc, 0, 0);
     return hwnd;
 }
 
@@ -1355,12 +1493,7 @@ static BOOL CALLBACK AttachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
 static BOOL CALLBACK DetachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) == 0) {
-        DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
-        HHOOK hHook = SetWindowsHookEx(WH_CALLWNDPROC, CrossThreadHookProc, NULL, tid);
-        if (hHook) {
-            SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
-            UnhookWindowsHookEx(hHook);
-        }
+        SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 100, NULL);
     }
     return TRUE;
 }
@@ -1398,7 +1531,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
                 
-                CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+                SpawnAnimationThread(data);
             }
         }
         return ShowWindow_Original(hWnd, nCmdShow);
@@ -1415,7 +1548,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
             
             BOOL res = ShowWindow_Original(hWnd, nCmdShow);
             
-            if (data) CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+            if (data) SpawnAnimationThread(data);
             return res;
         }
     }
@@ -1426,7 +1559,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     if (Msg == WM_DESTROY) {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_SnapshotCache.count(hWnd)) {
-            DeleteObject(g_SnapshotCache[hWnd].first);
+            DeleteObject(g_SnapshotCache[hWnd].hBmp);
             g_SnapshotCache.erase(hWnd);
         }
         if (g_IconPositions.count(hWnd)) {
@@ -1453,7 +1586,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                     SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                     SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
                     
-                    CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+                    SpawnAnimationThread(data);
                 }
             }
             return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
@@ -1473,7 +1606,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                 
                 LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
                 
-                if (data) CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
+                if (data) SpawnAnimationThread(data);
                 return res;
             }
         }
@@ -1487,7 +1620,26 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 BOOL Wh_ModInit() {
     Wh_Log(L"Custom Animations & Wobbly Mod Loading...");
     LoadSettings();
+    if (!g_hInstance) {
+        GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+                           (LPCSTR)&Wh_ModInit, (HMODULE*)&g_hInstance);
+    }
 
+    // ADD THIS: Register the Ghost window class
+    WNDCLASSA gc = {0};
+    gc.lpfnWndProc = GhostProc;
+    gc.hInstance = g_hInstance;
+    gc.lpszClassName = "GhostWindowClass";
+    RegisterClassA(&gc);
+
+    g_isUnloading.store(false, std::memory_order_relaxed);
+    g_engineInitialized = false;
+    g_isMoving = false;
+    g_isSettling = false;
+    g_mainHwnd = NULL;
+    g_overlayHwnd = NULL;
+    g_lastTick = 0;
+    
     WCHAR exePath[MAX_PATH];
     if (GetModuleFileNameW(NULL, exePath, MAX_PATH)) {
         _wcslwr_s(exePath);
@@ -1517,17 +1669,70 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
+void StopAndJoinAllThreads() {
+    g_isUnloading.store(true, std::memory_order_relaxed);
+    
+    std::vector<HANDLE> threadsToJoin;
+    {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        threadsToJoin = g_animationThreads;
+        g_animationThreads.clear();
+    }
+    
+    for (HANDLE hThread : threadsToJoin) {
+        while (true) {
+            DWORD res = MsgWaitForMultipleObjects(1, &hThread, FALSE, INFINITE, QS_ALLINPUT);
+            if (res == WAIT_OBJECT_0) {
+                break;
+            } else if (res == WAIT_OBJECT_0 + 1) {
+                MSG msg;
+                while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                }
+            } else {
+                break;
+            }
+        }
+        CloseHandle(hThread);
+    }
+
+    std::vector<HWND> ghostsToClose;
+    {
+        std::lock_guard<std::mutex> lock(g_ghostMutex);
+        ghostsToClose = g_activeGhosts;
+    }
+    for (HWND hwnd : ghostsToClose) {
+        if (IsWindow(hwnd)) {
+            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 200, NULL);
+        }
+    }
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Custom Animations & Wobbly Mod Unloading...");
-    
+
     EnumerateAndSubclass(FALSE);
 
-    if (g_engineInitialized) {
+    StopAndJoinAllThreads();
+
+    if (g_engineInitialized.exchange(false, std::memory_order_seq_cst)) {
+        if (g_overlayHwnd) {
+            SendMessageTimeoutW(g_overlayHwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
+            g_overlayHwnd = NULL;
+        }
+
+        std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
         CleanupWobblyD2D();
         if (g_wobblyRT) { g_wobblyRT->Release(); g_wobblyRT = nullptr; }
         if (g_wobblyMemDC) { DeleteDC(g_wobblyMemDC); g_wobblyMemDC = NULL; }
         if (g_wobblyTargetBmp) { DeleteObject(g_wobblyTargetBmp); g_wobblyTargetBmp = NULL; }
-        if (g_overlayHwnd) DestroyWindow(g_overlayHwnd);
+    }
+
+    if (g_hInstance) {
+        UnregisterClassA("WobblyOverlayWindow", g_hInstance);
+        UnregisterClassA("GhostWindowClass", g_hInstance);
+        g_hInstance = NULL;
     }
 
     if (g_d2dFactory) {
@@ -1537,7 +1742,7 @@ void Wh_ModUninit() {
     
     std::lock_guard<std::mutex> lock(g_CacheMutex);
     for (auto& pair : g_SnapshotCache) {
-        DeleteObject(pair.second.first);
+        DeleteObject(pair.second.hBmp);
     }
     g_SnapshotCache.clear();
     g_IconPositions.clear();
