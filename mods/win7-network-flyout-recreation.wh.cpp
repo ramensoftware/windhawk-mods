@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.3
+// @version        1.4.4
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -47,7 +47,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
     - 2: Italian
 - interceptNativeFlyout: true
   $name: Intercept native network flyout
-  $description: Replace the Windows 10/11 network flyout with this classic one when clicking the tray icon
+  $description: Replace the Windows network flyout with this classic one when clicking the tray icon (works only with the Windows 10 taskbar, specifically the native Windows 10 one and the ExplorerPatcher one in Windows 11)
 - privacyMode: false
   $name: Privacy mode (hide network names)
   $description: Show all networks as Network 1, Network 2... instead of real SSIDs
@@ -73,6 +73,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #define UNICODE
 #endif
 #include <windows.h>
+#include <winternl.h>
 #include <windowsx.h>
 #include <wlanapi.h>
 #include <objbase.h>
@@ -91,7 +92,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 
 // Valori logici a 96 DPI (100%) - sono il "design" originale, non vanno usati
 // direttamente nel rendering: usa le variabili scalate sotto.
-#define WINDOW_WIDTH_BASE        340
+#define WINDOW_WIDTH_BASE        300
 #define WINDOW_HEIGHT_BASE       405
 #define HEADER_HEIGHT_BASE       105
 #define FOOTER_HEIGHT_BASE       60
@@ -745,12 +746,30 @@ RegQueryValueExW_t Real_RegQueryValueExW = NULL;
 typedef LONG (WINAPI *RegGetValueW_t)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
 RegGetValueW_t Real_RegGetValueW = NULL;
 
+typedef LONG (WINAPI *NtQueryKey_t)(HANDLE, int, PVOID, ULONG, PULONG);
+static BOOL IsTargetReplaceVanKey(HKEY hKey) {
+    static NtQueryKey_t pNtQueryKey = NULL;
+    if (!pNtQueryKey) {
+        HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+        if (hNtdll) pNtQueryKey = (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
+        if (!pNtQueryKey) return TRUE;
+    }
+    BYTE buffer[1024];
+    ULONG resultLen = 0;
+    if (pNtQueryKey((HANDLE)hKey, 3, buffer, sizeof(buffer), &resultLen) != 0)
+        return TRUE;
+    UNICODE_STRING* nameInfo = (UNICODE_STRING*)buffer;
+    if (!nameInfo->Buffer || nameInfo->Length == 0) return TRUE;
+    return (StrStrIW(nameInfo->Buffer, REG_PATH_NETWORK) != NULL);
+}
+
 LONG WINAPI Hook_RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, 
                                    LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
     if (!g_Settings.useRegistryMethod)
         return Real_RegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     
-    if (lpValueName && _wcsicmp(lpValueName, REG_VALUE_REPLACEVAN) == 0) {
+    if (lpValueName && _wcsicmp(lpValueName, REG_VALUE_REPLACEVAN) == 0 &&
+        IsTargetReplaceVanKey(hKey)) {
         if (lpType) *lpType = REG_DWORD;
         if (lpData && lpcbData) {
             if (*lpcbData >= sizeof(DWORD)) {
@@ -772,7 +791,11 @@ LONG WINAPI Hook_RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
     if (!g_Settings.useRegistryMethod)
         return Real_RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     
-    if (lpValue && _wcsicmp(lpValue, REG_VALUE_REPLACEVAN) == 0) {
+    BOOL isTargetKey = lpSubKey
+        ? (StrStrIW(lpSubKey, L"Network") != NULL)
+        : IsTargetReplaceVanKey(hkey);
+    
+    if (lpValue && _wcsicmp(lpValue, REG_VALUE_REPLACEVAN) == 0 && isTargetKey) {
         if (pdwType) *pdwType = REG_DWORD;
         if (pvData && pcbData) {
             if (*pcbData >= sizeof(DWORD)) {
@@ -1043,7 +1066,7 @@ void RefreshWifiData(HANDLE hClient) {
                         tempList[t].connState = g_NetworkList[e].connState;
                         tempList[t].operationStartTime = g_NetworkList[e].operationStartTime;
                     }
-                    if (g_NetworkList[e].hasProfile) {
+                    if (g_NetworkList[e].hasProfile && tempList[t].hasProfile) {
                         tempList[t].hasProfile = TRUE;
                     }
                     break;
@@ -1460,9 +1483,11 @@ static BOOL AskForPasswordAndConnect(int index) {
         ctx->password[0] = L'\0';
     }
     
+    EnterCriticalSection(&g_Ctx.csLock);
     item->connState = CONN_STATE_CONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
+    LeaveCriticalSection(&g_Ctx.csLock);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -1510,9 +1535,11 @@ void DisconnectFromNetwork(int index) {
     WifiNetworkItem* item = &g_NetworkList[index];
     if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
     
+    EnterCriticalSection(&g_Ctx.csLock);
     item->connState = CONN_STATE_DISCONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
+    LeaveCriticalSection(&g_Ctx.csLock);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -1535,7 +1562,10 @@ void DisconnectFromNetwork(int index) {
 void CheckConnectionTimeouts() {
     if (!g_Ctx.hWlanClient) return;
     
+    EnterCriticalSection(&g_Ctx.csLock);
+    
     if (g_PendingConnectIndex < 0 || g_PendingConnectIndex >= g_NetworkCount) {
+        LeaveCriticalSection(&g_Ctx.csLock);
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
@@ -1545,13 +1575,17 @@ void CheckConnectionTimeouts() {
     
     WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
     
-    if (item->operationStartTime == 0) return;
+    if (item->operationStartTime == 0) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        return;
+    }
     
     // Se è già connesso (RefreshWifiData l'ha aggiornato), resetta tutto
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
@@ -1560,12 +1594,21 @@ void CheckConnectionTimeouts() {
     }
     
     DWORD now = GetTickCount();
-    if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
-        LogSsidSafe(L"Timeout for", item->ssid);
-        Wh_Log(L"  (state=%d)", item->connState);
+    BOOL timedOut = (now - item->operationStartTime) > CONNECTION_TIMEOUT_MS;
+    WCHAR timedOutSsid[33] = {0};
+    int timedOutState = 0;
+    if (timedOut) {
+        StringCchCopyW(timedOutSsid, ARRAYSIZE(timedOutSsid), item->ssid);
+        timedOutState = item->connState;
         item->connState = CONN_STATE_ERROR;
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    
+    if (timedOut) {
+        LogSsidSafe(L"Timeout for", timedOutSsid);
+        Wh_Log(L"  (state=%d)", timedOutState);
         
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
@@ -1646,6 +1689,11 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
 // -------------------------------------------------------
 // Signal icon drawing
 // -------------------------------------------------------
+// Aggiungi questa variabile globale all'inizio del file
+static HIMAGELIST g_hSignalImageList = NULL;
+
+
+// Sostituisci DrawNativeSignalIcon con questa versione
 void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     int idx = 0;
     if      (quality > 80) idx = 5;
@@ -1653,10 +1701,18 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     else if (quality > 40) idx = 3;
     else if (quality > 20) idx = 2;
     else if (quality > 0)  idx = 1;
-    if (g_hIconSignalBars[idx])
-        DrawIconEx(hdc, right-24, top+4, g_hIconSignalBars[idx], 16, 16, 0, NULL, DI_NORMAL);
+    
+    if (g_hSignalImageList) {
+        // Disegna l'icona dalla ImageList (già ridimensionata con qualità)
+        int xPos = right - 24 - 1; // 18-16 = 2, /2 = 1
+        int yPos = top + 4 - 1;
+        ImageList_Draw(g_hSignalImageList, idx, hdc, xPos, yPos, ILD_TRANSPARENT);
+    } else {
+        // Fallback all'icona originale se la ImageList non è disponibile
+        if (g_hIconSignalBars[idx])
+            DrawIconEx(hdc, right-24, top+4, g_hIconSignalBars[idx], 16, 16, 0, NULL, DI_NORMAL);
+    }
 }
-
 // -------------------------------------------------------
 // Tooltip
 // -------------------------------------------------------
@@ -1945,6 +2001,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_ERROR;
                 g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+                if (errorCode == WLAN_REASON_CODE_INVALID_PROFILE) {
+                    g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;
+                }
                 g_PendingConnectIndex = -1;
                 
                 WCHAR errMsg[256];
@@ -2111,10 +2170,9 @@ SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
             SelectObject(hdc, g_hFontNormal);
             TextOutW(hdc, 56, 40, LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
         }
-        int iconSize = ScaleDpi(35); 
+        int iconSize = ScaleDpi(35*1.05); 
 HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
 if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-
         if (g_IsHoveringRefresh) {
             RECT rcBtn = g_rcRefreshButton;
             
@@ -2198,12 +2256,15 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
                 }
                 
                 if (statusText) {
-                    SelectObject(hdc, item->connState == CONN_STATE_CONNECTED ? g_hFontBold : g_hFontNormal);
-                    SetTextColor(hdc, item->connState == CONN_STATE_CONNECTED ? RGB(0,0,0) : RGB(128,128,128));
-                    int textX = isSelected ? (rcRow.left+10)   : (rcRow.right-110);
-                    int textY = isSelected ? (rcRow.top+22)    : (rcRow.top+6);
-                    TextOutW(hdc, textX, textY, statusText, lstrlenW(statusText));
-                }
+    SelectObject(hdc, item->connState == CONN_STATE_CONNECTED ? g_hFontBold : g_hFontNormal);
+    SetTextColor(hdc, item->connState == CONN_STATE_CONNECTED ? RGB(0,0,0) : RGB(128,128,128));
+    
+    // POSIZIONE FISSA: sempre in alto a destra, indipendentemente dallo stato di selezione
+    int textX = rcRow.right - 110;  // sempre a destra
+    int textY = rcRow.top + 6;       // sempre in alto
+    
+    TextOutW(hdc, textX, textY, statusText, lstrlenW(statusText));
+}
                 
                 DrawNativeSignalIcon(hdc, rcRow.right-10, rcRow.top+2, item->signalQuality);
             }
@@ -2685,14 +2746,23 @@ static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
     
     if (GetIconInfo(hNetIcon, &netInfo) && GetIconInfo(hBtnIcon, &btnInfo)) {
         BITMAP netBmp = {0}, btnBmp = {0};
-        if (GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
-                       sizeof(BITMAP), &netBmp) &&
-            GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
-                       sizeof(BITMAP), &btnBmp)) {
-            if (netBmp.bmWidth == btnBmp.bmWidth && 
-                netBmp.bmHeight == btnBmp.bmHeight) {
-                match = TRUE;
+        HBITMAP hNetBmp = netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask;
+        HBITMAP hBtnBmp = btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask;
+        if (GetObjectW(hNetBmp, sizeof(BITMAP), &netBmp) &&
+            GetObjectW(hBtnBmp, sizeof(BITMAP), &btnBmp) &&
+            netBmp.bmWidth == btnBmp.bmWidth &&
+            netBmp.bmHeight == btnBmp.bmHeight &&
+            netBmp.bmBitsPixel == btnBmp.bmBitsPixel) {
+            LONG bufSize = netBmp.bmWidthBytes * netBmp.bmHeight;
+            BYTE* netBits = (BYTE*)malloc(bufSize);
+            BYTE* btnBits = (BYTE*)malloc(bufSize);
+            if (netBits && btnBits &&
+                GetBitmapBits(hNetBmp, bufSize, netBits) == bufSize &&
+                GetBitmapBits(hBtnBmp, bufSize, btnBits) == bufSize) {
+                match = (memcmp(netBits, btnBits, bufSize) == 0);
             }
+            if (netBits) free(netBits);
+            if (btnBits) free(btnBits);
         }
         if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
         if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
@@ -3122,7 +3192,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.3 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.4 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
