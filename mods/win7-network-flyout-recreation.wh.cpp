@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.2
+// @version        1.4.3
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -15,7 +15,7 @@
 
 This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the Windows 10 taskbar installed using ExplorerPatcher).
 
-**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations. This may change in the future.
+**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations.  it is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
 ## Features
 
 - **Wi-Fi network list** — Shows all available networks with signal strength
@@ -1071,11 +1071,16 @@ void RefreshWifiData(HANDLE hClient) {
 if (tempCount > 0) {
     lastValidRefresh = now;
 }
-    LeaveCriticalSection(&g_Ctx.csLock);
+        LeaveCriticalSection(&g_Ctx.csLock);
 
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
     }
+
+    Wh_Log(L"Refresh complete: %d network(s) found, connected: %s",
+           g_NetworkCount,
+           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
+               ? L"yes" : L"no");
 }
 // -------------------------------------------------------
 // Password dialog
@@ -2316,9 +2321,18 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
-        if (PtInRect(&g_rcRefreshButton,pt)) {
-            PostMessageW(hwnd,WM_REFRESH_DATA,0,0); break;
-        }
+   if (PtInRect(&g_rcRefreshButton,pt)) {
+    Wh_Log(L"Manual refresh requested");
+    if (g_Ctx.hWlanClient) {
+        RefreshWifiData(g_Ctx.hWlanClient);
+        UpdateLayoutGeometry();
+        InvalidateRect(hwnd, NULL, TRUE);
+        UpdateWindow(hwnd);
+    } else {
+        Wh_Log(L"Manual refresh skipped: WLAN client not available");
+    }
+    break;
+}
         if (PtInRect(&g_rcArrowButton,pt)) {
             g_bListExpanded = !g_bListExpanded;
             if (!g_bListExpanded) {
@@ -2560,7 +2574,11 @@ static bool TooltipMatchesNetwork(const WCHAR* lowerTip) {
     L"netwerk", L"internet", L"verbonden", L"verbinding", L"draadloos", L"toegang",
 
     // === Russian ===
-    L"сеть", L"интернет", L"подключено", L"подключение", L"доступ", L"беспроводная",
+    L"сеть", L"сети", L"сетью",
+    L"интернет", L"интернета", L"интернету", L"интернетом", L"интернете",
+    L"подключено", L"подключение", L"подключения", L"подключении",
+    L"доступ", L"доступа", L"доступу", L"доступом", L"доступе",
+    L"беспроводная", L"беспроводной", L"беспроводную",
 
     // === Polish ===
     L"siec", L"sieć", L"internet", L"polaczono", L"połączono", L"polaczenie", L"połączenie", L"dostep", L"dostęp",
@@ -2628,6 +2646,65 @@ static bool TooltipMatchesNetwork(const WCHAR* lowerTip) {
         if (wcsstr(lowerTip, networkKeywords[k])) return true;
     return false;
 }
+// Confronta l'icona del bottone della tray con l'icona standard di rete
+// (netshell.dll, icona 120). Restituisce TRUE se le icone corrispondono.
+static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
+    HICON hNetIcon = NULL;
+    ExtractIconExW(L"netshell.dll", 120, &hNetIcon, NULL, 1);
+    if (!hNetIcon) return FALSE;
+
+    HIMAGELIST hImageList = (HIMAGELIST)SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0);
+    if (!hImageList) {
+        DestroyIcon(hNetIcon);
+        return FALSE;
+    }
+
+    TBBUTTON tb = {0};
+    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIndex, (LPARAM)&tb)) {
+        DestroyIcon(hNetIcon);
+        return FALSE;
+    }
+
+    HICON hBtnIcon = ImageList_GetIcon(hImageList, tb.iBitmap, ILD_NORMAL);
+    if (!hBtnIcon) {
+        TBBUTTONINFOW tbi = {0};
+        tbi.cbSize = sizeof(tbi);
+        tbi.dwMask = TBIF_IMAGE;
+        if (SendMessageW(hToolbar, TB_GETBUTTONINFOW, tb.idCommand, (LPARAM)&tbi)) {
+            hBtnIcon = ImageList_GetIcon(hImageList, tbi.iImage, ILD_NORMAL);
+        }
+    }
+
+    if (!hBtnIcon) {
+        DestroyIcon(hNetIcon);
+        return FALSE;
+    }
+
+    ICONINFO netInfo = {0}, btnInfo = {0};
+    BOOL match = FALSE;
+    
+    if (GetIconInfo(hNetIcon, &netInfo) && GetIconInfo(hBtnIcon, &btnInfo)) {
+        BITMAP netBmp = {0}, btnBmp = {0};
+        if (GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
+                       sizeof(BITMAP), &netBmp) &&
+            GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
+                       sizeof(BITMAP), &btnBmp)) {
+            if (netBmp.bmWidth == btnBmp.bmWidth && 
+                netBmp.bmHeight == btnBmp.bmHeight) {
+                match = TRUE;
+            }
+        }
+        if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
+        if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
+        if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
+        if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
+    }
+
+    DestroyIcon(hBtnIcon);
+    DestroyIcon(hNetIcon);
+    return match;
+}
+
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"DetectNetworkButtonId: toolbar has %d buttons", count);
@@ -2637,11 +2714,7 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
                L"Network icon not available. Mod will not function correctly.", count);
     }
 
-    // Prima prova l'ID classico Win10 (idCommand==2), ma SOLO se il tooltip
-    // non smentisce esplicitamente che si tratti del bottone di rete.
-    // idCommand non è garantito stabile: se l'icona di rete viene nascosta
-    // dalla tray, Windows può riassegnare id=2 a un bottone completamente
-    // diverso (es. volume), quindi il match per ID da solo non è sufficiente.
+    // Prima prova l'ID classico Win10 (idCommand==2) con conferma icona o lista nera
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {0};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
@@ -2652,31 +2725,31 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
         BOOL hasTip = GetToolbarButtonTooltip(hToolbar, &tb, tipText, ARRAYSIZE(tipText));
         if (hasTip) ToLowerBuffer(tipText, lower, ARRAYSIZE(lower));
 
-        // Con tooltip presente, l'ID classico da solo non basta: serve una
-        // conferma positiva (keyword di rete). idCommand==2 può finire
-        // riassegnato a QUALSIASI icona di terze parti (stampanti, audio,
-        // antivirus...) quando l'icona di rete è nascosta: una blacklist a
-        // elenco aperto non potrà mai coprire tutti i casi, quindi si
-        // richiede match positivo invece di sola assenza di esclusione.
-        if (hasTip && !TooltipMatchesNetwork(lower)) {
+        // Se il tooltip è nella lista nera, rifiuta subito
+        if (hasTip && TooltipMatchesExclusion(lower)) {
             Wh_Log(L"DetectNetworkButtonId: id=2 at index %d rejected, tooltip '%s' "
-                   L"has no network keyword (icon likely reassigned)", i, tipText);
-            continue; // non fidarsi dell'ID, prosegui la scansione
+                   L"matches exclusion list (icon likely reassigned)", i, tipText);
+            continue;
+        }
+
+        // Conferma visiva: l'icona deve corrispondere a quella di rete
+        if (!IsNetworkIcon(hToolbar, i)) {
+            Wh_Log(L"DetectNetworkButtonId: id=2 at index %d rejected, icon does not "
+                   L"match network icon", i);
+            continue;
         }
 
         *outButtonId = TRAY_NETWORK_ID;
         WCHAR safeTip[256] = {0};
-    if (hasTip) {
-        // Oscura il tooltip: mostra solo "[network icon]"
-        StringCchCopyW(safeTip, ARRAYSIZE(safeTip), L"[network icon]");
-    }
-    Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d (tooltip: '%s')",
-       i, hasTip ? safeTip : L"<empty>");
+        if (hasTip) {
+            StringCchCopyW(safeTip, ARRAYSIZE(safeTip), L"[network icon]");
+        }
+        Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d (tooltip: '%s', icon matched)",
+               i, hasTip ? safeTip : L"<empty>");
         return;
     }
 
-    // Fallback: cerca per parole chiave di rete nel tooltip, scartando
-    // esplicitamente eventuali falsi positivi noti.
+    // Fallback: cerca per parole chiave di rete nel tooltip
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {0};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
@@ -2688,7 +2761,7 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
         ToLowerBuffer(tipText, lower, ARRAYSIZE(lower));
 
         if (TooltipMatchesExclusion(lower)) {
-            continue; // bottone notoriamente non di rete, salta subito
+            continue;
         }
 
         if (wcsstr(lower, L"cpu") || wcsstr(lower, L"memory")) {
@@ -2699,7 +2772,7 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
         if (TooltipMatchesNetwork(lower)) {
             *outButtonId = tb.idCommand;
             Wh_Log(L"DetectNetworkButtonId: found via tooltip '[network icon]', idCommand=%d",
-       tb.idCommand);
+                   tb.idCommand);
             return;
         }
     }
@@ -2713,7 +2786,6 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
                i, tb.idCommand, (unsigned)tb.fsState, (unsigned)tb.fsStyle);
     }
 }
-
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
@@ -2936,12 +3008,19 @@ static void SyncOverflowInterception() {
     }
 
     if (hCurrentOverflowToolbar) {
+    // Su Win11 con ExplorerPatcher, l'overflow subclassing può crashare explorer.
+    // L'icona di rete è quasi sempre nella toolbar principale, quindi disabilitiamo
+    // l'intercettazione overflow per sicurezza.
+    if (g_isWin11) {
+        Wh_Log(L"SyncOverflowInterception: skipping overflow on Win11 (stability)");
+        return;
+    }
         if (!IsWindow(hCurrentOverflowToolbar)) {
             Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p no longer valid, skipping",
                    hCurrentOverflowToolbar);
             return;
         }
-
+    
         Wh_Log(L"SyncOverflowInterception: overflow toolbar opened (0x%p), subclassing",
                hCurrentOverflowToolbar);
 
@@ -3043,7 +3122,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.2 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.3 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
