@@ -22,7 +22,7 @@ both menu heights to any custom value.
 ## Context menu items
 | Height: 22px (Windows default) | Height: 32px |
 | :----------------------------: | :----------: |
-| ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenu-22px.png) | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenu-32px.png) |
+| ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-22px.png) | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-32px.png) |
 
 ## Menu bar
 | Height: 19px (Windows default) | Height: 32px |
