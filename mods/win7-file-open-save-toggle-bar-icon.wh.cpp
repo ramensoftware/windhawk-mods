@@ -7,7 +7,7 @@
 // @github          https://github.com/Leymonaide
 // @twitter         https://twitter.com/Leym0naide
 // @homepage        https://leymonaide.github.io/
-// @include         *
+// @include         notepad.exe
 // @compilerOptions -lcomdlg32 -lgdi32 -lntdll
 // @license         MIT
 // ==/WindhawkMod==
@@ -20,10 +20,6 @@ Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dial
 
 This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
 make the icon look like the Windows 7 glyph.
-
-This mod is currently tested and known to work on Windows 10 builds 19041 through 19045. It is not tested on other
-versions. Since the mod injects into all processes to function, the mod will silently refuse to load on unsupported
-versions of Windows.
 
 ![Preview image](https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png)
 */
@@ -60,7 +56,7 @@ int g_iLPY = -1;
 HBITMAP g_hbmArrowDown = nullptr;
 HBITMAP g_hbmArrowUp = nullptr;
 
-UINT (*pfnGetDpiForWindow)(HWND hwnd) = nullptr;
+UINT (WINAPI *pfnGetDpiForWindow)(HWND hwnd) = nullptr;
 
 void InitDPI()
 {
@@ -90,26 +86,44 @@ void SHLogicalToPhysicalDPI(int *px, int *py)
         *py = MulDiv(*py, g_iLPY, 96);
 }
 
+thread_local void *g_pCurrentToggleBar = nullptr;
+thread_local HWND g_hwndCurrentToggleBar = nullptr;
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_orig;
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle,
+                     LPCWSTR lpClassName,
+                     LPCWSTR lpWindowName,
+                     DWORD dwStyle,
+                     int X,
+                     int Y,
+                     int nWidth,
+                     int nHeight,
+                     HWND hWndParent,
+                     HMENU hMenu,
+                     HINSTANCE hInstance,
+                     LPVOID lpParam)
+{
+    HWND hwnd = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName, 
+        dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+
+    if (hwnd && g_pCurrentToggleBar && !IS_INTRESOURCE(lpClassName) &&
+        0 == _wcsicmp(lpClassName, L"ToolbarWindow32"))
+        g_hwndCurrentToggleBar = hwnd;
+
+    return hwnd;
+}
+
 void (__thiscall *CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_orig)(class CFileOpenSave *pThis);
+void (__thiscall *CFileOpenSave___SetToggleBar_orig)(class CFileOpenSave *pThis);
 
 class CFileOpenSave
 {
 public:
-    // The current offsets are applicable for 19041.1806, and reportedly works
-    // on other 19041 variants. Support for other builds will be added later.
-    HWND get_hwndToggleBar()
-    {
-#ifdef _WIN64
-        return *(HWND *)((size_t)this + (70 * 8));
-#else
-        return *(HWND *)((size_t)this + (79 * 4));
-#endif
-    }
-
     // Entirely replaces original implementation.
     void ScaleAndSetToggleBarImageListIfNeeded()
     {
-        HWND hwndToggleBar = get_hwndToggleBar();
+        HWND hwndToggleBar = g_hwndCurrentToggleBar;
 
         if (!hwndToggleBar)
         {
@@ -155,6 +169,13 @@ void __thiscall CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_hook(class 
     return pThis->ScaleAndSetToggleBarImageListIfNeeded();
 }
 
+void __thiscall CFileOpenSave___SetToggleBar_hook(class CFileOpenSave *pThis)
+{
+    g_pCurrentToggleBar = pThis;
+    CFileOpenSave___SetToggleBar_orig(pThis);
+    g_pCurrentToggleBar = nullptr;
+}
+
 // comdlg32.dll
 const WindhawkUtils::SYMBOL_HOOK c_rghkComdlg32[] = {
     {
@@ -167,6 +188,17 @@ const WindhawkUtils::SYMBOL_HOOK c_rghkComdlg32[] = {
         },
         &CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_orig,
         CFileOpenSave__ScaleAndSetToggleBarImageListIfNeeded_hook,
+    },
+    {
+        {
+#ifdef _WIN64
+            L"protected: void __cdecl CFileOpenSave::_SetToggleBar(void)",
+#else
+            L"protected: void __thiscall CFileOpenSave::_SetToggleBar(void)",
+#endif
+        },
+        &CFileOpenSave___SetToggleBar_orig,
+        CFileOpenSave___SetToggleBar_hook,
     },
 };
 
@@ -187,15 +219,19 @@ BOOL Wh_ModInit()
     RTL_OSVERSIONINFOW osvi;
     RtlGetVersion(&osvi);
 
-
-    if (osvi.dwBuildNumber < 19041 || osvi.dwBuildNumber > 19045)
-    {
-        return FALSE;
-    }
-
     HMODULE hUser32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pfnGetDpiForWindow = (decltype(pfnGetDpiForWindow))GetProcAddress(hUser32, "GetDpiForWindow");
     FreeLibrary(hUser32);
+
+    if (!Wh_SetFunctionHook(
+        (void *)CreateWindowExW,
+        (void *)CreateWindowExW_hook,
+        (void **)&CreateWindowExW_orig
+    ))
+    {
+        Wh_Log(L"Failed to hook CreateWindowExW.");
+        return FALSE;
+    }
 
     g_hmodComdlg32_7 = LoadLibraryExW(g_spszComdlg32Path.c_str(), nullptr,
         LOAD_LIBRARY_AS_DATAFILE);
@@ -212,6 +248,7 @@ BOOL Wh_ModInit()
     if (!WindhawkUtils::HookSymbols(hmodComdlg32_10, c_rghkComdlg32, ARRAYSIZE(c_rghkComdlg32)))
     {
         Wh_Log(L"Failed to hook symbols in comdlg32.dll.");
+        return FALSE;
     }
 
     g_hbmArrowDown = LoadBitmapW(g_hmodComdlg32_7, (LPCWSTR)0x241);
