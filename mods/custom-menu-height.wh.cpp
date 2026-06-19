@@ -40,8 +40,8 @@ Enhance the overall context menu experience with these complementary mods:
 
 ## Compatibility note: Immersive menus
 To ensure the custom context menu item height functions properly within File
-Explorer and the taskbar on Windows 10 and later versions, this mod eradicates
-immersive menus system-wide, falling back to standard context menus.
+Explorer and the taskbar on Windows 10 and later, this mod eradicates immersive
+menus system-wide, falling back to standard context menus.
 
 The code for this implementation is based on the
 "[Eradicate Immersive Menus](https://windhawk.net/mods/eradicate-immersive-menus)"
@@ -145,7 +145,7 @@ UINT GetSystemDpi()
         return pfnGetDpiForSystem();
     }
 
-    // Fallback for Windows 8.1 and earlier versions
+    // Fallback for Windows 8.1 and earlier
     UINT uDpi = 96;
     HDC hdc = GetDC(nullptr);
     if (hdc)
@@ -173,7 +173,7 @@ UINT GetWindowDpi(HWND hWnd)
         return pfnGetDpiForWindow(hWnd);
     }
 
-    // Fallback for Windows 8.1 and earlier versions
+    // Fallback for Windows 8.1 and earlier
     UINT uDpi = 96;
     HDC hdc = GetDC(hWnd);
     if (hdc)
@@ -767,7 +767,7 @@ BOOL Wh_ModInit()
     }
 
     // Initialize hooks to eradicate immersive menus system-wide
-    // Required for Windows 10 and later versions.
+    // Required for Windows 10 and later.
     if (!IsWindows10OrGreater())
     {
         return TRUE;
