@@ -118,6 +118,7 @@ Control mod takes precedence due to the way the mod works.
 #include <atomic>
 #include <cmath>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -141,7 +142,7 @@ Control mod takes precedence due to the way the mod works.
 
 using namespace winrt::Windows::UI::Xaml;
 
-struct {
+struct Settings {
     int volumeChangeStep;
     bool ctrlClickToMute;
     bool ctrlScrollVolumeChange;
@@ -153,7 +154,15 @@ struct {
     std::wstring tooltipTerseNoAudioSessionText;
     std::wstring tooltipTerseMutedText;
     std::wstring tooltipTerseVolumeText;
-} g_settings;
+};
+
+Settings g_settings;
+std::mutex g_settingsMutex;
+
+Settings GetSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
+}
 
 std::atomic<bool> g_taskbarViewDllLoaded;
 
@@ -462,6 +471,7 @@ struct AppVolumeResult {
 std::optional<AppVolumeResult> AdjustAppVolumeForPID(DWORD targetPID,
                                                      float fVolumeAdd) {
     std::optional<AppVolumeResult> result;
+    auto settings = GetSettings();
 
     ForEachAudioSession([&](DWORD pid, IAudioSessionControl2* sessionControl) {
         if (pid != targetPID) {
@@ -493,7 +503,7 @@ std::optional<AppVolumeResult> AdjustAppVolumeForPID(DWORD targetPID,
             r.volume = (int)(newVolume * 100.0f + 0.5f);
 
             // Handle mute state based on volume.
-            if (!g_settings.noAutomaticMuteToggle) {
+            if (!settings.noAutomaticMuteToggle) {
                 if (newVolume < 0.005f) {
                     vol->SetMute(TRUE, NULL);
                     r.muted = true;
@@ -1092,19 +1102,21 @@ std::wstring FormatVolumeText(std::wstring text, int volume) {
 
 std::wstring FormatVolumeTooltipText(
     std::optional<AppVolumeResult> volumeResult) {
+    auto settings = GetSettings();
+
     if (!volumeResult) {
-        return g_settings.terseFormat ? g_settings.tooltipTerseNoAudioSessionText
-                                      : g_settings.tooltipNoAudioSessionText;
+        return settings.terseFormat ? settings.tooltipTerseNoAudioSessionText
+                                    : settings.tooltipNoAudioSessionText;
     }
 
     if (volumeResult->muted) {
-        return g_settings.terseFormat ? g_settings.tooltipTerseMutedText
-                                      : g_settings.tooltipMutedText;
+        return settings.terseFormat ? settings.tooltipTerseMutedText
+                                    : settings.tooltipMutedText;
     }
 
-    const std::wstring& format = g_settings.terseFormat
-                                     ? g_settings.tooltipTerseVolumeText
-                                     : g_settings.tooltipVolumeText;
+    const std::wstring& format = settings.terseFormat
+                                     ? settings.tooltipTerseVolumeText
+                                     : settings.tooltipVolumeText;
     return FormatVolumeText(format, volumeResult->volume);
 }
 
@@ -1162,8 +1174,10 @@ int WINAPI TaskListButton_OnPointerWheelChanged_Hook(void* pThis, void* pArgs) {
         return original();
     }
 
+    auto settings = GetSettings();
+
     // If Ctrl + Scroll is required, skip if Ctrl is not pressed.
-    if (g_settings.ctrlScrollVolumeChange && GetKeyState(VK_CONTROL) >= 0) {
+    if (settings.ctrlScrollVolumeChange && GetKeyState(VK_CONTROL) >= 0) {
         return original();
     }
 
@@ -1182,7 +1196,7 @@ int WINAPI TaskListButton_OnPointerWheelChanged_Hook(void* pThis, void* pArgs) {
     Wh_Log(L"Per-app volume: PID=%u, delta=%f", processId, delta);
 
     // Calculate volume change.
-    int step = g_settings.volumeChangeStep;
+    int step = settings.volumeChangeStep;
     if (!step) {
         step = 2;
     }
@@ -1283,7 +1297,9 @@ int WINAPI TaskListButton_OnPointerPressed_Hook(void* pThis, void* pArgs) {
         return TaskListButton_OnPointerPressed_Original(pThis, pArgs);
     };
 
-    if (!g_settings.ctrlClickToMute) {
+    auto settings = GetSettings();
+
+    if (!settings.ctrlClickToMute) {
         return original();
     }
 
@@ -1342,25 +1358,30 @@ std::wstring GetStringSettingWithFallback(PCWSTR valueName,
 }
 
 void LoadSettings() {
-    g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
-    g_settings.ctrlClickToMute = Wh_GetIntSetting(L"ctrlClickToMute");
-    g_settings.ctrlScrollVolumeChange =
+    Settings settings;
+
+    settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
+    settings.ctrlClickToMute = Wh_GetIntSetting(L"ctrlClickToMute");
+    settings.ctrlScrollVolumeChange =
         Wh_GetIntSetting(L"ctrlScrollVolumeChange");
-    g_settings.terseFormat = Wh_GetIntSetting(L"terseFormat");
-    g_settings.noAutomaticMuteToggle =
+    settings.terseFormat = Wh_GetIntSetting(L"terseFormat");
+    settings.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"noAutomaticMuteToggle");
-    g_settings.tooltipNoAudioSessionText = GetStringSettingWithFallback(
+    settings.tooltipNoAudioSessionText = GetStringSettingWithFallback(
         L"tooltipNoAudioSessionText", L"No audio session");
-    g_settings.tooltipMutedText =
+    settings.tooltipMutedText =
         GetStringSettingWithFallback(L"tooltipMutedText", L"Muted");
-    g_settings.tooltipVolumeText =
+    settings.tooltipVolumeText =
         GetStringSettingWithFallback(L"tooltipVolumeText", L"Volume: {volume}%");
-    g_settings.tooltipTerseNoAudioSessionText = GetStringSettingWithFallback(
+    settings.tooltipTerseNoAudioSessionText = GetStringSettingWithFallback(
         L"tooltipTerseNoAudioSessionText", L"🔕");
-    g_settings.tooltipTerseMutedText =
+    settings.tooltipTerseMutedText =
         GetStringSettingWithFallback(L"tooltipTerseMutedText", L"🔇");
-    g_settings.tooltipTerseVolumeText = GetStringSettingWithFallback(
+    settings.tooltipTerseVolumeText = GetStringSettingWithFallback(
         L"tooltipTerseVolumeText", L"🔊 {volume}%");
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = settings;
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
