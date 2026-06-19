@@ -7,7 +7,7 @@
 // @github          https://github.com/Anixx
 // @include         *
 // @include         dllhost.exe
-// @exclude         UniGetUI.Avalonia.exe
+// @exclude         *Avalonia*
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
