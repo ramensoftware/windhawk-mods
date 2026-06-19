@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.1
+// @version        1.4.2
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -370,7 +370,10 @@ UINT_PTR g_TimeoutTimer = 0;  // Single global timeout timer
 HWND G_hSubclassedToolbar = nullptr;
 UINT_PTR G_SubclassId = 0;
 
-
+// Toolbar dell'overflow ("icone nascoste", il menu a triangolo)
+HWND G_hSubclassedOverflowToolbar = nullptr;
+UINT_PTR G_OverflowSubclassId = 0;
+static int g_NetworkButtonIdOverflow = -1;
 
 // Mutex per prevenire operazioni concorrenti
 static HANDLE g_hConnectMutex = NULL;
@@ -585,14 +588,30 @@ void UpdateTooltipForRow(HWND hwnd, int index);
 BOOL GetRowRect(int index, RECT* rcRow);
 BOOL InstallTrayInterception(void);
 void RemoveTrayInterception(void);
+static BOOL SafeRemoveOverflowSubclass(HWND hTarget);
 void InitRefreshButtonRect(void);
 void SetKeyboardFocus(int index);
 void ClearKeyboardFocus(void);
 BOOL IsInternetConnected(void);
 static BOOL AskForPasswordAndConnect(int index);
 void RecalcDpiMetrics(UINT dpi);
+static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
 void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOOL autoConnect, WCHAR* outXml, size_t outSize);
-
+// Oscura l'SSID nei log per privacy, mantenendo i primi 3 caratteri
+static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
+    if (!ssid || ssid[0] == L'\0') {
+        Wh_Log(L"%s <empty>", prefix);
+        return;
+    }
+    WCHAR safe[33] = {0};
+    // Mostra solo i primi 3 caratteri + "***"
+    if (lstrlenW(ssid) <= 3) {
+        StringCchPrintfW(safe, ARRAYSIZE(safe), L"%s", ssid);
+    } else {
+        StringCchPrintfW(safe, ARRAYSIZE(safe), L"%.3s***", ssid);
+    }
+    Wh_Log(L"%s %s", prefix, safe);
+}
 // Base64 handling
 // Funzione per decodificare base64 e creare HICON
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) {
@@ -1041,15 +1060,17 @@ void RefreshWifiData(HANDLE hClient) {
             }
             g_PendingConnectIndex = newIndex;
         }
-    } else if (tempCount == 0) {
-        if (now - lastValidRefresh > 30000) {
-            ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
-            g_NetworkCount = 0;
-            g_PendingConnectIndex = -1;
-        }
-    } else {
-        lastValidRefresh = now;
+   } else if (tempCount == 0) {
+    if (now - lastValidRefresh > 30000) {
+        ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
+        g_NetworkCount = 0;
+        g_PendingConnectIndex = -1;
     }
+}
+// Rimuovi tutto il blocco else, e metti questo DOPO:
+if (tempCount > 0) {
+    lastValidRefresh = now;
+}
     LeaveCriticalSection(&g_Ctx.csLock);
 
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
@@ -1344,7 +1365,8 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         dwResult = WlanSetProfile(g_Ctx.hWlanClient, &ctx->interfaceGuid, 
             0, xmlProfile, NULL, TRUE, NULL, &dwReason);
         
-        Wh_Log(L"WlanSetProfile for %s returned: %lu (reason: %lu)", ctx->ssid, dwResult, dwReason);
+        LogSsidSafe(L"WlanSetProfile for", ctx->ssid);
+        Wh_Log(L"  returned: %lu (reason: %lu)", dwResult, dwReason);
         
         if (dwResult != ERROR_SUCCESS) {
             if (ctx->hWndNotify) {
@@ -1365,7 +1387,8 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     params.dwFlags = 0;
     
     dwResult = WlanConnect(g_Ctx.hWlanClient, &ctx->interfaceGuid, &params, NULL);
-    Wh_Log(L"WlanConnect for %s returned: %lu (0x%08X)", ctx->ssid, dwResult, dwResult);
+    LogSsidSafe(L"WlanConnect for", ctx->ssid);
+    Wh_Log(L"  returned: %lu (0x%08X)", dwResult, dwResult);
     
     if (ctx->hWndNotify) {
         PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, (dwResult == ERROR_SUCCESS), (LPARAM)dwResult);
@@ -1407,7 +1430,7 @@ static BOOL AskForPasswordAndConnect(int index) {
         WCHAR password[65] = {0};
         
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
-            Wh_Log(L"User cancelled password for %s", item->ssid);
+            LogSsidSafe(L"User cancelled password for", item->ssid);
             g_PendingConnectIndex = -1;
             free(ctx);
             return FALSE;
@@ -1422,7 +1445,7 @@ static BOOL AskForPasswordAndConnect(int index) {
             }
         }
         if (isEmpty) {
-            Wh_Log(L"Empty password provided for %s", item->ssid);
+            LogSsidSafe(L"Empty password provided for", item->ssid);
             MessageBoxW(g_hWndFlyout, LOC(STR_PWD_EMPTY), LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
             g_PendingConnectIndex = -1;
             free(ctx);
@@ -1467,7 +1490,7 @@ void ConnectToNetwork(int index) {
         return;
     }
     if (item->connState == CONN_STATE_CONNECTING) {
-        Wh_Log(L"Already connecting to %s, ignoring", item->ssid);
+        LogSsidSafe(L"Already connecting to, ignoring", item->ssid);
         return;
     }
     if (item->connState == CONN_STATE_ERROR) {
@@ -1501,7 +1524,7 @@ void DisconnectFromNetwork(int index) {
         UpdateLayoutGeometry();
         if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
     } else {
-        Wh_Log(L"WlanDisconnect request successful for %s", item->ssid);
+        LogSsidSafe(L"WlanDisconnect request successful for", item->ssid);
     }
 }
 void CheckConnectionTimeouts() {
@@ -1521,7 +1544,7 @@ void CheckConnectionTimeouts() {
     
     // Se è già connesso (RefreshWifiData l'ha aggiornato), resetta tutto
     if (item->connState == CONN_STATE_CONNECTED) {
-        Wh_Log(L"Timeout check: %s already connected, clearing pending", item->ssid);
+        LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
         if (g_TimeoutTimer && g_hWndFlyout) {
@@ -1533,7 +1556,8 @@ void CheckConnectionTimeouts() {
     
     DWORD now = GetTickCount();
     if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
-        Wh_Log(L"Timeout for %s (state=%d)", item->ssid, item->connState);
+        LogSsidSafe(L"Timeout for", item->ssid);
+        Wh_Log(L"  (state=%d)", item->connState);
         item->connState = CONN_STATE_ERROR;
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
@@ -1685,7 +1709,12 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     ti.rect     = rcRow;
     SendMessage(g_hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
 }
-
+static int GetTotalListHeight() {
+    int h = 0;
+    for (int i = 0; i < g_NetworkCount; i++)
+        h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    return h;
+}
 BOOL GetRowRect(int index, RECT* rcRow) {
     if (index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
     int y = LIST_Y_START;
@@ -1982,7 +2011,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_VSCROLL: {
-    int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+    int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
     int newPos = g_ScrollPos;
@@ -2007,7 +2036,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 }
 
 case WM_MOUSEWHEEL: {
-    int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+    int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
     int newPos = g_ScrollPos - (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * ROW_HEIGHT_NORMAL;
@@ -2038,7 +2067,7 @@ case WM_MOUSEWHEEL: {
         HBRUSH hBrF = CreateSolidBrush(RGB(225,230,242));
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
         // Configura la scrollbar in base all'altezza totale
-int totalHeight = g_NetworkCount * ROW_HEIGHT_NORMAL;
+int totalHeight = GetTotalListHeight();
 int visibleHeight = LIST_Y_END - LIST_Y_START;
 // int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
 
@@ -2371,69 +2400,311 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
 }
 // ID rilevato dinamicamente al momento della subclasse; -1 = non ancora trovato
 static int g_NetworkButtonId = -1;
+static BOOL GetToolbarButtonTooltip(HWND hToolbar, const TBBUTTON* tb, WCHAR* outText, int outLen) {
+    TBBUTTONINFOW tbi = {0};
+    tbi.cbSize  = sizeof(tbi);
+    tbi.dwMask  = TBIF_TEXT;
+    tbi.pszText = outText;
+    tbi.cchText = outLen;
+    SendMessageW(hToolbar, TB_GETBUTTONINFOW, (WPARAM)tb->idCommand, (LPARAM)&tbi);
 
-static void DetectNetworkButtonId(HWND hToolbar) {
+    if (outText[0] == L'\0') {
+        HWND hTT = (HWND)SendMessageW(hToolbar, TB_GETTOOLTIPS, 0, 0);
+        if (hTT) {
+            TOOLINFOW ti = {0};
+            ti.cbSize   = sizeof(ti);
+            ti.hwnd     = hToolbar;
+            ti.uId      = (UINT_PTR)tb->idCommand;
+            ti.lpszText = outText;
+            SendMessageW(hTT, TTM_GETTEXTW, outLen, (LPARAM)&ti);
+        }
+    }
+    return outText[0] != L'\0';
+}
+
+static void ToLowerBuffer(const WCHAR* src, WCHAR* dst, int dstLen) {
+    int k = 0;
+    for (; src[k] && k < dstLen - 1; k++)
+        dst[k] = (WCHAR)towlower(src[k]);
+    dst[k] = L'\0';
+}
+
+// Tooltip che indicano ESPLICITAMENTE che NON è il bottone di rete.
+// Serve a evitare falsi positivi quando l'icona di rete è nascosta e
+// idCommand==2 finisce riassegnato a un altro bottone (es. volume).
+static bool TooltipMatchesExclusion(const WCHAR* lowerTip) {
+static const WCHAR* excludeKeywords[] = {
+    // === Audio / Volume / Speakers ===
+    L"altoparlanti", L"volume", L"speaker", L"audio", L"sound", L"lautsprecher", L"ton", L"haut-parleurs", L"altavoces",
+    L"alto-falantes", L"luidspreker", L"динамик", L"звук", L"głośnik", L"dźwięk", L"hoparlör", L"ses", L"スピーカー",
+    L"스피커", L"扬声器", L"聲音", L"喇叭", L"مكبر", L"صوت", L"רמקול", L"ध्वनि", L"ลำโพง", L"loa", L"âm thanh",
+    L"hogtalare", L"högtalare", L"lyd", L"hoyttaler", L"høyttaler", L"højttaler", L"kaiutin", L"ääni", L"reproduktor",
+    L"hangszoro", L"hangszóró", L"hang", L"difuzor", L"ηχείο", L"ηχεια", L"гучномовець", L"звук", L"headset", L"headphones",
+
+    // === Battery / Power / Charging ===
+    L"batteria", L"battery", L"akku", L"alimentation", L"batterie", L"bateria", L"batería", L"batterij", L"батарея",
+    L"заряд", L"akumulator", L"pil", L"güç", L"バッテリー", L"전원", L"배터리", L"电池", L"電源", L"بطارية", L"طاقة",
+    L"סוללה", L"बैटरी", L"แบตเตอรี่", L"pin", L"nguồn", L"batteri", L"lataus", L"nabijeni", L"nabíjení", L"akkumulátor",
+    L"töltöttség", L"incarcare", L"încărcare", L"μπαταρία", L"живлення", L"charging", L"alimentacion", L"alimentação",
+
+    // === Language / Keyboard / IME ===
+    L"lingua", L"language", L"input", L"tastiera", L"sprache", L"tastatur", L"langue", L"clavier", L"idioma", L"teclado",
+    L"taal", L"toetsenbord", L"язык", L"клавиатура", L"jezyk", L"język", L"klawiatura", L"dil", L"klavye", L"言語",
+    L"キーボード", L"入力", L"언어", L"키보드", L"입력", L"语言", L"输入法", L"鍵盤", L"لغة", L"لوحة", L"שפה",
+    L"מקלדת", L"भाषा", L"कुंजीपटल", L"ภาษา", L"แป้นพิมพ์", L"ngôn ngữ", L"bàn phím", L"sprak", L"språk", L"tangentbord",
+    L"kieli", L"näppäimistö", L"jazyk", L"klavesnice", L"klávesnice", L"nyelv", L"billentyűzet", L"limba", L"tastatura",
+    L"tastatură", L"γλωσσα", L"γλώσσα", L"πληκτρολόγιο", L"мова", L"клавіатура", L"ime", L"mrf",
+
+    // === Clock / Time / Calendar ===
+    L"orologio", L"clock", L"uhr", L"zeit", L"horloge", L"temps", L"reloj", L"hora", L"relogio", L"relógio", L"klok",
+    L"tijd", L"часы", L"время", L"zegar", L"czas", L"saat", L"時計", L"시계", L"时钟", L"時間", L"ساعة", L"وقت",
+    L"שעון", L"זמן", L"घड़ी", L"समय", L"นาฬิกา", L"เวลา", L"đồng hồ", L"thời gian", L"klocka", L"tid", L"ur", L"kello",
+    L"aika", L"hodiny", L"cas", L"čas", L"ora", L"idő", L"ceas", L"ρολόι", L"ώρα", L"годинник", L"час", L"calendar",
+
+    // === Weather ===
+    L"meteo", L"weather", L"wetter", L"meteo", L"tiempo", L"tempo", L"weer", L"погода", L"pogoda", L"hava", L"天気",
+    L"날씨", L"天气", L"天氣", L"طقس", L"מזג", L"मौसम", L"สภาพอากาศ", L"thời tiết", L"vader", L"väder", L"vaer", L"vær",
+    L"vejr", L"saa", L"sää", L"pocasi", L"počasí", L"idojaras", L"időjárás", L"vreme", L"καιρός", L"καιρος", L"погода",
+    L"celsius", L"fahrenheit", L"degrees", L"gradi", L"graden", L"градусов",
+
+    // === Performance / Task Manager ===
+    L"cpu", L"memory", L"ram", L"disk", L"disco", L"prozessoren", L"memoire", L"mémoire", L"memoria", L"memória",
+    L"geheugen", L"память", L"диск", L"pamiec", L"pamięć", L"bellek", L"メモリ", L"메모리", L"디스크", L"内存", L"記憶體",
+    L"الذاكرة", L"זיכרון", L"स्मृति", L"หน่วยความจำ", L"bộ nhớ", L"minne", L"muisti", L"pamet", L"paměť", L"memoria",
+    L"perv", L"диск", L"taskmgr", L"performance",
+
+    // === USB / Hardware / Storage ===
+    L"hardware", L"safely remove", L"rimozione sicura", L"hardware sicher", L"retirer le peripherique", L"quitar hardware",
+    L"remover hardware", L"hardware veilig", L"безопасное извлечение", L"bezpieczne usuwanie", L"donanımı güvenle",
+    L"ハードウェアの安全", L"하드웨어 안전", L"安全删除硬件", L"안전하게 제거", L"إخراج الأجهزة", L"הסרת חומרה", L"सुरक्षित रूप से",
+    L"ดึงฮาร์ดแวร์", L"gỡ phần cứng", L"saker borttagning", L"sikker fjerning", L"sikker fjernelse", L"poista laite",
+    L"bezpecne odebrat", L"bezpečně odebrat", L"hardver biztonságos", L"eliminare hardware", L"κατάργηση συσκευών",
+    L"безпечне видалення", L"usb", L"pen drive", L"flash drive",
+
+    // === Cloud Sync (OneDrive / Dropbox etc.) ===
+    L"onedrive", L"dropbox", L"gdrive", L"google drive", L"icloud", L"sync", L"sinronizzazione", L"synchronisation",
+    L"sincronizacion", L"sincronización", L"sincronizacao", L"sincronização", L"синхронизация", L"synchronizacja",
+    L"senkronizasyon", L"同期", L"동기화", L"同步", L"مزامنة", L"סנכרון", L"तुल्यकालन", L"การซิงค์", L"đồng bộ",
+    L"synkronisering", L"synkronointi", L"synchronizace", L"szinkronizálás", L"sincronizare", L"συγχρονισμός",
+
+    // === Antivirus / Security / Defender ===
+    L"defender", L"antivirus", L"security", L"sicurezza", L"sicherheit", L"securite", L"sécurité", L"seguridad",
+    L"seguranca", L"segurança", L"veiligheid", L"безопасность", L"bezpieczenstwo", L"bezpieczeństwo", L"güvenlik",
+    L"セキュリティ", L"보안", L"安全中心", L"الحماية", L"אבטחה", L"सुरक्षा", L"ความปลอดภัย", L"bảo mật", L"sakerhet",
+    L"säkerhet", L"sikkerhet", L"sikkerhed", L"turvallisuus", L"zabezpeceni", L"zabezpečení", L"biztonság", L"securitate",
+    L"ασφάλεια", L"безпека", L"kaspersky", L"mcafee", L"avast", L"norton", L"bitdefender", L"malwarebytes",
+
+    // === Bluetooth ===
+    L"bluetooth", L"blue tooth", L"блютуз", L"블루투스", L"ブルートゥース", L"蓝芽", L"藍牙", L"بلوتوث", L"บลูทูธ",
+
+    // === Location / GPS ===
+    L"location", L"posizione", L"standort", L"emplacement", L"ubicacion", L"ubicación", L"localizacao", L"localização",
+    L"locatie", L"расположение", L"lokalizacja", L"konum", L"位置", L"위치", L"موقع", L"מיקום", L"स्थान", L"ตำแหน่ง",
+    L"vị trí", L"plats", L"sted", L"sijainti", L"poloha", L"helyszín", L"locație", L"τοποθεσία", L"місцезнаходження",
+    L"gps",
+
+    // === Printer / Scanner ===
+    L"printer", L"stampante", L"drucker", L"imprimante", L"impresora", L"impressora", L"printer", L"принтер",
+    L"drukarka", L"yazıcı", L"プリンター", L"프린터", L"打印机", L"印表機", L"طابعة", L"מדפסת", L"मुद्रक", L"เครื่องพิมพ์",
+    L"máy in", L"skrivare", L"tulostin", L"tiskarna", L"tiskárna", L"nyomtató", L"εκτυπωτής", L"scanner", L"scansiona",
+
+    // === Common Third-Party Apps ===
+    L"steam", L"discord", L"slack", L"telegram", L"spotify", L"skype", L"zoom", L"teams", L"whatsapp", L"viber",
+    L"epic games", L"gog galaxy", L"origin", L"uplay", L"nvidia", L"geforce", L"radeon", L"amd link", L"asus",
+    L"msi afterburner", L"logitech", L"razer", L"corsair", L"steelseries", L"creative", L"realtek",
+
+    // === Action Center / Notifications ===
+    L"notifications", L"notifiche", L"benachrichtigungen", L"notifications", L"notificaciones", L"notificacoes",
+    L"notificações", L"meldingen", L"уведомления", L"powiadomienia", L"bildirimler", L"通知", L"알림", L"إشعارات",
+    L"הודעות", L"सूचनाएं", L"การแจ้งเตือน", L"thông báo", L"meddelanden", L"varsler", L"meddelelser", L"ilmoitukset",
+    L"oznameni", L"oznámení", L"értesítések", L"notificări", L"ειδοποιήσεις", L"сповіщення", L"action center",
+
+    // === Accessibility / Ease of Access ===
+    L"accessibility", L"accessibilita", L"accessibilità", L"barrierefreiheit", L"accessibilite", L"accessibilité",
+    L"accesibilidad", L"acessibilidade", L"toegankelijkheid", L"доступность", L"dostepnosc", L"dostępność",
+    L"erişilebilirlik", L"アクセシビリティ", L"접근성", L"轻松使用", L"輕鬆存取", L"سهولة الوصول", L"נגישות",
+    L"सुगम्य", L"การช่วยการเข้าถึง", L"trợ năng", L"tillganglighet", L"tillgänglighet", L"tilgjengelighet",
+    L"tilgængelighed", L"saavutettavuus", L"usnadneni", L"usnadnění", L"akadálymentesítés", L"accesibilitate",
+    L"προσβασιμότητα", L"доступність", L"magnifier", L"narrator",
+
+    NULL
+};
+
+    for (int k = 0; excludeKeywords[k]; k++)
+        if (wcsstr(lowerTip, excludeKeywords[k])) return true;
+    return false;
+}
+
+static bool TooltipMatchesNetwork(const WCHAR* lowerTip) {
+    static const WCHAR* networkKeywords[] = {
+    // === English ===
+    L"network", L"internet", L"wi-fi", L"wifi", L"wlan", L"ethernet", L"wireless", 
+    L"connected", L"connection", L"access", L"disconnect",
+
+    // === Italian ===
+    L"rete", L"connesso", L"connessione", L"accesso", L"disconnesso",
+
+    // === German ===
+    L"netzwerk", L"internetzugriff", L"verbunden", L"verbindung", L"drahtlos",
+
+    // === French ===
+    L"reseau", L"réseau", L"internet", L"connecte", L"connecté", L"connexion", L"sans fil",
+
+    // === Spanish ===
+    L"redes", L"internet", L"conectado", L"conexion", L"conexión", L"inalambrica", L"inalámbrica",
+
+    // === Portuguese ===
+    L"rede", L"internet", L"conectado", L"conexao", L"conexão", L"sem fio", L"acesso",
+
+    // === Dutch ===
+    L"netwerk", L"internet", L"verbonden", L"verbinding", L"draadloos", L"toegang",
+
+    // === Russian ===
+    L"сеть", L"интернет", L"подключено", L"подключение", L"доступ", L"беспроводная",
+
+    // === Polish ===
+    L"siec", L"sieć", L"internet", L"polaczono", L"połączono", L"polaczenie", L"połączenie", L"dostep", L"dostęp",
+
+    // === Turkish ===
+    L"aglar", L"ağlar", L"internet", L"bagli", L"bağlı", L"baglanti", L"bağlantı", L"erisim", L"erişim", L"kablosuz",
+
+    // === Japanese ===
+    L"ネットワーク", L"インターネット", L"接続済み", L"アクセスの有無", L"無線lan", L"ワイヤレス",
+
+    // === Korean ===
+    L"네트워크", L"인터넷", L"연결됨", L"액세스", L"무선랜",
+
+    // === Chinese (Simplified) ===
+    L"网络", L"因特网", L"已连接", L"访问权限", L"无线", L"以太网",
+
+    // === Chinese (Traditional) ===
+    L"網路", L"網際網路", L"已連線", L"存取權限", L"無線", L"乙太網路",
+
+    // === Arabic ===
+    L"شبكة", L"الإنترنت", L"الاتصال", L"متصل", L"وصول", L"لاسلكي",
+
+    // === Hebrew ===
+    L"רשת", L"אינטרנט", L"מחובר", L"חיבור", L"גישה", L"אלחוטי",
+
+    // === Hindi ===
+    L"नेटवर्क", L"इंटरनेट", L"कनेक्ट", L"जुड़ा हुआ", L"पहुंच", L"वायरलेस",
+
+    // === Thai ===
+    L"เครือข่าย", L"อินเทอร์เน็ต", L"เชื่อมต่อ", L"การเข้าถึง", L"ไร้สาย",
+
+    // === Vietnamese ===
+    L"mang", L"mạng", L"internet", L"da ket noi", L"đã kết nối", L"ket noi", L"kết nối", L"truy cap", L"truy cập", L"khong day", L"không dây",
+
+    // === Swedish ===
+    L"natverk", L"nätverk", L"internet", L"ansluten", L"anslutning", L"tradlost", L"trådlöst", L"atkomst", L"åtkomst",
+
+    // === Norwegian ===
+    L"nettverk", L"internet", L"tilkoblet", L"tilkobling", L"tradlos", L"trådløs", L"tilgang",
+
+    // === Danish ===
+    L"netvaerk", L"netværk", L"internet", L"forbundet", L"forbindelse", L"tradlost", L"trådløst", L"adgang",
+
+    // === Finnish ===
+    L"verkko", L"internet", L"yhdistetty", L"yhteys", L"langaton", L"kaytto", L"käyttö",
+
+    // === Czech ===
+    L"sit", L"síť", L"internet", L"pripojeno", L"připojeno", L"pripojeni", L"připojení", L"pristup", L"přístup", L"bezdratove", L"bezdrátové",
+
+    // === Hungarian ===
+    L"halozat", L"hálózat", L"internet", L"kapcsolodva", L"kapcsolódva", L"kapcsolat", L"hozzaferes", L"hozzáférés", L"vezetek nelkuli", L"vezeték nélküli",
+
+    // === Romanian ===
+    L"retea", L"rețea", L"internet", L"conectat", L"conexiune", L"acces", L"fara fir", L"fără fir",
+
+    // === Greek ===
+    L"δικτυο", L"δίκτυο", L"ιντερνετ", L"συνδεδεμενο", L"συνδεδεμένο", L"συνδεση", L"σύνδεση", L"προσβαση", L"πρόσβαση", L"ασυρματο", L"ασύρματο",
+
+    // === Ukrainian ===
+    L"мережа", L"інтернет", L"підключено", L"підключення", L"доступ", L"бездротова",
+
+    NULL
+};
+    for (int k = 0; networkKeywords[k]; k++)
+        if (wcsstr(lowerTip, networkKeywords[k])) return true;
+    return false;
+}
+static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"DetectNetworkButtonId: toolbar has %d buttons", count);
 
-    // Prima prova l'ID classico Win10 (idCommand==2)
+    if (count <= 1) {
+        Wh_Log(L"WARNING: Toolbar has only %d button(s). Tray may not be initialized. "
+               L"Network icon not available. Mod will not function correctly.", count);
+    }
+
+    // Prima prova l'ID classico Win10 (idCommand==2), ma SOLO se il tooltip
+    // non smentisce esplicitamente che si tratti del bottone di rete.
+    // idCommand non è garantito stabile: se l'icona di rete viene nascosta
+    // dalla tray, Windows può riassegnare id=2 a un bottone completamente
+    // diverso (es. volume), quindi il match per ID da solo non è sufficiente.
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {0};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
-        if (tb.idCommand == TRAY_NETWORK_ID) {
-            g_NetworkButtonId = TRAY_NETWORK_ID;
-            Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d", i);
-            return;
+        if (tb.idCommand != TRAY_NETWORK_ID) continue;
+
+        WCHAR tipText[256] = {0};
+        WCHAR lower[256] = {0};
+        BOOL hasTip = GetToolbarButtonTooltip(hToolbar, &tb, tipText, ARRAYSIZE(tipText));
+        if (hasTip) ToLowerBuffer(tipText, lower, ARRAYSIZE(lower));
+
+        // Con tooltip presente, l'ID classico da solo non basta: serve una
+        // conferma positiva (keyword di rete). idCommand==2 può finire
+        // riassegnato a QUALSIASI icona di terze parti (stampanti, audio,
+        // antivirus...) quando l'icona di rete è nascosta: una blacklist a
+        // elenco aperto non potrà mai coprire tutti i casi, quindi si
+        // richiede match positivo invece di sola assenza di esclusione.
+        if (hasTip && !TooltipMatchesNetwork(lower)) {
+            Wh_Log(L"DetectNetworkButtonId: id=2 at index %d rejected, tooltip '%s' "
+                   L"has no network keyword (icon likely reassigned)", i, tipText);
+            continue; // non fidarsi dell'ID, prosegui la scansione
         }
+
+        *outButtonId = TRAY_NETWORK_ID;
+        WCHAR safeTip[256] = {0};
+    if (hasTip) {
+        // Oscura il tooltip: mostra solo "[network icon]"
+        StringCchCopyW(safeTip, ARRAYSIZE(safeTip), L"[network icon]");
+    }
+    Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d (tooltip: '%s')",
+       i, hasTip ? safeTip : L"<empty>");
+        return;
     }
 
-    // Fallback: cerca per parole chiave nel tooltip
-    static const WCHAR* networkKeywords[] = {
-        L"network", L"rete", L"wi-fi", L"wifi", L"wlan",
-        L"internet", L"wireless", L"ethernet", L"lan", NULL
-    };
-
+    // Fallback: cerca per parole chiave di rete nel tooltip, scartando
+    // esplicitamente eventuali falsi positivi noti.
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {0};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
 
         WCHAR tipText[256] = {0};
-        TBBUTTONINFOW tbi = {0};
-        tbi.cbSize  = sizeof(tbi);
-        tbi.dwMask  = TBIF_TEXT | TBIF_BYINDEX;
-        tbi.pszText = tipText;
-        tbi.cchText = ARRAYSIZE(tipText);
-        SendMessageW(hToolbar, TB_GETBUTTONINFOW, (WPARAM)i, (LPARAM)&tbi);
-
-        if (tipText[0] == L'\0') {
-            HWND hTT = (HWND)SendMessageW(hToolbar, TB_GETTOOLTIPS, 0, 0);
-            if (hTT) {
-                TOOLINFOW ti = {0};
-                ti.cbSize   = sizeof(ti);
-                ti.hwnd     = hToolbar;
-                ti.uId      = (UINT_PTR)tb.idCommand;
-                ti.lpszText = tipText;
-                SendMessageW(hTT, TTM_GETTEXTW, ARRAYSIZE(tipText), (LPARAM)&ti);
-            }
-        }
-
-        if (tipText[0] == L'\0') continue;
+        if (!GetToolbarButtonTooltip(hToolbar, &tb, tipText, ARRAYSIZE(tipText))) continue;
 
         WCHAR lower[256] = {0};
-        for (int k = 0; tipText[k] && k < 255; k++)
-            lower[k] = (WCHAR)towlower(tipText[k]);
+        ToLowerBuffer(tipText, lower, ARRAYSIZE(lower));
 
-        for (int k = 0; networkKeywords[k]; k++) {
-            if (wcsstr(lower, networkKeywords[k])) {
-                g_NetworkButtonId = tb.idCommand;
-                Wh_Log(L"DetectNetworkButtonId: found via tooltip '%s', idCommand=%d",
-                       tipText, tb.idCommand);
-                return;
-            }
+        if (TooltipMatchesExclusion(lower)) {
+            continue; // bottone notoriamente non di rete, salta subito
+        }
+
+        if (wcsstr(lower, L"cpu") || wcsstr(lower, L"memory")) {
+            Wh_Log(L"WARNING: Button[%d] tooltip '%s' appears to be Task Manager, "
+                   L"not network. Tray may not be fully populated.", i, tipText);
+        }
+
+        if (TooltipMatchesNetwork(lower)) {
+            *outButtonId = tb.idCommand;
+            Wh_Log(L"DetectNetworkButtonId: found via tooltip '[network icon]', idCommand=%d",
+       tb.idCommand);
+            return;
         }
     }
 
-    // Nessun match: dump completo per debug
+    *outButtonId = -1;
     Wh_Log(L"DetectNetworkButtonId: could not identify network button, dumping all:");
     for (int i = 0; i < count; i++) {
         TBBUTTON tb = {0};
@@ -2460,8 +2731,10 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (btnIdx >= 0) {
                 TBBUTTON tb = {0};
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
-                    // Usa l'ID rilevato dinamicamente; fallback a TRAY_NETWORK_ID
-                    int targetId = (g_NetworkButtonId >= 0) ? g_NetworkButtonId : TRAY_NETWORK_ID;
+                    // Sceglie l'ID giusto in base a quale toolbar ha generato l'evento
+                    BOOL isOverflow = (hWnd == G_hSubclassedOverflowToolbar);
+                    int detectedId = isOverflow ? g_NetworkButtonIdOverflow : g_NetworkButtonId;
+                    int targetId = (detectedId >= 0) ? detectedId : TRAY_NETWORK_ID;
                     if (tb.idCommand == targetId) {
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
@@ -2520,7 +2793,7 @@ static BOOL InstallTrayInterceptionInternal() {
 WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (DWORD_PTR)&G_SubclassId);
     if (hToolbar) {
         g_NetworkButtonId = -1;
-        DetectNetworkButtonId(hToolbar);
+        DetectNetworkButtonId(hToolbar, &g_NetworkButtonId);
     }
     return TRUE;
 }
@@ -2535,8 +2808,13 @@ void RemoveTrayInterception() {
         G_SubclassId = 0;
         G_hSubclassedToolbar = nullptr;
     }
+    if (G_hSubclassedOverflowToolbar) {
+        SafeRemoveOverflowSubclass(G_hSubclassedOverflowToolbar);
+        G_OverflowSubclassId = 0;
+        G_hSubclassedOverflowToolbar = nullptr;
+        g_NetworkButtonIdOverflow = -1;
+    }
 }
-
 // -------------------------------------------------------
 // Toggle flyout
 // -------------------------------------------------------
@@ -2594,9 +2872,95 @@ void ToggleFlyoutWindow() {
     LeaveCriticalSection(&g_Ctx.csLock);
 }
 
-// -------------------------------------------------------
-// Hotkey thread (unchanged)
-// -------------------------------------------------------
+#define OVERFLOW_POLL_TIMER_ID 9101
+#define OVERFLOW_POLL_INTERVAL_MS 800
+
+static HWND FindOverflowToolbar() {
+    HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", NULL);
+    if (!hOverflow) return NULL;
+    return FindWindowExW(hOverflow, NULL, L"ToolbarWindow32", NULL);
+}
+
+// Tenta il subclass in modo sicuro: verifica la validità della finestra
+// immediatamente prima dell'operazione, per ridurre la finestra di race in
+// cui Windows distrugge la overflow toolbar mentre il thread hotkey tenta
+// di sottoclassarla. Niente SEH (non supportato dal toolchain del mod):
+// ci affidiamo al doppio controllo IsWindow() per mitigare il caso più
+// comune, anche se non elimina al 100% una corsa a livello di istruzione.
+static BOOL SafeSubclassOverflowToolbar(HWND hTarget) {
+    if (!hTarget || !IsWindow(hTarget)) return FALSE;
+    if (!IsWindow(hTarget)) return FALSE; // doppio controllo, finestra può morire tra le righe
+    return WindhawkUtils::SetWindowSubclassFromAnyThread(
+        hTarget, ToolbarWndProc, (DWORD_PTR)&G_OverflowSubclassId);
+}
+static BOOL SafeRemoveOverflowSubclass(HWND hTarget) {
+    if (!hTarget) return FALSE;
+    if (!IsWindow(hTarget)) {
+        return TRUE;
+    }
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTarget, ToolbarWndProc);
+    return TRUE;
+}
+
+static void SyncOverflowInterception() {
+    HWND hCurrentOverflowToolbar = FindOverflowToolbar();
+
+    if (hCurrentOverflowToolbar == G_hSubclassedOverflowToolbar) {
+        return;
+    }
+
+    // Evita loop infinito: se la stessa finestra fallisce il subclassing
+    // per 3 volte consecutive, smetti di riprovare finché non appare
+    // una finestra DIVERSA (o questa viene distrutta e ricreata).
+    static HWND s_lastFailedHwnd = NULL;
+    static int  s_failedAttempts = 0;
+
+    if (hCurrentOverflowToolbar == s_lastFailedHwnd) {
+        s_failedAttempts++;
+        if (s_failedAttempts > 3) {
+            return;
+        }
+    } else {
+        s_lastFailedHwnd = hCurrentOverflowToolbar;
+        s_failedAttempts = 0;
+    }
+
+    if (G_hSubclassedOverflowToolbar) {
+        Wh_Log(L"SyncOverflowInterception: overflow toolbar closed, clearing state");
+        SafeRemoveOverflowSubclass(G_hSubclassedOverflowToolbar);
+        G_hSubclassedOverflowToolbar = nullptr;
+        G_OverflowSubclassId = 0;
+        g_NetworkButtonIdOverflow = -1;
+        s_lastFailedHwnd = NULL;
+        s_failedAttempts = 0;
+    }
+
+    if (hCurrentOverflowToolbar) {
+        if (!IsWindow(hCurrentOverflowToolbar)) {
+            Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p no longer valid, skipping",
+                   hCurrentOverflowToolbar);
+            return;
+        }
+
+        Wh_Log(L"SyncOverflowInterception: overflow toolbar opened (0x%p), subclassing",
+               hCurrentOverflowToolbar);
+
+        if (!SafeSubclassOverflowToolbar(hCurrentOverflowToolbar)) {
+            Wh_Log(L"SyncOverflowInterception: subclass failed/aborted for 0x%p, will retry next poll",
+                   hCurrentOverflowToolbar);
+            return;
+        }
+
+        G_hSubclassedOverflowToolbar = hCurrentOverflowToolbar;
+        g_NetworkButtonIdOverflow = -1;
+        s_failedAttempts = 0;
+
+        if (IsWindow(G_hSubclassedOverflowToolbar)) {
+            DetectNetworkButtonId(G_hSubclassedOverflowToolbar, &g_NetworkButtonIdOverflow);
+        }
+    }
+}
+
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
@@ -2611,6 +2975,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
 
     BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL);
     UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
+    UINT_PTR overflowPollTimer = SetTimer(NULL, OVERFLOW_POLL_TIMER_ID, OVERFLOW_POLL_INTERVAL_MS, NULL);
 
     MSG msg = {0};
     while (GetMessageW(&msg, NULL, 0, 0)) {
@@ -2620,12 +2985,18 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 trayRetryTimer = 0;
             }
         }
+        if (msg.message == WM_TIMER && msg.wParam == overflowPollTimer && !ctx->isUninitializing) {
+            SyncOverflowInterception();
+        }
         if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing)
             ToggleFlyoutWindow();
         if (msg.message == WM_HOTKEY_SETTINGS_CHANGED)
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             if (G_hSubclassedToolbar) RemoveTrayInterception();
+            G_hSubclassedOverflowToolbar = nullptr;
+            G_OverflowSubclassId = 0;
+            g_NetworkButtonIdOverflow = -1;
             Sleep(1000);
             if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
@@ -2634,6 +3005,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
         }
         TranslateMessage(&msg); DispatchMessageW(&msg);
     }
+    if (overflowPollTimer) KillTimer(NULL, overflowPollTimer);
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
     UnregisterHotKey(NULL, HOTKEY_ID);
     return 0;
@@ -2659,6 +3031,7 @@ void SafeCleanup() {
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
     if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
+    if (g_pNLM) { g_pNLM->Release(); g_pNLM = NULL; }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient,NULL); g_Ctx.hWlanClient=NULL; }
     FreeSystemIcons();
     FreeGlobalFonts();
@@ -2670,7 +3043,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.1 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.2 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
