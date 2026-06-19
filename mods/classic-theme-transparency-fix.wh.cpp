@@ -2,12 +2,11 @@
 // @id              classic-theme-transparency-fix
 // @name            Classic theme transparency fix
 // @description     Fixes transparency glitches in Classic theme
-// @version         1.3
+// @version         1.4
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // @include         dllhost.exe
-// @exclude         UniGetUI.Avalonia.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,6 +27,7 @@ shadiows, turn it off.
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <psapi.h>
 
 // --- Structs and types for dialog transparency removal ---
 
@@ -46,12 +46,42 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 
 typedef BOOL (WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
+// --- Global Avalonia flag ---
+// -1 = not checked yet, 0 = not Avalonia, 1 = Avalonia
+int g_isAvaloniaProcess = -1;
+
 // --- DWM / composition hooks ---
 
 typedef HRESULT (WINAPI *DwmIsCompositionEnabled_t)(BOOL *);
 DwmIsCompositionEnabled_t DwmIsCompositionEnabled_orig;
 HRESULT WINAPI DwmIsCompositionEnabled_hook(BOOL *pfEnabled)
 {
+    if (g_isAvaloniaProcess == -1) {
+        g_isAvaloniaProcess = 0;
+        HMODULE hMods[1024];
+        DWORD cbNeeded;
+
+        if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
+            for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+                WCHAR szModName[MAX_PATH];
+                if (GetModuleFileNameW(hMods[i], szModName, sizeof(szModName) / sizeof(WCHAR))) {
+                    WCHAR* fileName = wcsrchr(szModName, L'\\');
+                    fileName = fileName ? fileName + 1 : szModName;
+
+                    if (_wcsnicmp(fileName, L"av_lib", 6) == 0) {
+                        Wh_Log(L"Avalonia library detected");
+                        g_isAvaloniaProcess = 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (g_isAvaloniaProcess == 1) {
+        return DwmIsCompositionEnabled_orig(pfEnabled);
+    }
+
     *pfEnabled = FALSE;
     return S_OK;
 }
@@ -98,7 +128,7 @@ BOOL Wh_ModInit()
     HMODULE uxthemeModule = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
     Wh_SetFunctionHook((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
-    
+
     if (Wh_GetIntSetting(L"removeDialogTransparency")) {
         Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     }
