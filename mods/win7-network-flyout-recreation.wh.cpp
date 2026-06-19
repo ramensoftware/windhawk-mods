@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows 10/11 flyout, along with the Windows 8 flyout as a configurable fallback
+// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
 // @version        1.4.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
@@ -13,8 +13,9 @@
 /*
 # Windows 7 Network Flyout Recreation
 
-This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the classic Windows 10 taskbar installed).
+This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the Windows 10 taskbar installed using ExplorerPatcher).
 
+**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations. This may change in the future.
 ## Features
 
 - **Wi-Fi network list** — Shows all available networks with signal strength
