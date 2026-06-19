@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control-per-app
 // @name            Taskbar Volume Control Per-App
 // @description     Control the per-app volume by scrolling over taskbar buttons
-// @version         1.1.4
+// @version         1.1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -83,6 +83,33 @@ Control mod takes precedence due to the way the mod works.
     By default, the app is muted once the volume reaches zero, and is unmuted
     on any change to a non-zero volume. Enabling this option turns off this
     functionality, such that the app mute status is not changed.
+- tooltipNoAudioSessionText: No audio session
+  $name: No audio session tooltip text
+  $description: >-
+    Text to show when the hovered app has no active audio session.
+- tooltipMutedText: Muted
+  $name: Muted tooltip text
+  $description: >-
+    Text to show when the hovered app is muted.
+- tooltipVolumeText: 'Volume: {volume}%'
+  $name: Volume tooltip text
+  $description: >-
+    Text to show for the hovered app volume. Use {volume} for the volume
+    percentage.
+- tooltipTerseNoAudioSessionText: '🔕'
+  $name: Terse no audio session tooltip text
+  $description: >-
+    Text to show when terse format is enabled and the hovered app has no active
+    audio session.
+- tooltipTerseMutedText: '🔇'
+  $name: Terse muted tooltip text
+  $description: >-
+    Text to show when terse format is enabled and the hovered app is muted.
+- tooltipTerseVolumeText: '🔊 {volume}%'
+  $name: Terse volume tooltip text
+  $description: >-
+    Text to show when terse format is enabled for the hovered app volume. Use
+    {volume} for the volume percentage.
 */
 // ==/WindhawkModSettings==
 
@@ -120,6 +147,12 @@ struct {
     bool ctrlScrollVolumeChange;
     bool terseFormat;
     bool noAutomaticMuteToggle;
+    std::wstring tooltipNoAudioSessionText;
+    std::wstring tooltipMutedText;
+    std::wstring tooltipVolumeText;
+    std::wstring tooltipTerseNoAudioSessionText;
+    std::wstring tooltipTerseMutedText;
+    std::wstring tooltipTerseVolumeText;
 } g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
@@ -1044,6 +1077,37 @@ void HideVolumeTooltip() {
     g_volumeTooltipState.cursorX = 0.0;
 }
 
+std::wstring FormatVolumeText(std::wstring text, int volume) {
+    const std::wstring placeholder = L"{volume}";
+    const std::wstring volumeText = std::to_wstring(volume);
+
+    size_t pos = 0;
+    while ((pos = text.find(placeholder, pos)) != std::wstring::npos) {
+        text.replace(pos, placeholder.length(), volumeText);
+        pos += volumeText.length();
+    }
+
+    return text;
+}
+
+std::wstring FormatVolumeTooltipText(
+    std::optional<AppVolumeResult> volumeResult) {
+    if (!volumeResult) {
+        return g_settings.terseFormat ? g_settings.tooltipTerseNoAudioSessionText
+                                      : g_settings.tooltipNoAudioSessionText;
+    }
+
+    if (volumeResult->muted) {
+        return g_settings.terseFormat ? g_settings.tooltipTerseMutedText
+                                      : g_settings.tooltipMutedText;
+    }
+
+    const std::wstring& format = g_settings.terseFormat
+                                     ? g_settings.tooltipTerseVolumeText
+                                     : g_settings.tooltipVolumeText;
+    return FormatVolumeText(format, volumeResult->volume);
+}
+
 void ShowVolumeResultTooltip(UIElement element,
                              Input::PointerRoutedEventArgs args,
                              std::optional<AppVolumeResult> volumeResult) {
@@ -1061,19 +1125,9 @@ void ShowVolumeResultTooltip(UIElement element,
     double cursorX = rootPoint.X;
     double cursorY = rootPoint.Y;
 
-    WCHAR tooltipText[64];
-    if (!volumeResult) {
-        wcscpy_s(tooltipText,
-                 g_settings.terseFormat ? L"🔕" : L"No audio session");
-    } else if (volumeResult->muted) {
-        wcscpy_s(tooltipText, g_settings.terseFormat ? L"🔇" : L"Muted");
-    } else {
-        swprintf_s(tooltipText,
-                   g_settings.terseFormat ? L"🔊 %d%%" : L"Volume: %d%%",
-                   volumeResult->volume);
-    }
+    std::wstring tooltipText = FormatVolumeTooltipText(volumeResult);
     ShowVolumeTooltip(taskbarFrame, cursorX, cursorY, isOverflowPopup,
-                      tooltipText);
+                      tooltipText.c_str());
 }
 
 // Per-app volume wheel scroll handling.
@@ -1277,6 +1331,16 @@ int WINAPI TaskListButton_OnPointerPressed_Hook(void* pThis, void* pArgs) {
     return 0;
 }
 
+std::wstring GetStringSettingWithFallback(PCWSTR valueName,
+                                          PCWSTR fallbackValue) {
+    PCWSTR value = Wh_GetStringSetting(valueName);
+    std::wstring result = value && *value ? value : fallbackValue;
+    if (value) {
+        Wh_FreeStringSetting(value);
+    }
+    return result;
+}
+
 void LoadSettings() {
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
     g_settings.ctrlClickToMute = Wh_GetIntSetting(L"ctrlClickToMute");
@@ -1285,6 +1349,18 @@ void LoadSettings() {
     g_settings.terseFormat = Wh_GetIntSetting(L"terseFormat");
     g_settings.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"noAutomaticMuteToggle");
+    g_settings.tooltipNoAudioSessionText = GetStringSettingWithFallback(
+        L"tooltipNoAudioSessionText", L"No audio session");
+    g_settings.tooltipMutedText =
+        GetStringSettingWithFallback(L"tooltipMutedText", L"Muted");
+    g_settings.tooltipVolumeText =
+        GetStringSettingWithFallback(L"tooltipVolumeText", L"Volume: {volume}%");
+    g_settings.tooltipTerseNoAudioSessionText = GetStringSettingWithFallback(
+        L"tooltipTerseNoAudioSessionText", L"🔕");
+    g_settings.tooltipTerseMutedText =
+        GetStringSettingWithFallback(L"tooltipTerseMutedText", L"🔇");
+    g_settings.tooltipTerseVolumeText = GetStringSettingWithFallback(
+        L"tooltipTerseVolumeText", L"🔊 {volume}%");
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
