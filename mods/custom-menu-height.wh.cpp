@@ -71,7 +71,6 @@ mod by **aubymori**.
 #include <algorithm>
 #include <mutex>
 #include <unordered_map>
-#include <VersionHelpers.h>
 
 #ifdef _WIN64
 #   define DRAW_IMMERSIVE_MENU L"bool __cdecl ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu(struct HMENU__ *,struct HWND__ *)"
@@ -666,6 +665,23 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
     }
 
     return true;
+}
+
+// Helper: Get the OS version
+// Required to eradicate immersive menus system-wide on Windows 10 and later.
+bool IsWindows10OrGreater()
+{
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    static auto pfnRtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
+    if (pfnRtlGetVersion)
+    {
+        OSVERSIONINFOW osVersionInfo;
+        osVersionInfo.dwOSVersionInfoSize = sizeof(osVersionInfo);
+        return (pfnRtlGetVersion(&osVersionInfo) == 0 &&
+            osVersionInfo.dwMajorVersion >= 10);
+    }
+    return false;
 }
 
 // Load settings
