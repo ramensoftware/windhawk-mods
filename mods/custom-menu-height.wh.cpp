@@ -149,7 +149,7 @@ LPCWSTR GetCurrentProcessName()
     return pszProcessName;
 }
 
-// Helper: Get system DPI
+// Helper: Get the system DPI
 UINT GetSystemDpi()
 {
     using GetDpiForSystem_t = decltype(&GetDpiForSystem);
@@ -172,7 +172,7 @@ UINT GetSystemDpi()
     return uDpi;
 }
 
-// Helper: Get window DPI
+// Helper: Get the window DPI
 UINT GetWindowDpi(HWND hWnd)
 {
     if (!hWnd)
