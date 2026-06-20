@@ -2,7 +2,7 @@
 // @id              tray-hover-expand
 // @name            Tray hover expand
 // @description     Open the hidden tray icons flyout on hover instead of clicking the chevron; optionally collapse it when the cursor leaves
-// @version         1.4.2
+// @version         1.6.0
 // @author          wygodad
 // @github          https://github.com/wygodad
 // @include         windhawk.exe
@@ -45,6 +45,12 @@ battery, etc., and exposes no ExpandCollapse pattern). So detection is a hybrid:
   keywords" setting, or rely on the leftmost-tray-icon fallback.
 - If auto-collapse does not work, the flyout window class name may differ on your
   build. Change it in the "Flyout window class" setting.
+- Windows shows a "Hide" tooltip over the chevron while the flyout is open, which
+  can cover the bottom row of icons. Enable "Hide the chevron tooltip" to
+  suppress it.
+- By default the flyout is not opened while a fullscreen app is in the foreground
+  (e.g. a fullscreen video or a game), so it can't pop up over the content. Turn
+  off "Do not activate over fullscreen apps" to always activate.
 
 ---
 
@@ -81,6 +87,13 @@ jest więc hybrydowe:
   „Słowa kluczowe nazwy strzałki" albo polegaj na powyższym mechanizmie zapasowym.
 - Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
   Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".
+- Gdy schowek jest otwarty, Windows pokazuje nad strzałką podpowiedź „Ukryj",
+  która potrafi zasłaniać dolny rząd ikon. Włącz „Ukryj podpowiedź strzałki",
+  aby ją wyłączyć.
+- Domyślnie schowek nie otwiera się, gdy na pierwszym planie jest aplikacja
+  pełnoekranowa (np. film na pełnym ekranie lub gra), więc nie wyskoczy on na
+  wierzchu treści. Wyłącz „Nie aktywuj na aplikacjach pełnoekranowych", aby
+  aktywować zawsze.
 */
 // ==/WindhawkModReadme==
 
@@ -111,11 +124,26 @@ jest więc hybrydowe:
   $name:pl-PL: Słowa kluczowe nazwy strzałki
   $description: Case-insensitive substrings used to match the chevron button name. Add your locale's name for "Show Hidden Icons" here.
   $description:pl-PL: Fragmenty nazwy przycisku strzałki (wielkość liter bez znaczenia). Dodaj tu nazwę „Pokaż ukryte ikony" w swoim języku.
+- suppressInFullscreen: true
+  $name: Do not activate over fullscreen apps
+  $name:pl-PL: Nie aktywuj na aplikacjach pełnoekranowych
+  $description: When a fullscreen app is in the foreground (e.g. a fullscreen video or a game), hovering the chevron's location will not open the flyout, so it can't pop up over the content.
+  $description:pl-PL: Gdy na pierwszym planie jest aplikacja pełnoekranowa (np. film na pełnym ekranie lub gra), najechanie w miejsce strzałki nie otworzy schowka, więc nie wyskoczy on na wierzchu treści.
+- hideTooltip: false
+  $name: Hide the chevron tooltip
+  $name:pl-PL: Ukryj podpowiedź strzałki
+  $description: While the flyout is open and the cursor is on the chevron, hide the "Hide" tooltip that Windows shows over the chevron (it can cover the bottom row of icons).
+  $description:pl-PL: Gdy schowek jest otwarty, a kursor jest na strzałce, ukrywa podpowiedź „Ukryj", którą Windows pokazuje nad strzałką (potrafi zasłaniać dolny rząd ikon).
 - flyoutClass: TopLevelWindowForOverflowXamlIsland
   $name: Flyout window class
   $name:pl-PL: Klasa okna schowka
   $description: Window class name of the opened flyout (used to tell whether the cursor is over the icons). Change it if auto-collapse does not work.
   $description:pl-PL: Nazwa klasy okna otwartego schowka (służy do sprawdzania, czy kursor jest nad ikonami). Zmień ją, jeśli auto-zwijanie nie działa.
+- tooltipClass: Xaml_WindowedPopupClass
+  $name: Tooltip window class
+  $name:pl-PL: Klasa okna podpowiedzi
+  $description: Window class of the chevron tooltip, hidden only when "Hide the chevron tooltip" is enabled. Change it if hiding does not work on your build.
+  $description:pl-PL: Klasa okna podpowiedzi strzałki, ukrywanej tylko gdy włączono „Ukryj podpowiedź strzałki". Zmień ją, jeśli ukrywanie nie działa na Twojej kompilacji.
 - trayIconAutomationId: SystemTrayIcon
   $name: Tray icon AutomationId (fallback)
   $name:pl-PL: AutomationId ikony zasobnika (mechanizm zapasowy)
@@ -141,7 +169,10 @@ struct Settings {
     int pollInterval = 50;
     int grace = 200;
     int pad = 4;
+    bool hideTooltip = false;
+    bool suppressInFullscreen = true;
     std::wstring flyoutClass = L"TopLevelWindowForOverflowXamlIsland";
+    std::wstring tooltipClass = L"Xaml_WindowedPopupClass";
     std::wstring trayIconAutomationId = L"SystemTrayIcon";
     std::vector<std::wstring> keywords = {
         L"ukryte ikony", L"hidden icons", L"rozwiń", L"overflow"
@@ -315,6 +346,53 @@ static bool PtOverWindow(HWND hwnd, POINT pt) {
     return PtInRect(&r, pt);
 }
 
+// Hide the chevron's "Hide" tooltip, which Windows pops up over the chevron
+// while the flyout is open and can cover the bottom row of icons. The tooltip
+// is a separate window class from the flyout, but that class is a generic XAML
+// popup host, so only windows positioned over the chevron (horizontally
+// overlapping it and sitting at or above its top, i.e. inside the flyout zone)
+// are hidden — never popups elsewhere on screen.
+static void HideChevronTooltip(const Settings& s, const RECT& chevron) {
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, s.tooltipClass.c_str(), nullptr))) {
+        if (!IsWindowVisible(h)) continue;
+        RECT r;
+        if (!GetWindowRect(h, &r)) continue;
+        bool overlapsX = r.left <= chevron.right && r.right >= chevron.left;
+        bool aboveChevron = r.bottom <= chevron.bottom;
+        if (overlapsX && aboveChevron) {
+            ShowWindow(h, SW_HIDE);
+        }
+    }
+}
+
+// True when the foreground window covers its whole monitor, i.e. a fullscreen
+// app (a fullscreen video, a game, etc.). Maximized windows stop at the work
+// area and therefore do not match. The desktop and shell windows are excluded
+// so an empty desktop is not mistaken for a fullscreen app.
+static bool IsForegroundFullscreen() {
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd || hwnd == GetShellWindow()) return false;
+
+    WCHAR cls[64];
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
+        if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+            wcscmp(cls, L"Progman") == 0 ||
+            wcscmp(cls, L"WorkerW") == 0) {
+            return false;
+        }
+    }
+
+    RECT wr;
+    if (!GetWindowRect(hwnd, &wr)) return false;
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+        return false;
+    }
+    return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
+           wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
+}
+
 // ---- Worker thread ----
 
 static DWORD WINAPI WorkerThread(LPVOID) {
@@ -402,7 +480,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             // manually opened flyout is still noticed without paying a
             // FindWindowW call on every tick.
             HWND flyoutHwnd = nullptr;
-            if (enterEdge || (s.autoClose && flyoutBelievedOpen)) {
+            bool wantState = enterEdge
+                          || (s.autoClose && flyoutBelievedOpen)
+                          || (s.hideTooltip && overBtn);
+            if (wantState) {
                 flyoutHwnd = GetVisibleFlyout(s);
             } else if (s.autoClose && now >= nextIdleStateCheck) {
                 flyoutHwnd = GetVisibleFlyout(s);
@@ -411,10 +492,21 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             bool flyoutVisible = (flyoutHwnd != nullptr);
             flyoutBelievedOpen = flyoutVisible || cooling;
 
+            // While hovering the chevron of an open flyout, suppress the
+            // "Hide" tooltip that would otherwise cover the bottom icons.
+            if (s.hideTooltip && overBtn && flyoutVisible) {
+                HideChevronTooltip(s, cachedRect);
+            }
+
             // Open only on the cursor-enter edge and only when the flyout is
             // not already open. The chevron acts as a toggle, so any redundant
-            // Invoke would close it again.
-            if (enterEdge && !flyoutVisible) {
+            // Invoke would close it again. Skip activation over a fullscreen
+            // app so the flyout can't pop up on top of a video or a game (the
+            // taskbar is hidden there, but the cached chevron rect still matches
+            // that screen area). Checked only on the edge, so it costs nothing
+            // on idle ticks.
+            if (enterEdge && !flyoutVisible &&
+                !(s.suppressInFullscreen && IsForegroundFullscreen())) {
                 DoExpand(pBtn);
                 lastOpenAt = now;
                 flyoutBelievedOpen = true;
@@ -479,6 +571,8 @@ static void LoadSettings() {
     s.pollInterval = (int)Wh_GetIntSetting(L"pollInterval");
     s.grace = (int)Wh_GetIntSetting(L"grace");
     s.pad = (int)Wh_GetIntSetting(L"pad");
+    s.hideTooltip = Wh_GetIntSetting(L"hideTooltip") != 0;
+    s.suppressInFullscreen = Wh_GetIntSetting(L"suppressInFullscreen") != 0;
     if (s.pollInterval < 10) s.pollInterval = 10;
     if (s.grace < 0) s.grace = 0;
 
@@ -487,6 +581,10 @@ static void LoadSettings() {
     PCWSTR fc = Wh_GetStringSetting(L"flyoutClass");
     if (*fc) s.flyoutClass = fc;
     Wh_FreeStringSetting(fc);
+
+    PCWSTR tc = Wh_GetStringSetting(L"tooltipClass");
+    if (*tc) s.tooltipClass = tc;
+    Wh_FreeStringSetting(tc);
 
     PCWSTR aid = Wh_GetStringSetting(L"trayIconAutomationId");
     if (*aid) s.trayIconAutomationId = aid;
