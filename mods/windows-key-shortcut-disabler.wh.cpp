@@ -2,8 +2,8 @@
 // @id                 windows-key-shortcut-disabler
 // @name               Windows Key Shortcut Disabler (Win+V, Win+W, Win+Q, and more!)
 // @name:ja-JP         Windowsキーショートカット無効化（Win+V、Win+W、Win+Qなど）
-// @description        A configurable tweak/mod that disables Win+V, Win+W, Win+Q keyboard shortcuts. Also allows you to define your own Win+* shortcuts to block. ※ explorer.exe must be restarted for changes to take effect.
-// @description:ja-JP  Win+V、Win+W、Win+QなどのWindowsキーのショートカットを無効化できる、設定可能なtweak/modです。任意のWin+◯◯ショートカットを指定して無効化することもできます。※変更を反映するにはexplorer.exeの再起動が必要です。
+// @description        Disables Win+V, Win+W, Win+Q, and custom Win+* keyboard shortcuts. ※ explorer.exe must be restarted for changes to take effect.
+// @description:ja-JP  Win+V、Win+W、Win+Q、およびカスタムのWin+〇〇キーボードショートカットを無効化します。※変更を反映するにはexplorer.exeの再起動が必要です。
 // @version            1.0
 // @author             Karen/あけみ (akemin_dayo)
 // @github             https://github.com/akemin-dayo
