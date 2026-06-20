@@ -133,6 +133,22 @@ struct UAHMEASUREMENUITEM
     UAHMENUITEM uahMenuItem;
 };
 
+// Helper: Get the executable name of the current process
+LPCWSTR GetCurrentProcessName()
+{
+    static WCHAR szProcessPath[MAX_PATH];
+    static LPCWSTR pszProcessName = nullptr;
+    if (!pszProcessName)
+    {
+        GetModuleFileNameW(nullptr, szProcessPath, ARRAYSIZE(szProcessPath));
+        pszProcessName = wcsrchr(szProcessPath, L'\\');
+        pszProcessName = pszProcessName
+            ? pszProcessName + 1
+            : szProcessPath;
+    }
+    return pszProcessName;
+}
+
 // Helper: Get system DPI
 UINT GetSystemDpi()
 {
@@ -229,7 +245,7 @@ void AdjustUahMenuItemMetrics(HWND hWnd, LPARAM lParam)
 // Helper: Update the custom menu bar height and dynamically resize the window
 bool UpdateMenuBarHeight(HWND hWnd, UINT uMsg)
 {
-    if (uMsg == 0 || uMsg != g_updateMenuBarHeightMsg)
+    if (uMsg != g_updateMenuBarHeightMsg)
     {
         return false;
     }
@@ -627,17 +643,9 @@ inline bool ApplyImmersiveMenuHook(LPCWSTR pszModuleName,
             LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
 
-    WCHAR szProcessPath[MAX_PATH];
-    LPCWSTR pszTargetName = pszModuleName;
-    if (!pszTargetName)
-    {
-        GetModuleFileNameW(nullptr, szProcessPath, ARRAYSIZE(szProcessPath));
-        pszTargetName = wcsrchr(szProcessPath, L'\\');
-        pszTargetName = pszTargetName
-            ? pszTargetName + 1
-            : szProcessPath;
-    }
-
+    LPCWSTR pszTargetName = pszModuleName
+        ? pszModuleName
+        : GetCurrentProcessName();
     if (!hModule)
     {
         Wh_Log(L"Failed to load %s", pszTargetName);
@@ -701,12 +709,7 @@ void LoadSettings()
     }
 
     // Exclude Visual Studio from menu bar height modifications
-    WCHAR szProcessPath[MAX_PATH];
-    GetModuleFileNameW(nullptr, szProcessPath, ARRAYSIZE(szProcessPath));
-    LPCWSTR pszProcessName = wcsrchr(szProcessPath, L'\\');
-    pszProcessName = pszProcessName
-        ? pszProcessName + 1
-        : szProcessPath;
+    LPCWSTR pszProcessName = GetCurrentProcessName();
     if (_wcsicmp(pszProcessName, L"devenv.exe") == 0)
     {
         settings.menuBarHeight = 0;
@@ -790,13 +793,7 @@ BOOL Wh_ModInit()
     }
 
     // Exclude the current process from immersive menus hooks
-    WCHAR szProcessPath[MAX_PATH];
-    GetModuleFileNameW(nullptr, szProcessPath, ARRAYSIZE(szProcessPath));
-    LPCWSTR pszProcessName = wcsrchr(szProcessPath, L'\\');
-    pszProcessName = pszProcessName
-        ? pszProcessName + 1
-        : szProcessPath;
-
+    LPCWSTR pszProcessName = GetCurrentProcessName();
     bool shouldExcludeProcess =
         _wcsicmp(pszProcessName, L"windhawk.exe") == 0 ||
         _wcsicmp(pszProcessName, L"consent.exe") == 0 ||
