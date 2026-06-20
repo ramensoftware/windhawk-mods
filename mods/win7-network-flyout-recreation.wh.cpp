@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.6
+// @version        1.4.7
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -15,7 +15,7 @@
 
 This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the Windows 10 taskbar installed using ExplorerPatcher).
 
-**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations (such as Retrobar).  it is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
+**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations (such as Retrobar). It is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
 ## Features
 
 - **Wi-Fi network list** — Shows all available networks with signal strength
@@ -33,7 +33,9 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 | Key | Action |
 |-----|--------|
 | **Ctrl+H** | Toggle network flyout |
-
+## Credits 
+- m417z: Review 
+- Anixx: Testing
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -1645,12 +1647,16 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
         }
             
-        case wlan_notification_acm_connection_attempt_fail: {
-            PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
-                (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-            Wh_Log(L"WLAN: Connection Attempt Failed, Reason: %lu (ignored)", connData->wlanReasonCode);
-            break;
+    case wlan_notification_acm_connection_attempt_fail: {
+        PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
+            (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+        Wh_Log(L"WLAN: Connection Attempt Failed, Reason: %lu", connData->wlanReasonCode);
+    
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)connData->wlanReasonCode);
         }
+    break;
+}
             
         case wlan_notification_acm_disconnected:
             Wh_Log(L"WLAN: Disconnected");
@@ -2056,30 +2062,23 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         
         Wh_Log(L"Async connect complete: success=%d, error=%lu", opSuccess, errorCode);
         
-        // Se l'API ha fallito SUBITO (es. profilo non valido), aggiorna stato
-        // Altrimenti aspetta la notifica WLAN per lo stato finale
         if (!opSuccess && errorCode != ERROR_SUCCESS) {
-            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-                g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_ERROR;
-                g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-                if (errorCode == WLAN_REASON_CODE_INVALID_PROFILE) {
-                    g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;
-                }
-                g_PendingConnectIndex = -1;
-                
-                WCHAR errMsg[256];
-                if (errorCode == WLAN_REASON_CODE_INVALID_PROFILE) {
-                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), MB_OK | MB_ICONERROR);
-                } else {
-                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_CONNECTION_ERROR), errorCode);
-                    MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONERROR);
-                }
-            }
-            if (g_TimeoutTimer) {
-                KillTimer(hwnd, g_TimeoutTimer);
-                g_TimeoutTimer = 0;
-            }
-        }
+    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+        g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_ERROR;
+        g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+        g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;  // Forza ri-richiesta password
+        g_PendingConnectIndex = -1;
+        
+        // Mostra sempre l'errore, indipendentemente dal codice
+        WCHAR errMsg[256];
+        StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_PWD_FAILED_WRONG));
+        MessageBoxW(hwnd, errMsg, LOC(STR_PWD_FAILED_TITLE), MB_OK | MB_ICONERROR);
+    }
+    if (g_TimeoutTimer) {
+        KillTimer(hwnd, g_TimeoutTimer);
+        g_TimeoutTimer = 0;
+    }
+}
         
         RefreshWifiData(g_Ctx.hWlanClient);
         UpdateLayoutGeometry();
@@ -2870,18 +2869,16 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
         BOOL hasTip = GetToolbarButtonTooltip(hToolbar, &tb, tipText, ARRAYSIZE(tipText));
         if (hasTip) ToLowerBuffer(tipText, lower, ARRAYSIZE(lower));
 
-        // Se il tooltip è nella lista nera, rifiuta subito
         if (hasTip && TooltipMatchesExclusion(lower)) {
             Wh_Log(L"DetectNetworkButtonId: id=2 at index %d rejected, tooltip '%s' "
                    L"matches exclusion list (icon likely reassigned)", i, tipText);
             continue;
         }
 
-        // Conferma visiva: l'icona deve corrispondere a quella di rete
         if (!IsNetworkIcon(hToolbar, i)) {
-            Wh_Log(L"DetectNetworkButtonId: id=2 at index %d rejected, icon does not "
-                   L"match network icon", i);
-            continue;
+            Wh_Log(L"DetectNetworkButtonId: id=2 at index %d, icon does not "
+                   L"match network icon, but accepting anyway (id=2 + not excluded + not overflow)",
+                   i);
         }
 
         *outButtonId = TRAY_NETWORK_ID;
@@ -3260,7 +3257,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.6 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.7 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
