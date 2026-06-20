@@ -133,7 +133,7 @@ struct UAHMEASUREMENUITEM
     UAHMENUITEM uahMenuItem;
 };
 
-// Helper: Get the executable name of the current process
+// Helper: Get the current process name
 LPCWSTR GetCurrentProcessName()
 {
     static WCHAR szProcessPath[MAX_PATH];
