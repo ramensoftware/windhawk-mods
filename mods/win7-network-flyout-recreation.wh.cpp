@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.7
+// @version        1.4.8
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -2062,16 +2062,19 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         
         Wh_Log(L"Async connect complete: success=%d, error=%lu", opSuccess, errorCode);
         
-        if (!opSuccess && errorCode != ERROR_SUCCESS) {
+     if (!opSuccess && errorCode != ERROR_SUCCESS) {
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
         g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_ERROR;
         g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-        g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;  // Forza ri-richiesta password
+        g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;
         g_PendingConnectIndex = -1;
-        
-        // Mostra sempre l'errore, indipendentemente dal codice
+
         WCHAR errMsg[256];
-        StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_PWD_FAILED_WRONG));
+        if (errorCode == WLAN_REASON_CODE_INVALID_PROFILE) {
+            StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_CONNECTION_ERROR), errorCode);
+        } else {
+            StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_PWD_FAILED_WRONG));
+        }
         MessageBoxW(hwnd, errMsg, LOC(STR_PWD_FAILED_TITLE), MB_OK | MB_ICONERROR);
     }
     if (g_TimeoutTimer) {
@@ -3050,7 +3053,7 @@ void ToggleFlyoutWindow() {
             RegisterClassW(&wc);
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
-            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN;
+            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; // Added WS_BORDER as requested
             if (g_Settings.useRoundedCorners) dwStyle |= WS_THICKFRAME;
             AdjustWindowRectEx(&rcClient, dwStyle, FALSE, dwExStyle);
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
@@ -3257,7 +3260,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.7 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.8 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
