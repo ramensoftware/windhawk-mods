@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.9
+// @version        1.5.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -2793,11 +2793,13 @@ static bool TooltipMatchesNetwork(const WCHAR* lowerTip) {
         if (wcsstr(lowerTip, networkKeywords[k])) return true;
     return false;
 }
-// Confronta l'icona del bottone della tray con l'icona standard di rete
-// (netshell.dll, icona 120). Restituisce TRUE se le icone corrispondono.
-static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
+static BOOL IsNetworkIconByStockIcon(HWND hToolbar, int btnIndex) {
     HICON hNetIcon = NULL;
-    ExtractIconExW(L"netshell.dll", 120, &hNetIcon, NULL, 1);
+    SHSTOCKICONINFO sii = { sizeof(sii) };
+    if (FAILED(SHGetStockIconInfo(SIID_MYNETWORK, SHGSI_ICON | SHGSI_SMALLICON, &sii))) {
+        return FALSE;
+    }
+    hNetIcon = sii.hIcon;
     if (!hNetIcon) return FALSE;
 
     HIMAGELIST hImageList = (HIMAGELIST)SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0);
@@ -2852,6 +2854,80 @@ static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
     return match;
 }
 
+static BOOL IsNetworkIconByAnySignalVariant(HWND hToolbar, int btnIndex) {
+    HIMAGELIST hImageList = (HIMAGELIST)SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0);
+    if (!hImageList) return FALSE;
+
+    TBBUTTON tb = {0};
+    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIndex, (LPARAM)&tb)) return FALSE;
+
+    HICON hBtnIcon = ImageList_GetIcon(hImageList, tb.iBitmap, ILD_NORMAL);
+    if (!hBtnIcon) {
+        TBBUTTONINFOW tbi = {0};
+        tbi.cbSize = sizeof(tbi);
+        tbi.dwMask = TBIF_IMAGE;
+        if (SendMessageW(hToolbar, TB_GETBUTTONINFOW, tb.idCommand, (LPARAM)&tbi)) {
+            hBtnIcon = ImageList_GetIcon(hImageList, tbi.iImage, ILD_NORMAL);
+        }
+    }
+    if (!hBtnIcon) return FALSE;
+
+    ICONINFO btnInfo = {0};
+    if (!GetIconInfo(hBtnIcon, &btnInfo)) {
+        DestroyIcon(hBtnIcon);
+        return FALSE;
+    }
+
+    BITMAP btnBmp = {0};
+    if (!GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
+                    sizeof(BITMAP), &btnBmp)) {
+        if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
+        if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
+        DestroyIcon(hBtnIcon);
+        return FALSE;
+    }
+
+    if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
+    if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
+    DestroyIcon(hBtnIcon);
+
+    for (int variant = 0; variant < 6; variant++) {
+        HICON hNetVariant = NULL;
+        ExtractIconExW(L"netshell.dll", 152 + variant, &hNetVariant, NULL, 1);
+        if (!hNetVariant) continue;
+
+        ICONINFO netInfo = {0};
+        if (!GetIconInfo(hNetVariant, &netInfo)) {
+            DestroyIcon(hNetVariant);
+            continue;
+        }
+
+        BITMAP netBmp = {0};
+        BOOL gotBmp = GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
+                                 sizeof(BITMAP), &netBmp);
+        if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
+        if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
+        DestroyIcon(hNetVariant);
+
+        if (gotBmp && netBmp.bmWidth == btnBmp.bmWidth && netBmp.bmHeight == btnBmp.bmHeight) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static BOOL HasSuspiciousStyle(const TBBUTTON* tb) {
+    if (tb->fsState & TBSTATE_MARKED) return TRUE;
+    if (tb->fsStyle & BTNS_WHOLEDROPDOWN) return TRUE;
+    return FALSE;
+}
+
+static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
+    if (IsNetworkIconByAnySignalVariant(hToolbar, btnIndex)) return TRUE;
+    if (IsNetworkIconByStockIcon(hToolbar, btnIndex)) return TRUE;
+    return FALSE;
+}
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"DetectNetworkButtonId: toolbar has %d buttons", count);
@@ -2919,6 +2995,47 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
             Wh_Log(L"DetectNetworkButtonId: found via tooltip '[network icon]', idCommand=%d",
                    tb.idCommand);
             return;
+        }
+    }
+
+        // Method 4 + 7: filter by style and compare with all icon variants
+    {
+        int bestCandidate = -1;
+        for (int i = 0; i < count; i++) {
+            TBBUTTON tb = {0};
+            if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+            if (HasSuspiciousStyle(&tb)) continue;
+            
+            if (IsNetworkIconByAnySignalVariant(hToolbar, i)) {
+                bestCandidate = i;
+                Wh_Log(L"DetectNetworkButtonId: found via signal variant icon match at index %d", i);
+                break;
+            }
+            if (bestCandidate < 0 && IsNetworkIconByStockIcon(hToolbar, i)) {
+                bestCandidate = i;
+            }
+        }
+        
+        if (bestCandidate >= 0) {
+            TBBUTTON tb = {0};
+            SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)bestCandidate, (LPARAM)&tb);
+            *outButtonId = tb.idCommand;
+            Wh_Log(L"DetectNetworkButtonId: selected index %d (idCommand=%d) via icon fallback", 
+                   bestCandidate, tb.idCommand);
+            return;
+        }
+        
+        for (int i = 0; i < count; i++) {
+            TBBUTTON tb = {0};
+            if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
+            if (!HasSuspiciousStyle(&tb)) continue;
+            
+            if (IsNetworkIconByAnySignalVariant(hToolbar, i)) {
+                *outButtonId = tb.idCommand;
+                Wh_Log(L"DetectNetworkButtonId: found via icon match (suspicious style but icon matches) at index %d, idCommand=%d", 
+                       i, tb.idCommand);
+                return;
+            }
         }
     }
 
@@ -3092,9 +3209,6 @@ void ToggleFlyoutWindow() {
 #define OVERFLOW_POLL_TIMER_ID 9101
 #define OVERFLOW_POLL_INTERVAL_MS 800
 
-#define OVERFLOW_POLL_TIMER_ID 9101
-#define OVERFLOW_POLL_INTERVAL_MS 800
-
 static HWND FindOverflowToolbar() {
     HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", NULL);
     if (!hOverflow) return NULL;
@@ -3150,6 +3264,9 @@ static BOOL SafeRemoveOverflowSubclass(HWND hTarget) {
 }
 
 static void SyncOverflowInterception() {
+    if (!G_hSubclassedToolbar) return;
+    if (G_SubclassId == 0) return;
+    
     HWND hCurrentOverflowToolbar = FindOverflowToolbar();
 
     if (hCurrentOverflowToolbar == G_hSubclassedOverflowToolbar) {
@@ -3293,7 +3410,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.9 ===");
+    Wh_Log(L"=== Wh_ModInit v1.5.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
