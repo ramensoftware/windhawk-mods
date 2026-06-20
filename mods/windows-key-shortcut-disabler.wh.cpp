@@ -222,14 +222,14 @@ BOOL(WINAPI* orig_registerHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 BOOL WINAPI hook_registerHotKey(HWND hWnd, int id, UINT fsModifiers, UINT vk) {
 	// All Win+whatever shortcuts are MOD_NOREPEAT as far as I can tell.
 	if (fsModifiers == (MOD_WIN | MOD_NOREPEAT)) {
-		AkemiLog("Explorer is attempting to register key combination Win+%lc (%u)…", static_cast<wchar_t>(vk), vk);
+		AkemiLog("Explorer is attempting to register key combination Win+%lc (0x%02x)…", static_cast<wchar_t>(vk), vk);
 		if (
 			(vk == 'V' && akemiPreferences.shouldDisableWinV) ||
 			(vk == 'W' && akemiPreferences.shouldDisableWinW) ||
 			(vk == 'Q' && akemiPreferences.shouldDisableWinQ) ||
 			(akemiPreferences.userDefinedWinKeyExclusions.contains(vk))
 		) {
-			AkemiLog("Preventing Explorer from registering key combination Win+%lc (%u)…", static_cast<wchar_t>(vk), vk);
+			AkemiLog("Preventing Explorer from registering key combination Win+%lc (0x%02x)…", static_cast<wchar_t>(vk), vk);
 			SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
 			return false;
 		}
