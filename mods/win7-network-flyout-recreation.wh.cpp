@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.8
+// @version        1.4.9
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -3092,19 +3092,54 @@ void ToggleFlyoutWindow() {
 #define OVERFLOW_POLL_TIMER_ID 9101
 #define OVERFLOW_POLL_INTERVAL_MS 800
 
+#define OVERFLOW_POLL_TIMER_ID 9101
+#define OVERFLOW_POLL_INTERVAL_MS 800
+
 static HWND FindOverflowToolbar() {
     HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", NULL);
     if (!hOverflow) return NULL;
     return FindWindowExW(hOverflow, NULL, L"ToolbarWindow32", NULL);
 }
 
-// Safe subclassing
+static BOOL WaitForOverflowToolbarStable(HWND hToolbar, int minButtons, int maxWaitMs) {
+    if (!hToolbar || !IsWindow(hToolbar)) return FALSE;
+    
+    int prevCount = -1;
+    int stableCount = 0;
+    int pollIntervalMs = 100;
+    int maxAttempts = maxWaitMs / pollIntervalMs;
+    
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        if (!IsWindow(hToolbar)) return FALSE;
+        
+        int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+        
+        if (count >= minButtons && count == prevCount) {
+            stableCount++;
+            if (stableCount >= 3) {
+                Wh_Log(L"WaitForOverflowToolbarStable: toolbar stable with %d buttons after %d ms",
+                       count, attempt * pollIntervalMs);
+                return TRUE;
+            }
+        } else {
+            stableCount = 0;
+        }
+        prevCount = count;
+        Sleep(pollIntervalMs);
+    }
+    
+    Wh_Log(L"WaitForOverflowToolbarStable: toolbar did not stabilize within %d ms (last count=%d)",
+           maxWaitMs, prevCount);
+    return FALSE;
+}
+
 static BOOL SafeSubclassOverflowToolbar(HWND hTarget) {
     if (!hTarget || !IsWindow(hTarget)) return FALSE;
-    if (!IsWindow(hTarget)) return FALSE; // doppio controllo, finestra può morire tra le righe
+    if (!IsWindow(hTarget)) return FALSE;
     return WindhawkUtils::SetWindowSubclassFromAnyThread(
         hTarget, ToolbarWndProc, (DWORD_PTR)&G_OverflowSubclassId);
 }
+
 static BOOL SafeRemoveOverflowSubclass(HWND hTarget) {
     if (!hTarget) return FALSE;
     if (!IsWindow(hTarget)) {
@@ -3121,7 +3156,6 @@ static void SyncOverflowInterception() {
         return;
     }
 
-    // To avoid infinite loops
     static HWND s_lastFailedHwnd = NULL;
     static int  s_failedAttempts = 0;
 
@@ -3146,15 +3180,14 @@ static void SyncOverflowInterception() {
     }
 
     if (hCurrentOverflowToolbar) {
-    // Su Win11 con ExplorerPatcher, l'overflow subclassing può crashare explorer.
-    // L'icona di rete è quasi sempre nella toolbar principale, quindi disabilitiamo
-    // l'intercettazione overflow per sicurezza.
-    if (g_isWin11) {
-        Wh_Log(L"SyncOverflowInterception: skipping overflow on Win11 (stability)");
-        return;
-    }
         if (!IsWindow(hCurrentOverflowToolbar)) {
             Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p no longer valid, skipping",
+                   hCurrentOverflowToolbar);
+            return;
+        }
+        
+        if (!WaitForOverflowToolbarStable(hCurrentOverflowToolbar, 2, 2000)) {
+            Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p not stable, will retry next poll",
                    hCurrentOverflowToolbar);
             return;
         }
@@ -3260,7 +3293,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.8 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.9 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
