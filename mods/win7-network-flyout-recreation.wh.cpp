@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.4
+// @version        1.4.5
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -73,12 +73,12 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 #define UNICODE
 #endif
 #include <windows.h>
-#include <winternl.h>
 #include <windowsx.h>
 #include <wlanapi.h>
 #include <objbase.h>
 #include <uxtheme.h>
 #include <dwmapi.h>
+#include <guiddef.h>
 #include <strsafe.h>
 #include <shellapi.h>
 #include <commctrl.h>
@@ -577,7 +577,7 @@ static const WCHAR* SignalQualityToString(ULONG quality) {
 static bool IsExplorerProcess();
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 void RefreshWifiData(HANDLE hClient);
-void UpdateLayoutGeometry();
+void UpdateLayoutGeometry(int scrollbarOffset = 0);
 void ConnectToNetwork(int index);
 void DisconnectFromNetwork(int index);
 void CheckConnectionTimeouts(void);
@@ -746,30 +746,12 @@ RegQueryValueExW_t Real_RegQueryValueExW = NULL;
 typedef LONG (WINAPI *RegGetValueW_t)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
 RegGetValueW_t Real_RegGetValueW = NULL;
 
-typedef LONG (WINAPI *NtQueryKey_t)(HANDLE, int, PVOID, ULONG, PULONG);
-static BOOL IsTargetReplaceVanKey(HKEY hKey) {
-    static NtQueryKey_t pNtQueryKey = NULL;
-    if (!pNtQueryKey) {
-        HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-        if (hNtdll) pNtQueryKey = (NtQueryKey_t)GetProcAddress(hNtdll, "NtQueryKey");
-        if (!pNtQueryKey) return TRUE;
-    }
-    BYTE buffer[1024];
-    ULONG resultLen = 0;
-    if (pNtQueryKey((HANDLE)hKey, 3, buffer, sizeof(buffer), &resultLen) != 0)
-        return TRUE;
-    UNICODE_STRING* nameInfo = (UNICODE_STRING*)buffer;
-    if (!nameInfo->Buffer || nameInfo->Length == 0) return TRUE;
-    return (StrStrIW(nameInfo->Buffer, REG_PATH_NETWORK) != NULL);
-}
-
 LONG WINAPI Hook_RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, 
                                    LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
     if (!g_Settings.useRegistryMethod)
         return Real_RegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     
-    if (lpValueName && _wcsicmp(lpValueName, REG_VALUE_REPLACEVAN) == 0 &&
-        IsTargetReplaceVanKey(hKey)) {
+    if (lpValueName && _wcsicmp(lpValueName, REG_VALUE_REPLACEVAN) == 0) {
         if (lpType) *lpType = REG_DWORD;
         if (lpData && lpcbData) {
             if (*lpcbData >= sizeof(DWORD)) {
@@ -791,11 +773,7 @@ LONG WINAPI Hook_RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWOR
     if (!g_Settings.useRegistryMethod)
         return Real_RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     
-    BOOL isTargetKey = lpSubKey
-        ? (StrStrIW(lpSubKey, L"Network") != NULL)
-        : IsTargetReplaceVanKey(hkey);
-    
-    if (lpValue && _wcsicmp(lpValue, REG_VALUE_REPLACEVAN) == 0 && isTargetKey) {
+    if (lpValue && _wcsicmp(lpValue, REG_VALUE_REPLACEVAN) == 0) {
         if (pdwType) *pdwType = REG_DWORD;
         if (pvData && pcbData) {
             if (*pcbData >= sizeof(DWORD)) {
@@ -1043,7 +1021,50 @@ void RefreshWifiData(HANDLE hClient) {
         }
         if (pProfList) WlanFreeMemory(pProfList);
     }
-    WlanFreeMemory(pIfList);
+    // DEBUG: aggiungi reti finte - RIMUOVERE DOPO IL TEST
+/*for (int i = 0; i < 15 && tempCount < 50; i++) {
+    swprintf_s(tempList[tempCount].ssid, 33, L"Test-Network-%d", i+1);
+    tempList[tempCount].signalQuality = 100 - (i * 6);
+    tempList[tempCount].isSecured = (i % 2 == 0);
+    tempList[tempCount].interfaceGuid = pIfList->InterfaceInfo[0].InterfaceGuid;  // ok, pIfList ancora valido qui
+    tempList[tempCount].dot11BssType = dot11_BSS_type_infrastructure;
+    tempList[tempCount].connState = (i == 0) ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+    tempCount++;
+}*/
+
+WlanFreeMemory(pIfList);
+
+       {
+    bool seenConnectedForInterface[64] = {false};
+    GUID seenGuids[64];
+    int seenCount = 0;
+
+    for (int t = 0; t < tempCount; t++) {
+        if (tempList[t].connState != CONN_STATE_CONNECTED) continue;
+
+        int guidIndex = -1;
+        for (int g = 0; g < seenCount; g++) {
+            if (IsEqualGUID(seenGuids[g], tempList[t].interfaceGuid)) {
+                guidIndex = g;
+                break;
+            }
+        }
+        if (guidIndex == -1 && seenCount < 64) {
+            seenGuids[seenCount] = tempList[t].interfaceGuid;
+            guidIndex = seenCount;
+            seenConnectedForInterface[seenCount] = false;
+            seenCount++;
+        }
+
+        if (guidIndex >= 0) {
+            if (seenConnectedForInterface[guidIndex]) {
+                tempList[t].connState = CONN_STATE_IDLE;
+            } else {
+                seenConnectedForInterface[guidIndex] = true;
+            }
+        }
+    }
+}
 
     // Preserve connection state for pending operations
     EnterCriticalSection(&g_Ctx.csLock);
@@ -1483,11 +1504,9 @@ static BOOL AskForPasswordAndConnect(int index) {
         ctx->password[0] = L'\0';
     }
     
-    EnterCriticalSection(&g_Ctx.csLock);
     item->connState = CONN_STATE_CONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
-    LeaveCriticalSection(&g_Ctx.csLock);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -1535,11 +1554,9 @@ void DisconnectFromNetwork(int index) {
     WifiNetworkItem* item = &g_NetworkList[index];
     if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
     
-    EnterCriticalSection(&g_Ctx.csLock);
     item->connState = CONN_STATE_DISCONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
-    LeaveCriticalSection(&g_Ctx.csLock);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -1562,10 +1579,7 @@ void DisconnectFromNetwork(int index) {
 void CheckConnectionTimeouts() {
     if (!g_Ctx.hWlanClient) return;
     
-    EnterCriticalSection(&g_Ctx.csLock);
-    
     if (g_PendingConnectIndex < 0 || g_PendingConnectIndex >= g_NetworkCount) {
-        LeaveCriticalSection(&g_Ctx.csLock);
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
@@ -1575,17 +1589,13 @@ void CheckConnectionTimeouts() {
     
     WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
     
-    if (item->operationStartTime == 0) {
-        LeaveCriticalSection(&g_Ctx.csLock);
-        return;
-    }
+    if (item->operationStartTime == 0) return;
     
     // Se è già connesso (RefreshWifiData l'ha aggiornato), resetta tutto
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
-        LeaveCriticalSection(&g_Ctx.csLock);
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
@@ -1594,21 +1604,12 @@ void CheckConnectionTimeouts() {
     }
     
     DWORD now = GetTickCount();
-    BOOL timedOut = (now - item->operationStartTime) > CONNECTION_TIMEOUT_MS;
-    WCHAR timedOutSsid[33] = {0};
-    int timedOutState = 0;
-    if (timedOut) {
-        StringCchCopyW(timedOutSsid, ARRAYSIZE(timedOutSsid), item->ssid);
-        timedOutState = item->connState;
+    if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
+        LogSsidSafe(L"Timeout for", item->ssid);
+        Wh_Log(L"  (state=%d)", item->connState);
         item->connState = CONN_STATE_ERROR;
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
-    }
-    LeaveCriticalSection(&g_Ctx.csLock);
-    
-    if (timedOut) {
-        LogSsidSafe(L"Timeout for", timedOutSsid);
-        Wh_Log(L"  (state=%d)", timedOutState);
         
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
@@ -1643,20 +1644,26 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
         case wlan_notification_acm_connection_complete: {
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-            Wh_Log(L"WLAN: Connection Complete, Reason: %lu", connData->wlanReasonCode);
-            
+            Wh_Log(L"WLAN: Connection Complete, Reason: %lu, Profile: %s",
+                   connData->wlanReasonCode, connData->strProfileName);
+
             if (connData->wlanReasonCode == ERROR_SUCCESS) {
-                if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                BOOL matchesPending =
+                    (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) &&
+                    IsEqualGUID(data->InterfaceGuid, g_NetworkList[g_PendingConnectIndex].interfaceGuid) &&
+                    (wcscmp(g_NetworkList[g_PendingConnectIndex].ssid, connData->strProfileName) == 0);
+
+                if (matchesPending) {
                     Wh_Log(L"WLAN: Connection SUCCESS for pending index %d", g_PendingConnectIndex);
                     g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
                     g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
                     g_PendingConnectIndex = -1;
-                    
+
                     if (g_TimeoutTimer && hFlyout) {
-                        // KillTimer va chiamato dal thread che ha creato il timer (UI thread).
-                        // Usiamo PostMessage per delegare.
-                        PostMessageW(hFlyout, WM_TIMER, 1002, 0); // forza check timeout che lo uccide
+                        PostMessageW(hFlyout, WM_TIMER, 1002, 0);
                     }
+                } else {
+                    Wh_Log(L"WLAN: Connection complete for unrelated profile/interface, ignoring");
                 }
             }
             break;
@@ -1782,15 +1789,23 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     y -= g_ScrollPos;
-    if (y + ((index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL) <= LIST_Y_START) return FALSE;
+    
+    int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    
+    // Se la riga è completamente sopra l'area visibile, non mostrarla
+    if (y + rowHeight <= LIST_Y_START) return FALSE;
+    // Se la riga è completamente sotto l'area visibile, non mostrarla
     if (y >= LIST_Y_END) return FALSE;
+    
     rcRow->left   = 10;
     rcRow->top    = y;
     rcRow->right  = WINDOW_WIDTH - 10;
-    rcRow->bottom = (int)fmin(y + ((index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL), LIST_Y_END);
+    // CLAMP: la riga non può MAI superare LIST_Y_END
+    int bottom = y + rowHeight;
+    if (bottom > LIST_Y_END) bottom = LIST_Y_END;
+    rcRow->bottom = bottom;
     return TRUE;
 }
-
 int HitTestRows(int x, int y) {
     for (int i = 0; i < g_NetworkCount; i++) {
         RECT rc;
@@ -1802,13 +1817,19 @@ int HitTestRows(int x, int y) {
 void RecalcArrowRect() {
     int labelMidY = WIFI_LABEL_Y + (HEADER_HEIGHT - WIFI_LABEL_Y) / 2;
     int btnH = ScaleDpi(16), btnW = ScaleDpi(22);
-    int margineDestroFreccia = ScaleDpi(24);
+    
+    // Offset per la scrollbar (stesso valore usato per refresh button e icona segnale)
+    int totalHeight = GetTotalListHeight();
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(15) : 0;
+    
+    int margineDestroFreccia = ScaleDpi(20) + scrollbarOffset;
     g_rcArrowButton.right  = WINDOW_WIDTH - margineDestroFreccia;
     g_rcArrowButton.left   = g_rcArrowButton.right - btnW;
     g_rcArrowButton.top    = labelMidY - btnH/2;
     g_rcArrowButton.bottom = labelMidY + btnH/2;
 }
-void UpdateLayoutGeometry() {
+void UpdateLayoutGeometry(int scrollbarOffset) {
     if (!SafeToAccessUI()) return;
     
     if (g_SelectedRowIndex < 0 || g_SelectedRowIndex >= g_NetworkCount) {
@@ -1847,23 +1868,22 @@ void UpdateLayoutGeometry() {
     
     // Pulsante Connect/Disconnect
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
-        if (isConnecting) {
-            MoveWindow(g_hWndButtonConnect, rcRow.right - 100, rcRow.top + 35, 100, 22, TRUE);
-            SetWindowTextW(g_hWndButtonConnect, 
-                          item->connState == CONN_STATE_CONNECTING ? LOC(STR_CONNECTING) : LOC(STR_DISCONNECTING));
-            ShowWindow(g_hWndButtonConnect, SW_SHOW);
-            EnableWindow(g_hWndButtonConnect, FALSE);
-        } else if (isConnected) {
-            MoveWindow(g_hWndButtonConnect, rcRow.right - 90, rcRow.top + 35, 82, 22, TRUE);
-            SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
-            ShowWindow(g_hWndButtonConnect, SW_SHOW);
-            EnableWindow(g_hWndButtonConnect, TRUE);
-        } else {
-            MoveWindow(g_hWndButtonConnect, rcRow.right - 90, rcRow.top + 35, 82, 22, TRUE);
-            SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
-            ShowWindow(g_hWndButtonConnect, SW_SHOW);
-            EnableWindow(g_hWndButtonConnect, TRUE);
-        }
+    if (isConnecting) {
+    MoveWindow(g_hWndButtonConnect, rcRow.right - 50 - scrollbarOffset, rcRow.top + 35, 40, 22, TRUE);
+    SetWindowTextW(g_hWndButtonConnect, L"...");
+    ShowWindow(g_hWndButtonConnect, SW_SHOW);
+    EnableWindow(g_hWndButtonConnect, FALSE);
+} else if (isConnected) {
+    MoveWindow(g_hWndButtonConnect, rcRow.right - 100 - scrollbarOffset, rcRow.top + 35, 92, 22, TRUE);
+    SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
+    ShowWindow(g_hWndButtonConnect, SW_SHOW);
+    EnableWindow(g_hWndButtonConnect, TRUE);
+} else {
+    MoveWindow(g_hWndButtonConnect, rcRow.right - 100 - scrollbarOffset, rcRow.top + 35, 92, 22, TRUE);
+    SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
+    ShowWindow(g_hWndButtonConnect, SW_SHOW);
+    EnableWindow(g_hWndButtonConnect, TRUE);
+}
     }
 }
 
@@ -1907,7 +1927,56 @@ static RECT GetFooterRect() {
     RECT rc = { 0, WINDOW_HEIGHT - FOOTER_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT };
     return rc;
 }
+void EnsureRowVisible(int index) {
+    if (index < 0 || index >= g_NetworkCount) return;
 
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int totalHeight = GetTotalListHeight();
+    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+
+    // 1. Garantisce che la riga cliccata sia visibile (comportamento esistente)
+    int y = LIST_Y_START;
+    for (int i = 0; i < index; i++)
+        y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+
+    int rowTopRel = y - g_ScrollPos;
+    int rowBottomRel = rowTopRel + rowHeight;
+
+    if (rowBottomRel > visibleHeight) {
+        g_ScrollPos += (rowBottomRel - visibleHeight);
+    } else if (rowTopRel < 0) {
+        g_ScrollPos += rowTopRel;
+    }
+
+    // 2. Se dopo l'espansione la lista totale supera l'area visibile,
+    //    preferisci scrollare quanto basta per non lasciare un vuoto
+    //    sotto l'ultima riga (evita la riga finale "tagliata" a metà
+    //    contro il footer quando si espande una riga in alto).
+    if (totalHeight > visibleHeight) {
+        if (g_ScrollPos < maxScroll && rowBottomRel <= visibleHeight) {
+            // c'è margine per scrollare e la riga cliccata resta comunque visibile:
+            // verifica se l'ultima riga è scoperta e in tal caso scrolla quel poco che serve
+            int lastRowBottomAbs = totalHeight; // fine logica della lista
+            int lastRowBottomRel = lastRowBottomAbs - g_ScrollPos;
+            if (lastRowBottomRel < visibleHeight) {
+                int needed = visibleHeight - lastRowBottomRel;
+                int newScroll = g_ScrollPos + needed;
+                // non scrollare oltre maxScroll, e non sacrificare la visibilità della riga cliccata
+                if (newScroll > maxScroll) newScroll = maxScroll;
+                int newRowTopRel = y - newScroll;
+                if (newRowTopRel >= 0) {
+                    g_ScrollPos = newScroll;
+                }
+            }
+        }
+    }
+
+    if (g_ScrollPos > maxScroll) g_ScrollPos = maxScroll;
+    if (g_ScrollPos < 0) g_ScrollPos = 0;
+
+    SetScrollPos(g_hWndFlyout, SB_VERT, g_ScrollPos, TRUE);
+}
 // -------------------------------------------------------
 // Flyout Window Procedure (with removed old result/timeout cases)
 // -------------------------------------------------------
@@ -2098,7 +2167,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
     break;
 }
-
 case WM_MOUSEWHEEL: {
     int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -2173,6 +2241,14 @@ SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
         int iconSize = ScaleDpi(35*1.05); 
 HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
 if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        // Ricalcola posizione refresh button (se scrollbar visibile, sposta a sinistra)
+{
+    int totalHeight = GetTotalListHeight();
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(13) : 0;
+    g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset;
+    g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
+}
         if (g_IsHoveringRefresh) {
             RECT rcBtn = g_rcRefreshButton;
             
@@ -2216,12 +2292,22 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
             SelectObject(hdc, hOldPA); SelectObject(hdc, hOldBA);
             DeleteObject(hBrA); DeleteObject(hPenA);
         }
+        RecalcArrowRect();
         SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, RGB(50,50,50));
         LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
         RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
         DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
         if (g_bListExpanded) {
-            for (int i = 0; i < g_NetworkCount; i++) {
+    // --- CLIPPING: impedisce alle righe di invadere il footer ---
+    HRGN hRgnClip = CreateRectRgn(0, LIST_Y_START, WINDOW_WIDTH, LIST_Y_END);
+    SelectClipRgn(hdc, hRgnClip);
+    DeleteObject(hRgnClip);
+    // --- FINE CLIPPING ---
+    
+    int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
+    UpdateLayoutGeometry(scrollbarOffset);  // <-- AGGIUNGI QUESTA RIGA
+    
+    for (int i = 0; i < g_NetworkCount; i++) {
                 RECT rcRow;
                 if (!GetRowRect(i, &rcRow)) continue;
                 BOOL isSelected = (i == g_SelectedRowIndex);
@@ -2245,31 +2331,45 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
                 SelectObject(hdc, isSelected ? g_hFontBold : g_hFontNormal);
                 SetTextColor(hdc, RGB(0,0,255));
                 TextOutW(hdc, rcRow.left+10, rcRow.top+6, ssidBuf, lstrlenW(ssidBuf));
-                
-                WifiNetworkItem* item = &g_NetworkList[i];
-                const WCHAR* statusText = NULL;
-                switch (item->connState) {
-                    case CONN_STATE_CONNECTED:    statusText = LOC(STR_CONNECTED_TEXT); break;
-                    case CONN_STATE_CONNECTING:   statusText = LOC(STR_CONNECTING); break;
-                    case CONN_STATE_DISCONNECTING: statusText = LOC(STR_DISCONNECTING); break;
-                    default: break;
-                }
-                
-                if (statusText) {
-    SelectObject(hdc, item->connState == CONN_STATE_CONNECTED ? g_hFontBold : g_hFontNormal);
-    SetTextColor(hdc, item->connState == CONN_STATE_CONNECTED ? RGB(0,0,0) : RGB(128,128,128));
-    
-    // POSIZIONE FISSA: sempre in alto a destra, indipendentemente dallo stato di selezione
-    int textX = rcRow.right - 110;  // sempre a destra
-    int textY = rcRow.top + 6;       // sempre in alto
-    
-    TextOutW(hdc, textX, textY, statusText, lstrlenW(statusText));
+             WifiNetworkItem* item = &g_NetworkList[i];
+BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
+                         item->connState == CONN_STATE_DISCONNECTING);
+
+if (item->connState == CONN_STATE_CONNECTED) {
+    // Stato breve: resta a destra, sulla stessa riga del nome
+    SelectObject(hdc, g_hFontBold);
+    SetTextColor(hdc, RGB(0,0,0));
+
+    RECT rcStatus;
+    rcStatus.right = rcRow.right - 39 - scrollbarOffset;
+    rcStatus.left   = rcRow.left + 80;
+    rcStatus.top    = rcRow.top + 6;
+    rcStatus.bottom = rcStatus.top + 18;
+
+    DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
+              DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+}
+else if (isTransitioning) {
+    // Stato di transizione: riga propria sotto il nome, tutta larghezza disponibile
+    SelectObject(hdc, g_hFontNormal);
+    SetTextColor(hdc, RGB(128,128,128));
+
+    const WCHAR* transitionText = (item->connState == CONN_STATE_CONNECTING)
+        ? LOC(STR_CONNECTING) : LOC(STR_DISCONNECTING);
+
+    RECT rcTransition;
+    rcTransition.left   = rcRow.left + 10;
+    rcTransition.right  = rcRow.right - 10;
+    rcTransition.top    = rcRow.top + 24;   // sotto il nome, che è a rcRow.top+6
+    rcTransition.bottom = rcTransition.top + 18;
+
+    DrawTextW(hdc, transitionText, -1, &rcTransition,
+              DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
                 
-                DrawNativeSignalIcon(hdc, rcRow.right-10, rcRow.top+2, item->signalQuality);
-            }
+DrawNativeSignalIcon(hdc, rcRow.right - 10 - scrollbarOffset, rcRow.top+2, item->signalQuality);    }
         }
-
+                SelectClipRgn(hdc, NULL);
         SelectObject(hdc, g_IsHoveringLink ? g_hFontUnderline : g_hFontNormal);
 SetTextColor(hdc, RGB(14,75,184));
 const wchar_t* footerText = LOC(STR_OPEN_SHARING_CENTER);
@@ -2382,18 +2482,18 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
-   if (PtInRect(&g_rcRefreshButton,pt)) {
-    Wh_Log(L"Manual refresh requested");
-    if (g_Ctx.hWlanClient) {
-        RefreshWifiData(g_Ctx.hWlanClient);
-        UpdateLayoutGeometry();
-        InvalidateRect(hwnd, NULL, TRUE);
-        UpdateWindow(hwnd);
-    } else {
-        Wh_Log(L"Manual refresh skipped: WLAN client not available");
-    }
-    break;
-}
+        if (PtInRect(&g_rcRefreshButton,pt)) {
+            Wh_Log(L"Manual refresh requested");
+            if (g_Ctx.hWlanClient) {
+                RefreshWifiData(g_Ctx.hWlanClient);
+                UpdateLayoutGeometry();
+                InvalidateRect(hwnd, NULL, TRUE);
+                UpdateWindow(hwnd);
+            } else {
+                Wh_Log(L"Manual refresh skipped: WLAN client not available");
+            }
+            break;
+        }
         if (PtInRect(&g_rcArrowButton,pt)) {
             g_bListExpanded = !g_bListExpanded;
             if (!g_bListExpanded) {
@@ -2423,6 +2523,7 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
                     g_SelectedRowIndex = ci;
                     SetKeyboardFocus(g_SelectedRowIndex);
                     UpdateLayoutGeometry();
+                    EnsureRowVisible(ci);
                 }
                 InvalidateRect(hwnd,NULL,FALSE);
             }
@@ -2473,6 +2574,7 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
 }
+
 // ID rilevato dinamicamente al momento della subclasse; -1 = non ancora trovato
 static int g_NetworkButtonId = -1;
 static BOOL GetToolbarButtonTooltip(HWND hToolbar, const TBBUTTON* tb, WCHAR* outText, int outLen) {
@@ -2503,7 +2605,6 @@ static void ToLowerBuffer(const WCHAR* src, WCHAR* dst, int dstLen) {
         dst[k] = (WCHAR)towlower(src[k]);
     dst[k] = L'\0';
 }
-
 // Tooltip che indicano ESPLICITAMENTE che NON è il bottone di rete.
 // Serve a evitare falsi positivi quando l'icona di rete è nascosta e
 // idCommand==2 finisce riassegnato a un altro bottone (es. volume).
@@ -2746,23 +2847,14 @@ static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
     
     if (GetIconInfo(hNetIcon, &netInfo) && GetIconInfo(hBtnIcon, &btnInfo)) {
         BITMAP netBmp = {0}, btnBmp = {0};
-        HBITMAP hNetBmp = netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask;
-        HBITMAP hBtnBmp = btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask;
-        if (GetObjectW(hNetBmp, sizeof(BITMAP), &netBmp) &&
-            GetObjectW(hBtnBmp, sizeof(BITMAP), &btnBmp) &&
-            netBmp.bmWidth == btnBmp.bmWidth &&
-            netBmp.bmHeight == btnBmp.bmHeight &&
-            netBmp.bmBitsPixel == btnBmp.bmBitsPixel) {
-            LONG bufSize = netBmp.bmWidthBytes * netBmp.bmHeight;
-            BYTE* netBits = (BYTE*)malloc(bufSize);
-            BYTE* btnBits = (BYTE*)malloc(bufSize);
-            if (netBits && btnBits &&
-                GetBitmapBits(hNetBmp, bufSize, netBits) == bufSize &&
-                GetBitmapBits(hBtnBmp, bufSize, btnBits) == bufSize) {
-                match = (memcmp(netBits, btnBits, bufSize) == 0);
+        if (GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
+                       sizeof(BITMAP), &netBmp) &&
+            GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
+                       sizeof(BITMAP), &btnBmp)) {
+            if (netBmp.bmWidth == btnBmp.bmWidth && 
+                netBmp.bmHeight == btnBmp.bmHeight) {
+                match = TRUE;
             }
-            if (netBits) free(netBits);
-            if (btnBits) free(btnBits);
         }
         if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
         if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
@@ -3004,6 +3096,7 @@ void ToggleFlyoutWindow() {
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
             if (g_Ctx.hWlanClient) RefreshWifiData(g_Ctx.hWlanClient);
+            RecalcArrowRect();
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
             ShowWindow(g_hWndFlyout, SW_SHOW);
@@ -3192,7 +3285,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.4 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.5 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
