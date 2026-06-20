@@ -823,7 +823,7 @@ BOOL Wh_ModInit()
         );
     }
 
-    // Executable-specific hooks
+    // Process-specific hooks
     if (_wcsicmp(pszProcessName, L"explorer.exe") == 0)
     {
         ApplyImmersiveMenuHook(
