@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.4.5
+// @version        1.4.6
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -15,7 +15,7 @@
 
 This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the Windows 10 taskbar installed using ExplorerPatcher).
 
-**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations.  it is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
+**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations (such as Retrobar).  it is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
 ## Features
 
 - **Wi-Fi network list** — Shows all available networks with signal strength
@@ -267,7 +267,6 @@ typedef struct {
     DOT11_AUTH_ALGORITHM authAlgorithm;
     DOT11_CIPHER_ALGORITHM cipherAlgorithm;
     
-    // SINGLE STATE FIELD - the only truth
     ConnectionState connState;
     DWORD operationStartTime;  // For timeout detection
 } WifiNetworkItem;
@@ -945,11 +944,6 @@ void RefreshWifiData(HANDLE hClient) {
                 if (len == 0) {
                     StringCchCopyW(tempList[tempCount].ssid, 33, L"Hidden Network");
                 } else {
-                    // Sostituiamo i NUL interni nel buffer UTF-8 RAW prima di passarlo
-                    // a MultiByteToWideChar: alcuni hotspot (Xiaomi/Redmi) trasmettono
-                    // SSID con byte \0 incorporati a metà nome. MultiByteToWideChar si
-                    // ferma al primo \0 nel sorgente, troncando il risultato prima ancora
-                    // che il ciclo di correzione successivo possa agire.
                     BYTE cleanSsid[33] = {0};
                     size_t cleanLen = (len < 32u) ? len : 32u;
                     for (size_t k = 0; k < cleanLen; k++)
@@ -1021,16 +1015,6 @@ void RefreshWifiData(HANDLE hClient) {
         }
         if (pProfList) WlanFreeMemory(pProfList);
     }
-    // DEBUG: aggiungi reti finte - RIMUOVERE DOPO IL TEST
-/*for (int i = 0; i < 15 && tempCount < 50; i++) {
-    swprintf_s(tempList[tempCount].ssid, 33, L"Test-Network-%d", i+1);
-    tempList[tempCount].signalQuality = 100 - (i * 6);
-    tempList[tempCount].isSecured = (i % 2 == 0);
-    tempList[tempCount].interfaceGuid = pIfList->InterfaceInfo[0].InterfaceGuid;  // ok, pIfList ancora valido qui
-    tempList[tempCount].dot11BssType = dot11_BSS_type_infrastructure;
-    tempList[tempCount].connState = (i == 0) ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
-    tempCount++;
-}*/
 
 WlanFreeMemory(pIfList);
 
@@ -1069,8 +1053,6 @@ WlanFreeMemory(pIfList);
     // Preserve connection state for pending operations
     EnterCriticalSection(&g_Ctx.csLock);
     if (tempCount > 0 && tempCount <= 50) {
-        // Salva l'SSID della rete "in attesa" PRIMA di sovrascrivere l'array:
-        // la scansione Wi-Fi non garantisce lo stesso ordine ad ogni refresh.
         WCHAR pendingSsid[33] = {0};
         BOOL hadPending = (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount);
         if (hadPending) {
@@ -1111,7 +1093,6 @@ WlanFreeMemory(pIfList);
         g_PendingConnectIndex = -1;
     }
 }
-// Rimuovi tutto il blocco else, e metti questo DOPO:
 if (tempCount > 0) {
     lastValidRefresh = now;
 }
@@ -1289,7 +1270,6 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
     }
     
     EnableWindow(hParent, TRUE);
-    // Assicuriamoci che il flyout rimanga visibile e in primo piano
     ShowWindow(hParent, SW_SHOW);
     SetForegroundWindow(hParent);
     
@@ -1404,8 +1384,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         WifiNetworkItem tempItem = {{0}};
         StringCchCopyW(tempItem.ssid, ARRAYSIZE(tempItem.ssid), ctx->ssid);
         tempItem.isSecured = ctx->isSecured;
-        // Nota: gli algoritmi specifici non vengono più utilizzati da BuildWlanProfileXml,
-        // ma manteniamo i campi per futura espansione.
         tempItem.authAlgorithm = ctx->authAlgorithm;
         tempItem.cipherAlgorithm = ctx->cipherAlgorithm;
 
@@ -1450,8 +1428,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
 
 static BOOL AskForPasswordAndConnect(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
-    
-    // Se c'è già una connessione in sospeso, resetta la precedente per evitare stati bloccati
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
         g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
         g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
@@ -1696,11 +1672,9 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
 // -------------------------------------------------------
 // Signal icon drawing
 // -------------------------------------------------------
-// Aggiungi questa variabile globale all'inizio del file
 static HIMAGELIST g_hSignalImageList = NULL;
 
 
-// Sostituisci DrawNativeSignalIcon con questa versione
 void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     int idx = 0;
     if      (quality > 80) idx = 5;
@@ -1800,7 +1774,6 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     rcRow->left   = 10;
     rcRow->top    = y;
     rcRow->right  = WINDOW_WIDTH - 10;
-    // CLAMP: la riga non può MAI superare LIST_Y_END
     int bottom = y + rowHeight;
     if (bottom > LIST_Y_END) bottom = LIST_Y_END;
     rcRow->bottom = bottom;
@@ -1840,8 +1813,21 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         return;
     }
     
-    RECT rcRow;
-    if (!GetRowRect(g_SelectedRowIndex, &rcRow)) {
+    // Calcola la posizione Y assoluta della riga selezionata (senza passare da GetRowRect)
+    int rowY = LIST_Y_START;
+    for (int i = 0; i < g_SelectedRowIndex; i++) {
+        rowY += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    }
+    int rowYRelative = rowY - g_ScrollPos;
+    int rowHeight = ROW_HEIGHT_EXPANDED;  // La riga selezionata è sempre espansa
+    
+    WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+    BOOL isConnected = (item->connState == CONN_STATE_CONNECTED);
+    BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
+                         item->connState == CONN_STATE_DISCONNECTING);
+    
+    // Se la riga è completamente fuori dall'area visibile, nascondi tutto
+    if (rowYRelative + rowHeight <= LIST_Y_START || rowYRelative >= LIST_Y_END) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
@@ -1849,16 +1835,22 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         return;
     }
     
-    WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+    // Calcola la posizione del pulsante RELATIVA alla finestra
+    int btnX = WINDOW_WIDTH - 110 - scrollbarOffset;  // Posizione X fissa
+    int chkX = 18;  // Margine sinistro per la checkbox
+    int btnY = rowYRelative + 35;  // 35 pixel sotto il top della riga
+    int chkY = rowYRelative + 36;
     
-    BOOL isConnected = (item->connState == CONN_STATE_CONNECTED);
-    BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
-                         item->connState == CONN_STATE_DISCONNECTING);
+    // Clamp per evitare che i pulsanti escano dall'area visibile
+    if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
+    if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
+    if (chkY < LIST_Y_START) chkY = LIST_Y_START + 2;
+    if (chkY > LIST_Y_END - 22) chkY = LIST_Y_END - 22;
     
-    // Checkbox visibile solo se non connesso e non in transizione
+    // Checkbox
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) {
         if (!isConnected && !isConnecting) {
-            MoveWindow(g_hWndCheckboxConnect, rcRow.left + 8, rcRow.top + 36, 160, 20, TRUE);
+            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, 160, 20, TRUE);
             SetWindowTextW(g_hWndCheckboxConnect, LOC(STR_CHK_CONNECT_AUTO));
             ShowWindow(g_hWndCheckboxConnect, SW_SHOW);
         } else {
@@ -1868,22 +1860,22 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     
     // Pulsante Connect/Disconnect
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
-    if (isConnecting) {
-    MoveWindow(g_hWndButtonConnect, rcRow.right - 50 - scrollbarOffset, rcRow.top + 35, 40, 22, TRUE);
-    SetWindowTextW(g_hWndButtonConnect, L"...");
-    ShowWindow(g_hWndButtonConnect, SW_SHOW);
-    EnableWindow(g_hWndButtonConnect, FALSE);
-} else if (isConnected) {
-    MoveWindow(g_hWndButtonConnect, rcRow.right - 100 - scrollbarOffset, rcRow.top + 35, 92, 22, TRUE);
-    SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
-    ShowWindow(g_hWndButtonConnect, SW_SHOW);
-    EnableWindow(g_hWndButtonConnect, TRUE);
-} else {
-    MoveWindow(g_hWndButtonConnect, rcRow.right - 100 - scrollbarOffset, rcRow.top + 35, 92, 22, TRUE);
-    SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
-    ShowWindow(g_hWndButtonConnect, SW_SHOW);
-    EnableWindow(g_hWndButtonConnect, TRUE);
-}
+        if (isConnecting) {
+            MoveWindow(g_hWndButtonConnect, btnX + 50, btnY, 40, 22, TRUE);
+            SetWindowTextW(g_hWndButtonConnect, L"...");
+            ShowWindow(g_hWndButtonConnect, SW_SHOW);
+            EnableWindow(g_hWndButtonConnect, FALSE);
+        } else if (isConnected) {
+            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
+            SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
+            ShowWindow(g_hWndButtonConnect, SW_SHOW);
+            EnableWindow(g_hWndButtonConnect, TRUE);
+        } else {
+            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
+            SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
+            ShowWindow(g_hWndButtonConnect, SW_SHOW);
+            EnableWindow(g_hWndButtonConnect, TRUE);
+        }
     }
 }
 
@@ -2083,19 +2075,11 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONERROR);
                 }
             }
-            // L'operazione è davvero conclusa (con errore): solo qui possiamo
-            // fermare il timer di sicurezza del timeout.
             if (g_TimeoutTimer) {
                 KillTimer(hwnd, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
             }
         }
-        // Se opSuccess == TRUE, WlanConnect() ha solo "accodato" la richiesta:
-        // la vera connessione arriva più tardi via WlanNotificationCallback.
-        // NON fermare il timer qui: se la notifica non arriva mai (capita
-        // soprattutto su riconnessioni a reti già note), la voce resterebbe
-        // bloccata su "Connessione in corso..." per sempre invece di scattare
-        // il timeout dopo 15s.
         
         RefreshWifiData(g_Ctx.hWlanClient);
         UpdateLayoutGeometry();
@@ -2298,14 +2282,13 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
         RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
         DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
         if (g_bListExpanded) {
-    // --- CLIPPING: impedisce alle righe di invadere il footer ---
+    // CLIPPING
     HRGN hRgnClip = CreateRectRgn(0, LIST_Y_START, WINDOW_WIDTH, LIST_Y_END);
     SelectClipRgn(hdc, hRgnClip);
     DeleteObject(hRgnClip);
-    // --- FINE CLIPPING ---
     
     int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
-    UpdateLayoutGeometry(scrollbarOffset);  // <-- AGGIUNGI QUESTA RIGA
+    UpdateLayoutGeometry(scrollbarOffset);  
     
     for (int i = 0; i < g_NetworkCount; i++) {
                 RECT rcRow;
@@ -2965,7 +2948,6 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (btnIdx >= 0) {
                 TBBUTTON tb = {0};
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
-                    // Sceglie l'ID giusto in base a quale toolbar ha generato l'evento
                     BOOL isOverflow = (hWnd == G_hSubclassedOverflowToolbar);
                     int detectedId = isOverflow ? g_NetworkButtonIdOverflow : g_NetworkButtonId;
                     int targetId = (detectedId >= 0) ? detectedId : TRAY_NETWORK_ID;
@@ -3071,7 +3053,7 @@ void ToggleFlyoutWindow() {
             RegisterClassW(&wc);
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
-            DWORD dwStyle = WS_POPUP;
+            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN;
             if (g_Settings.useRoundedCorners) dwStyle |= WS_THICKFRAME;
             AdjustWindowRectEx(&rcClient, dwStyle, FALSE, dwExStyle);
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
@@ -3116,12 +3098,7 @@ static HWND FindOverflowToolbar() {
     return FindWindowExW(hOverflow, NULL, L"ToolbarWindow32", NULL);
 }
 
-// Tenta il subclass in modo sicuro: verifica la validità della finestra
-// immediatamente prima dell'operazione, per ridurre la finestra di race in
-// cui Windows distrugge la overflow toolbar mentre il thread hotkey tenta
-// di sottoclassarla. Niente SEH (non supportato dal toolchain del mod):
-// ci affidiamo al doppio controllo IsWindow() per mitigare il caso più
-// comune, anche se non elimina al 100% una corsa a livello di istruzione.
+// Safe subclassing
 static BOOL SafeSubclassOverflowToolbar(HWND hTarget) {
     if (!hTarget || !IsWindow(hTarget)) return FALSE;
     if (!IsWindow(hTarget)) return FALSE; // doppio controllo, finestra può morire tra le righe
@@ -3144,9 +3121,7 @@ static void SyncOverflowInterception() {
         return;
     }
 
-    // Evita loop infinito: se la stessa finestra fallisce il subclassing
-    // per 3 volte consecutive, smetti di riprovare finché non appare
-    // una finestra DIVERSA (o questa viene distrutta e ricreata).
+    // To avoid infinite loops
     static HWND s_lastFailedHwnd = NULL;
     static int  s_failedAttempts = 0;
 
@@ -3285,7 +3260,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.4.5 ===");
+    Wh_Log(L"=== Wh_ModInit v1.4.6 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
