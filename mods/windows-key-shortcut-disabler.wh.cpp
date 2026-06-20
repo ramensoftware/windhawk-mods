@@ -210,6 +210,8 @@ void initialiseAndLoadPreferences() {
 		}
 	}
 
+	Wh_FreeStringSetting(userDefinedWinKeyExclusionsString);
+
 	AkemiLog("Preferences initialised!");
 	return;
 }
@@ -255,8 +257,11 @@ void initialiseHooksAndSwizzleMethodSelectors() {
 		return;
 	}
 
-	AkemiLog("Hooking/swizzling method selector RegisterHotKey()…");
-	Wh_SetFunctionHook(user32RegisterHotKeySymbol, (void*)hook_registerHotKey, (void**)&orig_registerHotKey);
+	AkemiLog("Hooking and swizzling method selector RegisterHotKey()…");
+	if (!Wh_SetFunctionHook(user32RegisterHotKeySymbol, (void*)hook_registerHotKey, (void**)&orig_registerHotKey)) {
+		AkemiError("Failed to hook and swizzle method selector RegisterHotKey()!");
+		return;
+	}
 
 	AkemiLog("Hooks initialised, method selector RegisterHotKey() successfully swizzled!");
 	return;
