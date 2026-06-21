@@ -2,10 +2,10 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark appearance/wallpapers/themes based on a schedule with hotkey and custom script support
-// @version         1.3.1
+// @version         1.3.2
 // @author          tinodin
 // @github          https://github.com/tinodin
-// @include         windhawk.exe
+// @include         explorer.exe
 // @license         GPL-3.0
 // @compilerOptions -lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32
 // ==/WindhawkMod==
@@ -1100,6 +1100,39 @@ SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
     return st;
 }
 
+void ClearLockScreenCache() {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lock Screen", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+        return;
+
+    auto hasWindhawkEntry = [&]() -> bool {
+        wchar_t data[512];
+        DWORD dataSize;
+        for (wchar_t c = L'A'; c <= L'G'; ++c) {
+            std::wstring valueName = L"Details_" + std::wstring(1, c);
+            dataSize = sizeof(data);
+            if (RegGetValueW(hKey, NULL, valueName.c_str(), RRF_RT_REG_SZ, NULL, data, &dataSize) == ERROR_SUCCESS) {
+                if (wcscmp(data, L"IMAGENAME:C:\\Program Files\\Windhawk\\windhawk.exe") == 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    if (hasWindhawkEntry()) {
+        for (wchar_t c = L'A'; c <= L'G'; ++c) {
+            std::wstring suffix(1, c);
+            RegDeleteValueW(hKey, (L"Details_" + suffix).c_str());
+            RegDeleteValueW(hKey, (L"ImageId_" + suffix).c_str());
+            RegDeleteValueW(hKey, (L"OriginalFile_" + suffix).c_str());
+            Wh_Log(L"Cleared Lock Screen Cache");
+        }
+    }
+
+    RegCloseKey(hKey);
+}
+
 void LoadSettings() {
     auto getString = [](PCWSTR name, PCWSTR defaultValue = L"") {
         PCWSTR value = Wh_GetStringSetting(name);
@@ -1158,6 +1191,7 @@ void LoadSettings() {
 }
 
 BOOL WhTool_ModInit() {
+    ClearLockScreenCache();
     LoadSettings();
     StartScheduler();
     return TRUE;
