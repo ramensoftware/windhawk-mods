@@ -2,7 +2,7 @@
 // @id              taskbar-vd-switcher
 // @name            Taskbar Virtual Desktop Switcher
 // @description     Injects clickable buttons into the taskbar — one per virtual desktop — with configurable grid arrangement for direct switching.
-// @version         1.5
+// @version         1.6
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -12,57 +12,106 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Virtual Desktop Switcher
+# Virtual Desktop Switcher
 
-Adds numbered buttons to the taskbar — one per virtual desktop. Click to switch directly.
+A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable buttons into the system tray — one per virtual desktop — for instant switching without opening Task View.
 
-![Default tray placement — three numbered buttons, first active](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/simple3.png)
+![Three desktops with lower master button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/simple3wlowmaster.png)
+*Three desktops with the optional Task View master button as a lower sliver.*
 
-Buttons can be arranged into one or more rows with configurable fill order.
+![Default tray placement — three numbered buttons, first active](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/simple3.png)
+*Default tray placement: three desktops in a row, desktop 1 active.*
 
-![Four desktops with master button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/simple4wmaster.png)
+![Two desktop compact tray placement](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/simple2.png)
+*Compact tray placement with two desktops.*
 
-Works alongside other mods.
+![Four desktops with master button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/simple4wmaster.png)
+*Four desktops with the optional Task View master button.*
 
-![Complex setup with other mods active](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/vds-screenshot3.png)
+![Taller taskbar with right-side grid and lower master button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/gridonrightwlowermaster.png)
+*Taller taskbar: a dense grid with the master button as a lower sliver.*
 
-The compact grid adapts to how many desktops you have.
+![Left of Start button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/left-of-start.png)
+*Start placement: switcher reserved to the left of Start.*
 
-![Taller taskbar with right-side grid and lower master button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/gridonrightwlowermaster.png)
+![Left of Start with Start hidden](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/left-of-start-hidden-start.png)
+*Start placement with the Start button hidden.*
 
-The switcher can also sit near the Start button.
+![Over Start, nudged above](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/over-above-start.png)
+*Overlay mode can be nudged up with the vertical offset setting.*
 
-![Left of Start button](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/left-of-start.png)
+![Over Start, nudged below](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/over-below-start.png)
+*Overlay mode can also be nudged down.*
 
-![Over Start, nudged above](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/over-above-start.png)
+![Right of Start with Start hidden](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-vd-switcher/assets/right-of-start-hidden-start.png)
+*Right-of-Start placement when the Start button is hidden.*
 
-![Right of Start with Start hidden](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/virtual-desktop-switcher/assets/right-of-start-hidden-start.png)
+## Features
+
+- Numbered, roman-numeral, dot, or custom-label buttons
+- Smart grid layout with balanced, vertical-pack, horizontal-pack, and fixed override modes
+- Highlights the active desktop immediately on switch
+- Buttons appear/disappear as desktops are added or removed
+- Five placement positions within the system tray, plus experimental Start-adjacent and Start-overlay positions
+- Start placement modes: left of Start, over Start, and right of Start
+- Configurable size, spacing, colors, opacity, and shine effect
+- Per-state text color, font size, corner radius, bold, and border
+- Tooltip on each button shows the desktop's display name
+- Option to hide the bar entirely when only one desktop exists
 
 ## Settings
-- **Position** — system tray positions plus experimental Start-adjacent and Start-overlay positions
-- **Start positions** — place buttons left of Start, over Start, or in a reserved space to the right of Start
-- **Size** — button width × height in pixels; spacing between buttons
-- **Grid mode** — smart automatic layout, single row/column, fixed rows, fixed columns, or fixed grid
-- **Smart layout** — balanced, vertical pack, or horizontal pack behavior
-- **Fill order** — column-first or row-first button order
-- **Short group alignment** — when the last row/column is shorter, align it to start, center, or end
-- **Active color** — hex color for the current-desktop button (e.g. `#4488FF`)
-- **Inactive color** — hex color for other buttons (empty = system default)
-- **Opacity** — 0–100; lower values let the taskbar show through
-- **Shine effect** — subtle gradient highlight (applies when a color is set)
-- **Label format** — numbers, roman numerals, dots, or custom comma-separated labels
-- **Padding** — left and right margin around the button grid (px)
-- **Text color** — foreground color for active and inactive buttons
-- **Font size** — button label size in pt
-- **Corner radius** — rounded corners (px)
-- **Active bold** — bold the current desktop's label
-- **Border** — border color and thickness
-- **Hide when single** — hide the bar when only one desktop exists
-- **Tooltips** — hover a button to see the desktop name
-- **Master button** — optional extra button that opens Task View (Win+Tab) to preview, create, or close desktops
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Position | After clock | Where to place the switcher: system tray positions, left/right of Start, or over Start |
+| Button width | 20 px | Width of each button |
+| Button height | 22 px | Height of each button |
+| Button spacing | 2 px | Gap between buttons in the grid |
+| Grid mode | Smart automatic | Smart, single row/column, fixed rows, fixed columns, or fixed grid |
+| Smart layout | Balanced | Balanced, pack vertical, or pack horizontal |
+| Fill order | Row-first | Row-first or column-first |
+| Rows | 0 (auto) | Fixed rows, or max rows for smart mode when set |
+| Columns | 0 (auto) | Fixed columns, or max columns for smart mode when set |
+| Short group alignment | Center | Align a shorter last row/column to start, center, or end |
+| Active color | `#4488FF` | Background for the current desktop |
+| Inactive color | *(system)* | Background for other desktops |
+| Opacity | 100 | 0–100; lower values let the taskbar show through |
+| Shine effect | Off | Gradient highlight on buttons with custom colors |
+| Label format | Numbers | Numbers · Roman numerals · Dots · Custom |
+| Custom labels | *(empty)* | Comma-separated, e.g. `H,W,M` |
+| Padding left | 0 px | Extra space to the left of the button grid |
+| Padding right | 2 px | Extra space to the right of the button grid |
+| Active text color | *(system)* | Foreground color for the current-desktop button |
+| Inactive text color | *(system)* | Foreground color for other buttons |
+| Font size | 10 pt | Button label size |
+| Corner radius | 4 px | Rounded corners (0 = square, 4 = Windows default) |
+| Active bold | Off | Bold the current desktop's label |
+| Border thickness | 0 px | Button border width |
+| Border color | *(system)* | Button border color |
+| Hide when single | Off | Don't show the bar when only one desktop exists |
+| Task View button | Off | Optional button that opens Task View for previewing, creating, or closing desktops |
+| Task View button position | After | Column before/after desktop buttons, or sliver row above/below |
+| Task View button sliver height | 6 px | Height of the Task View button when used as a sliver row |
+| Task View button column width | 14 px | Width of the Task View button when used as a side column |
 
 ## Known limitations
-- Multi-monitor: only the primary taskbar gets buttons.
+
+- Only the primary taskbar is supported (multi-monitor requires hooking secondary taskbars)
+- Buttons may not appear until the mod injects on the first tray icon load; retry loop runs up to 5 times at 2-second intervals
+
+## Credits and inspirations
+
+This mod builds directly on patterns established by several community mods:
+
+**[taskbar-empty-space-clicks](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-empty-space-clicks.wh.cpp)** — source of the `SwitchVirtualDesktop()` COM vtable pattern, build-specific IIDs for `IVirtualDesktopManagerInternal`, and the `IObjectArray` desktop enumeration approach.
+
+**[taskbar-desktop-indicator](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp)** — reference for reading the current virtual desktop from the registry (session-scoped `VirtualDesktopIDs` + `CurrentVirtualDesktop` keys) and the notification cookie / `IVirtualDesktopNotificationService` registration pattern.
+
+**[Vertical OmniButton archive](https://github.com/sb4ssman/Windhawk-Mod-Lab/blob/main/omnibutton-customizer/archive/vertical-omnibutton-v1.4.wh.cpp)** (this lab, by sb4ssman) — source of the `GetTaskbarXamlRoot` boilerplate, `RunFromWindowThread` dispatcher, `FindCurrentProcessTaskbarWnd`, and the `IconView::IconView` hook-and-retry injection pattern.
+
+**[windows-11-taskbar-styler](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-taskbar-styler.wh.cpp)** — reference for the `SystemTrayFrameGrid` XAML tree structure and element names (`ShowDesktopStack`, `NotificationCenterButton`, `ControlCenterButton`, `NotifyIconStack`).
+
+**[Windhawk](https://windhawk.net)** by [m417z](https://github.com/m417z) — the modding platform that makes all of this possible.
 */
 // ==/WindhawkModReadme==
 
@@ -123,14 +172,14 @@ The switcher can also sit near the Start button.
   - rowFirst: Row-first (left to right, then down)
   - columnFirst: Column-first (top to bottom, then right)
 
-- buttonRows: 0
+- gridRows: 0
   $name: Rows (0 = auto)
   $description: >-
     In Fixed rows and Fixed grid modes: sets the exact row count. In Smart
     automatic mode: acts as a maximum cap (0 = uncapped). Ignored in Single
     row and Single column modes.
 
-- buttonColumns: 0
+- gridColumns: 0
   $name: Columns (0 = auto)
   $description: >-
     In Fixed columns and Fixed grid modes: sets the exact column count. In Smart
@@ -138,13 +187,13 @@ The switcher can also sit near the Start button.
     no limit). Ignored in Single row and Single column modes. In row-first fill,
     3 columns with 4 desktops gives a 3+1 layout.
 
-- activeColor: "#4488FF"
+- activeBackgroundColor: "#4488FF"
   $name: Active desktop color (hex, empty = system default)
 
-- inactiveColor: ""
+- inactiveBackgroundColor: ""
   $name: Inactive button color (hex, empty = system default)
 
-- buttonOpacity: 100
+- opacity: 100
   $name: Button opacity (0–100)
   $description: 100 = fully opaque; lower values let the taskbar show through
 
@@ -190,15 +239,15 @@ The switcher can also sit near the Start button.
   $name: Hide when only one desktop
   $description: Don't show the button bar when there is only one virtual desktop
 
-- paddingLeft: 0
+- groupPaddingLeft: 0
   $name: Padding left (px)
   $description: Extra space to the left of the button grid
 
-- paddingRight: 2
+- groupPaddingRight: 2
   $name: Padding right (px)
   $description: Extra space to the right of the button grid
 
-- gridVerticalOffset: 0
+- groupOffsetY: 0
   $name: Vertical offset (px)
   $description: >-
     Nudge the entire button grid up (negative) or down (positive) from its
@@ -216,17 +265,17 @@ The switcher can also sit near the Start button.
   - "end": "End (bottom for columns, right for rows)"
 
 - showMasterButton: false
-  $name: Show master button
+  $name: Show Task View button
   $description: >-
     Adds a button that opens Task View (Win+Tab), where you can preview all
     desktops and create or close them.
 
 - masterButtonLabel: "⊞"
-  $name: Master button label
-  $description: Text shown on the master button.
+  $name: Task View button label
+  $description: Text shown on the Task View button.
 
 - masterButtonPosition: "after"
-  $name: Master button position
+  $name: Task View button position
   $options:
   - "before": "Column before desktop buttons"
   - "after": "Column after desktop buttons"
@@ -236,14 +285,14 @@ The switcher can also sit near the Start button.
 - masterButtonHeight: 6
   $name: Sliver height (px)
   $description: >-
-    Row height of the master button when placed above or below the desktop buttons
+    Row height of the Task View button when placed above or below the desktop buttons
     (Top or Bottom positions). Larger values cause the sliver to peek further past
     the taskbar edge. Not used in Before or After (column) positions.
 
 - masterButtonWidth: 14
-  $name: Master column width (px)
+  $name: Task View column width (px)
   $description: >-
-    Column width of the master button when placed before or after the desktop
+    Column width of the Task View button when placed before or after the desktop
     buttons (Before or After positions). Not used in Top or Bottom (sliver) positions.
 
 - masterButtonSpacing: 0
@@ -338,15 +387,40 @@ static void LoadSettings() {
         Wh_FreeStringSetting(p);
         return r;
     };
+    auto AliasedStr = [](const wchar_t* canonical, const wchar_t* legacy,
+                         const wchar_t* fallback) {
+        PCWSTR p = Wh_GetStringSetting(canonical);
+        if (p && *p) {
+            std::wstring r = p;
+            Wh_FreeStringSetting(p);
+            return r;
+        }
+        Wh_FreeStringSetting(p);
+
+        p = Wh_GetStringSetting(legacy);
+        std::wstring r = p ? p : fallback;
+        Wh_FreeStringSetting(p);
+        return r;
+    };
+    auto AliasedInt = [](const wchar_t* canonical, const wchar_t* legacy,
+                         int fallback) {
+        constexpr int kUnset = -2147483647;
+        int value = Wh_GetIntSetting(canonical, kUnset);
+        if (value == kUnset) {
+            value = Wh_GetIntSetting(legacy, fallback);
+        }
+        return value;
+    };
+
     g_settings.position       = Str(L"position",      L"afterClock");
     g_settings.buttonWidth    = Wh_GetIntSetting(L"buttonWidth",   20);
     g_settings.buttonHeight   = Wh_GetIntSetting(L"buttonHeight",  22);
     g_settings.buttonSpacing  = Wh_GetIntSetting(L"buttonSpacing", 2);
-    g_settings.buttonRows     = std::max(Wh_GetIntSetting(L"buttonRows",    0), 0);
-    g_settings.buttonColumns  = std::max(Wh_GetIntSetting(L"buttonColumns", 0), 0);
-    g_settings.activeColor    = Str(L"activeColor",   L"#4488FF");
-    g_settings.inactiveColor  = Str(L"inactiveColor", L"");
-    g_settings.buttonOpacity  = Wh_GetIntSetting(L"buttonOpacity", 100);
+    g_settings.buttonRows     = std::max(AliasedInt(L"gridRows", L"buttonRows", 0), 0);
+    g_settings.buttonColumns  = std::max(AliasedInt(L"gridColumns", L"buttonColumns", 0), 0);
+    g_settings.activeColor    = AliasedStr(L"activeBackgroundColor", L"activeColor", L"#4488FF");
+    g_settings.inactiveColor  = AliasedStr(L"inactiveBackgroundColor", L"inactiveColor", L"");
+    g_settings.buttonOpacity  = AliasedInt(L"opacity", L"buttonOpacity", 100);
     g_settings.shineEffect    = Wh_GetIntSetting(L"shineEffect",   0) != 0;
     g_settings.labelFormat       = Str(L"labelFormat",       L"number");
     g_settings.customLabels      = Str(L"customLabels",      L"");
@@ -358,8 +432,8 @@ static void LoadSettings() {
     g_settings.borderThickness   = Wh_GetIntSetting(L"borderThickness",   0);
     g_settings.borderColor       = Str(L"borderColor",       L"");
     g_settings.hideWhenSingle    = Wh_GetIntSetting(L"hideWhenSingle",    0) != 0;
-    g_settings.paddingLeft       = Wh_GetIntSetting(L"paddingLeft",       0);
-    g_settings.paddingRight      = Wh_GetIntSetting(L"paddingRight",      2);
+    g_settings.paddingLeft       = AliasedInt(L"groupPaddingLeft", L"paddingLeft", 0);
+    g_settings.paddingRight      = AliasedInt(L"groupPaddingRight", L"paddingRight", 2);
     g_settings.gridMode             = Str(L"gridMode",        L"autoSmart");
     g_settings.smartLayout          = Str(L"smartLayout",     L"balanced");
     g_settings.fillOrder            = Str(L"fillOrder",       L"rowFirst");
@@ -370,7 +444,7 @@ static void LoadSettings() {
     g_settings.masterButtonHeight   = std::max(1, Wh_GetIntSetting(L"masterButtonHeight", 6));
     g_settings.masterButtonWidth    = std::max(1, Wh_GetIntSetting(L"masterButtonWidth",  14));
     g_settings.masterButtonSpacing  = Wh_GetIntSetting(L"masterButtonSpacing", 0);
-    g_settings.gridVerticalOffset   = Wh_GetIntSetting(L"gridVerticalOffset",  0);
+    g_settings.gridVerticalOffset   = AliasedInt(L"groupOffsetY", L"gridVerticalOffset", 0);
 }
 
 // ============================================================
@@ -1268,6 +1342,8 @@ static void StyleButton(Button& btn, bool isActive,
     Brush activeTextBrush, Brush inactiveTextBrush,
     Brush borderBrush)
 {
+    btn.MinWidth(0.0);
+    btn.MinHeight(0.0);
     btn.Padding({ 1.0, 0.0, 1.0, 0.0 });
     btn.FontSize((double)g_settings.fontSize);
     btn.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -1387,6 +1463,8 @@ static Grid BuildButtonGrid(int count, int current) {
         btn.Content(winrt::box_value(GetButtonLabel(i, current)));
         StyleButton(btn, i == current, activeBrush, inactiveBrush,
                     activeTextBrush, inactiveTextBrush, borderBrush);
+        btn.Width((double)g_settings.buttonWidth);
+        btn.Height((double)g_settings.buttonHeight);
         ToolTipService::SetToolTip(btn, winrt::box_value(winrt::hstring(desktopNames[i])));
 
         int capturedIdx = i;
@@ -1471,6 +1549,13 @@ static Grid BuildButtonGrid(int count, int current) {
         masterBtn.Content(winrt::box_value(winrt::hstring(g_settings.masterButtonLabel)));
         StyleButton(masterBtn, false, inactiveBrush, inactiveBrush,
                     inactiveTextBrush, inactiveTextBrush, borderBrush);
+        if (masterIsRow) {
+            masterBtn.Height((double)g_settings.masterButtonHeight);
+        } else {
+            masterBtn.Width((double)g_settings.masterButtonWidth);
+            if (rows == 1)
+                masterBtn.Height((double)g_settings.buttonHeight);
+        }
         ToolTipService::SetToolTip(masterBtn,
             winrt::box_value(winrt::hstring(L"Task View (Win+Tab)")));
         if (masterIsRow) {
