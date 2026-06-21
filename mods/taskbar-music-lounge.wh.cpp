@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              taskbar-music-lounge
-// @name            Taskbar Music Lounge
+// @id              taskbar-music-lounge-fork
+// @name            Taskbar Music Lounge - Fork
 // @description     A native-style music ticker with media controls.
 // @version         4.0.2
 // @author          Hashah2311
@@ -255,55 +255,117 @@ void UpdateMediaInfo() {
         if (!g_SessionManager) {
             g_SessionManager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
         }
-        if (!g_SessionManager) return;
 
-        // Iterate ALL sessions to find one that is actively PLAYING.
+        if (!g_SessionManager)
+            return;
+
         GlobalSystemMediaTransportControlsSession session = nullptr;
-        bool foundActive = false;
-
         auto sessionsList = g_SessionManager.GetSessions();
+
+        // ======================================================
+        // PRIORIDADE 1: SPOTIFY
+        // ======================================================
         for (auto const& s : sessionsList) {
+            auto source = s.SourceAppUserModelId();
             auto pb = s.GetPlaybackInfo();
-            if (pb && pb.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) {
-                session = s;
-                foundActive = true;
-                break;
+
+            if (pb &&
+                pb.PlaybackStatus() ==
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+            {
+                std::wstring sourceStr = source.c_str();
+
+                if (sourceStr.find(L"Spotify") != std::wstring::npos ||
+                    sourceStr.find(L"spotify") != std::wstring::npos)
+                {
+                    session = s;
+                    break;
+                }
             }
         }
 
-        if (!foundActive) {
+        // ======================================================
+        // PRIORIDADE 2: QUALQUER MÍDIA TOCANDO
+        // ======================================================
+        if (!session) {
+            for (auto const& s : sessionsList) {
+                auto pb = s.GetPlaybackInfo();
+
+                if (pb &&
+                    pb.PlaybackStatus() ==
+                        GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+                {
+                    session = s;
+                    break;
+                }
+            }
+        }
+
+        // ======================================================
+        // PRIORIDADE 3: CURRENT SESSION
+        // ======================================================
+        if (!session) {
             session = g_SessionManager.GetCurrentSession();
         }
 
+        // ======================================================
+        // ATUALIZA DADOS
+        // ======================================================
         if (session) {
             auto props = session.TryGetMediaPropertiesAsync().get();
             auto info = session.GetPlaybackInfo();
 
             lock_guard<mutex> guard(g_MediaState.lock);
-            
+
             wstring newTitle = props.Title().c_str();
-            if (newTitle != g_MediaState.title || g_MediaState.albumArt == nullptr) {
-                if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
+
+            if (newTitle != g_MediaState.title || g_MediaState.albumArt == nullptr)
+            {
+                if (g_MediaState.albumArt) {
+                    delete g_MediaState.albumArt;
+                    g_MediaState.albumArt = nullptr;
+                }
+
                 auto thumbRef = props.Thumbnail();
+
                 if (thumbRef) {
                     auto stream = thumbRef.OpenReadAsync().get();
                     g_MediaState.albumArt = StreamToBitmap(stream);
                 }
             }
+
             g_MediaState.title = newTitle;
             g_MediaState.artist = props.Artist().c_str();
-            g_MediaState.isPlaying = (info.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
+            g_MediaState.isPlaying =
+                (info.PlaybackStatus() ==
+                 GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
+
             g_MediaState.hasMedia = true;
-        } else {
+        }
+        else {
             lock_guard<mutex> guard(g_MediaState.lock);
+
             g_MediaState.hasMedia = false;
             g_MediaState.title = L"No Media";
             g_MediaState.artist = L"";
-            if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
+
+            if (g_MediaState.albumArt) {
+                delete g_MediaState.albumArt;
+                g_MediaState.albumArt = nullptr;
+            }
         }
-    } catch (...) {
+    }
+    catch (...) {
         lock_guard<mutex> guard(g_MediaState.lock);
+
         g_MediaState.hasMedia = false;
+        g_MediaState.title = L"No Media";
+        g_MediaState.artist = L"";
+
+        if (g_MediaState.albumArt) {
+            delete g_MediaState.albumArt;
+            g_MediaState.albumArt = nullptr;
+        }
     }
 }
 
