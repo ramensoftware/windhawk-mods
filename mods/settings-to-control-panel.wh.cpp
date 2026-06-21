@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.2
+// @version        10.0.3
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **NEW in 10.0.2: Option to redirect Audio & Network system tray icons to classic panels (Tested in Windows 10 21H2)**
+- **NEW in 10.0.3: Option to redirect Audio & Network system tray icons to classic panels (Tested in Windows 10 21H2)**
 
 ---
 
@@ -153,7 +153,7 @@ struct TrayCommandMapping {
 static const TrayCommandMapping g_trayCommandMappings[] = {
     {CMD_OPEN_SOUND_SETTINGS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
     {CMD_SOUNDS, L"rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,0"},
-    {CMD_OPEN_NETWORK_SETTINGS, L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"}
+    {CMD_OPEN_NETWORK_SETTINGS, L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"}
 };
 
 static const wchar_t* FindTrayCommand(UINT cmd) {
@@ -538,24 +538,23 @@ static const UriMapping g_allMappings[] = {
     {L"ms-settings:camera", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
     {L"ms-settings:privacy-customdevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
     
-    // Network - CORRETTI con "explorer shell:::"
-    {L"ms-settings:network", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-wifi", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-ethernet", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-vpn", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-airplanemode", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-mobilehotspot", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:network-cellular", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:datausage", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
+    // Network - Usando shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E} (come nel Codice 2)
+    {L"ms-settings:network", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-wifi", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-ethernet", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-vpn", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-airplanemode", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-mobilehotspot", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-cellular", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:datausage", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
     {L"ms-settings:network-proxy", L"inetcpl.cpl,,4"},
-    {L"ms-settings:network-status", L"explorer shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-    {L"ms-settings:network-dialup", L"explorer shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-    {L"ms-settings:network-advancedsettings", L"explorer shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
-    {L"ms-settings:firewall", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-    {L"ms-settings:network-firewall", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-    {L"ms-settings:windowsdefender", L"explorer shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
-    {L"ms-settings:network-places", L"explorer shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
-    
+    {L"ms-settings:network-status", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-dialup", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:network-advancedsettings", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
+    {L"ms-settings:firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:network-firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:windowsdefender", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
+    {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
     // Accounts
     {L"ms-settings:yourinfo", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
     {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
@@ -885,14 +884,18 @@ static void LaunchTarget(const wchar_t* command) {
     } else if (wcsstr(command, L".exe")) {
         wcscpy_s(cmdLine, 512, command);
     } else if (wcsncmp(command, L"shell:::", 8) == 0) {
+        // Forza l'uso di ShellExecuteExW per i CLSID - più affidabile
+        // rispetto a CreateProcess
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_FLAG_NO_UI;
+        sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
         sei.lpVerb = L"open";
         sei.lpFile = L"explorer.exe";
         sei.lpParameters = command;
         sei.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW_orig(&sei);
+        
+        HRESULT hr = ShellExecuteExW_orig(&sei);
+        Wh_Log(L"ShellExecuteExW for CLSID '%s' returned 0x%08X", command, hr);
         return;
     } else if (command[0] == L'\0') {
         wcscpy_s(cmdLine, 512, L"control.exe");
@@ -934,37 +937,52 @@ static void ExecuteMappedCommand(const wchar_t* command) {
     ShellExecuteExW_orig(&sei);
 }
 
-BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
-                                  HWND hWnd, const TPMPARAMS* lptpm) {
-    if (!g_settings.redirectSystemTray || IsChildProcess()) {
+static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
+                                         HWND hWnd, const TPMPARAMS* lptpm) {
+    if (!g_settings.redirectSystemTray)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
 
     HookGuard guard;
-    if (guard.IsReentrant()) {
+    if (guard.IsReentrant())
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-    
+
+    int itemCount = GetMenuItemCount(hMenu);
+    Wh_Log(L"TrackPopupMenuEx_Hook called, itemCount=%d", itemCount);  // <-- AGGIUNGI
+
+    if (itemCount <= 0 || itemCount > 6)
+        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+
+    UINT firstItemId = GetMenuItemID(hMenu, 0);
+    Wh_Log(L"firstItemId=%u", firstItemId);  // <-- AGGIUNGI
+
+    BOOL callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
     UINT modifiedFlags = uFlags | TPM_RETURNCMD;
     BOOL result = g_origTrackPopupMenuEx(hMenu, modifiedFlags, x, y, hWnd, lptpm);
 
+    Wh_Log(L"TrackPopupMenuEx result cmd=%d", result);  // <-- AGGIUNGI
+
     if (result > 0) {
         UINT cmd = (UINT)result;
-        
+
         const wchar_t* mappedCmd = FindTrayCommand(cmd);
+        Wh_Log(L"FindTrayCommand(%u) = %s", cmd, mappedCmd ? mappedCmd : L"(null)");  // <-- AGGIUNGI
+
         if (mappedCmd) {
             ExecuteMappedCommand(mappedCmd);
             return 0;
         }
-        
-        if (!(uFlags & TPM_RETURNCMD)) {
-            SendMessageW(hWnd, WM_COMMAND, (WPARAM)cmd, 0);
+
+        if (cmd == firstItemId) {
+            Wh_Log(L"TrackPopupMenuEx: cmd=%u (prima voce, itemCount=%d) non mappato in g_trayCommandMappings", cmd, itemCount);
+        }
+
+        if (!callerWantedReturnCmd) {
+            PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)cmd, 0), 0);
             return TRUE;
         }
     }
     return result;
 }
-
 static bool IsPersonalizationWindow(HWND hwnd) {
     if (!hwnd) return false;
 
@@ -1233,7 +1251,7 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(void* pThis, BSTR File, void* v
 
 // Windhawk entry points
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.2");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.3");
     
     InitializeCriticalSection(&g_bounceGuardCs);
     InitializeCriticalSection(&g_loopGuardCs);
@@ -1286,11 +1304,24 @@ void Wh_ModUninit() {
     DeleteCriticalSection(&g_bounceGuardCs);
     DeleteCriticalSection(&g_loopGuardCs);
     if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.2 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.3 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading");
+    bool oldRedirectSystemTray = g_settings.redirectSystemTray;
     LoadSettings();
     InitDynamicMappings();
+
+    if (g_settings.redirectSystemTray && !oldRedirectSystemTray && !g_origTrackPopupMenuEx) {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
+        if (hUser32) {
+            void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
+            if (pTrackPopupMenuEx) {
+                bool ok = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
+                Wh_Log(L"TrackPopupMenuEx hook installed at runtime: %d", (int)ok);
+            }
+        }
+    }
 }
