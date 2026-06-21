@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.5.1
+// @version        1.5.2
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -18,15 +18,15 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 **NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations (such as Retrobar). It is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
 ## Features
 
-- **Wi-Fi network list** — Shows all available networks with signal strength
-- **Connect/Disconnect** — Connect to networks with password support
-- **Privacy mode** — Hide real SSIDs (shows as Network 1, Network 2...)
-- **Windows 7 style tooltips** — Full network info on hover (SSID, signal, security, radio type)
-- **Network status & properties** — Right-click context menu for quick access
-- **Keyboard navigation** — Arrow keys, Enter, Escape support
-- **Auto-refresh** — Configurable network list refresh interval
-- **Registry fallback** — Optional Windows 8 style flyout (ReplaceVan method)
-- **Language support** — English and Italian (auto-detect or manual override)
+- **Wi-Fi network list**: Shows all available networks with signal strength
+- **Connect/Disconnect**: Connect to networks with password support
+- **Privacy mode**: Hide real SSIDs (shows as Network 1, Network 2...)
+- **Windows 7 style tooltips**: Full network info on hover (SSID, signal, security, radio type)
+- **Network status & properties**: Right-click context menu for quick access
+- **Keyboard navigation**: Arrow keys, Enter, Escape support
+- **Auto-refresh**: Periodically re-reads the network list at a configurable interval (does not force a new scan; use the Refresh button for that)
+- **Registry fallback**: Optional Windows 8 style flyout (ReplaceVan method) <- This is not a real registry modification
+- **Language support**: English and Italian (auto-detect or manual override)
 
 ## Hotkeys
 
@@ -36,6 +36,7 @@ This Windhawk mod recreates the Windows 7 network flyout panel, replacing the mo
 ## Credits 
 - m417z: Review 
 - Anixx: Testing
+Note: In rare cases, Wi-Fi networks may temporarily appear unavailable even in the native Windows flyout due to an outdated WLAN cache or network driver behavior. In such cases, the Refresh button forces a new scan; if the issue persists, check the status of the Wi-Fi adapter and, if possible, report the issue to the mod author.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -1669,6 +1670,17 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             }
             g_PendingConnectIndex = -1;
             break;
+
+        case wlan_notification_acm_scan_complete:
+            Wh_Log(L"WLAN: Scan complete");
+            break;
+
+        case wlan_notification_acm_scan_fail: {
+            DWORD scanFailReason = (data->pData && data->dwDataSize >= sizeof(DWORD))
+                ? *(DWORD*)data->pData : 0;
+            Wh_Log(L"WLAN: Scan failed, reason: %lu", scanFailReason);
+            break;
+        }
     }
     
     LeaveCriticalSection(&ctx->csLock);
@@ -1757,11 +1769,19 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     ti.rect     = rcRow;
     SendMessage(g_hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
 }
+
 static int GetTotalListHeight() {
     int h = 0;
     for (int i = 0; i < g_NetworkCount; i++)
         h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     return h;
+}
+static void ClampScrollPos() {
+    int totalHeight = GetTotalListHeight();
+    int visibleHeight = LIST_Y_END - LIST_Y_START;
+    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+    if (g_ScrollPos > maxScroll) g_ScrollPos = maxScroll;
+    if (g_ScrollPos < 0) g_ScrollPos = 0;
 }
 BOOL GetRowRect(int index, RECT* rcRow) {
     if (index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
@@ -2028,10 +2048,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         if (wParam == 1000) {
             if (g_Ctx.hWlanClient) {
                 RefreshWifiData(g_Ctx.hWlanClient);
+                ClampScrollPos();
                 UpdateLayoutGeometry();
-                // Usa FALSE per non cancellare lo sfondo (evita flickering bianco)
                 InvalidateRect(hwnd, NULL, FALSE);
-            }
+}   
         } else if (wParam == 1002) {
             CheckConnectionTimeouts();
             UpdateLayoutGeometry();
@@ -2051,9 +2071,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_REFRESH_DATA: {
         if (g_Ctx.hWlanClient) {
             RefreshWifiData(g_Ctx.hWlanClient);
+            ClampScrollPos();
             UpdateLayoutGeometry();
             InvalidateRect(hwnd, NULL, TRUE);
-        }
+}
         break;
     }
         case WM_ASYNC_CONNECT_COMPLETE: {
@@ -2468,17 +2489,26 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
         if (PtInRect(&g_rcRefreshButton,pt)) {
-            Wh_Log(L"Manual refresh requested");
-            if (g_Ctx.hWlanClient) {
-                RefreshWifiData(g_Ctx.hWlanClient);
-                UpdateLayoutGeometry();
-                InvalidateRect(hwnd, NULL, TRUE);
-                UpdateWindow(hwnd);
-            } else {
-                Wh_Log(L"Manual refresh skipped: WLAN client not available");
+    Wh_Log(L"Manual refresh requested");
+    if (g_Ctx.hWlanClient) {
+        PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
+        if (WlanEnumInterfaces(g_Ctx.hWlanClient, NULL, &pIfList) == ERROR_SUCCESS) {
+            for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
+                DWORD scanResult = WlanScan(g_Ctx.hWlanClient, &pIfList->InterfaceInfo[i].InterfaceGuid, NULL, NULL, NULL);
+                Wh_Log(L"WlanScan requested on interface %lu: %lu", i, scanResult);
             }
-            break;
+            WlanFreeMemory(pIfList);
         }
+        RefreshWifiData(g_Ctx.hWlanClient);
+        ClampScrollPos();
+        UpdateLayoutGeometry();
+        InvalidateRect(hwnd, NULL, TRUE);
+        UpdateWindow(hwnd);
+    } else {
+        Wh_Log(L"Manual refresh skipped: WLAN client not available");
+    }
+    break;
+}
         if (PtInRect(&g_rcArrowButton,pt)) {
             g_bListExpanded = !g_bListExpanded;
             if (!g_bListExpanded) {
@@ -3134,7 +3164,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.5.1 ===");
+    Wh_Log(L"=== Wh_ModInit v1.5.2 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
