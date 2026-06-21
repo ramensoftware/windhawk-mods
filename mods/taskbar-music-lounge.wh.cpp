@@ -539,6 +539,31 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     }
 }
 
+bool IsFullscreenAppRunning()
+{
+    HWND fg = GetForegroundWindow();
+    if (!fg)
+        return false;
+
+    RECT rcWindow;
+    GetWindowRect(fg, &rcWindow);
+
+    HMONITOR hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY);
+
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+
+    if (!GetMonitorInfo(hMon, &mi))
+        return false;
+
+    RECT rcMonitor = mi.rcMonitor;
+
+    return rcWindow.left <= rcMonitor.left &&
+           rcWindow.top <= rcMonitor.top &&
+           rcWindow.right >= rcMonitor.right &&
+           rcWindow.bottom >= rcMonitor.bottom;
+}
+
 // --- Event Hook ---
 bool IsTaskbarWindow(HWND hwnd) {
     WCHAR cls[64];
@@ -623,15 +648,11 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 bool shouldHide = false;
 
                 // 1. Check Fullscreen
-                if (g_Settings.hideFullscreen) {
-                    QUERY_USER_NOTIFICATION_STATE state;
-                    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-                        if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE) {
-                            shouldHide = true;
-                        }
-                    }
+                if (g_Settings.hideFullscreen)
+                {
+                    shouldHide = IsFullscreenAppRunning();
                 }
-
+                
                 // 2. Check Idle Timeout
                 bool isPlaying = false;
                 {
@@ -701,11 +722,9 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (!g_IsHiddenByIdle && !IsWindowVisible(hwnd)) {
                 // Double check fullscreen mode isn't forcing hide
                 bool gameModeHide = false;
-                if (g_Settings.hideFullscreen) {
-                     QUERY_USER_NOTIFICATION_STATE state;
-                     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-                        if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE) gameModeHide = true;
-                     }
+                if (g_Settings.hideFullscreen)
+                {
+                    gameModeHide = IsFullscreenAppRunning();
                 }
                 if (!gameModeHide) ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             }
@@ -724,7 +743,7 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 (myRc.bottom - myRc.top) != g_Settings.height) {
                     SetWindowPos(
                         hwnd,
-                        HWND_TOPMOST,
+                        HWND_NOTOPMOST,
                         x, y,
                         g_Settings.width,
                         g_Settings.height,
@@ -832,12 +851,12 @@ void MediaThread() {
 
     if (CreateWindowInBand) {
         g_hMediaWindow = CreateWindowInBand(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, TEXT("MusicLounge"),
             WS_POPUP | WS_VISIBLE,
             0, 0, g_Settings.width, g_Settings.height,
             NULL, NULL, wc.hInstance, NULL,
-            ZBID_IMMERSIVE_NOTIFICATION
+            ZBID_DESKTOP
         );
         if (g_hMediaWindow) {
             Wh_Log(L"Created window in ZBID_IMMERSIVE_NOTIFICATION band");
@@ -847,7 +866,7 @@ void MediaThread() {
     if (!g_hMediaWindow) {
         Wh_Log(L"Falling back to CreateWindowEx");
         g_hMediaWindow = CreateWindowEx(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW,
             wc.lpszClassName, TEXT("MusicLounge"),
             WS_POPUP | WS_VISIBLE,
             0, 0, g_Settings.width, g_Settings.height,
