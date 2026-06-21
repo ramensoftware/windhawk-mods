@@ -1126,7 +1126,6 @@ void ClearLockScreenCache() {
             RegDeleteValueW(hKey, (L"Details_" + suffix).c_str());
             RegDeleteValueW(hKey, (L"ImageId_" + suffix).c_str());
             RegDeleteValueW(hKey, (L"OriginalFile_" + suffix).c_str());
-            Wh_Log(L"Cleared Lock Screen Cache");
         }
     }
 
