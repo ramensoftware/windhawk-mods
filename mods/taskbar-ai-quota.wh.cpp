@@ -2,13 +2,13 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar
-// @version         0.9.2
+// @version         0.10.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -lcrypt32 -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,51 +27,51 @@ Each account gets one compact column:
 - vertical layout: side-by-side bars, filling bottom-up
 
 Hover for exact percentages and reset times. Click a column to refresh that account
-or open the provider dashboard, depending on settings. Right-click for Refresh all
-and Open dashboard.
+or open the provider dashboard, depending on settings. Right-click for Refresh all,
+Open dashboard, and a checkbox list to show/hide individual accounts. Hidden accounts
+stop updating and are left to go stale; the choice persists across restarts (at least
+one account always stays visible).
 Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
 Stale errors can mark labels/tooltips with `!`.
 
 Optionally fires a Windows notification when an account first crosses the red threshold
 (5-hour or weekly), so you don't have to keep glancing at the bars.
 
-Supported credential sources:
-- OpenCode: `%USERPROFILE%\.local\share\opencode\auth.json`
-- Claude Code: `%USERPROFILE%\.claude\.credentials.json`
-- Codex: `%USERPROFILE%\.codex\auth.json`
+## Signing in
 
-Credentials are read-only. The mod never refreshes or rewrites tokens, and never sends
-refresh tokens as bearer tokens. Run OpenCode, Claude Code, or Codex to refresh their
-own auth files if requests start returning `401`.
+A column that needs auth shows "click to sign in"; left-click it (or use **Sign in** in
+the right-click menu):
+- **Anthropic**: a browser opens to claude.ai; after you authorize, paste the code shown
+  on the page into the prompt.
+- **OpenAI**: a browser opens to chatgpt.com; the redirect is caught automatically on
+  `localhost:1455`.
+
+The mod refreshes the access token itself. Tokens are stored encrypted (Windows DPAPI).
+Use **Sign out** to remove a stored token.
+
+## Suggestions & bugs
+
+Have a suggestion or found a bug?
+[Open an issue](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - accounts:
-    - - provider: anthropic-opencode
+    - - provider: anthropic
         $name: Provider
-        $description: 'Choose the API provider and credential source.'
+        $description: 'Choose the API provider. Sign in per account from the right-click menu.'
         $options:
-          - anthropic-opencode: Anthropic (OpenCode)
-          - openai-opencode: OpenAI (OpenCode)
-          - anthropic-claude-code: Anthropic (Claude Code)
-          - openai-codex: OpenAI (Codex)
+          - anthropic: Anthropic (Claude)
+          - openai: OpenAI (ChatGPT/Codex)
       - label: A
         $name: Label
-        $description: 'Default: A for Anthropic, O for OpenAI'
-      - authFile: ""
-        $name: Auth file
-        $description: 'Default: empty = provider default. OpenCode: %USERPROFILE%\.local\share\opencode\auth.json; Claude Code: %USERPROFILE%\.claude\.credentials.json; Codex: %USERPROFILE%\.codex\auth.json'
-      - authKey: ""
-        $name: Auth JSON key
-        $description: 'Default: empty. OpenCode uses anthropic/openai; Claude Code and Codex ignore this.'
-    - - provider: openai-opencode
+        $description: 'Default: A for Anthropic, O for OpenAI. The label also identifies the stored sign-in; renaming it requires signing in again.'
+    - - provider: openai
       - label: O
-      - authFile: ""
-      - authKey: ""
   $name: Accounts
-  $description: 'Default: two accounts, Anthropic A and OpenAI O'
+  $description: 'Default: two accounts, Anthropic A and OpenAI O. Sign in to each from a quota column''s right-click menu.'
 - taskbarMonitorMode: primary
   $name: Taskbar monitors
   $description: 'Default: Primary only. Choose where quota bars are shown.'
@@ -157,11 +157,21 @@ own auth files if requests start returning `401`.
 */
 // ==/WindhawkModSettings==
 
+// Windhawk implicitly includes windhawk_api.h (and thus windows.h) before this file,
+// so winsock2.h can't be ordered ahead of windows.h here. WIN32_LEAN_AND_MEAN (set in
+// @compilerOptions) keeps that windows.h from pulling in the legacy winsock.h, so
+// winsock2.h is included cleanly below without redefinition conflicts.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include <windhawk_utils.h>
 
 #include <windows.h>
 #include <shellapi.h>
 #include <winhttp.h>
+#include <bcrypt.h>
+#include <wincrypt.h>
+#include <dpapi.h>
 #include <unknwn.h>
 
 #ifdef GetCurrentTime
@@ -204,11 +214,9 @@ namespace wuxi = winrt::Windows::UI::Xaml::Input;
 /**********************************************/
 
 struct AccountConfig {
-    std::wstring provider;
-    std::wstring authSource;
+    std::wstring provider;  // "anthropic" or "openai".
     std::wstring label;
-    std::wstring authFile;
-    std::wstring authKey;
+    bool hidden = false;  // Runtime show/hide toggle (right-click menu), persisted in mod storage.
 };
 
 enum class TaskbarMonitorMode {
@@ -274,6 +282,7 @@ struct AccountData {
     ULONGLONG lastSuccessMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool stale = true;
+    bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
 
 struct AppliedState {
@@ -284,6 +293,7 @@ struct AppliedState {
     std::wstring labelText;
     double labelOpacity = -1;
     double columnOpacity = -1;
+    int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
 };
 
 struct TapHandler {
@@ -313,6 +323,9 @@ struct QuotaUiInstance {
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
     std::vector<AccountUiRefs> accountRefs;
     std::vector<AppliedState> applied;
+    // Per-account show/hide toggle items, paired with their account index, for cross-instance
+    // IsChecked sync in UpdateQuotaUi (Click is revoked via menuItemClickHandlers).
+    std::vector<std::pair<int, ToggleMenuFlyoutItem>> accountToggleItems;
 };
 
 static Settings g_settings;
@@ -341,9 +354,6 @@ static HWND g_notifyWnd = nullptr;
 static std::vector<std::unique_ptr<QuotaUiInstance>> g_uiInstances;
 
 static const wchar_t* kRootName = L"AiQuota_Root";
-static const wchar_t* kDefaultOpenCodeAuthFile = L"%USERPROFILE%\\.local\\share\\opencode\\auth.json";
-static const wchar_t* kDefaultClaudeCodeAuthFile = L"%USERPROFILE%\\.claude\\.credentials.json";
-static const wchar_t* kDefaultCodexAuthFile = L"%USERPROFILE%\\.codex\\auth.json";
 static constexpr ULONGLONG kFileTimeUnixEpochOffsetMs = 11644473600000ULL;
 static constexpr ULONGLONG kUnixTimestampMsThreshold = 100000000000ULL;
 
@@ -374,41 +384,26 @@ static std::wstring Utf8ToWide(const std::string& s) {
     return w;
 }
 
-static std::wstring ExpandEnv(PCWSTR s) {
-    wchar_t buf[1024];
-    DWORD n = ExpandEnvironmentStringsW(s, buf, ARRAYSIZE(buf));
-    if (n == 0) return s;
-    if (n > ARRAYSIZE(buf)) {
-        std::wstring expanded(n, L'\0');
-        DWORD written = ExpandEnvironmentStringsW(s, expanded.data(), n);
-        if (written == 0 || written > n) return s;
-        expanded.resize(written - 1);
-        return expanded;
-    }
-    return buf;
+static std::string WideToUtf8(const std::wstring& s) {
+    if (s.empty()) return {};
+    int n = WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0, nullptr, nullptr);
+    if (n <= 0) return {};
+    std::string out(n, 0);
+    WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), out.data(), n, nullptr, nullptr);
+    return out;
 }
 
-static bool ReadFileUtf8(const std::wstring& path, std::string* out) {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
-
-    LARGE_INTEGER size{};
-    bool ok = GetFileSizeEx(h, &size) && size.QuadPart > 0 && size.QuadPart < 1024 * 1024;
-    if (ok) {
-        out->resize((size_t)size.QuadPart);
-        DWORD read = 0;
-        ok = ReadFile(h, out->data(), (DWORD)out->size(), &read, nullptr) &&
-             read == out->size();
+// Stable identity used to preserve g_data across settings reloads, persist the show/hide
+// toggle, and key the encrypted token store. FNV-1a over provider+label; relabeling an
+// account therefore points it at a fresh (unsigned-in) identity.
+static uint64_t AccountIdentityHash(const AccountConfig& a) {
+    std::wstring id = a.provider + L"\n" + a.label;
+    uint64_t h = 1469598103934665603ull;
+    for (const auto* p = reinterpret_cast<const unsigned char*>(id.data());
+         p != reinterpret_cast<const unsigned char*>(id.data() + id.size()); ++p) {
+        h = (h ^ *p) * 1099511628211ull;
     }
-    CloseHandle(h);
-
-    if (ok && out->size() >= 3 && (BYTE)(*out)[0] == 0xEF &&
-        (BYTE)(*out)[1] == 0xBB && (BYTE)(*out)[2] == 0xBF) {
-        out->erase(0, 3);
-    }
-    return ok;
+    return h;
 }
 
 static ULONGLONG ParseIso8601Ms(const std::wstring& s) {
@@ -756,6 +751,73 @@ static void OpenDashboardForAccount(int accountIndex) {
                                      : L"https://chatgpt.com/codex/cloud/settings/analytics#usage");
 }
 
+// Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
+// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
+// taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
+static void ToggleAccountVisibility(int accountIndex,
+                                    winrt::Windows::Foundation::IInspectable const& sender) {
+    if (g_unloading) return;
+
+    auto toggle = sender.try_as<ToggleMenuFlyoutItem>();
+    std::wstring hashes;
+    bool refreshNow = false;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        if (accountIndex < 0 || accountIndex >= (int)g_settings.accounts.size()) return;
+        bool wantVisible = toggle ? toggle.IsChecked() : g_settings.accounts[accountIndex].hidden;
+
+        // Refuse to hide the last visible account: there'd be no bar left to right-click.
+        if (!wantVisible && !g_settings.accounts[accountIndex].hidden) {
+            int visibleCount = 0;
+            for (const auto& a : g_settings.accounts) {
+                if (!a.hidden) visibleCount++;
+            }
+            if (visibleCount <= 1) {
+                if (toggle) toggle.IsChecked(true);
+                return;
+            }
+        }
+        bool newHidden = !wantVisible;
+        if (newHidden != g_settings.accounts[accountIndex].hidden) {
+            g_settings.accounts[accountIndex].hidden = newHidden;
+            if (newHidden) {
+                // Hiding: bump the generation so a fetch already in flight from the pre-toggle
+                // snapshot is discarded at publish (guard checks settingsGeneration), preventing a
+                // refresh or red-threshold notification for the now-hidden account.
+                g_settingsGeneration++;
+            } else {
+                // Showing: keep the existing (possibly stale) data and only re-query if it has
+                // already gone stale, matching the UI's grey-out threshold. This stops repeated
+                // hide/show from triggering fetches and hitting provider rate limits.
+                int intervalMin = g_settings.pollMinutes;
+                ULONGLONG now = NowUnixMs();
+                std::lock_guard<std::mutex> lk2(g_dataMutex);
+                if (accountIndex >= (int)g_data.size()) {
+                    refreshNow = true;
+                } else {
+                    const AccountData& d = g_data[accountIndex];
+                    refreshNow = d.stale || d.lastSuccessMs == 0 ||
+                                 now - d.lastSuccessMs > (ULONGLONG)intervalMin * 2 * 60000;
+                }
+            }
+        }
+
+        wchar_t buf[24];
+        for (const auto& a : g_settings.accounts) {
+            if (!a.hidden) continue;
+            if (!hashes.empty()) hashes += L";";
+            swprintf(buf, ARRAYSIZE(buf), L"%016llx", (unsigned long long)AccountIdentityHash(a));
+            hashes += buf;
+        }
+    }
+
+    Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
+    // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
+    // column collapses/reappears with its existing data without any network request.
+    if (refreshNow) RefreshQuota(accountIndex);
+    else PostUiUpdate();
+}
+
 /**********************************************/
 //  JSON Helpers
 /**********************************************/
@@ -778,21 +840,6 @@ static std::wstring GetStr(JsonObject const& o, PCWSTR name) {
     if (v.ValueType() != JsonValueType::String) return {};
     auto s = v.GetString();
     return std::wstring(s.c_str(), s.size());
-}
-
-static ULONGLONG GetExpiryMs(JsonObject const& o) {
-    double expiry = GetNum(o, L"expires", 0);
-    if (expiry <= 0) expiry = GetNum(o, L"expiresAt", 0);
-    if (expiry <= 0) expiry = GetNum(o, L"expires_at", 0);
-    if (expiry > 0) {
-        ULONGLONG expiryMs = (ULONGLONG)expiry;
-        return expiryMs < kUnixTimestampMsThreshold ? expiryMs * 1000 : expiryMs;
-    }
-
-    std::wstring expiryText = GetStr(o, L"expires");
-    if (expiryText.empty()) expiryText = GetStr(o, L"expiresAt");
-    if (expiryText.empty()) expiryText = GetStr(o, L"expires_at");
-    return expiryText.empty() ? 0 : ParseIso8601Ms(expiryText);
 }
 
 static bool GetBool(JsonObject const& o, PCWSTR name) {
@@ -825,82 +872,237 @@ static std::wstring DescribeJsonBody(const std::string& body) {
 }
 
 /**********************************************/
-//  Credentials
+//  Crypto and Encoding
 /**********************************************/
 
-struct AuthInfo {
-    bool ok = false;
-    std::wstring err;
+static std::string Base64Encode(const BYTE* data, size_t len) {
+    if (!len) return {};
+    DWORD outLen = 0;
+    if (!CryptBinaryToStringA(data, (DWORD)len, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+                              nullptr, &outLen) || !outLen) {
+        return {};
+    }
+    std::string out(outLen, '\0');
+    if (!CryptBinaryToStringA(data, (DWORD)len, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
+                              out.data(), &outLen)) {
+        return {};
+    }
+    out.resize(outLen);
+    return out;
+}
+
+static std::vector<BYTE> Base64Decode(const std::string& s) {
+    if (s.empty()) return {};
+    DWORD binLen = 0;
+    if (!CryptStringToBinaryA(s.data(), (DWORD)s.size(), CRYPT_STRING_BASE64, nullptr, &binLen,
+                              nullptr, nullptr) || !binLen) {
+        return {};
+    }
+    std::vector<BYTE> out(binLen);
+    if (!CryptStringToBinaryA(s.data(), (DWORD)s.size(), CRYPT_STRING_BASE64, out.data(), &binLen,
+                              nullptr, nullptr)) {
+        return {};
+    }
+    out.resize(binLen);
+    return out;
+}
+
+// RFC 7636 base64url (no padding). Used for PKCE and to decode JWT segments.
+static std::string ToBase64Url(const BYTE* data, size_t len) {
+    std::string b64 = Base64Encode(data, len);
+    std::string out;
+    out.reserve(b64.size());
+    for (char c : b64) {
+        if (c == '+') out += '-';
+        else if (c == '/') out += '_';
+        else if (c == '=') continue;
+        else out += c;
+    }
+    return out;
+}
+
+static std::vector<BYTE> FromBase64Url(std::string s) {
+    for (char& c : s) {
+        if (c == '-') c = '+';
+        else if (c == '_') c = '/';
+    }
+    s.append((4 - s.size() % 4) % 4, '=');
+    return Base64Decode(s);
+}
+
+static std::string RandomBase64Url(size_t bytes) {
+    std::vector<BYTE> buf(bytes);
+    if (BCryptGenRandom(nullptr, buf.data(), (ULONG)buf.size(),
+                        BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
+        return {};
+    }
+    return ToBase64Url(buf.data(), buf.size());
+}
+
+// PKCE code challenge: base64url(SHA-256(verifier)).
+static std::string Sha256Base64Url(const std::string& input) {
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) return {};
+    std::string out;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    std::array<BYTE, 32> digest{};
+    if (BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0) {
+        if (BCryptHashData(hash, (PUCHAR)input.data(), (ULONG)input.size(), 0) == 0 &&
+            BCryptFinishHash(hash, digest.data(), (ULONG)digest.size(), 0) == 0) {
+            out = ToBase64Url(digest.data(), digest.size());
+        }
+        BCryptDestroyHash(hash);
+    }
+    BCryptCloseAlgorithmProvider(alg, 0);
+    return out;
+}
+
+// Decodes a JWT's payload segment into a JSON object (claims). Empty on any failure.
+static JsonObject ParseJwtPayload(const std::wstring& jwt) {
+    std::string narrow = WideToUtf8(jwt);
+    size_t first = narrow.find('.');
+    if (first == std::string::npos) return nullptr;
+    size_t second = narrow.find('.', first + 1);
+    std::string payload = narrow.substr(first + 1,
+        second == std::string::npos ? std::string::npos : second - first - 1);
+    std::vector<BYTE> bytes = FromBase64Url(payload);
+    if (bytes.empty()) return nullptr;
+    try {
+        return JsonObject::Parse(Utf8ToWide(std::string((char*)bytes.data(), bytes.size())));
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// DPAPI (current user) so stored tokens are not plaintext at rest. Returns base64 of the
+// protected blob, or empty on failure.
+static std::string DpapiProtect(const std::string& plain) {
+    DATA_BLOB in{(DWORD)plain.size(), (BYTE*)plain.data()};
+    DATA_BLOB out{};
+    if (!CryptProtectData(&in, L"taskbar-ai-quota", nullptr, nullptr, nullptr, 0, &out)) {
+        return {};
+    }
+    std::string b64 = Base64Encode(out.pbData, out.cbData);
+    LocalFree(out.pbData);
+    return b64;
+}
+
+static std::string DpapiUnprotect(const std::string& b64) {
+    std::vector<BYTE> blob = Base64Decode(b64);
+    if (blob.empty()) return {};
+    DATA_BLOB in{(DWORD)blob.size(), blob.data()};
+    DATA_BLOB out{};
+    if (!CryptUnprotectData(&in, nullptr, nullptr, nullptr, nullptr, 0, &out)) {
+        return {};
+    }
+    std::string plain((char*)out.pbData, out.cbData);
+    LocalFree(out.pbData);
+    return plain;
+}
+
+/**********************************************/
+//  Token Store
+/**********************************************/
+
+// Per-account OAuth credentials, owned entirely by the mod (the CLI credential files are
+// never touched). Persisted DPAPI-encrypted in Windhawk mod storage, keyed by identity hash.
+struct StoredToken {
     std::wstring accessToken;
-    std::wstring accountId;
-    ULONGLONG expiresMs = 0;
+    std::wstring refreshToken;
+    std::wstring accountId;  // OpenAI ChatGPT-Account-Id; empty for Anthropic.
+    ULONGLONG expiresMs = 0;  // 0 = unknown; refresh is then driven reactively by 401s.
 };
 
-static AuthInfo LoadAuthInfo(const AccountConfig& acc) {
-    AuthInfo a;
-    std::string raw;
-    if (!ReadFileUtf8(acc.authFile, &raw)) {
-        a.err = L"can't read auth file";
-        return a;
-    }
+static std::mutex g_authMutex;
+static std::mutex g_authEpochMutex;
+static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
 
-    JsonObject root = nullptr;
+enum class TokenSaveResult {
+    Saved,
+    Stale,
+    Failed,
+};
+
+static ULONGLONG AuthEpochLocked(uint64_t idHash) {
+    for (const auto& [hash, epoch] : g_authEpochs) {
+        if (hash == idHash) return epoch;
+    }
+    return 0;
+}
+
+static ULONGLONG CurrentAuthEpoch(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    return AuthEpochLocked(idHash);
+}
+
+static std::wstring TokenStorageKey(uint64_t idHash) {
+    wchar_t buf[32];
+    swprintf(buf, ARRAYSIZE(buf), L"auth_%016llx", (unsigned long long)idHash);
+    return buf;
+}
+
+static bool LoadStoredToken(uint64_t idHash, StoredToken* out) {
+    std::lock_guard<std::mutex> lk(g_authMutex);
+    std::vector<wchar_t> buf(16384);
+    Wh_GetStringValue(TokenStorageKey(idHash).c_str(), buf.data(), buf.size());
+    std::wstring stored = buf.data();
+    if (stored.empty()) return false;
+
+    std::string plain = DpapiUnprotect(WideToUtf8(stored));
+    if (plain.empty()) return false;
     try {
-        root = JsonObject::Parse(Utf8ToWide(raw));
+        auto root = JsonObject::Parse(Utf8ToWide(plain));
+        out->accessToken = GetStr(root, L"access");
+        out->refreshToken = GetStr(root, L"refresh");
+        out->accountId = GetStr(root, L"accountId");
+        out->expiresMs = (ULONGLONG)GetNum(root, L"expiresMs", 0);
+        return !out->accessToken.empty() || !out->refreshToken.empty();
     } catch (...) {
-        a.err = L"auth file parse error";
-        return a;
+        return false;
     }
+}
 
-    bool legacyAutoSource = acc.authSource == L"auto";
-
-    if (acc.authSource == L"opencode" || legacyAutoSource) {
-        std::wstring key = acc.authKey.empty() ? acc.provider : acc.authKey;
-        if (auto entry = GetObj(root, key.c_str())) {
-            a.accessToken = GetStr(entry, L"access");
-            a.accountId = GetStr(entry, L"accountId");
-            a.expiresMs = GetExpiryMs(entry);
-            a.ok = !a.accessToken.empty();
-            if (!a.ok) a.err = L"no access token";
-            if (a.ok || !legacyAutoSource) return a;
-        }
-        if (!legacyAutoSource) {
-            a.err = L"no OpenCode credentials found";
-            return a;
-        }
+static bool SaveStoredToken(uint64_t idHash, const StoredToken& t) {
+    std::lock_guard<std::mutex> lk(g_authMutex);
+    std::wstring json;
+    try {
+        JsonObject root;
+        root.SetNamedValue(L"access", JsonValue::CreateStringValue(winrt::hstring(t.accessToken)));
+        root.SetNamedValue(L"refresh", JsonValue::CreateStringValue(winrt::hstring(t.refreshToken)));
+        root.SetNamedValue(L"accountId", JsonValue::CreateStringValue(winrt::hstring(t.accountId)));
+        root.SetNamedValue(L"expiresMs", JsonValue::CreateNumberValue((double)t.expiresMs));
+        json = root.Stringify().c_str();
+    } catch (...) {
+        return false;
     }
+    std::string b64 = DpapiProtect(WideToUtf8(json));
+    if (b64.empty()) return false;
+    return Wh_SetStringValue(TokenStorageKey(idHash).c_str(), Utf8ToWide(b64).c_str());
+}
 
-    if ((acc.authSource == L"claude-code" || legacyAutoSource) && acc.provider == L"anthropic") {
-        if (auto entry = GetObj(root, L"claudeAiOauth")) {
-            a.accessToken = GetStr(entry, L"accessToken");
-            a.expiresMs = GetExpiryMs(entry);
-            a.ok = !a.accessToken.empty();
-            if (!a.ok) a.err = L"no access token";
-            return a;
-        }
-        if (!legacyAutoSource) {
-            a.err = L"no Claude Code credentials found";
-            return a;
-        }
-    }
+static void ClearStoredToken(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authMutex);
+    Wh_SetStringValue(TokenStorageKey(idHash).c_str(), L"");
+}
 
-    if ((acc.authSource == L"codex" || legacyAutoSource) && acc.provider == L"openai") {
-        if (auto entry = GetObj(root, L"tokens")) {
-            a.accessToken = GetStr(entry, L"access_token");
-            a.accountId = GetStr(entry, L"account_id");
-            a.expiresMs = GetExpiryMs(entry);
-            a.ok = !a.accessToken.empty();
-            if (!a.ok) a.err = L"no access token";
-            return a;
-        }
-        if (!legacyAutoSource) {
-            a.err = L"no Codex credentials found";
-            return a;
+static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
+                                                const StoredToken& t) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    if (AuthEpochLocked(idHash) != authEpoch) return TokenSaveResult::Stale;
+    return SaveStoredToken(idHash, t) ? TokenSaveResult::Saved : TokenSaveResult::Failed;
+}
+
+static void ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
+    std::lock_guard<std::mutex> lk(g_authEpochMutex);
+    for (auto& [hash, epoch] : g_authEpochs) {
+        if (hash == idHash) {
+            epoch++;
+            ClearStoredToken(idHash);
+            return;
         }
     }
-
-    a.err = L"no credentials found";
-    return a;
+    g_authEpochs.push_back({idHash, 1});
+    ClearStoredToken(idHash);
 }
 
 /**********************************************/
@@ -942,8 +1144,8 @@ static void CloseActiveHttpHandles() {
     for (auto it = handles.rbegin(); it != handles.rend(); ++it) WinHttpCloseHandle(*it);
 }
 
-static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
-                          const std::wstring& headers) {
+static HttpResult HttpRequest(PCWSTR method, PCWSTR host, PCWSTR path, PCWSTR userAgent,
+                              const std::wstring& headers, const std::string& body = {}) {
     HttpResult res;
     HINTERNET ses = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
@@ -956,7 +1158,7 @@ static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
         WinHttpSetTimeouts(ses, 5000, 5000, 5000, 10000);
         con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
         if (con && !TrackHttpHandle(con)) con = nullptr;
-        req = con ? WinHttpOpenRequest(con, L"GET", path, nullptr,
+        req = con ? WinHttpOpenRequest(con, method, path, nullptr,
                                         WINHTTP_NO_REFERER,
                                         WINHTTP_DEFAULT_ACCEPT_TYPES,
                                         WINHTTP_FLAG_SECURE)
@@ -964,8 +1166,10 @@ static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
         if (req && !TrackHttpHandle(req)) req = nullptr;
     }
 
-    if (!g_unloading && req && WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
-                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+    if (!g_unloading && req &&
+        WinHttpSendRequest(req, headers.c_str(), (DWORD)headers.size(),
+                           body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
+                           (DWORD)body.size(), (DWORD)body.size(), 0) &&
         WinHttpReceiveResponse(req, nullptr)) {
         DWORD status = 0, sz = sizeof(status);
         WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
@@ -1024,6 +1228,616 @@ static HttpResult HttpGet(PCWSTR host, PCWSTR path, PCWSTR userAgent,
     if (con && UntrackHttpHandle(con)) WinHttpCloseHandle(con);
     if (ses && UntrackHttpHandle(ses)) WinHttpCloseHandle(ses);
     return res;
+}
+
+/**********************************************/
+//  OAuth
+/**********************************************/
+
+// Public OAuth clients used by the official CLIs; the mod runs the same flows so a sign-in
+// here is independent of (and never touches) OpenCode/Claude Code/Codex credential files.
+static constexpr PCWSTR kAnthropicClientId = L"9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+static constexpr PCWSTR kAnthropicTokenHost = L"console.anthropic.com";
+static constexpr PCWSTR kAnthropicTokenPath = L"/v1/oauth/token";
+static constexpr PCWSTR kAnthropicRedirect = L"https://console.anthropic.com/oauth/code/callback";
+static constexpr PCWSTR kAnthropicScope = L"org:create_api_key user:profile user:inference";
+static constexpr PCWSTR kOpenAiClientId = L"app_EMoamEEZ73f0CkXaXp7hrann";
+static constexpr PCWSTR kOpenAiTokenHost = L"auth.openai.com";
+static constexpr PCWSTR kOpenAiTokenPath = L"/oauth/token";
+static constexpr PCWSTR kOpenAiScope =
+    L"openid profile email offline_access api.connectors.read api.connectors.invoke";
+static constexpr PCWSTR kOAuthUserAgent = L"taskbar-ai-quota/0.1";
+
+static std::string UrlEncode(const std::string& s) {
+    static const char* kHex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out += (char)c;
+        } else {
+            out += '%';
+            out += kHex[c >> 4];
+            out += kHex[c & 0xF];
+        }
+    }
+    return out;
+}
+
+static std::string UrlDecode(const std::string& s) {
+    auto hex = [](char h) -> int {
+        if (h >= '0' && h <= '9') return h - '0';
+        if (h >= 'a' && h <= 'f') return h - 'a' + 10;
+        if (h >= 'A' && h <= 'F') return h - 'A' + 10;
+        return -1;
+    };
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        char c = s[i];
+        if (c == '%' && i + 2 < s.size()) {
+            int hi = hex(s[i + 1]), lo = hex(s[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out += (char)((hi << 4) | lo);
+                i += 2;
+                continue;
+            }
+        }
+        out += (c == '+') ? ' ' : c;
+    }
+    return out;
+}
+
+static std::wstring BuildAnthropicAuthorizeUrl(const std::string& challenge, const std::string& state) {
+    std::string url = "https://claude.ai/oauth/authorize?code=true";
+    url += "&client_id=" + UrlEncode(WideToUtf8(kAnthropicClientId));
+    url += "&response_type=code";
+    url += "&redirect_uri=" + UrlEncode(WideToUtf8(kAnthropicRedirect));
+    url += "&scope=" + UrlEncode(WideToUtf8(kAnthropicScope));
+    url += "&code_challenge=" + challenge;
+    url += "&code_challenge_method=S256";
+    url += "&state=" + state;
+    return Utf8ToWide(url);
+}
+
+static std::wstring BuildOpenAiAuthorizeUrl(int port, const std::string& challenge,
+                                            const std::string& state) {
+    std::string redirect = "http://localhost:" + std::to_string(port) + "/auth/callback";
+    std::string url = "https://auth.openai.com/oauth/authorize?response_type=code";
+    url += "&client_id=" + UrlEncode(WideToUtf8(kOpenAiClientId));
+    url += "&redirect_uri=" + UrlEncode(redirect);
+    url += "&scope=" + UrlEncode(WideToUtf8(kOpenAiScope));
+    url += "&code_challenge=" + challenge;
+    url += "&code_challenge_method=S256";
+    url += "&id_token_add_organizations=true";
+    url += "&codex_cli_simplified_flow=true";
+    url += "&originator=codex_cli_rs";
+    url += "&state=" + state;
+    return Utf8ToWide(url);
+}
+
+static std::wstring ParseOAuthError(const std::string& body) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        std::wstring desc = GetStr(root, L"error_description");
+        if (!desc.empty()) return desc;
+        return GetStr(root, L"error");
+    } catch (...) {
+        return {};
+    }
+}
+
+// Fills *tok from an OAuth token response (access/refresh/id_token), extracting the OpenAI
+// ChatGPT-Account-Id and access-token expiry from JWT claims when present. Used for both the
+// authorization-code exchange and refresh.
+static bool ParseTokenResponse(const std::string& body, bool anthropic, StoredToken* tok,
+                               std::wstring* err) {
+    try {
+        auto root = JsonObject::Parse(Utf8ToWide(body));
+        std::wstring access = GetStr(root, L"access_token");
+        std::wstring refresh = GetStr(root, L"refresh_token");
+        if (access.empty()) {
+            *err = L"no access token in response";
+            return false;
+        }
+        tok->accessToken = access;
+        if (!refresh.empty()) tok->refreshToken = refresh;
+
+        tok->expiresMs = 0;
+        double expiresIn = GetNum(root, L"expires_in", 0);
+        if (expiresIn > 0) tok->expiresMs = NowUnixMs() + (ULONGLONG)(expiresIn * 1000);
+
+        if (!anthropic) {
+            std::wstring idToken = GetStr(root, L"id_token");
+            if (auto claims = ParseJwtPayload(idToken.empty() ? access : idToken)) {
+                if (auto authObj = GetObj(claims, L"https://api.openai.com/auth")) {
+                    std::wstring acc = GetStr(authObj, L"chatgpt_account_id");
+                    if (!acc.empty()) tok->accountId = acc;
+                }
+            }
+            // OpenAI responses omit expires_in; derive expiry from the access-token JWT exp.
+            if (tok->expiresMs == 0) {
+                if (auto claims = ParseJwtPayload(access)) {
+                    double exp = GetNum(claims, L"exp", 0);
+                    if (exp > 0) tok->expiresMs = (ULONGLONG)(exp * 1000);
+                }
+            }
+        }
+        return true;
+    } catch (...) {
+        *err = L"invalid token response";
+        return false;
+    }
+}
+
+static bool PostTokenEndpoint(bool anthropic, const std::wstring& contentType,
+                              const std::string& body, StoredToken* tok, std::wstring* err) {
+    std::wstring headers = L"Content-Type: " + contentType + L"\r\nAccept: application/json\r\n";
+    PCWSTR host = anthropic ? kAnthropicTokenHost : kOpenAiTokenHost;
+    PCWSTR path = anthropic ? kAnthropicTokenPath : kOpenAiTokenPath;
+    HttpResult r = HttpRequest(L"POST", host, path, kOAuthUserAgent, headers, body);
+    if (!r.ok) {
+        *err = L"network error";
+        return false;
+    }
+    if (r.status < 200 || r.status >= 300) {
+        std::wstring detail = ParseOAuthError(r.body);
+        *err = detail.empty() ? (L"HTTP " + std::to_wstring(r.status)) : detail;
+        return false;
+    }
+    return ParseTokenResponse(r.body, anthropic, tok, err);
+}
+
+// grant_type=refresh_token. Anthropic sends JSON; OpenAI sends JSON too (its auth-code
+// exchange is the form-encoded one). Rotated refresh tokens come back in the response.
+static bool RefreshToken(const std::wstring& provider, StoredToken* tok, std::wstring* err) {
+    if (tok->refreshToken.empty()) {
+        *err = L"no refresh token";
+        return false;
+    }
+    bool anthropic = provider == L"anthropic";
+    std::string body;
+    try {
+        JsonObject obj;
+        obj.SetNamedValue(L"grant_type", JsonValue::CreateStringValue(L"refresh_token"));
+        obj.SetNamedValue(L"refresh_token",
+                          JsonValue::CreateStringValue(winrt::hstring(tok->refreshToken)));
+        obj.SetNamedValue(L"client_id", JsonValue::CreateStringValue(
+                                            winrt::hstring(anthropic ? kAnthropicClientId : kOpenAiClientId)));
+        body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
+    } catch (...) {
+        *err = L"internal error";
+        return false;
+    }
+    return PostTokenEndpoint(anthropic, L"application/json", body, tok, err);
+}
+
+/**********************************************/
+//  Login
+/**********************************************/
+
+struct LoginRequest {
+    std::wstring provider;
+    std::wstring label;
+    uint64_t idHash = 0;
+    ULONGLONG authEpoch = 0;
+    int index = -1;
+};
+
+static std::atomic<bool> g_loginInProgress{false};
+static HANDLE g_loginThread = nullptr;
+static std::mutex g_loginThreadMutex;  // Guards g_loginThread handoff vs. the unload join.
+static std::atomic<HWND> g_loginWnd{nullptr};        // Anthropic paste dialog window.
+static std::atomic<SOCKET> g_loginSocket{INVALID_SOCKET};  // OpenAI loopback listener.
+
+// Small modal-style input window so the Anthropic flow can collect the pasted code#state.
+// Runs its own message loop on the login thread; closed on cancel, submit, or unload.
+struct LoginDialogState {
+    std::wstring result;
+    HWND edit = nullptr;
+    bool ok = false;
+    bool done = false;
+};
+
+static LRESULT CALLBACK LoginDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CREATE: {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            auto* st = reinterpret_cast<LoginDialogState*>(cs->lpCreateParams);
+            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
+            HINSTANCE hInst = GetModuleHandleW(nullptr);
+            HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HWND label = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                                         12, 10, 424, 52, hWnd, (HMENU)100, hInst, nullptr);
+            HWND edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                                        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                                        12, 68, 424, 24, hWnd, (HMENU)101, hInst, nullptr);
+            HWND ok = CreateWindowExW(0, L"BUTTON", L"Sign in",
+                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                                      262, 104, 84, 30, hWnd, (HMENU)IDOK, hInst, nullptr);
+            HWND cancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
+                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                                          352, 104, 84, 30, hWnd, (HMENU)IDCANCEL, hInst, nullptr);
+            for (HWND c : {label, edit, ok, cancel}) {
+                SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
+            }
+            if (st) st->edit = edit;
+            SetFocus(edit);
+            return 0;
+        }
+        case WM_COMMAND: {
+            auto* st = reinterpret_cast<LoginDialogState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            WORD id = LOWORD(wParam);
+            if (id == IDOK && st && st->edit) {
+                int len = GetWindowTextLengthW(st->edit);
+                std::wstring buf(len + 1, L'\0');
+                GetWindowTextW(st->edit, buf.data(), len + 1);
+                buf.resize(len);
+                st->result = std::move(buf);
+                st->ok = true;
+                DestroyWindow(hWnd);
+                return 0;
+            }
+            if (id == IDCANCEL) {
+                DestroyWindow(hWnd);
+                return 0;
+            }
+            break;
+        }
+        case WM_CLOSE:
+            DestroyWindow(hWnd);
+            return 0;
+        case WM_DESTROY: {
+            auto* st = reinterpret_cast<LoginDialogState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+            if (st) st->done = true;
+            PostQuitMessage(0);
+            return 0;
+        }
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static std::wstring ShowLoginInputDialog(const std::wstring& title, const std::wstring& instructions) {
+    static PCWSTR kClass = L"AiQuotaLoginDlg_" WH_MOD_ID;
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = LoginDlgProc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = kClass;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    RegisterClassExW(&wc);  // ERROR_CLASS_ALREADY_EXISTS is fine.
+
+    LoginDialogState st;
+    int w = 460, h = 184;
+    int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
+    int y = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+    HWND wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_DLGMODALFRAME, kClass, title.c_str(),
+                               WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, w, h,
+                               nullptr, nullptr, hInst, &st);
+    if (!wnd) return {};
+    SetWindowTextW(GetDlgItem(wnd, 100), instructions.c_str());
+    g_loginWnd.store(wnd);
+
+    MSG msg;
+    while (!g_unloading && GetMessageW(&msg, nullptr, 0, 0)) {
+        if (!IsDialogMessageW(wnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (st.done) break;
+    }
+    g_loginWnd.store(nullptr);
+    if (IsWindow(wnd)) DestroyWindow(wnd);
+    // Unregister so a later mod reload can't reuse a class pointing at this now-unloaded WndProc.
+    UnregisterClassW(kClass, hInst);
+    return st.ok ? st.result : std::wstring();
+}
+
+static bool StartLoopback(SOCKET* outSock, int* outPort) {
+    for (int port : {1455, 1457}) {
+        SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (s == INVALID_SOCKET) continue;
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons((u_short)port);
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (bind(s, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(s, 1) == 0) {
+            *outSock = s;
+            *outPort = port;
+            return true;
+        }
+        closesocket(s);
+    }
+    return false;
+}
+
+// Accepts one localhost callback and returns the (URL-decoded) authorization code. Polls with
+// a 1s select timeout so it stays responsive to g_unloading and an overall deadline.
+static std::string WaitForLoopbackCode(SOCKET listener, const std::string& expectedState,
+                                       DWORD totalTimeoutMs, std::wstring* terminalError) {
+    if (terminalError) terminalError->clear();
+    auto getParam = [](const std::string& query, const std::string& key) -> std::string {
+        std::string pat = key + "=";
+        for (size_t p = 0; (p = query.find(pat, p)) != std::string::npos; p += pat.size()) {
+            if (p == 0 || query[p - 1] == '&' || query[p - 1] == '?') {
+                size_t v = p + pat.size();
+                size_t end = query.find('&', v);
+                return UrlDecode(query.substr(v, end == std::string::npos ? std::string::npos : end - v));
+            }
+        }
+        return {};
+    };
+
+    ULONGLONG deadline = GetTickCount64() + totalTimeoutMs;
+    while (!g_unloading) {
+        fd_set rd;
+        FD_ZERO(&rd);
+        FD_SET(listener, &rd);
+        timeval tv{1, 0};
+        int sel = select(0, &rd, nullptr, nullptr, &tv);
+        if (g_unloading) break;
+        if (sel <= 0) {
+            if (GetTickCount64() > deadline) break;
+            continue;
+        }
+
+        SOCKET c = accept(listener, nullptr, nullptr);
+        if (c == INVALID_SOCKET) {
+            if (g_unloading) break;
+            continue;
+        }
+
+        DWORD rcvTimeout = 3000;
+        setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, (char*)&rcvTimeout, sizeof(rcvTimeout));
+        std::string request;
+        char buf[2048];
+        for (int i = 0; i < 16; i++) {
+            int n = recv(c, buf, sizeof(buf), 0);
+            if (n <= 0) break;
+            request.append(buf, n);
+            if (request.find("\r\n\r\n") != std::string::npos || request.size() > 16384) break;
+        }
+
+        std::string path;
+        size_t sp1 = request.find(' ');
+        size_t sp2 = sp1 == std::string::npos ? std::string::npos : request.find(' ', sp1 + 1);
+        if (sp1 != std::string::npos && sp2 != std::string::npos) {
+            path = request.substr(sp1 + 1, sp2 - sp1 - 1);
+        }
+        size_t q = path.find('?');
+        std::string route = q == std::string::npos ? path : path.substr(0, q);
+        std::string query = q == std::string::npos ? "" : path.substr(q + 1);
+        std::string code = getParam(query, "code");
+        std::string state = getParam(query, "state");
+        std::string oauthError = getParam(query, "error");
+        std::string oauthErrorDesc = getParam(query, "error_description");
+        bool callback = route == "/auth/callback";
+        bool stateOk = callback && (expectedState.empty() || state == expectedState);
+        bool success = !code.empty() && stateOk;
+        bool terminalFailure = stateOk && (code.empty() || !oauthError.empty());
+
+        std::string html = success
+            ? "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'>"
+              "<h3>Signed in.</h3><p>You can close this tab and return to the taskbar.</p></body>"
+            : "<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;padding:2em'>"
+              "<h3>Sign-in failed.</h3><p>You can close this tab and try again from the taskbar.</p></body>";
+        std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+                           "Connection: close\r\nContent-Length: " + std::to_string(html.size()) +
+                           "\r\n\r\n" + html;
+        send(c, resp.data(), (int)resp.size(), 0);
+        closesocket(c);
+
+        if (success) return code;
+        if (terminalFailure) {
+            if (terminalError) {
+                if (!oauthErrorDesc.empty()) *terminalError = Utf8ToWide(oauthErrorDesc);
+                else if (!oauthError.empty()) *terminalError = Utf8ToWide(oauthError);
+                else *terminalError = L"missing authorization code";
+            }
+            return {};
+        }
+        // Ignore stray hits (favicon, etc.) and keep waiting until the deadline.
+        if (GetTickCount64() > deadline) break;
+    }
+    return {};
+}
+
+static void DoAnthropicLogin(const LoginRequest& req) {
+    std::string verifier = RandomBase64Url(32);
+    std::string challenge = Sha256Base64Url(verifier);
+    std::string state = RandomBase64Url(32);
+    if (verifier.empty() || challenge.empty() || state.empty()) {
+        Wh_Log(L"Sign-in: crypto init failed");
+        return;
+    }
+
+    OpenUrl(BuildAnthropicAuthorizeUrl(challenge, state).c_str());
+    std::wstring title = L"Sign in: " + req.label + L" (Anthropic)";
+    std::wstring instructions =
+        L"A browser window opened to claude.ai. Approve access, then copy the code shown "
+        L"on the page and paste it below.";
+    std::wstring pasted = ShowLoginInputDialog(title, instructions);
+    if (g_unloading || pasted.empty()) return;
+
+    size_t b = pasted.find_first_not_of(L" \t\r\n");
+    size_t e = pasted.find_last_not_of(L" \t\r\n");
+    std::wstring code = b == std::wstring::npos ? L"" : pasted.substr(b, e - b + 1);
+    size_t hashPos = code.find(L'#');  // pasted value is code#state.
+    if (hashPos != std::wstring::npos) code = code.substr(0, hashPos);
+    if (code.empty()) {
+        Wh_Log(L"Sign-in [%s]: no code entered", req.label.c_str());
+        return;
+    }
+
+    std::string body;
+    try {
+        JsonObject obj;
+        obj.SetNamedValue(L"grant_type", JsonValue::CreateStringValue(L"authorization_code"));
+        obj.SetNamedValue(L"client_id", JsonValue::CreateStringValue(winrt::hstring(kAnthropicClientId)));
+        obj.SetNamedValue(L"code", JsonValue::CreateStringValue(winrt::hstring(code)));
+        obj.SetNamedValue(L"redirect_uri", JsonValue::CreateStringValue(winrt::hstring(kAnthropicRedirect)));
+        obj.SetNamedValue(L"code_verifier", JsonValue::CreateStringValue(winrt::hstring(Utf8ToWide(verifier))));
+        obj.SetNamedValue(L"state", JsonValue::CreateStringValue(winrt::hstring(Utf8ToWide(state))));
+        body = WideToUtf8(std::wstring(obj.Stringify().c_str()));
+    } catch (...) {
+        Wh_Log(L"Sign-in [%s]: internal error", req.label.c_str());
+        return;
+    }
+
+    StoredToken tok;
+    std::wstring err;
+    if (PostTokenEndpoint(/*anthropic*/ true, L"application/json", body, &tok, &err)) {
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        if (saved == TokenSaveResult::Stale) {
+            Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+            return;
+        }
+        if (saved != TokenSaveResult::Saved) {
+            Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+            return;
+        }
+        RefreshQuota(req.index);
+        Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
+    } else {
+        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+    }
+}
+
+static void DoOpenAiLogin(const LoginRequest& req) {
+    std::string verifier = RandomBase64Url(32);
+    std::string challenge = Sha256Base64Url(verifier);
+    std::string state = RandomBase64Url(32);
+    if (verifier.empty() || challenge.empty() || state.empty()) {
+        Wh_Log(L"Sign-in: crypto init failed");
+        return;
+    }
+
+    SOCKET listener = INVALID_SOCKET;
+    int port = 0;
+    if (!StartLoopback(&listener, &port)) {
+        Wh_Log(L"Sign-in [%s]: could not bind localhost:1455/1457 (Codex running?)",
+               req.label.c_str());
+        return;
+    }
+    g_loginSocket.store(listener);
+    OpenUrl(BuildOpenAiAuthorizeUrl(port, challenge, state).c_str());
+    std::wstring callbackErr;
+    std::string code = WaitForLoopbackCode(listener, state, 180000, &callbackErr);
+    SOCKET s = g_loginSocket.exchange(INVALID_SOCKET);
+    if (s != INVALID_SOCKET) closesocket(s);
+    if (g_unloading || code.empty()) {
+        if (code.empty() && !g_unloading) {
+            if (!callbackErr.empty()) {
+                Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), callbackErr.c_str());
+            } else {
+                Wh_Log(L"Sign-in [%s]: cancelled or timed out", req.label.c_str());
+            }
+        }
+        return;
+    }
+
+    std::string redirect = "http://localhost:" + std::to_string(port) + "/auth/callback";
+    std::string formBody = "grant_type=authorization_code&code=" + UrlEncode(code) +
+                           "&redirect_uri=" + UrlEncode(redirect) +
+                           "&client_id=" + UrlEncode(WideToUtf8(kOpenAiClientId)) +
+                           "&code_verifier=" + UrlEncode(verifier);
+
+    StoredToken tok;
+    std::wstring err;
+    if (PostTokenEndpoint(/*anthropic*/ false, L"application/x-www-form-urlencoded", formBody,
+                          &tok, &err)) {
+        TokenSaveResult saved = SaveStoredTokenIfCurrent(req.idHash, req.authEpoch, tok);
+        if (saved == TokenSaveResult::Stale) {
+            Wh_Log(L"Sign-in [%s]: cancelled before saving token", req.label.c_str());
+            return;
+        }
+        if (saved != TokenSaveResult::Saved) {
+            Wh_Log(L"Sign-in [%s] failed: could not save token", req.label.c_str());
+            return;
+        }
+        RefreshQuota(req.index);
+        Wh_Log(L"Sign-in [%s]: success", req.label.c_str());
+    } else {
+        Wh_Log(L"Sign-in [%s] failed: %s", req.label.c_str(), err.c_str());
+    }
+}
+
+static DWORD WINAPI LoginThreadProc(LPVOID param) {
+    std::unique_ptr<LoginRequest> req(reinterpret_cast<LoginRequest*>(param));
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+    } catch (...) {}
+    try {
+        if (!g_unloading) {
+            if (req->provider == L"anthropic") DoAnthropicLogin(*req);
+            else DoOpenAiLogin(*req);
+        }
+    } catch (...) {
+        Wh_Log(L"Sign-in: exception");
+    }
+    if (apartmentInitialized) winrt::uninit_apartment();
+    g_loginInProgress.store(false);
+    return 0;
+}
+
+// Kicks off a sign-in on a dedicated thread (browser + paste dialog or loopback are blocking).
+// One at a time; runs on a taskbar UI thread (menu click).
+static void StartLogin(int accountIndex) {
+    if (g_unloading) return;
+    bool expected = false;
+    if (!g_loginInProgress.compare_exchange_strong(expected, true)) return;
+
+    auto* req = new LoginRequest();
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        if (accountIndex < 0 || accountIndex >= (int)g_settings.accounts.size()) {
+            delete req;
+            g_loginInProgress.store(false);
+            return;
+        }
+        const AccountConfig& a = g_settings.accounts[accountIndex];
+        req->provider = a.provider;
+        req->label = a.label;
+        req->idHash = AccountIdentityHash(a);
+        req->index = accountIndex;
+    }
+    req->authEpoch = CurrentAuthEpoch(req->idHash);
+
+    // Hand off g_loginThread under the lock and re-check g_unloading: Wh_ModUninit sets
+    // g_unloading before joining under the same lock, so we never spawn a thread into an
+    // unloading DLL or leave a handle the join would miss.
+    std::lock_guard<std::mutex> lk(g_loginThreadMutex);
+    if (g_unloading) {
+        delete req;
+        g_loginInProgress.store(false);
+        return;
+    }
+    // A prior login thread has already cleared g_loginInProgress; release its handle before reuse.
+    if (g_loginThread) {
+        CloseHandle(g_loginThread);
+        g_loginThread = nullptr;
+    }
+    g_loginThread = CreateThread(nullptr, 0, LoginThreadProc, req, 0, nullptr);
+    if (!g_loginThread) {
+        delete req;
+        g_loginInProgress.store(false);
+    }
+}
+
+static void SignOutAccount(int accountIndex) {
+    if (g_unloading) return;
+    uint64_t idHash;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        if (accountIndex < 0 || accountIndex >= (int)g_settings.accounts.size()) return;
+        idHash = AccountIdentityHash(g_settings.accounts[accountIndex]);
+    }
+    ClearStoredTokenAndBumpAuthEpoch(idHash);
+    RefreshQuota(accountIndex);  // re-fetch so the column flips to "not signed in".
 }
 
 /**********************************************/
@@ -1203,36 +2017,89 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec) {
     d->error.clear();
     d->retryDeadlineMs = 0;
-    AuthInfo auth = LoadAuthInfo(acc);
-    if (!auth.ok) {
+    d->needsLogin = false;
+
+    uint64_t idHash = AccountIdentityHash(acc);
+    ULONGLONG authEpoch = CurrentAuthEpoch(idHash);
+    StoredToken tok;
+    if (!LoadStoredToken(idHash, &tok) || tok.accessToken.empty()) {
         d->stale = true;
-        d->error = auth.err;
-        return;
-    }
-    if (auth.expiresMs && auth.expiresMs < NowUnixMs()) {
-        d->stale = true;
-        d->error = L"token expired - use CLI to refresh";
+        d->needsLogin = true;
+        d->error = L"not signed in - click to sign in";
         return;
     }
 
-    HttpResult r;
-    if (acc.provider == L"anthropic") {
-        std::wstring headers = L"Authorization: Bearer " + auth.accessToken +
-                               L"\r\nanthropic-beta: oauth-2025-04-20"
-                               L"\r\nAccept: application/json\r\n";
-        r = HttpGet(L"api.anthropic.com", L"/api/oauth/usage", L"claude-code/2.1.0", headers);
-    } else {
-        std::wstring headers = L"Authorization: Bearer " + auth.accessToken +
+    // Refresh just before expiry so a request rarely races the token going stale.
+    if (tok.expiresMs && tok.expiresMs < NowUnixMs() + 60000) {
+        std::wstring refreshErr;
+        if (RefreshToken(acc.provider, &tok, &refreshErr)) {
+            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            if (saved == TokenSaveResult::Stale) {
+                d->stale = true;
+                d->needsLogin = true;
+                d->error = L"not signed in - click to sign in";
+                return;
+            }
+            if (saved != TokenSaveResult::Saved) {
+                d->stale = true;
+                d->error = L"could not save refreshed token";
+                return;
+            }
+        } else {
+            d->stale = true;
+            d->needsLogin = true;
+            d->error = L"session expired - click to sign in";
+            return;
+        }
+    }
+
+    auto requestUsage = [&](const StoredToken& t) -> HttpResult {
+        if (acc.provider == L"anthropic") {
+            std::wstring headers = L"Authorization: Bearer " + t.accessToken +
+                                   L"\r\nanthropic-beta: oauth-2025-04-20"
+                                   L"\r\nAccept: application/json\r\n";
+            return HttpRequest(L"GET", L"api.anthropic.com", L"/api/oauth/usage",
+                               L"claude-code/2.1.0", headers);
+        }
+        std::wstring headers = L"Authorization: Bearer " + t.accessToken +
                                L"\r\nOrigin: https://chatgpt.com"
                                L"\r\nReferer: https://chatgpt.com/"
                                L"\r\nAccept: application/json\r\n";
-        if (!auth.accountId.empty()) headers += L"ChatGPT-Account-Id: " + auth.accountId + L"\r\n";
-        r = HttpGet(L"chatgpt.com", L"/backend-api/wham/usage", L"taskbar-ai-quota/0.1", headers);
+        if (!t.accountId.empty()) headers += L"ChatGPT-Account-Id: " + t.accountId + L"\r\n";
+        return HttpRequest(L"GET", L"chatgpt.com", L"/backend-api/wham/usage",
+                           L"taskbar-ai-quota/0.1", headers);
+    };
+
+    HttpResult r = requestUsage(tok);
+    // Reactive refresh: the access token may have been revoked or expired early.
+    if (r.ok && r.status == 401 && !tok.refreshToken.empty()) {
+        std::wstring refreshErr;
+        if (RefreshToken(acc.provider, &tok, &refreshErr)) {
+            TokenSaveResult saved = SaveStoredTokenIfCurrent(idHash, authEpoch, tok);
+            if (saved == TokenSaveResult::Saved) {
+                r = requestUsage(tok);
+            } else if (saved == TokenSaveResult::Stale) {
+                d->stale = true;
+                d->needsLogin = true;
+                d->error = L"not signed in - click to sign in";
+                return;
+            } else {
+                d->stale = true;
+                d->error = L"could not save refreshed token";
+                return;
+            }
+        }
     }
 
     if (!r.ok) {
         d->stale = true;
         d->error = L"network error";
+        return;
+    }
+    if (r.status == 401) {
+        d->stale = true;
+        d->needsLogin = true;
+        d->error = L"unauthorized - click to sign in";
         return;
     }
     if (r.status == 429) {
@@ -1400,6 +2267,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
+            // Hidden accounts are never fetched (poll or Refresh all); results[i] keeps the
+            // prior g_data[i] value and goes stale via the lastSuccessMs/interval check.
+            if (accounts[i].hidden) continue;
             if (refreshSingleAccount && (int)i != refreshAccountIndex) {
                 if (retryDeadlineMs[i] > nowMs &&
                     (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
@@ -1429,13 +2299,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
 
             if (!results[i].error.empty()) {
-                if (retryAfter <= 0) anyError = true;
-                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].authSource + L"\n" +
-                                          accounts[i].authFile + L"\n" + accounts[i].authKey + L"\n" +
-                                          results[i].error;
+                if (retryAfter <= 0 && !results[i].needsLogin) anyError = true;
+                std::wstring errorState = accounts[i].provider + L"\n" + accounts[i].label +
+                                          L"\n" + results[i].error;
                 if (errorState != lastLoggedErrorStates[i]) {
-                    Wh_Log(L"Fetch [%d] %s/%s: %s", (int)i, accounts[i].provider.c_str(),
-                           accounts[i].authSource.c_str(), results[i].error.c_str());
+                    Wh_Log(L"Fetch [%d] %s (%s): %s", (int)i, accounts[i].label.c_str(),
+                           accounts[i].provider.c_str(), results[i].error.c_str());
                     lastLoggedErrorStates[i] = std::move(errorState);
                 }
             } else {
@@ -1808,6 +2677,7 @@ static void ClearQuotaEventState(QuotaUiInstance& state) {
         try { handler.item.Click(handler.token); } catch (...) {}
     }
     state.menuItemClickHandlers.clear();
+    state.accountToggleItems.clear();
     state.accountRefs.clear();
 }
 
@@ -1856,6 +2726,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             col.Background(SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
             swprintf(name, ARRAYSIZE(name), L"AiQuota_Acc_%d", (int)i);
             col.Name(name);
+            col.Visibility(accounts[i].hidden ? Visibility::Collapsed : Visibility::Visible);
             AccountUiRefs refs;
             refs.column = col;
 
@@ -1944,7 +2815,13 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                         return;
                     }
 
-                    if (clickAction == ClickAction::OpenDashboard) OpenDashboardForAccount(accountIndex);
+                    bool needsLogin = false;
+                    {
+                        std::lock_guard<std::mutex> lk(g_dataMutex);
+                        if (accountIndex < (int)g_data.size()) needsLogin = g_data[accountIndex].needsLogin;
+                    }
+                    if (needsLogin) StartLogin(accountIndex);
+                    else if (clickAction == ClickAction::OpenDashboard) OpenDashboardForAccount(accountIndex);
                     else RefreshQuota(accountIndex);
                     e.Handled(true);
                 });
@@ -1968,6 +2845,55 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 });
             state.menuItemClickHandlers.push_back({dashboardItem, dashboardToken});
             menu.Items().Append(dashboardItem);
+
+            // Per-account show/hide checkboxes (checked = visible). Every column carries the same
+            // list; toggling flips global state, persists, and re-syncs all instances via UpdateQuotaUi.
+            menu.Items().Append(MenuFlyoutSeparator{});
+            for (size_t k = 0; k < accounts.size(); k++) {
+                ToggleMenuFlyoutItem toggle;
+                toggle.Text(accounts[k].label + L" - " +
+                            (accounts[k].provider == L"anthropic" ? L"Anthropic" : L"OpenAI"));
+                toggle.IsChecked(!accounts[k].hidden);
+                int toggleIndex = (int)k;
+                auto toggleToken = toggle.Click(
+                    [toggleIndex](winrt::Windows::Foundation::IInspectable const& sender,
+                                  RoutedEventArgs const&) {
+                        ToggleAccountVisibility(toggleIndex, sender);
+                    });
+                state.menuItemClickHandlers.push_back({toggle, toggleToken});
+                state.accountToggleItems.push_back({toggleIndex, toggle});
+                menu.Items().Append(toggle);
+            }
+
+            // Sign in / Sign out submenus drive the mod's own OAuth per account.
+            menu.Items().Append(MenuFlyoutSeparator{});
+            MenuFlyoutSubItem signInSub;
+            signInSub.Text(L"Sign in");
+            MenuFlyoutSubItem signOutSub;
+            signOutSub.Text(L"Sign out");
+            for (size_t k = 0; k < accounts.size(); k++) {
+                std::wstring name = accounts[k].label + L" - " +
+                                    (accounts[k].provider == L"anthropic" ? L"Anthropic" : L"OpenAI");
+                int authIndex = (int)k;
+
+                MenuFlyoutItem signInItem;
+                signInItem.Text(name);
+                auto signInToken = signInItem.Click(
+                    [authIndex](winrt::Windows::Foundation::IInspectable const&,
+                                RoutedEventArgs const&) { StartLogin(authIndex); });
+                state.menuItemClickHandlers.push_back({signInItem, signInToken});
+                signInSub.Items().Append(signInItem);
+
+                MenuFlyoutItem signOutItem;
+                signOutItem.Text(name);
+                auto signOutToken = signOutItem.Click(
+                    [authIndex](winrt::Windows::Foundation::IInspectable const&,
+                                RoutedEventArgs const&) { SignOutAccount(authIndex); });
+                state.menuItemClickHandlers.push_back({signOutItem, signOutToken});
+                signOutSub.Items().Append(signOutItem);
+            }
+            menu.Items().Append(signInSub);
+            menu.Items().Append(signOutSub);
 
             tappedElement.ContextFlyout(menu);
 
@@ -2033,6 +2959,18 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             const AccountData& d = data[i];
             AppliedState& ap = state.applied[i];
             const AccountUiRefs& ui = state.accountRefs[i];
+
+            // Hidden accounts collapse their column (no space, not right-clickable) and skip
+            // visual work; data stays in g_data and repaints on un-hide (which posts an update).
+            int visible = accounts[i].hidden ? 0 : 1;
+            if (visible != ap.visible) {
+                if (ui.column) {
+                    ui.column.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
+                }
+                ap.visible = visible;
+            }
+            if (!visible) continue;
+
             bool stale = d.stale || d.lastSuccessMs == 0 ||
                          now - d.lastSuccessMs > (ULONGLONG)intervalMin * 2 * 60000;
             bool warn = showStaleWarning && stale && !d.error.empty();
@@ -2058,11 +2996,8 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 }
             }
 
-            std::wstring sourceName = accounts[i].authSource == L"claude-code" ? L"Claude Code" :
-                                      accounts[i].authSource == L"codex" ? L"Codex" : L"OpenCode";
             std::wstring tip = (warn ? L"! " : L"") + accounts[i].label + L" - " +
-                               (accounts[i].provider == L"anthropic" ? L"Anthropic" : L"OpenAI") +
-                               L" (" + sourceName + L")";
+                               (accounts[i].provider == L"anthropic" ? L"Anthropic" : L"OpenAI");
             bool planIsSpark = d.plan.find(L"Spark") != std::wstring::npos ||
                                d.plan.find(L"spark") != std::wstring::npos;
             if (!d.plan.empty() && (showCodexSparkInTooltip || !planIsSpark)) {
@@ -2114,6 +3049,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             }
             tip += L"\n" + FormatUpdated(d.lastSuccessMs, stale);
             tip += accountRefreshing ? L" - refreshing..." :
+                   d.needsLogin ? L" - click to sign in" :
                    clickAction == ClickAction::OpenDashboard ? L" - click to open dashboard" :
                    L" - click to refresh";
 
@@ -2157,6 +3093,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 ap.labelOpacity = labelOpacity;
                 ap.labelText = std::move(labelText);
             }
+        }
+
+        // Keep every instance's menu checkboxes in sync with the shared hidden state
+        // (programmatic IsChecked does not raise Click).
+        for (auto& [idx, item] : state.accountToggleItems) {
+            if (!item || idx < 0 || idx >= (int)accounts.size()) continue;
+            bool checked = !accounts[idx].hidden;
+            if (item.IsChecked() != checked) item.IsChecked(checked);
         }
     } catch (...) {
         Wh_Log(L"UpdateQuotaUi: exception");
@@ -2238,14 +3182,11 @@ static bool InjectQuotaGrid(HWND hWnd) {
         if (!root) return fail(L"no XamlRoot content");
         auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
         auto trayGrid = trayFrame ? trayFrame.try_as<Grid>() : nullptr;
-        bool overlayFallback = false;
-        if (!trayGrid) {
-            auto rootGrid = FindChildByName(root, L"RootGrid");
-            trayGrid = rootGrid ? rootGrid.try_as<Grid>() : nullptr;
-            if (!trayGrid) trayGrid = root.try_as<Grid>();
-            if (!trayGrid) return fail(L"no injection grid");
-            overlayFallback = true;
-        }
+        // On a cold start the XamlRoot is ready before the system tray contents are realized
+        // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
+        // Bail and let the retry loop poll until it appears; never inject elsewhere, which
+        // would render the bars on top of the clock/tray.
+        if (!trayGrid) return fail(L"no SystemTrayFrameGrid");
 
         state = FindUiState(hWnd);
         if (!state) {
@@ -2257,7 +3198,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         state->injectionParent = trayGrid;
 
         int oldCol = RemoveQuotaChildren(trayGrid, *state);
-        if (!overlayFallback && oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
+        if (oldCol >= 0 && oldCol < (int)trayGrid.ColumnDefinitions().Size()) {
             for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
                 auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
                 if (child) {
@@ -2278,28 +3219,16 @@ static bool InjectQuotaGrid(HWND hWnd) {
             return fail(L"BuildQuotaGrid failed");
         }
 
-        if (overlayFallback) {
-            quota.HorizontalAlignment(HorizontalAlignment::Right);
-            quota.VerticalAlignment(VerticalAlignment::Center);
-            quota.Margin({0, 0, 4, 0});
-            Grid::SetColumn(quota, 0);
-            Grid::SetRow(quota, 0);
-            Grid::SetColumnSpan(quota, std::max(1, (int)trayGrid.ColumnDefinitions().Size()));
-            Grid::SetRowSpan(quota, std::max(1, (int)trayGrid.RowDefinitions().Size()));
-            state->quotaColumn = -1;
-            state->insertedColumn = false;
-        } else {
-            ColumnDefinition newCol;
-            newCol.Width({1.0, GridUnitType::Auto});
-            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-            state->quotaColumn = 0;
-            state->insertedColumn = true;
-            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
-            }
-            Grid::SetColumn(quota, 0);
+        ColumnDefinition newCol;
+        newCol.Width({1.0, GridUnitType::Auto});
+        trayGrid.ColumnDefinitions().InsertAt(0, newCol);
+        state->quotaColumn = 0;
+        state->insertedColumn = true;
+        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+            if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
         }
+        Grid::SetColumn(quota, 0);
         trayGrid.Children().Append(quota);
 
         state->quotaGrid = quota;
@@ -2462,11 +3391,6 @@ static bool HookTaskbarDllSymbols() {
 
 static void LoadSettings() {
     Settings s;
-    auto defaultAuthFile = [](const std::wstring& authSource) {
-        if (authSource == L"claude-code") return ExpandEnv(kDefaultClaudeCodeAuthFile);
-        if (authSource == L"codex") return ExpandEnv(kDefaultCodexAuthFile);
-        return ExpandEnv(kDefaultOpenCodeAuthFile);
-    };
 
     for (int i = 0;; i++) {
         PCWSTR provider = Wh_GetStringSetting(L"accounts[%d].provider", i);
@@ -2478,50 +3402,42 @@ static void LoadSettings() {
         AccountConfig a;
         std::wstring providerSetting = provider;
         Wh_FreeStringSetting(provider);
-
-        if (providerSetting == L"anthropic-claude-code") {
-            a.provider = L"anthropic";
-            a.authSource = L"claude-code";
-        } else if (providerSetting == L"openai-codex") {
-            a.provider = L"openai";
-            a.authSource = L"codex";
-        } else if (providerSetting == L"openai-opencode") {
-            a.provider = L"openai";
-            a.authSource = L"opencode";
-        } else if (providerSetting == L"anthropic-opencode") {
-            a.provider = L"anthropic";
-            a.authSource = L"opencode";
-        } else {
-            // Existing configs used bare anthropic/openai and auto-detected the file shape.
-            a.provider = providerSetting.find(L"openai") != std::wstring::npos ? L"openai" : L"anthropic";
-            a.authSource = L"auto";
-        }
+        // Bare "anthropic"/"openai"; older configs used "<provider>-<source>" - keep the provider.
+        a.provider = providerSetting.find(L"openai") != std::wstring::npos ? L"openai" : L"anthropic";
 
         PCWSTR label = Wh_GetStringSetting(L"accounts[%d].label", i);
         a.label = label;
         Wh_FreeStringSetting(label);
-
-        PCWSTR authFile = Wh_GetStringSetting(L"accounts[%d].authFile", i);
-        a.authFile = ExpandEnv(authFile);
-        Wh_FreeStringSetting(authFile);
-        if (a.authFile.empty() ||
-            ((a.authSource == L"claude-code" || a.authSource == L"codex") &&
-             a.authFile == ExpandEnv(kDefaultOpenCodeAuthFile))) {
-            a.authFile = defaultAuthFile(a.authSource);
-        }
-
-        PCWSTR authKey = Wh_GetStringSetting(L"accounts[%d].authKey", i);
-        a.authKey = authKey;
-        Wh_FreeStringSetting(authKey);
 
         if (a.label.empty()) a.label = a.provider == L"anthropic" ? L"A" : L"O";
         s.accounts.push_back(std::move(a));
     }
 
     if (s.accounts.empty()) {
-        std::wstring authFile = ExpandEnv(kDefaultOpenCodeAuthFile);
-        s.accounts.push_back({L"anthropic", L"opencode", L"A", authFile, L""});
-        s.accounts.push_back({L"openai", L"opencode", L"O", authFile, L""});
+        s.accounts.push_back({L"anthropic", L"A"});
+        s.accounts.push_back({L"openai", L"O"});
+    }
+
+    // Apply persisted show/hide toggles from mod storage (semicolon-separated identity hashes).
+    {
+        wchar_t buf[4096] = {};
+        Wh_GetStringValue(L"hiddenAccounts", buf, ARRAYSIZE(buf));
+        std::vector<uint64_t> hiddenHashes;
+        for (std::wstring rest = buf; !rest.empty();) {
+            size_t end = rest.find(L';');
+            std::wstring tok = rest.substr(0, end);
+            if (!tok.empty()) hiddenHashes.push_back(wcstoull(tok.c_str(), nullptr, 16));
+            if (end == std::wstring::npos) break;
+            rest.erase(0, end + 1);
+        }
+        int visibleCount = 0;
+        for (auto& a : s.accounts) {
+            a.hidden = std::find(hiddenHashes.begin(), hiddenHashes.end(),
+                                 AccountIdentityHash(a)) != hiddenHashes.end();
+            if (!a.hidden) visibleCount++;
+        }
+        // Never persist into an all-hidden state with no bar left to right-click.
+        if (visibleCount == 0 && !s.accounts.empty()) s.accounts[0].hidden = false;
     }
 
     auto getSettingText = [](PCWSTR name) {
@@ -2601,12 +3517,8 @@ static void LoadSettings() {
             for (size_t j = 0; j < g_settings.accounts.size() && j < g_data.size(); j++) {
                 if (oldDataUsed[j]) continue;
 
-                const AccountConfig& oldAccount = g_settings.accounts[j];
-                const AccountConfig& newAccount = s.accounts[i];
-                if (oldAccount.provider == newAccount.provider &&
-                    oldAccount.authSource == newAccount.authSource &&
-                    oldAccount.authFile == newAccount.authFile &&
-                    oldAccount.authKey == newAccount.authKey) {
+                if (AccountIdentityHash(g_settings.accounts[j]) ==
+                    AccountIdentityHash(s.accounts[i])) {
                     newData[i] = g_data[j];
                     oldDataUsed[j] = true;
                     break;
@@ -2632,7 +3544,13 @@ BOOL Wh_ModInit() {
     g_refreshGeneration = 0;
     g_uiInjected.store(false, std::memory_order_release);
     g_fetchThreadStarted.store(false, std::memory_order_release);
+    g_loginInProgress.store(false);
     LoadSettings();
+
+    WSADATA wsaData{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        Wh_Log(L"WSAStartup failed; OpenAI sign-in unavailable");
+    }
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"HookTaskbarDllSymbols failed");
@@ -2673,6 +3591,21 @@ void Wh_ModUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     CloseActiveHttpHandles();
 
+    // Unblock an in-flight sign-in: close the paste dialog and/or the loopback listener so the
+    // login thread falls out of its message/accept loop, then join it. The lock pairs with
+    // StartLogin (g_unloading is already set) so a concurrent click can't spawn a thread we miss.
+    {
+        std::lock_guard<std::mutex> lk(g_loginThreadMutex);
+        if (HWND loginWnd = g_loginWnd.load()) PostMessageW(loginWnd, WM_CLOSE, 0, 0);
+        if (SOCKET s = g_loginSocket.exchange(INVALID_SOCKET); s != INVALID_SOCKET) closesocket(s);
+        if (g_loginThread) {
+            WaitForSingleObject(g_loginThread, INFINITE);
+            CloseHandle(g_loginThread);
+            g_loginThread = nullptr;
+        }
+    }
+    g_loginInProgress.store(false);
+
     if (g_retryThread) {
         WaitForSingleObject(g_retryThread, INFINITE);
         CloseHandle(g_retryThread);
@@ -2692,6 +3625,7 @@ void Wh_ModUninit() {
     if (g_refreshEvent) CloseHandle(g_refreshEvent);
     g_stopEvent = nullptr;
     g_refreshEvent = nullptr;
+    WSACleanup();
 }
 
 void Wh_ModSettingsChanged() {
