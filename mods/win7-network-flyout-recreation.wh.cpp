@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout panel, replacing the modern Windows flyout, along with the Windows 8 flyout as a configurable fallback
-// @version        1.5.2
+// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
+// @version        2.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -13,62 +13,72 @@
 /*
 # Windows 7 Network Flyout Recreation
 
-This Windhawk mod recreates the Windows 7 network flyout panel, replacing the modern flyout with a classic interface. This mod works on Windows 10 and Windows 11 (only with the Windows 10 taskbar installed using ExplorerPatcher).
+This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a familiar, lightweight alternative.
 
-**NOTE**: This mod expects a standard Windows 10 taskbar (native on Windows 10, or via ExplorerPatcher on Windows 11). It is unlikely to work on systems using other taskbar mods or heavily customized configurations (such as Retrobar). It is strongly recommended to keep the network icon visible in the main system tray (not hidden in the overflow menu). This may change in the future.
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/scre.png)
+
 ## Features
 
-- **Wi-Fi network list**: Shows all available networks with signal strength
-- **Connect/Disconnect**: Connect to networks with password support
-- **Privacy mode**: Hide real SSIDs (shows as Network 1, Network 2...)
-- **Windows 7 style tooltips**: Full network info on hover (SSID, signal, security, radio type)
-- **Network status & properties**: Right-click context menu for quick access
-- **Keyboard navigation**: Arrow keys, Enter, Escape support
-- **Auto-refresh**: Periodically re-reads the network list at a configurable interval (does not force a new scan; use the Refresh button for that)
-- **Registry fallback**: Optional Windows 8 style flyout (ReplaceVan method) <- This is not a real registry modification
-- **Language support**: English and Italian (auto-detect or manual override)
+- **Wi-Fi network list**: Shows all available networks with live signal strength
+- **Connect/Disconnect**: Connect to secured and open networks with password support
+- **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
+- **Windows 7 style tooltips**: Full network info on hover (SSID, signal, security type)
+- **Right-click context menu**: Quick access to network status and properties
+- **Keyboard navigation**: Full Arrow keys, Enter, and Escape support if required.
+- **Auto-refresh**: Periodically refreshes the network list at a configurable interval (use the Refresh button to force a new scan)
+- **Language support**: English, Italian, or auto-detect from system (more languages are planned to be added in future)
+- **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
+- **Rounded corners**: Enable this if you want a more modern look on Windows 11 or if you use the Aero theme from Windows Vista/7.
+
+## Requirements
+
+- **Windows 10** with the native taskbar
+- **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher))
+- The network icon must be visible in the main system tray (not hidden in the overflow menu as it may work but it could be less reliable)
+
+> **Note:** This mod is unlikely to work with other taskbar mods (e.g. Retrobar) or heavily customized configurations.
 
 ## Hotkeys
 
 | Key | Action |
 |-----|--------|
-| **Ctrl+H** | Toggle network flyout |
-## Credits 
-- m417z: Review 
-- Anixx: Testing
-Note: In rare cases, Wi-Fi networks may temporarily appear unavailable even in the native Windows flyout due to an outdated WLAN cache or network driver behavior. In such cases, the Refresh button forces a new scan; if the issue persists, check the status of the Wi-Fi adapter and, if possible, report the issue to the mod author.
+| **Ctrl+H** | Toggle network flyout (disabled by default) |
+
+## Credits
+
+- **m417z** — Code review
+- **Anixx** — Testing and feedback
+
+If you encounter issues or need to clarify something, please report it on the author of the mod.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- language: 0
+- language: auto
   $name: Language
-  $description: Force language override (0 = auto-detect, 1 = English, 2 = Italian)
+  $description: User interface language, it follows your system language by default
   $options:
-    - 0: Auto-detect
-    - 1: English
-    - 2: Italian
+    - auto: Auto-detect
+    - en: English
+    - it: Italiano
 - interceptNativeFlyout: true
-  $name: Intercept native network flyout
-  $description: Replace the Windows network flyout with this classic one when clicking the tray icon (works only with the Windows 10 taskbar, specifically the native Windows 10 one and the ExplorerPatcher one in Windows 11)
+  $name: Intercept system network flyout
+  $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
 - privacyMode: false
-  $name: Privacy mode (hide network names)
-  $description: Show all networks as Network 1, Network 2... instead of real SSIDs
-- useRegistryMethod: true
-  $name: Use Registry ReplaceVan method
-  $description: Sets ReplaceVan=2 to enable Windows 8 style network flyout as fallback. Automatically removed when the mod is disabled.
+  $name: Privacy mode
+  $description: Hide real network names so all networks show as "Network 1", "Network 2", etc.
 - redirectNetworkContextMenu: true
   $name: Redirect network context menu
-  $description: Redirect network tray context menu to classic network connections
+  $description: When you right-click the network tray icon, it will open the classic Network Connections panel instead of the modern Settings page.
 - refreshInterval: 3000
-  $name: Refresh interval (ms)
-  $description: How often to automatically refresh the network list (0 = disable auto-refresh)
+  $name: Auto-refresh interval (milliseconds)
+  $description: How often to refresh the network list automatically. Set to 0 to disable auto-refresh. Minimum 1000 ms if enabled.
 - enableHotkey: false
-  $name: Enable global hotkey (Ctrl+H)
-  $description: Register Ctrl+H to toggle the network flyout. Disabled by default to avoid conflicts with browsers and editors.
+  $name: Enable Ctrl+H hotkey
+  $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts. This option is reccomended for debugging purposes.
 - useRoundedCorners: false
-  $name: Use rounded corners
-  $description: Apply rounded corners to the flyout window (disabled by default for classic theme compatibility)
+  $name: Rounded corners
+  $description: Give the flyout window rounded corners (looks better on Windows 11 or with the Aero theme enabled, disabled by default for classic theme compatibility).
 */
 // ==/WindhawkModSettings==
 
@@ -156,9 +166,6 @@ void RecalcDpiMetrics(UINT dpi) {
 #define IDM_STATUS          2003
 #define IDM_PROPERTIES      2004
 
-#define REG_PATH_NETWORK    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Control Panel\\Settings\\Network"
-#define REG_VALUE_REPLACEVAN L"ReplaceVan"
-
 #define TRAY_NETWORK_ID 2
 #define CLICK_DEBOUNCE_MS 600
 #define WM_HOTKEY_SETTINGS_CHANGED (WM_USER + 200)
@@ -171,7 +178,6 @@ void RecalcDpiMetrics(UINT dpi) {
 // Refresh normal - base64
 static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAN9JREFUOE9joAkw3nrrPwhDuaSB6Ree/zddcZVozUxQGg4WHn/OkKLAB+URBigGzDzy8D/j9z8MPEyMDNeuXVtx9epVMagUToBiwILDTxkYfv5hePr2O4OWllaEtrb2K6gUGFi2H8PwGiOIsKw/hNPPxxvtMNTAxEAAzrCs2IthyPEOZ4hmPHJwA0DAsnAHwpZ+D4hmJDF0AFODAiyzN2HV0LX8wn+QHC55ooB54rL/M9aeJ8+AqcuO/zcMmYKhGSMh4QJTF25nSPTRgPJIAIdPXFZXME/6D8JQoUEFGBgAn8daV7VTN5UAAAAASUVORK5CYII=////v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT07u7u9vb2+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABRUExURev0/TO12pfQ5zWo1TiXzpnI45nE4TmOyqfL5Orz/DmHxo663Dl/wkuKyESGxTl4vTlxuDlrsoqn0Ddhppitz5WmxzFUlCpHfpKgvMPI0yA3YglAoVgAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAFRJREFUKFN9yEkSgDAIRFHibJyIs7n/QS2goxvLt2h+Qd+cQ0CWI5KiREBVNy3SeN/Z1aVeDKOGfSbxHMHMOsI+QXcOdl/LioBtRyTHiTBXjKh/RDeDBAMcwXjgKAAAAABJRU5ErkJggg==//9T3qpBX7Ilk83uLCM4kMlo+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhGETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQAAAAASUVORK5CYII=";
 
-// Handle delle icone create dal base64
 static HICON g_hIconRefreshNormal = NULL;
 static HICON g_hIconRefreshHover = NULL;
 static INetworkListManager* g_pNLM = NULL;
@@ -194,35 +200,37 @@ typedef enum {
 struct ModSettings {
     BOOL interceptNativeFlyout;
     BOOL privacyMode;
-    BOOL useRegistryMethod;
     BOOL redirectNetworkContextMenu;
     int  refreshInterval;
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
     int  win11NetworkIconWidth;
-} g_Settings = { TRUE, FALSE, TRUE, TRUE, 3000, 0, FALSE, FALSE, 40 };
+} g_Settings = { TRUE, FALSE, TRUE, 3000, 0, FALSE, FALSE, 40 };
 
 static bool s_settingsSavedOnce = false;
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
     int raw_privacy    = Wh_GetIntSetting(L"privacyMode");
-    int raw_registry   = Wh_GetIntSetting(L"useRegistryMethod");
     int raw_redirectCtx= Wh_GetIntSetting(L"redirectNetworkContextMenu");
     int raw_refresh    = Wh_GetIntSetting(L"refreshInterval");
-    int raw_language   = Wh_GetIntSetting(L"language");
+    LPCWSTR lang = Wh_GetStringSetting(L"language");
+    int raw_language = 0;
+    if (lang) {
+        if (_wcsicmp(lang, L"en") == 0)      raw_language = 1;
+        else if (_wcsicmp(lang, L"it") == 0) raw_language = 2;
+        Wh_FreeStringSetting(lang);
+    }
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
     int raw_win11IconWidth = Wh_GetIntSetting(L"win11NetworkIconWidth");
 
     if (!s_settingsSavedOnce &&
         raw_intercept == 0 && raw_privacy == 0 &&
-        raw_registry  == 0 && raw_redirectCtx == 0 && 
         raw_refresh == 0 && raw_language == 0 && raw_roundedCorners == 0) {
         g_Settings.interceptNativeFlyout      = TRUE;
         g_Settings.privacyMode               = FALSE;
-        g_Settings.useRegistryMethod         = TRUE;
         g_Settings.redirectNetworkContextMenu = TRUE;
         g_Settings.refreshInterval            = 3000;
         g_Settings.language                  = 0;
@@ -232,7 +240,6 @@ void LoadSettings() {
     } else {
         g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
         g_Settings.privacyMode               = raw_privacy     != 0;
-        g_Settings.useRegistryMethod         = raw_registry    != 0;
         g_Settings.redirectNetworkContextMenu = raw_redirectCtx != 0;
         g_Settings.refreshInterval            = raw_refresh;
         g_Settings.language                  = raw_language;
@@ -739,58 +746,6 @@ void InitRefreshButtonRect() {
     g_rcRefreshButton.bottom = ScaleDpi(30);
 }
 
-// -------------------------------------------------------
-// Registry hooks (unchanged)
-// -------------------------------------------------------
-typedef LONG (WINAPI *RegQueryValueExW_t)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-RegQueryValueExW_t Real_RegQueryValueExW = NULL;
-
-typedef LONG (WINAPI *RegGetValueW_t)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
-RegGetValueW_t Real_RegGetValueW = NULL;
-
-LONG WINAPI Hook_RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, 
-                                   LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    if (!g_Settings.useRegistryMethod)
-        return Real_RegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    
-    if (lpValueName && _wcsicmp(lpValueName, REG_VALUE_REPLACEVAN) == 0) {
-        if (lpType) *lpType = REG_DWORD;
-        if (lpData && lpcbData) {
-            if (*lpcbData >= sizeof(DWORD)) {
-                *(DWORD*)lpData = 2;
-                *lpcbData = sizeof(DWORD);
-                return ERROR_SUCCESS;
-            } else {
-                *lpcbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-        }
-        if (lpcbData) { *lpcbData = sizeof(DWORD); return ERROR_SUCCESS; }
-    }
-    return Real_RegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-}
-
-LONG WINAPI Hook_RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, 
-                               LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
-    if (!g_Settings.useRegistryMethod)
-        return Real_RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-    
-    if (lpValue && _wcsicmp(lpValue, REG_VALUE_REPLACEVAN) == 0) {
-        if (pdwType) *pdwType = REG_DWORD;
-        if (pvData && pcbData) {
-            if (*pcbData >= sizeof(DWORD)) {
-                *(DWORD*)pvData = 2;
-                *pcbData = sizeof(DWORD);
-                return ERROR_SUCCESS;
-            } else {
-                *pcbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-        }
-        if (pcbData) { *pcbData = sizeof(DWORD); return ERROR_SUCCESS; }
-    }
-    return Real_RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-}
 
 // -------------------------------------------------------
 // TrackPopupMenuEx Hook
@@ -3164,7 +3119,7 @@ void SafeCleanup() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v1.5.2 ===");
+    Wh_Log(L"=== Wh_ModInit v2.0.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
@@ -3187,18 +3142,7 @@ BOOL Wh_ModInit() {
     }
     
     DetermineLocale();
-    
-    HMODULE hAdvapi32 = GetModuleHandleW(L"advapi32.dll");
-    if (hAdvapi32) {
-        void* pRegQueryValueExW = (void*)GetProcAddress(hAdvapi32, "RegQueryValueExW");
-        if (pRegQueryValueExW) {
-            Wh_SetFunctionHook(pRegQueryValueExW, (void*)Hook_RegQueryValueExW, (void**)&Real_RegQueryValueExW);
-        }
-        void* pRegGetValueW = (void*)GetProcAddress(hAdvapi32, "RegGetValueW");
-        if (pRegGetValueW) {
-            Wh_SetFunctionHook(pRegGetValueW, (void*)Hook_RegGetValueW, (void**)&Real_RegGetValueW);
-        }
-    }
+
     
     if (!IsExplorerProcess()) {
         InstallTrayInterceptionInternal();
