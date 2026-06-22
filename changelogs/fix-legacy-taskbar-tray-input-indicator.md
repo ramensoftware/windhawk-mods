@@ -1,3 +1,7 @@
+## 1.5 ([Jun 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c58a338f6f0f8db737e8bca45a7156d16e2a0331/mods/fix-legacy-taskbar-tray-input-indicator.wh.cpp))
+
+Remove flicker on hover
+
 ## 1.4.0 ([Mar 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/59966b5a2e2fe7dcdbc6b536b8ba1c20b9cda8e2/mods/fix-legacy-taskbar-tray-input-indicator.wh.cpp))
 
 Fix issues with taskbar thicker than 3 rows.
