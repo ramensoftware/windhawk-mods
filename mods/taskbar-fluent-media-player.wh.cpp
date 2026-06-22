@@ -1784,6 +1784,9 @@ static AlbumPalette g_cachedAlbumPalette = {
 };
 static size_t g_cachedPaletteHash = 0;
 
+static winrt::Windows::UI::Color g_cachedVizBaseColor{255, 255, 255, 255};
+static bool g_vizBaseColorDirty = true;
+
 static GlobalSystemMediaTransportControlsSessionManager g_sessionMgr     = nullptr;
 static GlobalSystemMediaTransportControlsSession        g_currentSession = nullptr;
 static std::mutex  g_sessionMtx;
@@ -2470,11 +2473,11 @@ static winrt::Windows::UI::Color ParseColorWithSpecialValues(const std::wstring&
 }
 
 static winrt::Windows::UI::Color ParseColorWithThemeSupport(const std::wstring& colorStr, BYTE alpha) {
-    size_t dashPos = colorStr.find(L'$');
+    size_t dollarPos = colorStr.find(L'$');
 
-    if (dashPos != std::wstring::npos) {
-        std::wstring lightColorStr = colorStr.substr(0, dashPos);
-        std::wstring darkColorStr = colorStr.substr(dashPos + 1);
+    if (dollarPos != std::wstring::npos) {
+        std::wstring lightColorStr = colorStr.substr(0, dollarPos);
+        std::wstring darkColorStr = colorStr.substr(dollarPos + 1);
 
         lightColorStr.erase(0, lightColorStr.find_first_not_of(L" \t"));
         lightColorStr.erase(lightColorStr.find_last_not_of(L" \t") + 1);
@@ -4243,7 +4246,8 @@ static constexpr float VIZ_PI = 3.14159265f;
 
 static std::atomic<float> g_VizBands[VIZ_NUM_BANDS] = {};
 static std::atomic<bool> g_CaptureRunning{false};
-static std::thread g_CaptureThread;
+static bool g_vizCurrentlyVisible = false;
+static std::thread* g_CaptureThread = nullptr;
 static HANDLE g_hCaptureEvent = nullptr;
 
 static float g_HannWindow[VIZ_FFT_SIZE] = {};
@@ -4499,20 +4503,28 @@ static void VizCaptureThreadProc() {
 static void StartVizCaptureThread() {
     if (g_CaptureRunning.load())
         return;
-    if (g_CaptureThread.joinable())
-        g_CaptureThread.join();
+    if (g_CaptureThread) {
+        if (g_CaptureThread->joinable())
+            g_CaptureThread->join();
+        delete g_CaptureThread;
+        g_CaptureThread = nullptr;
+    }
     if (!g_hCaptureEvent)
         g_hCaptureEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     g_CaptureRunning.store(true);
-    g_CaptureThread = std::thread(VizCaptureThreadProc);
+    g_CaptureThread = new std::thread(VizCaptureThreadProc);
 }
 
 static void StopVizCaptureThread() {
     g_CaptureRunning.store(false);
     if (g_hCaptureEvent)
         SetEvent(g_hCaptureEvent);
-    if (g_CaptureThread.joinable())
-        g_CaptureThread.join();
+    if (g_CaptureThread) {
+        if (g_CaptureThread->joinable())
+            g_CaptureThread->join();
+        delete g_CaptureThread;
+        g_CaptureThread = nullptr;
+    }
     if (g_hCaptureEvent) {
         CloseHandle(g_hCaptureEvent);
         g_hCaptureEvent = nullptr;
@@ -4663,7 +4675,11 @@ static void VizApplyFrame() {
         baseCol = g_cachedAlbumPalette.primary;
         baseCol.A = 255;
     } else {
-        baseCol = ParseColorWithThemeSupport(g_settings.vizColor, 255);
+        if (g_vizBaseColorDirty) {
+            g_cachedVizBaseColor = ParseColorWithThemeSupport(g_settings.vizColor, 255);
+            g_vizBaseColorDirty = false;
+        }
+        baseCol = g_cachedVizBaseColor;
     }
 
     auto pal0   = g_cachedAlbumPalette.primary;
@@ -4892,6 +4908,7 @@ static void StopTimerThread() {
 
 static void RefreshThemeColors() {
     if (!g_playerGrid || g_unloading || g_applyingSettings) return;
+    g_vizBaseColorDirty = true;
     try {
         UpdateHoverBrushColors();
 
@@ -5394,9 +5411,9 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
             menu.Items().Append(MakeActionContextMenuItem(L"\uE72C", L"Restart Player", []() {
                 try {
                     Wh_Log(L"Restart Player: Starting");
+                    StopVizTimer();
+                    g_vizCurrentlyVisible = false;
                     RemovePlayerGrid();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
                     auto dispatcher = winrt::Windows::UI::Core::CoreWindow::GetForCurrentThread().Dispatcher();
                     dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [=]() {
                         try {
@@ -8120,6 +8137,19 @@ static void UpdateVisibility() {
         }
 
         g_playerGrid.UpdateLayout();
+
+        if (g_settings.vizEnabled) {
+            bool nowVisible = !hide;
+            if (nowVisible && !g_vizCurrentlyVisible) {
+                g_vizCurrentlyVisible = true;
+                StartVizCaptureThread();
+                StartVizTimer();
+            } else if (!nowVisible && g_vizCurrentlyVisible) {
+                g_vizCurrentlyVisible = false;
+                StopVizTimer();
+                StopVizCaptureThread();
+            }
+        }
     } catch (...) {}
 }
 
@@ -8366,6 +8396,8 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     g_applyingSettings = true;
+    g_vizBaseColorDirty = true;
+    g_vizCurrentlyVisible = false;
 
     StopTimerThread();
 
