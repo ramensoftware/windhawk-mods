@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-22T11:57:22.000Z</updated>
+    <updated>2026-06-22T18:50:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Menu Height 1.0]]></title>
+        <id>https://windhawk.net/mods/custom-menu-height#478140d5af7f6de99455f59b3bb6e5c55932e298</id>
+        <link href="https://windhawk.net/mods/custom-menu-height"/>
+        <updated>2026-06-22T18:50:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="custommenuheight">Custom Menu Height</h1>
+<p>Control the height of Win32 context menu items and menu bars. Make classic menus
+as spacious as modern WinUI menus.</p>
+<p>By default, non-immersive context menu items are shown with a height of 22
+pixels, and menu bars with a height of 19 pixels. This mod allows increasing
+both menu heights to any custom value.</p>
+<h2 id="contextmenuitems">Context menu items</h2>
+<p>| Height: 22px (Windows default) | Height: 32px |
+| :----------------------------: | :----------: |
+| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-22px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-32px.png" alt="" /> |</p>
+<h2 id="menubar">Menu bar</h2>
+<p>| Height: 19px (Windows default) | Height: 32px |
+| :----------------------------: | :----------: |
+| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-19px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-32px.png" alt="" /> |</p>
+<h2 id="recommendedmods">Recommended mods</h2>
+<p>Enhance the overall context menu experience with these complementary mods:
+| Mod | Author | Note |
+| :-- | :----- | :--- |
+| <a href="https://windhawk.net/mods/explorer-context-menu-classic">Classic context menu on Windows 11</a> | m417z | Requires Windows 11 or later |
+| <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> | m417z | Requires Windows 11 or later |
+| <a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a> | Mgg Sk | Requires Windows 10 version 1809 or later |
+| <a href="https://windhawk.net/mods/remove-context-menu-items">Remove Context Menu Items</a> | Armaninyow | - |</p>
+<h2 id="compatibilitynoteimmersivemenus">Compatibility note: Immersive menus</h2>
+<p>To ensure the custom context menu item height functions properly within File
+Explorer and the taskbar on Windows 10 and later, this mod eradicates immersive
+menus system-wide, falling back to standard context menus.</p>
+<p>The code for this implementation is based on the
+"<a href="https://windhawk.net/mods/eradicate-immersive-menus">Eradicate Immersive Menus</a>"
+mod by <strong>aubymori</strong>.</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Fluent Media Player 1.4.0]]></title>
         <id>https://windhawk.net/mods/taskbar-fluent-media-player#1fa4d7fa3995d334df2bba31d035d361b851414a</id>
@@ -454,17 +493,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <author>
             <name>therealgorgan</name>
             <uri>https://github.com/therealgorgan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic theme transparency fix 1.2]]></title>
-        <id>https://windhawk.net/mods/classic-theme-transparency-fix#e7cf22e460b4514dc6dab1c2d897e8e7ebc3fbd3</id>
-        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
-        <updated>2026-06-16T18:23:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Add a fix for Internet Download Manager</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
