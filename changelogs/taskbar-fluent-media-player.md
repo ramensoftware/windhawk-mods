@@ -1,3 +1,27 @@
+## 1.4.0 ([Jun 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1fa4d7fa3995d334df2bba31d035d361b851414a/mods/taskbar-fluent-media-player.wh.cpp))
+
+### Added
+- **Real-time audio visualizer** (WASAPI loopback + FFT)
+  - 5 bar shapes: Stereo, Mountain, Mirror, Wave, Breathe
+  - 5 color modes: Solid, Dynamic Album, Dynamic Gradient, Custom Gradient, Acrylic
+  - EQ presets: Balanced, Bass, Rock, Pop, Jazz, Electronic
+  - Configurable position (left/right of player), vertical anchor (top/middle/bottom), bar count/width/gap, idle bar size, padding, and sensitivity
+- **Right-click context menu on the player**: Toggle Repeat/Shuffle, Rewind/Forward 5s, Next/Previous Track, Switch Sessions, Open media app, optional Restart Player, Open Windhawk
+- **"Switch Sessions" button/action** — new media button type, also available as a mouse/context-menu action
+- **Custom empty album art icon** — replaces the fixed "question mark"/"music note" presets with a configurable glyph (hex code), font, size, color, and opacity
+- **Per-theme color support** — almost every color field now accepts two values separated by `$` (e.g. `0 0 0$255 255 255`) for light/dark theme: background, button icons, title, artist, empty-art icon, visualizer
+- Separate pause-overlay icon size control
+- Dedicated second color for the gradient background (`gradientColor2`), independent from the two-tone solid color
+- Debug setting to toggle the "Restart Player" entry in the context menu
+- Customizable placeholder texts for the title/artist fields — separate, editable strings for "no title on the current track", "no artist on the current track", "no media session at all" (title and artist), each can be left empty to hide that field entirely in that state
+
+### Changed
+- "Spacing between buttons" and "Button icon size" moved from Main Settings to Appearance → Media Buttons Style
+- Reworked player hover/press visuals — new gradient "elevation" border instead of manual brush swapping per state
+- Buttons renamed for clarity: Previous → Previous Track, Next → Next Track, Shuffle → Toggle Shuffle, Repeat → Toggle Repeat
+- Removed the standalone "Auto theme" toggle — replaced by the universal light$dark color-pair support across all elements
+- The title/artist text container now collapses entirely (no reserved space) when both fields end up empty, instead of just hiding the individual text blocks
+
 ## 1.3.0 ([Jun 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a2f0ea730d8c70bfd9a4964909c0b6f29bfcf17/mods/taskbar-fluent-media-player.wh.cpp))
 
 ### Added

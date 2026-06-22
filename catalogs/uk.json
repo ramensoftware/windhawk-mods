@@ -10782,19 +10782,19 @@
           78
         ],
         "ratingUsers": 81,
-        "updated": 1781376587000,
+        "updated": 1782129442000,
         "users": 1325
       },
       "metadata": {
         "author": "Salyts",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser",
         "description": "Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.",
         "github": "https://github.com/Salyts",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Fluent Media Player",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "taskbar-grouping": {

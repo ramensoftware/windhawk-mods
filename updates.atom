@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-22T06:32:41.000Z</updated>
+    <updated>2026-06-22T11:57:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.4.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-fluent-media-player#1fa4d7fa3995d334df2bba31d035d361b851414a</id>
+        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
+        <updated>2026-06-22T11:57:22.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li><strong>Real-time audio visualizer</strong> (WASAPI loopback + FFT)</li>
+<li>5 bar shapes: Stereo, Mountain, Mirror, Wave, Breathe</li>
+<li>5 color modes: Solid, Dynamic Album, Dynamic Gradient, Custom Gradient, Acrylic</li>
+<li>EQ presets: Balanced, Bass, Rock, Pop, Jazz, Electronic</li>
+<li>Configurable position (left/right of player), vertical anchor (top/middle/bottom), bar count/width/gap, idle bar size, padding, and sensitivity</li>
+<li><strong>Right-click context menu on the player</strong>: Toggle Repeat/Shuffle, Rewind/Forward 5s, Next/Previous Track, Switch Sessions, Open media app, optional Restart Player, Open Windhawk</li>
+<li><strong>"Switch Sessions" button/action</strong> — new media button type, also available as a mouse/context-menu action</li>
+<li><strong>Custom empty album art icon</strong> — replaces the fixed "question mark"/"music note" presets with a configurable glyph (hex code), font, size, color, and opacity</li>
+<li><strong>Per-theme color support</strong> — almost every color field now accepts two values separated by <code>$</code> (e.g. <code>0 0 0$255 255 255</code>) for light/dark theme: background, button icons, title, artist, empty-art icon, visualizer</li>
+<li>Separate pause-overlay icon size control</li>
+<li>Dedicated second color for the gradient background (<code>gradientColor2</code>), independent from the two-tone solid color</li>
+<li>Debug setting to toggle the "Restart Player" entry in the context menu</li>
+<li>Customizable placeholder texts for the title/artist fields — separate, editable strings for "no title on the current track", "no artist on the current track", "no media session at all" (title and artist), each can be left empty to hide that field entirely in that state</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>"Spacing between buttons" and "Button icon size" moved from Main Settings to Appearance → Media Buttons Style</li>
+<li>Reworked player hover/press visuals — new gradient "elevation" border instead of manual brush swapping per state</li>
+<li>Buttons renamed for clarity: Previous → Previous Track, Next → Next Track, Shuffle → Toggle Shuffle, Repeat → Toggle Repeat</li>
+<li>Removed the standalone "Auto theme" toggle — replaced by the universal light$dark color-pair support across all elements</li>
+<li>The title/artist text container now collapses entirely (no reserved space) when both fields end up empty, instead of just hiding the individual text blocks</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar AI Quota Bars 0.10.2]]></title>
         <id>https://windhawk.net/mods/taskbar-ai-quota#3b5be7d2026357e86981da619e48f0e58af30ecf</id>
@@ -428,17 +462,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
         <updated>2026-06-16T18:23:49.000Z</updated>
         <content type="html"><![CDATA[<p>Add a fix for Internet Download Manager</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 2.0.1]]></title>
-        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#7b38cda60dbdd9dad527334fc61be76dcfd1db12</id>
-        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
-        <updated>2026-06-16T18:22:58.000Z</updated>
-        <content type="html"><![CDATA[<p>remove redunant argument</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
