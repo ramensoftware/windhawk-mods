@@ -329,7 +329,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       $name:ru-RU: Отступы (слева справа)
       $description: Two values "left right" in px.
       $description:ru-RU: Два значения "слева справа" в пикселях.
-    - vizSensitivity: 300
+    - vizSensitivity: 150
       $name: Sensitivity (0-300)
       $name:ru-RU: Чувствительность (0-300)
     $name: Visualizer
@@ -1172,7 +1172,7 @@ struct ModSettings {
     int          vizBarWidth     = 5;
     int          vizBarGap       = 5;
     int          vizIdleBarSize  = 15;
-    int          vizSensitivity  = 300;
+    int          vizSensitivity  = 150;
     int          vizPadLeft      = 0;
     int          vizPadRight     = 0;
 };
@@ -1426,7 +1426,7 @@ static void LoadSettings() {
     g_settings.vizColor        = Str(L"AppearanceSettings.VisualizerStyleSettings.vizColor",  L"255 255 255");
     g_settings.vizColor1       = Str(L"AppearanceSettings.VisualizerStyleSettings.vizColor1", L"30 215 96");
     g_settings.vizColor2       = Str(L"AppearanceSettings.VisualizerStyleSettings.vizColor2", L"0 180 255");
-    g_settings.vizSensitivity  = Int(L"MainSettings.VisualizerFunctionsSettings.vizSensitivity", 0, 300, 300);
+    g_settings.vizSensitivity  = Int(L"MainSettings.VisualizerFunctionsSettings.vizSensitivity", 0, 300, 150);
     {
         int n = 7, gap = 5;
         ParseTwoInts(Str(L"MainSettings.VisualizerFunctionsSettings.vizBarCountGap", L"7 5"), n, gap);
@@ -4686,7 +4686,7 @@ static void VizApplyFrame() {
     auto pal1   = g_cachedAlbumPalette.secondary;
     auto cg0    = ParseColorWithSpecialValues(g_settings.vizColor1, 255);
     auto cg1    = ParseColorWithSpecialValues(g_settings.vizColor2, 255);
-    auto acrCol = ParseColorWithSpecialValues(g_settings.vizColor, 255);
+    auto acrCol = ParseColorWithThemeSupport(g_settings.vizColor, 255);
 
     for (int i = 0; i < barCount; i++) {
         float tgt = g_VizTarget[i], cur = g_VizPeak[i];
@@ -4866,11 +4866,6 @@ static void StartTimerThread() {
 
     if (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling) {
         StartScrollTimer();
-    }
-
-    if (g_settings.vizEnabled) {
-        StartVizCaptureThread();
-        StartVizTimer();
     }
 }
 static void StopTimerThread() {
