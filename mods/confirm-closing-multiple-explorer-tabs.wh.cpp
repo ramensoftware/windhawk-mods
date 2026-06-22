@@ -174,8 +174,7 @@ HWND WINAPI CreateWindowExW_Hook(
         hInstance,
         lpParam
     );
-    if (hWnd && lpClassName &&
-        !IS_INTRESOURCE(lpClassName) &&
+    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
         _wcsicmp(lpClassName, L"CabinetWClass") == 0)
     {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
