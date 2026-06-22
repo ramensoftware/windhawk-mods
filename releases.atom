@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-22T18:53:05.000Z</updated>
+    <updated>2026-06-22T20:13:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Window Center & Resize 1.0]]></title>
+        <id>https://windhawk.net/mods/window-center-resize#7afa3ec648b18d390288723053a4e49f96ff13e1</id>
+        <link href="https://windhawk.net/mods/window-center-resize"/>
+        <updated>2026-06-22T20:13:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowcenterresize">Window Center &amp; Resize</h1>
+<p>Centers and resizes the foreground window using global hotkeys.</p>
+<h2 id="defaulthotkeys">Default Hotkeys</h2>
+<p>| Action                | Hotkey      | 
+|-----------------------|-------------|
+| Center window         | <code>Shift+F10</code> |
+| Cycle size (1→2→…→1)  | <code>Shift+F9</code> |</p>
+<p>Each press of the <strong>cycle hotkey</strong> applies the next size in the list, wrapping
+back to the first after the last one.</p>
+<h2 id="autorestoremaximizedwindows">Auto-restore maximized windows</h2>
+<p>Enable <strong>RestoreMaximized</strong> so that when you press the cycle hotkey on a
+maximized window, the mod automatically un-maximizes it and applies the target
+size. If disabled, the hotkey is ignored for maximized windows.</p>
+<h2 id="customsizes">Custom sizes</h2>
+<p>Add as many sizes as you want in the <strong>Sizes</strong> list. Each entry has:</p>
+<ul>
+<li><strong>Width</strong> — % of monitor work area width</li>
+<li><strong>Height</strong> — % of monitor work area height</li>
+</ul>
+<p>The cycle hotkey steps through all entries in order on each press.</p>
+<h2 id="hotkeyformat">Hotkey format</h2>
+<p><code>Modifier+Key</code> — modifiers: <code>Win</code>, <code>Alt</code>, <code>Ctrl</code>, <code>Shift</code>.
+Keys: <code>F1</code>-<code>F24</code>, <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>Space</code>, <code>Enter</code>, <code>Tab</code>, <code>Insert</code>,
+<code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Left</code>, <code>Right</code>, <code>Up</code>, <code>Down</code>.</p>
+<p>Examples: <code>Shift+F9</code>, <code>Win+Alt+C</code>, <code>Ctrl+F1</code></p>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.2.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#ca4b673744a580a088fd58c21a6b644dc7811636</id>
@@ -935,39 +970,6 @@ ShellExecute runas launch.</li>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Settings Styler 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-settings-styler#6ae9513b383f5e9a7870a5d22696203d4657bcec</id>
-        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
-        <updated>2026-06-10T19:13:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11settingsstyler">Windows 11 Settings Styler</h1>
-<p>Customize the Windows Settings app (Win+I) with themes contributed by others or
-create your own.</p>
-<p>Also check out the <strong>Windows 11 Start Menu Styler</strong>, <strong>Windows 11 Taskbar
-Styler</strong>, <strong>Windows 11 Notification Center Styler</strong> mods.</p>
-<h2 id="themes">Themes</h2>
-<p>Themes are collections of styles. The following themes are integrated into the
-mod and can be selected in the settings:</p>
-<p>[<img src="https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot.png" alt="Densy" /></p>
-<p>Densy](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Densy/README.md)</p>
-<p>More themes can be found in the <strong>Themes</strong> section of <a href="https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/README.md#themes">The Windows 11 Settings
-styling
-guide</a></p>
-<h2 id="advancedstyling">Advanced styling</h2>
-<p>See the same section of the <strong>Windows 11 Start Menu Styler</strong>
-<a href="https://windhawk.net/mods/windows-11-start-menu-styler">mod</a></p>
-<h2 id="implementationnotes">Implementation notes</h2>
-<p>The VisualTreeWatcher implementation is based on the
-<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
-code from the <strong>TranslucentTB</strong> project.</p>
-<p>The <code>WindhawkBlur</code> brush object implementation is based on
-<a href="https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp">XamlBlurBrush</a>
-from the <strong>TranslucentTB</strong> project.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

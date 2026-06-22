@@ -13904,6 +13904,35 @@
         "version": "1.0.1"
       }
     },
+    "window-center-resize": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782159229000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782159229000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Salyts",
+        "compilerOptions": "-luser32 -lgdi32 -ldwmapi",
+        "description": "Center and resize the foreground window using global hotkeys. Cycle hotkey steps through custom sizes in order. Combine with center hotkey to resize+center in one press. Optionally auto-restores maximized windows before resizing.",
+        "github": "https://github.com/Salyts",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Window Center & Resize",
+        "version": "1.0"
+      }
+    },
     "window-opacity": {
       "details": {
         "defaultSorting": 3934,
