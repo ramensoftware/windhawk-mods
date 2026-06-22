@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-22T05:43:50.000Z</updated>
+    <updated>2026-06-22T05:52:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Tray hover expand 1.6.0]]></title>
+        <id>https://windhawk.net/mods/tray-hover-expand#4b6102a9d024834632f3f28143a8b7172287f0ef</id>
+        <link href="https://windhawk.net/mods/tray-hover-expand"/>
+        <updated>2026-06-22T05:52:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Hide the chevron tooltip</strong> (new setting, opt-in, default off): while the flyout is open and the cursor is on the chevron, Windows shows a "Hide" tooltip that covers the bottom row of icons (#4487). When enabled, the mod hides that tooltip window. It is matched both by class and by position (only a popup sitting over the chevron is hidden), so the flyout's own per-icon tooltips and unrelated popups elsewhere are left untouched. The tooltip window class is also exposed as an advanced setting in case it differs across builds.</li>
+<li><strong>Do not activate over fullscreen apps</strong> (new setting, default on): when a fullscreen app is in the foreground (a fullscreen video, a game, etc.), the taskbar is hidden but the cached chevron rectangle still matches that screen area, so moving the cursor there (e.g. onto a video scrubber) would pop the flyout up over the content. The mod now skips activation in that case. The check runs only on the cursor-enter edge, so it costs nothing on idle ticks.</li>
+</ul>]]></content>
+        <author>
+            <name>wygodad</name>
+            <uri>https://github.com/wygodad</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.1]]></title>
         <id>https://windhawk.net/mods/disable-inactive-menubar-greying#f9de8523b4fa4c81a42f9f81f051f0581186f8f1</id>
@@ -420,19 +434,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <updated>2026-06-15T19:47:35.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the mod to work with multiple Explorer tabs.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Common Controls Hook 1.0.1]]></title>
-        <id>https://windhawk.net/mods/common-controls-hook#a58065fcfe028ee3a39e145948e3e6ca09e495bf</id>
-        <link href="https://windhawk.net/mods/common-controls-hook"/>
-        <updated>2026-06-15T17:43:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Only apply the common controls to windows, not to controls such as buttons. Improves stability, and fixes a crash in Device Manager.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

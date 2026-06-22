@@ -12470,7 +12470,7 @@
           13
         ],
         "ratingUsers": 18,
-        "updated": 1781532890000,
+        "updated": 1782107559000,
         "users": 127
       },
       "metadata": {
@@ -12483,7 +12483,7 @@
         ],
         "license": "MIT",
         "name": "Tray hover expand",
-        "version": "1.4.2"
+        "version": "1.6.0"
       }
     },
     "two-sided-snapping": {
