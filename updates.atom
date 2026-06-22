@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-22T05:52:39.000Z</updated>
+    <updated>2026-06-22T06:32:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota Bars 0.10.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#3b5be7d2026357e86981da619e48f0e58af30ecf</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-06-22T06:32:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Built-in OAuth: the mod now signs you in to Anthropic and OpenAI through your browser instead of reading CLI credential files. Tokens are stored encrypted and refreshed automatically. Sign in / Sign out from a column's right-click menu.</li>
+<li>Show/hide individual accounts from the right-click menu.</li>
+<li>Fix: bars no longer overlap the clock/tray on a cold start.</li>
+<li>More robust sign-in and token-refresh handling.</li>
+</ul>
+<p>Note: accounts are now just provider + label, so re-check your account settings after updating.</p>]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tray hover expand 1.6.0]]></title>
         <id>https://windhawk.net/mods/tray-hover-expand#4b6102a9d024834632f3f28143a8b7172287f0ef</id>
@@ -425,19 +442,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Folder Hover Menu 1.0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-folder-hover-menu#625c479f1d6f59a39cfde77301a4895444fdf429</id>
-        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
-        <updated>2026-06-15T19:47:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod to work with multiple Explorer tabs.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

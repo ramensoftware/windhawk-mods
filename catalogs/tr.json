@@ -10140,7 +10140,7 @@
           0
         ],
         "ratingUsers": 1,
-        "updated": 1781393256000,
+        "updated": 1782109961000,
         "users": 10
       },
       "metadata": {
@@ -10148,7 +10148,7 @@
           "x86-64"
         ],
         "author": "Cleroth",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -lws2_32 -lcrypt32 -lbcrypt",
         "description": "Shows compact 5-hour and weekly AI agent/LLM subscription quota bars for Anthropic and OpenAI on the Windows 11 taskbar",
         "github": "https://github.com/Cleroth",
         "include": [
@@ -10156,7 +10156,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar AI Quota Bars",
-        "version": "0.9.2"
+        "version": "0.10.2"
       }
     },
     "taskbar-auto-hide-custom-activation-area": {
