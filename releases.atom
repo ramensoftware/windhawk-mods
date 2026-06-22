@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-22T18:50:55.000Z</updated>
+    <updated>2026-06-22T18:53:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.2.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#ca4b673744a580a088fd58c21a6b644dc7811636</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-06-22T18:53:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskmanagertabslideanimation">Task Manager Tab Slide Animation</h1>
+<p><img src="https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation.gif" alt="Demo" /></p>
+<p>The Windows 11 Task Manager switches between its left-hand tabs (Processes,
+Performance, App history, Startup apps, Users, Details, Services) instantly. This
+mod adds a smooth <strong>slide</strong> transition between them.</p>
+<blockquote>
+  <p>Experimental. Task Manager is a WinUI 3 app, so there's no clean Win32
+  "tab changed" signal - this works by heuristics and screen capture.</p>
+</blockquote>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li>A low-level mouse hook (scoped to Task Manager) notices a click in the left
+navigation area and captures the content area from the screen (old tab).</li>
+<li><strong>The content's left edge is detected with UI Automation</strong>: the right edge of
+the clicked navigation item is where the content begins. This adapts
+automatically whether the nav pane is <strong>expanded</strong> (wide, with labels) or
+<strong>collapsed</strong> (icons only) - no manual width setting needed.</li>
+<li>After a short delay it captures the new tab and slides old -&gt; new in a layered
+overlay over the content area, then removes it to reveal the real content.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Top inset</strong> - height (px) of the top command bar to exclude from the slide.</li>
+<li><strong>Capture delay</strong> - how long to wait after the click before grabbing the new
+tab (ms). Raise if it grabs the old tab.</li>
+<li><strong>Animation duration</strong> and <strong>slide vertically</strong> to taste.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Relies on UI Automation to locate the content; if UIA can't identify the clicked
+navigation item, that switch just isn't animated.</li>
+<li>Clicking the <em>same</em> tab still plays a (harmless) slide of identical content.</li>
+<li>The Task Manager window should be visible/unobscured during the switch.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Menu Height 1.0]]></title>
         <id>https://windhawk.net/mods/custom-menu-height#478140d5af7f6de99455f59b3bb6e5c55932e298</id>
@@ -924,67 +968,6 @@ from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.1]]></title>
-        <id>https://windhawk.net/mods/settings-to-control-panel#1ac6e9fec2eed8fc9df2082f410e528b70dc1720</id>
-        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
-        <updated>2026-06-09T20:31:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="redirectsettingscontrolpanel">Redirect Settings → Control Panel</h1>
-<p>This mod intercepts modern <code>ms-settings:</code> URIs and redirects them to their
-corresponding classic Control Panel applets using only native Windows components.</p>
-<hr />
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li><strong>Windows 10</strong> – Mostly complete support</li>
-<li><strong>Windows 11</strong> – Partial support (some redirects may vary by build)</li>
-</ul>
-<hr />
-<h2 id="features">Features</h2>
-<ul>
-<li>Redirects numerous <code>ms-settings:</code> URIs to classic Control Panel</li>
-<li>Anti-loop protection</li>
-<li>Configurable fallback modes</li>
-</ul>
-<hr />
-<h2 id="configuration">Configuration</h2>
-<ul>
-<li><strong>EnableRedirects</strong> – Turn the mod on or off</li>
-<li><strong>UIOnlyRedirects</strong> – Only redirect clicks (safer, may miss some)</li>
-<li><strong>FallbackMode</strong> – What to do when no classic page exists:</li>
-<li><code>0</code> = ignore (do nothing)</li>
-<li><code>1</code> = open Control Panel</li>
-<li><code>2</code> = open modern Settings (default)</li>
-<li><strong>Win11CompatibilityMode</strong> – Extra safety for Windows 11</li>
-<li><strong>MaxLaunchesPerUri</strong> – Prevents infinite loops (default: 3 launches per 5 seconds)</li>
-</ul>
-<hr />
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>System tray icons (audio/network) use DCOM activation and cannot be intercepted (This could change in future)</li>
-<li>Windows 11 support is limited due to Microsoft's architectural changes and some redirects might change based on versions.</li>
-</ul>
-<hr />
-<h2 id="howitworks">How It Works</h2>
-<p>The mod hooks:</p>
-<ul>
-<li><code>ShellExecuteExW</code> / <code>ShellExecuteW</code></li>
-<li><code>CreateProcessW</code></li>
-<li><code>IShellDispatch2::ShellExecute</code></li>
-</ul>
-<p>When a <code>ms-settings:</code> URI is detected, it launches the corresponding classic
-Control Panel target instead of the modern Settings app.</p>
-<hr />
-<h2 id="credits">Credits</h2>
-<ul>
-<li>m417z – Code reviews and feedback</li>
-<li>Anixx – Testing on Windows 11 23H2</li>
-<li>dbilanoski – CLSID documentation</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

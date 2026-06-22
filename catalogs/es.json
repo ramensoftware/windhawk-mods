@@ -12046,6 +12046,35 @@
         "version": "1.0.0"
       }
     },
+    "taskmgr-tab-slide-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782154385000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782154385000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Abdullah Masood",
+        "compilerOptions": "-ldwmapi -lgdi32 -lole32",
+        "description": "Smooth slide transition when switching tabs (Processes, Performance, ...) in Task Manager.",
+        "github": "https://github.com/Abdullah-Masood-05",
+        "include": [
+          "Taskmgr.exe"
+        ],
+        "license": "MIT",
+        "name": "Task Manager Tab Slide Animation",
+        "version": "0.2.0"
+      }
+    },
     "taskmgr-taller-tab": {
       "details": {
         "defaultSorting": 1190,
