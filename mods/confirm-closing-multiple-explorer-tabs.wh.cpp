@@ -186,8 +186,11 @@ HWND WINAPI CreateWindowExW_Hook(
 // Enumeration callback: Attach the subclass to existing File Explorer windows
 BOOL CALLBACK InitEnumExplorerWindowsProc(HWND hWnd, LPARAM lParam)
 {
+    DWORD dwProcessId = 0;
     WCHAR szClassName[16];
-    if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+        dwProcessId == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
         _wcsicmp(szClassName, L"CabinetWClass") == 0)
     {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
@@ -199,8 +202,11 @@ BOOL CALLBACK InitEnumExplorerWindowsProc(HWND hWnd, LPARAM lParam)
 // Enumeration callback: Detach the subclass from existing File Explorer windows
 BOOL CALLBACK UninitEnumExplorerWindowsProc(HWND hWnd, LPARAM lParam)
 {
+    DWORD dwProcessId = 0;
     WCHAR szClassName[16];
-    if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+        dwProcessId == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
         _wcsicmp(szClassName, L"CabinetWClass") == 0)
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
@@ -216,14 +222,10 @@ void LoadSettings()
         std::max(1, Wh_GetIntSetting(L"tabCountThreshold"));
 
     settings.defaultButton = IDCANCEL;
-    PCWSTR pszDefaultButton = Wh_GetStringSetting(L"defaultButton");
-    if (pszDefaultButton)
+    if (wcscmp(WindhawkUtils::StringSetting::make(L"defaultButton").get(),
+            L"closeTabs") == 0)
     {
-        if (wcscmp(pszDefaultButton, L"closeTabs") == 0)
-        {
-            settings.defaultButton = IDOK;
-        }
-        Wh_FreeStringSetting(pszDefaultButton);
+        settings.defaultButton = IDOK;
     }
 }
 
