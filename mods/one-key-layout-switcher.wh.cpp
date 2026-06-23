@@ -46,7 +46,7 @@ and make sure that `dwm.exe` is in the list.
 // Settings — written on settings-change thread, read on hook thread.
 // Each field is a separate atomic so reads in the hot path are lock-free.
 // ---------------------------------------------------------------------------
-static std::atomic<bool> g_enableLeftWin  {true};
+static std::atomic<bool> g_enableLeftWin  {false};
 static std::atomic<bool> g_enableRightWin {true};
 static std::atomic<bool> g_enableLeftAlt  {false};
 static std::atomic<bool> g_enableRightAlt {false};
