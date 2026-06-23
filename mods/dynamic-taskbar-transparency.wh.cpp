@@ -2,13 +2,13 @@
 // @id              dynamic-taskbar-transparency
 // @name            Dynamic Taskbar Transparency
 // @description     Dynamically changes the Windows 11 taskbar XAML background transparency for desktop, Start, search, tray flyouts, task view, and maximized windows.
-// @version         0.3.5
+// @version         0.3.6
 // @author          11581
 // @github          https://github.com/r1file
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,6 +29,15 @@ blur-backed acrylic.
 
 Do not run this together with TranslucentTB or another tool that continuously
 writes the same taskbar background.
+
+Compared with taskbar-background-helper, this mod focuses on a TranslucentTB-
+style state machine: desktop/no-maximized-window, maximized windows, Start,
+search, task view, tray flyouts, notification/quick settings flyouts, and an
+optional catch-all for other shell surfaces can each choose their own
+appearance and fade duration. taskbar-background-helper is a lower-level
+background helper for always/maximized behavior and pairs well with Taskbar
+Styler; this mod adds per-shell-state switching and animation on top of the
+same general taskbar background use case.
 */
 // ==/WindhawkModReadme==
 
@@ -262,7 +271,10 @@ std::mutex g_settingsMutex;
 Settings g_settings;
 
 std::mutex g_elementsMutex;
-std::vector<TrackedBackgroundElement> g_backgroundElements;
+std::vector<TrackedBackgroundElement>& BackgroundElements() {
+    static auto* elements = new std::vector<TrackedBackgroundElement>();
+    return *elements;
+}
 
 struct ActiveAppearance {
     bool hasValue = false;
@@ -274,7 +286,7 @@ std::mutex g_activeAppearanceMutex;
 ActiveAppearance g_activeAppearance;
 
 std::atomic<bool> g_stopWorker = false;
-std::thread g_workerThread;
+std::thread* g_workerThread = nullptr;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 std::atomic<bool> g_scanPending = false;
 
@@ -299,10 +311,8 @@ int ClampInt(int value, int minValue, int maxValue) {
 }
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    auto value = WindhawkUtils::StringSetting::make(name);
+    return value.get();
 }
 
 AppearanceStyle ParseStyle(const std::wstring& value) {
@@ -1134,7 +1144,7 @@ void ApplyAppearanceToElement(Shapes::Rectangle rectangle,
 
 TrackedBackgroundElement GetOriginalElementInfo(void* abi) {
     std::lock_guard<std::mutex> lock(g_elementsMutex);
-    for (const auto& tracked : g_backgroundElements) {
+    for (const auto& tracked : BackgroundElements()) {
         if (tracked.abi == abi) {
             return tracked;
         }
@@ -1147,7 +1157,7 @@ void StoreAppliedAppearance(void* abi,
                             AppearanceStyle style,
                             bool restoreOriginal) {
     std::lock_guard<std::mutex> lock(g_elementsMutex);
-    for (auto& tracked : g_backgroundElements) {
+    for (auto& tracked : BackgroundElements()) {
         if (tracked.abi == abi) {
             if (restoreOriginal) {
                 tracked.hasAppliedAppearance = false;
@@ -1158,23 +1168,6 @@ void StoreAppliedAppearance(void* abi,
             return;
         }
     }
-}
-
-Media::Brush CaptureNativeFill(Shapes::Rectangle rectangle) {
-    Media::Brush originalFill = rectangle.Fill();
-
-    if (IsTransparentBrush(originalFill)) {
-        try {
-            rectangle.ClearValue(Shapes::Shape::FillProperty());
-            Media::Brush restoredFill = rectangle.Fill();
-            if (restoredFill && !IsTransparentBrush(restoredFill)) {
-                originalFill = restoredFill;
-            }
-        } catch (...) {
-        }
-    }
-
-    return originalFill;
 }
 
 struct BackgroundElementSnapshot {
@@ -1202,11 +1195,12 @@ void DispatchApplyAppearance(const Appearance& appearance,
     std::vector<BackgroundElementSnapshot> snapshot;
     {
         std::lock_guard<std::mutex> lock(g_elementsMutex);
-        std::erase_if(g_backgroundElements, [](const auto& tracked) {
+        auto& elements = BackgroundElements();
+        std::erase_if(elements, [](const auto& tracked) {
             return !tracked.element.get();
         });
-        snapshot.reserve(g_backgroundElements.size());
-        for (const auto& tracked : g_backgroundElements) {
+        snapshot.reserve(elements.size());
+        for (const auto& tracked : elements) {
             snapshot.push_back({tracked.element, tracked.abi});
         }
     }
@@ -1267,10 +1261,89 @@ void DispatchApplyAppearance(const Appearance& appearance,
         }
 
         if (completionEvent) {
-            WaitForSingleObject(completionEvent, 500);
+            if (WaitForSingleObject(completionEvent, 500) ==
+                WAIT_OBJECT_0) {
+                CloseHandle(completionEvent);
+            }
+        }
+    }
+}
+
+void ReleaseTrackedBrushesForElement(void* abi) {
+    std::lock_guard<std::mutex> lock(g_elementsMutex);
+    for (auto& tracked : BackgroundElements()) {
+        if (tracked.abi == abi) {
+            tracked.originalFill = nullptr;
+            tracked.originalParentBackground = nullptr;
+            tracked.nativeFill = nullptr;
+            tracked.nativeParentBackground = nullptr;
+            tracked.hasAppliedAppearance = false;
+            return;
+        }
+    }
+}
+
+void ReleaseTrackedBackgroundElements() {
+    std::vector<BackgroundElementSnapshot> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(g_elementsMutex);
+        auto& elements = BackgroundElements();
+        snapshot.reserve(elements.size());
+        for (const auto& tracked : elements) {
+            snapshot.push_back({tracked.element, tracked.abi});
+        }
+    }
+
+    std::vector<void*> releasedAbis;
+    releasedAbis.reserve(snapshot.size());
+
+    for (const auto& item : snapshot) {
+        auto rectangle = item.element.get();
+        if (!rectangle) {
+            releasedAbis.push_back(item.abi);
+            continue;
+        }
+
+        auto dispatcher = rectangle.Dispatcher();
+        if (!dispatcher) {
+            continue;
+        }
+
+        if (dispatcher.HasThreadAccess()) {
+            ReleaseTrackedBrushesForElement(item.abi);
+            releasedAbis.push_back(item.abi);
+            continue;
+        }
+
+        HANDLE completionEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!completionEvent) {
+            continue;
+        }
+
+        auto release = [abi = item.abi, completionEvent]() {
+            ReleaseTrackedBrushesForElement(abi);
+            SetEvent(completionEvent);
+        };
+
+        try {
+            dispatcher.RunAsync(Core::CoreDispatcherPriority::Normal, release);
+        } catch (...) {
+            SetEvent(completionEvent);
+        }
+
+        DWORD waitResult = WaitForSingleObject(completionEvent, 1000);
+        if (waitResult == WAIT_OBJECT_0) {
+            releasedAbis.push_back(item.abi);
             CloseHandle(completionEvent);
         }
     }
+
+    std::lock_guard<std::mutex> lock(g_elementsMutex);
+    auto& elements = BackgroundElements();
+    std::erase_if(elements, [&releasedAbis](const auto& tracked) {
+        return std::find(releasedAbis.begin(), releasedAbis.end(),
+                         tracked.abi) != releasedAbis.end();
+    });
 }
 
 bool HasAncestorClass(DependencyObject element, std::wstring_view className) {
@@ -1318,15 +1391,16 @@ void RegisterBackgroundElement(FrameworkElement element) {
     bool added = false;
     {
         std::lock_guard<std::mutex> lock(g_elementsMutex);
-        std::erase_if(g_backgroundElements, [](const auto& tracked) {
+        auto& elements = BackgroundElements();
+        std::erase_if(elements, [](const auto& tracked) {
             return !tracked.element.get();
         });
 
         auto it = std::find_if(
-            g_backgroundElements.begin(), g_backgroundElements.end(),
+            elements.begin(), elements.end(),
             [abi](const auto& tracked) { return tracked.abi == abi; });
 
-        if (it == g_backgroundElements.end()) {
+        if (it == elements.end()) {
             auto parentGrid = GetParentGrid(rectangle);
             TrackedBackgroundElement tracked;
             tracked.element = winrt::make_weak(rectangle);
@@ -1343,7 +1417,7 @@ void RegisterBackgroundElement(FrameworkElement element) {
                 nativeAppearance.parentBackground;
             tracked.nativeOpacity = nativeAppearance.opacity;
             tracked.abi = abi;
-            g_backgroundElements.push_back(std::move(tracked));
+            elements.push_back(std::move(tracked));
             added = true;
         }
     }
@@ -1561,12 +1635,6 @@ std::wstring GetWindowClassName(HWND hwnd) {
     return className;
 }
 
-std::wstring GetWindowTitle(HWND hwnd) {
-    WCHAR title[256]{};
-    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-    return title;
-}
-
 bool IsVisibleShellSurface(HWND hwnd, const RECT& rect) {
     if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsWindowCloaked(hwnd)) {
         return false;
@@ -1604,21 +1672,16 @@ BOOL CALLBACK EnumShellActivityProc(HWND hwnd, LPARAM lParam) {
 
     auto* context = reinterpret_cast<EnumShellActivityContext*>(lParam);
     const std::wstring className = ToLower(GetWindowClassName(hwnd));
-    const std::wstring title = ToLower(GetWindowTitle(hwnd));
     const std::wstring processName = GetProcessFileName(hwnd);
 
-    if (className.find(L"multitasking") != std::wstring::npos ||
-        title.find(L"task view") != std::wstring::npos ||
-        title.find(L"multitasking") != std::wstring::npos) {
+    if (className.find(L"multitasking") != std::wstring::npos) {
         context->activity.taskViewOpened = true;
         return TRUE;
     }
 
     if (className.find(L"notifyiconoverflow") != std::wstring::npos ||
         className.find(L"clockflyout") != std::wstring::npos ||
-        className.find(L"shellflyout") != std::wstring::npos ||
-        title.find(L"notification") != std::wstring::npos ||
-        title.find(L"quick settings") != std::wstring::npos) {
+        className.find(L"shellflyout") != std::wstring::npos) {
         context->activity.trayFlyoutOpened = true;
         return TRUE;
     }
@@ -1936,10 +1999,16 @@ void WorkerLoop() {
     Appearance currentAppearance{};
     Appearance animationStartAppearance{};
     Appearance targetAppearance{};
+    Appearance lastAppliedAppearance{};
     bool hasCurrentAppearance = false;
+    bool hasLastAppliedAppearance = false;
     bool loggedNoElements = false;
     const ULONGLONG workerStartTick = GetTickCount64();
     ULONGLONG animationStartTick = GetTickCount64();
+    ULONGLONG nextDetectionTick = 0;
+    ShellActivity shellActivity{};
+    StateResolution resolution{TaskbarDynamicState::desktop, L"desktop",
+                               false};
 
     while (!g_stopWorker) {
         Settings settings{};
@@ -1948,32 +2017,52 @@ void WorkerLoop() {
             settings = g_settings;
         }
 
-        const auto taskbars = FindTaskbars();
-        const ShellActivity shellActivity = DetectShellActivity();
-        StateResolution resolution =
-            ResolveState(settings, shellActivity, taskbars);
         const ULONGLONG now = GetTickCount64();
-        const TaskbarDynamicState state = resolution.state;
 
-        if (!g_hasLoggedState || g_lastLoggedState != state) {
-            Wh_Log(L"Taskbar state: %s (%s; taskView=%d start=%d search=%d "
-                   L"tray=%d max=%d other=%d)",
-                   StateName(state), resolution.reason,
-                   shellActivity.taskViewOpened, shellActivity.startOpened,
-                   shellActivity.searchOpened, shellActivity.trayFlyoutOpened,
-                   resolution.hasMaximizedWindow,
-                   shellActivity.otherInteraction);
-            g_lastLoggedState = state;
-            g_hasLoggedState = true;
+        if (!hasCurrentAppearance || now >= nextDetectionTick) {
+            const auto taskbars = FindTaskbars();
+            shellActivity = DetectShellActivity();
+            resolution = ResolveState(settings, shellActivity, taskbars);
+            nextDetectionTick =
+                now + static_cast<ULONGLONG>(settings.pollingIntervalMs);
+
+            const TaskbarDynamicState state = resolution.state;
+            if (!g_hasLoggedState || g_lastLoggedState != state) {
+                Wh_Log(L"Taskbar state: %s (%s; taskView=%d start=%d "
+                       L"search=%d tray=%d max=%d other=%d)",
+                       StateName(state), resolution.reason,
+                       shellActivity.taskViewOpened, shellActivity.startOpened,
+                       shellActivity.searchOpened,
+                       shellActivity.trayFlyoutOpened,
+                       resolution.hasMaximizedWindow,
+                       shellActivity.otherInteraction);
+                g_lastLoggedState = state;
+                g_hasLoggedState = true;
+            }
+
+            Appearance desiredAppearance =
+                GetAppearanceForState(settings, state);
+
+            if (!hasCurrentAppearance) {
+                currentAppearance = desiredAppearance;
+                animationStartAppearance = desiredAppearance;
+                targetAppearance = desiredAppearance;
+                hasCurrentAppearance = true;
+                animationStartTick = now;
+            }
+
+            if (!AppearanceSameTarget(targetAppearance, desiredAppearance)) {
+                animationStartAppearance = currentAppearance;
+                targetAppearance = desiredAppearance;
+                animationStartTick = now;
+            }
         }
-
-        Appearance desiredAppearance = GetAppearanceForState(settings, state);
 
         if (!loggedNoElements && now - workerStartTick > 5000) {
             size_t elementCount = 0;
             {
                 std::lock_guard<std::mutex> lock(g_elementsMutex);
-                elementCount = g_backgroundElements.size();
+                elementCount = BackgroundElements().size();
             }
 
             if (elementCount == 0) {
@@ -1981,20 +2070,6 @@ void WorkerLoop() {
             }
 
             loggedNoElements = true;
-        }
-
-        if (!hasCurrentAppearance) {
-            currentAppearance = desiredAppearance;
-            animationStartAppearance = desiredAppearance;
-            targetAppearance = desiredAppearance;
-            hasCurrentAppearance = true;
-            animationStartTick = now;
-        }
-
-        if (!AppearanceSameTarget(targetAppearance, desiredAppearance)) {
-            animationStartAppearance = currentAppearance;
-            targetAppearance = desiredAppearance;
-            animationStartTick = now;
         }
 
         double progress = 1.0;
@@ -2033,11 +2108,29 @@ void WorkerLoop() {
         }
 
         const bool animationDone = progress >= 1.0;
-        StoreActiveAppearance(currentAppearance, false);
-        DispatchApplyAppearance(currentAppearance, false);
+        if (!hasLastAppliedAppearance ||
+            !AppearanceSameTarget(lastAppliedAppearance, currentAppearance)) {
+            StoreActiveAppearance(currentAppearance, false);
+            DispatchApplyAppearance(currentAppearance, false);
+            lastAppliedAppearance = currentAppearance;
+            hasLastAppliedAppearance = true;
+        }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(
-            animationDone ? settings.pollingIntervalMs : settings.frameTimeMs));
+        int sleepMs = settings.frameTimeMs;
+        if (animationDone) {
+            const ULONGLONG afterFrameTick = GetTickCount64();
+            const ULONGLONG untilDetection =
+                nextDetectionTick > afterFrameTick
+                    ? nextDetectionTick - afterFrameTick
+                    : 0;
+            sleepMs = untilDetection > 0
+                          ? static_cast<int>(std::min<ULONGLONG>(
+                                untilDetection, settings.pollingIntervalMs))
+                          : 1;
+        }
+
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(std::max(1, sleepMs)));
     }
 
     DispatchApplyAppearance(currentAppearance, true, true, false);
@@ -2068,6 +2161,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -2117,7 +2211,9 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     g_stopWorker = false;
-    g_workerThread = std::thread(WorkerLoop);
+    g_taskbarViewDllLoaded = false;
+    g_scanPending = false;
+    g_hasLoggedState = false;
 
     if (HMODULE module = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -2147,6 +2243,7 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
+    g_workerThread = new std::thread(WorkerLoop);
     return TRUE;
 }
 
@@ -2157,13 +2254,14 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Dynamic Taskbar Transparency");
     g_stopWorker = true;
-    if (g_workerThread.joinable()) {
-        g_workerThread.join();
+    if (g_workerThread) {
+        if (g_workerThread->joinable()) {
+            g_workerThread->join();
+        }
+        delete g_workerThread;
+        g_workerThread = nullptr;
     }
 
     DispatchApplyAppearance(Appearance{}, true, true, false);
-    {
-        std::lock_guard<std::mutex> lock(g_elementsMutex);
-        g_backgroundElements.clear();
-    }
+    ReleaseTrackedBackgroundElements();
 }
