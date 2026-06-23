@@ -7,8 +7,8 @@
 // @github          https://github.com/Leymonaide
 // @twitter         https://twitter.com/Leym0naide
 // @homepage        https://leymonaide.github.io/
-// @include         notepad.exe
-// @compilerOptions -lcomdlg32 -lgdi32 -lntdll
+// @include         *
+// @compilerOptions -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -89,6 +89,14 @@ void SHLogicalToPhysicalDPI(int *px, int *py)
 thread_local void *g_pCurrentToggleBar = nullptr;
 thread_local HWND g_hwndCurrentToggleBar = nullptr;
 
+// Worth keeping in mind:
+// "Capture relies on the toggle bar being created via CreateWindowExW. If a
+// future build (or a differently-behaving app, once the scope broadens) creates
+// the toolbar through a path your hook doesn't see, the handle stays null and
+// ScaleAndSet… quietly logs 'hwndToggleBar is null' and does nothing — graceful,
+// but the feature silently won't apply. The analogous mod hooks CreateToolbarEx
+// for the same purpose; worth keeping in mind if you broaden @include."
+// https://github.com/ramensoftware/windhawk-mods/pull/4447#issuecomment-4765563181
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_orig;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle,
@@ -216,12 +224,8 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    RTL_OSVERSIONINFOW osvi;
-    RtlGetVersion(&osvi);
-
-    HMODULE hUser32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    pfnGetDpiForWindow = (decltype(pfnGetDpiForWindow))GetProcAddress(hUser32, "GetDpiForWindow");
-    FreeLibrary(hUser32);
+    pfnGetDpiForWindow = (decltype(pfnGetDpiForWindow))GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
 
     if (!Wh_SetFunctionHook(
         (void *)CreateWindowExW,
@@ -256,6 +260,18 @@ BOOL Wh_ModInit()
     g_hbmArrowUp = LoadBitmapW(g_hmodComdlg32_7, (LPCWSTR)0x242);
     Wh_Log(L"hbmArrow up: %p", g_hbmArrowUp);
 
+    if (!g_hbmArrowDown || !g_hbmArrowUp)
+    {
+        Wh_Log(
+            L"Failed to load one or more bitmaps from the module \"%s\". "
+            L"Please ensure that bitmap resources 577 (0x241) and 578 (0x242) "
+            L"exist in the target binary. An unmodified binary from Windows 7 "
+            L"will feature these resources.",
+            g_spszComdlg32Path.c_str()
+        );
+        return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -263,6 +279,12 @@ BOOL Wh_ModInit()
 void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
+
+    if (g_hbmArrowDown)
+        DeleteObject(g_hbmArrowDown);
+
+    if (g_hbmArrowUp)
+        DeleteObject(g_hbmArrowUp);
 
     if (g_hmodComdlg32_7)
         FreeLibrary(g_hmodComdlg32_7);
