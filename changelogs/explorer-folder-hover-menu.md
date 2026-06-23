@@ -1,3 +1,14 @@
+## 1.2 ([Jun 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c6d25a49f8ecf6159e4c32e8ff3019a9d6c7b63/mods/explorer-folder-hover-menu.wh.cpp))
+
+* Added support for open/save dialogs. It's optional and can be disabled in the settings.
+* Added folder left click and middle click actions. Default actions are "Open in the current window" and "Open in a new tab" respectively.
+* Added an option to customize the button opacity.
+* Changed the default maximum items value from 500 to 200.
+* Fixed maximum item count and time limit not working on special folders such as Recycle Bin.
+* Fixed mouse wheel scrolling not working in the menu in some cases.
+* Fixed the expand button not appearing in some cases.
+* Fixed incompatibility with NVIDIA GeForce overlay and possibly other overlay tools.
+
 ## 1.1 ([Jun 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/453bb94231c97af750e51e2584e73991074cb4fc/mods/explorer-folder-hover-menu.wh.cpp))
 
 * Added an option for rounded corners for the menu.

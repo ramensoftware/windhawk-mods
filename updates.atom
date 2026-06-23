@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-23T19:47:18.000Z</updated>
+    <updated>2026-06-23T22:56:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Folder Hover Menu 1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-hover-menu#3c6d25a49f8ecf6159e4c32e8ff3019a9d6c7b63</id>
+        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
+        <updated>2026-06-23T22:56:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for open/save dialogs. It's optional and can be disabled in the settings.</li>
+<li>Added folder left click and middle click actions. Default actions are "Open in the current window" and "Open in a new tab" respectively.</li>
+<li>Added an option to customize the button opacity.</li>
+<li>Changed the default maximum items value from 500 to 200.</li>
+<li>Fixed maximum item count and time limit not working on special folders such as Recycle Bin.</li>
+<li>Fixed mouse wheel scrolling not working in the menu in some cases.</li>
+<li>Fixed the expand button not appearing in some cases.</li>
+<li>Fixed incompatibility with NVIDIA GeForce overlay and possibly other overlay tools.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.1]]></title>
         <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#34c3b3965f17e7b560b975227e2472e64165c1c8</id>
@@ -442,19 +462,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Common Controls Hook 1.0.2]]></title>
-        <id>https://windhawk.net/mods/common-controls-hook#63664bab1097722f2b7567cda9961b22fe5a0c8c</id>
-        <link href="https://windhawk.net/mods/common-controls-hook"/>
-        <updated>2026-06-17T18:35:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Common Controls v6 activation is now skipped if already activated, improving stability.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
