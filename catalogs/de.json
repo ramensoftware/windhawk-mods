@@ -6874,6 +6874,36 @@
         "version": "0.7"
       }
     },
+    "lock-keys-notifier": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782234426000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782234426000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Havrlisan",
+        "compilerOptions": "-lgdiplus -ldwmapi -lwinmm -lgdi32 -luser32 -lshcore -lshell32",
+        "description": "Shows a customizable toast when a lock key (Caps/Num/Scroll/Insert) is toggled",
+        "github": "https://github.com/havrlisan",
+        "homepage": "https://github.com/havrlisan/lock-keys-notifier",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Lock Keys Notifier",
+        "version": "1.0.0"
+      }
+    },
     "logon-logoff-shutdown-sounds": {
       "details": {
         "defaultSorting": 67480,

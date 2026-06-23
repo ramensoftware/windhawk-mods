@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-23T07:45:46.000Z</updated>
+    <updated>2026-06-23T17:07:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lock Keys Notifier 1.0.0]]></title>
+        <id>https://windhawk.net/mods/lock-keys-notifier#0d25f36c6bece76b384de92bf08e6c7bc2e10061</id>
+        <link href="https://windhawk.net/mods/lock-keys-notifier"/>
+        <updated>2026-06-23T17:07:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lockkeysnotifier">Lock Keys Notifier</h1>
+<p>Displays a small, customizable toast whenever a lock key (Caps Lock, Num Lock,
+Scroll Lock, or Insert) is toggled, showing its new ON/OFF state.</p>
+<h2 id="preview">Preview</h2>
+<p>Pill, Tile, and Minimal layouts (following the system theme and accent):</p>
+<p><img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-pill.png" alt="Pill layout" />
+<img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/scroll-lock-on-tile.png" alt="Tile layout" />
+<img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-minimal.png" alt="Minimal layout" /></p>
+<p>Insert can show a single fixed label in a neutral color instead of ON/OFF:</p>
+<p><img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/insert-pressed-tile.png" alt="Insert single-value" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Per-key enable/disable.</li>
+<li>9-point positioning with offsets, on the active, primary, or all monitors.</li>
+<li>Three layouts (Pill, Tile, Minimal), themeable colors, opacity, corner radius,
+padding, font, soft drop shadow, and an optional per-key accent state. Follows
+the system light/dark theme and accent by default.</li>
+<li>Optional fade animation and optional sound (system default or custom WAV).</li>
+<li>Editable ON/OFF labels and per-key display names; optional key icon glyph.</li>
+<li>Insert can show a single fixed label (e.g. "pressed") in neutral color instead
+of ON/OFF.</li>
+<li>Optionally skips the toast while a fullscreen app is in the foreground (games,
+fullscreen video, presentation mode); off by default.</li>
+<li>Per-monitor DPI aware: scales to each monitor, so it stays the same physical
+size on mixed-DPI multi-monitor setups.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Runs as a tool mod in its own windhawk.exe process, so notifications keep
+working even when Explorer is restarting or not running.</li>
+<li>Toggles made while an elevated (administrator) app has focus are not detected.
+The mod process runs at medium integrity and Windows (UIPI) blocks it from
+observing input to higher-integrity windows; this can't be worked around from a
+mod. The next toggle in a normal app shows the correct state.</li>
+<li>Fullscreen exclusive apps may cover the toast (or enable the option above to skip it).</li>
+<li>Insert reports the OS toggle bit, not an app's overtype mode (off by default).</li>
+</ul>]]></content>
+        <author>
+            <name>Havrlisan</name>
+            <uri>https://github.com/havrlisan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 File Open/Save Toggle Bar Icon 1.0]]></title>
         <id>https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon#ed51a0b3f375eca20654ec5b64e14cf0be627b0d</id>
@@ -930,28 +977,6 @@ ShellExecute runas launch.</li>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Context Menu Custom Items 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-context-menu-custom-items#19bc5c4ed26f7fae503df45a5415ab60fec6311e</id>
-        <link href="https://windhawk.net/mods/explorer-context-menu-custom-items"/>
-        <updated>2026-06-12T16:23:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorercontextmenucustomitems">Explorer Context Menu Custom Items</h1>
-<p>Easily add, filter, and manage custom shortcut actions inside the classic context menu (<strong>Show more options</strong>).</p>
-<h3 id="keyfeatures">Key Features:</h3>
-<ul>
-<li><strong>Dynamic Commands:</strong> Run any CLI tool or executable (like <code>whisperx</code>, <code>ffmpeg</code>, or <code>python</code>) directly on a highlighted file.</li>
-<li><strong>Extension Filtering:</strong> Restrict commands to specific formats (e.g., <code>.mp4, .mkv</code>) so your menu stays clean and relevant.</li>
-<li><strong>Folder Toggle:</strong> Choose whether specific shortcuts show up when right-clicking folders or folder backdrops.</li>
-</ul>
-<h3 id="howtousevariables">How to use variables:</h3>
-<ul>
-<li>Use <code>%1</code> in your command string to automatically pass the absolute file path of your selected file. It is recommended to use double quotes around it in your command settings (e.g., whisperx "%1") to handle spaces in file paths properly.</li>
-</ul>]]></content>
-        <author>
-            <name>Deepak</name>
-            <uri>https://github.com/deepak-raven</uri>
         </author>
     </entry>
 </feed>
