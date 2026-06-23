@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.1.0
+// @version        2.2.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -282,7 +282,17 @@ typedef struct {
     BOOL  hasInternetAccess;
     DOT11_AUTH_ALGORITHM authAlgorithm;
     DOT11_CIPHER_ALGORITHM cipherAlgorithm;
-    
+    // BSSID del miglior AP visto per questa entry. Usato per targettare la
+    // connessione al BSS giusto quando esistono più AP con lo stesso SSID
+    // (vedi displaySuffix), invece di lasciare che WlanConnect scelga da solo.
+    DOT11_MAC_ADDRESS bssid;
+    BOOL  hasBssid;
+    // Suffisso di disambiguazione (0 = nessuno, 2 = "Nome 2", 3 = "Nome 3"...).
+    // Senza questo, BSS diversi con lo stesso SSID venivano fusi in una sola
+    // entry e la riconnessione falliva: il profilo costruito non corrispondeva
+    // più al BSS effettivamente selezionato dall'utente.
+    int   displaySuffix;
+
     ConnectionState connState;
     DWORD operationStartTime;  // For timeout detection
 } WifiNetworkItem;
@@ -298,6 +308,11 @@ typedef struct {
     DOT11_BSS_TYPE dot11BssType;
     DOT11_AUTH_ALGORITHM authAlgorithm;
     DOT11_CIPHER_ALGORITHM cipherAlgorithm;
+    // BSSID specifico da raggiungere, quando esistono più AP con lo stesso
+    // SSID (es. "Redmi" e "Redmi 2"). Se hasBssid è FALSE, WlanConnect lascia
+    // la scelta del BSS al sistema (comportamento precedente).
+    DOT11_MAC_ADDRESS bssid;
+    BOOL hasBssid;
 } AsyncConnectContext;
 // -------------------------------------------------------
 // Windows version detection
@@ -819,10 +834,16 @@ static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 // SSID display helper
 // -------------------------------------------------------
 static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
-    if (g_Settings.privacyMode)
+    if (g_Settings.privacyMode) {
         StringCchPrintfW(buf, bufLen, LOC(STR_NETWORK_PRIVACY_FMT), index + 1);
-    else
+        return;
+    }
+    int suffix = g_NetworkList[index].displaySuffix;
+    if (suffix >= 2) {
+        StringCchPrintfW(buf, bufLen, L"%s %d", g_NetworkList[index].ssid, suffix);
+    } else {
         StringCchCopyW(buf, bufLen, g_NetworkList[index].ssid);
+    }
 }
 
 // -------------------------------------------------------
@@ -936,24 +957,39 @@ void RefreshWifiData(HANDLE hClient) {
                     tempList[tempCount].ssid[converted] = L'\0';
                 }
 
-                // Check duplicates
+                // Check duplicates: due entry sono lo STESSO BSS-aggregate solo
+                // se SSID, sicurezza, cifratura e tipo di BSS coincidono tutti.
+                // Se l'SSID è uguale ma i parametri di sicurezza differiscono,
+                // sono due access point distinti con lo stesso nome (es. due
+                // router "Redmi" su bande diverse): vanno tenuti come entry
+                // separate, esattamente come fa il flyout nativo di Windows
+                // ("Redmi", "Redmi 2", ...). Fonderli (comportamento precedente)
+                // faceva sì che il profilo costruito per la connessione potesse
+                // non corrispondere più al BSS effettivamente selezionato
+                // dall'utente, causando fallimenti di (ri)connessione intermittenti.
                 BOOL duplicate = FALSE;
+                int sameSsidVariants = 0;
                 for (int d = 0; d < tempCount; d++) {
-                    if (wcscmp(tempList[d].ssid, tempList[tempCount].ssid) == 0) {
+                    BOOL sameSsid = (wcscmp(tempList[d].ssid, tempList[tempCount].ssid) == 0);
+                    if (!sameSsid) continue;
+
+                    BOOL sameSecurity =
+                        (tempList[d].isSecured == (BOOL)network.bSecurityEnabled) &&
+                        (tempList[d].dot11BssType == network.dot11BssType) &&
+                        (tempList[d].authAlgorithm == network.dot11DefaultAuthAlgorithm) &&
+                        (tempList[d].cipherAlgorithm == network.dot11DefaultCipherAlgorithm);
+
+                    if (sameSecurity) {
                         if (network.wlanSignalQuality > tempList[d].signalQuality)
                             tempList[d].signalQuality = network.wlanSignalQuality;
                         if (network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED)
                             tempList[d].connState = CONN_STATE_CONNECTED;
-                        tempList[d].isSecured = network.bSecurityEnabled;
-                        tempList[d].dot11BssType = network.dot11BssType;
-                        // Update security algorithms for duplicates
-                        if (network.dot11DefaultAuthAlgorithm > tempList[d].authAlgorithm)
-                            tempList[d].authAlgorithm = network.dot11DefaultAuthAlgorithm;
-                        if (network.dot11DefaultCipherAlgorithm > tempList[d].cipherAlgorithm)
-                            tempList[d].cipherAlgorithm = network.dot11DefaultCipherAlgorithm;
                         duplicate = TRUE;
                         break;
                     }
+                    // SSID uguale ma BSS/sicurezza diversi: non è lo stesso
+                    // ingresso, ma serve per numerare il suffisso di display.
+                    sameSsidVariants++;
                 }
                 if (duplicate) continue;
 
@@ -968,6 +1004,34 @@ void RefreshWifiData(HANDLE hClient) {
                 // Capture security algorithms
                 tempList[tempCount].authAlgorithm = network.dot11DefaultAuthAlgorithm;
                 tempList[tempCount].cipherAlgorithm = network.dot11DefaultCipherAlgorithm;
+                // 0 = nessun suffisso (prima variante vista), altrimenti 2,3,4...
+                tempList[tempCount].displaySuffix = (sameSsidVariants > 0) ? (sameSsidVariants + 1) : 0;
+                tempList[tempCount].hasBssid = FALSE;
+                ZeroMemory(tempList[tempCount].bssid, sizeof(tempList[tempCount].bssid));
+
+                // Risolvi il BSSID del miglior AP per questa entry, in modo da
+                // poter targettare la connessione al BSS giusto in AskForPasswordAndConnect
+                // quando ce ne sono più con lo stesso SSID. Senza questo, WlanConnect
+                // lasciava al sistema la scelta del BSS, che poteva non coincidere
+                // con quello selezionato dall'utente nella lista (segnale migliore
+                // istantaneo vs. quello mostrato all'ultimo refresh).
+                {
+                    PWLAN_BSS_LIST pBssDetailList = NULL;
+                    if (WlanGetNetworkBssList(hClient, &IfInfo.InterfaceGuid,
+                            &network.dot11Ssid, network.dot11BssType,
+                            network.bSecurityEnabled, NULL, &pBssDetailList) == ERROR_SUCCESS && pBssDetailList) {
+                        LONG bestRssi = -32768L; // RSSI realistico minimo, evita dipendenza da limits.h
+                        for (DWORD b = 0; b < pBssDetailList->dwNumberOfItems; b++) {
+                            const WLAN_BSS_ENTRY& bss = pBssDetailList->wlanBssEntries[b];
+                            if (bss.lRssi > bestRssi) {
+                                bestRssi = bss.lRssi;
+                                CopyMemory(tempList[tempCount].bssid, bss.dot11Bssid, sizeof(DOT11_MAC_ADDRESS));
+                                tempList[tempCount].hasBssid = TRUE;
+                            }
+                        }
+                        WlanFreeMemory(pBssDetailList);
+                    }
+                }
 
                 if (pProfList) {
                     for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
@@ -1388,10 +1452,27 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     params.strProfile = ctx->ssid;
     params.dot11BssType = ctx->dot11BssType;
     params.dwFlags = 0;
+    // Se conosciamo il BSSID esatto (risolto in RefreshWifiData), lo passiamo
+    // per forzare la connessione a QUEL BSS specifico. Senza questo, quando
+    // esistono più AP con lo stesso SSID, WlanConnect con solo il nome profilo
+    // lascia al sistema la scelta del BSS: poteva connettersi a un AP diverso
+    // da quello mostrato/selezionato nella UI, oppure a uno irraggiungibile,
+    // facendo apparire la riconnessione come "non funzionante".
+    DOT11_BSSID_LIST bssidList;
+    if (ctx->hasBssid) {
+        ZeroMemory(&bssidList, sizeof(bssidList));
+        bssidList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        bssidList.Header.Revision = DOT11_BSSID_LIST_REVISION_1;
+        bssidList.Header.Size = sizeof(bssidList);
+        bssidList.uNumOfEntries = 1;
+        bssidList.uTotalNumOfEntries = 1;
+        CopyMemory(bssidList.BSSIDs[0], ctx->bssid, sizeof(DOT11_MAC_ADDRESS));
+        params.pDesiredBssidList = &bssidList;
+    }
     
     dwResult = WlanConnect(g_Ctx.hWlanClient, &ctx->interfaceGuid, &params, NULL);
     LogSsidSafe(L"WlanConnect for", ctx->ssid);
-    Wh_Log(L"  returned: %lu (0x%08X)", dwResult, dwResult);
+    Wh_Log(L"  returned: %lu (0x%08X), targeted BSSID: %s", dwResult, dwResult, ctx->hasBssid ? L"yes" : L"no (system choice)");
     
     if (ctx->hWndNotify) {
         PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, (dwResult == ERROR_SUCCESS), (LPARAM)dwResult);
@@ -1426,6 +1507,13 @@ static BOOL AskForPasswordAndConnect(int index) {
     ctx->authAlgorithm = item->authAlgorithm;
     ctx->cipherAlgorithm = item->cipherAlgorithm;
     StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item->ssid);
+    // Porta con sé il BSSID specifico risolto in RefreshWifiData, per evitare
+    // che WlanConnect scelga un BSS diverso quando esistono più AP con lo
+    // stesso SSID (vedi displaySuffix / "Redmi", "Redmi 2"...).
+    ctx->hasBssid = item->hasBssid;
+    if (item->hasBssid) {
+        CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
+    }
 
     if (item->isSecured && !item->hasProfile) {
         WCHAR password[65] = {0};
@@ -3349,7 +3437,7 @@ static HWND CreateHiddenWindow() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.1.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.2.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
