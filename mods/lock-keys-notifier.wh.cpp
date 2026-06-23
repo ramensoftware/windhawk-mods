@@ -6,8 +6,7 @@
 // @author          Havrlisan
 // @github          https://github.com/havrlisan
 // @homepage        https://github.com/havrlisan/lock-keys-notifier
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @license         MIT
 // @compilerOptions -lgdiplus -ldwmapi -lwinmm -lgdi32 -luser32 -lshcore -lshell32
 // ==/WindhawkMod==
@@ -18,6 +17,18 @@
 
 Displays a small, customizable toast whenever a lock key (Caps Lock, Num Lock,
 Scroll Lock, or Insert) is toggled, showing its new ON/OFF state.
+
+## Preview
+
+Pill, Tile, and Minimal layouts (following the system theme and accent):
+
+![Pill layout](https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-pill.png)
+![Tile layout](https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/scroll-lock-on-tile.png)
+![Minimal layout](https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-minimal.png)
+
+Insert can show a single fixed label in a neutral color instead of ON/OFF:
+
+![Insert single-value](https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/insert-pressed-tile.png)
 
 ## Features
 - Per-key enable/disable.
@@ -35,11 +46,12 @@ Scroll Lock, or Insert) is toggled, showing its new ON/OFF state.
   size on mixed-DPI multi-monitor setups.
 
 ## Notes
-- Runs in explorer.exe; notifications pause if Explorer is not running.
+- Runs as a tool mod in its own windhawk.exe process, so notifications keep
+  working even when Explorer is restarting or not running.
 - Toggles made while an elevated (administrator) app has focus are not detected.
-  Explorer runs at medium integrity and Windows (UIPI) blocks it from observing
-  input to higher-integrity windows; this can't be worked around from a mod. The
-  next toggle in a normal app shows the correct state.
+  The mod process runs at medium integrity and Windows (UIPI) blocks it from
+  observing input to higher-integrity windows; this can't be worked around from a
+  mod. The next toggle in a normal app shows the correct state.
 - Fullscreen exclusive apps may cover the toast (or enable the option above to skip it).
 - Insert reports the OS toggle bit, not an app's overtype mode (off by default).
 */
@@ -198,7 +210,7 @@ Scroll Lock, or Insert) is toggled, showing its new ON/OFF state.
 #include <gdiplus.h>
 #include <mmsystem.h>
 #include <shellscalingapi.h>
-#include <shlobj.h>
+#include <shellapi.h>   // SHQueryUserNotificationState / QUERY_USER_NOTIFICATION_STATE
 #include <vector>
 
 // === HELPERS BEGIN === (pure: no Windhawk/GDI deps; extracted for tests)
@@ -514,6 +526,12 @@ struct ToastWindow {
 };
 
 static std::vector<ToastWindow> g_toasts;   // index 0 for active/primary; one per monitor for "all"
+// The primary toast HWND, cached once at worker init before the pump starts.
+// StopWorker (which runs on the arbitrary Wh_ModUninit thread) reads this instead
+// of g_toasts[0].hwnd, so it never races the worker's hotplug pool-grow in DoShow
+// (a std::vector reallocation). The worker writes it before signaling ready, and
+// StopWorker reads it after that handshake, so a plain HWND needs no atomics.
+static HWND   g_primaryToastHwnd = nullptr;
 static DWORD  g_workerThreadId = 0;
 static HANDLE g_workerThread = nullptr;
 static HANDLE g_workerReady = nullptr;
@@ -991,6 +1009,11 @@ static void DoShow(int keyIndex, bool isOn) {
     s = g_settings;
     LeaveCriticalSection(&g_settingsCs);
 
+    // Suppress while a fullscreen app is in the foreground. Checked here (on the
+    // worker thread, after the hook returned) rather than inside the LL hook, so
+    // the shell/window queries never sit on the input-blocking hook path.
+    if (s.suppressFullscreen && IsFullscreenActive()) return;
+
     std::vector<RECT> areas;
     if (s.monitor == MonitorTarget::All) {
         MonitorList ml; EnumDisplayMonitors(nullptr, nullptr, EnumMonProc, (LPARAM)&ml);
@@ -1148,11 +1171,12 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lPa
                 bool isOn = (GetKeyState(kLockVk[i]) & 1) != 0;
                 EnterCriticalSection(&g_settingsCs);
                 bool enabled = KeyEnabled(g_settings, i);
-                bool suppressFs = g_settings.suppressFullscreen;
                 LeaveCriticalSection(&g_settingsCs);
-                // Detector calls Windows APIs — run it outside the lock, and only
-                // when the flag is on so it costs nothing when disabled.
-                if (enabled && !(suppressFs && IsFullscreenActive())) RequestToast(i, isOn);
+                // Only marshal here — an LL hook blocks *all* system input until
+                // it returns, so keep it cheap. The fullscreen-suppress check
+                // (shell + window/monitor queries) runs in DoShow on the worker
+                // thread, after this callback has returned.
+                if (enabled) RequestToast(i, isOn);
                 break;
             }
         }
@@ -1178,6 +1202,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     for (auto& tw : g_toasts) {
         tw.hwnd = CreateToastWindow();
     }
+    g_primaryToastHwnd = g_toasts.empty() ? nullptr : g_toasts[0].hwnd;
 
     g_realHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInst, 0);
 
@@ -1200,6 +1225,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         if (tw.dib) DeleteObject(tw.dib);
     }
     g_toasts.clear();
+    g_primaryToastHwnd = nullptr;
     UnregisterClassW(kToastClass, hInst);
     GdiplusShutdown(g_gdiplusToken);
     return 0;
@@ -1218,8 +1244,8 @@ bool StartWorker() {
 }
 
 void StopWorker() {
-    if (!g_toasts.empty() && g_toasts[0].hwnd)
-        PostMessageW(g_toasts[0].hwnd, WM_APP_QUIT, 0, 0);
+    if (g_primaryToastHwnd)
+        PostMessageW(g_primaryToastHwnd, WM_APP_QUIT, 0, 0);
     else if (g_workerThreadId)
         PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
     if (g_workerThread) {
@@ -1231,7 +1257,7 @@ void StopWorker() {
     if (g_workerReady) { CloseHandle(g_workerReady); g_workerReady = nullptr; }
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Lock Keys Notifier init");
     InitializeCriticalSection(&g_settingsCs);
     LoadSettings();
@@ -1244,13 +1270,194 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Lock Keys Notifier uninit");
     StopWorker();
     DeleteCriticalSection(&g_settingsCs);
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Lock Keys Notifier settings changed");
     LoadSettings();
+}
+
+// --- Windhawk Tool Mod Boilerplate (Do not modify) ---
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
