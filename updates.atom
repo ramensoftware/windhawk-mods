@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-23T19:40:57.000Z</updated>
+    <updated>2026-06-23T19:47:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.1]]></title>
+        <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#34c3b3965f17e7b560b975227e2472e64165c1c8</id>
+        <link href="https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs"/>
+        <updated>2026-06-23T19:47:18.000Z</updated>
+        <content type="html"><![CDATA[<p>Added an option to set the minimum number of open tabs required to show the confirmation dialog.</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.3]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#78dcd1fcb93e34b86e3d571072734618cf09c93c</id>
@@ -444,46 +455,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.0]]></title>
-        <id>https://windhawk.net/mods/resource-aware-task-terminator#31cf6c1d7b3cf7f8ece91354f299cfd165ac54ad</id>
-        <link href="https://windhawk.net/mods/resource-aware-task-terminator"/>
-        <updated>2026-06-17T17:55:59.000Z</updated>
-        <content type="html"><![CDATA[<p>Resource-Aware Task Terminator</p>
-<ul>
-<li>Press the configured hotkey to terminate a target process or app group.</li>
-<li>Modes:</li>
-<li>foreground: Kill the active window process.</li>
-<li>top_cpu: Sample CPU over a configurable window and show the top PID candidates.</li>
-<li>top_pagefaults: Sample page-fault deltas and show the top PID candidates.</li>
-<li>top<em>disk</em>io: Sample process read/write byte deltas and show the top PID candidates.</li>
-<li>aggregate<em>super</em>score: Group eligible processes by executable path/name and rank app groups by CPU, page faults, disk I/O, and memory.</li>
-<li>top<em>gpu</em>experimental: Disabled in this no-PDH build to avoid loader dependency failures.</li>
-</ul>
-<p>Defaults</p>
-<ul>
-<li>Hotkey: Ctrl + Alt + F4. Pick a different hotkey if another app or Windows reserves it.</li>
-<li>Protected apps: Conservative defaults including explorer.exe, windhawk.exe, taskmgr.exe, conhost.exe, dwm.exe, and critical system processes.</li>
-</ul>
-<p>Notes and Safety</p>
-<ul>
-<li>You may need to run Windhawk elevated to kill elevated targets; otherwise OpenProcess(PROCESS_TERMINATE) can fail with Access Denied.</li>
-<li>Do not remove critical system processes from the protected list. Killing them can destabilize Windows.</li>
-<li>Terminating an app can cause data loss. Save work first.</li>
-<li>Confirmation mode is enabled by default and shows the selected process/app group, mode, sampling evidence, and protection check before termination.</li>
-<li>The chooser supports sortable metric columns, severity-colored metric cells, manual refresh, and optional live refresh.</li>
-</ul>
-<p>Troubleshooting</p>
-<ul>
-<li>If the hotkey does not work, pick a different combo. Some Win+ combos or hotkeys taken by other apps will fail to register.</li>
-<li>GPU mode is disabled in this no-PDH build.</li>
-<li>This build runs the hotkey in a dedicated Windhawk tool process for a persistent per-session host.</li>
-</ul>]]></content>
-        <author>
-            <name>Math Shamenson</name>
-            <uri>https://github.com/insane66613</uri>
         </author>
     </entry>
 </feed>
