@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.2.0
+// @version        2.3.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -1034,13 +1034,13 @@ void RefreshWifiData(HANDLE hClient) {
                 }
 
                 if (pProfList) {
-                    for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
-                        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) == 0) {
-                            tempList[tempCount].hasProfile = TRUE;
-                            break;
-                        }
-                    }
-                }
+    for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
+        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) == 0) {
+            tempList[tempCount].hasProfile = TRUE;
+            break;
+        }
+    }
+}
 
                 // Move connected network to top
                 if (tempList[tempCount].connState == CONN_STATE_CONNECTED && tempCount > 0) {
@@ -1176,11 +1176,11 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         
         CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
             WS_CHILD|WS_VISIBLE, 15,15,380,20, hwnd,(HMENU)200,cs->hInstance,NULL);
-        CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
-            WS_CHILD|WS_VISIBLE, 15,53,115,18, hwnd,NULL,cs->hInstance,NULL);
-        HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
-            WS_CHILD|WS_VISIBLE|ES_PASSWORD|ES_AUTOHSCROLL,
-            135,50,255,22, hwnd,(HMENU)101,cs->hInstance,NULL);
+CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
+    WS_CHILD|WS_VISIBLE, 15,53,125,18, hwnd,NULL,cs->hInstance,NULL);        
+    HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
+    WS_CHILD|WS_VISIBLE|ES_PASSWORD|ES_AUTOHSCROLL,
+    145,50,245,22, hwnd,(HMENU)101,cs->hInstance,NULL);
         SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         SetFocus(hEdit);
         
@@ -1515,7 +1515,44 @@ static BOOL AskForPasswordAndConnect(int index) {
         CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
     }
 
-    if (item->isSecured && !item->hasProfile) {
+    BOOL needsPassword = (item->isSecured && !item->hasProfile);
+if (item->isSecured && item->hasProfile && item->connState != CONN_STATE_CONNECTED) {
+    // Tenta connessione con profilo esistente
+    WLAN_CONNECTION_PARAMETERS params;
+    ZeroMemory(&params, sizeof(params));
+    params.wlanConnectionMode = wlan_connection_mode_profile;
+    params.strProfile = item->ssid;
+    params.dot11BssType = item->dot11BssType;
+    params.dwFlags = 0;
+    
+    if (item->hasBssid) {
+        DOT11_BSSID_LIST bssidList;
+        ZeroMemory(&bssidList, sizeof(bssidList));
+        bssidList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+        bssidList.Header.Revision = DOT11_BSSID_LIST_REVISION_1;
+        bssidList.Header.Size = sizeof(bssidList);
+        bssidList.uNumOfEntries = 1;
+        bssidList.uTotalNumOfEntries = 1;
+        CopyMemory(bssidList.BSSIDs[0], item->bssid, sizeof(DOT11_MAC_ADDRESS));
+        params.pDesiredBssidList = &bssidList;
+    }
+    
+    DWORD quickResult = WlanConnect(g_Ctx.hWlanClient, &item->interfaceGuid, &params, NULL);
+    if (quickResult == ERROR_SUCCESS) {
+        // Connessione riuscita col profilo esistente, non serve password
+        item->connState = CONN_STATE_CONNECTING;
+        item->operationStartTime = GetTickCount();
+        g_PendingConnectIndex = index;
+        UpdateLayoutGeometry();
+        if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
+        return TRUE;
+    }
+    // Profilo non valido per questa rete, forza richiesta password
+    item->hasProfile = FALSE;
+    needsPassword = TRUE;
+}
+
+if (needsPassword) {
         WCHAR password[65] = {0};
         
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
@@ -3437,7 +3474,7 @@ static HWND CreateHiddenWindow() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.2.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.3.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
