@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.0.0
+// @version        2.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -79,6 +79,9 @@ If you encounter issues or need to clarify something, please report it on the au
 - useRoundedCorners: false
   $name: Rounded corners
   $description: Give the flyout window rounded corners (looks better on Windows 11 or with the Aero theme enabled, disabled by default for classic theme compatibility).
+- enableCustomTrayIcon: false
+  $name: Show a custom tray icon (Win7 style)
+  $description: Add a second network icon to the system tray with the classic Windows 7 design. Useful as a fallback if the automatic flyout interception doesn't work on your setup. Click it to open the flyout.
 */
 // ==/WindhawkModSettings==
 
@@ -160,11 +163,26 @@ void RecalcDpiMetrics(UINT dpi) {
 #define WM_SAFE_CLOSE       (WM_USER + 101)
 #define WM_SHOW_FLYOUT      (WM_USER + 102)
 #define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
+#define WM_TRAY_ICON_NOTIFY   (WM_USER + 110)
+#define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
+#define CUSTOM_TRAY_ICON_ID   1001
 
+static HICON g_hCustomTrayIcon = NULL;
+static NOTIFYICONDATAW g_nid = {0};
+static HWND g_hHiddenWnd = NULL;
+static UINT g_uTaskbarCreated = 0;
+// Thread che possiede g_hWndFlyout (il primo che la crea). Le richieste di
+// toggle provenienti da altri thread vengono marshallate lì, invece di
+// operare cross-thread su ShowWindow/SetForegroundWindow/MoveWindow, il che
+// causava un primo paint vuoto e un flyout non draggabile/responsivo quando
+// l'apertura avveniva da un thread diverso da quello proprietario.
+static DWORD g_dwFlyoutOwnerThreadId = 0;
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
 #define IDM_STATUS          2003
 #define IDM_PROPERTIES      2004
+#define IDM_TRAY_TROUBLESHOOT      5001
+#define IDM_TRAY_NETWORK_SETTINGS  5002
 
 #define TRAY_NETWORK_ID 2
 #define CLICK_DEBOUNCE_MS 600
@@ -205,10 +223,11 @@ struct ModSettings {
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
+    BOOL enableCustomTrayIcon;
     int  win11NetworkIconWidth;
-} g_Settings = { TRUE, FALSE, TRUE, 3000, 0, FALSE, FALSE, 40 };
 
-static bool s_settingsSavedOnce = false;
+} g_Settings = { TRUE, FALSE, TRUE, 3000, 0, FALSE, FALSE, FALSE, 40 };
+
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
@@ -226,33 +245,20 @@ void LoadSettings() {
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
     int raw_win11IconWidth = Wh_GetIntSetting(L"win11NetworkIconWidth");
 
-    if (!s_settingsSavedOnce &&
-        raw_intercept == 0 && raw_privacy == 0 &&
-        raw_refresh == 0 && raw_language == 0 && raw_roundedCorners == 0) {
-        g_Settings.interceptNativeFlyout      = TRUE;
-        g_Settings.privacyMode               = FALSE;
-        g_Settings.redirectNetworkContextMenu = TRUE;
-        g_Settings.refreshInterval            = 3000;
-        g_Settings.language                  = 0;
-        g_Settings.enableHotkey              = FALSE;
-        g_Settings.useRoundedCorners         = FALSE;
-        g_Settings.win11NetworkIconWidth      = 40;
-    } else {
-        g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
-        g_Settings.privacyMode               = raw_privacy     != 0;
-        g_Settings.redirectNetworkContextMenu = raw_redirectCtx != 0;
-        g_Settings.refreshInterval            = raw_refresh;
-        g_Settings.language                  = raw_language;
-        g_Settings.enableHotkey              = raw_enableHotkey != 0;
-        g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
-        g_Settings.win11NetworkIconWidth      = (raw_win11IconWidth > 0) ? raw_win11IconWidth : 40;
-    }
+    g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
+    g_Settings.privacyMode               = raw_privacy     != 0;
+    g_Settings.redirectNetworkContextMenu = raw_redirectCtx != 0;
+    g_Settings.refreshInterval            = raw_refresh;
+    g_Settings.language                  = raw_language;
+    g_Settings.enableHotkey              = raw_enableHotkey != 0;
+    g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
+    g_Settings.win11NetworkIconWidth      = (raw_win11IconWidth > 0) ? raw_win11IconWidth : 40;
+    g_Settings.enableCustomTrayIcon       = Wh_GetIntSetting(L"enableCustomTrayIcon") != 0;
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
         g_Settings.refreshInterval = 1000;
     }
 }
-
 // -------------------------------------------------------
 // Structures
 // -------------------------------------------------------
@@ -445,6 +451,8 @@ typedef enum {
     STR_TIMEOUT_ERROR,
     STR_CONNECTION_TIMEOUT_MSG,
     STR_PWD_EMPTY,
+    STR_TRAY_TROUBLESHOOT,
+    STR_TRAY_NETWORK_SETTINGS,
     STR_COUNT
 } LocaleStringId;
 
@@ -498,6 +506,8 @@ static const LocalePack g_Locales[] = {
         L"Connection timed out",
         L"The connection attempt timed out. The network may be out of range.",
         L"Please enter a network security key.",
+        L"Troubleshoot problems",
+        L"Open Network and Sharing Center",
     }},
     { 0x0410, {
         L"Attualmente connesso a:",
@@ -543,6 +553,8 @@ static const LocalePack g_Locales[] = {
         L"Timeout durante la connessione",
         L"Il tentativo di connessione \u00E8 scaduto. La rete potrebbe essere fuori portata.",
         L"Inserire una chiave di sicurezza di rete.",
+        L"Risoluzione dei problemi",
+        L"Apri Centro connessioni di rete e condivisione",
     }}
 };
 
@@ -583,7 +595,12 @@ static const WCHAR* SignalQualityToString(ULONG quality) {
 // -------------------------------------------------------
 // Prototypes
 // -------------------------------------------------------
+LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+static HWND CreateHiddenWindow(void);
+static void CreateCustomTrayIcon(void);
+static HICON GetCurrentNetworkTrayIcon(void);
 static bool IsExplorerProcess();
+static void UpdateCustomTrayIcon(void);
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 void RefreshWifiData(HANDLE hClient);
 void UpdateLayoutGeometry(int scrollbarOffset = 0);
@@ -607,6 +624,7 @@ static BOOL AskForPasswordAndConnect(int index);
 void RecalcDpiMetrics(UINT dpi);
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
 void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOOL autoConnect, WCHAR* outXml, size_t outSize);
+static void RemoveCustomTrayIcon(void);
 // Oscura l'SSID nei log per privacy, mantenendo i primi 3 caratteri
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     if (!ssid || ssid[0] == L'\0') {
@@ -2000,13 +2018,14 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
         case WM_TIMER:
-        if (wParam == 1000) {
-            if (g_Ctx.hWlanClient) {
-                RefreshWifiData(g_Ctx.hWlanClient);
-                ClampScrollPos();
-                UpdateLayoutGeometry();
-                InvalidateRect(hwnd, NULL, FALSE);
-}   
+    if (wParam == 1000) {
+        if (g_Ctx.hWlanClient) {
+            RefreshWifiData(g_Ctx.hWlanClient);
+            ClampScrollPos();
+            UpdateLayoutGeometry();
+            UpdateCustomTrayIcon();
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
         } else if (wParam == 1002) {
             CheckConnectionTimeouts();
             UpdateLayoutGeometry();
@@ -2015,21 +2034,24 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     case WM_SHOW_FLYOUT:
-        ShowWindow(hwnd, SW_SHOW);
-        SetForegroundWindow(hwnd);
-        if (g_Ctx.hWlanClient) {
-            RefreshWifiData(g_Ctx.hWlanClient);
-            UpdateLayoutGeometry();
-            InvalidateRect(hwnd, NULL, TRUE);
-        }
-        break;
+    ShowWindow(hwnd, SW_SHOW);
+    SetForegroundWindow(hwnd);
+    if (g_Ctx.hWlanClient) {
+        RefreshWifiData(g_Ctx.hWlanClient);
+        UpdateLayoutGeometry();
+        UpdateCustomTrayIcon();
+        InvalidateRect(hwnd, NULL, TRUE);
+    }
+    break;
     case WM_REFRESH_DATA: {
-        if (g_Ctx.hWlanClient) {
-            RefreshWifiData(g_Ctx.hWlanClient);
-            ClampScrollPos();
-            UpdateLayoutGeometry();
-            InvalidateRect(hwnd, NULL, TRUE);
-}
+    if (g_Ctx.hWlanClient) {
+        RefreshWifiData(g_Ctx.hWlanClient);
+        ClampScrollPos();
+        UpdateLayoutGeometry();
+        UpdateCustomTrayIcon();
+        InvalidateRect(hwnd, NULL, TRUE);
+    }
+
         break;
     }
         case WM_ASYNC_CONNECT_COMPLETE: {
@@ -2061,6 +2083,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         
         RefreshWifiData(g_Ctx.hWlanClient);
         UpdateLayoutGeometry();
+        UpdateCustomTrayIcon();  // riflette lo stato connesso/errore appena risolto
         InvalidateRect(hwnd, NULL, TRUE);
         break;
     }
@@ -2857,10 +2880,132 @@ void RemoveTrayInterception() {
         g_NetworkButtonIdOverflow = -1;
     }
 }
+static HICON GetCurrentNetworkTrayIcon() {
+    // Se c'è una rete connessa, usa l'icona con le barre di segnale
+    if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
+        ULONG quality = g_NetworkList[0].signalQuality;
+        int idx = 0;
+        if      (quality > 80) idx = 5;
+        else if (quality > 60) idx = 4;
+        else if (quality > 40) idx = 3;
+        else if (quality > 20) idx = 2;
+        else if (quality > 0)  idx = 1;
+        
+        if (g_hIconSignalBars[idx]) {
+            return CopyIcon(g_hIconSignalBars[idx]);
+        }
+    }
+    
+    // Fallback: icona "non connesso" (barre vuote) o mappa di rete
+    if (g_hIconSignalBars[0]) {
+        return CopyIcon(g_hIconSignalBars[0]);
+    }
+    
+    return NULL;
+}
+
+static void CreateCustomTrayIcon() {
+    if (!g_Settings.enableCustomTrayIcon) return;
+    if (!g_hHiddenWnd || !IsWindow(g_hHiddenWnd)) return;
+    
+    // Rimuovi icona precedente se esiste (NIM_DELETE è idempotente)
+    if (g_nid.hWnd) {
+        Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        ZeroMemory(&g_nid, sizeof(g_nid));
+    }
+    if (g_hCustomTrayIcon) {
+        DestroyIcon(g_hCustomTrayIcon);
+        g_hCustomTrayIcon = NULL;
+    }
+    
+    g_hCustomTrayIcon = GetCurrentNetworkTrayIcon();
+    if (!g_hCustomTrayIcon) return;
+
+    ZeroMemory(&g_nid, sizeof(g_nid));
+    g_nid.cbSize = sizeof(NOTIFYICONDATAW);
+    g_nid.hWnd = g_hHiddenWnd;
+    g_nid.uID = CUSTOM_TRAY_ICON_ID;
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+    g_nid.uCallbackMessage = WM_TRAY_ICON_NOTIFY;
+    g_nid.hIcon = g_hCustomTrayIcon;
+    
+    if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
+    WCHAR ssidBuf[33];
+    GetDisplaySSID(0, ssidBuf, 33);
+    StringCchPrintfW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"%s - %s", ssidBuf, LOC(STR_INTERNET_ACCESS));
+} else {
+    wcscpy_s(g_nid.szTip, LOC(STR_WIFI_HEADER));
+}
+    
+    Shell_NotifyIconW(NIM_ADD, &g_nid);
+    Wh_Log(L"Custom tray icon created/updated");
+}
+
+static void RemoveCustomTrayIcon() {
+    // NIM_DELETE funziona anche se la finestra non esiste più:
+    // Shell_NotifyIconW cerca l'icona per hWnd+uID e la rimuove
+    // dal tray di sistema, indipendentemente dallo stato della finestra.
+    NOTIFYICONDATAW nidDel = {0};
+    nidDel.cbSize = sizeof(NOTIFYICONDATAW);
+    nidDel.hWnd = g_hHiddenWnd;  // può essere NULL o invalido, va bene lo stesso
+    nidDel.uID = CUSTOM_TRAY_ICON_ID;
+    Shell_NotifyIconW(NIM_DELETE, &nidDel);
+    
+    ZeroMemory(&g_nid, sizeof(g_nid));
+    if (g_hCustomTrayIcon) {
+        DestroyIcon(g_hCustomTrayIcon);
+        g_hCustomTrayIcon = NULL;
+    }
+    Wh_Log(L"Custom tray icon removed");
+}
+
+
+static void UpdateCustomTrayIcon() {
+    if (!g_Settings.enableCustomTrayIcon) return;
+    if (!g_nid.hWnd) return;
+    
+    // Distruggi la vecchia icona
+    if (g_hCustomTrayIcon) {
+        DestroyIcon(g_hCustomTrayIcon);
+        g_hCustomTrayIcon = NULL;
+    }
+    
+    // Carica la nuova icona
+    g_hCustomTrayIcon = GetCurrentNetworkTrayIcon();
+    if (!g_hCustomTrayIcon) return;
+    
+    // Aggiorna tooltip
+    if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
+        WCHAR ssidBuf[33];
+        GetDisplaySSID(0, ssidBuf, 33);
+        StringCchPrintfW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"%s - %s", ssidBuf, LOC(STR_INTERNET_ACCESS));
+    } else {
+        wcscpy_s(g_nid.szTip, L"Network Connections");
+    }
+    
+    g_nid.hIcon = g_hCustomTrayIcon;
+    g_nid.uFlags = NIF_ICON | NIF_TIP;
+    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
+}
 // -------------------------------------------------------
 // Toggle flyout
 // -------------------------------------------------------
 void ToggleFlyoutWindow() {
+    // Il flyout deve sempre vivere sul thread di HotkeyThreadProc: è il solo
+    // loop di messaggi sotto il nostro controllo, capace di ricevere
+    // WM_TOGGLE_FLYOUT_REQUEST marshallato da altri thread (es. il click
+    // sull'icona di sistema, gestito sul thread della taskbar di Explorer).
+    // Se il chiamante non è quel thread, si marshalla sempre la richiesta là
+    // invece di creare/manipolare la finestra qui: operare cross-thread su
+    // ShowWindow/SetForegroundWindow/MoveWindow è la causa del primo paint
+    // vuoto e del flyout non draggabile/responsivo.
+    DWORD dwCurrentThreadId = GetCurrentThreadId();
+    BOOL flyoutAlreadyExists = (g_hWndFlyout && IsWindow(g_hWndFlyout));
+    DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
+    if (dwTargetOwnerThreadId != 0 && dwTargetOwnerThreadId != dwCurrentThreadId) {
+        PostThreadMessageW(dwTargetOwnerThreadId, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
+        return;
+    }
     EnterCriticalSection(&g_Ctx.csLock);
     if (!g_Ctx.isUninitializing) {
         if (!g_hWndFlyout || !IsWindow(g_hWndFlyout)) {
@@ -2885,6 +3030,9 @@ void ToggleFlyoutWindow() {
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
                 0, 0, rcClient.right-rcClient.left, rcClient.bottom-rcClient.top,
                 NULL, NULL, hInst, NULL);
+            if (g_hWndFlyout) {
+                g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
+            }
         }
         if (IsWindowVisible(g_hWndFlyout)) {
             ClearKeyboardFocus();
@@ -3049,6 +3197,23 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
+    // g_hHiddenWnd va creata qui (non in Wh_ModInit): questo thread ha un
+    // message loop attivo per tutta la durata del mod, quindi i messaggi
+    // della finestra (WM_TRAY_ICON_NOTIFY: click, menu contestuale) vengono
+    // effettivamente pompati. Creata altrove (es. nel thread di Wh_ModInit,
+    // che ritorna subito senza mai chiamare GetMessage), la finestra
+    // resterebbe orfana: l'icona apparirebbe comunque (Shell_NotifyIconW
+    // funziona indipendentemente dal pump), ma niente click/menu/aggiornamenti
+    // visibili in risposta a quei messaggi.
+    if (g_Settings.enableCustomTrayIcon) {
+        g_hHiddenWnd = CreateHiddenWindow();
+        if (g_hHiddenWnd) {
+            CreateCustomTrayIcon();
+        } else {
+            Wh_Log(L"HotkeyThreadProc: CreateHiddenWindow failed, custom tray icon disabled");
+        }
+    }
+
     BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL);
     UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
     UINT_PTR overflowPollTimer = SetTimer(NULL, OVERFLOW_POLL_TIMER_ID, OVERFLOW_POLL_INTERVAL_MS, NULL);
@@ -3066,6 +3231,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
         }
         if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing)
             ToggleFlyoutWindow();
+        if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
+            ToggleFlyoutWindow();
         if (msg.message == WM_HOTKEY_SETTINGS_CHANGED)
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
@@ -3078,6 +3245,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
+            CreateCustomTrayIcon();
         }
         TranslateMessage(&msg); DispatchMessageW(&msg);
     }
@@ -3086,12 +3254,15 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UnregisterHotKey(NULL, HOTKEY_ID);
     return 0;
 }
-// -------------------------------------------------------
-// Cleanup
-// -------------------------------------------------------
 void SafeCleanup() {
     if (InterlockedExchange(&g_Ctx.isUninitializing,1L)) return;
     RemoveTrayInterception();
+    RemoveCustomTrayIcon();
+    if (g_hCustomTrayIcon) { DestroyIcon(g_hCustomTrayIcon); g_hCustomTrayIcon = NULL; }
+    if (g_hHiddenWnd && IsWindow(g_hHiddenWnd)) {
+        SendMessageW(g_hHiddenWnd, WM_CLOSE, 0, 0);
+        g_hHiddenWnd = NULL;
+    }
     if (g_Ctx.dwHotkeyThreadId) PostThreadMessageW(g_Ctx.dwHotkeyThreadId,WM_QUIT,0,0);
     if (g_Ctx.hHotkeyThread) {
         WaitForSingleObject(g_Ctx.hHotkeyThread,3000);
@@ -3112,14 +3283,73 @@ void SafeCleanup() {
     FreeSystemIcons();
     FreeGlobalFonts();
     g_hWndFlyout=g_hWndButtonConnect=g_hWndCheckboxConnect=NULL;
+    g_dwFlyoutOwnerThreadId = 0;
     g_Initialized=FALSE;
 }
+LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_TRAY_ICON_NOTIFY:
+            if (g_Ctx.isUninitializing) break;
+            if (LOWORD(lp) == WM_LBUTTONUP) {
+                Wh_Log(L"Opening flyout from custom tray icon");
+                ToggleFlyoutWindow();
+            } else if (LOWORD(lp) == WM_RBUTTONUP) {
+                HMENU hMenu = CreatePopupMenu();
+                AppendMenuW(hMenu, MF_STRING, IDM_TRAY_TROUBLESHOOT, LOC(STR_TRAY_TROUBLESHOOT));
+                AppendMenuW(hMenu, MF_STRING, IDM_TRAY_NETWORK_SETTINGS, LOC(STR_TRAY_NETWORK_SETTINGS));
 
+                POINT pt;
+                GetCursorPos(&pt);
+                SetForegroundWindow(hwnd);
+
+                int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD,
+                                         pt.x, pt.y, 0, hwnd, NULL);
+                if (cmd == IDM_TRAY_TROUBLESHOOT) {
+                    ShellExecuteW(NULL, L"open", L"msdt.exe",
+                                  L"-id NetworkDiagnosticsWeb", NULL, SW_SHOWNORMAL);
+                } else if (cmd == IDM_TRAY_NETWORK_SETTINGS) {
+                    ShellExecuteW(NULL, L"open", L"control.exe",
+                                  L"/name Microsoft.NetworkAndSharingCenter", NULL, SW_SHOWNORMAL);
+                }
+                DestroyMenu(hMenu);
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            break;
+        case WM_DESTROY:
+            RemoveCustomTrayIcon();
+            break;
+        default:
+            return DefWindowProcW(hwnd, msg, wp, lp);
+    }
+    return 0;
+}
+static HWND CreateHiddenWindow() {
+    WNDCLASSW wc = {0};
+    wc.lpfnWndProc = HiddenWndProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"Win7NetFlyoutHidden";
+    
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return NULL;
+    }
+    
+    // Invece di HWND_MESSAGE, crea una finestra invisibile ma reale
+    return CreateWindowExW(
+        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+        wc.lpszClassName,
+        L"",
+        WS_POPUP,  // Finestra popup invisibile
+        0, 0, 1, 1,  // Dimensioni minime
+        NULL, NULL, GetModuleHandle(NULL), NULL
+    );
+}
 // -------------------------------------------------------
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.0.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.1.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
@@ -3142,18 +3372,21 @@ BOOL Wh_ModInit() {
     }
     
     DetermineLocale();
-
+    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    LoadSystemIcons();
+    
+    // g_hHiddenWnd viene creata in HotkeyThreadProc (ha un message loop attivo)
     
     if (!IsExplorerProcess()) {
-        InstallTrayInterceptionInternal();
+        // Windhawk inietta anche in processi non-explorer: non serve subclassing qui
         g_Initialized = TRUE;
         return TRUE;
     }
     
     InitGlobalFonts();
-    LoadSystemIcons();
     InitRefreshButtonRect();
     RecalcArrowRect();
+    
     if (g_Settings.redirectNetworkContextMenu) {
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -3164,7 +3397,7 @@ BOOL Wh_ModInit() {
         }
     }
     
-    InstallTrayInterceptionInternal(); // tentativo immediato; se fallisce ci pensa il retry nel thread hotkey
+    InstallTrayInterceptionInternal();
 
     g_Ctx.hHotkeyThread = CreateThread(NULL,0,HotkeyThreadProc,&g_Ctx,0,&g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
@@ -3188,9 +3421,11 @@ BOOL Wh_ModInit() {
     g_Initialized=TRUE;
     return TRUE;
 }
+
 void Wh_ModSettingsChanged() {
-    s_settingsSavedOnce = true;
+    // s_settingsSavedOnce = true;
     BOOL oldRoundedCorners = g_Settings.useRoundedCorners;
+    BOOL oldCustomTrayIcon = g_Settings.enableCustomTrayIcon;
     LoadSettings();
     DetermineLocale();
     
@@ -3199,6 +3434,15 @@ void Wh_ModSettingsChanged() {
             BOOL wasVisible = IsWindowVisible(g_hWndFlyout);
             SendMessageW(g_hWndFlyout, WM_SAFE_CLOSE, 0, 0);
             if (wasVisible) ToggleFlyoutWindow();
+        }
+    }
+    
+    // Ricrea l'icona tray se l'impostazione è cambiata
+    if (oldCustomTrayIcon != g_Settings.enableCustomTrayIcon) {
+        if (g_Settings.enableCustomTrayIcon) {
+            CreateCustomTrayIcon();
+        } else {
+            RemoveCustomTrayIcon();
         }
     }
     
