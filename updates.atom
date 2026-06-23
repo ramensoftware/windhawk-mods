@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-23T17:07:06.000Z</updated>
+    <updated>2026-06-23T19:40:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#78dcd1fcb93e34b86e3d571072734618cf09c93c</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-06-23T19:40:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed label handling with "Show labels, combine taskbar buttons" mode and zero taskbar item width (Windows adaptive width).</li>
+<li>Fixed compatibility with recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Keys Notifier 1.0.0]]></title>
         <id>https://windhawk.net/mods/lock-keys-notifier#0d25f36c6bece76b384de92bf08e6c7bc2e10061</id>
@@ -470,19 +484,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>Math Shamenson</name>
             <uri>https://github.com/insane66613</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Properties Icon 1.0.3]]></title>
-        <id>https://windhawk.net/mods/no-properties-icon#2dab67866f3b95a3d75a3b4326e82853e75ef515</id>
-        <link href="https://windhawk.net/mods/no-properties-icon"/>
-        <updated>2026-06-17T16:42:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix property sheet window showing on the taskbar when focusing on child windows</li>
-</ul>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>

@@ -11030,7 +11030,7 @@
           439
         ],
         "ratingUsers": 496,
-        "updated": 1752342739000,
+        "updated": 1782243657000,
         "users": 32468
       },
       "featured": true,
@@ -11039,7 +11039,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
         "description": "Customize text labels and combining for running programs on the taskbar (Windows 11 only)",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -11048,7 +11048,7 @@
         ],
         "name": "Taskbar Labels for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.4.2"
+        "version": "1.4.3"
       }
     },
     "taskbar-language-indicator-layout-control": {
