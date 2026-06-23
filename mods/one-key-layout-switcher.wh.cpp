@@ -21,7 +21,7 @@ and make sure that `dwm.exe` is in the list.
 
 // ==WindhawkModSettings==
 /*
-- switchMethod: ctrlshift
+- switchMethod: altshift
   $name: Switch method
   $description: Choose which key combination to send for layout switching
   $options:
