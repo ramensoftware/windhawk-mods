@@ -25,8 +25,8 @@ and make sure that `dwm.exe` is in the list.
   $name: Switch method
   $description: Choose which key combination to send for layout switching
   $options:
-  - ctrlshift: Ctrl+Shift
   - altshift: Alt+Shift
+  - ctrlshift: Ctrl+Shift
   - both: Both Ctrl+Shift and Alt+Shift
 - enableLeftWin: false
   $name: Enable Left Win key
