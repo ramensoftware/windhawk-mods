@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.3.0
+// @version        2.4.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -1009,12 +1009,7 @@ void RefreshWifiData(HANDLE hClient) {
                 tempList[tempCount].hasBssid = FALSE;
                 ZeroMemory(tempList[tempCount].bssid, sizeof(tempList[tempCount].bssid));
 
-                // Risolvi il BSSID del miglior AP per questa entry, in modo da
-                // poter targettare la connessione al BSS giusto in AskForPasswordAndConnect
-                // quando ce ne sono più con lo stesso SSID. Senza questo, WlanConnect
-                // lasciava al sistema la scelta del BSS, che poteva non coincidere
-                // con quello selezionato dall'utente nella lista (segnale migliore
-                // istantaneo vs. quello mostrato all'ultimo refresh).
+
                 {
                     PWLAN_BSS_LIST pBssDetailList = NULL;
                     if (WlanGetNetworkBssList(hClient, &IfInfo.InterfaceGuid,
@@ -1097,19 +1092,26 @@ WlanFreeMemory(pIfList);
         BOOL hadPending = (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount);
         if (hadPending) {
             StringCchCopyW(pendingSsid, ARRAYSIZE(pendingSsid), g_NetworkList[g_PendingConnectIndex].ssid);
+            Wh_Log(L"RefreshWifiData: preserving pending state - SSID='%s', index=%d, hasProfile=%d, connState=%d", 
+                   pendingSsid, g_PendingConnectIndex, 
+                   g_NetworkList[g_PendingConnectIndex].hasProfile,
+                   g_NetworkList[g_PendingConnectIndex].connState);
         }
 
         // Keep existing connection states for networks being connected/disconnected
         for (int t = 0; t < tempCount; t++) {
             for (int e = 0; e < g_NetworkCount; e++) {
                 if (wcscmp(tempList[t].ssid, g_NetworkList[e].ssid) == 0) {
+                    // Preserva lo stato di connessione per le operazioni in corso
                     if (g_NetworkList[e].connState == CONN_STATE_CONNECTING ||
                         g_NetworkList[e].connState == CONN_STATE_DISCONNECTING ||
                         g_NetworkList[e].connState == CONN_STATE_ERROR) {
                         tempList[t].connState = g_NetworkList[e].connState;
                         tempList[t].operationStartTime = g_NetworkList[e].operationStartTime;
                     }
-                    if (g_NetworkList[e].hasProfile && tempList[t].hasProfile) {
+                    // IMPORTANTE: preserva hasProfile dalla lista esistente
+                    // Se la rete aveva un profilo, mantienilo anche dopo il refresh
+                    if (g_NetworkList[e].hasProfile) {
                         tempList[t].hasProfile = TRUE;
                     }
                     break;
@@ -1124,10 +1126,19 @@ WlanFreeMemory(pIfList);
             for (int n = 0; n < g_NetworkCount; n++) {
                 if (wcscmp(g_NetworkList[n].ssid, pendingSsid) == 0) { newIndex = n; break; }
             }
-            g_PendingConnectIndex = newIndex;
+            if (newIndex >= 0) {
+                g_PendingConnectIndex = newIndex;
+                Wh_Log(L"RefreshWifiData: updated g_PendingConnectIndex from %d to %d", 
+                       (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) ? g_PendingConnectIndex : -1, 
+                       newIndex);
+            } else {
+                Wh_Log(L"RefreshWifiData: pending SSID '%s' no longer in list, clearing g_PendingConnectIndex", pendingSsid);
+                g_PendingConnectIndex = -1;
+            }
         }
    } else if (tempCount == 0) {
     if (now - lastValidRefresh > 30000) {
+        Wh_Log(L"RefreshWifiData: no networks for 30s, clearing all state");
         ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
         g_NetworkCount = 0;
         g_PendingConnectIndex = -1;
@@ -1142,10 +1153,11 @@ if (tempCount > 0) {
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
     }
 
-    Wh_Log(L"Refresh complete: %d network(s) found, connected: %s",
+    Wh_Log(L"Refresh complete: %d network(s) found, connected: %s, g_PendingConnectIndex=%d",
            g_NetworkCount,
            (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
-               ? L"yes" : L"no");
+               ? L"yes" : L"no",
+           g_PendingConnectIndex);
 }
 // -------------------------------------------------------
 // Password dialog
@@ -1171,32 +1183,68 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         data = (PasswordDlgData*)cs->lpCreateParams;
         if (!data) return -1;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)data);
-        HFONT hFontDlg = CreateFontW(-12,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH|FF_DONTCARE,L"Segoe UI");
         
-        CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
-            WS_CHILD|WS_VISIBLE, 15,15,380,20, hwnd,(HMENU)200,cs->hInstance,NULL);
-CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
-    WS_CHILD|WS_VISIBLE, 15,53,125,18, hwnd,NULL,cs->hInstance,NULL);        
-    HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
-    WS_CHILD|WS_VISIBLE|ES_PASSWORD|ES_AUTOHSCROLL,
-    145,50,245,22, hwnd,(HMENU)101,cs->hInstance,NULL);
-        SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
-        SetFocus(hEdit);
+        // --- INIZIO CODICE IMPOSTAZIONE ICONA ---
+        // Carichiamo van.dll (contiene l'icona specifica della finestra di connessione)
+        HMODULE hVanDll = LoadLibraryW(L"van.dll");
+        if (hVanDll) {
+            // ID 100 è l'icona del prompt di connessione in van.dll
+            HICON hIconSmall = (HICON)LoadImageW(hVanDll, MAKEINTRESOURCEW(100), IMAGE_ICON, 
+                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
+            HICON hIconBig = (HICON)LoadImageW(hVanDll, MAKEINTRESOURCEW(100), IMAGE_ICON, 
+                GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
+
+            if (hIconSmall) {
+                SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+            }
+            if (hIconBig) {
+                SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+            }
+            
+            // Nota: Non facciamo FreeLibrary(hVanDll) subito se le icone dipendono dalla DLL istanziata, 
+            // ma con LR_SHARED o lasciandola in cache va bene. Per sicurezza nei mod Windhawk la si può lasciare caricata.
+        }
+        // --- FINE CODICE IMPOSTAZIONE ICONA ---
+
+        HDC hdc = GetDC(hwnd);
+        int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+        ReleaseDC(hwnd, hdc);
+        HFONT hFontDlg = CreateFontW(ptPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        SendMessageW(hwnd, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+
+        HWND hInstr = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
+            WS_CHILD|WS_VISIBLE, 15, 15, 380, 20, hwnd, (HMENU)200, cs->hInstance, NULL);
+        SendMessageW(hInstr, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        
+        HWND hLabel = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
+            WS_CHILD|WS_VISIBLE, 15, 53, 125, 18, hwnd, NULL, cs->hInstance, NULL);
+        SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        
+        // RIMUOVI ES_PASSWORD dalla creazione dell'edit
+HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
+    WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,  // ← tolto ES_PASSWORD
+    145, 50, 245, 22, hwnd, (HMENU)101, cs->hInstance, NULL);
+SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+// Imposta il cerchio nero come carattere di password (come Windows 7)
+SendMessageW(hEdit, EM_SETPASSWORDCHAR, 0x25CF, 0);  // ● = U+25CF
+SetFocus(hEdit);
         
         HWND hCheck = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_HIDE_CHARS),
-            WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 135,80,200,18, hwnd,(HMENU)102,cs->hInstance,NULL);
+        WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 135, 80, 200, 18, hwnd, (HMENU)102, cs->hInstance, NULL);
         SendMessageW(hCheck, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        SendMessageW(hCheck, BM_SETCHECK, BST_CHECKED, 0);
         
         RECT rcClient; GetClientRect(hwnd, &rcClient);
-        int btnW=85, btnH=24, btnY=rcClient.bottom-35;
+        int btnW = 85, btnH = 24, btnY = rcClient.bottom - 35;
         HWND hBtnOk = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_OK),
             WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,
-            rcClient.right-btnW-15, btnY, btnW,btnH, hwnd,(HMENU)IDOK,cs->hInstance,NULL);
+            rcClient.right - btnW - 15, btnY, btnW, btnH, hwnd, (HMENU)IDOK, cs->hInstance, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         HWND hBtnCancel = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_CANCEL),
-            WS_CHILD|WS_VISIBLE, rcClient.right-(btnW*2)-25, btnY, btnW,btnH,
-            hwnd,(HMENU)IDCANCEL,cs->hInstance,NULL);
+            WS_CHILD|WS_VISIBLE, rcClient.right - (btnW * 2) - 25, btnY, btnW, btnH,
+            hwnd, (HMENU)IDCANCEL, cs->hInstance, NULL);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         break;
     }
@@ -1234,13 +1282,13 @@ CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
     }
     
     case WM_COMMAND: {
-        if (LOWORD(wParam) == 102) {
-            HWND hEdit = GetDlgItem(hwnd, 101);
-            BOOL checked = SendMessageW((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-            SendMessageW(hEdit, EM_SETPASSWORDCHAR, checked ? 0 : L'*', 0);
-            InvalidateRect(hEdit, NULL, TRUE);
-            return 0;
-        }
+    if (LOWORD(wParam) == 102) {
+        HWND hEdit = GetDlgItem(hwnd, 101);
+        BOOL checked = SendMessageW((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        SendMessageW(hEdit, EM_SETPASSWORDCHAR, checked ? 0x25CF : 0, 0);
+        InvalidateRect(hEdit, NULL, TRUE);
+        return 0;
+    }
         if (LOWORD(wParam) == IDOK) {
             if (data) { 
                 GetDlgItemTextW(hwnd, 101, data->passwordBuffer, data->bufferSize); 
@@ -1482,7 +1530,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     free(ctx);
     return 0;
 }
-
 static BOOL AskForPasswordAndConnect(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
@@ -1507,52 +1554,15 @@ static BOOL AskForPasswordAndConnect(int index) {
     ctx->authAlgorithm = item->authAlgorithm;
     ctx->cipherAlgorithm = item->cipherAlgorithm;
     StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item->ssid);
-    // Porta con sé il BSSID specifico risolto in RefreshWifiData, per evitare
-    // che WlanConnect scelga un BSS diverso quando esistono più AP con lo
-    // stesso SSID (vedi displaySuffix / "Redmi", "Redmi 2"...).
     ctx->hasBssid = item->hasBssid;
     if (item->hasBssid) {
         CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
     }
 
+    // La password serve SOLO se la rete è protetta e non ha un profilo salvato
     BOOL needsPassword = (item->isSecured && !item->hasProfile);
-if (item->isSecured && item->hasProfile && item->connState != CONN_STATE_CONNECTED) {
-    // Tenta connessione con profilo esistente
-    WLAN_CONNECTION_PARAMETERS params;
-    ZeroMemory(&params, sizeof(params));
-    params.wlanConnectionMode = wlan_connection_mode_profile;
-    params.strProfile = item->ssid;
-    params.dot11BssType = item->dot11BssType;
-    params.dwFlags = 0;
-    
-    if (item->hasBssid) {
-        DOT11_BSSID_LIST bssidList;
-        ZeroMemory(&bssidList, sizeof(bssidList));
-        bssidList.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
-        bssidList.Header.Revision = DOT11_BSSID_LIST_REVISION_1;
-        bssidList.Header.Size = sizeof(bssidList);
-        bssidList.uNumOfEntries = 1;
-        bssidList.uTotalNumOfEntries = 1;
-        CopyMemory(bssidList.BSSIDs[0], item->bssid, sizeof(DOT11_MAC_ADDRESS));
-        params.pDesiredBssidList = &bssidList;
-    }
-    
-    DWORD quickResult = WlanConnect(g_Ctx.hWlanClient, &item->interfaceGuid, &params, NULL);
-    if (quickResult == ERROR_SUCCESS) {
-        // Connessione riuscita col profilo esistente, non serve password
-        item->connState = CONN_STATE_CONNECTING;
-        item->operationStartTime = GetTickCount();
-        g_PendingConnectIndex = index;
-        UpdateLayoutGeometry();
-        if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
-        return TRUE;
-    }
-    // Profilo non valido per questa rete, forza richiesta password
-    item->hasProfile = FALSE;
-    needsPassword = TRUE;
-}
 
-if (needsPassword) {
+    if (needsPassword) {
         WCHAR password[65] = {0};
         
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
@@ -1584,6 +1594,9 @@ if (needsPassword) {
     item->connState = CONN_STATE_CONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
+    
+    Wh_Log(L"AskForPasswordAndConnect: set g_PendingConnectIndex=%d, SSID=%s, hasProfile=%d", 
+           index, item->ssid, item->hasProfile);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -1619,9 +1632,21 @@ void ConnectToNetwork(int index) {
         LogSsidSafe(L"Already connecting to, ignoring", item->ssid);
         return;
     }
-    if (item->connState == CONN_STATE_ERROR) {
-        item->connState = CONN_STATE_IDLE;
+    
+    // ❌ RIMOSSO IL RESET PREMATURE:
+    // if (item->connState == CONN_STATE_ERROR) {
+    //     item->connState = CONN_STATE_IDLE;
+    // }
+    
+    // Resetta tutte le altre reti in stato "Connecting..." o "Error" prima di connettere
+    for (int i = 0; i < g_NetworkCount; i++) {
+        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+            g_NetworkList[i].connState = CONN_STATE_IDLE;
+            g_NetworkList[i].operationStartTime = 0;
+        }
     }
+    
     AskForPasswordAndConnect(index);
 }
 
@@ -1630,6 +1655,15 @@ void DisconnectFromNetwork(int index) {
     
     WifiNetworkItem* item = &g_NetworkList[index];
     if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
+    
+    // Resetta tutte le altre reti in stato "Connecting..." o "Error" prima di disconnettere
+    for (int i = 0; i < g_NetworkCount; i++) {
+        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+            g_NetworkList[i].connState = CONN_STATE_IDLE;
+            g_NetworkList[i].operationStartTime = 0;
+        }
+    }
     
     item->connState = CONN_STATE_DISCONNECTING;
     item->operationStartTime = GetTickCount();
@@ -1680,6 +1714,22 @@ void CheckConnectionTimeouts() {
         return;
     }
     
+    // Se è in stato di errore, resetta senza mostrare messaggio
+    if (item->connState == CONN_STATE_ERROR) {
+        LogSsidSafe(L"Timeout check: connection already errored, clearing pending", item->ssid);
+        item->operationStartTime = 0;
+        g_PendingConnectIndex = -1;
+        if (g_TimeoutTimer && g_hWndFlyout) {
+            KillTimer(g_hWndFlyout, g_TimeoutTimer);
+            g_TimeoutTimer = 0;
+        }
+        if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+            InvalidateRect(g_hWndFlyout, NULL, TRUE);
+            UpdateLayoutGeometry();
+        }
+        return;
+    }
+    
     DWORD now = GetTickCount();
     if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
         LogSsidSafe(L"Timeout for", item->ssid);
@@ -1719,55 +1769,138 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
             
         case wlan_notification_acm_connection_complete: {
-            PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
-                (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-            Wh_Log(L"WLAN: Connection Complete, Reason: %lu, Profile: %s",
-                   connData->wlanReasonCode, connData->strProfileName);
+    PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
+        (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+    
+    Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
+           connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
+    Wh_Log(L"  g_PendingConnectIndex = %d", g_PendingConnectIndex);
+    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+        Wh_Log(L"  Pending SSID = %s, hasProfile = %d", 
+               g_NetworkList[g_PendingConnectIndex].ssid,
+               g_NetworkList[g_PendingConnectIndex].hasProfile);
+    }
 
-            if (connData->wlanReasonCode == ERROR_SUCCESS) {
-                BOOL matchesPending =
-                    (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) &&
-                    IsEqualGUID(data->InterfaceGuid, g_NetworkList[g_PendingConnectIndex].interfaceGuid) &&
-                    (wcscmp(g_NetworkList[g_PendingConnectIndex].ssid, connData->strProfileName) == 0);
+    if (connData->wlanReasonCode == ERROR_SUCCESS) {
+        BOOL matchesPending =
+            (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) &&
+            IsEqualGUID(data->InterfaceGuid, g_NetworkList[g_PendingConnectIndex].interfaceGuid) &&
+            (wcscmp(g_NetworkList[g_PendingConnectIndex].ssid, connData->strProfileName) == 0);
 
-                if (matchesPending) {
-                    Wh_Log(L"WLAN: Connection SUCCESS for pending index %d", g_PendingConnectIndex);
-                    g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
-                    g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-                    g_PendingConnectIndex = -1;
-
-                    if (g_TimeoutTimer && hFlyout) {
-                        PostMessageW(hFlyout, WM_TIMER, 1002, 0);
+        if (matchesPending) {
+            Wh_Log(L"WLAN: Connection SUCCESS for pending index %d", g_PendingConnectIndex);
+            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
+            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+            g_PendingConnectIndex = -1;
+            if (g_TimeoutTimer && hFlyout) {
+                PostMessageW(hFlyout, WM_TIMER, 1002, 0);
+            }
+        } else {
+            Wh_Log(L"WLAN: Connection complete for unrelated profile/interface (pending=%d, matches=%d)", 
+                   g_PendingConnectIndex, matchesPending);
+        }
+    } else {
+        // FALLIMENTO
+        Wh_Log(L"WLAN: Connection FAILED with reason 0x%08X", connData->wlanReasonCode);
+        
+        static const DWORD authFailureCodes[] = {
+            0x00038001,  // INVALID_PROFILE
+            0x00038002,  // INVALID_PROFILE_SCHEMA  
+            0x00028001,  // AUTH_FAILURE
+            0x00028002,  // ASSOC_FAILURE
+            0x00030001,  // KEY_MISMATCH
+        };
+        
+        BOOL isAuthFailure = FALSE;
+        for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
+            if (connData->wlanReasonCode == authFailureCodes[i]) {
+                isAuthFailure = TRUE;
+                break;
+            }
+        }
+        
+        Wh_Log(L"  isAuthFailure = %d", isAuthFailure);
+        
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+            WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
+            
+            // Verifica che la notifica corrisponda alla rete in attesa
+            BOOL matchesPending = 
+                IsEqualGUID(data->InterfaceGuid, item->interfaceGuid) &&
+                (wcscmp(item->ssid, connData->strProfileName) == 0);
+            
+            Wh_Log(L"  matchesPending = %d", matchesPending);
+            
+            if (matchesPending) {
+                if (isAuthFailure) {
+                    Wh_Log(L"WLAN: Auth failure for '%s' — resetting hasProfile", item->ssid);
+                    item->hasProfile = FALSE;
+                    item->connState = CONN_STATE_ERROR;
+                    item->operationStartTime = 0;
+                    
+                    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+                        MessageBoxW(g_hWndFlyout, 
+                                   LOC(STR_PWD_FAILED_WRONG), 
+                                   LOC(STR_PWD_FAILED_TITLE), 
+                                   MB_OK | MB_ICONERROR);
                     }
                 } else {
-                    Wh_Log(L"WLAN: Connection complete for unrelated profile/interface, ignoring");
+                    Wh_Log(L"WLAN: Non-auth failure for '%s' — keeping profile intact", item->ssid);
+                    item->connState = CONN_STATE_ERROR;
+                    item->operationStartTime = 0;
+                    
+                    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+                        WCHAR errMsg[256];
+                        StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
+                                       LOC(STR_CONNECTION_ERROR), connData->wlanReasonCode);
+                        MessageBoxW(g_hWndFlyout, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
+                    }
+                }
+                
+                g_PendingConnectIndex = -1;
+                if (g_TimeoutTimer && hFlyout) {
+                    KillTimer(hFlyout, g_TimeoutTimer);
+                    g_TimeoutTimer = 0;
                 }
             }
-            break;
         }
-            
-    case wlan_notification_acm_connection_attempt_fail: {
-        PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
-            (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-        Wh_Log(L"WLAN: Connection Attempt Failed, Reason: %lu", connData->wlanReasonCode);
-    
-        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)connData->wlanReasonCode);
-        }
+    }
     break;
 }
             
-        case wlan_notification_acm_disconnected:
-            Wh_Log(L"WLAN: Disconnected");
-            for (int i = 0; i < g_NetworkCount; i++) {
-                if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
-                    g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
-                    g_NetworkList[i].connState = CONN_STATE_IDLE;
-                    g_NetworkList[i].operationStartTime = 0;
-                }
-            }
-            g_PendingConnectIndex = -1;
+        case wlan_notification_acm_connection_attempt_fail: {
+            PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
+                (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+            Wh_Log(L"WLAN: Connection Attempt Failed (intermediate), Reason: %lu", 
+                   connData->wlanReasonCode);
+            
+            // Non facciamo nulla di speciale qui: aspettiamo connection_complete
+            // per il verdetto finale. Questo è solo un tentativo intermedio fallito.
             break;
+        }
+            
+        case wlan_notification_acm_disconnected: {
+    PWLAN_CONNECTION_NOTIFICATION_DATA discData = 
+        (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+    Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
+           discData->wlanReasonCode, g_PendingConnectIndex);
+    
+    for (int i = 0; i < g_NetworkCount; i++) {
+        // Resetta SOLO le reti che non sono quella in pending
+        if (i == g_PendingConnectIndex) {
+            Wh_Log(L"  Skipping reset for pending network '%s' (index %d)", 
+                   g_NetworkList[i].ssid, i);
+            continue;
+        }
+        if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
+            g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
+            g_NetworkList[i].connState = CONN_STATE_IDLE;
+            g_NetworkList[i].operationStartTime = 0;
+        }
+    }
+
+    break;
+}
 
         case wlan_notification_acm_scan_complete:
             Wh_Log(L"WLAN: Scan complete");
@@ -2180,38 +2313,105 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
         case WM_ASYNC_CONNECT_COMPLETE: {
-        BOOL opSuccess = (BOOL)wParam;
-        DWORD errorCode = (DWORD)lParam;
-        
-        Wh_Log(L"Async connect complete: success=%d, error=%lu", opSuccess, errorCode);
-        
-     if (!opSuccess && errorCode != ERROR_SUCCESS) {
-    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-        g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_ERROR;
-        g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-        g_NetworkList[g_PendingConnectIndex].hasProfile = FALSE;
-        g_PendingConnectIndex = -1;
-
-        WCHAR errMsg[256];
-        if (errorCode == WLAN_REASON_CODE_INVALID_PROFILE) {
-            StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_CONNECTION_ERROR), errorCode);
-        } else {
-            StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), LOC(STR_PWD_FAILED_WRONG));
+    BOOL opSuccess = (BOOL)wParam;
+    DWORD errorCode = (DWORD)lParam;
+    
+    Wh_Log(L"Async connect complete: success=%d, error=%lu (0x%08X)", 
+           opSuccess, errorCode, errorCode);
+    
+    if (opSuccess) {
+        // Connessione riuscita: aggiorna lo stato e pulisci
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
+            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+            g_PendingConnectIndex = -1;
         }
-        MessageBoxW(hwnd, errMsg, LOC(STR_PWD_FAILED_TITLE), MB_OK | MB_ICONERROR);
-    }
-    if (g_TimeoutTimer) {
-        KillTimer(hwnd, g_TimeoutTimer);
-        g_TimeoutTimer = 0;
-    }
-}
+        if (g_TimeoutTimer) {
+            KillTimer(hwnd, g_TimeoutTimer);
+            g_TimeoutTimer = 0;
+        }
+    } else {
+        // Connessione fallita: analizza il tipo di errore
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+            WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
+            
+            // Codici di errore WLAN che indicano un problema di autenticazione/password
+            // Questi significano "la password salvata non è più valida"
+            static const DWORD authFailureCodes[] = {
+                0x00038001,  // WLAN_REASON_CODE_INVALID_PROFILE
+                0x00038002,  // MSM_REASON_CODE_INVALID_PROFILE_SCHEMA
+                0x00028001,  // MSM_REASON_CODE_AUTH_FAILURE
+                0x00028002,  // MSM_REASON_CODE_ASSOC_FAILURE (spesso auth-related)
+                0x00030001,  // MSM_REASON_CODE_KEY_MISMATCH
+            };
+            
+            BOOL isAuthFailure = FALSE;
+            for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
+                if (errorCode == authFailureCodes[i]) {
+                    isAuthFailure = TRUE;
+                    break;
+                }
+            }
+            
+            if (isAuthFailure && item->hasProfile) {
+                // CASO 1: Errore di autenticazione con profilo esistente
+                // → La password salvata è probabilmente sbagliata
+                Wh_Log(L"Auth failure for '%s' (code 0x%08X) — saved password likely wrong, resetting profile", 
+                       item->ssid, errorCode);
+                
+                // Resetta hasProfile così al prossimo click verrà chiesta la password
+                item->hasProfile = FALSE;
+                item->connState = CONN_STATE_ERROR;
+                item->operationStartTime = 0;
+                
+                // Mostra messaggio di errore specifico per password sbagliata
+                MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                           MB_OK | MB_ICONERROR);
+                
+            } else if (isAuthFailure && !item->hasProfile) {
+                // CASO 2: Errore di autenticazione ma senza profilo (prima connessione)
+                // → L'utente ha appena inserito una password sbagliata
+                Wh_Log(L"Auth failure for '%s' (code 0x%08X) — user-entered password was wrong", 
+                       item->ssid, errorCode);
+                
+                item->connState = CONN_STATE_ERROR;
+                item->operationStartTime = 0;
+                
+                MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                           MB_OK | MB_ICONERROR);
+                
+            } else {
+                // CASO 3: Altro tipo di errore (rete fuori portata, timeout, rifiutata, ecc.)
+                // → Il profilo è probabilmente valido, non tocchiamolo
+                Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) — keeping profile intact", 
+                       item->ssid, errorCode);
+                
+                item->connState = CONN_STATE_ERROR;
+                item->operationStartTime = 0;
+                
+                // Messaggio generico di connessione fallita
+                WCHAR errMsg[256];
+                StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
+                               LOC(STR_CONNECTION_ERROR), errorCode);
+                MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
+            }
+            
+            g_PendingConnectIndex = -1;
+        }
         
-        RefreshWifiData(g_Ctx.hWlanClient);
-        UpdateLayoutGeometry();
-        UpdateCustomTrayIcon();  // riflette lo stato connesso/errore appena risolto
-        InvalidateRect(hwnd, NULL, TRUE);
-        break;
+        if (g_TimeoutTimer) {
+            KillTimer(hwnd, g_TimeoutTimer);
+            g_TimeoutTimer = 0;
+        }
     }
+    
+    // Aggiorna la UI in ogni caso
+    RefreshWifiData(g_Ctx.hWlanClient);
+    UpdateLayoutGeometry();
+    UpdateCustomTrayIcon();
+    InvalidateRect(hwnd, NULL, TRUE);
+    break;
+}
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS | DLGC_WANTCHARS;
     case WM_KEYDOWN: {
@@ -3474,7 +3674,7 @@ static HWND CreateHiddenWindow() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.3.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.4.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
