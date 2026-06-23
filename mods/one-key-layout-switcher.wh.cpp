@@ -21,13 +21,6 @@ and make sure that `dwm.exe` is in the list.
 
 // ==WindhawkModSettings==
 /*
-- switchMethod: both
-  $name: Switch method
-  $description: Choose which key combination to send for layout switching
-  $options:
-  - altshift: Alt+Shift
-  - ctrlshift: Ctrl+Shift
-  - both: Both Ctrl+Shift and Alt+Shift
 - enableLeftWin: false
   $name: Enable Left Win key
   $description: Use Left Windows key to switch layout
@@ -37,7 +30,7 @@ and make sure that `dwm.exe` is in the list.
 - enableLeftAlt: false
   $name: Enable Left Alt key
   $description: Use Left Alt key to switch layout
-- enableRightAlt: true
+- enableRightAlt: false
   $name: Enable Right Alt key
   $description: Use Right Alt key to switch layout
 - enableMenu: true
@@ -47,134 +40,119 @@ and make sure that `dwm.exe` is in the list.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <atomic>
 
-HHOOK  g_hook     = NULL;
-HANDLE g_thread   = NULL;
-DWORD  g_threadId = 0;
+// ---------------------------------------------------------------------------
+// Settings — written on settings-change thread, read on hook thread.
+// Each field is a separate atomic so reads in the hot path are lock-free.
+// ---------------------------------------------------------------------------
+static std::atomic<bool> g_enableLeftWin  {true};
+static std::atomic<bool> g_enableRightWin {true};
+static std::atomic<bool> g_enableLeftAlt  {false};
+static std::atomic<bool> g_enableRightAlt {false};
+static std::atomic<bool> g_enableMenu     {true};
 
-struct {
-    WCHAR switchMethod[32];
-    BOOL enableLeftWin;
-    BOOL enableRightWin;
-    BOOL enableLeftAlt;
-    BOOL enableRightAlt;
-    BOOL enableMenu;
-} settings;
-
-// Track modifier key down states to suppress auto-repeat
-static bool s_keyDown[256] = {};
-
-void LoadSettings() {
-    PCWSTR method = Wh_GetStringSetting(L"switchMethod");
-    wcscpy_s(settings.switchMethod, 32, method ? method : L"ctrlshift");
-    Wh_FreeStringSetting(method);
-
-    settings.enableLeftWin  = Wh_GetIntSetting(L"enableLeftWin");
-    settings.enableRightWin = Wh_GetIntSetting(L"enableRightWin");
-    settings.enableLeftAlt  = Wh_GetIntSetting(L"enableLeftAlt");
-    settings.enableRightAlt = Wh_GetIntSetting(L"enableRightAlt");
-    settings.enableMenu     = Wh_GetIntSetting(L"enableMenu");
+static void LoadSettings() {
+    g_enableLeftWin .store(Wh_GetIntSetting(L"enableLeftWin")  != 0);
+    g_enableRightWin.store(Wh_GetIntSetting(L"enableRightWin") != 0);
+    g_enableLeftAlt .store(Wh_GetIntSetting(L"enableLeftAlt")  != 0);
+    g_enableRightAlt.store(Wh_GetIntSetting(L"enableRightAlt") != 0);
+    g_enableMenu    .store(Wh_GetIntSetting(L"enableMenu")      != 0);
 }
 
-bool ShouldIntercept(DWORD vk) {
+// ---------------------------------------------------------------------------
+// Layout switching — posts WM_INPUTLANGCHANGEREQUEST directly to the
+// foreground window, so it works regardless of the user's hotkey config.
+// INPUTLANGCHANGE_FORWARD (0x0002) asks for the next layout in the list.
+// ---------------------------------------------------------------------------
+static void SwitchLayout() {
+    HWND fg = GetForegroundWindow();
+    if (!fg) {
+        Wh_Log(L"SwitchLayout: no foreground window");
+        return;
+    }
+
+    // Get the current layout for the foreground thread
+    DWORD fgThreadId = GetWindowThreadProcessId(fg, nullptr);
+    HKL currentHkl   = GetKeyboardLayout(fgThreadId);
+
+    // Ask Windows for the next layout in the list
+    HKL nextHkl = (HKL)GetKeyboardLayoutList(0, nullptr);
+    {
+        int count = GetKeyboardLayoutList(0, nullptr);
+        if (count <= 1) {
+            Wh_Log(L"SwitchLayout: only one layout installed, nothing to do");
+            return;
+        }
+
+        HKL* list = new HKL[count];
+        GetKeyboardLayoutList(count, list);
+
+        nextHkl = list[0]; // fallback
+        for (int i = 0; i < count; i++) {
+            if (list[i] == currentHkl) {
+                nextHkl = list[(i + 1) % count];
+                break;
+            }
+        }
+        delete[] list;
+    }
+
+    Wh_Log(L"SwitchLayout: fg=0x%p currentHkl=0x%p nextHkl=0x%p",
+           (void*)fg, (void*)currentHkl, (void*)nextHkl);
+
+    // Post to the foreground window — same mechanism Windows itself uses
+    PostMessage(fg, WM_INPUTLANGCHANGEREQUEST,
+                INPUTLANGCHANGE_FORWARD,
+                (LPARAM)nextHkl);
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+static HHOOK g_hook = NULL;
+
+// Track which intercepted keys are currently held to suppress auto-repeat
+static bool s_keyDown[256] = {};
+
+static bool ShouldIntercept(DWORD vk) {
     switch (vk) {
-        case VK_LWIN:  return settings.enableLeftWin;
-        case VK_RWIN:  return settings.enableRightWin;
-        case VK_LMENU: return settings.enableLeftAlt;
-        case VK_RMENU: return settings.enableRightAlt;
-        case VK_APPS:  return settings.enableMenu;
+        case VK_LWIN:  return g_enableLeftWin .load();
+        case VK_RWIN:  return g_enableRightWin.load();
+        case VK_LMENU: return g_enableLeftAlt .load();
+        case VK_RMENU: return g_enableRightAlt.load();
+        case VK_APPS:  return g_enableMenu    .load();
         default:       return false;
     }
 }
 
-void SendLayoutSwitch() {
-    if (wcscmp(settings.switchMethod, L"ctrlshift") == 0 ||
-        wcscmp(settings.switchMethod, L"both") == 0) {
-
-        Wh_Log(L"Sending Ctrl+Shift");
-
-        INPUT inputs[4] = {};
-
-        inputs[0].type       = INPUT_KEYBOARD;
-        inputs[0].ki.wVk     = VK_LCONTROL;
-        inputs[0].ki.dwFlags = 0;
-
-        inputs[1].type       = INPUT_KEYBOARD;
-        inputs[1].ki.wVk     = VK_LSHIFT;
-        inputs[1].ki.dwFlags = 0;
-
-        inputs[2].type       = INPUT_KEYBOARD;
-        inputs[2].ki.wVk     = VK_LSHIFT;
-        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        inputs[3].type       = INPUT_KEYBOARD;
-        inputs[3].ki.wVk     = VK_LCONTROL;
-        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        SendInput(4, inputs, sizeof(INPUT));
-    }
-
-    if (wcscmp(settings.switchMethod, L"altshift") == 0 ||
-        wcscmp(settings.switchMethod, L"both") == 0) {
-
-        Wh_Log(L"Sending Alt+Shift");
-
-        if (wcscmp(settings.switchMethod, L"both") == 0) {
-            Sleep(100);
-        }
-
-        INPUT inputs[4] = {};
-
-        inputs[0].type       = INPUT_KEYBOARD;
-        inputs[0].ki.wVk     = VK_LMENU;
-        inputs[0].ki.dwFlags = 0;
-
-        inputs[1].type       = INPUT_KEYBOARD;
-        inputs[1].ki.wVk     = VK_LSHIFT;
-        inputs[1].ki.dwFlags = 0;
-
-        inputs[2].type       = INPUT_KEYBOARD;
-        inputs[2].ki.wVk     = VK_LSHIFT;
-        inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        inputs[3].type       = INPUT_KEYBOARD;
-        inputs[3].ki.wVk     = VK_LMENU;
-        inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-
-        SendInput(4, inputs, sizeof(INPUT));
-    }
-}
-
-LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
-        KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+        KBDLLHOOKSTRUCT* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         DWORD vk = kb->vkCode;
 
-        // Ignore injected events (from our own SendInput)
+        // Ignore injected events (from SendInput etc.)
         if (kb->flags & LLKHF_INJECTED) {
             return CallNextHookEx(g_hook, nCode, wParam, lParam);
         }
 
         if (ShouldIntercept(vk)) {
-            bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
-            bool isKeyUp   = (wParam == WM_KEYUP   || wParam == WM_SYSKEYUP);
+            bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+            bool isUp   = (wParam == WM_KEYUP   || wParam == WM_SYSKEYUP);
 
-            if (isKeyDown) {
-                // Suppress auto-repeat
+            if (isDown) {
                 if (!s_keyDown[vk]) {
                     s_keyDown[vk] = true;
-                    Wh_Log(L"Key down intercepted: VK=0x%X", vk);
-                    SendLayoutSwitch();
+                    Wh_Log(L"Key down: VK=0x%X -> switching layout", vk);
+                    SwitchLayout();
                 }
-                // Block the key - do NOT call CallNextHookEx
-                return 1;
+                return 1; // Block, do NOT call CallNextHookEx
             }
 
-            if (isKeyUp) {
+            if (isUp) {
                 s_keyDown[vk] = false;
-                Wh_Log(L"Key up intercepted: VK=0x%X", vk);
-                // Block the key - do NOT call CallNextHookEx
-                return 1;
+                Wh_Log(L"Key up: VK=0x%X blocked", vk);
+                return 1; // Block
             }
         }
     }
@@ -182,7 +160,22 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_hook, nCode, wParam, lParam);
 }
 
-DWORD WINAPI MsgThread(LPVOID) {
+// ---------------------------------------------------------------------------
+// Worker thread — owns the hook and runs the message loop
+// ---------------------------------------------------------------------------
+static HANDLE g_thread   = NULL;
+static DWORD  g_threadId = 0;
+static HANDLE g_readyEvent = NULL; // signaled once the queue is primed
+
+static DWORD WINAPI MsgThread(LPVOID) {
+    // Prime the message queue before installing the hook so that a
+    // WM_QUIT posted from another thread is never lost.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    // Signal that the queue exists and is ready
+    SetEvent(g_readyEvent);
+
     g_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
     if (!g_hook) {
         Wh_Log(L"SetWindowsHookEx failed: %d", GetLastError());
@@ -191,50 +184,61 @@ DWORD WINAPI MsgThread(LPVOID) {
 
     Wh_Log(L"Hook installed, entering message loop");
 
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    if (g_hook) {
-        UnhookWindowsHookEx(g_hook);
-        g_hook = NULL;
-    }
+    UnhookWindowsHookEx(g_hook);
+    g_hook = NULL;
 
+    Wh_Log(L"Message loop exited");
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Windhawk entry points
+// ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     Wh_Log(L"=== Keyboard Layout Switcher Init ===");
 
     LoadSettings();
 
-    Wh_Log(L"Method=%s LWin=%d RWin=%d LAlt=%d RAlt=%d Menu=%d",
-           settings.switchMethod,
-           settings.enableLeftWin,
-           settings.enableRightWin,
-           settings.enableLeftAlt,
-           settings.enableRightAlt,
-           settings.enableMenu);
+    Wh_Log(L"Settings: LWin=%d RWin=%d LAlt=%d RAlt=%d Menu=%d",
+           (int)g_enableLeftWin.load(),
+           (int)g_enableRightWin.load(),
+           (int)g_enableLeftAlt.load(),
+           (int)g_enableRightAlt.load(),
+           (int)g_enableMenu.load());
 
-    g_thread = CreateThread(NULL, 0, MsgThread, NULL, 0, &g_threadId);
-    if (!g_thread) {
-        Wh_Log(L"CreateThread failed: %d", GetLastError());
+    // Create the ready event before the thread so there's no race
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_readyEvent) {
+        Wh_Log(L"CreateEvent failed: %d", GetLastError());
         return FALSE;
     }
 
+    g_thread = CreateThread(nullptr, 0, MsgThread, nullptr, 0, &g_threadId);
+    if (!g_thread) {
+        Wh_Log(L"CreateThread failed: %d", GetLastError());
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+        return FALSE;
+    }
+
+    // Wait until the worker thread has primed its message queue
+    WaitForSingleObject(g_readyEvent, INFINITE);
+    CloseHandle(g_readyEvent);
+    g_readyEvent = nullptr;
+
+    Wh_Log(L"Worker thread ready");
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"=== Keyboard Layout Switcher Uninit ===");
 
-    if (g_hook) {
-        UnhookWindowsHookEx(g_hook);
-        g_hook = NULL;
-    }
-
+    // Safe to post now because we waited for the queue to be primed
     if (g_threadId) {
         PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
     }
@@ -242,11 +246,12 @@ void Wh_ModUninit() {
     if (g_thread) {
         WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
-        g_thread   = NULL;
+        g_thread   = nullptr;
         g_threadId = 0;
     }
 
     memset(s_keyDown, 0, sizeof(s_keyDown));
+    Wh_Log(L"Uninit complete");
 }
 
 void Wh_ModSettingsChanged() {
