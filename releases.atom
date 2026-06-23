@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-22T20:13:49.000Z</updated>
+    <updated>2026-06-23T07:45:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 File Open/Save Toggle Bar Icon 1.0]]></title>
+        <id>https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon#ed51a0b3f375eca20654ec5b64e14cf0be627b0d</id>
+        <link href="https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon"/>
+        <updated>2026-06-23T07:45:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7fileopensavetogglebaricon">Windows 7 File Open/Save Toggle Bar Icon</h1>
+<p>Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dialogs.</p>
+<p>This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
+make the icon look like the Windows 7 glyph.</p>
+<p><img src="https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png" alt="Preview image" /></p>]]></content>
+        <author>
+            <name>Leymonaide</name>
+            <uri>https://github.com/Leymonaide</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Window Center & Resize 1.0]]></title>
         <id>https://windhawk.net/mods/window-center-resize#7afa3ec648b18d390288723053a4e49f96ff13e1</id>
@@ -937,39 +952,6 @@ ShellExecute runas launch.</li>
         <author>
             <name>Deepak</name>
             <uri>https://github.com/deepak-raven</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-fluent-media-player#f0bc654c79f5fc11c5509aba5c2428922694388a</id>
-        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
-        <updated>2026-06-10T21:50:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarfluentmediaplayer120">Taskbar Fluent Media Player 1.2.0</h1>
-<p><strong>Taskbar Fluent Media Player —</strong> is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.</p>
-<h3 id="russiandocumentationhttpsgithubcomsalytstaskbarfluentmediaplayerblobmainreadme_rumd"><a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/blob/main/README_RU.md">> Russian documentation <</a></h3>
-<p><img src="https://i.imgur.com/9xXlVyq.png" alt="img" /></p>
-<p><img src="https://i.imgur.com/Md5CvZB.png" alt="img" /></p>
-<h3 id="keyfeatures">Key Features:</h3>
-<ul>
-<li><strong>Deep Integration —</strong> Place the player in the tray area (left or right of the clock), next to system icons, or in the center of the taskbar.</li>
-<li><strong>Fluent UI Effects —</strong> Full support for native Windows 11 materials including <strong>Acrylic</strong>, <strong>Mica</strong>, and <strong>Mica Alt</strong>.</li>
-<li><strong>Adaptive Design —</strong> The player can automatically adapt its colors based on the album art or follow the system accent color.</li>
-<li><strong>Full Media Control —</strong> Buttons for Play/Pause, Skip, 5-second Seek, Shuffle, and Repeat modes.</li>
-<li><strong>Smart Behavior —</strong> Automatically hides the player when no media is playing, when entering full-screen mode, or after a period of inactivity (idle).</li>
-</ul>
-<h3 id="advancedcustomization">Advanced Customization:</h3>
-<ul>
-<li><strong>Visuals —</strong> Customize fonts (Segoe UI, Aptos, etc.), text sizes, padding, and element transparency.</li>
-<li><strong>Album Art —</strong> Adjustable corner radius, source app icon overlay, and pause overlay effects.</li>
-<li><strong>Mouse Interactions —</strong> Assign custom actions (Volume control, Track seeking, Session switching) to the mouse wheel, single clicks, or double clicks on different parts of the player.</li>
-</ul>
-<hr />
-<h3 id="reportabug">Report a Bug</h3>
-<p>If you encounter any issues, bugs, or have suggestions for new features, please report them on the project's GitHub page:
-👉 <strong><a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues">Report an Issue on GitHub</a></strong></p>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

@@ -13684,6 +13684,37 @@
         "version": "1.0"
       }
     },
+    "win7-file-open-save-toggle-bar-icon": {
+      "details": {
+        "defaultSorting": 9,
+        "published": 1782200746000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782200746000,
+        "users": 1
+      },
+      "metadata": {
+        "author": "Leymonaide",
+        "compilerOptions": "-lgdi32",
+        "description": "Restores the bitmap arrow glyph on the \"Toggle Folders\" button in open/save dialogs.",
+        "github": "https://github.com/Leymonaide",
+        "homepage": "https://leymonaide.github.io/",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Windows 7 File Open/Save Toggle Bar Icon",
+        "twitter": "https://twitter.com/Leym0naide",
+        "version": "1.0"
+      }
+    },
     "win7-login-fade": {
       "details": {
         "defaultSorting": 6720,
