@@ -1,3 +1,7 @@
+## 1.1.5 ([Jun 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e421932847184af2d4b2ed99a7fb28782a92808/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Fixed compatibility with recent Windows 11 versions.
+
 ## 1.1.4 ([May 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3abf6a1bb79cd33592be254be9a2f37fefd198e0/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Fixed: If labels are shown, each reordering operation caused the thumbnail previews to be closed.

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-24T18:28:13.000Z</updated>
+    <updated>2026-06-24T19:17:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#2e421932847184af2d4b2ed99a7fb28782a92808</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
+        <updated>2026-06-24T19:17:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-button-scroll#559c762c7ca4753a05cd6de592059685e85381eb</id>
@@ -404,25 +417,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>Math Shamenson</name>
             <uri>https://github.com/insane66613</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VS Code Dark Non-client Frame 1.0]]></title>
-        <id>https://windhawk.net/mods/vscode-dark-nonclient-frame#bc3d1c8d2415c4adb2a06b222c6e85883a07342e</id>
-        <link href="https://windhawk.net/mods/vscode-dark-nonclient-frame"/>
-        <updated>2026-06-18T08:13:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="vscodedarknonclientframe">VS Code Dark Non-client Frame</h1>
-<p>Forces Visual Studio Code's Windows non-client frame into immersive dark mode.</p>
-<p>This fixes the 2px light gray bottom edge that can appear when VS Code is maximized with the custom title bar in Windows light mode, especially with a hidden or transparent taskbar.</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/DVrOPag.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/ldT3xJt.png" alt="After" /></p>
-<p>The mod targets only <code>Code.exe</code> by default. Users of VS Code Insiders, VSCodium, or renamed/portable builds can add the relevant executable name to the mod's custom include list.</p>
-<p>When the mod is disabled, it stops overriding VS Code's frame mode. Already affected windows may keep their current frame mode until VS Code applies a new value, for example after a theme or window state change.</p>]]></content>
-        <author>
-            <name>v1b3s0</name>
-            <uri>https://github.com/v1b3s0</uri>
         </author>
     </entry>
 </feed>

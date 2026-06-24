@@ -11666,7 +11666,7 @@
           357
         ],
         "ratingUsers": 394,
-        "updated": 1777651418000,
+        "updated": 1782328623000,
         "users": 20771
       },
       "featured": true,
@@ -11684,7 +11684,7 @@
         ],
         "name": "Taskbar Thumbnail Reorder",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.1.4"
+        "version": "1.1.5"
       }
     },
     "taskbar-thumbnail-size": {
