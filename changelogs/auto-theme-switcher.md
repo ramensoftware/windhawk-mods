@@ -1,3 +1,7 @@
+## 1.3.2 ([Jun 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a5c9b87ba0824d826d6c1a95f6a497cb48d2dc66/mods/auto-theme-switcher.wh.cpp))
+
+* Fix applying lockscreen wallpaper by injecting into explorer.exe again and clearing lock screen cache
+
 ## 1.3.1 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/97c5ff6fcd4bb755aae0e1030c6d53e542d1af4d/mods/auto-theme-switcher.wh.cpp))
 
 - Change target to windhawk.exe
