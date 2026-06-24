@@ -1,3 +1,7 @@
+## 1.1.4 ([Jun 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/559c762c7ca4753a05cd6de592059685e85381eb/mods/taskbar-button-scroll.wh.cpp))
+
+* Fixed compatibility with recent Windows 11 versions.
+
 ## 1.1.3 ([Feb 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ddaa47d5ea629338f30ed0ed41d49774f9487a90/mods/taskbar-button-scroll.wh.cpp))
 
 * Improved window minimize/restore robustness on Windows 11.
