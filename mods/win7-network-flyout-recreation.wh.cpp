@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.4.0
+// @version        2.5.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -26,7 +26,7 @@ This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, re
 - **Right-click context menu**: Quick access to network status and properties
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support if required.
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval (use the Refresh button to force a new scan)
-- **Language support**: English, Italian, or auto-detect from system (more languages are planned to be added in future)
+- **Language support**: English, Italian, Spanish, French, Russian, or auto-detect from system
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Enable this if you want a more modern look on Windows 11 or if you use the Aero theme from Windows Vista/7.
 
@@ -61,6 +61,9 @@ If you encounter issues or need to clarify something, please report it on the au
     - auto: Auto-detect
     - en: English
     - it: Italiano
+    - es: Español
+    - fr: Français
+    - ru: Русский
 - interceptNativeFlyout: true
   $name: Intercept system network flyout
   $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
@@ -80,8 +83,8 @@ If you encounter issues or need to clarify something, please report it on the au
   $name: Rounded corners
   $description: Give the flyout window rounded corners (looks better on Windows 11 or with the Aero theme enabled, disabled by default for classic theme compatibility).
 - enableCustomTrayIcon: false
-  $name: Show a custom tray icon (Win7 style)
-  $description: Add a second network icon to the system tray with the classic Windows 7 design. Useful as a fallback if the automatic flyout interception doesn't work on your setup. Click it to open the flyout.
+  $name: Show a custom tray icon 
+  $description: This setting adds a second network icon to the system tray with a similar design to the original Windows 7 one. Useful as a fallback if the automatic flyout interception doesn't work on your setup. Click it to open the flyout.
 */
 // ==/WindhawkModSettings==
 
@@ -189,6 +192,11 @@ static DWORD g_dwFlyoutOwnerThreadId = 0;
 #define WM_HOTKEY_SETTINGS_CHANGED (WM_USER + 200)
 #define INIT_DELAY_MS 1000
 #define CONNECTION_TIMEOUT_MS 15000
+// La disconnessione è un'operazione tipicamente molto più rapida di una
+// connessione (nessun handshake, nessun DHCP): un timeout di 15s la fa
+// percepire come bloccata quando in realtà è solo un evento mancato/perso.
+// Usiamo un timeout dedicato e più corto, separato da quello di connessione.
+#define DISCONNECTION_TIMEOUT_MS 4000
 // Connection related definitions
 #define WLAN_REASON_CODE_INVALID_PROFILE    0x00038001  // 229377
 
@@ -239,6 +247,9 @@ void LoadSettings() {
     if (lang) {
         if (_wcsicmp(lang, L"en") == 0)      raw_language = 1;
         else if (_wcsicmp(lang, L"it") == 0) raw_language = 2;
+        else if (_wcsicmp(lang, L"es") == 0) raw_language = 3;
+        else if (_wcsicmp(lang, L"fr") == 0) raw_language = 4;
+        else if (_wcsicmp(lang, L"ru") == 0) raw_language = 5;
         Wh_FreeStringSetting(lang);
     }
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
@@ -570,6 +581,147 @@ static const LocalePack g_Locales[] = {
         L"Inserire una chiave di sicurezza di rete.",
         L"Risoluzione dei problemi",
         L"Apri Centro connessioni di rete e condivisione",
+    }},
+    { 0x040A, {
+        L"Conectado actualmente a:",
+        L"Acceso a Internet",
+        L"Conexi\u00F3n de red inal\u00E1mbrica",
+        L"Conectado",
+        L"Abrir el Centro de redes y recursos compartidos",
+        L"Conectar",
+        L"Desconectar",
+        L"Conectar",
+        L"Desconectar",
+        L"Estado",
+        L"Propiedades",
+        L"No hay conexiones disponibles",
+        L"Hay conexiones disponibles",
+        L"Conectar automáticamente",
+        L"Conectarse a una red",
+        L"Escriba la clave de seguridad de red",
+        L"Clave de seguridad:",
+        L"Ocultar caracteres",
+        L"Aceptar",
+        L"Cancelar",
+        L"Error de conexi\u00F3n",
+        L"La clave de seguridad de red no es correcta. Vuelva a intentarlo.",
+        L"No se pudo conectar a %s",
+        L"Red %d",
+        L"Tipo de seguridad:",
+        L"Intensidad de la se\u00F1al:",
+        L"Tipo de radio:",
+        L"Excelente",
+        L"Buena",
+        L"Aceptable",
+        L"Baja",
+        L"Sin se\u00F1al",
+        L"Conectando...",
+        L"Desconectando...",
+        L"Estado: Conectado",
+        L"Estado: Conectando...",
+        L"Estado: No conectado",
+        L"Error",
+        L"No se pudo guardar el perfil de red (c\u00F3digo: %lu)",
+        L"Error de conexi\u00F3n (c\u00F3digo: %lu)",
+        L"Tiempo de conexi\u00F3n agotado",
+        L"Se agot\u00F3 el tiempo de espera de la conexi\u00F3n. Puede que la red esté fuera de alcance.",
+        L"Escriba una clave de seguridad de red.",
+        L"Solucionar problemas",
+        L"Abrir el Centro de redes y recursos compartidos",
+    }},
+    { 0x040C, {
+        L"Connect\u00E9 actuellement \u00E0 :",
+        L"Acc\u00E8s Internet",
+        L"Connexion r\u00E9seau sans fil",
+        L"Connect\u00E9",
+        L"Ouvrir le Centre R\u00E9seau et partage",
+        L"Connecter",
+        L"D\u00E9connecter",
+        L"Connecter",
+        L"D\u00E9connecter",
+        L"\u00C9tat",
+        L"Propri\u00E9t\u00E9s",
+        L"Aucune connexion disponible",
+        L"Des connexions sont disponibles",
+        L"Connexion automatique",
+        L"Se connecter \u00E0 un r\u00E9seau",
+        L"Entrez la cl\u00E9 de s\u00E9curit\u00E9 r\u00E9seau",
+        L"Cl\u00E9 de s\u00E9curit\u00E9 :",
+        L"Masquer les caract\u00E8res",
+        L"OK",
+        L"Annuler",
+        L"\u00C9chec de la connexion",
+        L"La cl\u00E9 de s\u00E9curit\u00E9 r\u00E9seau est incorrecte. Veuillez r\u00E9essayer.",
+        L"Impossible de se connecter \u00E0 %s",
+        L"R\u00E9seau %d",
+        L"Type de s\u00E9curit\u00E9 :",
+        L"Intensit\u00E9 du signal :",
+        L"Type de r\u00E9seau radio :",
+        L"Excellent",
+        L"Bon",
+        L"Correct",
+        L"Faible",
+        L"Aucun signal",
+        L"Connexion en cours...",
+        L"D\u00E9connexion en cours...",
+        L"\u00C9tat : Connect\u00E9",
+        L"\u00C9tat : Connexion en cours...",
+        L"\u00C9tat : Non connect\u00E9",
+        L"Erreur",
+        L"Impossible d'enregistrer le profil r\u00E9seau (code : %lu)",
+        L"Erreur de connexion (code : %lu)",
+        L"D\u00E9lai de connexion d\u00E9pass\u00E9",
+        L"La tentative de connexion a expir\u00E9. Le r\u00E9seau est peut-\u00EAtre hors de port\u00E9e.",
+        L"Veuillez entrer une cl\u00E9 de s\u00E9curit\u00E9 r\u00E9seau.",
+        L"R\u00E9soudre les probl\u00E8mes",
+        L"Ouvrir le Centre R\u00E9seau et partage",
+    }},
+    { 0x0419, {
+        L"\u0421\u0435\u0439\u0447\u0430\u0441 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E \u043A:",
+        L"\u0414\u043E\u0441\u0442\u0443\u043F \u0432 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442",
+        L"\u0411\u0435\u0441\u043F\u0440\u043E\u0432\u043E\u0434\u043D\u043E\u0435 \u0441\u0435\u0442\u0435\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
+        L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
+        L"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0446\u0435\u043D\u0442\u0440 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F \u0441\u0435\u0442\u044F\u043C\u0438 \u0438 \u043E\u0431\u0449\u0438\u043C \u0434\u043E\u0441\u0442\u0443\u043F\u043E\u043C",
+        L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F",
+        L"\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
+        L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F",
+        L"\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
+        L"\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435",
+        L"\u0421\u0432\u043E\u0439\u0441\u0442\u0432\u0430",
+        L"\u041D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0445 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0439",
+        L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+        L"\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u044C \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
+        L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043A \u0441\u0435\u0442\u0438",
+        L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043A\u043B\u044E\u0447 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0435\u0442\u0438",
+        L"\u041A\u043B\u044E\u0447 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438:",
+        L"\u0421\u043A\u0440\u044B\u0432\u0430\u0442\u044C \u0441\u0438\u043C\u0432\u043E\u043B\u044B",
+        L"\u041E\u041A",
+        L"\u041E\u0442\u043C\u0435\u043D\u0430",
+        L"\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+        L"\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u044B\u0439 \u043A\u043B\u044E\u0447 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0435\u0442\u0438. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u043E\u043F\u044B\u0442\u043A\u0443.",
+        L"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043A %s",
+        L"\u0421\u0435\u0442\u044C %d",
+        L"\u0422\u0438\u043F \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438:",
+        L"\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u0441\u0438\u0433\u043D\u0430\u043B\u0430:",
+        L"\u0422\u0438\u043F \u0440\u0430\u0434\u0438\u043E\u0441\u0432\u044F\u0437\u0438:",
+        L"\u041E\u0442\u043B\u0438\u0447\u043D\u044B\u0439",
+        L"\u0425\u043E\u0440\u043E\u0448\u0438\u0439",
+        L"\u0421\u0440\u0435\u0434\u043D\u0438\u0439",
+        L"\u0421\u043B\u0430\u0431\u044B\u0439",
+        L"\u041D\u0435\u0442 \u0441\u0438\u0433\u043D\u0430\u043B\u0430",
+        L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435...",
+        L"\u041E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435...",
+        L"\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
+        L"\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435...",
+        L"\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: \u041D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
+        L"\u041E\u0448\u0438\u0431\u043A\u0430",
+        L"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0441\u0435\u0442\u0438 (\u043A\u043E\u0434: %lu)",
+        L"\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F (\u043A\u043E\u0434: %lu)",
+        L"\u0418\u0441\u0442\u0435\u043A\u043B\u043E \u0432\u0440\u0435\u043C\u044F \u043E\u0436\u0438\u0434\u0430\u043D\u0438\u044F \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+        L"\u0418\u0441\u0442\u0435\u043A\u043B\u043E \u0432\u0440\u0435\u043C\u044F \u043E\u0436\u0438\u0434\u0430\u043D\u0438\u044F \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u0412\u043E\u0437\u043C\u043E\u0436\u043D\u043E, \u0441\u0435\u0442\u044C \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430.",
+        L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043A\u043B\u044E\u0447 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0435\u0442\u0438.",
+        L"\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430 \u043D\u0435\u043F\u043E\u043B\u0430\u0434\u043E\u043A",
+        L"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0446\u0435\u043D\u0442\u0440 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F \u0441\u0435\u0442\u044F\u043C\u0438 \u0438 \u043E\u0431\u0449\u0438\u043C \u0434\u043E\u0441\u0442\u0443\u043F\u043E\u043C",
     }}
 };
 
@@ -592,6 +744,9 @@ void DetermineLocale() {
     switch (g_Settings.language) {
         case 1: g_CurrentLocalePack = FindLocalePack(0x0409); break;
         case 2: g_CurrentLocalePack = FindLocalePack(0x0410); break;
+        case 3: g_CurrentLocalePack = FindLocalePack(0x040A); break;
+        case 4: g_CurrentLocalePack = FindLocalePack(0x040C); break;
+        case 5: g_CurrentLocalePack = FindLocalePack(0x0419); break;
         default: {
             LANGID userLangId = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(userLangId);
@@ -616,6 +771,10 @@ static void CreateCustomTrayIcon(void);
 static HICON GetCurrentNetworkTrayIcon(void);
 static bool IsExplorerProcess();
 static void UpdateCustomTrayIcon(void);
+void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOOL autoConnect, WCHAR* outXml, size_t outSize);
+static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue);
+static BOOL ProfileSecurityMatches(const WCHAR* profileXml, DOT11_AUTH_ALGORITHM authAlgorithm, DOT11_CIPHER_ALGORITHM cipherAlgorithm);
+static void RemoveCustomTrayIcon(void);
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 void RefreshWifiData(HANDLE hClient);
 void UpdateLayoutGeometry(int scrollbarOffset = 0);
@@ -638,8 +797,6 @@ BOOL IsInternetConnected(void);
 static BOOL AskForPasswordAndConnect(int index);
 void RecalcDpiMetrics(UINT dpi);
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
-void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOOL autoConnect, WCHAR* outXml, size_t outSize);
-static void RemoveCustomTrayIcon(void);
 // Oscura l'SSID nei log per privacy, mantenendo i primi 3 caratteri
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     if (!ssid || ssid[0] == L'\0') {
@@ -957,16 +1114,7 @@ void RefreshWifiData(HANDLE hClient) {
                     tempList[tempCount].ssid[converted] = L'\0';
                 }
 
-                // Check duplicates: due entry sono lo STESSO BSS-aggregate solo
-                // se SSID, sicurezza, cifratura e tipo di BSS coincidono tutti.
-                // Se l'SSID è uguale ma i parametri di sicurezza differiscono,
-                // sono due access point distinti con lo stesso nome (es. due
-                // router "Redmi" su bande diverse): vanno tenuti come entry
-                // separate, esattamente come fa il flyout nativo di Windows
-                // ("Redmi", "Redmi 2", ...). Fonderli (comportamento precedente)
-                // faceva sì che il profilo costruito per la connessione potesse
-                // non corrispondere più al BSS effettivamente selezionato
-                // dall'utente, causando fallimenti di (ri)connessione intermittenti.
+                // Check duplicates
                 BOOL duplicate = FALSE;
                 int sameSsidVariants = 0;
                 for (int d = 0; d < tempCount; d++) {
@@ -1030,10 +1178,23 @@ void RefreshWifiData(HANDLE hClient) {
 
                 if (pProfList) {
     for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
-        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) == 0) {
-            tempList[tempCount].hasProfile = TRUE;
-            break;
+        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) != 0)
+            continue;
+
+        LPWSTR pProfileXml = NULL;
+        DWORD flags = 0;
+        if (WlanGetProfile(hClient, &IfInfo.InterfaceGuid,
+                            pProfList->ProfileInfo[p].strProfileName,
+                            NULL, &pProfileXml, &flags, NULL) == ERROR_SUCCESS) {
+            tempList[tempCount].hasProfile = ProfileSecurityMatches(
+                pProfileXml,
+                tempList[tempCount].authAlgorithm,
+                tempList[tempCount].cipherAlgorithm);
+            WlanFreeMemory(pProfileXml);
+        } else {
+            tempList[tempCount].hasProfile = FALSE;
         }
+        break;
     }
 }
 
@@ -1447,6 +1608,88 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
     }
 }
 
+// -------------------------------------------------------
+// Validazione del profilo salvato rispetto alla rete scansionata
+// -------------------------------------------------------
+// WlanGetProfileList dice solo che esiste un profilo con un certo NOME.
+// Non garantisce che auth/cipher salvati corrispondano ancora a quelli che
+// l'AP usa oggi (es. router cambiato, sicurezza aggiornata da WPA2 a WPA3,
+// oppure due reti diverse nel tempo con lo stesso SSID). Senza questo
+// controllo, hasProfile veniva marcato TRUE solo per il nome, il mod
+// tentava WlanConnect col profilo vecchio, falliva, e SOLO DOPO il
+// fallimento si "scopriva" il mismatch — risultato visibile: a volte la
+// password viene richiesta anche per una rete "nota" perché il profilo
+// reale non corrisponde più, oppure il primo tentativo fallisce sempre
+// prima che hasProfile venga corretto.
+static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue) {
+    if (!xml || !tagName || !expectedValue) return FALSE;
+
+    WCHAR openTag[64] = {0};
+    StringCchPrintfW(openTag, ARRAYSIZE(openTag), L"<%s>", tagName);
+
+    const WCHAR* start = wcsstr(xml, openTag);
+    if (!start) return FALSE;
+    start += lstrlenW(openTag);
+
+    WCHAR closeTag[64] = {0};
+    StringCchPrintfW(closeTag, ARRAYSIZE(closeTag), L"</%s>", tagName);
+    const WCHAR* end = wcsstr(start, closeTag);
+    if (!end || end < start) return FALSE;
+
+    size_t len = (size_t)(end - start);
+    if (len == 0 || len >= 64) return FALSE;
+
+    WCHAR value[64] = {0};
+    StringCchCopyNW(value, ARRAYSIZE(value), start, len);
+
+    return (_wcsicmp(value, expectedValue) == 0);
+}
+
+static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
+                                    DOT11_AUTH_ALGORITHM authAlgorithm,
+                                    DOT11_CIPHER_ALGORITHM cipherAlgorithm) {
+    if (!profileXml) return FALSE;
+
+    // Stessa mappatura usata in BuildWlanProfileXml: il confronto deve
+    // sempre essere coerente con quello che il mod stesso scriverebbe.
+    const WCHAR* expectedAuth = L"open";
+    switch (authAlgorithm) {
+        case DOT11_AUTH_ALGO_80211_OPEN:       expectedAuth = L"open";    break;
+        case DOT11_AUTH_ALGO_80211_SHARED_KEY: expectedAuth = L"shared";  break;
+        case DOT11_AUTH_ALGO_WPA:              expectedAuth = L"WPA";     break;
+        case DOT11_AUTH_ALGO_WPA_PSK:          expectedAuth = L"WPAPSK";  break;
+        case DOT11_AUTH_ALGO_WPA3:             expectedAuth = L"WPA3";    break;
+        case DOT11_AUTH_ALGO_WPA3_SAE:         expectedAuth = L"WPA3SAE"; break;
+        case DOT11_AUTH_ALGO_RSNA:             expectedAuth = L"WPA2";    break;
+        case DOT11_AUTH_ALGO_RSNA_PSK:         expectedAuth = L"WPA2PSK"; break;
+        default:                               expectedAuth = L"WPA2PSK"; break;
+    }
+
+    const WCHAR* expectedEnc = L"none";
+    switch (cipherAlgorithm) {
+        case DOT11_CIPHER_ALGO_NONE:          expectedEnc = L"none"; break;
+        case DOT11_CIPHER_ALGO_WEP:           expectedEnc = L"WEP";  break;
+        case DOT11_CIPHER_ALGO_WEP40:         expectedEnc = L"WEP";  break;
+        case DOT11_CIPHER_ALGO_WEP104:        expectedEnc = L"WEP";  break;
+        case DOT11_CIPHER_ALGO_TKIP:          expectedEnc = L"TKIP"; break;
+        case DOT11_CIPHER_ALGO_CCMP:          expectedEnc = L"AES";  break;
+        case DOT11_CIPHER_ALGO_WPA_USE_GROUP: expectedEnc = L"TKIP"; break;
+        default:                              expectedEnc = L"AES";  break;
+    }
+
+    // Rete open: basta che il profilo dichiari anch'esso authentication=open.
+    // Non richiediamo la presenza del tag <encryption> in questo caso,
+    // perché alcuni profili "open" storici lo omettono.
+    if (authAlgorithm == DOT11_AUTH_ALGO_80211_OPEN) {
+        return XmlTagEqualsCI(profileXml, L"authentication", L"open");
+    }
+
+    BOOL authMatches = XmlTagEqualsCI(profileXml, L"authentication", expectedAuth);
+    BOOL encMatches  = XmlTagEqualsCI(profileXml, L"encryption", expectedEnc);
+
+    return authMatches && encMatches;
+}
+
 // Thread proc per connessione asincrona
 static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     AsyncConnectContext* ctx = (AsyncConnectContext*)pParam;
@@ -1670,7 +1913,11 @@ void DisconnectFromNetwork(int index) {
     g_PendingConnectIndex = index;
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-        g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
+        // Polling più frequente per la disconnessione: il suo timeout
+        // (DISCONNECTION_TIMEOUT_MS) è molto più corto di quello di
+        // connessione, quindi serve un intervallo di controllo proporzionato
+        // per non aggiungere un ritardo extra percepibile sopra ai 4s.
+        g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 1000, NULL);
     }
     
     UpdateLayoutGeometry();
@@ -1729,8 +1976,37 @@ void CheckConnectionTimeouts() {
         }
         return;
     }
-    
+
     DWORD now = GetTickCount();
+
+    // La disconnessione usa un percorso e un timeout dedicati, separati da
+    // quello di connessione. Senza questo, CONN_STATE_DISCONNECTING restava
+    // bloccato per l'intero CONNECTION_TIMEOUT_MS (15s) ogni volta che la
+    // notifica wlan_notification_acm_disconnected non arrivava in tempo o
+    // veniva persa — la causa principale della disconnessione "lentissima"
+    // percepita dall'utente. Inoltre, allo scadere non mostriamo un errore:
+    // se l'item non è più CONNECTED/CONNECTING, la disconnessione ha quasi
+    // certamente avuto successo anche senza notifica esplicita.
+    if (item->connState == CONN_STATE_DISCONNECTING) {
+        if ((now - item->operationStartTime) > DISCONNECTION_TIMEOUT_MS) {
+            LogSsidSafe(L"Disconnection timeout (no notification received), assuming success for", item->ssid);
+            item->connState = CONN_STATE_IDLE;
+            item->operationStartTime = 0;
+            g_PendingConnectIndex = -1;
+
+            if (g_TimeoutTimer && g_hWndFlyout) {
+                KillTimer(g_hWndFlyout, g_TimeoutTimer);
+                g_TimeoutTimer = 0;
+            }
+            if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+                if (g_Ctx.hWlanClient) RefreshWifiData(g_Ctx.hWlanClient);
+                InvalidateRect(g_hWndFlyout, NULL, TRUE);
+                UpdateLayoutGeometry();
+            }
+        }
+        return;
+    }
+
     if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
         LogSsidSafe(L"Timeout for", item->ssid);
         Wh_Log(L"  (state=%d)", item->connState);
@@ -1884,9 +2160,32 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
         (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
     Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
            discData->wlanReasonCode, g_PendingConnectIndex);
-    
+
+    // CORREZIONE: la versione precedente saltava sempre l'indice in
+    // g_PendingConnectIndex, assumendo che "pending" volesse sempre dire
+    // "operazione di CONNESSIONE in corso, non toccare". Ma quando l'utente
+    // clicca Disconnect, g_PendingConnectIndex punta proprio alla rete in
+    // CONN_STATE_DISCONNECTING — ed è esattamente quella rete che questa
+    // notifica sta confermando come disconnessa. Saltarla lasciava lo stato
+    // bloccato su "Disconnecting..." finché non scadeva il timeout (prima
+    // 15s, percepito dall'utente come "ci mette 9 anni a disconnettersi").
+    // Ora: se il pending è in DISCONNECTING, lo risolviamo qui sull'istante.
+    // Se invece il pending è in CONNECTING (operazione di connessione verso
+    // un'altra rete), lo lasciamo intatto: questa notifica di disconnect
+    // riguarda probabilmente la rete precedente, non quella a cui ci stiamo
+    // connettendo ora.
+    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount &&
+        g_NetworkList[g_PendingConnectIndex].connState == CONN_STATE_DISCONNECTING) {
+        LogSsidSafe(L"Disconnection confirmed by notification for", g_NetworkList[g_PendingConnectIndex].ssid);
+        g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
+        g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+        g_PendingConnectIndex = -1;
+    }
+
     for (int i = 0; i < g_NetworkCount; i++) {
-        // Resetta SOLO le reti che non sono quella in pending
+        // A questo punto, se il pending era una disconnessione, è già
+        // stato risolto sopra: qui resettiamo solo le altre reti, e quella
+        // ancora in pending (se è una CONNECTING) resta protetta.
         if (i == g_PendingConnectIndex) {
             Wh_Log(L"  Skipping reset for pending network '%s' (index %d)", 
                    g_NetworkList[i].ssid, i);
@@ -1897,6 +2196,12 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             g_NetworkList[i].connState = CONN_STATE_IDLE;
             g_NetworkList[i].operationStartTime = 0;
         }
+    }
+
+    if (g_TimeoutTimer && hFlyout) {
+        // Sveglia subito il loop dei timeout così la UI si aggiorna senza
+        // aspettare il prossimo tick naturale del polling timer.
+        PostMessageW(hFlyout, WM_TIMER, 1002, 0);
     }
 
     break;
@@ -3674,7 +3979,7 @@ static HWND CreateHiddenWindow() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.4.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.5.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
