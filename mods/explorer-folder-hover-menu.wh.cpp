@@ -307,12 +307,16 @@ HANDLE g_workerReadyEvent;
 // letting a com_ptr destructor Release these here would marshal into the dead
 // worker STA and crash. Leaking the holder avoids that; the OS reclaims it on
 // exit anyway.
+// g_workerUia is intentionally not released in WorkerThreadProc: calling
+// CoUninitialize first would invalidate the pointer, and calling Release
+// after CoUninitialize on some builds crashes. The OS cleans up on exit.
 winrt::com_ptr<IUIAutomation>& g_workerUia =
     *new winrt::com_ptr<IUIAutomation>();
 winrt::com_ptr<IUIAutomationElement>& g_workerContainer =
     *new winrt::com_ptr<IUIAutomationElement>();
-HWND g_workerContainerTab;           // Worker thread only: the tab the
-                                     // cached container belongs to.
+// g_workerContainerTab tracks which tab the cached g_workerContainer belongs
+// to. Nullptr means the container is stale or was never acquired for this tab.
+HWND g_workerContainerTab;
 PIDLIST_ABSOLUTE g_workerFolderAbs;  // Worker thread only: the folder
 bool g_workerFolderIsDesktop;        // the shared children map holds.
 bool g_workerChildrenValid;
@@ -401,6 +405,11 @@ FolderAction g_pendingExecAction;
 // only.
 HWND g_leftDownToolbar;
 int g_leftDownIdCmd;
+
+// Accumulated sub-notch wheel delta for high-resolution wheels and touchpads.
+// Reset to 0 at the start of each menu session (ShowFolderMenuModal) so carry
+// never bleeds across menus.  UI thread only.
+int g_scrollAccumulatedDelta;
 
 std::wstring ToLower(const std::wstring& s) {
     std::wstring r = s;
@@ -1370,6 +1379,9 @@ void WorkerBuildSnapshot(HWND tab, bool isDesktop, POINT pt) {
                      !ILIsEqual(g_workerFolderAbs, folderAbs));
 
     // (Re)acquire the list element when the tab changed.
+    // g_workerContainerTab tracks which tab the cached g_workerContainer
+    // belongs to. Nullptr means the container is stale or was never acquired
+    // for this tab.
     if (tab != g_workerContainerTab || !g_workerContainer) {
         g_workerContainer = FindContainerFromPoint(pt);
         g_workerContainerTab = g_workerContainer ? tab : nullptr;
@@ -2009,6 +2021,8 @@ class CTimeoutEnumIDList final : public IEnumIDList {
         if (!clone) {
             return E_OUTOFMEMORY;
         }
+        // Override the deadline set by the constructor: the clone inherits the
+        // remaining budget of the original, not a fresh one.
         clone->m_deadline = m_deadline;
         clone->m_timedOutEmitted = m_timedOutEmitted;
         clone->m_count = m_count;
@@ -2258,7 +2272,10 @@ HRESULT STDMETHODCALLTYPE GetDisplayNameOf_Hook(IShellFolder* pThis,
     return origs ? origs->getDisplayNameOf(pThis, pidl, uFlags, pName) : E_FAIL;
 }
 
-// IShellFolder vtable slot indices (after the three IUnknown slots).
+// IShellFolder vtable layout (after 3 IUnknown slots):
+// 3=ParseDisplayName, 4=EnumObjects, 5=BindToObject, 6=BindToStorage,
+// 7=CompareIDs, 8=CreateViewObject, 9=GetAttributesOf,
+// 10=GetUIObjectOf, 11=GetDisplayNameOf, 12=SetNameOf
 enum {
     kVtblEnumObjects = 4,
     kVtblBindToObject = 5,
@@ -2295,6 +2312,8 @@ void HookFolderVtable(IShellFolder* folder, FolderOrigs& origs) {
         Wh_Log(L"Failed to pin module for folder vtable %p", vtable);
     }
 
+    // A failed hook is never invoked, so its corresponding original pointer
+    // (left at nullptr) is never reached. No crash results.
     auto check = [vtable](PCWSTR label, BOOL hooked) {
         if (!hooked) {
             Wh_Log(L"SetFunctionHook(%s) failed for folder vtable %p", label,
@@ -2519,11 +2538,11 @@ void ScrollMenuWithWheel(HWND pager, int wheelDelta) {
     }
 
     // Accumulate sub-notch deltas so high-resolution wheels and touchpads still
-    // step smoothly.
-    static int s_accumulatedDelta;
-    s_accumulatedDelta += wheelDelta;
-    int notches = s_accumulatedDelta / WHEEL_DELTA;
-    s_accumulatedDelta -= notches * WHEEL_DELTA;
+    // step smoothly.  Reset to 0 at the start of each menu session
+    // (ShowFolderMenuModal) so carry never bleeds across menus.
+    g_scrollAccumulatedDelta += wheelDelta;
+    int notches = g_scrollAccumulatedDelta / WHEEL_DELTA;
+    g_scrollAccumulatedDelta -= notches * WHEEL_DELTA;
     if (notches == 0) {
         return;
     }
@@ -2898,7 +2917,13 @@ winrt::com_ptr<IMenuBand> PopupFolderMenu(PCIDLIST_ABSOLUTE pidlAbs,
 // Shows the folder menu and pumps a nested message loop until it is dismissed.
 void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
     g_menuActive = true;
+    // Clear any stale button-down state from before the menu opened,
+    // so a click-release pair is only recognized if both halves happen inside
+    // this menu session.
     g_leftDownToolbar = nullptr;
+    // Reset the scroll carry for the new menu session so sub-notch delta from
+    // a previous menu does not cause the first wheel event to jump.
+    g_scrollAccumulatedDelta = 0;
 
     winrt::com_ptr<IMenuBand> band = PopupFolderMenu(pidlAbs, anchorRect);
     if (band) {
@@ -2988,6 +3013,9 @@ void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
 // Effective DPI of the monitor that contains the given rectangle.
 UINT GetDpiForRect(const RECT& rc) {
     using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    // shcore.dll is a system DLL that lives for the process lifetime;
+    // intentionally not freed so the function pointer remains valid without a
+    // static HMODULE.
     static GetDpiForMonitor_t pGetDpiForMonitor = []() -> GetDpiForMonitor_t {
         HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr,
                                         LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -3668,9 +3696,13 @@ DWORD WINAPI UiThreadProc(LPVOID param) {
 
     // Start the worker thread that does all UIA + shell work off this thread.
     g_workerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_workerReadyEvent) {
+        Wh_Log(L"CreateEventW for worker failed");
+        return;  // UiThreadProc terminates; WhTool_ModInit will see the timeout
+    }
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0,
                                   &g_workerThreadId);
-    if (g_workerThread && g_workerReadyEvent) {
+    if (g_workerThread) {
         WaitForSingleObject(g_workerReadyEvent, 5000);
     }
     if (g_workerReadyEvent) {
@@ -3828,6 +3860,12 @@ void WhTool_ModUninit() {
         CloseHandle(g_uiThread);
         g_uiThread = nullptr;
         g_uiThreadId = 0;
+    }
+
+    if (g_toolModProcessMutex) {
+        ReleaseMutex(g_toolModProcessMutex);
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
     }
 
     DeleteCriticalSection(&g_snapshotLock);
