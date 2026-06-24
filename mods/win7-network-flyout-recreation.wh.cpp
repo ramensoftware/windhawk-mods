@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.7.1
+// @version        2.8.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -345,7 +345,6 @@ static void DetectWindowsVersion() {
 
     if (g_isWin11) {
         // Rileva se è presente la barra delle applicazioni Win10 legacy su Win11
-        // (ExplorerPatcher o taskbar remnant da 23H2)
         HWND hTray    = FindWindowW(L"Shell_TrayWnd", NULL);
         HWND hNotify  = hTray   ? FindWindowExW(hTray,   NULL, L"TrayNotifyWnd",   NULL) : NULL;
         HWND hSysPager= hNotify ? FindWindowExW(hNotify, NULL, L"SysPager",        NULL) : NULL;
@@ -362,6 +361,26 @@ static void DetectWindowsVersion() {
             Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd — unusual configuration");
         } else {
             Wh_Log(L"Win11: Shell_TrayWnd not found — taskbar not ready yet");
+        }
+
+        // Verifica presenza ExplorerPatcher
+        WCHAR epPniduiPath[MAX_PATH];
+        StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
+                         L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
+        if (GetFileAttributesW(epPniduiPath) != INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"ExplorerPatcher detected: pnidui.dll found");
+        } else {
+            Wh_Log(L"ExplorerPatcher not detected");
+        }
+
+        // Verifica pnidui.dll di sistema
+        WCHAR sysPniduiPath[MAX_PATH];
+        GetSystemDirectoryW(sysPniduiPath, ARRAYSIZE(sysPniduiPath));
+        StringCchCatW(sysPniduiPath, ARRAYSIZE(sysPniduiPath), L"\\pnidui.dll");
+        if (GetFileAttributesW(sysPniduiPath) != INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"System pnidui.dll found");
+        } else {
+            Wh_Log(L"System pnidui.dll NOT found (Win11 24H2+ native)");
         }
     }
 }
@@ -2410,6 +2429,20 @@ int HitTestRows(int x, int y) {
     }
     return -1;
 }
+// Cache per la detection del bottone di rete
+typedef struct {
+    int  buttonCount;
+    int  networkId;
+    BOOL valid;
+} ToolbarScanCache;
+
+static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
+static ToolbarScanCache g_ToolbarCacheOverflow = {0, -1, FALSE};
+
+static void InvalidateToolbarCache() {
+    g_ToolbarCache.valid = FALSE;
+    g_ToolbarCacheOverflow.valid = FALSE;
+}
 
 void RecalcArrowRect() {
     int labelMidY = WIFI_LABEL_Y + (HEADER_HEIGHT - WIFI_LABEL_Y) / 2;
@@ -3258,184 +3291,42 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         break;
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
-}
+}// =====================================================================
+// Network icon detection v2.8.0 — Icon index matching + blacklist
+// =====================================================================
+static const int g_NetworkIconIndices[] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    10, 11, 12, 13, 14, 15,
+    40, 41, 42,
+    -1
+};
 
-static int g_NetworkButtonId = -1;
-
-
-static BOOL IsNetworkIconByStockIcon(HWND hToolbar, int btnIndex) {
-    HICON hNetIcon = NULL;
-    SHSTOCKICONINFO sii = { sizeof(sii) };
-    if (FAILED(SHGetStockIconInfo(SIID_MYNETWORK, SHGSI_ICON | SHGSI_SMALLICON, &sii))) {
-        return FALSE;
+static BOOL IsNetworkIconIndex(int iBitmap) {
+    for (int i = 0; g_NetworkIconIndices[i] != -1; i++) {
+        if (iBitmap == g_NetworkIconIndices[i]) return TRUE;
     }
-    hNetIcon = sii.hIcon;
-    if (!hNetIcon) return FALSE;
-
-    HIMAGELIST hImageList = (HIMAGELIST)SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0);
-    if (!hImageList) {
-        DestroyIcon(hNetIcon);
-        return FALSE;
-    }
-
-    TBBUTTON tb = {0};
-    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIndex, (LPARAM)&tb)) {
-        DestroyIcon(hNetIcon);
-        return FALSE;
-    }
-
-    HICON hBtnIcon = ImageList_GetIcon(hImageList, tb.iBitmap, ILD_NORMAL);
-    if (!hBtnIcon) {
-        TBBUTTONINFOW tbi = {0};
-        tbi.cbSize = sizeof(tbi);
-        tbi.dwMask = TBIF_IMAGE;
-        if (SendMessageW(hToolbar, TB_GETBUTTONINFOW, tb.idCommand, (LPARAM)&tbi)) {
-            hBtnIcon = ImageList_GetIcon(hImageList, tbi.iImage, ILD_NORMAL);
-        }
-    }
-
-    if (!hBtnIcon) {
-        DestroyIcon(hNetIcon);
-        return FALSE;
-    }
-
-    ICONINFO netInfo = {0}, btnInfo = {0};
-    BOOL match = FALSE;
-    
-    if (GetIconInfo(hNetIcon, &netInfo) && GetIconInfo(hBtnIcon, &btnInfo)) {
-        BITMAP netBmp = {0}, btnBmp = {0};
-        if (GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
-                       sizeof(BITMAP), &netBmp) &&
-            GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
-                       sizeof(BITMAP), &btnBmp)) {
-            if (netBmp.bmWidth == btnBmp.bmWidth && 
-                netBmp.bmHeight == btnBmp.bmHeight) {
-                match = TRUE;
-            }
-        }
-        if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
-        if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
-        if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
-        if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
-    }
-
-    DestroyIcon(hBtnIcon);
-    DestroyIcon(hNetIcon);
-    return match;
-}
-static BOOL IsNetworkIconByAnySignalVariant(HWND hToolbar, int btnIndex) {
-    HIMAGELIST hImageList = (HIMAGELIST)SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0);
-    if (!hImageList) return FALSE;
-
-    TBBUTTON tb = {0};
-    if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)btnIndex, (LPARAM)&tb)) return FALSE;
-
-    HICON hBtnIcon = ImageList_GetIcon(hImageList, tb.iBitmap, ILD_NORMAL);
-    if (!hBtnIcon) {
-        TBBUTTONINFOW tbi = {0};
-        tbi.cbSize = sizeof(tbi);
-        tbi.dwMask = TBIF_IMAGE;
-        if (SendMessageW(hToolbar, TB_GETBUTTONINFOW, tb.idCommand, (LPARAM)&tbi)) {
-            hBtnIcon = ImageList_GetIcon(hImageList, tbi.iImage, ILD_NORMAL);
-        }
-    }
-    if (!hBtnIcon) return FALSE;
-
-    ICONINFO btnInfo = {0};
-    if (!GetIconInfo(hBtnIcon, &btnInfo)) {
-        DestroyIcon(hBtnIcon);
-        return FALSE;
-    }
-
-    BITMAP btnBmp = {0};
-    if (!GetObjectW(btnInfo.hbmColor ? btnInfo.hbmColor : btnInfo.hbmMask, 
-                    sizeof(BITMAP), &btnBmp)) {
-        if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
-        if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
-        DestroyIcon(hBtnIcon);
-        return FALSE;
-    }
-
-    if (btnInfo.hbmColor) DeleteObject(btnInfo.hbmColor);
-    if (btnInfo.hbmMask)  DeleteObject(btnInfo.hbmMask);
-    DestroyIcon(hBtnIcon);
-
-    for (int variant = 0; variant < 6; variant++) {
-        HICON hNetVariant = NULL;
-        ExtractIconExW(L"netshell.dll", 152 + variant, &hNetVariant, NULL, 1);
-        if (!hNetVariant) continue;
-
-        ICONINFO netInfo = {0};
-        if (!GetIconInfo(hNetVariant, &netInfo)) {
-            DestroyIcon(hNetVariant);
-            continue;
-        }
-
-        BITMAP netBmp = {0};
-        BOOL gotBmp = GetObjectW(netInfo.hbmColor ? netInfo.hbmColor : netInfo.hbmMask, 
-                                 sizeof(BITMAP), &netBmp);
-        if (netInfo.hbmColor) DeleteObject(netInfo.hbmColor);
-        if (netInfo.hbmMask)  DeleteObject(netInfo.hbmMask);
-        DestroyIcon(hNetVariant);
-
-        if (gotBmp && netBmp.bmWidth == btnBmp.bmWidth && netBmp.bmHeight == btnBmp.bmHeight) {
-            return TRUE;
-        }
-    }
-
     return FALSE;
 }
 
-static BOOL HasSuspiciousStyle(const TBBUTTON* tb) {
-    if (tb->fsState & TBSTATE_MARKED) return TRUE;
-    if (tb->fsStyle & BTNS_WHOLEDROPDOWN) return TRUE;
-    return FALSE;
-}
-
-
-// Esempio di espansione IA (5 lingue)
 static const WCHAR* const g_NonNetworkButtonNameHints[] = {
-    // ENGLISH
     L"volume", L"audio", L"speaker", L"sound",
     L"battery", L"power",
     L"safely remove", L"remove hardware", L"hardware",
     L"language", L"input", L"keyboard",
     L"action center", L"notification",
     L"touch keyboard", L"pen menu",
-    
-    // ITALIANO
-    L"volume", L"audio", L"altoparlante", L"suono",
-    L"batteria", L"alimentazione",
-    L"rimozione sicura", L"hardware",
-    L"lingua", L"input", L"tastiera",
-    L"centro notifiche", L"notifiche",
-    L"tastiera touch", L"menu penna",
-    
-    // FRANÇAIS
-    L"volume", L"audio", L"haut-parleur", L"son",
-    L"batterie", L"alimentation",
-    L"retirer matériel", L"matériel",
-    L"langue", L"clavier",
-    L"centre de notifications", L"notifications",
-    L"clavier tactile", L"menu stylet",
-    
-    // ESPAÑOL
-    L"volumen", L"audio", L"altavoz", L"sonido",
-    L"batería", L"alimentación",
-    L"quitar hardware", L"hardware",
-    L"idioma", L"entrada", L"teclado",
-    L"centro de notificaciones", L"notificaciones",
-    L"teclado táctil", L"menú lápiz",
-    
-    // DEUTSCH
-    L"lautstärke", L"audio", L"lautsprecher", L"ton",
-    L"batterie", L"strom",
-    L"hardware entfernen", L"hardware",
-    L"sprache", L"eingabe", L"tastatur",
-    L"aktionscenter", L"benachrichtigungen",
-    L"touch-tastatur", L"stiftmenü",
-    
-    // RUSSIAN
+    L"altoparlante", L"suono", L"batteria", L"alimentazione",
+    L"rimozione sicura", L"lingua", L"tastiera",
+    L"centro notifiche", L"notifiche", L"tastiera touch", L"menu penna",
+    L"haut-parleur", L"batterie", L"alimentation",
+    L"retirer matériel", L"matériel", L"langue", L"clavier",
+    L"centre de notifications", L"notifications", L"clavier tactile", L"menu stylet",
+    L"volumen", L"altavoz", L"sonido", L"batería", L"alimentación",
+    L"quitar hardware", L"idioma", L"entrada", L"teclado",
+    L"centro de notificaciones", L"notificaciones", L"teclado táctil", L"menú lápiz",
+    L"lautstärke", L"lautsprecher", L"ton", L"batterie", L"strom",
+    L"hardware entfernen", L"sprache", L"eingabe", L"tastatur",
+    L"aktionscenter", L"benachrichtigungen", L"touch-tastatur", L"stiftmenü",
     L"громкость", L"аудио", L"динамик", L"звук",
     L"батарея", L"питание",
     L"безопасное извлечение", L"оборудование",
@@ -3455,94 +3346,52 @@ static BOOL IsKnownNonNetworkButton(HWND hToolbar, int btnIndex, int idCommand) 
 
     for (size_t h = 0; h < ARRAYSIZE(g_NonNetworkButtonNameHints); h++) {
         if (wcsstr(lower, g_NonNetworkButtonNameHints[h])) {
-            Wh_Log(L"IsKnownNonNetworkButton: index %d (idCommand=%d) matched exclusion hint, text='%s'",
-                   btnIndex, idCommand, text);
+            Wh_Log(L"[Blacklist] Excluded: id=%d text='%s' matched='%s'",
+                   idCommand, text, g_NonNetworkButtonNameHints[h]);
             return TRUE;
         }
     }
     return FALSE;
 }
 
-static BOOL IsNetworkIcon(HWND hToolbar, int btnIndex) {
-    if (IsNetworkIconByAnySignalVariant(hToolbar, btnIndex)) return TRUE;
-    if (IsNetworkIconByStockIcon(hToolbar, btnIndex)) return TRUE;
-    return FALSE;
-}
-
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
+    *outButtonId = -1;
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
-    Wh_Log(L"DetectNetworkButtonId: toolbar has %d buttons", count);
+    Wh_Log(L"[Discovery] Toolbar has %d buttons", count);
 
-    if (count <= 1) {
-        Wh_Log(L"WARNING: Toolbar has only %d button(s). Tray may not be initialized. "
-               L"Network icon not available. Mod will not function correctly.", count);
-    }
-
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count && *outButtonId == -1; i++) {
         TBBUTTON tb = {0};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
-        if (tb.idCommand != TRAY_NETWORK_ID) continue;
+        if (tb.fsState & TBSTATE_HIDDEN) continue;
+        if (tb.fsStyle & TBSTYLE_SEP) continue;
 
-        if (!IsNetworkIcon(hToolbar, i)) {
-            Wh_Log(L"DetectNetworkButtonId: id=2 at index %d, icon does not "
-                   L"match network icon, but accepting anyway (id=2 + not overflow)",
-                   i);
+        WCHAR text[128] = {0};
+        SendMessageW(hToolbar, TB_GETBUTTONTEXT, tb.idCommand, (LPARAM)text);
+        Wh_Log(L"[Discovery]   btn[%d]: id=%d iBitmap=%d text='%s'",
+               i, tb.idCommand, tb.iBitmap, text);
+
+        if (IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) continue;
+
+        if (IsNetworkIconIndex(tb.iBitmap)) {
+            *outButtonId = tb.idCommand;
+            Wh_Log(L"[Discovery] Network found: id=%d iBitmap=%d", tb.idCommand, tb.iBitmap);
         }
-
-        *outButtonId = TRAY_NETWORK_ID;
-        Wh_Log(L"DetectNetworkButtonId: found classic id=2 at index %d", i);
-        return;
     }
 
-    {
-        int bestCandidate = -1;
+    if (*outButtonId == -1) {
         for (int i = 0; i < count; i++) {
             TBBUTTON tb = {0};
             if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
-            if (HasSuspiciousStyle(&tb)) continue;
-            if (IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) continue;
-            
-            if (IsNetworkIconByAnySignalVariant(hToolbar, i)) {
-                bestCandidate = i;
-                Wh_Log(L"DetectNetworkButtonId: found via signal variant icon match at index %d", i);
+            if (tb.idCommand == TRAY_NETWORK_ID && !IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) {
+                *outButtonId = TRAY_NETWORK_ID;
+                Wh_Log(L"[Discovery] Found via ID=2 fallback");
                 break;
             }
-            if (bestCandidate < 0 && IsNetworkIconByStockIcon(hToolbar, i)) {
-                bestCandidate = i;
-            }
-        }
-        
-        if (bestCandidate >= 0) {
-            TBBUTTON tb = {0};
-            SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)bestCandidate, (LPARAM)&tb);
-            *outButtonId = tb.idCommand;
-            Wh_Log(L"DetectNetworkButtonId: selected index %d (idCommand=%d) via icon fallback", 
-                   bestCandidate, tb.idCommand);
-            return;
-        }
-        
-        for (int i = 0; i < count; i++) {
-            TBBUTTON tb = {0};
-            if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
-            if (!HasSuspiciousStyle(&tb)) continue;
-            if (IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) continue;
-            
-            if (IsNetworkIconByAnySignalVariant(hToolbar, i)) {
-                *outButtonId = tb.idCommand;
-                Wh_Log(L"DetectNetworkButtonId: found via icon match (suspicious style but icon matches) at index %d, idCommand=%d", 
-                       i, tb.idCommand);
-                return;
-            }
         }
     }
 
-    *outButtonId = -1;
-    Wh_Log(L"DetectNetworkButtonId: could not identify network button, dumping all:");
-    for (int i = 0; i < count; i++) {
-        TBBUTTON tb = {0};
-        if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
-        Wh_Log(L"  button[%d]: idCommand=%d state=0x%02X style=0x%02X",
-               i, tb.idCommand, (unsigned)tb.fsState, (unsigned)tb.fsStyle);
+    if (*outButtonId == -1) {
+        Wh_Log(L"[Discovery] Network button NOT found");
     }
 }
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
@@ -3563,9 +3412,23 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TBBUTTON tb = {0};
                 if (SendMessageW(hWnd, TB_GETBUTTON, (WPARAM)btnIdx, (LPARAM)&tb)) {
                     BOOL isOverflow = (hWnd == G_hSubclassedOverflowToolbar);
-                    int detectedId = isOverflow ? g_NetworkButtonIdOverflow : g_NetworkButtonId;
-                    int targetId = (detectedId >= 0) ? detectedId : TRAY_NETWORK_ID;
-                    if (tb.idCommand == targetId) {
+                    ToolbarScanCache* cache = isOverflow ? &g_ToolbarCacheOverflow : &g_ToolbarCache;
+                    
+                    int currentCount = (int)SendMessageW(hWnd, TB_BUTTONCOUNT, 0, 0);
+                    if (currentCount != cache->buttonCount) {
+                        cache->valid = FALSE;
+                    }
+                    
+                    if (!cache->valid) {
+                        int detectedId = -1;
+                        DetectNetworkButtonId(hWnd, &detectedId);
+                        cache->networkId = detectedId;
+                        cache->buttonCount = currentCount;
+                        cache->valid = TRUE;
+                    }
+                    
+                    int targetId = cache->networkId;
+                    if (targetId != -1 && tb.idCommand == targetId) {
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
                             DWORD currentTime = GetTickCount();
@@ -3588,7 +3451,6 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
-
 
 static bool IsExplorerProcess() {
     WCHAR exePath[MAX_PATH] = {};
@@ -3622,9 +3484,12 @@ static BOOL InstallTrayInterceptionInternal() {
     
 WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, (DWORD_PTR)&G_SubclassId);
     if (hToolbar) {
-        g_NetworkButtonId = -1;
-        DetectNetworkButtonId(hToolbar, &g_NetworkButtonId);
-    }
+    int detectedId = -1;
+    DetectNetworkButtonId(hToolbar, &detectedId);
+    g_ToolbarCache.networkId = detectedId;
+    g_ToolbarCache.buttonCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+    g_ToolbarCache.valid = (detectedId != -1);
+}
     return TRUE;
 }
 BOOL InstallTrayInterception() {
@@ -3685,14 +3550,12 @@ static void CreateCustomTrayIcon() {
         Shell_NotifyIconW(NIM_DELETE, &nidClean);
     }
     
-    // ✅ Pulisci COMPLETAMENTE lo stato
     if (g_hCustomTrayIcon) {
         DestroyIcon(g_hCustomTrayIcon);
         g_hCustomTrayIcon = NULL;
     }
     ZeroMemory(&g_nid, sizeof(g_nid));
     
-    // ✅ Ora crea la nuova icona
     g_hCustomTrayIcon = GetCurrentNetworkTrayIcon();
     if (!g_hCustomTrayIcon) return;
 
@@ -3712,9 +3575,6 @@ static void CreateCustomTrayIcon() {
 }
 
 static void RemoveCustomTrayIcon() {
-    // NIM_DELETE funziona anche se la finestra non esiste più:
-    // Shell_NotifyIconW cerca l'icona per hWnd+uID e la rimuove
-    // dal tray di sistema, indipendentemente dallo stato della finestra.
     NOTIFYICONDATAW nidDel = {0};
     nidDel.cbSize = sizeof(NOTIFYICONDATAW);
     nidDel.hWnd = g_hHiddenWnd;  // può essere NULL o invalido, va bene lo stesso
@@ -3761,14 +3621,6 @@ static void UpdateCustomTrayIcon() {
 // Toggle flyout
 // -------------------------------------------------------
 void ToggleFlyoutWindow() {
-    // Il flyout deve sempre vivere sul thread di HotkeyThreadProc: è il solo
-    // loop di messaggi sotto il nostro controllo, capace di ricevere
-    // WM_TOGGLE_FLYOUT_REQUEST marshallato da altri thread (es. il click
-    // sull'icona di sistema, gestito sul thread della taskbar di Explorer).
-    // Se il chiamante non è quel thread, si marshalla sempre la richiesta là
-    // invece di creare/manipolare la finestra qui: operare cross-thread su
-    // ShowWindow/SetForegroundWindow/MoveWindow è la causa del primo paint
-    // vuoto e del flyout non draggabile/responsivo.
     DWORD dwCurrentThreadId = GetCurrentThreadId();
     BOOL flyoutAlreadyExists = (g_hWndFlyout && IsWindow(g_hWndFlyout));
     DWORD dwTargetOwnerThreadId = flyoutAlreadyExists ? g_dwFlyoutOwnerThreadId : g_Ctx.dwHotkeyThreadId;
@@ -3967,30 +3819,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    // g_hHiddenWnd va creata qui (non in Wh_ModInit): questo thread ha un
-    // message loop attivo per tutta la durata del mod, quindi i messaggi
-    // della finestra (WM_TRAY_ICON_NOTIFY: click, menu contestuale) vengono
-    // effettivamente pompati. Creata altrove (es. nel thread di Wh_ModInit,
-    // che ritorna subito senza mai chiamare GetMessage), la finestra
-    // resterebbe orfana: l'icona apparirebbe comunque (Shell_NotifyIconW
-    // funziona indipendentemente dal pump), ma niente click/menu/aggiornamenti
-    // visibili in risposta a quei messaggi.
     if (g_Settings.enableCustomTrayIcon) {
-        // Se una finestra nascosta precedente è ancora viva (es. Wh_ModInit
-        // rieseguito senza un Wh_ModUninit completo nel mezzo), distruggila
-        // prima di crearne una nuova: altrimenti la vecchia icona resta
-        // orfana nel tray (hWnd diverso = icona diversa per Shell_NotifyIconW)
-        // e se ne accumula una seconda ad ogni reinizializzazione.
         if (g_hHiddenWnd && IsWindow(g_hHiddenWnd)) {
-            Wh_Log(L"HotkeyThreadProc: stale hidden window found, destroying before recreating");
             SendMessageW(g_hHiddenWnd, WM_CLOSE, 0, 0);
             g_hHiddenWnd = NULL;
         }
         g_hHiddenWnd = CreateHiddenWindow();
         if (g_hHiddenWnd) {
             CreateCustomTrayIcon();
-        } else {
-            Wh_Log(L"HotkeyThreadProc: CreateHiddenWindow failed, custom tray icon disabled");
         }
     }
 
@@ -4017,15 +3853,11 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == WM_CUSTOM_TRAY_TOGGLE && !ctx->isUninitializing) {
             if (g_Settings.enableCustomTrayIcon) {
-                if (g_hHiddenWnd && IsWindow(g_hHiddenWnd)) {
-                    Wh_Log(L"WM_CUSTOM_TRAY_TOGGLE: hidden window already exists, reusing it");
-                } else {
+                if (!g_hHiddenWnd || !IsWindow(g_hHiddenWnd)) {
                     g_hHiddenWnd = CreateHiddenWindow();
                 }
                 if (g_hHiddenWnd) {
                     CreateCustomTrayIcon();
-                } else {
-                    Wh_Log(L"WM_CUSTOM_TRAY_TOGGLE: CreateHiddenWindow failed, custom tray icon disabled");
                 }
             } else {
                 RemoveCustomTrayIcon();
@@ -4036,6 +3868,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             }
         }
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
+            InvalidateToolbarCache();
             if (G_hSubclassedToolbar) RemoveTrayInterception();
             G_hSubclassedOverflowToolbar = nullptr;
             G_OverflowSubclassId = 0;
@@ -4045,10 +3878,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
-            // Il riavvio della taskbar invalida le icone tray registrate in
-            // precedenza: pulisci lo stato locale prima di ricreare l'icona,
-            // così CreateCustomTrayIcon parte da zero invece di fidarsi di
-            // un g_nid che punta a un'icona che lo shell ha già scartato.
             RemoveCustomTrayIcon();
             CreateCustomTrayIcon();
         }
@@ -4059,8 +3888,9 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     UnregisterHotKey(NULL, HOTKEY_ID);
     return 0;
 }
+
 void SafeCleanup() {
-    if (InterlockedExchange(&g_Ctx.isUninitializing,1L)) return;
+    if (InterlockedExchange(&g_Ctx.isUninitializing, 1L)) return;
     RemoveTrayInterception();
     RemoveCustomTrayIcon();
     if (g_hCustomTrayIcon) { DestroyIcon(g_hCustomTrayIcon); g_hCustomTrayIcon = NULL; }
@@ -4068,50 +3898,47 @@ void SafeCleanup() {
         SendMessageW(g_hHiddenWnd, WM_CLOSE, 0, 0);
         g_hHiddenWnd = NULL;
     }
-    if (g_Ctx.dwHotkeyThreadId) PostThreadMessageW(g_Ctx.dwHotkeyThreadId,WM_QUIT,0,0);
+    if (g_Ctx.dwHotkeyThreadId) PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_QUIT, 0, 0);
     if (g_Ctx.hHotkeyThread) {
-        WaitForSingleObject(g_Ctx.hHotkeyThread,3000);
+        WaitForSingleObject(g_Ctx.hHotkeyThread, 3000);
         CloseHandle(g_Ctx.hHotkeyThread);
-        g_Ctx.hHotkeyThread=NULL; g_Ctx.dwHotkeyThreadId=0;
+        g_Ctx.hHotkeyThread = NULL; g_Ctx.dwHotkeyThreadId = 0;
     }
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-        SendMessageW(g_hWndFlyout,WM_SAFE_CLOSE,0,0);
-        for (int i=0; i<50 && IsWindow(g_hWndFlyout); i++) {
+        SendMessageW(g_hWndFlyout, WM_SAFE_CLOSE, 0, 0);
+        for (int i = 0; i < 50 && IsWindow(g_hWndFlyout); i++) {
             MSG msg;
-            while (PeekMessageW(&msg,NULL,0,0,PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
     if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
     if (g_pNLM) { g_pNLM->Release(); g_pNLM = NULL; }
-    if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient,NULL); g_Ctx.hWlanClient=NULL; }
+    if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient, NULL); g_Ctx.hWlanClient = NULL; }
     FreeSystemIcons();
     FreeGlobalFonts();
-    g_hWndFlyout=g_hWndButtonConnect=g_hWndCheckboxConnect=NULL;
+    g_hWndFlyout = g_hWndButtonConnect = g_hWndCheckboxConnect = NULL;
     g_dwFlyoutOwnerThreadId = 0;
-    g_Initialized=FALSE;
+    g_Initialized = FALSE;
 }
+
 LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_TRAY_ICON_NOTIFY:
             if (g_Ctx.isUninitializing) break;
             if (LOWORD(lp) == WM_LBUTTONUP) {
-                Wh_Log(L"Opening flyout from custom tray icon");
                 ToggleFlyoutWindow();
             } else if (LOWORD(lp) == WM_RBUTTONUP) {
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenuW(hMenu, MF_STRING, IDM_TRAY_TROUBLESHOOT, LOC(STR_TRAY_TROUBLESHOOT));
                 AppendMenuW(hMenu, MF_STRING, IDM_TRAY_NETWORK_SETTINGS, LOC(STR_TRAY_NETWORK_SETTINGS));
-
                 POINT pt;
                 GetCursorPos(&pt);
                 SetForegroundWindow(hwnd);
-
                 int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD,
                                          pt.x, pt.y, 0, hwnd, NULL);
                 if (cmd == IDM_TRAY_TROUBLESHOOT) {
-                    ShellExecuteW(NULL, L"open", L"msdt.exe",
-                                  L"-id NetworkDiagnosticsWeb", NULL, SW_SHOWNORMAL);
+                    ShellExecuteW(NULL, L"open", L"msdt.exe", L"-id NetworkDiagnosticsWeb", NULL, SW_SHOWNORMAL);
                 } else if (cmd == IDM_TRAY_NETWORK_SETTINGS) {
                     ShellExecuteW(NULL, L"open", L"control.exe",
                                   L"/name Microsoft.NetworkAndSharingCenter", NULL, SW_SHOWNORMAL);
@@ -4130,68 +3957,53 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return 0;
 }
+
 static HWND CreateHiddenWindow() {
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = HiddenWndProc;
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = L"Win7NetFlyoutHidden";
-    
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
         return NULL;
     }
-    
-    // Invece di HWND_MESSAGE, crea una finestra invisibile ma reale
-    return CreateWindowExW(
-        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-        wc.lpszClassName,
-        L"",
-        WS_POPUP,  // Finestra popup invisibile
-        0, 0, 1, 1,  // Dimensioni minime
-        NULL, NULL, GetModuleHandle(NULL), NULL
-    );
+    return CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+        wc.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1,
+        NULL, NULL, GetModuleHandle(NULL), NULL);
 }
-// -------------------------------------------------------
-// Windhawk entry points
-// -------------------------------------------------------
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.7.1 ===");
+    Wh_Log(L"=== Wh_ModInit v2.8.0 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
     }
     DetectWindowsVersion();
     LoadSettings();
-    ZeroMemory(&g_Ctx,sizeof(g_Ctx));
+    ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
+
     static DWORD lastInitTime = 0;
     DWORD currentTime = GetTickCount();
     if (lastInitTime > 0 && (currentTime - lastInitTime) < 2000) {
-        Wh_Log(L"Wh_ModInit called too quickly after previous init (%lu ms) - ignoring", 
-        currentTime - lastInitTime);
-        return TRUE; 
+        Wh_Log(L"Wh_ModInit called too quickly - ignoring");
+        return TRUE;
     }
     lastInitTime = currentTime;
+
     g_hConnectMutex = CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex");
-    if (!g_hConnectMutex) {
-        Wh_Log(L"Failed to create connect mutex");
-    }
-    
     DetermineLocale();
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
-    
-    // g_hHiddenWnd viene creata in HotkeyThreadProc (ha un message loop attivo)
-    
+
     if (!IsExplorerProcess()) {
-        // Windhawk inietta anche in processi non-explorer: non serve subclassing qui
         g_Initialized = TRUE;
         return TRUE;
     }
-    
+
     InitGlobalFonts();
     InitRefreshButtonRect();
     RecalcArrowRect();
-    
+
     if (g_Settings.redirectNetworkContextMenu) {
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -4201,10 +4013,10 @@ BOOL Wh_ModInit() {
             }
         }
     }
-    
+
     InstallTrayInterceptionInternal();
 
-    g_Ctx.hHotkeyThread = CreateThread(NULL,0,HotkeyThreadProc,&g_Ctx,0,&g_Ctx.dwHotkeyThreadId);
+    g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
         if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
         DeleteCriticalSection(&g_Ctx.csLock);
@@ -4212,7 +4024,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    DWORD dwMaxClient=2, dwCurVer=0;
+    DWORD dwMaxClient = 2, dwCurVer = 0;
     for (int wlanAttempt = 0; wlanAttempt < 10; wlanAttempt++) {
         DWORD wlanResult = WlanOpenHandle(dwMaxClient, NULL, &dwCurVer, &g_Ctx.hWlanClient);
         if (wlanResult == ERROR_SUCCESS) {
@@ -4222,18 +4034,17 @@ BOOL Wh_ModInit() {
         }
         Sleep(2000);
     }
-    
-    g_Initialized=TRUE;
+
+    g_Initialized = TRUE;
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
-    // s_settingsSavedOnce = true;
     BOOL oldRoundedCorners = g_Settings.useRoundedCorners;
     BOOL oldCustomTrayIcon = g_Settings.enableCustomTrayIcon;
     LoadSettings();
     DetermineLocale();
-    
+
     if (oldRoundedCorners != g_Settings.useRoundedCorners) {
         if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             BOOL wasVisible = IsWindowVisible(g_hWndFlyout);
@@ -4241,17 +4052,17 @@ void Wh_ModSettingsChanged() {
             if (wasVisible) ToggleFlyoutWindow();
         }
     }
-    
+
     if (oldCustomTrayIcon != g_Settings.enableCustomTrayIcon) {
         if (g_Ctx.dwHotkeyThreadId) {
             PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_CUSTOM_TRAY_TOGGLE, 0, 0);
         }
     }
-    
+
     if (g_Ctx.dwHotkeyThreadId) {
         PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_HOTKEY_SETTINGS_CHANGED, 0, 0);
     }
-    
+
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_RefreshTimer) {
             KillTimer(g_hWndFlyout, g_RefreshTimer);
