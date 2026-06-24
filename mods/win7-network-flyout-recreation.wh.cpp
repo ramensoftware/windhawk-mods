@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.0
+// @version        2.8.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -3292,9 +3292,18 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
 }// =====================================================================
-// Network icon detection v2.8.0 — Icon index matching + blacklist
+// Network icon detection v2.8.1 — Icon index matching + blacklist
 // =====================================================================
-static const int g_NetworkIconIndices[] = {
+// Indici icone di rete in pnidui.dll per Windows 10 (ID 0-21)
+static const int g_NetworkIconIndices_Win10[] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21,  // Varianti tema chiaro/scuro
+    -1
+};
+
+// Indici icone di rete in pnidui.dll per Windows 11 (ID 0-15 + 40-42)
+static const int g_NetworkIconIndices_Win11[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 15,
     40, 41, 42,
@@ -3302,8 +3311,9 @@ static const int g_NetworkIconIndices[] = {
 };
 
 static BOOL IsNetworkIconIndex(int iBitmap) {
-    for (int i = 0; g_NetworkIconIndices[i] != -1; i++) {
-        if (iBitmap == g_NetworkIconIndices[i]) return TRUE;
+    const int* list = g_isWin11 ? g_NetworkIconIndices_Win11 : g_NetworkIconIndices_Win10;
+    for (int i = 0; list[i] != -1; i++) {
+        if (iBitmap == list[i]) return TRUE;
     }
     return FALSE;
 }
@@ -3325,6 +3335,11 @@ static const WCHAR* const g_NonNetworkButtonNameHints[] = {
     L"quitar hardware", L"idioma", L"entrada", L"teclado",
     L"centro de notificaciones", L"notificaciones", L"teclado táctil", L"menú lápiz",
     L"lautstärke", L"lautsprecher", L"ton", L"batterie", L"strom",
+    L"batteria", L"battery", L"batterie", L"batería",
+    L"carica", L"charge", L"chargement",
+    L"tempo residuo", L"remaining", L"rimanenti",
+    L"power", L"alimentazione", L"alimentation", L"alimentación",
+    L"strom", L"питание", L"батарея",
     L"hardware entfernen", L"sprache", L"eingabe", L"tastatur",
     L"aktionscenter", L"benachrichtigungen", L"touch-tastatur", L"stiftmenü",
     L"громкость", L"аудио", L"динамик", L"звук",
@@ -3370,21 +3385,26 @@ static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
         Wh_Log(L"[Discovery]   btn[%d]: id=%d iBitmap=%d text='%s'",
                i, tb.idCommand, tb.iBitmap, text);
 
-        if (IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) continue;
-
+        // Prima: match tecnico per indice icona
         if (IsNetworkIconIndex(tb.iBitmap)) {
-            *outButtonId = tb.idCommand;
-            Wh_Log(L"[Discovery] Network found: id=%d iBitmap=%d", tb.idCommand, tb.iBitmap);
+            // Poi: verifica blacklist come safety net
+            if (!IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) {
+                *outButtonId = tb.idCommand;
+                Wh_Log(L"[Discovery] Network found: id=%d iBitmap=%d", tb.idCommand, tb.iBitmap);
+            } else {
+                Wh_Log(L"[Discovery] Icon match blocked by blacklist: id=%d iBitmap=%d", tb.idCommand, tb.iBitmap);
+            }
         }
     }
 
+    // Fallback: ID=2 verificato con blacklist
     if (*outButtonId == -1) {
         for (int i = 0; i < count; i++) {
             TBBUTTON tb = {0};
             if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
             if (tb.idCommand == TRAY_NETWORK_ID && !IsKnownNonNetworkButton(hToolbar, i, tb.idCommand)) {
                 *outButtonId = TRAY_NETWORK_ID;
-                Wh_Log(L"[Discovery] Found via ID=2 fallback");
+                Wh_Log(L"[Discovery] Found via ID=2 fallback at index %d", i);
                 break;
             }
         }
@@ -3972,7 +3992,7 @@ static HWND CreateHiddenWindow() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.8.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.8.1 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
