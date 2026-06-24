@@ -31,10 +31,10 @@ and make sure that `dwm.exe` is in the list.
 - enableLeftWin: false
   $name: Enable Left Win key
   $description: Use Left Windows key to switch layout
-- enableRightWin: false
+- enableRightWin: true
   $name: Enable Right Win key
   $description: Use Right Windows key to switch layout
-- enableLeftAlt: true
+- enableLeftAlt: false
   $name: Enable Left Alt key
   $description: Use Left Alt key to switch layout
 - enableRightAlt: false
