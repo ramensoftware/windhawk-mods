@@ -410,14 +410,14 @@ BOOL Wh_ModInit()
     }
     else
     {
-        WindhawkUtils::SYMBOL_HOOK dui70_hook = {
+        WindhawkUtils::SYMBOL_HOOK dui70_dll_hooks = {
             { L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)" },
             (void**)&Element_PaintBg,
             (void*)Element_PaintBgHook,
             false
         };
 
-        if (!WindhawkUtils::HookSymbols(hDui70, &dui70_hook, 1))
+        if (!WindhawkUtils::HookSymbols(hDui70, &dui70_dll_hooks, 1))
         {
             Wh_Log(L"Failed to hook DirectUI::Element::PaintBackground — Control Panel Color Fix will be skipped.");
         }
