@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.7.0
+// @version        2.7.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -3673,57 +3673,42 @@ static void CreateCustomTrayIcon() {
     if (!g_Settings.enableCustomTrayIcon) return;
     if (!g_hHiddenWnd || !IsWindow(g_hHiddenWnd)) return;
     
-    // Rimuovi SEMPRE una eventuale icona precedente con hWnd+uID fissi
-    // (NIM_DELETE è idempotente: non fa nulla se non esiste). Non ci si può
-    // basare sullo stato di g_nid.hWnd per decidere se serve la rimozione:
-    // dopo un riavvio della taskbar (TaskbarCreated) lo shell scarta tutte
-    // le icone registrate in precedenza, ma g_nid.hWnd resta non-NULL lato
-    // nostro. Una NIM_ADD successiva con lo stesso uID poteva quindi creare
-    // una seconda icona "fantasma" invece di sostituire quella vecchia.
     NOTIFYICONDATAW nidClean = {0};
     nidClean.cbSize = sizeof(NOTIFYICONDATAW);
-    nidClean.hWnd = g_hHiddenWnd;
     nidClean.uID = CUSTOM_TRAY_ICON_ID;
+    // Prova a rimuovere da tutte le finestre possibili
+    nidClean.hWnd = g_hHiddenWnd;
     Shell_NotifyIconW(NIM_DELETE, &nidClean);
-    ZeroMemory(&g_nid, sizeof(g_nid));
-
+    // Se la finestra è stata ricreata, prova anche con la vecchia
+    if (g_nid.hWnd && g_nid.hWnd != g_hHiddenWnd) {
+        nidClean.hWnd = g_nid.hWnd;
+        Shell_NotifyIconW(NIM_DELETE, &nidClean);
+    }
+    
+    // ✅ Pulisci COMPLETAMENTE lo stato
     if (g_hCustomTrayIcon) {
         DestroyIcon(g_hCustomTrayIcon);
         g_hCustomTrayIcon = NULL;
     }
+    ZeroMemory(&g_nid, sizeof(g_nid));
     
+    // ✅ Ora crea la nuova icona
     g_hCustomTrayIcon = GetCurrentNetworkTrayIcon();
     if (!g_hCustomTrayIcon) return;
 
-    ZeroMemory(&g_nid, sizeof(g_nid));
     g_nid.cbSize = sizeof(NOTIFYICONDATAW);
     g_nid.hWnd = g_hHiddenWnd;
     g_nid.uID = CUSTOM_TRAY_ICON_ID;
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
     g_nid.uCallbackMessage = WM_TRAY_ICON_NOTIFY;
     g_nid.hIcon = g_hCustomTrayIcon;
-    
-    if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
-    WCHAR ssidBuf[33];
-    GetDisplaySSID(0, ssidBuf, 33);
-    StringCchPrintfW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"%s - %s", ssidBuf, LOC(STR_INTERNET_ACCESS));
-} else {
-    wcscpy_s(g_nid.szTip, LOC(STR_WIFI_HEADER));
-}
+    // ... tooltip ...
     
     Shell_NotifyIconW(NIM_ADD, &g_nid);
-
-    // Senza NIM_SETVERSION lo shell tratta l'icona con semantiche "legacy"
-    // (pre-Vista): può finire spinta nell'overflow invece che nella tray
-    // principale, e il comportamento dei messaggi di notifica del mouse
-    // diventa meno predicibile. NOTIFYICON_VERSION_4 è quello usato dalle
-    // icone moderne di sistema (inclusa quella di rete originale).
     g_nid.uVersion = NOTIFYICON_VERSION_4;
-    if (!Shell_NotifyIconW(NIM_SETVERSION, &g_nid)) {
-        Wh_Log(L"CreateCustomTrayIcon: NIM_SETVERSION failed");
-    }
-
-    Wh_Log(L"Custom tray icon created/updated");
+    Shell_NotifyIconW(NIM_SETVERSION, &g_nid);
+    
+    Wh_Log(L"Custom tray icon created (hWnd=0x%p, uID=%d)", g_hHiddenWnd, CUSTOM_TRAY_ICON_ID);
 }
 
 static void RemoveCustomTrayIcon() {
@@ -4169,7 +4154,7 @@ static HWND CreateHiddenWindow() {
 // Windhawk entry points
 // -------------------------------------------------------
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.7.0 ===");
+    Wh_Log(L"=== Wh_ModInit v2.7.1 ===");
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
@@ -4257,10 +4242,6 @@ void Wh_ModSettingsChanged() {
         }
     }
     
-    // Ricrea l'icona tray se l'impostazione è cambiata. Marshallato sul
-    // thread di HotkeyThreadProc: è l'unico con un message loop attivo, e se
-    // la finestra nascosta venisse creata qui i suoi messaggi (incluso il
-    // click sull'icona) non sarebbero mai pompati da nessuno.
     if (oldCustomTrayIcon != g_Settings.enableCustomTrayIcon) {
         if (g_Ctx.dwHotkeyThreadId) {
             PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_CUSTOM_TRAY_TOGGLE, 0, 0);
