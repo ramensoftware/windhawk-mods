@@ -23,7 +23,6 @@ with a usage bar.
 * Displays the disk usage percentage text below the bar.
 
 ## Configuration
-This mod provides the following options:
 * **Show red bar on low space:** Switches the usage bar color to red when disk
   usage exceeds 90%.
 * **Show decimal percentage:** Displays the disk usage percentage text with one
