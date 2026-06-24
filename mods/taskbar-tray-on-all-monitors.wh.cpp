@@ -52,7 +52,6 @@ frame keeps all secondary widths in sync at runtime.
 #include <windhawk_utils.h>
 
 #include <commctrl.h>
-#include <shellapi.h>
 #include <ShellScalingApi.h>
 #include <windowsx.h>
 #include <winrt/base.h>
@@ -440,17 +439,13 @@ static void ArmFlyoutContext(HWND taskbarWnd, int kind, POINT anchor) {
     MONITORINFOEX armMi = {};
     armMi.cbSize = sizeof(armMi);
     GetMonitorInfo(mon, &armMi);
-    APPBARDATA abd = {sizeof(abd)};
-    UINT abState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
     Wh_Log(L"[FlyoutCtx] Armed kind=%d mon=%p \"%s\" dpi=%u anchor=(%d,%d) "
-           L"duration=%u taskbar=(%d,%d,%d,%d) monWork=(%d,%d,%d,%d) "
-           L"autoHide=%s",
+           L"duration=%u taskbar=(%d,%d,%d,%d) monWork=(%d,%d,%d,%d)",
            kind, mon, armMi.szDevice, g_flyoutCtx.targetDpi,
            anchor.x, anchor.y, durationMs,
            tbRect.left, tbRect.top, tbRect.right, tbRect.bottom,
            armMi.rcWork.left, armMi.rcWork.top,
-           armMi.rcWork.right, armMi.rcWork.bottom,
-           (abState & ABS_AUTOHIDE) ? L"YES" : L"NO");
+           armMi.rcWork.right, armMi.rcWork.bottom);
 }
 
 static void ClearFlyoutContext() {
@@ -480,10 +475,16 @@ static void ShortenFlyoutContext(DWORD newDurationMs) {
     }
 }
 
+// Forward declarations used by flyout code below
+static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass = nullptr,
+                                 int outClassSize = 0);
+static decltype(&MonitorFromRect) MonitorFromRect_Original = nullptr;
+static decltype(&SetWindowPos)    SetWindowPos_Original     = nullptr;
+
 // ─── Known flyout window identification ─────────────────────────────────────
 
-static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass = nullptr,
-                                 int outClassSize = 0) {
+static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass,
+                                 int outClassSize) {
     wchar_t className[128] = {};
     if (!GetClassName(hWnd, className, ARRAYSIZE(className)))
         return false;
@@ -495,15 +496,42 @@ static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass = nullptr,
         return true;
     if (wcscmp(className, L"ControlCenterWindow") == 0)
         return true;
-    // Note: Xaml_WindowedPopupClass is excluded — it matches tooltips and
-    // small XAML popups that the system positions correctly. Real CC/overflow
-    // flyouts use ControlCenterWindow or TopLevelWindowForOverflowXamlIsland.
+    // Xaml_WindowedPopupClass is matched only when a CC/NC flyout context
+    // is active (i.e. we just forwarded a right-click to the primary).
+    // This avoids catching tooltips and other small XAML popups that the
+    // system positions correctly during normal operation.
+    if (wcscmp(className, L"Xaml_WindowedPopupClass") == 0) {
+        auto* ctx = GetActiveFlyoutContext();
+        return ctx && (ctx->flyoutKind == kControlCenter ||
+                       ctx->flyoutKind == kNotificationCenter);
+    }
     if (wcscmp(className, L"#32768") == 0)
         return true;
-    if (wcscmp(className, L"XamlExplorerHostIslandWindow") == 0)
+    // XamlExplorerHostIslandWindow and DesktopChildSiteBridge are used by
+    // both tray flyout popups AND Explorer file manager windows (toolbars,
+    // navigation bar, content area). Only treat them as flyout windows if
+    // they are NOT children of an Explorer file manager window (CabinetWClass)
+    // or a navigation window (ShellTabWindowClass).
+    if (wcscmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+        wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0) {
+        // Walk up the parent/owner chain to check for Explorer file manager
+        HWND ancestor = hWnd;
+        for (int i = 0; i < 10 && ancestor; i++) {
+            HWND parent = GetParent(ancestor);
+            if (!parent) parent = GetWindow(ancestor, GW_OWNER);
+            if (!parent) break;
+            wchar_t parentClass[128] = {};
+            if (GetClassName(parent, parentClass, ARRAYSIZE(parentClass))) {
+                if (wcscmp(parentClass, L"CabinetWClass") == 0 ||
+                    wcscmp(parentClass, L"ShellTabWindowClass") == 0 ||
+                    wcscmp(parentClass, L"ExploreWClass") == 0) {
+                    return false;  // Explorer file manager window, not a flyout
+                }
+            }
+            ancestor = parent;
+        }
         return true;
-    if (wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)
-        return true;
+    }
     // Note: Windows.UI.Composition.DesktopWindowContentBridge is excluded —
     // it's the taskbar's own XAML bridge, not a flyout popup.
     return false;
@@ -525,9 +553,7 @@ static bool IsKnownFlyoutWindow(HWND hWnd, wchar_t* outClass = nullptr,
 
 // Original function pointers (set during hook installation)
 static decltype(&MonitorFromPoint)  MonitorFromPoint_Original  = nullptr;
-static decltype(&MonitorFromRect)   MonitorFromRect_Original   = nullptr;
 static decltype(&MonitorFromWindow) MonitorFromWindow_Original = nullptr;
-static decltype(&SetWindowPos)      SetWindowPos_Original      = nullptr;
 static decltype(&MoveWindow)        MoveWindow_Original        = nullptr;
 static decltype(&DeferWindowPos)    DeferWindowPos_Original    = nullptr;
 static decltype(&TrackPopupMenuEx)  TrackPopupMenuEx_Original  = nullptr;
@@ -568,20 +594,23 @@ static bool TranslateFlyoutRect(HWND hWnd, const RECT& requested,
         if (!sourceDpi) sourceDpi = 96;
     }
 
+    // Get class name for kind-specific placement and rescaling decisions
+    wchar_t className[128] = {};
+    GetClassName(hWnd, className, ARRAYSIZE(className));
+
     // Rescale dimensions if source and target monitors have different DPI.
-    // Only rescale for fixed-size flyouts (overflow tray, tray popups).
-    // Control Center and Notification Center fill the work area height and
-    // are already sized correctly by the system for the target monitor.
-    bool shouldRescale = (sourceDpi != targetDpi) &&
-        (ctx->flyoutKind == kOverflowTray || ctx->flyoutKind == kTrayPopup);
+    // Rescale for: fixed-size flyouts (overflow tray, tray popups) and
+    // Xaml_WindowedPopupClass (CC/NC context menus forwarded from secondary).
+    // Full-height panels (Control Center, Notification Center) fill the work
+    // area and are sized correctly by the system — no rescaling needed.
+    bool isSmallPopup = (ctx->flyoutKind == kOverflowTray ||
+                         ctx->flyoutKind == kTrayPopup ||
+                         wcscmp(className, L"Xaml_WindowedPopupClass") == 0);
+    bool shouldRescale = (sourceDpi != targetDpi) && isSmallPopup;
     if (shouldRescale) {
         width  = MulDiv(width, targetDpi, sourceDpi);
         height = MulDiv(height, targetDpi, sourceDpi);
     }
-
-    // Get class name for kind-specific placement
-    wchar_t className[128] = {};
-    GetClassName(hWnd, className, ARRAYSIZE(className));
 
     Wh_Log(L"[Translate] class=%s kind=%d anchor=(%d,%d) "
            L"targetMon=%p srcDpi=%u tgtDpi=%u "
@@ -649,7 +678,7 @@ static bool TranslateFlyoutRect(HWND hWnd, const RECT& requested,
 
 static bool TryCursorRescue(HWND hWnd, const RECT& requestedRect) {
     wchar_t className[128] = {};
-    if (!GetClassName(hWnd, className, ARRAYSIZE(className)))
+    if (!IsKnownFlyoutWindow(hWnd, className, ARRAYSIZE(className)))
         return false;
 
     int kind = kFlyoutNone;
@@ -896,6 +925,28 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter,
                                       int X, int Y, int cx, int cy,
                                       UINT uFlags) {
     if (!g_unloading && !g_flyoutRedirectionSuppressed) {
+        // Unconditional logging for Xaml_WindowedPopupClass to diagnose
+        // right-click context menus (primary vs secondary comparison).
+        {
+            wchar_t debugCls[128] = {};
+            if (GetClassName(hWnd, debugCls, ARRAYSIZE(debugCls)) &&
+                wcscmp(debugCls, L"Xaml_WindowedPopupClass") == 0 &&
+                ShouldTranslatePlacement(uFlags)) {
+                RECT wr = {};
+                GetWindowRect(hWnd, &wr);
+                bool vis = IsWindowVisible(hWnd);
+                LONG style = GetWindowLong(hWnd, GWL_STYLE);
+                LONG exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+                Wh_Log(L"[SWP_Debug] Xaml_WindowedPopupClass hwnd=%p "
+                       L"pos=(%d,%d) size=(%d,%d) flags=0x%X "
+                       L"curRect=(%d,%d,%d,%d) visible=%d "
+                       L"style=0x%X exStyle=0x%X",
+                       hWnd, X, Y, cx, cy, uFlags,
+                       wr.left, wr.top, wr.right, wr.bottom,
+                       vis, style, exStyle);
+            }
+        }
+
         bool isFlyout = IsKnownFlyoutWindow(hWnd);
 
         if (isFlyout && ShouldTranslatePlacement(uFlags)) {
@@ -1103,8 +1154,11 @@ static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags,
                    ctx->flyoutKind);
 
             ShortenFlyoutContext(kAfterPlacementMs);
-            return TrackPopupMenuEx_Original(hMenu, uFlags, newX, newY,
-                                              hWnd, lptpm);
+
+            BOOL result = TrackPopupMenuEx_Original(hMenu, uFlags, newX, newY,
+                                                     hWnd, lptpm);
+
+            return result;
         }
     }
     return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
@@ -1257,6 +1311,222 @@ static bool GetFlyoutAnchorPoint(HWND hWnd, LPARAM lParam, int flyoutKind,
     return true;
 }
 
+// ─── Mouse hook — intercept right-clicks on CC/NC, relay to primary ──────────
+// The XAML island child window processes WM_RBUTTONDOWN directly, before
+// WM_PARENTNOTIFY reaches Shell_SecondaryTrayWnd. A WH_MOUSE hook fires
+// before the target window's WndProc, letting us swallow the message.
+//
+// Instead of just eating the click, we relay it to the primary taskbar's
+// XAML island at the equivalent position. The primary processes it normally
+// (no XamlRoot crash), opens the MenuFlyout, and our SetWindowPos/MoveWindow
+// hooks reposition the resulting Xaml_WindowedPopupClass to the secondary.
+
+static HHOOK g_mouseHook = nullptr;
+
+// Set when we're forwarding a right-click to the primary — prevents the
+// mouse hook from eating the forwarded message and the subclass from
+// re-arming the flyout context. Cleared by a deferred timer after
+// SendInput's async messages have been processed.
+static bool g_forwardingRightClick = false;
+
+// Timer callback: clears g_forwardingRightClick after SendInput's async
+// messages have been processed by the message loop.
+static VOID CALLBACK ForwardClickCleanupTimerProc(HWND, UINT, UINT_PTR id,
+                                                   DWORD) {
+    KillTimer(nullptr, id);
+    g_forwardingRightClick = false;
+    Wh_Log(L"[Forward] Cleanup timer fired, forwarding flag cleared");
+}
+
+// Find the Shell_SecondaryTrayWnd ancestor of a window, if any.
+static HWND FindSecondaryTaskbarAncestor(HWND hWnd) {
+    HWND root = GetAncestor(hWnd, GA_ROOT);
+    if (!root) return nullptr;
+    wchar_t cls[64] = {};
+    GetClassName(root, cls, ARRAYSIZE(cls));
+    if (wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0)
+        return root;
+    return nullptr;
+}
+
+// Find the XAML island child window inside a taskbar (primary or secondary).
+// The XAML island is a child window of class
+// "Windows.UI.Composition.DesktopWindowContentBridge".
+static HWND FindXamlIslandChild(HWND taskbarWnd) {
+    struct FindCtx { HWND result; } ctx = {nullptr};
+    EnumChildWindows(taskbarWnd, [](HWND child, LPARAM lp) -> BOOL {
+        wchar_t cls[128] = {};
+        GetClassName(child, cls, ARRAYSIZE(cls));
+        if (wcscmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
+            auto* c = reinterpret_cast<FindCtx*>(lp);
+            c->result = child;
+            return FALSE;  // found it
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.result;
+}
+
+// Translate a right-click from a secondary taskbar to the primary.
+// The click position is mapped by preserving the x-offset-from-right,
+// since both taskbars share the same tray layout (right-aligned).
+static void ForwardRightClickToPrimary(HWND secondaryTaskbar,
+                                        POINT screenPt, int kind) {
+    // Find primary taskbar
+    HWND primaryTaskbar = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (!primaryTaskbar) {
+        Wh_Log(L"[Forward] Primary taskbar not found");
+        return;
+    }
+
+    // Find XAML island in primary
+    HWND primaryIsland = FindXamlIslandChild(primaryTaskbar);
+    if (!primaryIsland) {
+        Wh_Log(L"[Forward] Primary XAML island not found");
+        return;
+    }
+
+    // Compute x-from-right in the secondary taskbar (in client pixels)
+    RECT secClient = {};
+    GetClientRect(secondaryTaskbar, &secClient);
+    POINT secClientPt = screenPt;
+    ScreenToClient(secondaryTaskbar, &secClientPt);
+    int xFromRight = secClient.right - secClientPt.x;
+
+    // Map to primary taskbar client coordinates (same x-from-right)
+    RECT priClient = {};
+    GetClientRect(primaryTaskbar, &priClient);
+
+    // DPI-adjust: the x-from-right is in secondary pixels, convert to primary pixels
+    UINT secDpi = GetWindowDpi(secondaryTaskbar);
+    UINT priDpi = GetWindowDpi(primaryTaskbar);
+    int priXFromRight = MulDiv(xFromRight, priDpi, secDpi ? secDpi : 96);
+
+    int priClientX = priClient.right - priXFromRight;
+    if (priClientX < priClient.left) priClientX = priClient.left;
+
+    // The XAML island may not cover the full taskbar client area.
+    // Convert from taskbar client to island client coords.
+    POINT priScreenPt = {priClientX, (priClient.top + priClient.bottom) / 2};
+    ClientToScreen(primaryTaskbar, &priScreenPt);
+
+    POINT islandClientPt = priScreenPt;
+    ScreenToClient(primaryIsland, &islandClientPt);
+
+    // Arm flyout context targeting the secondary monitor BEFORE sending
+    // the click so our MonitorFrom*/SetWindowPos hooks redirect the menu.
+    POINT anchor = {};
+    LPARAM secLParam = MAKELPARAM(secClientPt.x, secClientPt.y);
+    GetFlyoutAnchorPoint(secondaryTaskbar, secLParam, kind, &anchor);
+    ArmFlyoutContext(secondaryTaskbar, kind, anchor);
+
+    Wh_Log(L"[Forward] Relaying right-click: secondary screen=(%d,%d) "
+           L"xFromRight=%d -> primary island client=(%d,%d) kind=%d "
+           L"anchor=(%d,%d)",
+           screenPt.x, screenPt.y, xFromRight,
+           islandClientPt.x, islandClientPt.y, kind,
+           anchor.x, anchor.y);
+
+    // Synthesize a real right-click at the primary island position using
+    // SendInput. SendMessage(WM_RBUTTONDOWN/UP) doesn't work because XAML's
+    // input processing requires messages to come through the real input
+    // pipeline with proper input state (GetAsyncKeyState, etc.).
+    //
+    // SendInput with MOUSEEVENTF_ABSOLUTE positions the click in normalized
+    // coordinates (0-65535 mapped to the virtual screen). The mouse hook's
+    // g_forwardingRightClick flag prevents our hook from eating the
+    // injected click on the primary.
+
+    // Convert primary screen point to normalized absolute coordinates.
+    // The virtual screen spans all monitors.
+    int vsX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vsY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vsW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vsH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    LONG absX = (LONG)(((double)(priScreenPt.x - vsX) / vsW) * 65535.0 + 0.5);
+    LONG absY = (LONG)(((double)(priScreenPt.y - vsY) / vsH) * 65535.0 + 0.5);
+
+    Wh_Log(L"[Forward] SendInput abs=(%d,%d) screen=(%d,%d) vs=(%d,%d,%d,%d)",
+           absX, absY, priScreenPt.x, priScreenPt.y, vsX, vsY, vsW, vsH);
+
+    INPUT inputs[3] = {};
+    // First move cursor to the primary position
+    inputs[0].type = INPUT_MOUSE;
+    inputs[0].mi.dx = absX;
+    inputs[0].mi.dy = absY;
+    inputs[0].mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE |
+                            MOUSEEVENTF_VIRTUALDESK;
+    // Right button down
+    inputs[1].type = INPUT_MOUSE;
+    inputs[1].mi.dx = absX;
+    inputs[1].mi.dy = absY;
+    inputs[1].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_ABSOLUTE |
+                            MOUSEEVENTF_VIRTUALDESK;
+    // Right button up
+    inputs[2].type = INPUT_MOUSE;
+    inputs[2].mi.dx = absX;
+    inputs[2].mi.dy = absY;
+    inputs[2].mi.dwFlags = MOUSEEVENTF_RIGHTUP | MOUSEEVENTF_ABSOLUTE |
+                            MOUSEEVENTF_VIRTUALDESK;
+
+    // Set flag BEFORE SendInput. SendInput is async — the injected messages
+    // arrive through the message queue AFTER SendInput returns. We use a
+    // timer callback to clear the flag and restore the cursor after XAML
+    // has had time to process the input and create the context menu.
+    g_forwardingRightClick = true;
+    SendInput(3, inputs, sizeof(INPUT));
+
+    // Defer cursor restore and flag reset via timer. 200ms gives XAML
+    // enough time to process the input and create the context menu.
+    SetTimer(nullptr, 0, 200, ForwardClickCleanupTimerProc);
+}
+
+static LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && !g_unloading && !g_forwardingRightClick) {
+        if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
+            wParam == WM_CONTEXTMENU) {
+            auto* mhs = reinterpret_cast<MOUSEHOOKSTRUCT*>(lParam);
+            HWND taskbar = FindSecondaryTaskbarAncestor(mhs->hwnd);
+            if (taskbar) {
+                // Convert screen coords to taskbar client coords for hit test
+                POINT clientPt = mhs->pt;
+                ScreenToClient(taskbar, &clientPt);
+                LPARAM clientLParam = MAKELPARAM(clientPt.x, clientPt.y);
+                int kind = HitTestTrayClick(taskbar, clientLParam);
+                if (kind == kControlCenter || kind == kNotificationCenter) {
+                    if (wParam == WM_RBUTTONDOWN) {
+                        Wh_Log(L"[MouseHook] Intercepting right-click on "
+                               L"CC/NC (kind=%d) -> forwarding to primary",
+                               kind);
+                        ForwardRightClickToPrimary(taskbar, mhs->pt, kind);
+                    }
+                    return 1;  // eat the original message
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+}
+
+static void InstallMouseHook() {
+    if (g_mouseHook) return;
+    g_mouseHook = SetWindowsHookEx(WH_MOUSE, MouseHookProc, nullptr,
+                                    GetCurrentThreadId());
+    if (g_mouseHook) {
+        Wh_Log(L"[MouseHook] Installed on thread %u", GetCurrentThreadId());
+    } else {
+        Wh_Log(L"[MouseHook] Failed: error=%d", GetLastError());
+    }
+}
+
+static void RemoveMouseHook() {
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+        Wh_Log(L"[MouseHook] Removed");
+    }
+}
+
 // ─── Taskbar subclass ───────────────────────────────────────────────────────
 
 static constexpr UINT_PTR kTaskbarSubclassId = 0x54524159; // 'TRAY'
@@ -1272,6 +1542,13 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg,
         if (uMsg == WM_NCDESTROY) {
             RemoveWindowSubclass(hWnd, TaskbarSubclassProc, kTaskbarSubclassId);
         }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Skip arming during forwarded right-clicks — we already armed the
+    // context in ForwardRightClickToPrimary and don't want the subclass
+    // to override it with a different kind when WM_PARENTNOTIFY arrives.
+    if (g_forwardingRightClick) {
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -1296,6 +1573,9 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg,
     if (isDown) {
         int kind = HitTestTrayClick(hWnd, lParam);
         if (kind != kFlyoutNone) {
+            // Note: right-click on CC/NC is eaten by the WH_MOUSE hook
+            // (MouseHookProc) before it reaches the XAML island. The
+            // subclass here only arms the flyout context for left-clicks.
             if (isRight && kind != kOverflowTray) {
                 kind = kTrayPopup;
             }
@@ -1366,6 +1646,10 @@ static void InstallFlyoutHooks() {
             InstallTaskbarSubclass(tbWnd);
         }
     }
+
+    // Install WH_MOUSE hook to eat right-clicks on CC/NC before XAML
+    // island processes them (prevents XamlRoot-lock crash).
+    InstallMouseHook();
 }
 
 // ─── Identify primary vs secondary from XAML tree ───────────────────────────
@@ -1702,22 +1986,43 @@ static void SyncTrayState(SecondaryInfo& si) {
         }
     }
 
-    const wchar_t* icContainers[] = {
-        L"ControlCenterButton",
-        L"NotificationCenterButton",
-    };
-    for (auto name : icContainers) {
-        auto primaryC = FindChildByName(primaryGrid, name);
-        auto secondaryC = FindChildByName(secondaryGrid, name);
-        if (!primaryC || !secondaryC) continue;
-        auto pIC = primaryC.try_as<Controls::ItemsControl>();
-        auto sIC = secondaryC.try_as<Controls::ItemsControl>();
+    // Share ItemsSource on ControlCenterButton so volume/network/battery
+    // glyphs render on secondaries. Right-clicks on secondary CC glyphs
+    // are intercepted by the WH_MOUSE hook (MouseHookProc), forwarded to
+    // the primary taskbar's XAML island (which has the correct XamlRoot),
+    // and the resulting context menu is repositioned to the secondary
+    // monitor by our SetWindowPos/MoveWindow hooks.
+    //
+    // NotificationCenterButton is NOT shared — Windows gives every taskbar
+    // its own clock/date items natively.
+    auto primaryCC = FindChildByName(primaryGrid, L"ControlCenterButton");
+    auto secondaryCC = FindChildByName(secondaryGrid, L"ControlCenterButton");
+    if (primaryCC && secondaryCC) {
+        auto pIC = primaryCC.try_as<Controls::ItemsControl>();
+        auto sIC = secondaryCC.try_as<Controls::ItemsControl>();
         if (pIC && sIC) {
             auto pSource = pIC.ItemsSource();
             if (pSource && sIC.ItemsSource() != pSource) {
                 try { sIC.ItemsSource(pSource); } catch (...) {}
             }
+            // Re-attach on primary to transfer menu ownership back.
+            // Setting ItemsSource on the secondary moves the per-glyph
+            // context menu ownership to the secondary's island. Without
+            // this re-attach, right-clicking CC glyphs on the PRIMARY
+            // would also crash. The detach/re-attach cycle moves
+            // ownership back to the primary's island.
+            if (pSource) {
+                try {
+                    pIC.ItemsSource(nullptr);
+                    pIC.ItemsSource(pSource);
+                } catch (...) {}
+            }
         }
+        // Note: right-click on secondary CC is intercepted by the
+        // WH_MOUSE hook and forwarded to the primary's XAML island.
+        // The re-attach above ensures the primary island owns the
+        // MenuFlyout, so the forwarded click opens the menu without
+        // crashing. Our placement hooks then reposition it.
     }
 
     for (auto stackName : g_stackContainers) {
@@ -1959,6 +2264,7 @@ static void ResetXamlState() {
     }
 
     RemoveAllTaskbarSubclasses();
+    RemoveMouseHook();
     ClearFlyoutContext();
     g_autoRevokerList.clear();
 
@@ -2291,6 +2597,7 @@ BOOL Wh_ModInit() {
                                            LoadLibraryExW_Hook,
                                            &LoadLibraryExW_Original);
         }
+
     }
 
     // Hook Win32 APIs for proactive flyout repositioning in ALL included processes (explorer.exe and ShellHost.exe).
@@ -2345,15 +2652,6 @@ BOOL Wh_ModInit() {
                MonitorFromWindow_Original, SetWindowPos_Original,
                MoveWindow_Original, DeferWindowPos_Original,
                TrackPopupMenuEx_Original);
-    }
-
-    // Log taskbar auto-hide state
-    {
-        APPBARDATA abd = {sizeof(abd)};
-        UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
-        Wh_Log(L"[Taskbar] auto-hide=%s always-on-top=%s",
-               (state & ABS_AUTOHIDE) ? L"YES" : L"NO",
-               (state & ABS_ALWAYSONTOP) ? L"YES" : L"NO");
     }
 
     // Log all monitor geometries for diagnostics
@@ -2411,8 +2709,9 @@ void Wh_ModBeforeUninit() {
     // Remove display change listener
     UninstallDisplayChangeListener();
 
-    // Remove flyout subclasses and clear context
+    // Remove flyout subclasses, mouse hook, and clear context
     RemoveAllTaskbarSubclasses();
+    RemoveMouseHook();
     ClearFlyoutContext();
 
     // Remove SizeChanged listener from primary frame
