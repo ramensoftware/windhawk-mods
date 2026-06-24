@@ -302,6 +302,10 @@ VOID __cdecl Element_PaintBgHook(
     class Element* This, HDC hdc, class Value* value,
     LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
 {
+    if (!value || !pRect) {
+        Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+        return;
+    }
     if (g_settingControlPanelColorFix)
     {
         if ((int)(*(DWORD*)value << 26) >> 26 != 9)
