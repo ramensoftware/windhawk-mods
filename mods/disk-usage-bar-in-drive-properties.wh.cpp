@@ -39,8 +39,7 @@ This mod provides the following options:
 
 ---
 
-This mod is based on the
-"[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
+Based on the "[Disk Pie Chart](https://windhawk.net/mods/disk-pie-chart)" mod by
 **aubymori**.
 */
 // ==/WindhawkModReadme==
