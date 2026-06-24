@@ -14535,7 +14535,7 @@
           4
         ],
         "ratingUsers": 5,
-        "updated": 1774175059000,
+        "updated": 1782288435000,
         "users": 137
       },
       "metadata": {
@@ -14546,7 +14546,7 @@
           "winword.exe"
         ],
         "name": "Word 图像无损导出 PDF",
-        "version": "1.1.1"
+        "version": "1.2.0"
       },
       "metadataEnglish": {
         "description": "Forces Word to export PDFs with lossless image quality",
