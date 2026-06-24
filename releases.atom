@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-23T17:07:06.000Z</updated>
+    <updated>2026-06-24T21:18:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[One Key Keyboard Layout Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/one-key-layout-switcher#f689a0f9e31c38ef4df585bcc6a730539a9e335b</id>
+        <link href="https://windhawk.net/mods/one-key-layout-switcher"/>
+        <updated>2026-06-24T21:18:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Switches keyboard layout with a single key press instead of a two-key combination.
+Intercepts keyboard events at the lowest possible user-mode level (WH<em>KEYBOARD</em>LL).</p>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Keys Notifier 1.0.0]]></title>
         <id>https://windhawk.net/mods/lock-keys-notifier#0d25f36c6bece76b384de92bf08e6c7bc2e10061</id>
@@ -948,35 +963,6 @@ and RAM usage, plus the single top-consuming process for each.</p>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Saved Run Commands 1.0.0]]></title>
-        <id>https://windhawk.net/mods/saved-run-commands#3fea50c0b2dad77305ca50376a7683b232443903</id>
-        <link href="https://windhawk.net/mods/saved-run-commands"/>
-        <updated>2026-06-13T09:21:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="savedruncommands">Saved Run Commands</h1>
-<p>Adds a small button to the standard Windows Run dialog. The button opens a
-compact "Saved Commands" window. A double click on a saved command inserts it
-into the Run edit box and immediately executes it.
-The Saved Commands window can also save either the current Run command or a
-command typed directly into its own input field.
-Saved commands can be edited with the "Update selected" button.
-Multiple saved commands can be selected and deleted at once.
-Each saved command has a per-row "Run as administrator" checkbox.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28button%29.png" alt="Windows Run dialog with the Saved Run Commands button" /></p>
-<p><img src="https://raw.githubusercontent.com/communism420/Media-Host-For-My-Windhawk-Mods/refs/heads/main/photo%20saved%20run%20commands%20%28window%29.png" alt="Saved Commands window" /></p>
-<p>Notes:</p>
-<ul>
-<li>Commands are stored as one line per command in the mod storage folder.</li>
-<li>Elevated commands expand environment variables before a best-effort
-ShellExecute runas launch.</li>
-<li>The UI added by this mod is intentionally English-only.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

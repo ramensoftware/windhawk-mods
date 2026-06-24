@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-24T21:10:13.000Z</updated>
+    <updated>2026-06-24T21:18:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[One Key Keyboard Layout Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/one-key-layout-switcher#f689a0f9e31c38ef4df585bcc6a730539a9e335b</id>
+        <link href="https://windhawk.net/mods/one-key-layout-switcher"/>
+        <updated>2026-06-24T21:18:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Switches keyboard layout with a single key press instead of a two-key combination.
+Intercepts keyboard events at the lowest possible user-mode level (WH<em>KEYBOARD</em>LL).</p>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore AutoRun Icon in Drive Properties 1.0.1]]></title>
         <id>https://windhawk.net/mods/restore-autorun-icon-in-drive-properties#b0195475999df8f6766269b86ed2cf8ec1f79f62</id>
@@ -395,24 +410,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Folder Hover Menu 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-folder-hover-menu#453bb94231c97af750e51e2584e73991074cb4fc</id>
-        <link href="https://windhawk.net/mods/explorer-folder-hover-menu"/>
-        <updated>2026-06-18T12:52:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for rounded corners for the menu.</li>
-<li>Added options for customizing the button position.</li>
-<li>Added options for limiting the amount of shown items and loading time to reduce slow loading and avoid hangs.</li>
-<li>Added mouse wheel scrolling support.</li>
-<li>The default button size was changed from 18 to 20.</li>
-<li>Fixed the hover button not appearing sometimes.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

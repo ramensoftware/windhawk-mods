@@ -8306,6 +8306,33 @@
         "version": "1.0"
       }
     },
+    "one-key-layout-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782335905000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782335905000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anixx",
+        "description": "Switch keyboard layout with a single key press (Win, Alt, or Menu key)",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "dwm.exe"
+        ],
+        "name": "One Key Keyboard Layout Switcher",
+        "version": "1.0"
+      }
+    },
     "onenote-cursor-teleport-fix": {
       "details": {
         "defaultSorting": 160,
