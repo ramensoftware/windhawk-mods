@@ -1105,6 +1105,14 @@ void ClearLockScreenCache() {
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lock Screen", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
         return;
 
+    auto isWindhawkEntry = [](PCWSTR s) -> bool {
+        constexpr PCWSTR kPrefix = L"IMAGENAME:";
+        if (_wcsnicmp(s, kPrefix, 10) != 0) return false;
+        PCWSTR path = s + 10;
+        PCWSTR name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"windhawk.exe") == 0;
+    };
+
     auto hasWindhawkEntry = [&]() -> bool {
         wchar_t data[512];
         DWORD dataSize;
@@ -1112,7 +1120,7 @@ void ClearLockScreenCache() {
             std::wstring valueName = L"Details_" + std::wstring(1, c);
             dataSize = sizeof(data);
             if (RegGetValueW(hKey, NULL, valueName.c_str(), RRF_RT_REG_SZ, NULL, data, &dataSize) == ERROR_SUCCESS) {
-                if (wcscmp(data, L"IMAGENAME:C:\\Program Files\\Windhawk\\windhawk.exe") == 0) {
+                if (isWindhawkEntry(data)) {
                     return true;
                 }
             }
@@ -1127,6 +1135,7 @@ void ClearLockScreenCache() {
             RegDeleteValueW(hKey, (L"ImageId_" + suffix).c_str());
             RegDeleteValueW(hKey, (L"OriginalFile_" + suffix).c_str());
         }
+        Wh_Log(L"Cleared lock screen cache");
     }
 
     RegCloseKey(hKey);
@@ -1227,7 +1236,7 @@ void WhTool_ModUninit() {
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
+// The mod will load and run in a dedicated explorer.exe process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
