@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.1
+// @version        2.8.2
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -24,19 +24,24 @@ This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, re
 - **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
 - **Windows 7 style tooltips**: Full network info on hover (SSID, signal, security type)
 - **Right-click context menu**: Quick access to network status and properties
-- **Keyboard navigation**: Full Arrow keys, Enter, and Escape support if required.
-- **Auto-refresh**: Periodically refreshes the network list at a configurable interval (use the Refresh button to force a new scan)
-- **Language support**: English, Italian, Spanish, French, Russian, or auto-detect from system
+- **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
+- **Auto-refresh**: Periodically refreshes the network list at a configurable interval
+- **Language support**: English, Italian, Spanish, French, Russian, or auto-detect
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
-- **Rounded corners**: Enable this if you want a more modern look on Windows 11 or if you use the Aero theme from Windows Vista/7.
+- **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 
 ## Requirements
 
 - **Windows 10** with the native taskbar
 - **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher))
-- The network icon must be visible in the main system tray (not hidden in the overflow menu as it may work but it could be less reliable)
+- The network icon must be visible in the main system tray (overflow menu not supported)
 
 > **Note:** This mod is unlikely to work with other taskbar mods (e.g. Retrobar) or heavily customized configurations.
+
+## Known limitations
+
+- **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
+- **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
 
 ## Hotkeys
 
@@ -50,14 +55,14 @@ This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, re
 - **Anixx** — Testing on Windows 11 23H2 and feedback
 - **sebastian08dm08-cpu** — Testing on Windows 10 1809
 
-If you encounter issues or need to clarify something, please report it on the author of the mod.
+If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - language: auto
   $name: Language
-  $description: User interface language, it follows your system language by default
+  $description: User interface language, follows your system language by default
   $options:
     - auto: Auto-detect
     - en: English
@@ -73,22 +78,18 @@ If you encounter issues or need to clarify something, please report it on the au
   $description: Hide real network names so all networks show as "Network 1", "Network 2", etc.
 - redirectNetworkContextMenu: true
   $name: Redirect network context menu
-  $description: When you right-click the network tray icon, it will open the classic Network Connections panel instead of the modern Settings page.
+  $description: When you right-click the network tray icon, open the classic Network Connections panel instead of the modern Settings page.
 - refreshInterval: 3000
   $name: Auto-refresh interval (milliseconds)
   $description: How often to refresh the network list automatically. Set to 0 to disable auto-refresh. Minimum 1000 ms if enabled.
 - enableHotkey: false
   $name: Enable Ctrl+H hotkey
-  $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts. This option is reccomended for debugging purposes.
+  $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts.
 - useRoundedCorners: false
   $name: Rounded corners
-  $description: Give the flyout window rounded corners (looks better on Windows 11 or with the Aero theme enabled, disabled by default for classic theme compatibility).
-- enableCustomTrayIcon: false
-  $name: Show a custom tray icon 
-  $description: This setting adds a second network icon to the system tray with a similar design to the original Windows 7 one. Useful as a fallback if the automatic flyout interception doesn't work on your setup. Click it to open the flyout.
+  $description: Give the flyout window rounded corners. Looks better on Windows 11 or with the Aero theme enabled. Disabled by default for classic theme compatibility.
 */
 // ==/WindhawkModSettings==
-
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -175,11 +176,6 @@ static HICON g_hCustomTrayIcon = NULL;
 static NOTIFYICONDATAW g_nid = {0};
 static HWND g_hHiddenWnd = NULL;
 static UINT g_uTaskbarCreated = 0;
-// Thread che possiede g_hWndFlyout (il primo che la crea). Le richieste di
-// toggle provenienti da altri thread vengono marshallate lì, invece di
-// operare cross-thread su ShowWindow/SetForegroundWindow/MoveWindow, il che
-// causava un primo paint vuoto e un flyout non draggabile/responsivo quando
-// l'apertura avveniva da un thread diverso da quello proprietario.
 static DWORD g_dwFlyoutOwnerThreadId = 0;
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -253,7 +249,6 @@ void LoadSettings() {
     }
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
-    int raw_win11IconWidth = Wh_GetIntSetting(L"win11NetworkIconWidth");
 
     g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
     g_Settings.privacyMode               = raw_privacy     != 0;
@@ -262,8 +257,6 @@ void LoadSettings() {
     g_Settings.language                  = raw_language;
     g_Settings.enableHotkey              = raw_enableHotkey != 0;
     g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
-    g_Settings.win11NetworkIconWidth      = (raw_win11IconWidth > 0) ? raw_win11IconWidth : 40;
-    g_Settings.enableCustomTrayIcon       = Wh_GetIntSetting(L"enableCustomTrayIcon") != 0;
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
         g_Settings.refreshInterval = 1000;
@@ -3708,124 +3701,17 @@ void ToggleFlyoutWindow() {
 #define OVERFLOW_POLL_TIMER_ID 9101
 #define OVERFLOW_POLL_INTERVAL_MS 800
 
-static HWND FindOverflowToolbar() {
-    HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", NULL);
-    if (!hOverflow) return NULL;
-    return FindWindowExW(hOverflow, NULL, L"ToolbarWindow32", NULL);
-}
 
-static BOOL WaitForOverflowToolbarStable(HWND hToolbar, int minButtons, int maxWaitMs) {
-    if (!hToolbar || !IsWindow(hToolbar)) return FALSE;
-    
-    int prevCount = -1;
-    int stableCount = 0;
-    int pollIntervalMs = 100;
-    int maxAttempts = maxWaitMs / pollIntervalMs;
-    
-    for (int attempt = 0; attempt < maxAttempts; attempt++) {
-        if (!IsWindow(hToolbar)) return FALSE;
-        
-        int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
-        
-        if (count >= minButtons && count == prevCount) {
-            stableCount++;
-            if (stableCount >= 3) {
-                Wh_Log(L"WaitForOverflowToolbarStable: toolbar stable with %d buttons after %d ms",
-                       count, attempt * pollIntervalMs);
-                return TRUE;
-            }
-        } else {
-            stableCount = 0;
-        }
-        prevCount = count;
-        Sleep(pollIntervalMs);
-    }
-    
-    Wh_Log(L"WaitForOverflowToolbarStable: toolbar did not stabilize within %d ms (last count=%d)",
-           maxWaitMs, prevCount);
-    return FALSE;
-}
 
-static BOOL SafeSubclassOverflowToolbar(HWND hTarget) {
-    if (!hTarget || !IsWindow(hTarget)) return FALSE;
-    if (!IsWindow(hTarget)) return FALSE;
-    return WindhawkUtils::SetWindowSubclassFromAnyThread(
-        hTarget, ToolbarWndProc, (DWORD_PTR)&G_OverflowSubclassId);
-}
 
 static BOOL SafeRemoveOverflowSubclass(HWND hTarget) {
-    if (!hTarget) return FALSE;
-    if (!IsWindow(hTarget)) {
-        return TRUE;
-    }
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTarget, ToolbarWndProc);
-    return TRUE;
+    return NULL;
 }
 
 static void SyncOverflowInterception() {
-    if (!G_hSubclassedToolbar) return;
-    if (G_SubclassId == 0) return;
-    
-    HWND hCurrentOverflowToolbar = FindOverflowToolbar();
-
-    if (hCurrentOverflowToolbar == G_hSubclassedOverflowToolbar) {
-        return;
+   return;
     }
 
-    static HWND s_lastFailedHwnd = NULL;
-    static int  s_failedAttempts = 0;
-
-    if (hCurrentOverflowToolbar == s_lastFailedHwnd) {
-        s_failedAttempts++;
-        if (s_failedAttempts > 3) {
-            return;
-        }
-    } else {
-        s_lastFailedHwnd = hCurrentOverflowToolbar;
-        s_failedAttempts = 0;
-    }
-
-    if (G_hSubclassedOverflowToolbar) {
-        Wh_Log(L"SyncOverflowInterception: overflow toolbar closed, clearing state");
-        SafeRemoveOverflowSubclass(G_hSubclassedOverflowToolbar);
-        G_hSubclassedOverflowToolbar = nullptr;
-        G_OverflowSubclassId = 0;
-        g_NetworkButtonIdOverflow = -1;
-        s_lastFailedHwnd = NULL;
-        s_failedAttempts = 0;
-    }
-
-    if (hCurrentOverflowToolbar) {
-        if (!IsWindow(hCurrentOverflowToolbar)) {
-            Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p no longer valid, skipping",
-                   hCurrentOverflowToolbar);
-            return;
-        }
-        
-        if (!WaitForOverflowToolbarStable(hCurrentOverflowToolbar, 2, 2000)) {
-            Wh_Log(L"SyncOverflowInterception: overflow toolbar 0x%p not stable, will retry next poll",
-                   hCurrentOverflowToolbar);
-            return;
-        }
-    
-        Wh_Log(L"SyncOverflowInterception: overflow toolbar opened (0x%p), subclassing",
-               hCurrentOverflowToolbar);
-
-        if (!SafeSubclassOverflowToolbar(hCurrentOverflowToolbar)) {
-            Wh_Log(L"SyncOverflowInterception: subclass failed/aborted for 0x%p, will retry next poll",
-                   hCurrentOverflowToolbar);
-            return;
-        }
-
-        G_hSubclassedOverflowToolbar = hCurrentOverflowToolbar;
-        g_NetworkButtonIdOverflow = -1;
-        s_failedAttempts = 0;
-
-        if (IsWindow(G_hSubclassedOverflowToolbar)) {
-            DetectNetworkButtonId(G_hSubclassedOverflowToolbar, &g_NetworkButtonIdOverflow);
-        }
-    }
-}
 
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
