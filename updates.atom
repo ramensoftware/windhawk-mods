@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-24T21:18:25.000Z</updated>
+    <updated>2026-06-24T21:27:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.2.1]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#f1df18956cac038a20d04e9d08f371c6121e90ed</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties"/>
+        <updated>2026-06-24T21:27:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>General code optimizations.</li>
+<li>Removed the supported OS versions list from the Readme, as it is unnecessary; the mod will function as long as the required debug symbols exist on Microsoft's servers.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[One Key Keyboard Layout Switcher 1.0]]></title>
         <id>https://windhawk.net/mods/one-key-layout-switcher#f689a0f9e31c38ef4df585bcc6a730539a9e335b</id>
@@ -396,17 +410,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
         <updated>2026-06-22T05:42:14.000Z</updated>
         <content type="html"><![CDATA[<p>Add workaround for all Avalonia applications</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix language indicator in Win10 taskbar under Win11 24H2+ 1.5]]></title>
-        <id>https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator#c58a338f6f0f8db737e8bca45a7156d16e2a0331</id>
-        <link href="https://windhawk.net/mods/fix-legacy-taskbar-tray-input-indicator"/>
-        <updated>2026-06-22T05:41:05.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove flicker on hover</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
