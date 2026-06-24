@@ -9275,7 +9275,7 @@
           1
         ],
         "ratingUsers": 2,
-        "updated": 1771093172000,
+        "updated": 1782335413000,
         "users": 64
       },
       "metadata": {
@@ -9287,7 +9287,7 @@
           "*"
         ],
         "name": "Restore AutoRun Icon in Drive Properties",
-        "version": "1.0"
+        "version": "1.0.1"
       }
     },
     "restore-button-pulse-anim": {
