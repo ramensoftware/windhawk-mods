@@ -31,13 +31,13 @@ and make sure that `dwm.exe` is in the list.
 - enableLeftWin: false
   $name: Enable Left Win key
   $description: Use Left Windows key to switch layout
-- enableRightWin: true
+- enableRightWin: false
   $name: Enable Right Win key
   $description: Use Right Windows key to switch layout
-- enableLeftAlt: false
+- enableLeftAlt: true
   $name: Enable Left Alt key
   $description: Use Left Alt key to switch layout
-- enableRightAlt: true
+- enableRightAlt: false
   $name: Enable Right Alt key
   $description: Use Right Alt key to switch layout
 - enableMenu: true
@@ -77,9 +77,9 @@ constexpr UINT WM_SWITCH_LAYOUT = WM_APP + 1;
 void LoadSettings() {
     PCWSTR method = Wh_GetStringSetting(L"switchMethod");
     
-    if (wcscmp(method, L"altshift") == 0) {
+    if (!wcscmp(method, L"altshift")) {
         settings.switchMethod = SwitchMethod::AltShift;
-    } else if (wcscmp(method, L"ctrlshift") == 0) {
+    } else if (!wcscmp(method, L"ctrlshift")) {
         settings.switchMethod = SwitchMethod::CtrlShift;
     } else {
         settings.switchMethod = SwitchMethod::Both;
@@ -136,10 +136,6 @@ void SendLayoutSwitch() {
         settings.switchMethod == SwitchMethod::Both) {
 
         Wh_Log(L"Sending Alt+Shift");
-
-        if (settings.switchMethod == SwitchMethod::Both) {
-            Sleep(100);
-        }
 
         INPUT inputs[4] = {};
 
@@ -273,17 +269,16 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"=== Keyboard Layout Switcher Uninit ===");
 
-    if (g_hook) {
-        UnhookWindowsHookEx(g_hook);
-        g_hook = NULL;
-    }
-
     if (g_threadId) {
         PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
     }
 
     if (g_thread) {
-        WaitForSingleObject(g_thread, INFINITE);
+        // Use bounded wait instead of INFINITE to prevent potential hang
+        DWORD result = WaitForSingleObject(g_thread, 1000);
+        if (result == WAIT_TIMEOUT) {
+            Wh_Log(L"Warning: Worker thread did not exit within timeout");
+        }
         CloseHandle(g_thread);
         g_thread   = NULL;
         g_threadId = 0;
@@ -293,8 +288,6 @@ void Wh_ModUninit() {
         CloseHandle(g_threadReadyEvent);
         g_threadReadyEvent = NULL;
     }
-
-    memset(s_keyDown, 0, sizeof(s_keyDown));
 }
 
 void Wh_ModSettingsChanged() {
