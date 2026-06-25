@@ -166,20 +166,20 @@ install this mod: [*Remember the folder windows' positions*](https://windhawk.ne
 37. To make the Control Panel to look like a regular folder the way it was before Windows 7, install this mod:
 [*Control Panel Classic View Lite*](https://windhawk.net/mods/cpl-classic-view-lite).
 
-38. To male the Windows Tools (Administrative Tools) folder to remember its view mode, install this mod:
-[Fix Windows Tools Folder View](https://windhawk.net/mods/fix-windows-tools-view).
+38. To make the Windows Tools (Administrative Tools) folder to remember its view mode, install this mod:
+[*Fix Windows Tools Folder View*](https://windhawk.net/mods/fix-windows-tools-view).
 
 39. To make the MSHTML content (CHM viewer, Outlook Express, classic Windows Mail, Internet Explorer) to use controls
 from Classic Theme, install this mod and follow the instructions there:
-[MSHTML Tweaks](https://windhawk.net/mods/mshtml-native-controls)
+[*MSHTML Tweaks*](https://windhawk.net/mods/mshtml-native-controls)
 
 40. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
-[Explorer No Minimum Window Size](https://windhawk.net/mods/explorer-no-min-size)
+[*Explorer No Minimum Window Size*](https://windhawk.net/mods/explorer-no-min-size)
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
 it will require the UAC authorization). Alternatively you can use the 
-[New Classic Theme Configurator](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
+[*New Classic Theme Configurator*](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
 
 */
 // ==/WindhawkModReadme==
