@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-25T12:30:58.000Z</updated>
+    <updated>2026-06-25T20:04:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Ctrl+Backspace Fix for Win32 Text Boxes 1.0.1]]></title>
+        <id>https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes#8816b488b2a762412178f53c1e8eef2b974516bf</id>
+        <link href="https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes"/>
+        <updated>2026-06-25T20:04:32.000Z</updated>
+        <content type="html"><![CDATA[<p>Excluded the <code>Scintilla</code> control to resolve text corruption with Unicode characters that caused a crash in Notepad++.</p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Lock Keys Notifier 1.0.1]]></title>
+        <id>https://windhawk.net/mods/lock-keys-notifier#be4c114ae4a7801eabd67c9cbf851c0754a1b8c0</id>
+        <link href="https://windhawk.net/mods/lock-keys-notifier"/>
+        <updated>2026-06-25T20:04:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Pre-warm GDI+ text pipeline at startup to fix cold-boot first-toast delay</li>
+</ul>]]></content>
+        <author>
+            <name>Havrlisan</name>
+            <uri>https://github.com/havrlisan</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.3.2]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#78b0296b65dab926d11dbc5f063d7314ae204aaf</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-06-25T20:04:03.000Z</updated>
+        <content type="html"><![CDATA[<p>Lowers the default <strong>Change threshold</strong> from 18% to 2%, so more subtle tab switches animate out of the box. The setting remains user-adjustable (1–100%).</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.3.1]]></title>
         <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#abf43cf5f55c1d34f2ca6fcd7da315e8beaacd54</id>
@@ -329,96 +364,6 @@ navigation item, that switch just isn't animated.</li>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Menu Height 1.0]]></title>
-        <id>https://windhawk.net/mods/custom-menu-height#478140d5af7f6de99455f59b3bb6e5c55932e298</id>
-        <link href="https://windhawk.net/mods/custom-menu-height"/>
-        <updated>2026-06-22T18:50:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="custommenuheight">Custom Menu Height</h1>
-<p>Control the height of Win32 context menu items and menu bars. Make classic menus
-as spacious as modern WinUI menus.</p>
-<p>By default, non-immersive context menu items are shown with a height of 22
-pixels, and menu bars with a height of 19 pixels. This mod allows increasing
-both menu heights to any custom value.</p>
-<h2 id="contextmenuitems">Context menu items</h2>
-<p>| Height: 22px (Windows default) | Height: 32px |
-| :----------------------------: | :----------: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-22px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-32px.png" alt="" /> |</p>
-<h2 id="menubar">Menu bar</h2>
-<p>| Height: 19px (Windows default) | Height: 32px |
-| :----------------------------: | :----------: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-19px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-32px.png" alt="" /> |</p>
-<h2 id="recommendedmods">Recommended mods</h2>
-<p>Enhance the overall context menu experience with these complementary mods:
-| Mod | Author | Note |
-| :-- | :----- | :--- |
-| <a href="https://windhawk.net/mods/explorer-context-menu-classic">Classic context menu on Windows 11</a> | m417z | Requires Windows 11 or later |
-| <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> | m417z | Requires Windows 11 or later |
-| <a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a> | Mgg Sk | Requires Windows 10 version 1809 or later |
-| <a href="https://windhawk.net/mods/remove-context-menu-items">Remove Context Menu Items</a> | Armaninyow | - |</p>
-<h2 id="compatibilitynoteimmersivemenus">Compatibility note: Immersive menus</h2>
-<p>To ensure the custom context menu item height functions properly within File
-Explorer and the taskbar on Windows 10 and later, this mod eradicates immersive
-menus system-wide, falling back to standard context menus.</p>
-<p>The code for this implementation is based on the
-"<a href="https://windhawk.net/mods/eradicate-immersive-menus">Eradicate Immersive Menus</a>"
-mod by <strong>aubymori</strong>.</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.4.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-fluent-media-player#1fa4d7fa3995d334df2bba31d035d361b851414a</id>
-        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
-        <updated>2026-06-22T11:57:22.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li><strong>Real-time audio visualizer</strong> (WASAPI loopback + FFT)</li>
-<li>5 bar shapes: Stereo, Mountain, Mirror, Wave, Breathe</li>
-<li>5 color modes: Solid, Dynamic Album, Dynamic Gradient, Custom Gradient, Acrylic</li>
-<li>EQ presets: Balanced, Bass, Rock, Pop, Jazz, Electronic</li>
-<li>Configurable position (left/right of player), vertical anchor (top/middle/bottom), bar count/width/gap, idle bar size, padding, and sensitivity</li>
-<li><strong>Right-click context menu on the player</strong>: Toggle Repeat/Shuffle, Rewind/Forward 5s, Next/Previous Track, Switch Sessions, Open media app, optional Restart Player, Open Windhawk</li>
-<li><strong>"Switch Sessions" button/action</strong> — new media button type, also available as a mouse/context-menu action</li>
-<li><strong>Custom empty album art icon</strong> — replaces the fixed "question mark"/"music note" presets with a configurable glyph (hex code), font, size, color, and opacity</li>
-<li><strong>Per-theme color support</strong> — almost every color field now accepts two values separated by <code>$</code> (e.g. <code>0 0 0$255 255 255</code>) for light/dark theme: background, button icons, title, artist, empty-art icon, visualizer</li>
-<li>Separate pause-overlay icon size control</li>
-<li>Dedicated second color for the gradient background (<code>gradientColor2</code>), independent from the two-tone solid color</li>
-<li>Debug setting to toggle the "Restart Player" entry in the context menu</li>
-<li>Customizable placeholder texts for the title/artist fields — separate, editable strings for "no title on the current track", "no artist on the current track", "no media session at all" (title and artist), each can be left empty to hide that field entirely in that state</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>"Spacing between buttons" and "Button icon size" moved from Main Settings to Appearance → Media Buttons Style</li>
-<li>Reworked player hover/press visuals — new gradient "elevation" border instead of manual brush swapping per state</li>
-<li>Buttons renamed for clarity: Previous → Previous Track, Next → Next Track, Shuffle → Toggle Shuffle, Repeat → Toggle Repeat</li>
-<li>Removed the standalone "Auto theme" toggle — replaced by the universal light$dark color-pair support across all elements</li>
-<li>The title/artist text container now collapses entirely (no reserved space) when both fields end up empty, instead of just hiding the individual text blocks</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota Bars 0.10.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#3b5be7d2026357e86981da619e48f0e58af30ecf</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-06-22T06:32:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Built-in OAuth: the mod now signs you in to Anthropic and OpenAI through your browser instead of reading CLI credential files. Tokens are stored encrypted and refreshed automatically. Sign in / Sign out from a column's right-click menu.</li>
-<li>Show/hide individual accounts from the right-click menu.</li>
-<li>Fix: bars no longer overlap the clock/tray on a cold start.</li>
-<li>More robust sign-in and token-refresh handling.</li>
-</ul>
-<p>Note: accounts are now just provider + label, so re-check your account settings after updating.</p>]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
         </author>
     </entry>
 </feed>

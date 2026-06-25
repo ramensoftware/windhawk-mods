@@ -2689,7 +2689,7 @@
           5
         ],
         "ratingUsers": 5,
-        "updated": 1778532715000,
+        "updated": 1782417872000,
         "users": 206
       },
       "metadata": {
@@ -2700,7 +2700,7 @@
           "*"
         ],
         "name": "Ctrl+Backspace Fix for Win32 Text Boxes",
-        "version": "1.0"
+        "version": "1.0.1"
       }
     },
     "custom-cmd-startup-text": {
@@ -6899,7 +6899,7 @@
           4
         ],
         "ratingUsers": 4,
-        "updated": 1782234426000,
+        "updated": 1782417858000,
         "users": 58
       },
       "metadata": {
@@ -6913,7 +6913,7 @@
         ],
         "license": "MIT",
         "name": "Lock Keys Notifier",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "logon-logoff-shutdown-sounds": {
@@ -12117,7 +12117,7 @@
           0
         ],
         "ratingUsers": 2,
-        "updated": 1782390658000,
+        "updated": 1782417843000,
         "users": 58
       },
       "metadata": {
@@ -12130,7 +12130,7 @@
         ],
         "license": "MIT",
         "name": "Task Manager Tab Slide Animation",
-        "version": "0.3.1"
+        "version": "0.3.2"
       }
     },
     "taskmgr-taller-tab": {

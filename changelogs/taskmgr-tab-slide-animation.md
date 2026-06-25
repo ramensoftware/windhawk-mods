@@ -1,3 +1,7 @@
+## 0.3.2 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78b0296b65dab926d11dbc5f063d7314ae204aaf/mods/taskmgr-tab-slide-animation.wh.cpp))
+
+Lowers the default **Change threshold** from 18% to 2%, so more subtle tab switches animate out of the box. The setting remains user-adjustable (1–100%).
+
 ## 0.3.1 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/abf43cf5f55c1d34f2ca6fcd7da315e8beaacd54/mods/taskmgr-tab-slide-animation.wh.cpp))
 
 - **New "Change threshold" setting** (default 18%) with pixel-sampling comparison, so clicking a process row, selecting, or live-graph ticks no longer trigger a spurious slide.
