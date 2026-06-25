@@ -58,11 +58,6 @@ Processes that cannot be queried are treated as protected and omitted. Terminati
 or otherwise restricted targets may require running Windhawk elevated. The chooser reports
 how many processes could not be inspected, and the result dialog reports per-PID failures.
 
-## GPU mode
-
-The legacy `top_gpu_experimental` value remains parseable for compatibility, but GPU ranking
-is disabled in this no-PDH build. Selecting it displays an explanatory message and does not
-choose a target.
 */
 // ==/WindhawkModReadme==
 
@@ -85,7 +80,7 @@ choose a target.
   $description: One letter, one digit, or F1 through F24.
 - kill_mode: foreground
   $name: Target mode
-  $description: GPU mode is intentionally unavailable in this build.
+  $description: Choose the foreground process, a sampled resource offender, or a weighted executable group.
   $options:
     - foreground: Foreground window process
     - top_cpu: Top CPU offender
@@ -140,6 +135,7 @@ choose a target.
 #include <utility>
 #include <vector>
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
 #include <psapi.h>
@@ -173,7 +169,6 @@ enum class KillMode {
     TopPagefaults,
     TopIo,
     AggregateSuperScore,
-    TopGpuExperimental,
 };
 
 KillMode g_killMode = KillMode::Foreground;
@@ -303,7 +298,6 @@ static KillMode ParseKillMode(PCWSTR value) {
         mode == L"aggregate") {
         return KillMode::AggregateSuperScore;
     }
-    if (mode == L"top_gpu_experimental") return KillMode::TopGpuExperimental;
     return KillMode::Foreground;
 }
 
@@ -314,7 +308,6 @@ static PCWSTR KillModeName(KillMode mode) {
     case KillMode::TopPagefaults: return L"top_pagefaults";
     case KillMode::TopIo: return L"top_io";
     case KillMode::AggregateSuperScore: return L"aggregate_super_score";
-    case KillMode::TopGpuExperimental: return L"top_gpu_experimental";
     }
     return L"unknown";
 }
@@ -354,17 +347,11 @@ static void LoadSettings() {
     if (Wh_GetIntSetting(L"require_shift") != 0) g_modifiers |= MOD_SHIFT;
     if (Wh_GetIntSetting(L"require_win") != 0) g_modifiers |= MOD_WIN;
 
-    PCWSTR keyStr = Wh_GetStringSetting(L"kill_key");
-    g_vkCode = ParseKeyCode(keyStr);
-    if (keyStr) {
-        Wh_FreeStringSetting(keyStr);
-    }
+    auto keyStr = WindhawkUtils::StringSetting::make(L"kill_key");
+    g_vkCode = ParseKeyCode(keyStr.get());
 
-    PCWSTR modeStr = Wh_GetStringSetting(L"kill_mode");
-    g_killMode = ParseKillMode(modeStr);
-    if (modeStr) {
-        Wh_FreeStringSetting(modeStr);
-    }
+    auto modeStr = WindhawkUtils::StringSetting::make(L"kill_mode");
+    g_killMode = ParseKillMode(modeStr.get());
 
     int sampleMs = Wh_GetIntSetting(L"sample_ms");
     g_sampleMs = sampleMs >= 500 && sampleMs <= 15000
@@ -399,11 +386,8 @@ static void LoadSettings() {
     g_showResultSummary = Wh_GetIntSetting(L"show_result_summary") != 0;
 
     g_blacklist.clear();
-    PCWSTR appsStr = Wh_GetStringSetting(L"protected_apps");
-    std::wstring rawApps = appsStr ? appsStr : L"";
-    if (appsStr) {
-        Wh_FreeStringSetting(appsStr);
-    }
+    auto appsStr = WindhawkUtils::StringSetting::make(L"protected_apps");
+    std::wstring rawApps = appsStr.get();
 
     size_t start = 0;
     while (start <= rawApps.size()) {
@@ -811,7 +795,6 @@ static std::wstring FormatPrimaryMetric(const KillDecision& decision) {
         return L"selected window";
     case KillMode::TopCpu:
     case KillMode::AggregateSuperScore:
-    case KillMode::TopGpuExperimental:
         return FormatDouble(decision.metricValue);
     }
     return FormatDouble(decision.metricValue);
@@ -1252,15 +1235,15 @@ static std::wstring CandidateTextForColumn(const KillDecision& decision,
     case 3:
         return FormatPrimaryMetric(decision);
     case 4:
-        return decision.cpuValid ? FormatDouble(decision.cpuPercent) : L"â€”";
+        return decision.cpuValid ? FormatDouble(decision.cpuPercent) : L"—";
     case 5:
         return decision.pageFaultValid
             ? FormatInteger(decision.pageFaultDelta)
-            : L"â€”";
+            : L"—";
     case 6:
-        return decision.ioValid ? FormatMb(decision.ioBytes, true) : L"â€”";
+        return decision.ioValid ? FormatMb(decision.ioBytes, true) : L"—";
     case 7:
-        return decision.memoryValid ? FormatDouble(decision.memoryMb) : L"â€”";
+        return decision.memoryValid ? FormatDouble(decision.memoryMb) : L"—";
     case 8:
         return decision.identity.processPath;
     }
@@ -2044,12 +2027,6 @@ static bool ResolveTargetDecision(KillDecision& decision,
         return true;
     }
 
-    if (decision.mode == KillMode::TopGpuExperimental) {
-        failureMessage =
-            L"GPU ranking is disabled in this no-PDH build. Select another target mode in the mod settings.";
-        return false;
-    }
-
     CandidateBuildResult build = BuildCandidatesForMode(
         decision.mode, decision.sampleMs, candidateCount, g_hStopEvent);
     if (build.cancelled || CancellationRequested()) {
@@ -2413,18 +2390,7 @@ static DWORD WINAPI HotkeyThread(LPVOID) {
     return 0;
 }
 
-// ------------------------ Dedicated tool-process host ------------------------
-
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-
-static void WINAPI EntryPoint_Hook() {
-    // This is the documented Windhawk tool-mod host pattern: the original
-    // windhawk.exe entry-point thread exits while the dedicated worker threads
-    // keep the tool process alive.
-    Wh_Log(L">");
-    ExitThread(0);
-}
+// ------------------------ Dedicated tool-process callbacks ------------------------
 
 BOOL WhTool_ModInit() {
     LoadSettings();
@@ -2509,10 +2475,6 @@ void WhTool_ModUninit() {
         g_hStopEvent = nullptr;
     }
 
-    if (g_toolModProcessMutex) {
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
 }
 
 void WhTool_ModSettingsChanged() {
@@ -2522,36 +2484,54 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
 BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
     }
-
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
-
-    for (int index = 1; index < argc; index++) {
-        if (wcscmp(argv[index], L"-service") == 0 ||
-            wcscmp(argv[index], L"-service-start") == 0 ||
-            wcscmp(argv[index], L"-service-stop") == 0) {
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
     }
-
-    for (int index = 1; index < argc - 1; index++) {
-        if (wcscmp(argv[index], L"-tool-mod") == 0) {
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[index + 1], WH_MOD_ID) == 0) {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
             break;
@@ -2563,12 +2543,11 @@ BOOL Wh_ModInit() {
     if (isExcluded) {
         return FALSE;
     }
-
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutexW failed");
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
@@ -2576,20 +2555,18 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
-
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
-        auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(
-            GetModuleHandleW(nullptr));
-        auto ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        DWORD entryPointRva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRva;
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        Wh_SetFunctionHook(entryPoint,
-                           reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -2605,61 +2582,63 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
-
-    WCHAR currentProcessPath[MAX_PATH]{};
-    DWORD pathLength = GetModuleFileNameW(nullptr, currentProcessPath,
-                                          ARRAYSIZE(currentProcessPath));
-    if (pathLength == 0 || pathLength == ARRAYSIZE(currentProcessPath)) {
-        Wh_Log(L"GetModuleFileNameW failed");
-        return;
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
-
-    WCHAR commandLine[MAX_PATH + 2 +
-        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1]{};
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
-               currentProcessPath, WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
-
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
-        LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID, LPCWSTR,
-        LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto createProcessInternalW =
-        reinterpret_cast<CreateProcessInternalW_t>(
-            GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternalW) {
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
-
-    STARTUPINFOW startupInfo{};
-    startupInfo.cb = sizeof(startupInfo);
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION processInformation{};
-    if (!createProcessInternalW(
-            nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-            NORMAL_PRIORITY_CLASS, nullptr, nullptr, &startupInfo,
-            &processInformation, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed (error=%lu).", GetLastError());
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
-
-    CloseHandle(processInformation.hProcess);
-    CloseHandle(processInformation.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
