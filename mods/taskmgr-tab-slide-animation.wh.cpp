@@ -2,7 +2,7 @@
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
 // @description     Smooth slide transition when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.3.1
+// @version         0.3.2
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
@@ -57,7 +57,7 @@ Disk, Network/Ethernet, Wi-Fi, GPU).
 - capture_delay_ms: 140
   $name: Capture delay (ms)
   $description: Delay after the click before capturing the new view. Raise if it grabs the old view.
-- change_threshold: 18
+- change_threshold: 2
   $name: Change threshold (%)
   $description: Minimum percent of the region that must change for the slide to play. Raise to reduce spurious slides.
 - slide_vertical: false
@@ -91,7 +91,7 @@ struct TabSlideData {
 std::atomic<int>  g_durationMs{250};
 std::atomic<int>  g_topInset{48};
 std::atomic<int>  g_captureDelay{140};
-std::atomic<int>  g_changeThreshold{18};
+std::atomic<int>  g_changeThreshold{2};
 std::atomic<bool> g_slideVertical{false};
 
 std::atomic<bool> g_inProgress{false}; // an animation is currently running
