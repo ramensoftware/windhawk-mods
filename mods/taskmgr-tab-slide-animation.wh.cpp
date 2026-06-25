@@ -2,7 +2,7 @@
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
 // @description     Smooth slide transition when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.2.0
+// @version         0.3.1
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
@@ -16,34 +16,33 @@
 
 ![Demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation.gif)
 
-The Windows 11 Task Manager switches between its left-hand tabs (Processes,
-Performance, App history, Startup apps, Users, Details, Services) instantly. This
-mod adds a smooth **slide** transition between them.
+The Windows 11 Task Manager switches between its tabs instantly. This mod adds a
+smooth **slide** transition - both for the main left navigation (Processes,
+Performance, App history, ...) and for the **Performance sub-pages** (CPU, Memory,
+Disk, Network/Ethernet, Wi-Fi, GPU).
 
 > Experimental. Task Manager is a WinUI 3 app, so there's no clean Win32
 > "tab changed" signal - this works by heuristics and screen capture.
 
 ## How it works
-- A low-level mouse hook (scoped to Task Manager) notices a click in the left
-  navigation area and captures the content area from the screen (old tab).
-- **The content's left edge is detected with UI Automation**: the right edge of
-  the clicked navigation item is where the content begins. This adapts
-  automatically whether the nav pane is **expanded** (wide, with labels) or
-  **collapsed** (icons only) - no manual width setting needed.
-- After a short delay it captures the new tab and slides old -> new in a layered
-  overlay over the content area, then removes it to reveal the real content.
+- A low-level mouse hook (scoped to Task Manager) notices a click in a left-hand
+  navigation area and screen-captures the content next to it (old view).
+- **UI Automation** reads the clicked item's bounding rectangle - its right edge is
+  where the content begins - so the slide region adapts automatically to the main
+  nav (expanded or collapsed) *and* to the Performance sub-list.
+- After a short delay it captures the new view. It only plays the slide if the
+  content actually **changed** by more than a threshold, so clicking a process row,
+  selecting, or live graph updates don't trigger a spurious slide.
 
 ## Settings
-- **Top inset** - height (px) of the top command bar to exclude from the slide.
-- **Capture delay** - how long to wait after the click before grabbing the new
-  tab (ms). Raise if it grabs the old tab.
+- **Top inset** - height (px) of the top command bar to exclude.
+- **Capture delay** - delay after the click before capturing the new view (ms).
+- **Change threshold** - minimum % of the region that must change to animate.
 - **Animation duration** and **slide vertically** to taste.
 
-## Known limitations
-- Relies on UI Automation to locate the content; if UIA can't identify the clicked
-  navigation item, that switch just isn't animated.
-- Clicking the *same* tab still plays a (harmless) slide of identical content.
-- The Task Manager window should be visible/unobscured during the switch.
+## Limitations
+- Relies on UI Automation to locate the clicked item.
+- The window should be visible/unobscured during the switch.
 */
 // ==/WindhawkModReadme==
 
@@ -57,7 +56,10 @@ mod adds a smooth **slide** transition between them.
   $description: Height of the top command bar to exclude from the slide.
 - capture_delay_ms: 140
   $name: Capture delay (ms)
-  $description: Delay after the click before capturing the new tab. Raise if it grabs the old tab.
+  $description: Delay after the click before capturing the new view. Raise if it grabs the old view.
+- change_threshold: 18
+  $name: Change threshold (%)
+  $description: Minimum percent of the region that must change for the slide to play. Raise to reduce spurious slides.
 - slide_vertical: false
   $name: Slide vertically
   $description: Slide up/down instead of left/right.
@@ -89,6 +91,7 @@ struct TabSlideData {
 std::atomic<int>  g_durationMs{250};
 std::atomic<int>  g_topInset{48};
 std::atomic<int>  g_captureDelay{140};
+std::atomic<int>  g_changeThreshold{18};
 std::atomic<bool> g_slideVertical{false};
 
 std::atomic<bool> g_inProgress{false}; // an animation is currently running
@@ -119,6 +122,11 @@ void TmSlideLoadSettings() {
     if (delay < 0) delay = 0;
     if (delay > 1000) delay = 1000;
     g_captureDelay.store(delay, std::memory_order_relaxed);
+
+    int thr = Wh_GetIntSetting(L"change_threshold");
+    if (thr < 1) thr = 1;
+    if (thr > 100) thr = 100;
+    g_changeThreshold.store(thr, std::memory_order_relaxed);
 
     g_slideVertical.store(Wh_GetIntSetting(L"slide_vertical") != 0, std::memory_order_relaxed);
 }
@@ -175,11 +183,60 @@ bool TmSlideClientInfo(HWND root, POINT* originScreen, int* clientW, int* client
     return true;
 }
 
-// Using UI Automation, find the clicked navigation item and return the screen X of
-// its right edge - i.e. where the content area begins. Walks a few ancestors in
-// case ElementFromPoint lands on an inner icon/label. Returns false if the point
-// isn't on a nav-item-like element (so content clicks don't trigger a slide).
-bool TmSlideNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int* contentLeftScreen) {
+// Fraction (0..1) of sampled pixels that differ noticeably between two same-size
+// bitmaps. Used to tell a real view change (high) from a selection highlight or a
+// live graph tick (low). Returns 1.0 (treat as changed) if it can't read the bits.
+double TmSlideChangedFraction(HBITMAP a, HBITMAP b, int w, int h) {
+    if (!a || !b || w <= 0 || h <= 0) return 1.0;
+
+    BITMAPINFO bi;
+    ZeroMemory(&bi, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;        // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    size_t n = (size_t)w * h * 4;
+    BYTE* pa = (BYTE*)HeapAlloc(GetProcessHeap(), 0, n);
+    BYTE* pb = (BYTE*)HeapAlloc(GetProcessHeap(), 0, n);
+    double frac = 1.0;
+    if (pa && pb) {
+        HDC dc = GetDC(NULL);
+        int ra = GetDIBits(dc, a, 0, h, pa, &bi, DIB_RGB_COLORS);
+        int rb = GetDIBits(dc, b, 0, h, pb, &bi, DIB_RGB_COLORS);
+        ReleaseDC(NULL, dc);
+        if (ra && rb) {
+            long sampled = 0, diff = 0;
+            const int step = 4;
+            for (int y = 0; y < h; y += step) {
+                BYTE* rowa = pa + (size_t)y * w * 4;
+                BYTE* rowb = pb + (size_t)y * w * 4;
+                for (int x = 0; x < w; x += step) {
+                    BYTE* ca = rowa + (size_t)x * 4;
+                    BYTE* cb = rowb + (size_t)x * 4;
+                    int d0 = ca[0] - cb[0]; if (d0 < 0) d0 = -d0;
+                    int d1 = ca[1] - cb[1]; if (d1 < 0) d1 = -d1;
+                    int d2 = ca[2] - cb[2]; if (d2 < 0) d2 = -d2;
+                    if (d0 > 24 || d1 > 24 || d2 > 24) diff++;
+                    sampled++;
+                }
+            }
+            if (sampled > 0) frac = (double)diff / (double)sampled;
+        }
+    }
+    if (pa) HeapFree(GetProcessHeap(), 0, pa);
+    if (pb) HeapFree(GetProcessHeap(), 0, pb);
+    return frac;
+}
+
+// Using UI Automation, find the clicked navigation item (main nav OR a second-level
+// list like the Performance sub-pages) and return the screen X of its right edge -
+// i.e. where the content next to it begins. Walks a few ancestors so we land on the
+// whole item/list, not an inner icon/label.
+bool TmSlideNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
+                         int* contentLeftScreen) {
     if (!uia) return false;
 
     IUIAutomationElement* el = NULL;
@@ -188,15 +245,23 @@ bool TmSlideNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int* cont
     IUIAutomationTreeWalker* walker = NULL;
     uia->get_ControlViewWalker(&walker);
 
+    const int leftMax = (int)(clientW * 0.55);
+    const int rightMax = (int)(clientW * 0.70);
+
     int best = -1;
     IUIAutomationElement* cur = el; // owns the ElementFromPoint reference
-    for (int i = 0; i < 5 && cur; ++i) {
+    for (int i = 0; i < 6 && cur; ++i) {
         RECT r;
         if (SUCCEEDED(cur->get_CurrentBoundingRectangle(&r))) {
             int leftRel = r.left - clientLeft;
             int rightRel = r.right - clientLeft;
-            // Nav items hug the left edge and are at most ~pane-wide.
-            if (leftRel < 48 && rightRel >= 32 && rightRel <= 520 && rightRel > best) {
+            int width = rightRel - leftRel;
+            // A nav / sub-nav item or column: starts at the left or in a left column,
+            // is much narrower than the content, and ends in the left portion.
+            if (leftRel >= -8 && leftRel <= leftMax &&
+                width >= 24 && width <= 360 &&
+                rightRel >= 24 && rightRel <= rightMax &&
+                rightRel > best) {
                 best = rightRel;
             }
         }
@@ -243,8 +308,6 @@ void TmSlideRun(HBITMAP oldBmp, HBITMAP newBmp, const RECT& rect) {
 
     const double total = (double)g_durationMs.load(std::memory_order_relaxed);
 
-    // Time-based progress, gated on the DWM compose cycle so each rendered frame
-    // lands on exactly one displayed frame (same trick as the genie mod).
     LARGE_INTEGER freq, start, now;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start);
@@ -257,15 +320,14 @@ void TmSlideRun(HBITMAP oldBmp, HBITMAP newBmp, const RECT& rect) {
         float p = last ? 1.0f : (float)(elapsed / total);
         float e = p * p * (3.0f - 2.0f * p);   // smoothstep ease in/out
 
-        int oldOff = (int)(-e * span);          // outgoing slides off one side
-        int newOff = (int)((1.0f - e) * span);  // incoming slides in from the other
+        int oldOff = (int)(-e * span);
+        int newOff = (int)((1.0f - e) * span);
 
         int ox = vertical ? 0 : oldOff;
         int oy = vertical ? oldOff : 0;
         int nx = vertical ? 0 : newOff;
         int ny = vertical ? newOff : 0;
 
-        // Old + new together cover the whole canvas, so no clear is needed.
         BitBlt(canvasDC, ox, oy, W, H, oldDC, 0, 0, SRCCOPY);
         BitBlt(canvasDC, nx, ny, W, H, newDC, 0, 0, SRCCOPY);
 
@@ -275,7 +337,7 @@ void TmSlideRun(HBITMAP oldBmp, HBITMAP newBmp, const RECT& rect) {
         BLENDFUNCTION bf;
         bf.BlendOp = AC_SRC_OVER;
         bf.BlendFlags = 0;
-        bf.SourceConstantAlpha = 255;  // fully opaque - covers the real content
+        bf.SourceConstantAlpha = 255;
         bf.AlphaFormat = 0;
         UpdateLayeredWindow(overlay, screen, &ptDst, &sz, canvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
 
@@ -299,20 +361,21 @@ void TmSlideRun(HBITMAP oldBmp, HBITMAP newBmp, const RECT& rect) {
     DestroyWindow(overlay);
 }
 
-// Worker: wait for the new tab to render, locate the content edge via UI
-// Automation, capture the new tab, and run the slide.
+// Worker: wait for the new view to render, locate the content edge via UI
+// Automation, capture the new view, and slide - but only if it actually changed.
 DWORD WINAPI TmSlideWorkerThread(LPVOID lpParam) {
     TabSlideData* d = (TabSlideData*)lpParam;
 
     Sleep(g_captureDelay.load(std::memory_order_relaxed));
 
+    int clientW = d->fullRect.right - d->fullRect.left;
     int contentLeft = d->fullRect.left;
     bool located = false;
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     IUIAutomation* uia = NULL;
     if (SUCCEEDED(CoCreateInstance(kCLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
                                    kIID_IUIAutomation, (void**)&uia)) && uia) {
-        located = TmSlideNavItemRight(uia, d->clickPt, d->fullRect.left, &contentLeft);
+        located = TmSlideNavItemRight(uia, d->clickPt, d->fullRect.left, clientW, &contentLeft);
         uia->Release();
     }
     if (SUCCEEDED(hrCo)) CoUninitialize();
@@ -323,12 +386,31 @@ DWORD WINAPI TmSlideWorkerThread(LPVOID lpParam) {
         int ch = content.bottom - content.top;
         if (cw >= 80 && ch >= 80) {
             HBITMAP oldC = TmSlideCrop(d->oldFull, contentLeft - d->fullRect.left, 0, cw, ch);
-            HBITMAP newC = TmSlideCaptureRect(content);
-            if (oldC && newC) {
-                TmSlideRun(oldC, newC, content);
+            if (oldC) {
+                // Re-capture the new view until it has actually rendered. Some tabs
+                // (Disk / Network / GPU) draw their first frame noticeably later than
+                // CPU / Memory, so a single fixed delay misses them. We poll until the
+                // content visibly changes (or give up), which makes the effect robust
+                // to a small capture delay.
+                const double readyFrac = 0.06;
+                const double userThr = g_changeThreshold.load(std::memory_order_relaxed) / 100.0;
+                HBITMAP newC = NULL;
+                double frac = 0.0;
+                for (int attempt = 0; attempt < 6; ++attempt) {
+                    HBITMAP cap = TmSlideCaptureRect(content);
+                    if (!cap) break;
+                    if (newC) DeleteObject(newC);
+                    newC = cap;
+                    frac = TmSlideChangedFraction(oldC, newC, cw, ch);
+                    if (frac >= readyFrac) break;  // new view has rendered
+                    Sleep(35);
+                }
+                if (newC && frac >= userThr) {
+                    TmSlideRun(oldC, newC, content);
+                }
+                if (newC) DeleteObject(newC);
+                DeleteObject(oldC);
             }
-            if (oldC) DeleteObject(oldC);
-            if (newC) DeleteObject(newC);
         }
     }
 
@@ -343,7 +425,6 @@ DWORD WINAPI TmSlideWorkerThread(LPVOID lpParam) {
 // -------------------------------------------------------------------------
 void TmSlideOnClick(WPARAM msg, POINT pt) {
     if (msg == WM_LBUTTONUP) {
-        // Fire the slide for a previously-armed nav click.
         std::lock_guard<std::mutex> lock(g_mutex);
         if (!g_armed) return;
         g_armed = false;
@@ -372,9 +453,9 @@ void TmSlideOnClick(WPARAM msg, POINT pt) {
         return;
     }
 
-    // msg == WM_LBUTTONDOWN: capture the current tab now (before the click switches
-    // it) if the click is plausibly in the left navigation area. The actual nav /
-    // content boundary is resolved later, on the worker thread, via UI Automation.
+    // msg == WM_LBUTTONDOWN: capture the current view now (before the click changes
+    // it) if the click is plausibly in a left navigation column. The nav/content
+    // boundary and whether anything actually changed are resolved on the worker.
     if (g_inProgress.load(std::memory_order_relaxed)) return;
 
     HWND under = WindowFromPoint(pt);
@@ -392,8 +473,8 @@ void TmSlideOnClick(WPARAM msg, POINT pt) {
     int relY = pt.y - origin.y;
 
     int topI = g_topInset.load(std::memory_order_relaxed);
-    // Below the command bar, and in the left portion where the nav can be.
-    if (relX < 0 || relY < topI || relX > cw / 2 || relY >= ch) return;
+    // Below the command bar, and in the left portion where the nav / sub-nav can be.
+    if (relX < 0 || relY < topI || relX > (cw * 3) / 5 || relY >= ch) return;
 
     RECT full;
     full.left   = origin.x;
