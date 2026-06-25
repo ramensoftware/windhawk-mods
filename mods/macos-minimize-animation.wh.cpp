@@ -19,7 +19,7 @@
 Brings the classic macOS **genie** effect to Windows. When you minimize a window
 it warps and flows down into the taskbar; when you restore it, it flows back out.
 
-Definitely not inspired from MacOS.
+Eye candy for something you do a hundred times a day.
 
 ## See it in action
 - Compile the mod with the button on the left or with Ctrl+B.
