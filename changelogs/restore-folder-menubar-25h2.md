@@ -1,3 +1,7 @@
+## 3.0.0 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e011233788cb0248cb78e4d2eb93692310dd7931/mods/restore-folder-menubar-25h2.wh.cpp))
+
+Add code from the mod Control Panel Color Fix version 1.0 because the version 1.0.1 breaks the compatibility with Classic theme and the author is not going to fix it.
+
 ## 2.0.1 ([Jun 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7b38cda60dbdd9dad527334fc61be76dcfd1db12/mods/restore-folder-menubar-25h2.wh.cpp))
 
 remove redunant argument
