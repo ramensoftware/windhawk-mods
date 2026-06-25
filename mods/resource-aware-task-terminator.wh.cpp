@@ -7,7 +7,7 @@
 // @github          https://github.com/insane66613
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -std=c++20 -lpsapi -lgdi32 -lcomctl32 -lshell32
+// @compilerOptions -lpsapi -lgdi32 -lcomctl32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==

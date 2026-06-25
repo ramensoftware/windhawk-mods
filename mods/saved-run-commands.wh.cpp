@@ -1,11 +1,12 @@
 // ==WindhawkMod==
 // @id              saved-run-commands
 // @name            Saved Run Commands
-// @description     Adds a compact saved commands list to the Windows Run dialog.
-// @version         1.0.0
+// @description     Adds a compact saved commands list to Run-style dialogs.
+// @version         1.1.0
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         explorer.exe
+// @include         Taskmgr.exe
 // @compilerOptions -lcomctl32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
@@ -13,9 +14,10 @@
 /*
 # Saved Run Commands
 
-Adds a small button to the standard Windows Run dialog. The button opens a
-compact "Saved Commands" window. A double click on a saved command inserts it
-into the Run edit box and immediately executes it.
+Adds a small button to the standard Windows Run dialog and Task Manager's
+"Create new task" dialog. The button opens a compact "Saved Commands" window.
+A double click on a saved command inserts it into the dialog edit box and
+immediately executes it.
 The Saved Commands window can also save either the current Run command or a
 command typed directly into its own input field.
 Saved commands can be edited with the "Update selected" button.
