@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-25T06:38:19.000Z</updated>
+    <updated>2026-06-25T11:53:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.1]]></title>
+        <id>https://windhawk.net/mods/resource-aware-task-terminator#28fb6f69a46487bfb9ae4ea21dd6411c1497c5fb</id>
+        <link href="https://windhawk.net/mods/resource-aware-task-terminator"/>
+        <updated>2026-06-25T11:53:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>PID reuse hardening with creation-time/path revalidation</li>
+<li>Safer protected-process handling</li>
+<li>Sortable chooser and result summary</li>
+<li>Compatibility-preserving settings keys</li>
+</ul>]]></content>
+        <author>
+            <name>Math Shamenson</name>
+            <uri>https://github.com/insane66613</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 3.0.0]]></title>
         <id>https://windhawk.net/mods/restore-folder-menubar-25h2#e011233788cb0248cb78e4d2eb93692310dd7931</id>
@@ -402,17 +418,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>wygodad</name>
             <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.1]]></title>
-        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#f9de8523b4fa4c81a42f9f81f051f0581186f8f1</id>
-        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
-        <updated>2026-06-22T05:43:50.000Z</updated>
-        <content type="html"><![CDATA[<p>Narrow down the logic to avoid the unwanted effects</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
