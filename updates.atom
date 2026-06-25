@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-25T11:53:15.000Z</updated>
+    <updated>2026-06-25T12:30:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.3.1]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#abf43cf5f55c1d34f2ca6fcd7da315e8beaacd54</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-06-25T12:30:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>New "Change threshold" setting</strong> (default 18%) with pixel-sampling comparison, so clicking a process row, selecting, or live-graph ticks no longer trigger a spurious slide.</li>
+<li><strong>Performance sub-pages</strong> (CPU, Memory, Disk, Network/Ethernet, Wi-Fi, GPU) now slide too, not just the main left navigation.</li>
+<li><strong>Poll-until-rendered capture</strong> of the new view (up to 6 attempts) so tabs that draw their first frame late (Disk/Network/GPU) are reliably animated.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.1]]></title>
         <id>https://windhawk.net/mods/resource-aware-task-terminator#28fb6f69a46487bfb9ae4ea21dd6411c1497c5fb</id>
@@ -404,20 +419,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.6.0]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#4b6102a9d024834632f3f28143a8b7172287f0ef</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-06-22T05:52:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Hide the chevron tooltip</strong> (new setting, opt-in, default off): while the flyout is open and the cursor is on the chevron, Windows shows a "Hide" tooltip that covers the bottom row of icons (#4487). When enabled, the mod hides that tooltip window. It is matched both by class and by position (only a popup sitting over the chevron is hidden), so the flyout's own per-icon tooltips and unrelated popups elsewhere are left untouched. The tooltip window class is also exposed as an advanced setting in case it differs across builds.</li>
-<li><strong>Do not activate over fullscreen apps</strong> (new setting, default on): when a fullscreen app is in the foreground (a fullscreen video, a game, etc.), the taskbar is hidden but the cached chevron rectangle still matches that screen area, so moving the cursor there (e.g. onto a video scrubber) would pop the flyout up over the content. The mod now skips activation in that case. The check runs only on the cursor-enter edge, so it costs nothing on idle ticks.</li>
-</ul>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
         </author>
     </entry>
 </feed>
