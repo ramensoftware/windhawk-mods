@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.2
+// @version        2.8.3
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -16,7 +16,7 @@
 This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a familiar, lightweight alternative.
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/scre.png)
-
+The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
 ## Features
 
 - **Wi-Fi network list**: Shows all available networks with live signal strength
@@ -111,8 +111,6 @@ If you encounter issues, please report them on the author of the mod.
 #include <windhawk_utils.h>
 #include <process.h>
 
-// Valori logici a 96 DPI (100%) - sono il "design" originale, non vanno usati
-// direttamente nel rendering: usa le variabili scalate sotto.
 #define WINDOW_WIDTH_BASE        300
 #define WINDOW_HEIGHT_BASE       405
 #define HEADER_HEIGHT_BASE       105
@@ -120,7 +118,6 @@ If you encounter issues, please report them on the author of the mod.
 #define ROW_HEIGHT_NORMAL_BASE   26
 #define ROW_HEIGHT_EXPANDED_BASE 74
 
-// DPI corrente e variabili scalate, ricalcolate da RecalcDpiMetrics()
 static UINT g_dpi = 96;
 static int  WINDOW_WIDTH        = WINDOW_WIDTH_BASE;
 static int  WINDOW_HEIGHT       = WINDOW_HEIGHT_BASE;
@@ -136,8 +133,7 @@ static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
 }
 
-// Forward declarations: queste funzioni sono definite più avanti nel file,
-// ma servono già qui dentro RecalcDpiMetrics().
+
 void InitGlobalFonts();
 void FreeGlobalFonts();
 void InitRefreshButtonRect(void);
@@ -177,6 +173,7 @@ static NOTIFYICONDATAW g_nid = {0};
 static HWND g_hHiddenWnd = NULL;
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
+static HANDLE g_hConnectThread = NULL; 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
 #define IDM_STATUS          2003
@@ -202,7 +199,8 @@ static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAA
 static HICON g_hIconRefreshNormal = NULL;
 static HICON g_hIconRefreshHover = NULL;
 static INetworkListManager* g_pNLM = NULL;
-
+// NOTE: The custom network icon has been removed from the settings because it's not totally stable and right now I don't have enough time to work on it.
+// Therefore, I've left it over in the code and if I have more time and find a stabler way to implement it, I will add it. The same thing applies with support for dark theme.
 
 // -------------------------------------------------------
 // Connection State Machine (simplified)
@@ -285,15 +283,8 @@ typedef struct {
     BOOL  hasInternetAccess;
     DOT11_AUTH_ALGORITHM authAlgorithm;
     DOT11_CIPHER_ALGORITHM cipherAlgorithm;
-    // BSSID del miglior AP visto per questa entry. Usato per targettare la
-    // connessione al BSS giusto quando esistono più AP con lo stesso SSID
-    // (vedi displaySuffix), invece di lasciare che WlanConnect scelga da solo.
     DOT11_MAC_ADDRESS bssid;
     BOOL  hasBssid;
-    // Suffisso di disambiguazione (0 = nessuno, 2 = "Nome 2", 3 = "Nome 3"...).
-    // Senza questo, BSS diversi con lo stesso SSID venivano fusi in una sola
-    // entry e la riconnessione falliva: il profilo costruito non corrispondeva
-    // più al BSS effettivamente selezionato dall'utente.
     int   displaySuffix;
 
     ConnectionState connState;
@@ -311,9 +302,6 @@ typedef struct {
     DOT11_BSS_TYPE dot11BssType;
     DOT11_AUTH_ALGORITHM authAlgorithm;
     DOT11_CIPHER_ALGORITHM cipherAlgorithm;
-    // BSSID specifico da raggiungere, quando esistono più AP con lo stesso
-    // SSID (es. "Redmi" e "Redmi 2"). Se hasBssid è FALSE, WlanConnect lascia
-    // la scelta del BSS al sistema (comportamento precedente).
     DOT11_MAC_ADDRESS bssid;
     BOOL hasBssid;
 } AsyncConnectContext;
@@ -366,7 +354,6 @@ static void DetectWindowsVersion() {
             Wh_Log(L"ExplorerPatcher not detected");
         }
 
-        // Verifica pnidui.dll di sistema
         WCHAR sysPniduiPath[MAX_PATH];
         GetSystemDirectoryW(sysPniduiPath, ARRAYSIZE(sysPniduiPath));
         StringCchCatW(sysPniduiPath, ARRAYSIZE(sysPniduiPath), L"\\pnidui.dll");
@@ -423,21 +410,17 @@ UINT_PTR g_TimeoutTimer = 0;  // Single global timeout timer
 HWND G_hSubclassedToolbar = nullptr;
 UINT_PTR G_SubclassId = 0;
 
-// Toolbar dell'overflow ("icone nascoste", il menu a triangolo)
 HWND G_hSubclassedOverflowToolbar = nullptr;
 UINT_PTR G_OverflowSubclassId = 0;
 static int g_NetworkButtonIdOverflow = -1;
 
-// Mutex per prevenire operazioni concorrenti
+// Mutex 
 static HANDLE g_hConnectMutex = NULL;
 
-// Flag per evitare che il flyout si nasconda durante la richiesta della password
 static BOOL g_inPasswordPrompt = FALSE;
 
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 
-using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
-static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
 static WCHAR g_TooltipBuffer[1024] = {0};
 
@@ -808,14 +791,12 @@ BOOL IsInternetConnected(void);
 static BOOL AskForPasswordAndConnect(int index);
 void RecalcDpiMetrics(UINT dpi);
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
-// Oscura l'SSID nei log per privacy, mantenendo i primi 3 caratteri
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     if (!ssid || ssid[0] == L'\0') {
         Wh_Log(L"%s <empty>", prefix);
         return;
     }
     WCHAR safe[33] = {0};
-    // Mostra solo i primi 3 caratteri + "***"
     if (lstrlenW(ssid) <= 3) {
         StringCchPrintfW(safe, ARRAYSIZE(safe), L"%s", ssid);
     } else {
@@ -824,8 +805,7 @@ static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     Wh_Log(L"%s %s", prefix, safe);
 }
 // Base64 handling
-// Funzione per decodificare base64 e creare HICON
-static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) {
+static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode function to create HICON
     static const WCHAR* tbl = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     
     int len = lstrlenW(base64Str);
@@ -856,7 +836,7 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) {
     if (!stream) { GlobalFree(hMem); return NULL; }
     
     HICON hIcon = NULL;
-    HMODULE hGdi = LoadLibraryW(L"gdiplus.dll");
+    HMODULE hGdi = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hGdi) {
         typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
         typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
@@ -888,7 +868,6 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) {
     stream->Release();
     return hIcon;
 }
-// Disegna testo con word-wrap automatico se supera maxWidth
 static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, int lineHeight) {
     if (!text || text[0] == L'\0') return;
     
@@ -898,13 +877,11 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
     SIZE size;
     GetTextExtentPoint32W(hdc, text, totalLen, &size);
     
-    // Se il testo entra in una riga sola, disegnalo normalmente
     if (size.cx <= maxWidth) {
         TextOutW(hdc, x, y, text, totalLen);
         return;
     }
     
-    // Word-wrap: spezza il testo su più righe
     WCHAR buffer[256];
     int lineStart = 0;
     int currentY = y;
@@ -913,7 +890,6 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
         int lineLen = 0;
         int lastGoodBreak = 0;
         
-        // Trova il punto di spezzatura
         for (int i = 0; lineStart + i < totalLen; i++) {
             buffer[i] = text[lineStart + i];
             buffer[i + 1] = L'\0';
@@ -935,10 +911,8 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
             lineLen = i + 1;
         }
         
-        // Disegna la riga
         TextOutW(hdc, x, currentY, text + lineStart, lineLen);
         
-        // Salta lo spazio iniziale della prossima riga
         while (lineStart + lineLen < totalLen && text[lineStart + lineLen] == L' ') {
             lineLen++;
         }
@@ -946,7 +920,6 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
         lineStart += lineLen;
         currentY += lineHeight;
         
-        // Massimo 5 righe per sicurezza
         if (currentY > y + lineHeight * 5) break;
     }
 }
@@ -1009,57 +982,6 @@ void InitRefreshButtonRect() {
     g_rcRefreshButton.bottom = ScaleDpi(30);
 }
 
-
-// -------------------------------------------------------
-// TrackPopupMenuEx Hook
-// -------------------------------------------------------
-static constexpr UINT CMD_OPEN_NETWORK_SETTINGS_TRAY = 3109;
-static constexpr UINT CMD_NETWORK_STATUS_TRAY         = 3108;
-static constexpr UINT CMD_NETWORK_DIAGNOSTICS_TRAY    = 3110;
-static thread_local int g_trackPopupHookDepth = 0;
-
-static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
-                                         HWND hWnd, const TPMPARAMS* lptpm) {
-    if (!g_Settings.redirectNetworkContextMenu)
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    if (g_trackPopupHookDepth > 0)
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-
-    // Il popup di rete ha poche voci; i menu generici (es. quello da 17 voci osservato)
-    // ne hanno molte di più: questo basta a escluderli senza toccarli.
-    int itemCount = GetMenuItemCount(hMenu);
-    if (itemCount <= 0 || itemCount > 6)
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-
-    g_trackPopupHookDepth++;
-    BOOL callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
-    UINT modifiedFlags = uFlags | TPM_RETURNCMD;
-    BOOL result = g_origTrackPopupMenuEx(hMenu, modifiedFlags, x, y, hWnd, lptpm);
-
-    if (result > 0) {
-        UINT cmd = (UINT)result;
-        switch (cmd) {
-            case CMD_OPEN_NETWORK_SETTINGS_TRAY:
-            case CMD_NETWORK_STATUS_TRAY:
-                ShellExecuteW(NULL, L"open", L"explorer.exe",
-                    L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", NULL, SW_SHOWNORMAL);
-                g_trackPopupHookDepth--;
-                return 0;
-            case CMD_NETWORK_DIAGNOSTICS_TRAY:
-                ShellExecuteW(NULL, L"open", L"msdt.exe",
-                    L"-id NetworkDiagnosticsWeb", NULL, SW_SHOWNORMAL);
-                g_trackPopupHookDepth--;
-                return 0;
-        }
-        if (!callerWantedReturnCmd) {
-            PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)cmd, 0), 0);
-            g_trackPopupHookDepth--;
-            return TRUE;
-        }
-    }
-    g_trackPopupHookDepth--;
-    return result;
-}
 // -------------------------------------------------------
 // SSID display helper
 // -------------------------------------------------------
@@ -1099,7 +1021,7 @@ void FreeSystemIcons() {
 }
 
 void InitGlobalFonts() {
-    FreeGlobalFonts(); // si ricrea sempre, per poter cambiare dimensione col DPI
+    FreeGlobalFonts(); 
 
     int sizeNormal = -ScaleDpi(12);
     int sizeSmall  = -ScaleDpi(11);
@@ -1418,10 +1340,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (!data) return -1;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)data);
         
-        // Carichiamo van.dll (contiene l'icona specifica della finestra di connessione)
-        HMODULE hVanDll = LoadLibraryW(L"van.dll");
+        HMODULE hVanDll = LoadLibraryExW(L"van.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hVanDll) {
-            // ID 100 è l'icona del prompt di connessione in van.dll
             HICON hIconSmall = (HICON)LoadImageW(hVanDll, MAKEINTRESOURCEW(100), IMAGE_ICON, 
                 GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
             HICON hIconBig = (HICON)LoadImageW(hVanDll, MAKEINTRESOURCEW(100), IMAGE_ICON, 
@@ -1433,11 +1353,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             if (hIconBig) {
                 SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
             }
-            
-            // Nota: Non facciamo FreeLibrary(hVanDll) subito se le icone dipendono dalla DLL istanziata, 
-            // ma con LR_SHARED o lasciandola in cache va bene. Per sicurezza nei mod Windhawk la si può lasciare caricata.
         }
-        // --- FINE CODICE IMPOSTAZIONE ICONA ---
 
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -1624,10 +1540,9 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
 
     const WCHAR* connMode = autoConnect ? L"auto" : L"manual";
 
-    // Mappa gli algoritmi in stringhe XML
+    // Map algorithms to XML strings
     const WCHAR* authStr = L"open";
     const WCHAR* encStr  = L"none";
-    BOOL useOneX = FALSE;
 
     switch (item->authAlgorithm) {
         case DOT11_AUTH_ALGO_80211_OPEN:   authStr = L"open";    break;
@@ -1638,7 +1553,7 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
         case DOT11_AUTH_ALGO_WPA3_SAE:     authStr = L"WPA3SAE"; break;
         case DOT11_AUTH_ALGO_RSNA:         authStr = L"WPA2";    break;
         case DOT11_AUTH_ALGO_RSNA_PSK:     authStr = L"WPA2PSK"; break;
-        default:                           authStr = L"WPA2PSK"; break; // fallback
+        default:                           authStr = L"WPA2PSK"; break;
     }
 
     switch (item->cipherAlgorithm) {
@@ -1648,25 +1563,44 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
         case DOT11_CIPHER_ALGO_WEP104:     encStr = L"WEP";  break;
         case DOT11_CIPHER_ALGO_TKIP:       encStr = L"TKIP"; break;
         case DOT11_CIPHER_ALGO_CCMP:       encStr = L"AES";  break;
-        case DOT11_CIPHER_ALGO_WPA_USE_GROUP: encStr = L"TKIP"; break; // commonly group TKIP
-        default:                           encStr = L"AES";  break; // fallback
+        case DOT11_CIPHER_ALGO_WPA_USE_GROUP: encStr = L"TKIP"; break;
+        default:                           encStr = L"AES";  break;
     }
 
+    // Detect Enterprise networks (WPA/WPA2/WPA3 without PSK)
+    BOOL isEnterprise = (item->authAlgorithm == DOT11_AUTH_ALGO_WPA ||
+                         item->authAlgorithm == DOT11_AUTH_ALGO_WPA3 ||
+                         item->authAlgorithm == DOT11_AUTH_ALGO_RSNA);
+
     if (item->isSecured) {
-        StringCchPrintfW(outXml, outSize,
-            L"<?xml version=\"1.0\"?>"
-            L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
-            L"<name>%s</name>"
-            L"<SSIDConfig><SSID><name>%s</name></SSID></SSIDConfig>"
-            L"<connectionType>ESS</connectionType>"
-            L"<connectionMode>%s</connectionMode>"
-            L"<MSM><security>"
-            L"<authEncryption><authentication>%s</authentication><encryption>%s</encryption><useOneX>%s</useOneX></authEncryption>"
-            L"<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>%s</keyMaterial></sharedKey>"
-            L"</security></MSM></WLANProfile>",
-            escapedSsid, escapedSsid, connMode, 
-            authStr, encStr, useOneX ? L"true" : L"false",
-            escapedPwd);
+        if (!isEnterprise) {
+            StringCchPrintfW(outXml, outSize,
+                L"<?xml version=\"1.0\"?>"
+                L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
+                L"<name>%s</name>"
+                L"<SSIDConfig><SSID><name>%s</name></SSID></SSIDConfig>"
+                L"<connectionType>ESS</connectionType>"
+                L"<connectionMode>%s</connectionMode>"
+                L"<MSM><security>"
+                L"<authEncryption><authentication>%s</authentication><encryption>%s</encryption><useOneX>false</useOneX></authEncryption>"
+                L"<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>%s</keyMaterial></sharedKey>"
+                L"</security></MSM></WLANProfile>",
+                escapedSsid, escapedSsid, connMode, 
+                authStr, encStr, escapedPwd);
+        } else {
+            StringCchPrintfW(outXml, outSize,
+                L"<?xml version=\"1.0\"?>"
+                L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
+                L"<name>%s</name>"
+                L"<SSIDConfig><SSID><name>%s</name></SSID></SSIDConfig>"
+                L"<connectionType>ESS</connectionType>"
+                L"<connectionMode>%s</connectionMode>"
+                L"<MSM><security>"
+                L"<authEncryption><authentication>%s</authentication><encryption>%s</encryption><useOneX>true</useOneX>"
+                L"</security></MSM></WLANProfile>",
+                escapedSsid, escapedSsid, connMode, 
+                authStr, encStr);
+        }
     } else {
         StringCchPrintfW(outXml, outSize,
             L"<?xml version=\"1.0\"?>"
@@ -1680,19 +1614,6 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
     }
 }
 
-// -------------------------------------------------------
-// Validazione del profilo salvato rispetto alla rete scansionata
-// -------------------------------------------------------
-// WlanGetProfileList dice solo che esiste un profilo con un certo NOME.
-// Non garantisce che auth/cipher salvati corrispondano ancora a quelli che
-// l'AP usa oggi (es. router cambiato, sicurezza aggiornata da WPA2 a WPA3,
-// oppure due reti diverse nel tempo con lo stesso SSID). Senza questo
-// controllo, hasProfile veniva marcato TRUE solo per il nome, il mod
-// tentava WlanConnect col profilo vecchio, falliva, e SOLO DOPO il
-// fallimento si "scopriva" il mismatch — risultato visibile: a volte la
-// password viene richiesta anche per una rete "nota" perché il profilo
-// reale non corrisponde più, oppure il primo tentativo fallisce sempre
-// prima che hasProfile venga corretto.
 static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue) {
     if (!xml || !tagName || !expectedValue) return FALSE;
 
@@ -1932,7 +1853,11 @@ static BOOL AskForPasswordAndConnect(int index) {
         free(ctx);
         return FALSE;
     }
-    CloseHandle(hThread);
+    if (g_hConnectThread) {
+    WaitForSingleObject(g_hConnectThread, 5000);
+    CloseHandle(g_hConnectThread);
+    }
+    g_hConnectThread = hThread;
     return TRUE;
 }
 
@@ -2052,15 +1977,6 @@ void CheckConnectionTimeouts() {
     }
 
     DWORD now = GetTickCount();
-
-    // La disconnessione usa un percorso e un timeout dedicati, separati da
-    // quello di connessione. Senza questo, CONN_STATE_DISCONNECTING restava
-    // bloccato per l'intero CONNECTION_TIMEOUT_MS (15s) ogni volta che la
-    // notifica wlan_notification_acm_disconnected non arrivava in tempo o
-    // veniva persa — la causa principale della disconnessione "lentissima"
-    // percepita dall'utente. Inoltre, allo scadere non mostriamo un errore:
-    // se l'item non è più CONNECTED/CONNECTING, la disconnessione ha quasi
-    // certamente avuto successo anche senza notifica esplicita.
     if (item->connState == CONN_STATE_DISCONNECTING) {
         if ((now - item->operationStartTime) > DISCONNECTION_TIMEOUT_MS) {
             LogSsidSafe(L"Disconnection timeout (no notification received), assuming success for", item->ssid);
@@ -2124,97 +2040,11 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     
     Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
            connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
-    Wh_Log(L"  g_PendingConnectIndex = %d", g_PendingConnectIndex);
-    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-        Wh_Log(L"  Pending SSID = %s, hasProfile = %d", 
-               g_NetworkList[g_PendingConnectIndex].ssid,
-               g_NetworkList[g_PendingConnectIndex].hasProfile);
-    }
-
-    if (connData->wlanReasonCode == ERROR_SUCCESS) {
-        BOOL matchesPending =
-            (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) &&
-            IsEqualGUID(data->InterfaceGuid, g_NetworkList[g_PendingConnectIndex].interfaceGuid) &&
-            (wcscmp(g_NetworkList[g_PendingConnectIndex].ssid, connData->strProfileName) == 0);
-
-        if (matchesPending) {
-            Wh_Log(L"WLAN: Connection SUCCESS for pending index %d", g_PendingConnectIndex);
-            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
-            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-            g_PendingConnectIndex = -1;
-            if (g_TimeoutTimer && hFlyout) {
-                PostMessageW(hFlyout, WM_TIMER, 1002, 0);
-            }
-        } else {
-            Wh_Log(L"WLAN: Connection complete for unrelated profile/interface (pending=%d, matches=%d)", 
-                   g_PendingConnectIndex, matchesPending);
-        }
-    } else {
-        // FALLIMENTO
-        Wh_Log(L"WLAN: Connection FAILED with reason 0x%08X", connData->wlanReasonCode);
-        
-        static const DWORD authFailureCodes[] = {
-            0x00038001,  // INVALID_PROFILE
-            0x00038002,  // INVALID_PROFILE_SCHEMA  
-            0x00028001,  // AUTH_FAILURE
-            0x00028002,  // ASSOC_FAILURE
-            0x00030001,  // KEY_MISMATCH
-        };
-        
-        BOOL isAuthFailure = FALSE;
-        for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
-            if (connData->wlanReasonCode == authFailureCodes[i]) {
-                isAuthFailure = TRUE;
-                break;
-            }
-        }
-        
-        Wh_Log(L"  isAuthFailure = %d", isAuthFailure);
-        
-        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-            
-            // Verifica che la notifica corrisponda alla rete in attesa
-            BOOL matchesPending = 
-                IsEqualGUID(data->InterfaceGuid, item->interfaceGuid) &&
-                (wcscmp(item->ssid, connData->strProfileName) == 0);
-            
-            Wh_Log(L"  matchesPending = %d", matchesPending);
-            
-            if (matchesPending) {
-                if (isAuthFailure) {
-                    Wh_Log(L"WLAN: Auth failure for '%s' — resetting hasProfile", item->ssid);
-                    item->hasProfile = FALSE;
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    
-                    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-                        MessageBoxW(g_hWndFlyout, 
-                                   LOC(STR_PWD_FAILED_WRONG), 
-                                   LOC(STR_PWD_FAILED_TITLE), 
-                                   MB_OK | MB_ICONERROR);
-                    }
-                } else {
-                    Wh_Log(L"WLAN: Non-auth failure for '%s' — keeping profile intact", item->ssid);
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    
-                    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-                        WCHAR errMsg[256];
-                        StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
-                                       LOC(STR_CONNECTION_ERROR), connData->wlanReasonCode);
-                        MessageBoxW(g_hWndFlyout, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
-                    }
-                }
-                
-                g_PendingConnectIndex = -1;
-                if (g_TimeoutTimer && hFlyout) {
-                    KillTimer(hFlyout, g_TimeoutTimer);
-                    g_TimeoutTimer = 0;
-                }
-            }
-        }
-    }
+    
+    // Post to flyout thread — no UI/timer work on WLAN thread
+    PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 
+                 (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
+                 (LPARAM)connData->wlanReasonCode);
     break;
 }
             
@@ -2224,8 +2054,6 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             Wh_Log(L"WLAN: Connection Attempt Failed (intermediate), Reason: %lu", 
                    connData->wlanReasonCode);
             
-            // Non facciamo nulla di speciale qui: aspettiamo connection_complete
-            // per il verdetto finale. Questo è solo un tentativo intermedio fallito.
             break;
         }
             
@@ -2235,19 +2063,6 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
            discData->wlanReasonCode, g_PendingConnectIndex);
 
-    // CORREZIONE: la versione precedente saltava sempre l'indice in
-    // g_PendingConnectIndex, assumendo che "pending" volesse sempre dire
-    // "operazione di CONNESSIONE in corso, non toccare". Ma quando l'utente
-    // clicca Disconnect, g_PendingConnectIndex punta proprio alla rete in
-    // CONN_STATE_DISCONNECTING — ed è esattamente quella rete che questa
-    // notifica sta confermando come disconnessa. Saltarla lasciava lo stato
-    // bloccato su "Disconnecting..." finché non scadeva il timeout (prima
-    // 15s, percepito dall'utente come "ci mette 9 anni a disconnettersi").
-    // Ora: se il pending è in DISCONNECTING, lo risolviamo qui sull'istante.
-    // Se invece il pending è in CONNECTING (operazione di connessione verso
-    // un'altra rete), lo lasciamo intatto: questa notifica di disconnect
-    // riguarda probabilmente la rete precedente, non quella a cui ci stiamo
-    // connettendo ora.
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount &&
         g_NetworkList[g_PendingConnectIndex].connState == CONN_STATE_DISCONNECTING) {
         LogSsidSafe(L"Disconnection confirmed by notification for", g_NetworkList[g_PendingConnectIndex].ssid);
@@ -2257,9 +2072,6 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     }
 
     for (int i = 0; i < g_NetworkCount; i++) {
-        // A questo punto, se il pending era una disconnessione, è già
-        // stato risolto sopra: qui resettiamo solo le altre reti, e quella
-        // ancora in pending (se è una CONNECTING) resta protetta.
         if (i == g_PendingConnectIndex) {
             Wh_Log(L"  Skipping reset for pending network '%s' (index %d)", 
                    g_NetworkList[i].ssid, i);
@@ -2312,12 +2124,10 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     else if (quality > 0)  idx = 1;
     
     if (g_hSignalImageList) {
-        // Disegna l'icona dalla ImageList (già ridimensionata con qualità)
         int xPos = right - 24 - 1; // 18-16 = 2, /2 = 1
         int yPos = top + 4 - 1;
         ImageList_Draw(g_hSignalImageList, idx, hdc, xPos, yPos, ILD_TRANSPARENT);
     } else {
-        // Fallback all'icona originale se la ImageList non è disponibile
         if (g_hIconSignalBars[idx])
             DrawIconEx(hdc, right-24, top+4, g_hIconSignalBars[idx], 16, 16, 0, NULL, DI_NORMAL);
     }
@@ -2441,8 +2251,7 @@ void RecalcArrowRect() {
     int labelMidY = WIFI_LABEL_Y + (HEADER_HEIGHT - WIFI_LABEL_Y) / 2;
     int btnH = ScaleDpi(16), btnW = ScaleDpi(22);
     
-    // Offset per la scrollbar (stesso valore usato per refresh button e icona segnale)
-    int totalHeight = GetTotalListHeight();
+    int totalHeight = GetTotalListHeight(); // Scrollbar offset
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(15) : 0;
     
@@ -2485,13 +2294,11 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         return;
     }
     
-    // Calcola la posizione del pulsante RELATIVA alla finestra
-    int btnX = WINDOW_WIDTH - 110 - scrollbarOffset;  // Posizione X fissa
-    int chkX = 18;  // Margine sinistro per la checkbox
-    int btnY = rowYRelative + 35;  // 35 pixel sotto il top della riga
+    int btnX = WINDOW_WIDTH - 110 - scrollbarOffset;  // X position
+    int chkX = 18;  
+    int btnY = rowYRelative + 35;  
     int chkY = rowYRelative + 36;
     
-    // Clamp per evitare che i pulsanti escano dall'area visibile
     if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
     if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
     if (chkY < LIST_Y_START) chkY = LIST_Y_START + 2;
@@ -2747,17 +2554,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
             
             if (isAuthFailure && item->hasProfile) {
-                // CASO 1: Errore di autenticazione con profilo esistente
-                // → La password salvata è probabilmente sbagliata
                 Wh_Log(L"Auth failure for '%s' (code 0x%08X) — saved password likely wrong, resetting profile", 
                        item->ssid, errorCode);
                 
-                // Resetta hasProfile così al prossimo click verrà chiesta la password
                 item->hasProfile = FALSE;
                 item->connState = CONN_STATE_ERROR;
                 item->operationStartTime = 0;
                 
-                // Mostra messaggio di errore specifico per password sbagliata
                 MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
                            MB_OK | MB_ICONERROR);
                 
@@ -2774,15 +2577,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                            MB_OK | MB_ICONERROR);
                 
             } else {
-                // CASO 3: Altro tipo di errore (rete fuori portata, timeout, rifiutata, ecc.)
-                // → Il profilo è probabilmente valido, non tocchiamolo
                 Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) — keeping profile intact", 
                        item->ssid, errorCode);
                 
                 item->connState = CONN_STATE_ERROR;
                 item->operationStartTime = 0;
                 
-                // Messaggio generico di connessione fallita
                 WCHAR errMsg[256];
                 StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
                                LOC(STR_CONNECTION_ERROR), errorCode);
@@ -2798,7 +2598,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
     }
     
-    // Aggiorna la UI in ogni caso
     RefreshWifiData(g_Ctx.hWlanClient);
     UpdateLayoutGeometry();
     UpdateCustomTrayIcon();
@@ -3032,9 +2831,9 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
                 WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
                 SelectObject(hdc, isSelected ? g_hFontBold : g_hFontNormal);
                 SetTextColor(hdc, RGB(0,0,255));
-DrawTextWithWrap(hdc, ssidBuf, rcRow.left+10, rcRow.top+6, 
-                 rcRow.right - rcRow.left - 50, 18);             WifiNetworkItem* item = &g_NetworkList[i];
-BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
+                DrawTextWithWrap(hdc, ssidBuf, rcRow.left+10, rcRow.top+6, 
+                rcRow.right - rcRow.left - 50, 18);             WifiNetworkItem* item = &g_NetworkList[i];
+                BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                          item->connState == CONN_STATE_DISCONNECTING);
 
 if (item->connState == CONN_STATE_CONNECTED) {
@@ -3077,14 +2876,12 @@ SetTextColor(hdc, RGB(14,75,184));
 const wchar_t* footerText = LOC(STR_OPEN_SHARING_CENTER);
 SIZE textSize; GetTextExtentPoint32W(hdc, footerText, lstrlenW(footerText), &textSize);
 
-// Usa le dimensioni reali dell'area client per centrare perfettamente
 RECT rcClient;
 GetClientRect(hwnd, &rcClient);
 int footerTop = rcClient.bottom - FOOTER_HEIGHT;
 int centerX = (rcClient.right - textSize.cx) / 2;
 int footerTextYC = footerTop + (FOOTER_HEIGHT - textSize.cy) / 2;
 
-// Sposta il testo del 15% più in basso se gli angoli arrotondati sono attivi
 if (g_Settings.useRoundedCorners) {
     footerTextYC += (FOOTER_HEIGHT * 15) / 100;
 }
@@ -3285,17 +3082,17 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
 }// =====================================================================
-// Network icon detection v2.8.1 — Icon index matching + blacklist
+// Network icon detection v2.8.2 — Icon index matching + blacklist
 // =====================================================================
-// Indici icone di rete in pnidui.dll per Windows 10 (ID 0-21)
+// Network icon ids on pnidui.dll for Windows 10 (ID 0-21)
 static const int g_NetworkIconIndices_Win10[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 15,
-    16, 17, 18, 19, 20, 21,  // Varianti tema chiaro/scuro
+    16, 17, 18, 19, 20, 21,  
     -1
 };
 
-// Indici icone di rete in pnidui.dll per Windows 11 (ID 0-15 + 40-42)
+// Network icon ids on pnidui.dll for Windows 11 under the legacy taskbar (ID 0-15 + 40-42)
 static const int g_NetworkIconIndices_Win11[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 15,
@@ -3312,19 +3109,19 @@ static BOOL IsNetworkIconIndex(int iBitmap) {
 }
 
 static const WCHAR* const g_NonNetworkButtonNameHints[] = {
-    L"volume", L"audio", L"speaker", L"sound",
+    L"volume", L"audio", L"speaker", L"speakers", L"sound",
     L"battery", L"power",
     L"safely remove", L"remove hardware", L"hardware",
     L"language", L"input", L"keyboard",
     L"action center", L"notification",
     L"touch keyboard", L"pen menu",
-    L"altoparlante", L"suono", L"batteria", L"alimentazione",
+    L"altoparlante", L"altoparlanti", L"suono", L"batteria", L"alimentazione",
     L"rimozione sicura", L"lingua", L"tastiera",
     L"centro notifiche", L"notifiche", L"tastiera touch", L"menu penna",
-    L"haut-parleur", L"batterie", L"alimentation",
+    L"haut-parleur", L"haut-parleurs", L"batterie", L"alimentation",
     L"retirer matériel", L"matériel", L"langue", L"clavier",
     L"centre de notifications", L"notifications", L"clavier tactile", L"menu stylet",
-    L"volumen", L"altavoz", L"sonido", L"batería", L"alimentación",
+    L"volumen", L"altavoz", L"altavoces", L"sonido", L"batería", L"alimentación",
     L"quitar hardware", L"idioma", L"entrada", L"teclado",
     L"centro de notificaciones", L"notificaciones", L"teclado táctil", L"menú lápiz",
     L"lautstärke", L"lautsprecher", L"ton", L"batterie", L"strom",
@@ -3341,6 +3138,9 @@ static const WCHAR* const g_NonNetworkButtonNameHints[] = {
     L"язык", L"ввод", L"клавиатура",
     L"центр уведомлений", L"уведомления",
     L"сенсорная клавиатура", L"меню пера",
+    // Portoguese (PR)
+    L"volume", L"bateria", L"idioma", L"teclado", L"notificações",
+    L"alto-falante", L"carregamento",
 };
 
 static BOOL IsKnownNonNetworkButton(HWND hToolbar, int btnIndex, int idCommand) {
@@ -3705,7 +3505,7 @@ void ToggleFlyoutWindow() {
 
 
 static BOOL SafeRemoveOverflowSubclass(HWND hTarget) {
-    return NULL;
+    return FALSE;
 }
 
 static void SyncOverflowInterception() {
@@ -3716,7 +3516,8 @@ static void SyncOverflowInterception() {
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
-    
+    // Initialize COM on this thread (owns flyout and NLM)
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
         UnregisterHotKey(NULL, HOTKEY_ID);
         if (shouldRegister) RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H');
@@ -3792,6 +3593,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     if (overflowPollTimer) KillTimer(NULL, overflowPollTimer);
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
     UnregisterHotKey(NULL, HOTKEY_ID);
+    CoUninitialize();
     return 0;
 }
 
@@ -3819,7 +3621,15 @@ void SafeCleanup() {
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
     if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
-    if (g_pNLM) { g_pNLM->Release(); g_pNLM = NULL; }
+    if (g_hConnectThread) {
+        Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
+        DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
+        Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
+        CloseHandle(g_hConnectThread);
+        g_hConnectThread = NULL;
+    } else {
+        Wh_Log(L"SafeCleanup: No pending connect thread");
+    }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient, NULL); g_Ctx.hWlanClient = NULL; }
     FreeSystemIcons();
     FreeGlobalFonts();
@@ -3878,23 +3688,11 @@ static HWND CreateHiddenWindow() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.8.1 ===");
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
-    }
+    Wh_Log(L"=== Wh_ModInit v2.8.3 ===");
     DetectWindowsVersion();
     LoadSettings();
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
-
-    static DWORD lastInitTime = 0;
-    DWORD currentTime = GetTickCount();
-    if (lastInitTime > 0 && (currentTime - lastInitTime) < 2000) {
-        Wh_Log(L"Wh_ModInit called too quickly - ignoring");
-        return TRUE;
-    }
-    lastInitTime = currentTime;
 
     g_hConnectMutex = CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex");
     DetermineLocale();
@@ -3909,24 +3707,12 @@ BOOL Wh_ModInit() {
     InitGlobalFonts();
     InitRefreshButtonRect();
     RecalcArrowRect();
-
-    if (g_Settings.redirectNetworkContextMenu) {
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        if (hUser32) {
-            void* pFn = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
-            if (pFn) {
-                Wh_SetFunctionHook(pFn, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
-            }
-        }
-    }
-
     InstallTrayInterceptionInternal();
 
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
         if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
         DeleteCriticalSection(&g_Ctx.csLock);
-        CoUninitialize();
         return FALSE;
     }
 
@@ -3985,5 +3771,4 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
-    CoUninitialize();
 }
