@@ -6890,7 +6890,7 @@
           8
         ],
         "ratingUsers": 8,
-        "updated": 1782417858000,
+        "updated": 1782472556000,
         "users": 107
       },
       "metadata": {
@@ -6904,7 +6904,7 @@
         ],
         "license": "MIT",
         "name": "Lock Keys Notifier",
-        "version": "1.0.1"
+        "version": "1.1.0"
       }
     },
     "logon-logoff-shutdown-sounds": {
