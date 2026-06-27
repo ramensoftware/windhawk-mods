@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-27T20:40:44.000Z</updated>
+    <updated>2026-06-27T21:35:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Borderless Fullscreen 1.1.0]]></title>
+        <id>https://windhawk.net/mods/borderless-fullscreen#c208c001106e00938f338cacf204cb1dfdf43528</id>
+        <link href="https://windhawk.net/mods/borderless-fullscreen"/>
+        <updated>2026-06-27T21:35:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="borderlessfullscreen">Borderless Fullscreen</h1>
+<p>Add an executable name (e.g. <code>game.exe</code>) to the target list and the app
+will automatically run without a title bar / border, stretched to fill
+the primary monitor's current resolution (multi monitor setup is planned
+for the next version).</p>
+<p>Optionally, set a fixed window size instead (the window will then be
+centered on the primary monitor) - useful for older games with a low
+native resolution.</p>
+<h2 id="howitworks">How it works</h2>
+<p>This mod runs in a separate, dedicated process and restores the original
+window style and size automatically if the app is removed from the
+target list, if the mod is disabled, or if the window is closed.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>If a target doesn't react, double-check the <em>exact</em> process name in
+Task Manager's Details tab while it's running. Some launchers start a
+child process with a different executable name than expected.</li>
+</ul>]]></content>
+        <author>
+            <name>TomberWolf</name>
+            <uri>https://github.com/TomberWolf</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on Empty Explorer 2.1.1]]></title>
         <id>https://windhawk.net/mods/click-on-empty-explorer#17537dd9bf6b29f13a26dfe0cadf8eeecd76a86d</id>
@@ -996,28 +1024,6 @@ re-enter the hook logic.</p>]]></content>
         <author>
             <name>easyatm</name>
             <uri>https://github.com/easyatm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Common Controls Hook 1.0]]></title>
-        <id>https://windhawk.net/mods/common-controls-hook#b02dade50ac82c10c15af1cccbd935ff314c0a53</id>
-        <link href="https://windhawk.net/mods/common-controls-hook"/>
-        <updated>2026-06-13T22:45:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="commoncontrolshook">Common Controls Hook</h1>
-<p>This mod forces legacy GUI processes into the Common Controls version 6
-activation context at the moment they create windows, dialogs, and message
-boxes.</p>
-<p>The practical goal is simple: make old Win32 UI surfaces, including VBScript
-<code>MsgBox</code> and classic dialog-based applications, use themed visual styles instead
-of the pre-XP <code>comctl32.dll</code> version 5 look.</p>
-<p><img src="https://i.imgur.com/4oVsYi7.png" alt="Screenshot" /></p>
-<h2 id="credits">Credits</h2>
-<p>This mod is a Windhawk port of
-<a href="https://github.com/LuicdLabs/comctl32v6hook">comctl32v6hook</a>, a standalone
-user-mode DLL by LuicdLabs.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
