@@ -694,6 +694,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
         { std::lock_guard<std::mutex> lk(g_wrappersMutex);
           for (auto& w : g_Wrappers)
             if (w.hShellTab == shellTab) { w.hListView = defView; break; }
+        }
     }
     return hWnd;
 }
