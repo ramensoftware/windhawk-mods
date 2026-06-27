@@ -14,7 +14,7 @@
 //
 // Based on "Explorer Double Click Up" by wrldspawn (GPL-3.0) and
 // "Explorer Middle Click Duplicate Tab" by LiHua81 (GPL-3.0).
-// COMInitializer and UIAutomation usage from "Click on empty taskbar space" (GPL-3.0).
+// UIAutomation usage from "Click on empty taskbar space" (GPL-3.0).
 // FileCabinet_CreateViewWindow2 hook from "Classic Explorer Treeview".
 // Going up a directory referenced from Open-Shell.
 
@@ -405,39 +405,21 @@ public:
     }
 };
 
-// ---- COMInitializer ----
-
-class COMInitializer {
-public:
-    COMInitializer() : m_initialized(false) {}
-
-    bool Init() {
-        if (!m_initialized) {
-            m_initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
-        }
-        return m_initialized;
-    }
-
-    void Uninit() {
-        if (m_initialized) {
-            CoUninitialize();
-            m_initialized = false;
-            Wh_Log(L"COM de-initialized");
-        }
-    }
-
-    ~COMInitializer() { Uninit(); }
-    bool IsInitialized() const { return m_initialized; }
-
-private:
-    bool m_initialized;
-} g_comInitializer;
-
 // ---- Globals ----
 
 std::vector<ExplorerWrapper> g_Wrappers;
 static std::mutex g_wrappersMutex;
-static winrt::com_ptr<IUIAutomation> g_pUIAutomation;
+
+// Lazily initialized on first use (Explorer UI thread has COM already)
+static winrt::com_ptr<IUIAutomation> GetUIAutomation() {
+    static winrt::com_ptr<IUIAutomation> s_pUIAutomation = []{
+        winrt::com_ptr<IUIAutomation> p;
+        CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
+                         __uuidof(IUIAutomation), p.put_void());
+        return p;
+    }();
+    return s_pUIAutomation;
+}
 
 // ---- NavigateNewTabProc (timer callback for duplicate tab) ----
 
@@ -572,7 +554,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     if (uMsg != WM_PARENTNOTIFY)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-    if (!g_pUIAutomation)
+    auto pUIA = GetUIAutomation();
+    if (!pUIA)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     SettingsSnapshot s = CopySettings();
@@ -587,7 +570,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         POINT mousePos;
         GetCursorPos(&mousePos);
         winrt::com_ptr<IUIAutomationElement> pElement = NULL;
-        if (SUCCEEDED(g_pUIAutomation->ElementFromPoint(mousePos, pElement.put())) && pElement) {
+        if (SUCCEEDED(pUIA->ElementFromPoint(mousePos, pElement.put())) && pElement) {
             bstr_ptr clsName;
             if (SUCCEEDED(pElement->get_CurrentClassName(clsName.GetAddress()))) {
                 wchar_t* cn = clsName.GetBSTR();
@@ -627,7 +610,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         POINT mousePos;
         GetCursorPos(&mousePos);
         winrt::com_ptr<IUIAutomationElement> pElement = NULL;
-        if (SUCCEEDED(g_pUIAutomation->ElementFromPoint(mousePos, pElement.put())) && pElement) {
+        if (SUCCEEDED(pUIA->ElementFromPoint(mousePos, pElement.put())) && pElement) {
             bstr_ptr clsName;
             if (SUCCEEDED(pElement->get_CurrentClassName(clsName.GetAddress()))) {
                 wchar_t* cn = clsName.GetBSTR();
@@ -816,17 +799,6 @@ BOOL Wh_ModInit() {
     }
 
     WindhawkUtils::SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook, (void**)&CreateWindowExW_original);
-
-    if (!g_comInitializer.Init()) {
-        Wh_Log(L"COM initialization failed");
-        return FALSE;
-    }
-
-    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
-                                 __uuidof(IUIAutomation), g_pUIAutomation.put_void())) || !g_pUIAutomation) {
-        Wh_Log(L"Failed to create UIAutomation COM instance");
-        return FALSE;
-    }
 
     InterlockedExchange(&g_initialized, 1);
     return TRUE;
