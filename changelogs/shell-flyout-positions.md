@@ -1,3 +1,9 @@
+## 1.3 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9ed1f6989d728bc1fad2d5ad23f5d30117b64cf/mods/shell-flyout-positions.wh.cpp))
+
+* Added options to align the Start menu to the left, center, or right of the Start button.
+* Added a "Windows default" option for the notification center, the action center, and the Start menu vertical alignment to reduce the impact for unused settings.
+* Various improvements for multiple monitors, auto-hide, restore on unload, and other scenarios.
+
 ## 1.2 ([Feb 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c46e11f8c2f0d701fd60bad7b3eef653bafd0b32/mods/shell-flyout-positions.wh.cpp))
 
 * Added options for customizing the position of the Start menu.
