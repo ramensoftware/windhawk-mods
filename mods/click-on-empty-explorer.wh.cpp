@@ -2,7 +2,7 @@
 // @id              click-on-empty-explorer
 // @name            Click on Empty Explorer
 // @description     Configure double click, middle click and double middle click actions on empty space in File Explorer
-// @version         2.1.0
+// @version         2.1.1
 // @author          LiHua81
 // @github          https://github.com/LiHua81
 // @include         explorer.exe
@@ -131,6 +131,7 @@ require Windows 11 for tabbed Explorer support.
 #include <winrt/base.h>
 
 #include <mutex>
+#include <string>
 #include <vector>
 
 using bstr_ptr = _bstr_t;
@@ -171,16 +172,20 @@ static void LoadSettings() {
     g_doubleMiddleClickAction.Load(L"doubleMiddleClickAction");
 }
 
-// Read settings under lock, return copies that outlive the lock
+// Read settings under lock, deep-copy strings so they outlive the lock
 struct SettingsSnapshot {
-    PCWSTR doubleClick;
-    PCWSTR middleClick;
-    PCWSTR doubleMiddleClick;
+    std::wstring doubleClick;
+    std::wstring middleClick;
+    std::wstring doubleMiddleClick;
 };
 
 static SettingsSnapshot CopySettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return { g_doubleClickAction.Get(), g_middleClickAction.Get(), g_doubleMiddleClickAction.Get() };
+    return {
+        g_doubleClickAction.Get() ? g_doubleClickAction.Get() : L"",
+        g_middleClickAction.Get() ? g_middleClickAction.Get() : L"",
+        g_doubleMiddleClickAction.Get() ? g_doubleMiddleClickAction.Get() : L""
+    };
 }
 
 // ---- Helper: Send key combination ----
@@ -218,9 +223,10 @@ static HWND g_pendingNavHwnd = NULL;
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
-// ---- Middle-click double-click detection (timer-based, not immediate) ----
-// Single-click is delayed by GetDoubleClickTime()*2. If a second middle click
-// arrives before the timer fires, it's treated as a double click instead.
+// ---- Middle-click double-click detection (timer-based) ----
+// Single-click fires immediately if only single is configured.
+// If both single and double are configured, single is delayed by
+// GetDoubleClickTime() (~500ms) to detect double clicks.
 
 static HWND g_midClickPendingHwnd = NULL;
 static UINT_PTR g_midClickTimerId = 0;
@@ -231,9 +237,9 @@ static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
     KillTimer(hwnd, idEvent);
     g_midClickTimerId = 0;
     if (g_midClickPendingHwnd && IsWindow(g_midClickPendingHwnd) && g_initialized) {
-        PCWSTR action = CopySettings().middleClick;
-        if (wcscmp(action, L"none") != 0)
-            FindShellTabAndDoAction(g_midClickPendingHwnd, action);
+        std::wstring action = CopySettings().middleClick;
+        if (wcscmp(action.c_str(), L"none") != 0)
+            FindShellTabAndDoAction(g_midClickPendingHwnd, action.c_str());
     }
     g_midClickPendingHwnd = NULL;
 }
@@ -500,7 +506,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     SettingsSnapshot s = CopySettings();
 
     if (uMsg == WM_LBUTTONDBLCLK) {
-        if (wcscmp(s.doubleClick, L"none") == 0)
+        if (wcscmp(s.doubleClick.c_str(), L"none") == 0)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
@@ -510,7 +516,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
         if (ListView_SubItemHitTest(hWnd, &ht) == -1)
-            FindShellTabAndDoAction(hWnd, s.doubleClick);
+            FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
 
     } else if (uMsg == WM_MBUTTONDOWN) {
         POINT mousePos;
@@ -522,13 +528,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (ListView_SubItemHitTest(hWnd, &ht) != -1)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        bool singleOn = wcscmp(s.middleClick, L"none") != 0;
-        bool doubleOn = wcscmp(s.doubleMiddleClick, L"none") != 0;
+        bool singleOn = wcscmp(s.middleClick.c_str(), L"none") != 0;
+        bool doubleOn = wcscmp(s.doubleMiddleClick.c_str(), L"none") != 0;
         if (!singleOn && !doubleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         if (singleOn && !doubleOn) {
-            FindShellTabAndDoAction(hWnd, s.middleClick);
+            FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -536,7 +542,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (isDouble) {
             CancelPendingMidClick();
-            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick);
+            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
         } else {
             CancelPendingMidClick();
             g_midClickPendingHwnd = hWnd;
@@ -573,8 +579,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
     // Middle click — timer-based double-click detection
     if (wParam == WM_MBUTTONDOWN) {
-        bool singleOn = wcscmp(s.middleClick, L"none") != 0;
-        bool doubleOn = wcscmp(s.doubleMiddleClick, L"none") != 0;
+        bool singleOn = wcscmp(s.middleClick.c_str(), L"none") != 0;
+        bool doubleOn = wcscmp(s.doubleMiddleClick.c_str(), L"none") != 0;
         if (!singleOn && !doubleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -588,7 +594,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                 if (cn && (wcscmp(cn, L"UIGroupItem") == 0 || wcscmp(cn, L"UIItemsView") == 0)) {
 
                     if (singleOn && !doubleOn) {
-                        FindShellTabAndDoAction(hWnd, s.middleClick);
+                        FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
 
@@ -596,7 +602,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (isDouble) {
                         CancelPendingMidClick();
-                        FindShellTabAndDoAction(hWnd, s.doubleMiddleClick);
+                        FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
@@ -611,7 +617,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
     // Left click — track for double-click detection
     if (wParam == WM_LBUTTONDOWN) {
-        if (wcscmp(s.doubleClick, L"none") == 0)
+        if (wcscmp(s.doubleClick.c_str(), L"none") == 0)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         DWORD now = GetTickCount();
@@ -628,7 +634,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                 if (!cn || (wcscmp(cn, L"UIGroupItem") != 0 && wcscmp(cn, L"UIItemsView") != 0)) {
                     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                 }
-                wcsncpy(g_currentClick.className, cn, 256);
+                wcsncpy(g_currentClick.className, cn, 255);
+                g_currentClick.className[255] = L'\0';
 
                 DWORD delta = g_currentClick.time - g_lastClick.time;
                 if (g_currentClick.hWnd == g_lastClick.hWnd &&
@@ -637,12 +644,15 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                      (wcscmp(cn, L"UIItemsView") == 0 &&
                       wcscmp(g_lastClick.className, L"UIItemsView") == 0)) &&
                     delta <= GetDoubleClickTime()) {
-                    FindShellTabAndDoAction(hWnd, s.doubleClick);
+                    FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+                    g_lastClick.time = 0;  // prevent triple-click from double-firing
+                } else {
+                    g_lastClick.time = now;
                 }
 
-                g_lastClick.time = now;
                 g_lastClick.hWnd = hWnd;
-                wcsncpy(g_lastClick.className, cn, 256);
+                wcsncpy(g_lastClick.className, cn, 255);
+                g_lastClick.className[255] = L'\0';
             }
         }
     }
@@ -843,23 +853,24 @@ void Wh_ModUninit() {
     g_pendingNavBrowser = nullptr;
     g_pendingNavPath[0] = L'\0';
 
+    // Collect HWNDs under lock, then remove subclasses outside the lock
+    // (RemoveWindowSubclassFromAnyThread does SendMessage which can deadlock
+    //  if the target thread is waiting on g_wrappersMutex)
+    struct SubclassInfo { HWND hWnd; bool isListView; };
+    std::vector<SubclassInfo> toRemove;
     {
         std::lock_guard<std::mutex> lk(g_wrappersMutex);
         for (ExplorerWrapper& wrapper : g_Wrappers) {
             HWND hWnd = wrapper.hListView;
             if (hWnd && IsWindow(hWnd)) {
                 wchar_t className[256];
-                if (GetClassName(hWnd, className, 256)) {
-                    if (wcscmp(className, L"SysListView32") == 0)
-                        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SysListViewSubclass);
-                    else if (wcscmp(className, L"SHELLDLL_DefView") == 0)
-                        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, DUISubclass);
-                }
+                if (GetClassName(hWnd, className, 256))
+                    toRemove.push_back({ hWnd, wcscmp(className, L"SysListView32") == 0 });
             }
         }
         g_Wrappers.clear();
     }
-
-    if (g_comInitializer.IsInitialized())
-        g_comInitializer.Uninit();
+    for (auto& info : toRemove)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            info.hWnd, info.isListView ? SysListViewSubclass : DUISubclass);
 }
