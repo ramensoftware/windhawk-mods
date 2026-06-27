@@ -1,3 +1,11 @@
+## 0.3.3 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc21e7ca1840bb5de5d5a8f2b08d27312555d29c/mods/taskmgr-tab-slide-animation.wh.cpp))
+
+This version reworks the tab transition into a smooth crossfade between the old and new views — for both the main left navigation (Processes, Performance, App history, …) and the Performance sub-pages (CPU, Memory, Disk, Network/Ethernet, Wi-Fi, GPU).
+
+To avoid a visible jump, on mouse-down the current view is frozen under a topmost, click-through layered overlay; Task Manager switches the tab underneath it invisibly, and a worker thread then locates the content edge via UI Automation, captures the new view once it has rendered, and crossfades the overlay from the old frame to the new one.
+
+The demo GIF has been updated to show the new animation.
+
 ## 0.3.2 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78b0296b65dab926d11dbc5f063d7314ae204aaf/mods/taskmgr-tab-slide-animation.wh.cpp))
 
 Lowers the default **Change threshold** from 18% to 2%, so more subtle tab switches animate out of the box. The setting remains user-adjustable (1–100%).
