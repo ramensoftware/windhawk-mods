@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the Start button to be on the left of the taskbar, even when taskbar icons are centered, with an option to also move the search and task view buttons (Windows 11 only)
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -33,10 +33,10 @@ keeping only the app icons centered.
 
 Only Windows 11 is supported.
 
-![Screenshot](https://i.imgur.com/MSKYKbE.png)
+![Screenshot](https://i.imgur.com/MSKYKbE.png) \
 _Start button on the left_
 
-![Screenshot](https://i.imgur.com/SOdWH1P.png)
+![Screenshot](https://i.imgur.com/SOdWH1P.png) \
 _Start button, search and task view buttons on the left_
 */
 // ==/WindhawkModReadme==
@@ -104,6 +104,7 @@ thread_local bool g_inShowStartButtonContextMenu;
 
 HWND g_searchMenuWnd;
 int g_searchMenuOriginalX;
+HMONITOR g_searchMenuMonitor;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -1089,11 +1090,8 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }
 
     BOOL cloak = *(BOOL*)pvAttribute;
-    if (cloak) {
-        return original();
-    }
 
-    Wh_Log(L"> %08X", (DWORD)(DWORD_PTR)hwnd);
+    Wh_Log(L"> %08X %s", (DWORD)(DWORD_PTR)hwnd, cloak ? L"cloak" : L"uncloak");
 
     DWORD processId = 0;
     if (!hwnd || !GetWindowThreadProcessId(hwnd, &processId)) {
@@ -1131,19 +1129,10 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int cy = targetRect.bottom - targetRect.top;
 
     if (target == DwmTarget::SearchHost) {
-        if (!IsStartMenuOpen()) {
-            // Win+S or the search bar on the taskbar cause the search menu to
-            // be repositioned. Don't customize it and restore the original
-            // position.
-            g_searchMenuWnd = nullptr;
-            g_searchMenuOriginalX = 0;
-            return original();
-        }
-
         // Only change x.
         int xNew;
 
-        if (g_settings.startMenuOnTheLeft) {
+        if (g_settings.startMenuOnTheLeft && !cloak && IsStartMenuOpen()) {
             // Not centered or already changed.
             if (x == monitorInfo.rcWork.left) {
                 return original();
@@ -1152,19 +1141,29 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
             xNew = monitorInfo.rcWork.left;
             g_searchMenuWnd = hwnd;
             g_searchMenuOriginalX = x;
+            g_searchMenuMonitor = monitor;
         } else {
             if (!g_searchMenuOriginalX) {
                 return original();
             }
 
             xNew = g_searchMenuOriginalX;
+            bool monitorMatches = monitor == g_searchMenuMonitor;
+
             g_searchMenuWnd = nullptr;
             g_searchMenuOriginalX = 0;
+            g_searchMenuMonitor = nullptr;
+
+            if (!monitorMatches) {
+                return original();
+            }
         }
 
         if (xNew == x) {
             return original();
         }
+
+        Wh_Log(L"Adjusting search menu: %d -> %d", x, xNew);
 
         x = xNew;
     }
@@ -1462,8 +1461,14 @@ HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
 
 void RestoreMenuPositions() {
     if (g_searchMenuWnd && g_searchMenuOriginalX) {
+        HMONITOR monitor =
+            MonitorFromWindow(g_searchMenuWnd, MONITOR_DEFAULTTONEAREST);
+
         RECT rect;
-        if (GetWindowRect(g_searchMenuWnd, &rect)) {
+        // The saved position is an absolute coordinate, valid only on the
+        // monitor where it was recorded.
+        if (monitor == g_searchMenuMonitor &&
+            GetWindowRect(g_searchMenuWnd, &rect)) {
             int x = rect.left;
             int y = rect.top;
             int cx = rect.right - rect.left;
@@ -1478,6 +1483,7 @@ void RestoreMenuPositions() {
 
         g_searchMenuWnd = nullptr;
         g_searchMenuOriginalX = 0;
+        g_searchMenuMonitor = nullptr;
     }
 }
 
