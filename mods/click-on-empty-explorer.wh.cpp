@@ -410,12 +410,13 @@ public:
 std::vector<ExplorerWrapper> g_Wrappers;
 static std::mutex g_wrappersMutex;
 
-// Lazily initialized on first use (Explorer UI thread has COM already)
-static winrt::com_ptr<IUIAutomation> GetUIAutomation() {
-    static winrt::com_ptr<IUIAutomation> s_pUIAutomation = []{
-        winrt::com_ptr<IUIAutomation> p;
+// Lazily initialized on first use (Explorer UI thread has COM already).
+// Intentionally leaked (raw pointer) to avoid Release() during DLL_PROCESS_DETACH.
+static IUIAutomation* GetUIAutomation() {
+    static IUIAutomation* s_pUIAutomation = []{
+        IUIAutomation* p = nullptr;
         CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
-                         __uuidof(IUIAutomation), p.put_void());
+                         __uuidof(IUIAutomation), (void**)&p);
         return p;
     }();
     return s_pUIAutomation;
