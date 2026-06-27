@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-26T11:15:56.000Z</updated>
+    <updated>2026-06-27T10:05:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 2.8.4]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#f7eabd22737735da3efb5507964ecd6832f79aa3</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-06-27T10:05:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7networkflyoutrecreation">Windows 7 Network Flyout Recreation</h1>
+<p>This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a familiar, lightweight alternative.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/ms.png" alt="Screenshot" />
+The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Wi-Fi network list</strong>: Shows all available networks with live signal strength</li>
+<li><strong>Connect/Disconnect</strong>: Connect to secured and open networks with password support</li>
+<li><strong>Privacy mode</strong>: Hide real network names (shows as Network 1, Network 2…)</li>
+<li><strong>Windows 7 style tooltips</strong>: Full network info on hover (SSID, signal, security type)</li>
+<li><strong>Right-click context menu</strong>: Quick access to network status and properties</li>
+<li><strong>Keyboard navigation</strong>: Full Arrow keys, Enter, and Escape support</li>
+<li><strong>Auto-refresh</strong>: Periodically refreshes the network list at a configurable interval</li>
+<li><strong>Language support</strong>: English, Italian, Spanish, French, Russian, or auto-detect</li>
+<li><strong>DPI aware</strong>: Scales correctly on high-DPI and mixed-DPI setups</li>
+<li><strong>Rounded corners</strong>: Optional modern look for Windows 11 or Aero theme</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>Windows 10</strong> with the native taskbar</li>
+<li><strong>Windows 11</strong> with the Windows 10 taskbar (via <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>)</li>
+<li>The network icon must be visible in the main system tray (overflow menu not supported)</li>
+</ul>
+<blockquote>
+  <p><strong>Note:</strong> This mod is unlikely to work with other taskbar mods (e.g. Retrobar) or heavily customized configurations.</p>
+</blockquote>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>Overflow menu</strong>: The network icon must be in the main system tray, not hidden in the overflow menu.</li>
+<li><strong>Auto-reconnect checkbox</strong>: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.</li>
+</ul>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>| Key | Action |
+|-----|--------|
+| <strong>Ctrl+H</strong> | Toggle network flyout (disabled by default) |</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>m417z</strong> — Code review</li>
+<li><strong>Anixx</strong> — Testing on Windows 11 23H2 and feedback</li>
+<li><strong>sebastian08dm08-cpu</strong> — Testing on Windows 10 1809</li>
+</ul>
+<p>If you encounter issues, please report them on the author of the mod.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lock Keys Notifier 1.1.0]]></title>
         <id>https://windhawk.net/mods/lock-keys-notifier#00056305e81658b3ca6dda4c76f391593f3a17c1</id>
@@ -296,21 +348,6 @@ mod. The next toggle in a normal app shows the correct state.</li>
         <author>
             <name>Havrlisan</name>
             <uri>https://github.com/havrlisan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 File Open/Save Toggle Bar Icon 1.0]]></title>
-        <id>https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon#ed51a0b3f375eca20654ec5b64e14cf0be627b0d</id>
-        <link href="https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon"/>
-        <updated>2026-06-23T07:45:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7fileopensavetogglebaricon">Windows 7 File Open/Save Toggle Bar Icon</h1>
-<p>Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dialogs.</p>
-<p>This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
-make the icon look like the Windows 7 glyph.</p>
-<p><img src="https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png" alt="Preview image" /></p>]]></content>
-        <author>
-            <name>Leymonaide</name>
-            <uri>https://github.com/Leymonaide</uri>
         </author>
     </entry>
 </feed>
