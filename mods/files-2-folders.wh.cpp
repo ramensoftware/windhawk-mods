@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              files-2-folders
 // @name            Files 2 Folders
-// @description     Move or copy one or more selected files in Explorer into a subfolder (named, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.1
+// @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), with a workaround hotkey for other file managers
+// @version         2.2
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -30,6 +30,14 @@ with four options for moving the selection into a new subfolder:
    an existing folder** in settings to instead create a fresh numbered folder
    each time (`archive`, `archive (2)`, `archive (3)`, … — the way Explorer
    numbers duplicates).
+
+   **Nested subfolders:** type a `/` (or `\`) in the name to build a whole path
+   at once. `test/1/2/3/name` creates `test\1\2\3\name` and moves the selection
+   into the final `name` folder. The intermediate folders (`test\1\2\3`) are
+   created if missing and reused if they already exist; only the **last**
+   segment follows the reuse/numbering rule above. Each segment is sanitized
+   individually, and empty segments (leading, trailing, or doubled separators)
+   are ignored.
 2. Move each file into a subfolder named after the file (without extension):
    `Good.bat` -> `.\Good\Good.bat`. With a single file selected, this just
    creates one folder around that file.
@@ -122,7 +130,7 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 /*
 - defaultSubfolderName: ""
   $name: "Default subfolder name (mode 1)"
-  $description: "Pre-filled name for the \"Fixed name\" option. Leave empty to use Windows' own localized \"New folder\" name (matches your OS language)."
+  $description: "Pre-filled name for the \"Fixed name\" option. Leave empty to use Windows' own localized \"New folder\" name (matches your OS language). Use \"/\" (or \"\\\") to nest, e.g. \"archive/incoming\" creates archive\\incoming and moves into incoming."
 - fixedNameReuse: true
   $name: "Fixed name: reuse an existing folder"
   $description: |-
@@ -432,6 +440,31 @@ static std::wstring SanitizeFolderName(const std::wstring& in) {
         out.pop_back();
     if (out.empty()) out = L"_";
     return out;
+}
+
+// Split a user-entered "fixed name" into nested subfolder segments. A '/' or
+// '\' acts as a path separator, so "a/b/c" yields { "a", "b", "c" } (caller
+// joins with '\' and moves the files into the final "c"). Each segment is
+// trimmed of surrounding blanks and sanitized independently; empty segments
+// (from leading, trailing, or doubled separators) are dropped. An empty result
+// means the name was effectively blank.
+static std::vector<std::wstring> SplitNamePath(const std::wstring& raw) {
+    std::vector<std::wstring> segs;
+    size_t start = 0;
+    for (size_t i = 0; i <= raw.size(); ++i) {
+        if (i == raw.size() || raw[i] == L'/' || raw[i] == L'\\') {
+            std::wstring piece = raw.substr(start, i - start);
+            size_t b = piece.find_first_not_of(L' ');
+            if (b != std::wstring::npos) {
+                // No separators remain in piece, so SanitizeFolderName only
+                // strips other invalid chars and trailing space/dot here.
+                std::wstring s = SanitizeFolderName(piece.substr(b));
+                if (!s.empty() && s != L"_") segs.push_back(s);
+            }
+            start = i + 1;
+        }
+    }
+    return segs;
 }
 
 static std::wstring GetFileNameOnly(const std::wstring& full) {
@@ -819,28 +852,45 @@ static void DoFiles2Folder(HWND owner,
     std::vector<std::pair<std::wstring, std::wstring>> moves;
 
     if (mode == MODE_FIXED_NAME || mode == MODE_DATE_NAMED) {
-        std::wstring raw = (mode == MODE_FIXED_NAME) ? fixedName : dateText;
-        std::wstring sub = SanitizeFolderName(raw);
-        if (sub.empty() || sub == L"_") {
+        // Resolve the destination into a parent directory plus a leaf folder.
+        // Date mode is always a single folder directly under the source.
+        // Fixed-name mode additionally supports nested subfolders: a '/' or
+        // '\' in the name is a path separator, so "a/b/c" builds a\b\c and the
+        // files land in the final "c". The intermediate folders go into
+        // parentDir (always created/reused); only the leaf follows the
+        // reuse/numbering rule below.
+        std::wstring parentDir = folder;
+        std::wstring leaf;
+        if (mode == MODE_FIXED_NAME) {
+            std::vector<std::wstring> segs = SplitNamePath(fixedName);
+            if (!segs.empty()) {
+                for (size_t i = 0; i + 1 < segs.size(); ++i)
+                    parentDir += L"\\" + segs[i];
+                leaf = segs.back();
+            }
+        } else {
+            leaf = SanitizeFolderName(dateText);
+            if (leaf == L"_") leaf.clear();
+        }
+        if (leaf.empty()) {
             if (!silent)
                 MessageBoxW(owner,
                     L"The subfolder name cannot be empty.",
                     L"Files 2 Folder", MB_ICONWARNING);
             return;
         }
-        // Pick the destination folder. Fixed-name mode reuses an existing
-        // folder when the "Fixed name: reuse an existing folder" setting is on
-        // (the default) — so repeated runs accumulate in e.g. "archive". With
-        // it off, and always for date mode, number duplicates like Explorer
+        // Pick the leaf folder. Fixed-name mode reuses an existing folder when
+        // the "Fixed name: reuse an existing folder" setting is on (the
+        // default) — so repeated runs accumulate in e.g. "archive". With it
+        // off, and always for date mode, number duplicates like Explorer
         // ("archive", "archive (2)", ...). Folders have no extension, so don't
-        // split one off. (EnsureDir returns the existing folder when reusing;
+        // split one off. (EnsureDir creates the whole chain — intermediate
+        // dirs included — and returns the existing leaf when reusing;
         // same-named files inside it are still de-duplicated by the move step.)
-        std::wstring dest;
-        if (mode == MODE_FIXED_NAME && g_settings.fixedNameReuse) {
-            dest = folder + L"\\" + sub;
-        } else {
-            dest = UniqueDest(folder, sub, /*splitExtension=*/false);
-        }
+        bool reuse = (mode == MODE_FIXED_NAME) && g_settings.fixedNameReuse;
+        std::wstring dest = reuse
+            ? parentDir + L"\\" + leaf
+            : UniqueDest(parentDir, leaf, /*splitExtension=*/false);
         if (!EnsureDir(dest)) {
             if (!silent)
                 MessageBoxW(owner, L"Could not create destination folder.",
