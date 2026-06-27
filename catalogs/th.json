@@ -3543,6 +3543,34 @@
         "version": "1.2.1"
       }
     },
+    "disk-usage-bar-customizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782591090000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782591090000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Valer100",
+        "compilerOptions": "-luxtheme -lgdi32",
+        "description": "Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border and more.",
+        "github": "https://github.com/Valer100",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Disk Usage Bar Customizer",
+        "version": "1.0.0"
+      }
+    },
     "disk-usage-bar-in-drive-properties": {
       "details": {
         "defaultSorting": 5850,

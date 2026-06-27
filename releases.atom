@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-27T10:05:17.000Z</updated>
+    <updated>2026-06-27T20:11:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-customizer#fab14b0a0962e79179ca89a14f9f70481633371b</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
+        <updated>2026-06-27T20:11:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="diskusagebarcustomizer">Disk Usage Bar Customizer</h1>
+<p>Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border and more.</p>
+<p>This is a fork of the original <a href="https://windhawk.net/mods/disk-usage-bar-color">Disk Usage Bar Color</a> mod made by <a href="https://github.com/dirtyrazkl">dirtyrazkl</a>.</p>
+<h2 id="customizationoptions">Customization options</h2>
+<h3 id="general">General</h3>
+<ul>
+<li>Show remaining space as progress instead of used space</li>
+<li>Custom warning percentage threshold</li>
+</ul>
+<h3 id="rendering">Rendering</h3>
+<ul>
+<li>Render using visual styles</li>
+<li>Render using dark mode parts when using visual styles</li>
+</ul>
+<h3 id="customrendering">Custom rendering</h3>
+<ul>
+<li>Use system's accent color for the normal progress color</li>
+<li>Render bar border</li>
+<li>Height factor</li>
+<li>Custom light &amp; dark mode colors</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="colorsadaptingtothesystemstheme">Colors adapting to the system's theme</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png" alt="System colors light mode" /></p>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png" alt="System colors dark mode" /></p>
+<h3 id="accentcolorasthenormalprogresscolor">Accent color as the normal progress color</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png" alt="Accent color light mode" /></p>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png" alt="Accent color dark mode" /></p>
+<h3 id="customcolors">Custom colors</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png" alt="Custom colors" /></p>
+<h3 id="noborder">No border</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png" alt="No border" /></p>
+<h3 id="customheight">Custom height</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png" alt="Custom height" /></p>
+<h3 id="customwarningthreshold">Custom warning threshold</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png" alt="Custom warning threshold" /></p>
+<h3 id="showremainingspaceasprogressinsteadofusedspace">Show remaining space as progress instead of used space</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png" alt="Show remaining space as progress instead of used space" /></p>]]></content>
+        <author>
+            <name>Valer100</name>
+            <uri>https://github.com/Valer100</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 2.8.4]]></title>
         <id>https://windhawk.net/mods/win7-network-flyout-recreation#f7eabd22737735da3efb5507964ecd6832f79aa3</id>
@@ -941,43 +989,6 @@ and launch items straight from the menu, without opening the folder first.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota Bars 0.9.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#abc86d1f587043340096e5fafc9019caa29cc2e7</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-06-13T18:51:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraiquotabars">Taskbar AI Quota Bars</h1>
-<p>Shows Anthropic Claude and OpenAI/Codex AI agent and LLM subscription quota usage as
-compact bars on the Windows 11 taskbar, next to the system tray.
-Can show on the primary taskbar only, all taskbars, or one specific monitor.</p>
-<p><img src="https://i.imgur.com/LD0K31E.png" alt="Taskbar AI Quota Bars" />
-<img src="https://i.imgur.com/H7agnz2.png" alt="Taskbar AI Quota Bars Detail" /></p>
-<p>Each account gets one compact column:</p>
-<ul>
-<li>stacked layout: stacked horizontal bars, filling left-to-right</li>
-<li>vertical layout: side-by-side bars, filling bottom-up</li>
-</ul>
-<p>Hover for exact percentages and reset times. Click a column to refresh that account
-or open the provider dashboard, depending on settings. Right-click for Refresh all
-and Open dashboard.
-Bars use configurable green/yellow/orange/red thresholds, with a colorblind palette option.
-Stale errors can mark labels/tooltips with <code>!</code>.</p>
-<p>Optionally fires a Windows notification when an account first crosses the red threshold
-(5-hour or weekly), so you don't have to keep glancing at the bars.</p>
-<p>Supported credential sources:</p>
-<ul>
-<li>OpenCode: <code>%USERPROFILE%\.local\share\opencode\auth.json</code></li>
-<li>Claude Code: <code>%USERPROFILE%\.claude\.credentials.json</code></li>
-<li>Codex: <code>%USERPROFILE%\.codex\auth.json</code></li>
-</ul>
-<p>Credentials are read-only. The mod never refreshes or rewrites tokens, and never sends
-refresh tokens as bearer tokens. Run OpenCode, Claude Code, or Codex to refresh their
-own auth files if requests start returning <code>401</code>.</p>]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
         </author>
     </entry>
 </feed>

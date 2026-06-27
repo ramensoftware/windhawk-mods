@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-27T19:31:34.000Z</updated>
+    <updated>2026-06-27T20:11:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-customizer#fab14b0a0962e79179ca89a14f9f70481633371b</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
+        <updated>2026-06-27T20:11:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="diskusagebarcustomizer">Disk Usage Bar Customizer</h1>
+<p>Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border and more.</p>
+<p>This is a fork of the original <a href="https://windhawk.net/mods/disk-usage-bar-color">Disk Usage Bar Color</a> mod made by <a href="https://github.com/dirtyrazkl">dirtyrazkl</a>.</p>
+<h2 id="customizationoptions">Customization options</h2>
+<h3 id="general">General</h3>
+<ul>
+<li>Show remaining space as progress instead of used space</li>
+<li>Custom warning percentage threshold</li>
+</ul>
+<h3 id="rendering">Rendering</h3>
+<ul>
+<li>Render using visual styles</li>
+<li>Render using dark mode parts when using visual styles</li>
+</ul>
+<h3 id="customrendering">Custom rendering</h3>
+<ul>
+<li>Use system's accent color for the normal progress color</li>
+<li>Render bar border</li>
+<li>Height factor</li>
+<li>Custom light &amp; dark mode colors</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="colorsadaptingtothesystemstheme">Colors adapting to the system's theme</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png" alt="System colors light mode" /></p>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png" alt="System colors dark mode" /></p>
+<h3 id="accentcolorasthenormalprogresscolor">Accent color as the normal progress color</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png" alt="Accent color light mode" /></p>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png" alt="Accent color dark mode" /></p>
+<h3 id="customcolors">Custom colors</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png" alt="Custom colors" /></p>
+<h3 id="noborder">No border</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png" alt="No border" /></p>
+<h3 id="customheight">Custom height</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png" alt="Custom height" /></p>
+<h3 id="customwarningthreshold">Custom warning threshold</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png" alt="Custom warning threshold" /></p>
+<h3 id="showremainingspaceasprogressinsteadofusedspace">Show remaining space as progress instead of used space</h3>
+<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png" alt="Show remaining space as progress instead of used space" /></p>]]></content>
+        <author>
+            <name>Valer100</name>
+            <uri>https://github.com/Valer100</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.3.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#85926525df30b8fca5c589f5bcb17b98839b4fc9</id>
@@ -301,19 +349,6 @@ and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word PDF Lossless Export 1.2.0]]></title>
-        <id>https://windhawk.net/mods/word-pdf-lossless-export#3960e3612980016d1d1cc3800c9899f2c88affdf</id>
-        <link href="https://windhawk.net/mods/word-pdf-lossless-export"/>
-        <updated>2026-06-24T08:07:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to use pattern scanning for hooking. This provides an alternative for specific Office versions where Microsoft has not released PDB symbols.</li>
-</ul>]]></content>
-        <author>
-            <name>Joe Ye</name>
-            <uri>https://github.com/JoeYe-233</uri>
         </author>
     </entry>
 </feed>
