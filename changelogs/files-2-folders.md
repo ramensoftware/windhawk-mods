@@ -1,3 +1,9 @@
+## 2.2 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd63b735358811aff34f11c4ba5909f1b44688a4/mods/files-2-folders.wh.cpp))
+
+* Add nested-subfolder support to the **Fixed name** mode. A `/` (or `\`) in the name is now treated as a path separator, so `test/1/2/3/name` creates `test\1\2\3\name` and moves the selection into the final `name` folder.
+* Intermediate folders are always created/reused as a stable path; only the last segment follows the existing "Fixed name: reuse an existing folder" reuse/numbering rule.
+* Empty segments (from leading, trailing, or doubled separators) are ignored. Other modes (by name, by extension, by date) are unchanged.
+
 ## 2.1 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b0dd6aa46438ea0f3e7c9130f92772831dcbd22c/mods/files-2-folders.wh.cpp))
 
 - **Copy operation mode.** The old Fast/Slow move toggle becomes a single **Operation** setting with three choices: *Move - fast* (`MoveFileExW`), *Move - safe* (`IFileOperation::MoveItem`, with progress/undo/UAC), and *Copy* (`IFileOperation::CopyItem`, leaving the originals in place). The dialog radio labels read "Copy" vs "Move" to match the selected operation.
