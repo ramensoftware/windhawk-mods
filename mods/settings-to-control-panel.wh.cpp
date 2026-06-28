@@ -2,11 +2,11 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.5
+// @version        10.0.6
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -lcomctl32 -lpsapi
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **NEW in 10.0.5: Redirect Audio & Network tray context menu items to classic panels using dynamic menu interception without hardcoded IDs**
+- **NEW in 10.0.6: Triple-layer tray detection — ATL class address (primary) + immersive menu blocking (Win11 fix) + DLL-based TrackPopupMenuEx fallback. All methods are language-independent.**
 
 ---
 
@@ -53,7 +53,7 @@ corresponding classic Control Panel applets using only native Windows components
 ## Credits
 
 - m417z – Code reviews and feedback
-- Anixx – Testing on Windows 11 23H2
+- Anixx – Testing on Windows 11 23H2 and original toolbar subclassing approach
 - dbilanoski – CLSID documentation
 */
 // ==/WindhawkModReadme==
@@ -84,10 +84,11 @@ corresponding classic Control Panel applets using only native Windows components
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <objbase.h>
 #include <shellapi.h>
+#include <commctrl.h>
 #include <psapi.h>
 #include <initguid.h>
 #include <string>
@@ -96,7 +97,8 @@ corresponding classic Control Panel applets using only native Windows components
 #include <unordered_set>
 #include <vector>
 #include <mutex>
-// Custom IDs for tray menu redirection
+
+// Custom IDs for tray menu redirection (TrackPopupMenuEx method)
 #define TRAY_CUSTOM_ID_AUDIO    65001
 #define TRAY_CUSTOM_ID_NETWORK  65002
 
@@ -109,13 +111,21 @@ static HMODULE g_hOle32 = nullptr;
 using IShellDispatch2_ShellExecute_t = HRESULT(WINAPI*)(void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow);
 static IShellDispatch2_ShellExecute_t IShellDispatch2_ShellExecute_orig = nullptr;
 
-// TrackPopupMenuEx hook
+// TrackPopupMenuEx hook (DLL-based fallback method)
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
-// Custom IDs for tray menu redirection
-#define TRAY_CUSTOM_ID_AUDIO    65001
-#define TRAY_CUSTOM_ID_NETWORK  65002
+// Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
+// 0=none, 1=audio, 2=network. Thread-local: only valid for the UI thread that right-clicked.
+static thread_local int g_trayContextType = 0;
+
+// ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu hook
+// Forces classic Win32 menus in SndVolSSO.dll and pnidui.dll (Win11 fix).
+using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
+static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
+static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
+
+static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) { return false; }
 
 // Constants
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
@@ -179,7 +189,7 @@ static bool IsChildProcess() {
 // Settings
 struct ModSettings {
     bool enableRedirects = true;
-    bool redirectSystemTray = false;
+    bool redirectSystemTray = true;
     bool uiOnlyRedirects = false;
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
@@ -348,33 +358,81 @@ static std::wstring ToLower(std::wstring s) {
 }
 
 // ============================================================
-// TRAY CONTEXT MENU HANDLING
+// TRAY: METHOD 1 - Toolbar subclassing (language-independent)
 // ============================================================
 
-static void* GetReturnAddress() {
-    void* stackTrace[3];
-    WORD frames = CaptureStackBackTrace(0, 3, stackTrace, NULL);
-    // [0] = GetReturnAddress, [1] = TrackPopupMenuEx_Hook, [2] = caller
-    if (frames >= 3) {
-        return stackTrace[2];
-    }
-    return nullptr;
-}
+static HWND g_hTrayToolbar = nullptr;
+static BYTE* g_sndVolSSOBase = nullptr;
+static BYTE* g_sndVolSSOEnd = nullptr;
+static BYTE* g_pniduiBase = nullptr;
+static BYTE* g_pniduiEnd = nullptr;
 
-static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
-    HMODULE hModule = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, 
-                           (LPCWSTR)address, &hModule)) {
-        wchar_t path[MAX_PATH];
-        if (GetModuleFileNameW(hModule, path, MAX_PATH)) {
-            return (wcsstr(path, moduleName) != nullptr);
+// Initialize DLL base/end for tray icon detection
+static bool InitTrayDllInfo() {
+    if (g_sndVolSSOBase && g_pniduiBase) return true;
+
+    HMODULE hSndVol = GetModuleHandleW(L"SndVolSSO.dll");
+    if (hSndVol) {
+        MODULEINFO mi{};
+        if (GetModuleInformation(GetCurrentProcess(), hSndVol, &mi, sizeof(mi))) {
+            g_sndVolSSOBase = (BYTE*)mi.lpBaseOfDll;
+            g_sndVolSSOEnd = g_sndVolSSOBase + mi.SizeOfImage;
         }
     }
-    return false;
+
+    HMODULE hPniDui = GetModuleHandleW(L"pnidui.dll");
+    if (hPniDui) {
+        MODULEINFO mi{};
+        if (GetModuleInformation(GetCurrentProcess(), hPniDui, &mi, sizeof(mi))) {
+            g_pniduiBase = (BYTE*)mi.lpBaseOfDll;
+            g_pniduiEnd = g_pniduiBase + mi.SizeOfImage;
+        }
+    }
+
+    return (g_sndVolSSOBase != nullptr || g_pniduiBase != nullptr);
 }
 
+// Identify tray button type via ATL class address in DLL
+static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
+    if (buttonIndex < 0) return 0;
+
+    TBBUTTON tb{};
+    if (!SendMessageW(hToolbar, TB_GETBUTTON, buttonIndex, (LPARAM)&tb)) return 0;
+    if (!tb.dwData) return 0;
+
+    HWND hIconWnd = *(HWND*)tb.dwData;
+    if (!hIconWnd || !IsWindow(hIconWnd)) return 0;
+
+    wchar_t className[256]{};
+    if (!GetClassNameW(hIconWnd, className, 256)) return 0;
+
+    if (wcsncmp(className, L"ATL:", 4) != 0) return 0;
+
+    const wchar_t* hexPart = className + 4;
+    ULONG_PTR addr = 0;
+
+    while (*hexPart) {
+        wchar_t c = *hexPart;
+        int digit = 0;
+        if (c >= L'0' && c <= L'9') digit = c - L'0';
+        else if (c >= L'A' && c <= L'F') digit = 10 + (c - L'A');
+        else if (c >= L'a' && c <= L'f') digit = 10 + (c - L'a');
+        else break;
+        addr = (addr << 4) | digit;
+        hexPart++;
+    }
+
+    if (g_sndVolSSOBase && addr >= (ULONG_PTR)g_sndVolSSOBase && addr < (ULONG_PTR)g_sndVolSSOEnd)
+        return 1; // Audio
+    if (g_pniduiBase && addr >= (ULONG_PTR)g_pniduiBase && addr < (ULONG_PTR)g_pniduiEnd)
+        return 2; // Network
+
+    return 0;
+}
+
+// Launch functions
 static void OpenClassicSoundPanel() {
-    Wh_Log(L"Opening classic Sound panel from tray context menu");
+    Wh_Log(L"Opening classic Sound panel");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -386,423 +444,171 @@ static void OpenClassicSoundPanel() {
 }
 
 static void OpenClassicNetworkConnections() {
-    Wh_Log(L"Opening classic Network Connections from tray context menu");
+    Wh_Log(L"Opening classic Network Connections");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
     sei.lpVerb = L"open";
     sei.lpFile = L"explorer.exe";
-    sei.lpParameters = L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}";  // ← CAMBIA QUI
+    sei.lpParameters = L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}";
     sei.nShow = SW_SHOWNORMAL;
     ShellExecuteExW_orig(&sei);
 }
-// ============================================================
-// SUPPORT FUNCTIONS FOR SYSTEM DLL CHECKS
-// ============================================================
 
-// Check if pnidui.dll exists in ExplorerPatcher folder
-static bool IsPniDuiInExplorerPatcher() {
-    wchar_t epPath[MAX_PATH];
-    // Build path: C:\Program Files\ExplorerPatcher\pnidui.dll
-    if (GetEnvironmentVariableW(L"ProgramFiles", epPath, MAX_PATH)) {
-        wcscat_s(epPath, MAX_PATH, L"\\ExplorerPatcher\\pnidui.dll");
-        DWORD attrib = GetFileAttributesW(epPath);
-        bool exists = (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY));
-        if (exists) {
-            Wh_Log(L"pnidui.dll found in ExplorerPatcher: %s", epPath);
+// Toolbar subclass proc — intercepts right-click on tray icons.
+// Sets g_trayContextType so TrackPopupMenuEx_Hook can identify the menu
+// without any text/language-dependent detection.
+static LRESULT CALLBACK TrayToolbarSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
+{
+    if (msg == WM_RBUTTONUP) {
+        POINT pt;
+        pt.x = (int)(short)LOWORD(lParam);
+        pt.y = (int)(short)HIWORD(lParam);
+        int hitIndex = (int)SendMessageW(hwnd, TB_HITTEST, 0, (LPARAM)&pt);
+
+        if (hitIndex >= 0) {
+            int buttonType = GetTrayButtonType(hwnd, hitIndex);
+            if (buttonType == 1) {
+                Wh_Log(L"[TRAY-SUBCLASS] Audio icon right-clicked");
+                g_trayContextType = 1; // will be consumed by TrackPopupMenuEx_Hook
+            }
+            else if (buttonType == 2) {
+                Wh_Log(L"[TRAY-SUBCLASS] Network icon right-clicked");
+                g_trayContextType = 2;
+            }
         }
-        return exists;
     }
-    
-    // Fallback: check classic path as well
-    wchar_t classicPath[] = L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll";
-    DWORD attrib = GetFileAttributesW(classicPath);
-    bool exists = (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY));
-    if (exists) {
-        Wh_Log(L"pnidui.dll found in ExplorerPatcher (fallback): %s", classicPath);
-    }
-    return exists;
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-// Check if pnidui.dll is loaded in memory (from any path)
-static bool IsPniDuiLoadedInProcess() {
-    HMODULE hMod = GetModuleHandleW(L"pnidui.dll");
-    if (hMod) {
+// Find tray toolbar
+static HWND FindTrayToolbar() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!hTray) return nullptr;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hTray, &pid);
+    if (pid != GetCurrentProcessId()) return nullptr;
+    HWND hNotify = FindWindowExW(hTray, nullptr, L"TrayNotifyWnd", nullptr);
+    if (!hNotify) return nullptr;
+    HWND hSysPager = FindWindowExW(hNotify, nullptr, L"SysPager", nullptr);
+    if (hSysPager) {
+        HWND hToolbar = FindWindowExW(hSysPager, nullptr, L"ToolbarWindow32", nullptr);
+        if (hToolbar) return hToolbar;
+    }
+    return FindWindowExW(hNotify, nullptr, L"ToolbarWindow32", nullptr);
+}
+
+static void SetupTraySubclass() {
+    if (g_hTrayToolbar) return;
+    if (!InitTrayDllInfo()) return;
+    HWND hToolbar = FindTrayToolbar();
+    if (!hToolbar) return;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
+        g_hTrayToolbar = hToolbar;
+        Wh_Log(L"[TRAY-SUBCLASS] Installed");
+    }
+}
+
+static void RemoveTraySubclass() {
+    if (g_hTrayToolbar) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTrayToolbar, TrayToolbarSubclassProc);
+        g_hTrayToolbar = nullptr;
+        Wh_Log(L"[TRAY-SUBCLASS] Removed");
+    }
+}
+
+// ============================================================
+// TRAY: METHOD 2 - TrackPopupMenuEx DLL-based detection (fallback)
+// ============================================================
+
+static void* GetReturnAddress() {
+    void* stackTrace[3];
+    WORD frames = CaptureStackBackTrace(0, 3, stackTrace, NULL);
+    if (frames >= 3) return stackTrace[2];
+    return nullptr;
+}
+
+static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
+    HMODULE hModule = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)address, &hModule)) {
         wchar_t path[MAX_PATH];
-        GetModuleFileNameW(hMod, path, MAX_PATH);
-        Wh_Log(L"pnidui.dll loaded in memory from: %s", path);
-        return true;
+        if (GetModuleFileNameW(hModule, path, MAX_PATH))
+            return (wcsstr(path, moduleName) != nullptr);
     }
     return false;
 }
 
-// Check if pnidui.dll exists in System32
-static bool IsPniDuiOnDisk() {
-    wchar_t systemPath[MAX_PATH];
-    if (!GetSystemDirectoryW(systemPath, MAX_PATH)) {
-        return false;
-    }
-    wcscat_s(systemPath, MAX_PATH, L"\\pnidui.dll");
-    DWORD attrib = GetFileAttributesW(systemPath);
-    bool exists = (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY));
-    if (exists) {
-        Wh_Log(L"pnidui.dll found in System32: %s", systemPath);
-    }
-    return exists;
-}
-
-// Check if SndVolSSO.dll is loaded in memory
-static bool IsSndVolSSOLoadedInProcess() {
-    HMODULE hMod = GetModuleHandleW(L"SndVolSSO.dll");
-    if (hMod) {
-        wchar_t path[MAX_PATH];
-        GetModuleFileNameW(hMod, path, MAX_PATH);
-        Wh_Log(L"SndVolSSO.dll loaded in memory from: %s", path);
-        return true;
-    }
-    return false;
-}
-
-// Alternative method to detect network menu by text content (fallback)
-static bool IsNetworkMenuByText(HMENU hMenu, int itemCount) {
-    if (itemCount <= 0 || itemCount > 6) return false;
-    
-    for (int i = 0; i < itemCount; i++) {
-        wchar_t text[256] = {0};
-        if (GetMenuStringW(hMenu, i, text, 256, MF_BYPOSITION)) {
-            std::wstring lower = ToLower(text);
-            if (lower.find(L"network") != std::wstring::npos ||
-                lower.find(L"internet") != std::wstring::npos ||
-                lower.find(L"wifi") != std::wstring::npos ||
-                lower.find(L"wi-fi") != std::wstring::npos ||
-                lower.find(L"ethernet") != std::wstring::npos ||
-                lower.find(L"connection") != std::wstring::npos) {
-                Wh_Log(L"Network menu detected by text: '%s'", text);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// Alternative method to detect audio menu by text content (fallback)
-static bool IsAudioMenuByText(HMENU hMenu, int itemCount) {
-    if (itemCount <= 0 || itemCount > 6) return false;
-    
-    for (int i = 0; i < itemCount; i++) {
-        wchar_t text[256] = {0};
-        if (GetMenuStringW(hMenu, i, text, 256, MF_BYPOSITION)) {
-            std::wstring lower = ToLower(text);
-            if (lower.find(L"sound") != std::wstring::npos ||
-                lower.find(L"audio") != std::wstring::npos ||
-                lower.find(L"volume") != std::wstring::npos ||
-                lower.find(L"speaker") != std::wstring::npos ||
-                lower.find(L"altoparlante") != std::wstring::npos) {
-                Wh_Log(L"Audio menu detected by text: '%s'", text);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-// ============================================================
-// WINDOWS VERSION DETECTION
-// ============================================================
-// ============================================================
-// WINDOWS VERSION DETECTION
-// ============================================================
-
-/**
- * Check if running on Windows 11 24H2 or later (build 26100+)
- * 
- * This function is for logging and for debugging in case of bug report to the author.
- * It helps identify the exact Windows version where issues might occur.
- * 
- * Windows 11 version mapping:
- * - 21H2: Build 22000
- * - 22H2: Build 22621
- * - 23H2: Build 22631
- * - 24H2: Build 26100
- * - 25H2: Build 26200
- * - 26H2: Build 26250+
- * 
- * Returns:
- *   true  - Running on Windows 11 24H2 or later
- *   false - Running on older Windows version (Windows 10 or Windows 11 23H2 or earlier)
- */
-static bool IsWin11_24H2OrLater() {
-    static bool checked = false;
-    static bool is24H2 = false;
-    
-    if (!checked) {
-        OSVERSIONINFOEXW osvi = {};
-        osvi.dwOSVersionInfoSize = sizeof(osvi);
-        using RtlGetVersion_t = NTSTATUS(WINAPI*)(OSVERSIONINFOEXW*);
-        HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-        if (hNtdll) {
-            auto fn = (RtlGetVersion_t)GetProcAddress(hNtdll, "RtlGetVersion");
-            if (fn) {
-                NTSTATUS status = fn(&osvi);
-                if (status == 0) {  // STATUS_SUCCESS
-                    // Windows 11 24H2 = build 26100 or higher
-                    is24H2 = (osvi.dwMajorVersion == 10 && 
-                              osvi.dwMinorVersion == 0 && 
-                              osvi.dwBuildNumber >= 26100);
-                    
-                    // Detailed logging for debugging
-                    const wchar_t* versionName = L"Unknown";
-                    if (osvi.dwBuildNumber >= 26250) {
-                        versionName = L"Windows 11 26H2 (2026 Update)";
-                    } else if (osvi.dwBuildNumber >= 26200) {
-                        versionName = L"Windows 11 25H2 (2025 Update)";
-                    } else if (osvi.dwBuildNumber >= 26100) {
-                        versionName = L"Windows 11 24H2 (2024 Update)";
-                    } else if (osvi.dwBuildNumber >= 22631) {
-                        versionName = L"Windows 11 23H2 (2023 Update)";
-                    } else if (osvi.dwBuildNumber >= 22621) {
-                        versionName = L"Windows 11 22H2 (2022 Update)";
-                    } else if (osvi.dwBuildNumber >= 22000) {
-                        versionName = L"Windows 11 21H2 (Sun Valley)";
-                    } else if (osvi.dwBuildNumber >= 19045) {
-                        versionName = L"Windows 10 22H2 (2022 Update)";
-                    } else if (osvi.dwBuildNumber >= 19044) {
-                        versionName = L"Windows 10 21H2 (November 2021 Update)";
-                    } else if (osvi.dwBuildNumber >= 19043) {
-                        versionName = L"Windows 10 21H1 (May 2021 Update)";
-                    } else if (osvi.dwBuildNumber >= 19042) {
-                        versionName = L"Windows 10 20H2 (October 2020 Update)";
-                    } else if (osvi.dwBuildNumber >= 19041) {
-                        versionName = L"Windows 10 2004 (May 2020 Update)";
-                    } else if (osvi.dwBuildNumber >= 18363) {
-                        versionName = L"Windows 10 1909 (November 2019 Update)";
-                    } else if (osvi.dwBuildNumber >= 18362) {
-                        versionName = L"Windows 10 1903 (May 2019 Update)";
-                    } else if (osvi.dwBuildNumber >= 17763) {
-                        versionName = L"Windows 10 1809 (October 2018 Update)";
-                    } else if (osvi.dwBuildNumber >= 17134) {
-                        versionName = L"Windows 10 1803 (April 2018 Update)";
-                    } else if (osvi.dwBuildNumber >= 16299) {
-                        versionName = L"Windows 10 1709 (Fall Creators Update)";
-                    } else if (osvi.dwBuildNumber >= 15063) {
-                        versionName = L"Windows 10 1703 (Creators Update)";
-                    } else if (osvi.dwBuildNumber >= 14393) {
-                        versionName = L"Windows 10 1607 (Anniversary Update)";
-                    } else if (osvi.dwBuildNumber >= 10586) {
-                        versionName = L"Windows 10 1511";
-                    } else if (osvi.dwBuildNumber >= 10240) {
-                        versionName = L"Windows 10 1507 (RTM)";
-                    }
-                    
-                    Wh_Log(L"[VERSION] %s (Build %lu, Is24H2=%d, IsWin11=%d)", 
-                           versionName, osvi.dwBuildNumber, is24H2, 
-                           (osvi.dwBuildNumber >= 22000));
-                } else {
-                    Wh_Log(L"[VERSION] RtlGetVersion failed with status: 0x%08X", status);
-                }
-            } else {
-                Wh_Log(L"[VERSION] RtlGetVersion not found in ntdll.dll");
-            }
-        } else {
-            Wh_Log(L"[VERSION] ntdll.dll not loaded");
-        }
-        checked = true;
-    }
-    return is24H2;
-}
-
-// ============================================================
-// TRACKPOPUPMENUEX_HOOK WITH COMPLETE SYSTEM CHECKS
-// ============================================================
-
-/**
- * Hook function for TrackPopupMenuEx to intercept system tray context menus.
- * 
- * This function detects audio and network context menus from the system tray
- * and redirects them to classic Control Panel applets instead of the modern
- * Settings app.
- * 
- * Detection methods (in order of priority):
- * 1. DLL-based detection via calling module (SndVolSSO.dll, pnidui.dll, dxgi.dll)
- * 2. ExplorerPatcher detection for Windows 11 24H2+
- * 3. Text-based fallback detection for compatibility
- * 
- * This function is for logging and for debugging in case of bug report to the author.
- * The extensive logging helps identify issues with specific Windows versions or
- * third-party modifications like ExplorerPatcher.
- * 
- * Supported menus:
- * - Audio: "Open Sound settings" -> opens mmsys.cpl
- * - Network: "Open Network & Internet settings" -> opens Network Connections
- * 
- * Returns:
- *   BOOL - Result from the original TrackPopupMenuEx function
- */
-BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, 
-                                   HWND hWnd, const TPMPARAMS* lptpm) {
-    if (!g_settings.redirectSystemTray || !g_settings.enableRedirects) {
+BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
+    if (!g_settings.redirectSystemTray || !g_settings.enableRedirects)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
 
     HookGuard guard;
-    if (guard.IsReentrant()) {
+    if (guard.IsReentrant())
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
 
-    void* retAddr = GetReturnAddress();
-    int itemCount = GetMenuItemCount(hMenu);
-    
-    if (itemCount <= 0 || itemCount > 6) {
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
+    // --- Primary: subclass flag set on WM_RBUTTONUP (language-independent) ---
+    int contextType = g_trayContextType;
+    g_trayContextType = 0; // consume immediately
 
-    // ============================================================
-    // 1. DLL STATUS DETECTION - COMPLETE SYSTEM CHECK
-    // ============================================================
-    
-    // Primary detection: based on calling module (standard method)
-    bool isAudioMenu = false;
-    bool isNetworkMenu = false;
-    
-    // Check for SndVolSSO.dll for audio menu (always in memory on all versions)
-    if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
-        isAudioMenu = true;
-        Wh_Log(L"[TRAY] Audio menu detected via SndVolSSO.dll in memory");
-    } 
-    // Check for pnidui.dll for network menu (loaded from System32 or ExplorerPatcher)
-    else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
-        // Native network menu from pnidui.dll
-        isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
-        Wh_Log(L"[TRAY] Network menu detected via pnidui.dll in memory (items=%d)", itemCount);
-    } 
-    // Check for dxgi.dll for win7-network-flyout mod
-    else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
-        isNetworkMenu = (itemCount == 2 && 
-                        GetMenuItemID(hMenu, 0) == 3107 && 
-                        GetMenuItemID(hMenu, 1) == 3109);
-        if (isNetworkMenu) {
-            Wh_Log(L"[TRAY] Network menu detected via dxgi.dll (win7-network-flyout mod)");
-        }
-    }
-    
-    // ============================================================
-    // 2. IF NOT DETECTED: CHECK EXPLORERPATCHER (FALLBACK)
-    // ============================================================
-    
+    bool isAudioMenu   = (contextType == 1);
+    bool isNetworkMenu = (contextType == 2);
+
+    // --- Fallback: DLL return-address detection (language-independent) ---
     if (!isAudioMenu && !isNetworkMenu) {
-        // Check if pnidui.dll is in ExplorerPatcher folder
-        bool pniDuiInEP = IsPniDuiInExplorerPatcher();
-        bool pniDuiLoaded = IsPniDuiLoadedInProcess();
-        bool pniDuiInSystem = IsPniDuiOnDisk();
-        
-        Wh_Log(L"[TRAY] pnidui.dll status - In EP: %d, Loaded: %d, In System32: %d", 
-               pniDuiInEP, pniDuiLoaded, pniDuiInSystem);
-        
-        // If pnidui.dll is in ExplorerPatcher but not loaded yet,
-        // try to detect network menu via text content
-        if (pniDuiInEP || pniDuiLoaded) {
-            if (IsNetworkMenuByText(hMenu, itemCount)) {
-                isNetworkMenu = true;
-                Wh_Log(L"[TRAY] Network menu detected via text content (fallback)");
-            }
-        }
-        
-        // If still not detected, try audio menu via text content
-        if (!isNetworkMenu && IsAudioMenuByText(hMenu, itemCount)) {
-            isAudioMenu = true;
-            Wh_Log(L"[TRAY] Audio menu detected via text content (fallback)");
-        }
-    }
-    
-    // ============================================================
-    // 3. IF STILL NOT DETECTED: USE SndVolSSO IN MEMORY AS LAST RESORT
-    // ============================================================
-    
-    if (!isAudioMenu && !isNetworkMenu) {
-        // Check if SndVolSSO.dll is loaded (it should always be)
-        if (IsSndVolSSOLoadedInProcess()) {
-            // Could be an audio menu not detected by retAddr
-            // Verify by text content
-            if (IsAudioMenuByText(hMenu, itemCount)) {
+        void* retAddr = GetReturnAddress();
+        int itemCount = GetMenuItemCount(hMenu);
+        if (itemCount > 0 && itemCount <= 6) {
+            if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
                 isAudioMenu = true;
-                Wh_Log(L"[TRAY] Audio menu detected via SndVolSSO.dll in memory (text fallback)");
+                Wh_Log(L"[TRAY-HOOK] Audio menu via SndVolSSO.dll retaddr");
+            }
+            else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
+                isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
+                Wh_Log(L"[TRAY-HOOK] Network menu via pnidui.dll retaddr (items=%d)", itemCount);
+            }
+            else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
+                isNetworkMenu = (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109);
+                if (isNetworkMenu) Wh_Log(L"[TRAY-HOOK] Network menu via dxgi.dll retaddr");
             }
         }
+    } else {
+        Wh_Log(L"[TRAY-HOOK] %s menu via subclass flag", isAudioMenu ? L"Audio" : L"Network");
     }
-    
-    // ============================================================
-    // 4. IF NO DETECTION: EXIT WITH DEBUG LOGGING
-    // ============================================================
-    
-    if (!isAudioMenu && !isNetworkMenu) {
-        // Debug logging for Win11 24H2 scenarios
-        // This helps identify issues with specific Windows versions for bug reports
-        if (IsWin11_24H2OrLater()) {
-            Wh_Log(L"[TRAY] Win11 24H2+ - no menu detected (items=%d, retAddr=%p)", 
-                   itemCount, retAddr);
-            // Log first 3 items for debugging
-            for (int i = 0; i < std::min(3, itemCount); i++) {
-                wchar_t text[256] = {0};
-                UINT itemId = GetMenuItemID(hMenu, i);
-                if (GetMenuStringW(hMenu, i, text, 256, MF_BYPOSITION)) {
-                    Wh_Log(L"[TRAY]   Item %d: ID=%u, Text='%s'", i, itemId, text);
-                } else {
-                    Wh_Log(L"[TRAY]   Item %d: ID=%u, Text=<failed to retrieve>", i, itemId);
-                }
-            }
-        } else {
-            // Log for non-Win11 24H2 scenarios as well for debugging
-            Wh_Log(L"[TRAY] No menu detected (items=%d, retAddr=%p)", itemCount, retAddr);
-        }
+
+    if (!isAudioMenu && !isNetworkMenu)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
 
-    Wh_Log(L"[TRAY] %s menu DETECTED, %d items", 
-           isAudioMenu ? L"AUDIO" : L"NETWORK", itemCount);
+    int itemCount = GetMenuItemCount(hMenu);
+    Wh_Log(L"[TRAY-HOOK] %s menu, %d items", isAudioMenu ? L"AUDIO" : L"NETWORK", itemCount);
 
-    // ============================================================
-    // 5. MENU ITEM ID REPLACEMENT
-    // ============================================================
-    
-    // Audio: first item (index 0), Network: last item (index itemCount - 1)
+    // Replace the target menu item ID with a sentinel so we can detect the selection.
     int targetIndex = isAudioMenu ? 0 : (itemCount - 1);
-    UINT customId = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO : TRAY_CUSTOM_ID_NETWORK;
-
+    UINT customId   = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO : TRAY_CUSTOM_ID_NETWORK;
     UINT originalId = GetMenuItemID(hMenu, targetIndex);
-    Wh_Log(L"[TRAY]   Target item at index %d: original ID=%u, replacing with %u", 
-           targetIndex, originalId, customId);
 
-    // Replace with custom ID
     MENUITEMINFOW mii = { sizeof(MENUITEMINFOW) };
     mii.fMask = MIIM_ID;
-    mii.wID = customId;
+    mii.wID   = customId;
     SetMenuItemInfoW(hMenu, targetIndex, TRUE, &mii);
 
     bool callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
     uFlags |= TPM_RETURNCMD;
-
-    BOOL result = g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    int selectedId = (int)result;
+    BOOL result     = g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    int selectedId  = (int)result;
 
     // Restore original ID
     mii.wID = originalId;
     SetMenuItemInfoW(hMenu, targetIndex, TRUE, &mii);
 
-    // ============================================================
-    // 6. HANDLE USER SELECTION
-    // ============================================================
-    
     if (selectedId == (int)customId) {
-        Wh_Log(L"[TRAY]   User selected the target item, redirecting...");
-        if (isAudioMenu) {
-            OpenClassicSoundPanel();
-        } else {
-            OpenClassicNetworkConnections();
-        }
+        Wh_Log(L"[TRAY-HOOK] User selected target item, redirecting");
+        if (isAudioMenu) OpenClassicSoundPanel();
+        else             OpenClassicNetworkConnections();
         return 0;
     }
 
     if (selectedId != 0 && !callerWantedReturnCmd) {
-        Wh_Log(L"[TRAY]   User selected other item (ID=%d), forwarding WM_COMMAND", selectedId);
         PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)selectedId, 0), 0);
         return TRUE;
     }
@@ -811,7 +617,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y,
 }
 
 // ============================================================
-// URI MAPPINGS
+// URI MAPPINGS (unchanged)
 // ============================================================
 
 static std::unordered_map<std::wstring, std::wstring> g_mappings;
@@ -1007,7 +813,7 @@ static void InitMappings() {
         {L"ms-settings:accounts-signinoptions", L"netplwiz"},
         {L"ms-settings:accounts-users", L"netplwiz"},
         {L"ms-settings:family-users", L"netplwiz"},
-        // Additional mappings (safe on both Win10 and Win11)
+        // Additional mappings
         {L"ms-settings:power", L"powercfg.cpl"},
         {L"ms-settings:display-hdr", L"colorcpl.exe"},
         {L"ms-settings:personalization-taskbar", NOTIF_AREA_CLSID},
@@ -1018,7 +824,6 @@ static void InitMappings() {
         {L"ms-settings:network-advancedsettings", L"control.exe /name Microsoft.NetworkAndSharingCenter"},
     };
 
-    // Additional Windows 11 24H2 specific mapping
     if (g_isWin11) {
         g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
     };
@@ -1398,10 +1203,79 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(void* pThis, BSTR File, void* v
 }
 
 // ============================================================
+// TRAY: METHOD 3 - Block immersive menus in SndVolSSO/pnidui (Win11 fix)
+// Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu to return false,
+// forcing classic Win32 menus so TrackPopupMenuEx is actually called.
+// Pattern borrowed from "eradicate-immersive-menus" by aubymori.
+// ============================================================
+
+static void InstallImmersiveMenuHooks() {
+    struct DllHook {
+        const wchar_t*   dll;
+        ICMH_CAODTM_t*  orig;
+    } targets[] = {
+        { L"SndVolSSO.dll", &g_icmhOrig_SndVolSSO },
+        { L"pnidui.dll",    &g_icmhOrig_pnidui    },
+    };
+
+    for (auto& t : targets) {
+        HMODULE hMod = GetModuleHandleW(t.dll);
+        if (!hMod) continue; // not loaded yet — TrackPopupMenuEx fallback handles it
+
+        WindhawkUtils::SYMBOL_HOOK hook = {
+            {
+                L"bool "
+#ifdef _WIN64
+                L"__cdecl"
+#else
+                L"__stdcall"
+#endif
+                L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+                L"(struct HMENU__ *,struct HWND__ *)"
+            },
+            (void**)t.orig,
+            (void*)ICMH_CAODTM_hook,
+            true // optional — don't fail if missing
+        };
+
+        if (WindhawkUtils::HookSymbols(hMod, &hook, 1))
+            Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
+        else
+            Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s (may be absent on this build)", t.dll);
+    }
+}
+
+// ============================================================
+// CreateWindowExW hook for toolbar subclassing
+// ============================================================
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+
+HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    HWND hwnd = CreateWindowExW_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle,
+        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    
+    if (hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0 && g_settings.redirectSystemTray) {
+            SetupTraySubclass();
+        }
+    }
+    
+    return hwnd;
+}
+
+// ============================================================
 // Windhawk entry points
 // ============================================================
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.5");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.6");
     
     g_hOle32 = LoadLibraryW(L"ole32.dll");
     if (g_hOle32) {
@@ -1412,12 +1286,6 @@ BOOL Wh_ModInit() {
     LoadSettings();
     BuildChildEnvironment();
     InitMappings();
-    
-    // ============================================================
-    // Log Windows version for debugging and bug reports
-    // This helps identify the exact Windows version where issues might occur
-    // ============================================================
-    IsWin11_24H2OrLater();  // This will log detailed version info
     
     Wh_Log(L"%zu URI mappings loaded", g_mappings.size());
 
@@ -1441,15 +1309,22 @@ BOOL Wh_ModInit() {
         if (pCPW) Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
     }
 
-    // Install TrackPopupMenuEx hook for tray context menu handling
+    // Install tray hooks if enabled
     if (g_settings.redirectSystemTray) {
+        // Method 1: Toolbar subclassing (CreateWindowExW hook)
+        Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
+        SetupTraySubclass();
+
+        // Method 2: Block immersive menus so Win32 TrackPopupMenuEx is called on Win11
+        InstallImmersiveMenuHooks();
+
+        // Method 3: TrackPopupMenuEx DLL-based detection (fallback)
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
         if (hUser32) {
             void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
             if (pTrackPopupMenuEx) {
-                bool ok3 = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, 
-                                              (void**)&g_origTrackPopupMenuEx);
+                bool ok3 = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
                 Wh_Log(L"TrackPopupMenuEx hook=%d", ok3);
             }
         }
@@ -1460,12 +1335,22 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    RemoveTraySubclass();
     if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.5 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.6 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading");
+    RemoveTraySubclass();
+    g_sndVolSSOBase = nullptr;
+    g_sndVolSSOEnd = nullptr;
+    g_pniduiBase = nullptr;
+    g_pniduiEnd = nullptr;
     LoadSettings();
     InitMappings();
+    if (g_settings.redirectSystemTray) {
+        SetupTraySubclass();
+        InstallImmersiveMenuHooks();
+    }
 }
