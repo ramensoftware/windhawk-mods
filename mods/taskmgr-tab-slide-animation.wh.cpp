@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
-// @description     Smooth crossfade transition when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.3.3
+// @description     Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.
+// @version         0.4.0
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
@@ -14,42 +14,51 @@
 /*
 # Task Manager Tab Slide Animation
 
-![Demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation.gif)
+**Crossfade:**
+
+![Crossfade demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-fade.gif)
+
+**Slide:**
+
+![Slide demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-slide.gif)
 
 The Windows 11 Task Manager switches between its tabs instantly. This mod adds a
-smooth **crossfade** transition - both for the main left navigation (Processes,
-Performance, App history, ...) and for the **Performance sub-pages** (CPU, Memory,
-Disk, Network/Ethernet, Wi-Fi, GPU).
+smooth transition - both for the main left navigation (Processes, Performance,
+App history, ...) and for the **Performance sub-pages** (CPU, Memory, Disk,
+Network/Ethernet, Wi-Fi, GPU).
 
 > Experimental. Task Manager is a WinUI 3 app, so there's no clean Win32
 > "tab changed" signal - this works by heuristics and screen capture.
 
-## v2 architecture (no visual jump)
-v1 created the overlay *after* Task Manager had already switched the tab, so you
-could see a brief jump to the new view before the fade started. v2 fixes this:
+## Two animation styles (pick one in Settings)
+- **Crossfade** *(default)* - the overlay crossfades from the old view to the new one.
+- **Slide** - the old view slides out while the new view slides in (left/right, or
+  up/down via a setting).
 
-1. On **mouse-down** in a nav area, the current view is captured and a topmost,
-   click-through layered overlay showing that frozen frame is created **immediately**.
-2. Task Manager switches the tab *underneath* the overlay - invisibly.
-3. A worker thread waits for the new view to render, locates the content edge via
-   **UI Automation**, captures the new view, and crossfades the overlay from the
-   frozen old frame to the new frame.
-4. The overlay is then destroyed **only on the hook thread** (via a posted message),
-   because a window must be destroyed on the thread that created it.
+Both styles freeze the current view under a topmost, click-through overlay at
+mouse-down, so Task Manager switches the tab *underneath* it with **no visual jump** -
+the animation always starts from the old frame.
 
-Result: no visible jump - the old frame stays on screen until the fade plays.
+## How it works
+- A low-level mouse hook (scoped to Task Manager) notices a click in a left-hand
+  navigation area and, before the click switches the tab, captures the current view
+  and shows it on a frozen overlay.
+- **UI Automation** reads the clicked item's bounding rectangle - its right edge is
+  where the content begins - so the animated region adapts automatically to the main
+  nav (expanded or collapsed) *and* to the Performance sub-list.
+- It captures the new view (via PrintWindow, so the overlay doesn't block it) and
+  only animates if the content actually **changed** by more than a threshold, so
+  clicking a process row, selecting, or live graph updates don't trigger a spurious
+  animation.
 
 ## Settings
+- **Animation type** - Crossfade or Slide.
 - **Top inset** - height (px) of the top command bar to exclude.
 - **Capture delay** - delay after the click before capturing the new view (ms).
 - **Change threshold** - minimum % of the region that must change to animate.
-- **Animation duration** to taste.
+- **Animation duration** and **slide vertically** (slide mode) to taste.
 
-## Notes / limitations
-- Because the overlay is shown on every qualifying left-click, a click that does
-  **not** change the view (e.g. selecting a process row) briefly shows the frozen
-  frame for up to "capture delay" ms before the overlay disappears with no fade.
-  Keep the capture delay modest to minimise this.
+## Limitations
 - Relies on UI Automation to locate the clicked item.
 - The window should be visible/unobscured during the switch.
 */
@@ -57,18 +66,27 @@ Result: no visible jump - the old frame stays on screen until the fade plays.
 
 // ==WindhawkModSettings==
 /*
+- animation_type: fade
+  $name: Animation type
+  $description: How the new tab appears.
+  $options:
+  - fade: Crossfade (no visual jump)
+  - slide: Slide
 - duration_ms: 250
   $name: Animation duration (ms)
-  $description: How long the crossfade lasts. Clamped to 60-1500.
+  $description: How long the transition lasts. Clamped to 60-1500.
 - top_inset: 48
   $name: Top inset (px)
-  $description: Height of the top command bar to exclude from the fade.
+  $description: Height of the top command bar to exclude from the animation.
 - capture_delay_ms: 140
   $name: Capture delay (ms)
   $description: Delay after the click before capturing the new view. Raise if it grabs the old view.
 - change_threshold: 2
   $name: Change threshold (%)
-  $description: Minimum percent of the region that must change for the fade to play. Raise to reduce spurious fades.
+  $description: Minimum percent of the region that must change for the animation to play. Raise to reduce spurious animations.
+- slide_vertical: false
+  $name: Slide vertically (slide mode only)
+  $description: Slide up/down instead of left/right. Only affects the Slide animation.
 */
 // ==/WindhawkModSettings==
 
@@ -77,6 +95,7 @@ Result: no visible jump - the old frame stays on screen until the fade plays.
 #include <uiautomation.h>
 #include <atomic>
 #include <mutex>
+#include <wchar.h>
 
 // Custom message posted from the worker thread to the hook thread asking it to
 // destroy the overlay window (a window must be destroyed on its creating thread).
@@ -95,51 +114,72 @@ static const CLSID kCLSID_CUIAutomation =
 static const IID kIID_IUIAutomation =
     { 0x30cbe57d, 0xd9d0, 0x452a, { 0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee } };
 
+// Animation styles.
+enum { ANIM_FADE = 0, ANIM_SLIDE = 1 };
+
 // -------------------------------------------------------------------------
 // State
 // -------------------------------------------------------------------------
 
-// Data handed to the worker thread. In v2 the captured old frame lives on the
-// overlay (g_overlay.frozenBmp), so the worker only needs the click point and the
-// overlay's screen rect.
-struct TabFadeData {
+// Data handed to the worker thread. The captured old frame lives on the overlay
+// (g_overlay.frozenBmp), so the worker only needs the click point, overlay rect,
+// the window (for PrintWindow capture) and which style to play.
+struct TabAnimData {
     HWND  root;      // the Task Manager window (for PrintWindow capture)
     POINT clickPt;   // screen point of the nav click (for UI Automation)
     RECT  fullRect;  // screen rect the overlay covers
+    RECT  winRect;   // window rect at mouse-down (to detect a move/resize mid-cycle)
+    int   mode;      // ANIM_FADE or ANIM_SLIDE
 };
 
 // The single live overlay. Created on the hook thread at mouse-down, read by the
-// worker during the fade, destroyed on the hook thread afterwards.
+// worker during the animation, destroyed on the hook thread afterwards.
 struct OverlayState {
     HWND    hwnd;       // topmost, click-through, layered window
     HBITMAP frozenBmp;  // the full old frame captured at mouse-down (overlay owns it)
     RECT    rect;       // screen rect of the overlay
+    HWND    srcWnd;     // source window (to detect a move while the overlay is live)
+    RECT    srcRect;    // source window rect when the overlay was created
 };
 
+std::atomic<int>  g_animType{ANIM_FADE};
 std::atomic<int>  g_durationMs{250};
 std::atomic<int>  g_topInset{48};
 std::atomic<int>  g_captureDelay{140};
 std::atomic<int>  g_changeThreshold{2};
+std::atomic<bool> g_slideVertical{false};
 
-std::atomic<bool> g_inProgress{false}; // a fade cycle (overlay live) is in flight
+std::atomic<bool> g_inProgress{false}; // an animation cycle (overlay live) is in flight
 
-// Pairing state between mouse-down (create overlay) and mouse-up (start worker).
+// Pairing state between mouse-down (create overlay) and mouse-up (start worker). The
+// active style is captured into g_pendingMode at mouse-down so a mid-gesture settings
+// change can't split a cycle across both code paths.
 std::mutex g_mutex;
+int        g_pendingMode  = ANIM_FADE;
 HWND       g_pendingRoot  = NULL;
 POINT      g_pendingClick = {0, 0};
 RECT       g_pendingRect  = {0, 0, 0, 0};
+RECT       g_pendingWin   = {0, 0, 0, 0};
 bool       g_armed        = false;
 
 // Overlay state, guarded by its own mutex (touched by hook + worker threads).
 std::mutex   g_overlayMutex;
-OverlayState g_overlay = { NULL, NULL, {0, 0, 0, 0} };
+OverlayState g_overlay = { NULL, NULL, {0, 0, 0, 0}, NULL, {0, 0, 0, 0} };
 
 // Mouse-hook thread.
 HHOOK  g_mouseHook    = NULL;
 HANDLE g_hookThread   = NULL;
 DWORD  g_hookThreadId = 0;
 
-void TmFadeLoadSettings() {
+void TmLoadSettings() {
+    PCWSTR type = Wh_GetStringSetting(L"animation_type");
+    int mode = ANIM_FADE;
+    if (type) {
+        if (wcscmp(type, L"slide") == 0) mode = ANIM_SLIDE;
+        Wh_FreeStringSetting(type);
+    }
+    g_animType.store(mode, std::memory_order_relaxed);
+
     int ms = Wh_GetIntSetting(L"duration_ms");
     if (ms < 60)   ms = 60;
     if (ms > 1500) ms = 1500;
@@ -158,6 +198,8 @@ void TmFadeLoadSettings() {
     if (thr < 1)   thr = 1;
     if (thr > 100) thr = 100;
     g_changeThreshold.store(thr, std::memory_order_relaxed);
+
+    g_slideVertical.store(Wh_GetIntSetting(L"slide_vertical") != 0, std::memory_order_relaxed);
 }
 
 // -------------------------------------------------------------------------
@@ -165,7 +207,7 @@ void TmFadeLoadSettings() {
 // -------------------------------------------------------------------------
 
 // Grab a screen rectangle into a new DDB (caller owns / deletes it).
-HBITMAP TmFadeCaptureRect(const RECT& r) {
+HBITMAP TmCaptureRect(const RECT& r) {
     int w = r.right - r.left;
     int h = r.bottom - r.top;
     if (w <= 0 || h <= 0) return NULL;
@@ -185,7 +227,7 @@ HBITMAP TmFadeCaptureRect(const RECT& r) {
 // (PrintWindow + PW_RENDERFULLCONTENT). Unlike a screen BitBlt this is NOT blocked
 // by our topmost overlay, so the worker can grab the freshly-switched view even
 // while the overlay still covers that area on screen. Caller owns the result.
-HBITMAP TmFadeCaptureWindowRegion(HWND root, const RECT& screenRegion) {
+HBITMAP TmCaptureWindowRegion(HWND root, const RECT& screenRegion) {
     if (!root) return NULL;
     RECT wr;
     if (!GetWindowRect(root, &wr)) return NULL;
@@ -225,7 +267,7 @@ HBITMAP TmFadeCaptureWindowRegion(HWND root, const RECT& screenRegion) {
 // True if a bitmap is essentially blank (almost entirely near-black) - the typical
 // signature of PrintWindow failing on hardware-composited content. Used to fall
 // back to a plain screen grab so the overlay never flashes a black box.
-bool TmFadeLooksBlank(HBITMAP bmp, int w, int h) {
+bool TmLooksBlank(HBITMAP bmp, int w, int h) {
     if (!bmp || w <= 0 || h <= 0) return true;
 
     BITMAPINFO bi;
@@ -263,7 +305,7 @@ bool TmFadeLooksBlank(HBITMAP bmp, int w, int h) {
 }
 
 // Copy a sub-region of a bitmap into a new bitmap.
-HBITMAP TmFadeCrop(HBITMAP src, int x, int y, int w, int h) {
+HBITMAP TmCrop(HBITMAP src, int x, int y, int w, int h) {
     if (!src || w <= 0 || h <= 0) return NULL;
     HDC screen = GetDC(NULL);
     HDC sdc = CreateCompatibleDC(screen);
@@ -281,7 +323,7 @@ HBITMAP TmFadeCrop(HBITMAP src, int x, int y, int w, int h) {
 }
 
 // Screen-space origin and size of the window's client area.
-bool TmFadeClientInfo(HWND root, POINT* originScreen, int* clientW, int* clientH) {
+bool TmClientInfo(HWND root, POINT* originScreen, int* clientW, int* clientH) {
     if (!root) return false;
     RECT cr;
     if (!GetClientRect(root, &cr)) return false;
@@ -296,7 +338,7 @@ bool TmFadeClientInfo(HWND root, POINT* originScreen, int* clientW, int* clientH
 // Fraction (0..1) of sampled pixels that differ noticeably between two same-size
 // bitmaps. Used to tell a real view change (high) from a selection highlight or a
 // live graph tick (low). Returns 1.0 (treat as changed) if it can't read the bits.
-double TmFadeChangedFraction(HBITMAP a, HBITMAP b, int w, int h) {
+double TmChangedFraction(HBITMAP a, HBITMAP b, int w, int h) {
     if (!a || !b || w <= 0 || h <= 0) return 1.0;
 
     BITMAPINFO bi;
@@ -344,8 +386,8 @@ double TmFadeChangedFraction(HBITMAP a, HBITMAP b, int w, int h) {
 // Using UI Automation, find the clicked navigation item and return the screen X of
 // its right edge - i.e. where the content next to it begins. Walks a few ancestors
 // so we land on the whole item/list, not an inner icon/label.
-bool TmFadeNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
-                        int* contentLeftScreen) {
+bool TmNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
+                    int* contentLeftScreen) {
     if (!uia) return false;
 
     IUIAutomationElement* el = NULL;
@@ -385,6 +427,16 @@ bool TmFadeNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int client
     return true;
 }
 
+// True if the window has moved or resized away from `orig` (or vanished). Our overlay
+// is pinned to fixed screen coordinates, so once the window moves the overlay would
+// become a detached ghost - the animation aborts the moment this returns true.
+static bool TmWindowMoved(HWND root, const RECT& orig) {
+    RECT cur;
+    if (!root || !GetWindowRect(root, &cur)) return true;
+    return cur.left   != orig.left  || cur.top    != orig.top ||
+           cur.right  != orig.right || cur.bottom != orig.bottom;
+}
+
 // -------------------------------------------------------------------------
 // Overlay management
 //   Create  / Destroy  -> hook thread only (owns the window)
@@ -392,7 +444,7 @@ bool TmFadeNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int client
 // -------------------------------------------------------------------------
 
 // Destroy the live overlay and free its bitmap. MUST run on the hook thread.
-void TmFadeDestroyOverlay() {
+void TmDestroyOverlay() {
     std::lock_guard<std::mutex> lock(g_overlayMutex);
     if (g_overlay.hwnd) {
         DestroyWindow(g_overlay.hwnd);
@@ -402,18 +454,20 @@ void TmFadeDestroyOverlay() {
         DeleteObject(g_overlay.frozenBmp);
         g_overlay.frozenBmp = NULL;
     }
-    g_overlay.rect = RECT{0, 0, 0, 0};
+    g_overlay.rect    = RECT{0, 0, 0, 0};
+    g_overlay.srcWnd  = NULL;
+    g_overlay.srcRect = RECT{0, 0, 0, 0};
 }
 
 // Create the overlay showing the frozen old frame. Takes ownership of `frozen`.
 // MUST run on the hook thread. Returns true on success.
-bool TmFadeCreateOverlay(HBITMAP frozen, const RECT& full) {
+bool TmCreateOverlay(HBITMAP frozen, const RECT& full, HWND srcWnd, const RECT& srcRect) {
     int W = full.right - full.left;
     int H = full.bottom - full.top;
     if (!frozen || W <= 0 || H <= 0) return false;
 
     // Clear any stale overlay first (shouldn't normally exist).
-    TmFadeDestroyOverlay();
+    TmDestroyOverlay();
 
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
@@ -447,11 +501,28 @@ bool TmFadeCreateOverlay(HBITMAP frozen, const RECT& full) {
     g_overlay.hwnd      = hwnd;
     g_overlay.frozenBmp = frozen;
     g_overlay.rect      = full;
+    g_overlay.srcWnd    = srcWnd;
+    g_overlay.srcRect   = srcRect;
     return true;
 }
 
+// Hide the overlay if its source window has moved/resized. Runs on the hook thread
+// (called for every mouse event). The animation worker can be blocked inside a
+// cross-process UI Automation call while the user drags the window - Task Manager's
+// UI thread is busy in its modal move loop and can't answer - so the worker can't
+// tear the overlay down itself until the drag ends. Hiding it here kills the ghost
+// immediately, regardless of the worker. We only hide (not destroy) so we never free
+// the frozen bitmap out from under a worker that might still be animating.
+void TmHideOverlayIfMoved() {
+    std::lock_guard<std::mutex> lock(g_overlayMutex);
+    if (!g_overlay.hwnd) return;
+    if (TmWindowMoved(g_overlay.srcWnd, g_overlay.srcRect)) {
+        ShowWindow(g_overlay.hwnd, SW_HIDE);
+    }
+}
+
 // Ask the hook thread to destroy the overlay once the worker is finished.
-void TmFadeAnimationDone() {
+void TmAnimationDone() {
     if (g_hookThreadId) {
         PostThreadMessageW(g_hookThreadId, WM_FADE_DESTROY_WND, 0, 0);
     }
@@ -460,7 +531,7 @@ void TmFadeAnimationDone() {
 // Crossfade the EXISTING overlay: the frozen full frame stays as the base, and the
 // new content (offsetX..offsetX+cw, 0..ch within the overlay) is blended in from
 // alpha 0 -> 255 over the animation duration. Runs on the worker thread.
-void TmFadeAnimate(HBITMAP newBmp, int offsetX, int cw, int ch) {
+void TmFadeAnimate(HBITMAP newBmp, int offsetX, int cw, int ch, HWND root, const RECT& winRect) {
     HWND    hwnd;
     HBITMAP frozen;
     RECT    rect;
@@ -498,6 +569,10 @@ void TmFadeAnimate(HBITMAP newBmp, int offsetX, int cw, int ch) {
         float p = last ? 1.0f : (float)(elapsed / total);
         float e = p * p * (3.0f - 2.0f * p);   // smoothstep ease in/out
 
+        // Bail if the user moved/resized the window - a fixed-position overlay would
+        // otherwise linger as a detached ghost during the move.
+        if (TmWindowMoved(root, winRect)) break;
+
         // Base = frozen full frame. Then blend the new content region on top with
         // alpha tied to eased progress, so the nav stays frozen and only the
         // content crossfades.
@@ -534,15 +609,119 @@ void TmFadeAnimate(HBITMAP newBmp, int offsetX, int cw, int ch) {
     ReleaseDC(NULL, screen);
 }
 
+// Slide the content region of the EXISTING overlay: the frozen full frame is the
+// base (keeps the left nav frozen), and within the content sub-rect the old content
+// slides out while the new content slides in. Drawing is clipped to the content rect
+// so the sliding bitmaps never spill over the nav. Runs on the worker thread.
+void TmSlideAnimate(HBITMAP newContent, HBITMAP oldContent, int offsetX, int cw, int ch, HWND root, const RECT& winRect) {
+    HWND    hwnd;
+    HBITMAP frozen;
+    RECT    rect;
+    {
+        std::lock_guard<std::mutex> lock(g_overlayMutex);
+        hwnd   = g_overlay.hwnd;
+        frozen = g_overlay.frozenBmp;
+        rect   = g_overlay.rect;
+    }
+    if (!hwnd || !frozen || !newContent || !oldContent) return;
+
+    int W = rect.right - rect.left;
+    int H = rect.bottom - rect.top;
+    if (W <= 0 || H <= 0) return;
+
+    const bool vertical = g_slideVertical.load(std::memory_order_relaxed);
+    const int  span     = vertical ? ch : cw;
+
+    HDC screen   = GetDC(NULL);
+    HDC frozenDC = CreateCompatibleDC(screen);
+    HDC oldDC    = CreateCompatibleDC(screen);
+    HDC newDC    = CreateCompatibleDC(screen);
+    HDC canvasDC = CreateCompatibleDC(screen);
+    HBITMAP canvas  = CreateCompatibleBitmap(screen, W, H);
+    HBITMAP oldSelF = (HBITMAP)SelectObject(frozenDC, frozen);
+    HBITMAP oldSelO = (HBITMAP)SelectObject(oldDC,    oldContent);
+    HBITMAP oldSelN = (HBITMAP)SelectObject(newDC,    newContent);
+    HBITMAP oldSelC = (HBITMAP)SelectObject(canvasDC, canvas);
+
+    const double total = (double)g_durationMs.load(std::memory_order_relaxed);
+
+    LARGE_INTEGER freq, start, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+
+    for (;;) {
+        QueryPerformanceCounter(&now);
+        double elapsed = (now.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;
+        BOOL last = (elapsed >= total);
+        float p = last ? 1.0f : (float)(elapsed / total);
+        float e = p * p * (3.0f - 2.0f * p);   // smoothstep ease in/out
+
+        // Bail if the user moved/resized the window (see TmFadeAnimate).
+        if (TmWindowMoved(root, winRect)) break;
+
+        int oldOff = (int)(-e * span);
+        int newOff = (int)((1.0f - e) * span);
+        int ox = vertical ? 0 : oldOff;
+        int oy = vertical ? oldOff : 0;
+        int nx = vertical ? 0 : newOff;
+        int ny = vertical ? newOff : 0;
+
+        // Base = frozen full frame (keeps the nav frozen). Then draw the sliding old
+        // and new content, clipped to the content rect so nothing paints the nav.
+        BitBlt(canvasDC, 0, 0, W, H, frozenDC, 0, 0, SRCCOPY);
+
+        HRGN clip = CreateRectRgn(offsetX, 0, offsetX + cw, ch);
+        SelectClipRgn(canvasDC, clip);
+        BitBlt(canvasDC, offsetX + ox, oy, cw, ch, oldDC, 0, 0, SRCCOPY);
+        BitBlt(canvasDC, offsetX + nx, ny, cw, ch, newDC, 0, 0, SRCCOPY);
+        SelectClipRgn(canvasDC, NULL);
+        DeleteObject(clip);
+
+        POINT ptDst = { rect.left, rect.top };
+        SIZE  sz    = { W, H };
+        POINT ptSrc = { 0, 0 };
+        BLENDFUNCTION bf;
+        bf.BlendOp             = AC_SRC_OVER;
+        bf.BlendFlags          = 0;
+        bf.SourceConstantAlpha = 255;
+        bf.AlphaFormat         = 0;
+        UpdateLayeredWindow(hwnd, screen, &ptDst, &sz, canvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+
+        if (last) break;
+        DwmFlush();
+    }
+
+    SelectObject(canvasDC, oldSelC);
+    SelectObject(newDC,    oldSelN);
+    SelectObject(oldDC,    oldSelO);
+    SelectObject(frozenDC, oldSelF);
+    DeleteObject(canvas);
+    DeleteDC(canvasDC);
+    DeleteDC(newDC);
+    DeleteDC(oldDC);
+    DeleteDC(frozenDC);
+    ReleaseDC(NULL, screen);
+}
+
 // -------------------------------------------------------------------------
 // Worker: wait for the new view to render, locate the content edge via UI
-// Automation, capture the new view, crossfade the existing overlay (only if the
-// content actually changed), then ask the hook thread to destroy the overlay.
+// Automation, capture the new view, play the chosen animation on the existing
+// overlay (only if the content actually changed), then ask the hook thread to
+// destroy the overlay.
 // -------------------------------------------------------------------------
-DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
-    TabFadeData* d = (TabFadeData*)lpParam;
+DWORD WINAPI TmWorkerThread(LPVOID lpParam) {
+    TabAnimData* d = (TabAnimData*)lpParam;
 
     Sleep(g_captureDelay.load(std::memory_order_relaxed));
+
+    // If the user started moving/resizing the window during the capture delay, our
+    // fixed-position overlay would show as a detached ghost - abort and destroy it.
+    if (TmWindowMoved(d->root, d->winRect)) {
+        TmAnimationDone();
+        delete d;
+        g_inProgress.store(false, std::memory_order_relaxed);
+        return 0;
+    }
 
     int clientW     = d->fullRect.right - d->fullRect.left;
     int contentLeft = d->fullRect.left;
@@ -552,7 +731,7 @@ DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
     IUIAutomation* uia = NULL;
     if (SUCCEEDED(CoCreateInstance(kCLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
                                    kIID_IUIAutomation, (void**)&uia)) && uia) {
-        located = TmFadeNavItemRight(uia, d->clickPt, d->fullRect.left, clientW, &contentLeft);
+        located = TmNavItemRight(uia, d->clickPt, d->fullRect.left, clientW, &contentLeft);
         uia->Release();
     }
     if (SUCCEEDED(hrCo)) CoUninitialize();
@@ -569,7 +748,7 @@ DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
             {
                 std::lock_guard<std::mutex> lock(g_overlayMutex);
                 if (g_overlay.frozenBmp) {
-                    oldCrop = TmFadeCrop(g_overlay.frozenBmp, offsetX, 0, cw, ch);
+                    oldCrop = TmCrop(g_overlay.frozenBmp, offsetX, 0, cw, ch);
                 }
             }
 
@@ -585,18 +764,22 @@ DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
                 for (int attempt = 0; attempt < 6; ++attempt) {
                     // Capture from the window itself, not the screen - the overlay
                     // sits on top of `content`, so a screen BitBlt would just read
-                    // back our own frozen old frame and the fade would never play.
-                    HBITMAP cap = TmFadeCaptureWindowRegion(d->root, content);
+                    // back our own frozen old frame and the animation would never play.
+                    HBITMAP cap = TmCaptureWindowRegion(d->root, content);
                     if (!cap) break;
                     if (newBmp) DeleteObject(newBmp);
                     newBmp = cap;
-                    frac = TmFadeChangedFraction(oldCrop, newBmp, cw, ch);
+                    frac = TmChangedFraction(oldCrop, newBmp, cw, ch);
                     if (frac >= readyFrac) break;  // new view has rendered
                     Sleep(35);
                 }
 
-                if (newBmp && frac >= userThr) {
-                    TmFadeAnimate(newBmp, offsetX, cw, ch);
+                if (newBmp && frac >= userThr && !TmWindowMoved(d->root, d->winRect)) {
+                    if (d->mode == ANIM_SLIDE) {
+                        TmSlideAnimate(newBmp, oldCrop, offsetX, cw, ch, d->root, d->winRect);
+                    } else {
+                        TmFadeAnimate(newBmp, offsetX, cw, ch, d->root, d->winRect);
+                    }
                 }
                 if (newBmp) DeleteObject(newBmp);
                 DeleteObject(oldCrop);
@@ -605,7 +788,7 @@ DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
     }
 
     // Hand the overlay back to the hook thread for destruction.
-    TmFadeAnimationDone();
+    TmAnimationDone();
 
     delete d;
     g_inProgress.store(false, std::memory_order_relaxed);
@@ -615,53 +798,59 @@ DWORD WINAPI TmFadeWorkerThread(LPVOID lpParam) {
 // -------------------------------------------------------------------------
 // Click detection (low-level mouse hook)
 //   mouse-down -> capture old frame + create overlay immediately
-//   mouse-up   -> launch the worker that fades and destroys it
+//   mouse-up   -> launch the worker that animates and destroys it
 // -------------------------------------------------------------------------
-void TmFadeOnClick(WPARAM msg, POINT pt) {
+void TmOnClick(WPARAM msg, POINT pt) {
     // ------------------------------------------------------------------
     // FINISH: launch the worker.
     // ------------------------------------------------------------------
     if (msg == WM_LBUTTONUP) {
+        int   mode;
         HWND  root;
         POINT click;
         RECT  full;
+        RECT  win;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             if (!g_armed) return;
             g_armed = false;
+            mode  = g_pendingMode;
             root  = g_pendingRoot;
             click = g_pendingClick;
             full  = g_pendingRect;
+            win   = g_pendingWin;
         }
 
-        // An overlay was created at mouse-down. If a previous cycle is somehow
-        // still running, tear this overlay down and bail.
+        // An overlay was created at mouse-down. If a previous cycle is somehow still
+        // running, tear this overlay down and bail.
         if (g_inProgress.load(std::memory_order_relaxed)) {
-            TmFadeDestroyOverlay();
+            TmDestroyOverlay();
             return;
         }
 
         g_inProgress.store(true, std::memory_order_relaxed);
 
-        TabFadeData* d = new TabFadeData();
+        TabAnimData* d = new TabAnimData();
         d->root     = root;
         d->clickPt  = click;
         d->fullRect = full;
+        d->winRect  = win;
+        d->mode     = mode;
 
-        HANDLE h = CreateThread(NULL, 0, TmFadeWorkerThread, d, 0, NULL);
+        HANDLE h = CreateThread(NULL, 0, TmWorkerThread, d, 0, NULL);
         if (h) {
             CloseHandle(h);
         } else {
             delete d;
-            TmFadeDestroyOverlay();   // we're on the hook thread - safe
+            TmDestroyOverlay();   // we're on the hook thread - safe
             g_inProgress.store(false, std::memory_order_relaxed);
         }
         return;
     }
 
     // ------------------------------------------------------------------
-    // START: capture the current view and show the overlay immediately, before
-    // the click changes the tab, if the click is plausibly in a left nav column.
+    // START: capture the current view and show the overlay immediately, before the
+    // click changes the tab, if the click is plausibly in a left nav column.
     // ------------------------------------------------------------------
     if (msg != WM_LBUTTONDOWN) return;
     if (g_inProgress.load(std::memory_order_relaxed)) return;
@@ -676,7 +865,7 @@ void TmFadeOnClick(WPARAM msg, POINT pt) {
 
     POINT origin;
     int cw, ch;
-    if (!TmFadeClientInfo(root, &origin, &cw, &ch)) return;
+    if (!TmClientInfo(root, &origin, &cw, &ch)) return;
     int relX = pt.x - origin.x;
     int relY = pt.y - origin.y;
 
@@ -694,48 +883,59 @@ void TmFadeOnClick(WPARAM msg, POINT pt) {
     // Capture the old frame the same way the worker captures the new one
     // (PrintWindow), so the change-detection comparison is apples-to-apples. If
     // PrintWindow isn't usable here (null or a blank/black frame), fall back to a
-    // plain screen grab for the displayed frame - the fade then simply no-ops
+    // plain screen grab for the displayed frame - the animation then simply no-ops
     // instead of showing a black overlay.
     int fullW = full.right - full.left;
     int fullH = full.bottom - full.top;
-    HBITMAP oldBmp = TmFadeCaptureWindowRegion(root, full);
-    if (!oldBmp || TmFadeLooksBlank(oldBmp, fullW, fullH)) {
+    HBITMAP oldBmp = TmCaptureWindowRegion(root, full);
+    if (!oldBmp || TmLooksBlank(oldBmp, fullW, fullH)) {
         if (oldBmp) DeleteObject(oldBmp);
-        oldBmp = TmFadeCaptureRect(full);
+        oldBmp = TmCaptureRect(full);
     }
     if (!oldBmp) return;
 
+    RECT winRect = {0, 0, 0, 0};
+    GetWindowRect(root, &winRect);
+
     // Show the frozen old frame immediately so the tab switches invisibly. The
-    // overlay takes ownership of oldBmp (freed in TmFadeDestroyOverlay).
-    if (!TmFadeCreateOverlay(oldBmp, full)) {
+    // overlay takes ownership of oldBmp (freed in TmDestroyOverlay).
+    if (!TmCreateOverlay(oldBmp, full, root, winRect)) {
         DeleteObject(oldBmp);
         return;
     }
 
     std::lock_guard<std::mutex> lock(g_mutex);
+    g_pendingMode  = g_animType.load(std::memory_order_relaxed);
     g_pendingRoot  = root;
     g_pendingClick = pt;
     g_pendingRect  = full;
+    g_pendingWin   = winRect;
     g_armed        = true;
 }
 
-LRESULT CALLBACK TmFadeMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP)) {
-        MSLLHOOKSTRUCT* ms = (MSLLHOOKSTRUCT*)lParam;
-        TmFadeOnClick(wParam, ms->pt);
+LRESULT CALLBACK TmMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        // Every mouse event (incl. moves during a title-bar drag): if a live overlay's
+        // window has moved, hide it now so it doesn't linger as a detached ghost.
+        TmHideOverlayIfMoved();
+
+        if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP) {
+            MSLLHOOKSTRUCT* ms = (MSLLHOOKSTRUCT*)lParam;
+            TmOnClick(wParam, ms->pt);
+        }
     }
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
 // Dedicated thread owning the hook and pumping messages (required for LL hooks).
 // It also owns the overlay window, so it is the only place the overlay is destroyed.
-DWORD WINAPI TmFadeHookThread(LPVOID lpParam) {
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, TmFadeMouseProc, GetModuleHandleW(NULL), 0);
+DWORD WINAPI TmHookThread(LPVOID lpParam) {
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, TmMouseProc, GetModuleHandleW(NULL), 0);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_FADE_DESTROY_WND) {
-            TmFadeDestroyOverlay();
+            TmDestroyOverlay();
             continue;
         }
         TranslateMessage(&msg);
@@ -743,7 +943,7 @@ DWORD WINAPI TmFadeHookThread(LPVOID lpParam) {
     }
 
     // Destroy any surviving overlay on its creating thread before we exit.
-    TmFadeDestroyOverlay();
+    TmDestroyOverlay();
 
     if (g_mouseHook) {
         UnhookWindowsHookEx(g_mouseHook);
@@ -756,13 +956,13 @@ DWORD WINAPI TmFadeHookThread(LPVOID lpParam) {
 // Windhawk entry points
 // -------------------------------------------------------------------------
 BOOL Wh_ModInit() {
-    TmFadeLoadSettings();
-    g_hookThread = CreateThread(NULL, 0, TmFadeHookThread, NULL, 0, &g_hookThreadId);
+    TmLoadSettings();
+    g_hookThread = CreateThread(NULL, 0, TmHookThread, NULL, 0, &g_hookThreadId);
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
-    TmFadeLoadSettings();
+    TmLoadSettings();
 }
 
 void Wh_ModUninit() {
@@ -777,5 +977,5 @@ void Wh_ModUninit() {
     }
 
     // The hook thread destroys the overlay on exit; this frees anything left.
-    TmFadeDestroyOverlay();
+    TmDestroyOverlay();
 }
