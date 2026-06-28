@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-27T21:35:22.000Z</updated>
+    <updated>2026-06-28T18:18:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adaptive Microphone Icon Visibility 1.0]]></title>
+        <id>https://windhawk.net/mods/adaptive-microphone-icon-visibility#0ba128210751d519899c9c5564c47a9aaf8460cb</id>
+        <link href="https://windhawk.net/mods/adaptive-microphone-icon-visibility"/>
+        <updated>2026-06-28T18:18:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="adaptivemicrophoneiconvisibility">Adaptive Microphone Icon Visibility</h1>
+<p>This mod hides the system tray microphone icon if only whitelisted applications
+(or no applications) have active access. If an unlisted application begins using
+the microphone, the icon is immediately shown to alert the user.</p>
+<p>Only Windows 11 is supported.</p>
+<h2 id="credits">Credits</h2>
+<p>Icon manipulation logic in this mod is based on the
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a> mod by <strong>m417z</strong>.</p>]]></content>
+        <author>
+            <name>Ikkecode</name>
+            <uri>https://github.com/ikkecode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Borderless Fullscreen 1.1.0]]></title>
         <id>https://windhawk.net/mods/borderless-fullscreen#c208c001106e00938f338cacf204cb1dfdf43528</id>
@@ -383,20 +401,6 @@ and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore AutoRun Icon in Drive Properties 1.0.1]]></title>
-        <id>https://windhawk.net/mods/restore-autorun-icon-in-drive-properties#b0195475999df8f6766269b86ed2cf8ec1f79f62</id>
-        <link href="https://windhawk.net/mods/restore-autorun-icon-in-drive-properties"/>
-        <updated>2026-06-24T21:10:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>General code optimizations.</li>
-<li>Removed the supported OS versions list from the Readme, as it is unnecessary; the mod will function as long as the required debug symbols exist on Microsoft's servers.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>

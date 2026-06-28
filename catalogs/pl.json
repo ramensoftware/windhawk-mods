@@ -94,6 +94,38 @@
         "version": "1.1.0"
       }
     },
+    "adaptive-microphone-icon-visibility": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782670689000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782670689000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Ikkecode",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Hides the system tray microphone icon if only whitelisted applications have active access.",
+        "github": "https://github.com/ikkecode",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Adaptive Microphone Icon Visibility",
+        "twitter": "https://twitter.com/ikkenand",
+        "version": "1.0"
+      }
+    },
     "add-virtual-folders-to-nav-top": {
       "details": {
         "defaultSorting": 2979,
