@@ -189,7 +189,7 @@ static bool IsChildProcess() {
 // Settings
 struct ModSettings {
     bool enableRedirects = true;
-    bool redirectSystemTray = true;
+    bool redirectSystemTray = false;
     bool uiOnlyRedirects = false;
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
@@ -1222,7 +1222,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = GetModuleHandleW(t.dll);
         if (!hMod) continue; // not loaded yet — TrackPopupMenuEx fallback handles it
 
-        WindhawkUtils::SYMBOL_HOOK hook = {
+        // SndVolSSO.dll, pnidui.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
             {
                 L"bool "
 #ifdef _WIN64
@@ -1238,7 +1239,7 @@ static void InstallImmersiveMenuHooks() {
             true // optional — don't fail if missing
         };
 
-        if (WindhawkUtils::HookSymbols(hMod, &hook, 1))
+        if (WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1))
             Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
         else
             Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s (may be absent on this build)", t.dll);
