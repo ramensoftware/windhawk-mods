@@ -845,18 +845,18 @@
           0
         ],
         "ratingUsers": 0,
-        "updated": 1782596122000,
+        "updated": 1782673250000,
         "users": 0
       },
       "metadata": {
         "author": "TomberWolf",
-        "description": "Removes the window border of selected apps/games and resizes them to the primary monitor's resolution (or a fixed size)",
+        "description": "Removes the window border of selected apps/games and resizes them to fill the monitor they're running on (or a fixed size)",
         "github": "https://github.com/TomberWolf",
         "include": [
           "windhawk.exe"
         ],
         "name": "Borderless Fullscreen",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "caffeine": {

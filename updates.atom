@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-28T18:18:09.000Z</updated>
+    <updated>2026-06-28T19:00:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Borderless Fullscreen 1.2.0]]></title>
+        <id>https://windhawk.net/mods/borderless-fullscreen#8210aa6d68a6e2b57d5477f005cbd80a498a70cf</id>
+        <link href="https://windhawk.net/mods/borderless-fullscreen"/>
+        <updated>2026-06-28T19:00:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added multi-monitor support (The window remains on the monitor where it was opened)</li>
+</ul>]]></content>
+        <author>
+            <name>TomberWolf</name>
+            <uri>https://github.com/TomberWolf</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adaptive Microphone Icon Visibility 1.0]]></title>
         <id>https://windhawk.net/mods/adaptive-microphone-icon-visibility#0ba128210751d519899c9c5564c47a9aaf8460cb</id>
@@ -386,21 +399,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[One Key Keyboard Layout Switcher 1.0]]></title>
-        <id>https://windhawk.net/mods/one-key-layout-switcher#f689a0f9e31c38ef4df585bcc6a730539a9e335b</id>
-        <link href="https://windhawk.net/mods/one-key-layout-switcher"/>
-        <updated>2026-06-24T21:18:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Switches keyboard layout with a single key press instead of a two-key combination.
-Intercepts keyboard events at the lowest possible user-mode level (WH<em>KEYBOARD</em>LL).</p>
-<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
