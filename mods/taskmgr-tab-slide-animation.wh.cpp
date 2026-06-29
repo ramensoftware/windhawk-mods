@@ -2,7 +2,7 @@
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
 // @description     Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.4.0
+// @version         0.4.1
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
@@ -16,11 +16,11 @@
 
 **Crossfade:**
 
-![Crossfade demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-fade.gif)
+![Crossfade demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-fade-v2.gif)
 
 **Slide:**
 
-![Slide demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-slide.gif)
+![Slide demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/taskmgr-tab-slide-animation-slide-v2.gif)
 
 The Windows 11 Task Manager switches between its tabs instantly. This mod adds a
 smooth transition - both for the main left navigation (Processes, Performance,
