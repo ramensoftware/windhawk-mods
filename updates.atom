@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-28T19:00:50.000Z</updated>
+    <updated>2026-06-29T17:28:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VMware Audio Distortion Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/vmware-audio-fix#6d68c5bf92732b90a067961d33b9381b88811b25</id>
+        <link href="https://windhawk.net/mods/vmware-audio-fix"/>
+        <updated>2026-06-29T17:28:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="vmwareaudiodistortionfix">VMware Audio Distortion Fix</h1>
+<h3 id="thisprojectisinspiredbyvmaudiobackhosthttpsgithubcomraymai97vmaudiobackhostthankstoraymai97">This project is inspired by <a href="https://github.com/Raymai97/VMAudioBackHost">VMAudioBackHost</a>. Thanks to Raymai97</h3>
+<p>Fixes distorted audio in VMware virtual machines by setting a high-resolution
+timer in the vmware-vmx.exe process.</p>
+<h2 id="background">Background</h2>
+<p>Windows 10 build 2004+ made timer resolution per-process. VMware virtual
+machines may experience distorted audio because the vmware-vmx.exe process
+uses the default low timer resolution (15.625 ms). This mod injects into
+vmware-vmx.exe and calls <code>NtSetTimerResolution</code> to set a high-resolution
+timer, fixing the audio stuttering/distortion.</p>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>Install this mod via <a href="https://windhawk.net">Windhawk</a>.</li>
+<li>The mod will automatically inject into all running and future
+vmware-vmx.exe processes.</li>
+<li>Configure the desired timer resolution in the mod settings.</li>
+</ol>
+<p>The recommended setting is 1.0 ms, which provides smooth audio without
+significant impact on power consumption.</p>]]></content>
+        <author>
+            <name>Starfield</name>
+            <uri>https://github.com/steveji2021</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Borderless Fullscreen 1.2.0]]></title>
         <id>https://windhawk.net/mods/borderless-fullscreen#8210aa6d68a6e2b57d5477f005cbd80a498a70cf</id>
@@ -385,20 +414,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar in Drive Properties 1.2.1]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-in-drive-properties#f1df18956cac038a20d04e9d08f371c6121e90ed</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-in-drive-properties"/>
-        <updated>2026-06-24T21:27:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>General code optimizations.</li>
-<li>Removed the supported OS versions list from the Readme, as it is unnecessary; the mod will function as long as the required debug symbols exist on Microsoft's servers.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>

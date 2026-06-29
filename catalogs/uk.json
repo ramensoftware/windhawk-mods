@@ -13234,6 +13234,37 @@
         "version": "1.1.5"
       }
     },
+    "vmware-audio-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782754090000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782754090000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Starfield",
+        "description": "Fixes distorted audio in VMware virtual machines by setting high-resolution timers.",
+        "github": "https://github.com/steveji2021",
+        "include": [
+          "vmware-vmx.exe",
+          "vmware-vmx-debug.exe"
+        ],
+        "name": "VMware Audio Distortion Fix",
+        "version": "1.0"
+      }
+    },
     "vmware-disable-upgrade-dialog": {
       "details": {
         "defaultSorting": 290,
