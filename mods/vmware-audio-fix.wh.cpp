@@ -10,6 +10,7 @@
 // @author          Starfield
 // @github          https://github.com/steveji2021
 // @include         vmware-vmx.exe
+// @include         vmware-vmx-debug.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -60,7 +61,7 @@ significant impact on power consumption.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <stdlib.h>
+#include <windhawk_utils.h>
 
 typedef LONG NTSTATUS;
 
@@ -68,31 +69,7 @@ static ULONG g_desiredTimerRes100ns = 10000;
 
 static double ParseMsString(PCWSTR str)
 {
-    double result = 0.0;
-    BOOL afterDecimal = FALSE;
-    double decimalDiv = 1.0;
-
-    for (; *str; str++)
-    {
-        if (*str >= L'0' && *str <= L'9')
-        {
-            if (!afterDecimal)
-            {
-                result = result * 10.0 + (double)(*str - L'0');
-            }
-            else
-            {
-                decimalDiv *= 10.0;
-                result += (double)(*str - L'0') / decimalDiv;
-            }
-        }
-        else if (*str == L'.')
-        {
-            afterDecimal = TRUE;
-        }
-    }
-
-    return result;
+    return wcstod(str, nullptr);
 }
 
 static void SetTimerResolution(void)
@@ -107,8 +84,8 @@ static void SetTimerResolution(void)
     NTSTATUS (WINAPI *NtQueryTimerResolution)(ULONG*, ULONG*, ULONG*) =
         (NTSTATUS (WINAPI*)(ULONG*, ULONG*, ULONG*))
         GetProcAddress(ntdll, "NtQueryTimerResolution");
-    NTSTATUS (WINAPI *NtSetTimerResolution)(ULONG, BOOL, ULONG*) =
-        (NTSTATUS (WINAPI*)(ULONG, BOOL, ULONG*))
+    NTSTATUS (WINAPI *NtSetTimerResolution)(ULONG, BOOLEAN, ULONG*) =
+        (NTSTATUS (WINAPI*)(ULONG, BOOLEAN, ULONG*))
         GetProcAddress(ntdll, "NtSetTimerResolution");
 
     if (!NtQueryTimerResolution || !NtSetTimerResolution)
@@ -140,22 +117,43 @@ static void SetTimerResolution(void)
            g_desiredTimerRes100ns / 10000.0);
 }
 
+static void ReleaseTimerResolution(void)
+{
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll)
+    {
+        return;
+    }
+
+    NTSTATUS (WINAPI *NtSetTimerResolution)(ULONG, BOOLEAN, ULONG*) =
+        (NTSTATUS (WINAPI*)(ULONG, BOOLEAN, ULONG*))
+        GetProcAddress(ntdll, "NtSetTimerResolution");
+
+    if (!NtSetTimerResolution)
+    {
+        return;
+    }
+
+    ULONG currRes;
+    NtSetTimerResolution(g_desiredTimerRes100ns, FALSE, &currRes);
+    Wh_Log(L"Timer resolution released");
+}
+
 static void LoadSettings(void)
 {
-    PCWSTR resStr = Wh_GetStringSetting(L"timerResolution");
-    double resMs = ParseMsString(resStr);
+    WindhawkUtils::StringSetting resStr = WindhawkUtils::StringSetting::make(L"timerResolution");
+    double resMs = ParseMsString(resStr.get());
     if (resMs < 0.5)  resMs = 0.5;
     if (resMs > 15.625) resMs = 15.625;
     g_desiredTimerRes100ns = (ULONG)(resMs * 10000.0);
-    Wh_FreeStringSetting(resStr);
 
     Wh_Log(L"Settings: timerResolution=%s (%.3f ms, %lu 100ns units)",
-           resStr, resMs, g_desiredTimerRes100ns);
+           resStr.get(), resMs, g_desiredTimerRes100ns);
 }
 
 BOOL Wh_ModInit(void)
 {
-    Wh_Log(L"VMAudioBackHost initializing");
+    Wh_Log(L"Initializing");
     LoadSettings();
     SetTimerResolution();
     return TRUE;
@@ -163,12 +161,14 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModSettingsChanged(void)
 {
-    Wh_Log(L"VMAudioBackHost settings changed");
+    Wh_Log(L"Settings changed");
     LoadSettings();
+    ReleaseTimerResolution();
     SetTimerResolution();
 }
 
 void Wh_ModUninit(void)
 {
-    Wh_Log(L"VMAudioBackHost uninitializing");
+    Wh_Log(L"Uninitializing");
+    ReleaseTimerResolution();
 }
