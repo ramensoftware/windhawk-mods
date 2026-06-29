@@ -12236,7 +12236,7 @@
           4
         ],
         "ratingUsers": 9,
-        "updated": 1782754200000,
+        "updated": 1782764769000,
         "users": 130
       },
       "metadata": {
@@ -12249,7 +12249,7 @@
         ],
         "license": "MIT",
         "name": "Task Manager Tab Slide Animation",
-        "version": "0.4.0"
+        "version": "0.4.1"
       }
     },
     "taskmgr-taller-tab": {

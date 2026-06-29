@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-29T17:34:13.000Z</updated>
+    <updated>2026-06-29T20:26:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.1]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#1e8d5224d6c438602744da41174e6c0427d2f3da</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-06-29T20:26:09.000Z</updated>
+        <content type="html"><![CDATA[<p>Documentation-only fix: the two readme demo GIFs (crossfade and slide) were pointing at filenames whose cached copies on the image proxy showed the wrong animation. This points them at fresh <code>-v2</code> filenames so the correct crossfade and slide demos are shown. No code changes.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
@@ -448,21 +459,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
         <updated>2026-06-25T20:04:03.000Z</updated>
         <content type="html"><![CDATA[<p>Lowers the default <strong>Change threshold</strong> from 18% to 2%, so more subtle tab switches animate out of the box. The setting remains user-adjustable (1–100%).</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.3.1]]></title>
-        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#abf43cf5f55c1d34f2ca6fcd7da315e8beaacd54</id>
-        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
-        <updated>2026-06-25T12:30:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>New "Change threshold" setting</strong> (default 18%) with pixel-sampling comparison, so clicking a process row, selecting, or live-graph ticks no longer trigger a spurious slide.</li>
-<li><strong>Performance sub-pages</strong> (CPU, Memory, Disk, Network/Ethernet, Wi-Fi, GPU) now slide too, not just the main left navigation.</li>
-<li><strong>Poll-until-rendered capture</strong> of the new view (up to 6 attempts) so tabs that draw their first frame late (Disk/Network/GPU) are reliably animated.</li>
-</ul>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
