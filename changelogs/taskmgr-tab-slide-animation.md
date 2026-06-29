@@ -1,3 +1,13 @@
+## 0.4.0 ([Jun 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a2dc42dae82c5bfdd6bebb8cef79b93f091b9664/mods/taskmgr-tab-slide-animation.wh.cpp))
+
+This version adds a selectable animation style alongside the existing crossfade:
+
+- **Animation type** setting - **Crossfade** (default, the previous behavior) or **Slide** (the old view slides out while the new one slides in; left/right, or up/down via *Slide vertically*).
+- Both styles use the same no-visual-jump approach: the current view is frozen under a topmost, click-through overlay at mouse-down, so Task Manager switches the tab underneath it invisibly, and the animation always starts from the old frame.
+- Robustness fix: if the window is moved or resized mid-animation, the overlay is now hidden immediately instead of lingering as a detached "ghost" copy at the old location.
+
+The readme demo now shows both the crossfade and slide animations.
+
 ## 0.3.3 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc21e7ca1840bb5de5d5a8f2b08d27312555d29c/mods/taskmgr-tab-slide-animation.wh.cpp))
 
 This version reworks the tab transition into a smooth crossfade between the old and new views — for both the main left navigation (Processes, Performance, App history, …) and the Performance sub-pages (CPU, Memory, Disk, Network/Ethernet, Wi-Fi, GPU).

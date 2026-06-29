@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-29T17:28:10.000Z</updated>
+    <updated>2026-06-29T17:30:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#a2dc42dae82c5bfdd6bebb8cef79b93f091b9664</id>
+        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
+        <updated>2026-06-29T17:30:00.000Z</updated>
+        <content type="html"><![CDATA[<p>This version adds a selectable animation style alongside the existing crossfade:</p>
+<ul>
+<li><strong>Animation type</strong> setting - <strong>Crossfade</strong> (default, the previous behavior) or <strong>Slide</strong> (the old view slides out while the new one slides in; left/right, or up/down via <em>Slide vertically</em>).</li>
+<li>Both styles use the same no-visual-jump approach: the current view is frozen under a topmost, click-through overlay at mouse-down, so Task Manager switches the tab underneath it invisibly, and the animation always starts from the old frame.</li>
+<li>Robustness fix: if the window is moved or resized mid-animation, the overlay is now hidden immediately instead of lingering as a detached "ghost" copy at the old location.</li>
+</ul>
+<p>The readme demo now shows both the crossfade and slide animations.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VMware Audio Distortion Fix 1.0]]></title>
         <id>https://windhawk.net/mods/vmware-audio-fix#6d68c5bf92732b90a067961d33b9381b88811b25</id>
@@ -403,17 +420,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>Math Shamenson</name>
             <uri>https://github.com/insane66613</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 3.0.0]]></title>
-        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#e011233788cb0248cb78e4d2eb93692310dd7931</id>
-        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
-        <updated>2026-06-25T06:38:19.000Z</updated>
-        <content type="html"><![CDATA[<p>Add code from the mod Control Panel Color Fix version 1.0 because the version 1.0.1 breaks the compatibility with Classic theme and the author is not going to fix it.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

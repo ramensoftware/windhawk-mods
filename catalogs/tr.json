@@ -12211,20 +12211,20 @@
           4
         ],
         "ratingUsers": 9,
-        "updated": 1782593430000,
+        "updated": 1782754200000,
         "users": 130
       },
       "metadata": {
         "author": "Abdullah Masood",
         "compilerOptions": "-ldwmapi -lgdi32 -lole32 -lmsimg32",
-        "description": "Smooth crossfade transition when switching tabs (Processes, Performance, ...) in Task Manager.",
+        "description": "Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.",
         "github": "https://github.com/Abdullah-Masood-05",
         "include": [
           "Taskmgr.exe"
         ],
         "license": "MIT",
         "name": "Task Manager Tab Slide Animation",
-        "version": "0.3.3"
+        "version": "0.4.0"
       }
     },
     "taskmgr-taller-tab": {
