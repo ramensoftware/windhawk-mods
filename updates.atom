@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-29T17:30:00.000Z</updated>
+    <updated>2026-06-29T17:34:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-06-29T17:34:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="macosminimizeanimation">MacOS Minimize Animation</h1>
+<p><img src="https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif" alt="Demo" /></p>
+<p>Brings the classic macOS <strong>genie</strong> effect to Windows. When you minimize a window
+it warps and flows down into the taskbar; when you restore it, it flows back out.</p>
+<p>Eye candy for something you do a hundred times a day.</p>
+<h2 id="seeitinaction">See it in action</h2>
+<ul>
+<li>Compile the mod with the button on the left or with Ctrl+B.</li>
+<li>Enable the mod and open any normal window (Explorer, a browser, Notepad…).</li>
+<li>Minimize it with the title bar <code>[-]</code> button or <code>Win</code>+<code>Down</code> and watch it warp
+and pour into the taskbar.</li>
+<li>Restore it from the taskbar and watch the genie play in reverse.</li>
+<li>Tweak the <strong>Animation duration</strong> in the settings to taste.</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Real genie warp.</strong> The window is sliced into horizontal strips that curve and
+funnel toward the taskbar (the bottom flows in first), instead of just shrinking.</li>
+<li><strong>Actually smooth.</strong> Progress is driven by real elapsed time and every rendered
+frame is gated on the DWM compose cycle (<code>DwmFlush</code>), so each frame you render is
+exactly one frame you see - perfectly aligned with vsync at any duration you set.</li>
+<li><strong>Smoothstep easing</strong> instead of a linear ramp, so it eases in and out.</li>
+<li><strong>Clean edges and fade</strong> via a per-pixel-alpha layered surface.</li>
+<li><strong>Smart targeting.</strong> The mod learns where each app's taskbar icon is (from where
+your cursor was when you minimized) and aims the genie at that spot next time.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>ShowWindow</code> and <code>DefWindowProcW</code> to catch minimize / restore
+requests. It snapshots the window, then on a dedicated high-priority thread it
+draws a transparent layered "ghost" window that warps the snapshot frame by frame
+into the taskbar, leaving the real window to minimize behind it without the
+system's own animation getting in the way.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Animation duration</strong> - how long the effect lasts (50-2000 ms).</li>
+<li><strong>Animate window restore (open)</strong> - also play the reverse genie when restoring.</li>
+<li><strong>Animate app launch (experimental)</strong> - also play the genie when an application
+window first opens. <strong>Experimental and off by default</strong>: it may briefly flash the
+window before animating, may not catch borderless apps, and can occasionally fire
+on splash / dialog windows. Leave it off and the mod behaves exactly like plain
+minimize / restore.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Works on all top-level windows; child / tiny / hidden windows are skipped.</li>
+<li>DWM transitions are temporarily disabled on the animated window and restored
+afterwards, so the system's own minimize/restore animation doesn't fight ours.</li>
+<li>The genie currently targets the primary monitor's taskbar edge.</li>
+</ul>
+<h1 id="gettingstarted">Getting started</h1>
+<p>Check out the documentation
+<a href="https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod">here</a>.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#a2dc42dae82c5bfdd6bebb8cef79b93f091b9664</id>
@@ -404,22 +466,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource-Aware Task Terminator 1.0.1]]></title>
-        <id>https://windhawk.net/mods/resource-aware-task-terminator#28fb6f69a46487bfb9ae4ea21dd6411c1497c5fb</id>
-        <link href="https://windhawk.net/mods/resource-aware-task-terminator"/>
-        <updated>2026-06-25T11:53:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>PID reuse hardening with creation-time/path revalidation</li>
-<li>Safer protected-process handling</li>
-<li>Sortable chooser and result summary</li>
-<li>Compatibility-preserving settings keys</li>
-</ul>]]></content>
-        <author>
-            <name>Math Shamenson</name>
-            <uri>https://github.com/insane66613</uri>
         </author>
     </entry>
 </feed>

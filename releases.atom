@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-29T17:28:10.000Z</updated>
+    <updated>2026-06-29T17:34:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-06-29T17:34:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="macosminimizeanimation">MacOS Minimize Animation</h1>
+<p><img src="https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif" alt="Demo" /></p>
+<p>Brings the classic macOS <strong>genie</strong> effect to Windows. When you minimize a window
+it warps and flows down into the taskbar; when you restore it, it flows back out.</p>
+<p>Eye candy for something you do a hundred times a day.</p>
+<h2 id="seeitinaction">See it in action</h2>
+<ul>
+<li>Compile the mod with the button on the left or with Ctrl+B.</li>
+<li>Enable the mod and open any normal window (Explorer, a browser, Notepad…).</li>
+<li>Minimize it with the title bar <code>[-]</code> button or <code>Win</code>+<code>Down</code> and watch it warp
+and pour into the taskbar.</li>
+<li>Restore it from the taskbar and watch the genie play in reverse.</li>
+<li>Tweak the <strong>Animation duration</strong> in the settings to taste.</li>
+</ul>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Real genie warp.</strong> The window is sliced into horizontal strips that curve and
+funnel toward the taskbar (the bottom flows in first), instead of just shrinking.</li>
+<li><strong>Actually smooth.</strong> Progress is driven by real elapsed time and every rendered
+frame is gated on the DWM compose cycle (<code>DwmFlush</code>), so each frame you render is
+exactly one frame you see - perfectly aligned with vsync at any duration you set.</li>
+<li><strong>Smoothstep easing</strong> instead of a linear ramp, so it eases in and out.</li>
+<li><strong>Clean edges and fade</strong> via a per-pixel-alpha layered surface.</li>
+<li><strong>Smart targeting.</strong> The mod learns where each app's taskbar icon is (from where
+your cursor was when you minimized) and aims the genie at that spot next time.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>ShowWindow</code> and <code>DefWindowProcW</code> to catch minimize / restore
+requests. It snapshots the window, then on a dedicated high-priority thread it
+draws a transparent layered "ghost" window that warps the snapshot frame by frame
+into the taskbar, leaving the real window to minimize behind it without the
+system's own animation getting in the way.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Animation duration</strong> - how long the effect lasts (50-2000 ms).</li>
+<li><strong>Animate window restore (open)</strong> - also play the reverse genie when restoring.</li>
+<li><strong>Animate app launch (experimental)</strong> - also play the genie when an application
+window first opens. <strong>Experimental and off by default</strong>: it may briefly flash the
+window before animating, may not catch borderless apps, and can occasionally fire
+on splash / dialog windows. Leave it off and the mod behaves exactly like plain
+minimize / restore.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Works on all top-level windows; child / tiny / hidden windows are skipped.</li>
+<li>DWM transitions are temporarily disabled on the animated window and restored
+afterwards, so the system's own minimize/restore animation doesn't fight ours.</li>
+<li>The genie currently targets the primary monitor's taskbar edge.</li>
+</ul>
+<h1 id="gettingstarted">Getting started</h1>
+<p>Check out the documentation
+<a href="https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod">here</a>.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VMware Audio Distortion Fix 1.0]]></title>
         <id>https://windhawk.net/mods/vmware-audio-fix#6d68c5bf92732b90a067961d33b9381b88811b25</id>
@@ -918,84 +980,6 @@ zablokowania użyj nawigacji klawiaturą (Tab/Enter) albo wyłącz mod w
 Windhawku klawiaturą. Przemapowanie <strong>prawego przycisku</strong> odbiera dostęp
 do menu kontekstowych (działa jeszcze klawisz Menu na klawiaturze). Oba
 są domyślnie wyłączone — włączaj tylko świadomie.</p>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray hover expand 1.4.2]]></title>
-        <id>https://windhawk.net/mods/tray-hover-expand#ed888d43cc5bd73a43fd1f2a1c7acc67801f725b</id>
-        <link href="https://windhawk.net/mods/tray-hover-expand"/>
-        <updated>2026-06-15T14:14:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayhoverexpand">Tray hover expand</h1>
-<p><img src="https://i.imgur.com/qsNUNpj.png" alt="Demo" /></p>
-<p>Opens the hidden tray icons flyout (the "Show Hidden Icons" chevron) when you
-hover the cursor over it, instead of having to click. Optionally collapses it
-again once the cursor leaves the opened icons.</p>
-<p>It works through UI Automation, so it does not hook internal shell functions —
-it is relatively safe and resilient across Windows builds. It runs as a tool
-mod in a dedicated process and does not inject into the shell.</p>
-<h2 id="howitdiffersfromsimilarmods">How it differs from similar mods</h2>
-<ul>
-<li><em>Taskbar tray icons hide on hover</em> auto-hides the whole tray area and reveals
-it on hover.</li>
-<li><em>Show all taskbar notification icons</em> forces all hidden icons to always show.</li>
-<li>This mod keeps the standard Windows overflow flyout and simply opens it on
-hover (and optionally closes it when you move away).</li>
-</ul>
-<h2 id="howthechevronisdetected">How the chevron is detected</h2>
-<p>The "Show Hidden Icons" chevron has no language-independent unique identifier on
-Windows 11 (it shares AutomationId <code>SystemTrayIcon</code> with the clock, volume,
-battery, etc., and exposes no ExpandCollapse pattern). So detection is a hybrid:</p>
-<ol>
-<li>Match the button by name (the keyword list covers English and Polish by
-default and can be extended in the settings).</li>
-<li>If no name matches (other languages), fall back to the leftmost tray button
-with the configured AutomationId, which is normally the chevron.</li>
-</ol>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>For unsupported languages, add your locale's chevron name to the "Chevron name
-keywords" setting, or rely on the leftmost-tray-icon fallback.</li>
-<li>If auto-collapse does not work, the flyout window class name may differ on your
-build. Change it in the "Flyout window class" setting.</li>
-</ul>
-<hr />
-<h2 id="opispopolsku">Opis po polsku</h2>
-<p>Otwiera schowek ukrytych ikon zasobnika (strzałkę „Pokaż ukryte ikony") po
-najechaniu kursorem, bez konieczności klikania. Opcjonalnie zwija go z powrotem,
-gdy kursor opuści otwarte ikony.</p>
-<p>Mod działa przez UI Automation, więc nie hookuje wewnętrznych funkcji powłoki —
-jest stosunkowo bezpieczny i odporny na zmiany między kompilacjami Windows.
-Działa jako „tool mod" w osobnym procesie i nie wstrzykuje się do powłoki.</p>
-<h3 id="czymrnisiodpodobnychmodw">Czym różni się od podobnych modów</h3>
-<ul>
-<li><em>Taskbar tray icons hide on hover</em> automatycznie ukrywa cały obszar zasobnika
-i odsłania go po najechaniu.</li>
-<li><em>Show all taskbar notification icons</em> wymusza stałe wyświetlanie wszystkich
-ukrytych ikon.</li>
-<li>Ten mod zachowuje standardowy schowek Windows i po prostu otwiera go po
-najechaniu (a opcjonalnie zamyka po odjechaniu kursorem).</li>
-</ul>
-<h3 id="jakwykrywanajeststrzaka">Jak wykrywana jest strzałka</h3>
-<p>Strzałka „Pokaż ukryte ikony" nie ma w Windows 11 unikalnego, niezależnego od
-języka identyfikatora (dzieli AutomationId <code>SystemTrayIcon</code> z zegarem,
-głośnością, baterią itd. i nie udostępnia wzorca ExpandCollapse). Wykrywanie
-jest więc hybrydowe:</p>
-<ol>
-<li>Dopasowanie przycisku po nazwie (domyślna lista słów kluczowych obejmuje
-angielski i polski; można ją rozszerzyć w ustawieniach).</li>
-<li>Gdy nazwa nie pasuje (inne języki) — pierwszy od lewej przycisk zasobnika ze
-skonfigurowanym AutomationId, którym zwykle jest strzałka.</li>
-</ol>
-<h3 id="uwagi">Uwagi</h3>
-<ul>
-<li>Dla nieobsługiwanych języków dodaj nazwę strzałki w swoim języku do ustawienia
-„Słowa kluczowe nazwy strzałki" albo polegaj na powyższym mechanizmie zapasowym.</li>
-<li>Jeśli auto-zwijanie nie działa, nazwa klasy okna schowka może się różnić na
-Twojej kompilacji systemu. Zmień ją w ustawieniu „Klasa okna schowka".</li>
-</ul>]]></content>
         <author>
             <name>wygodad</name>
             <uri>https://github.com/wygodad</uri>

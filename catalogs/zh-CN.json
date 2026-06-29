@@ -7061,6 +7061,35 @@
         "version": "1.0.3"
       }
     },
+    "macos-minimize-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1782754453000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1782754453000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Abdullah Masood",
+        "compilerOptions": "-ldwmapi -lgdi32",
+        "description": "Smooth macOS-style genie minimize and restore (open) animations for every window.",
+        "github": "https://github.com/Abdullah-Masood-05",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "MacOS Minimize Animation",
+        "version": "2.0.0"
+      }
+    },
     "magnifier-headless": {
       "details": {
         "defaultSorting": 1310,
