@@ -2,7 +2,7 @@
 // @id              click-on-empty-explorer
 // @name            Click on Empty Explorer
 // @description     Configure double click, middle click and double middle click actions on empty space in File Explorer
-// @version         2.2.0
+// @version         2.3.0
 // @author          LiHua81
 // @github          https://github.com/LiHua81
 // @include         explorer.exe
@@ -62,7 +62,7 @@ no file or folder is located) and performs the action you've configured.
 
 When you choose "Custom Hotkey" for a trigger, a text field appears where you define the shortcut.
 
-**Format:** `Modifier + Modifier + ... + Key`
+**Format:** `Modifier+Modifier+...+Key` — spaces around `+` are optional and auto-trimmed
 
 - **Modifiers:** `Ctrl`, `Shift`, `Alt`, `Win` — can combine multiple, e.g. `Ctrl+Shift+N`, `Win+Shift+S`
 - **Keys:** letters (A-Z), digits (0-9), function keys (F1-F24), named keys (Tab, Enter, Space, Backspace, Delete, Escape, Left, Right, Up, Down, Home, End, PageUp, PageDown, Insert)
@@ -311,12 +311,19 @@ static WORD ParseHotkeyToken(const wchar_t* token) {
 }
 
 static void SendParsedHotkey(const std::wstring& combo) {
+    auto trim = [](std::wstring s) {
+        size_t a = s.find_first_not_of(L" \t");
+        if (a == std::wstring::npos) return std::wstring();
+        size_t b = s.find_last_not_of(L" \t");
+        return s.substr(a, b - a + 1);
+    };
     std::vector<WORD> keys;
     size_t start = 0;
     while (start < combo.length()) {
         size_t end = combo.find(L'+', start);
-        std::wstring token = (end == std::wstring::npos)
-            ? combo.substr(start) : combo.substr(start, end - start);
+        std::wstring token = trim((end == std::wstring::npos)
+            ? combo.substr(start) : combo.substr(start, end - start));
+        if (token.empty()) { if (end == std::wstring::npos) break; start = end + 1; continue; }
         WORD vk = ParseHotkeyToken(token.c_str());
         if (vk) keys.push_back(vk);
         if (end == std::wstring::npos) break;
