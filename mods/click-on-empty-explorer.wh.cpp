@@ -2,7 +2,7 @@
 // @id              click-on-empty-explorer
 // @name            Click on Empty Explorer
 // @description     Configure double click, middle click and double middle click actions on empty space in File Explorer
-// @version         2.1.1
+// @version         2.2.0
 // @author          LiHua81
 // @github          https://github.com/LiHua81
 // @include         explorer.exe
@@ -52,9 +52,24 @@ no file or folder is located) and performs the action you've configured.
 - **Close Tab** — Close the current tab (Win11)
 - **New Folder** — Create a new folder in the current view
 - **Copy Path** — Copy the current folder path to clipboard
+- **Paste** — Paste (Ctrl+V) into the current view
+- **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
 - **None** — Do nothing
+
+## Custom Hotkey
+
+When you choose "Custom Hotkey" for a trigger, a text field appears where you define the shortcut.
+
+**Format:** `Modifier + Modifier + ... + Key`
+
+- **Modifiers:** `Ctrl`, `Shift`, `Alt`, `Win` — can combine multiple, e.g. `Ctrl+Shift+N`, `Win+Shift+S`
+- **Keys:** letters (A-Z), digits (0-9), function keys (F1-F24), named keys (Tab, Enter, Space, Backspace, Delete, Escape, Left, Right, Up, Down, Home, End, PageUp, PageDown, Insert)
+
+**Examples:** `Ctrl+V`, `Ctrl+Shift+N`, `Win+E`, `Alt+F4`, `Ctrl+Shift+Esc`, `F5`, `Win+Shift+S`
+
+Each trigger (double click, middle click, double middle click) has its own independent custom hotkey field.
 
 ## Windows version support
 
@@ -78,6 +93,8 @@ require Windows 11 for tabbed Explorer support.
     - closeTab: Close Tab (Win11)
     - newFolder: New Folder
     - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
     - none: None
@@ -94,6 +111,8 @@ require Windows 11 for tabbed Explorer support.
     - closeTab: Close Tab (Win11)
     - newFolder: New Folder
     - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
     - none: None
@@ -110,9 +129,20 @@ require Windows 11 for tabbed Explorer support.
     - closeTab: Close Tab (Win11)
     - newFolder: New Folder
     - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
     - none: None
+- doubleClickCustomHotkey: ""
+  $name: Double Click Custom Hotkey
+  $description: "Format: modifier keys + main key. Modifiers: Ctrl, Shift, Alt, Win (can combine multiple, e.g. Ctrl+Shift+N, Win+Shift+S). Main key: letter, F1-F24, Tab, Enter, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Insert"
+- middleClickCustomHotkey: ""
+  $name: Middle Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+V, Ctrl+T, Win+D, Ctrl+Shift+Esc"
+- doubleMiddleClickCustomHotkey: ""
+  $name: Double Middle Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+W, Alt+Tab, Win+E, Alt+Shift+F4"
 */
 // ==/WindhawkModSettings==
 
@@ -164,12 +194,18 @@ static std::mutex g_settingsMutex;
 static StringSetting g_doubleClickAction;
 static StringSetting g_middleClickAction;
 static StringSetting g_doubleMiddleClickAction;
+static StringSetting g_doubleClickCustomCombo;
+static StringSetting g_middleClickCustomCombo;
+static StringSetting g_doubleMiddleClickCustomCombo;
 
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_doubleClickAction.Load(L"doubleClickAction");
     g_middleClickAction.Load(L"middleClickAction");
     g_doubleMiddleClickAction.Load(L"doubleMiddleClickAction");
+    g_doubleClickCustomCombo.Load(L"doubleClickCustomHotkey");
+    g_middleClickCustomCombo.Load(L"middleClickCustomHotkey");
+    g_doubleMiddleClickCustomCombo.Load(L"doubleMiddleClickCustomHotkey");
 }
 
 // Read settings under lock, deep-copy strings so they outlive the lock
@@ -177,6 +213,9 @@ struct SettingsSnapshot {
     std::wstring doubleClick;
     std::wstring middleClick;
     std::wstring doubleMiddleClick;
+    std::wstring doubleClickCombo;
+    std::wstring middleClickCombo;
+    std::wstring doubleMiddleClickCombo;
 };
 
 static SettingsSnapshot CopySettings() {
@@ -184,8 +223,20 @@ static SettingsSnapshot CopySettings() {
     return {
         g_doubleClickAction.Get() ? g_doubleClickAction.Get() : L"",
         g_middleClickAction.Get() ? g_middleClickAction.Get() : L"",
-        g_doubleMiddleClickAction.Get() ? g_doubleMiddleClickAction.Get() : L""
+        g_doubleMiddleClickAction.Get() ? g_doubleMiddleClickAction.Get() : L"",
+        g_doubleClickCustomCombo.Get() ? g_doubleClickCustomCombo.Get() : L"",
+        g_middleClickCustomCombo.Get() ? g_middleClickCustomCombo.Get() : L"",
+        g_doubleMiddleClickCustomCombo.Get() ? g_doubleMiddleClickCustomCombo.Get() : L""
     };
+}
+
+static void SendParsedHotkey(const std::wstring& combo);
+
+// Helper: execute custom hotkey if the selected action is "customHotkey"
+static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
+    if (wcscmp(action, L"customHotkey") != 0) return false;
+    if (!combo.empty()) SendParsedHotkey(combo);
+    return true;
 }
 
 // ---- Helper: Send key combination ----
@@ -214,6 +265,84 @@ static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
     SendInput(count / 2, inputs + count / 2, sizeof(INPUT));
 }
 
+// ---- Custom hotkey parsing ----
+
+static int StrICmp(const wchar_t* a, const wchar_t* b) {
+    for (; *a && *b; a++, b++) {
+        wchar_t ca = (a[0] >= L'a' && a[0] <= L'z') ? a[0] - L'a' + L'A' : a[0];
+        wchar_t cb = (b[0] >= L'a' && b[0] <= L'z') ? b[0] - L'a' + L'A' : b[0];
+        if (ca != cb) return ca - cb;
+    }
+    return *a - *b;
+}
+
+static WORD ParseHotkeyToken(const wchar_t* token) {
+    if (!token || !token[0]) return 0;
+    if (StrICmp(token, L"Ctrl") == 0 || StrICmp(token, L"Control") == 0) return VK_CONTROL;
+    if (StrICmp(token, L"Shift") == 0)                         return VK_SHIFT;
+    if (StrICmp(token, L"Alt") == 0 || StrICmp(token, L"Menu") == 0) return VK_MENU;
+    if (StrICmp(token, L"Win") == 0 || StrICmp(token, L"Windows") == 0) return VK_LWIN;
+    if (wcslen(token) == 1) {
+        if (token[0] >= L'A' && token[0] <= L'Z') return (WORD)token[0];
+        if (token[0] >= L'a' && token[0] <= L'z') return (WORD)(token[0] - L'a' + L'A');
+        if (token[0] >= L'0' && token[0] <= L'9') return (WORD)token[0];
+    }
+    if (StrICmp(token, L"Tab") == 0)        return VK_TAB;
+    if (StrICmp(token, L"Enter") == 0 || StrICmp(token, L"Return") == 0) return VK_RETURN;
+    if (StrICmp(token, L"Space") == 0)      return VK_SPACE;
+    if (StrICmp(token, L"Backspace") == 0)  return VK_BACK;
+    if (StrICmp(token, L"Delete") == 0 || StrICmp(token, L"Del") == 0) return VK_DELETE;
+    if (StrICmp(token, L"Escape") == 0 || StrICmp(token, L"Esc") == 0) return VK_ESCAPE;
+    if (StrICmp(token, L"Left") == 0)       return VK_LEFT;
+    if (StrICmp(token, L"Right") == 0)      return VK_RIGHT;
+    if (StrICmp(token, L"Up") == 0)         return VK_UP;
+    if (StrICmp(token, L"Down") == 0)       return VK_DOWN;
+    if (StrICmp(token, L"Home") == 0)       return VK_HOME;
+    if (StrICmp(token, L"End") == 0)        return VK_END;
+    if (StrICmp(token, L"PageUp") == 0)     return VK_PRIOR;
+    if (StrICmp(token, L"PageDown") == 0)   return VK_NEXT;
+    if (StrICmp(token, L"Insert") == 0 || StrICmp(token, L"Ins") == 0) return VK_INSERT;
+    // F1-F24
+    if ((token[0] == L'F' || token[0] == L'f') && token[1]) {
+        int n = (int)wcstol(token + 1, NULL, 10);
+        if (n >= 1 && n <= 24) return VK_F1 + (n - 1);
+    }
+    return 0;
+}
+
+static void SendParsedHotkey(const std::wstring& combo) {
+    std::vector<WORD> keys;
+    size_t start = 0;
+    while (start < combo.length()) {
+        size_t end = combo.find(L'+', start);
+        std::wstring token = (end == std::wstring::npos)
+            ? combo.substr(start) : combo.substr(start, end - start);
+        WORD vk = ParseHotkeyToken(token.c_str());
+        if (vk) keys.push_back(vk);
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    if (keys.empty() || keys.size() > 4) return; // safety cap
+
+    INPUT inputs[8] = {};
+    int count = 0;
+    // Press all
+    for (size_t i = 0; i < keys.size(); i++) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = keys[i];
+        count++;
+    }
+    SendInput(count, inputs, sizeof(INPUT));
+    // Release in reverse
+    for (int i = (int)keys.size() - 1; i >= 0; i--) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = keys[i];
+        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+        count++;
+    }
+    SendInput((int)keys.size(), inputs + (int)keys.size(), sizeof(INPUT));
+}
+
 // ---- Duplicate Tab infrastructure ----
 
 static wchar_t g_pendingNavPath[MAX_PATH] = {};
@@ -237,9 +366,11 @@ static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
     KillTimer(hwnd, idEvent);
     g_midClickTimerId = 0;
     if (g_midClickPendingHwnd && IsWindow(g_midClickPendingHwnd) && g_initialized) {
-        std::wstring action = CopySettings().middleClick;
-        if (wcscmp(action.c_str(), L"none") != 0)
-            FindShellTabAndDoAction(g_midClickPendingHwnd, action.c_str());
+        SettingsSnapshot s = CopySettings();
+        if (wcscmp(s.middleClick.c_str(), L"none") != 0) {
+            if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
+                FindShellTabAndDoAction(g_midClickPendingHwnd, s.middleClick.c_str());
+        }
     }
     g_midClickPendingHwnd = NULL;
 }
@@ -365,6 +496,10 @@ public:
         SendKeyCombo(VK_CONTROL, VK_SHIFT, 'N');
     }
 
+    void Paste() {
+        SendKeyCombo(VK_CONTROL, 'V');
+    }
+
     void CopyPath() {
         wchar_t path[MAX_PATH] = {};
         if (!GetCurrentFolderPath(path, MAX_PATH)) return;
@@ -401,6 +536,7 @@ public:
         else if (wcscmp(action, L"closeTab") == 0)    CloseTab();
         else if (wcscmp(action, L"newFolder") == 0)   NewFolder();
         else if (wcscmp(action, L"copyPath") == 0)    CopyPath();
+        else if (wcscmp(action, L"paste") == 0)       Paste();
         // "none" or unknown — do nothing
     }
 };
@@ -498,8 +634,10 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         LVHITTESTINFO ht = {};
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
-        if (ListView_SubItemHitTest(hWnd, &ht) == -1)
-            FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+        if (ListView_SubItemHitTest(hWnd, &ht) == -1) {
+            if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
+                FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+        }
 
     } else if (uMsg == WM_MBUTTONDOWN) {
         POINT mousePos;
@@ -517,7 +655,8 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         if (singleOn && !doubleOn) {
-            FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+            if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
+                FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -525,7 +664,8 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (isDouble) {
             CancelPendingMidClick();
-            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+            if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
+                FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
         } else {
             CancelPendingMidClick();
             g_midClickPendingHwnd = hWnd;
@@ -578,7 +718,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                 if (cn && (wcscmp(cn, L"UIGroupItem") == 0 || wcscmp(cn, L"UIItemsView") == 0)) {
 
                     if (singleOn && !doubleOn) {
-                        FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+                        if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
+                            FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
 
@@ -586,7 +727,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (isDouble) {
                         CancelPendingMidClick();
-                        FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
+                            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
@@ -628,7 +770,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                      (wcscmp(cn, L"UIItemsView") == 0 &&
                       wcscmp(g_lastClick.className, L"UIItemsView") == 0)) &&
                     delta <= GetDoubleClickTime()) {
-                    FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+                    if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
+                        FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
                     g_lastClick.time = 0;  // prevent triple-click from double-firing
                 } else {
                     g_lastClick.time = now;
