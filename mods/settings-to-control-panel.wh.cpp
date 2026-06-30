@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.6
+// @version        10.0.8
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **NEW in 10.0.6: Triple-layer tray detection — ATL class address (primary) + immersive menu blocking (Win11 fix) + DLL-based TrackPopupMenuEx fallback. All methods are language-independent.**
+- **v10.0.8: Fixed tray context menu redirect for Audio on Windows 10 (cross-thread contextType fix)**
 
 ---
 
@@ -55,6 +55,7 @@ corresponding classic Control Panel applets using only native Windows components
 - m417z – Code reviews and feedback
 - Anixx – Testing on Windows 11 23H2 and original toolbar subclassing approach
 - dbilanoski – CLSID documentation
+- aubymori – Immersive menu blocking pattern
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -115,9 +116,10 @@ static IShellDispatch2_ShellExecute_t IShellDispatch2_ShellExecute_orig = nullpt
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
-// Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
-// 0=none, 1=audio, 2=network. Thread-local: only valid for the UI thread that right-clicked.
-static thread_local int g_trayContextType = 0;
+// Cross-thread tray context type: 0=none, 1=audio, 2=network.
+// Set by subclass proc on WM_RBUTTONUP, consumed by TrackPopupMenuEx hook.
+static int g_trayContextType = 0;
+static std::mutex g_trayContextMutex;
 
 // ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu hook
 // Forces classic Win32 menus in SndVolSSO.dll and pnidui.dll (Win11 fix).
@@ -357,6 +359,24 @@ static std::wstring ToLower(std::wstring s) {
     return s;
 }
 
+// Caller identification utilities
+static void* GetReturnAddress() {
+    void* stackTrace[3];
+    WORD frames = CaptureStackBackTrace(0, 3, stackTrace, NULL);
+    if (frames >= 3) return stackTrace[2];
+    return nullptr;
+}
+
+static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
+    HMODULE hModule = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)address, &hModule)) {
+        wchar_t path[MAX_PATH];
+        if (GetModuleFileNameW(hModule, path, MAX_PATH))
+            return (wcsstr(path, moduleName) != nullptr);
+    }
+    return false;
+}
+
 // ============================================================
 // TRAY: METHOD 1 - Toolbar subclassing (language-independent)
 // ============================================================
@@ -432,7 +452,7 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
 
 // Launch functions
 static void OpenClassicSoundPanel() {
-    Wh_Log(L"Opening classic Sound panel");
+    Wh_Log(L"[ACTION] Opening classic Sound panel (mmsys.cpl,,0)");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -444,7 +464,7 @@ static void OpenClassicSoundPanel() {
 }
 
 static void OpenClassicNetworkConnections() {
-    Wh_Log(L"Opening classic Network Connections");
+    Wh_Log(L"[ACTION] Opening classic Network Connections");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
@@ -455,9 +475,7 @@ static void OpenClassicNetworkConnections() {
     ShellExecuteExW_orig(&sei);
 }
 
-// Toolbar subclass proc — intercepts right-click on tray icons.
-// Sets g_trayContextType so TrackPopupMenuEx_Hook can identify the menu
-// without any text/language-dependent detection.
+// Toolbar subclass proc - intercepts right-click on tray icons
 static LRESULT CALLBACK TrayToolbarSubclassProc(
     HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
@@ -471,10 +489,12 @@ static LRESULT CALLBACK TrayToolbarSubclassProc(
             int buttonType = GetTrayButtonType(hwnd, hitIndex);
             if (buttonType == 1) {
                 Wh_Log(L"[TRAY-SUBCLASS] Audio icon right-clicked");
-                g_trayContextType = 1; // will be consumed by TrackPopupMenuEx_Hook
+                std::lock_guard<std::mutex> lk(g_trayContextMutex);
+                g_trayContextType = 1;
             }
             else if (buttonType == 2) {
                 Wh_Log(L"[TRAY-SUBCLASS] Network icon right-clicked");
+                std::lock_guard<std::mutex> lk(g_trayContextMutex);
                 g_trayContextType = 2;
             }
         }
@@ -522,23 +542,6 @@ static void RemoveTraySubclass() {
 // TRAY: METHOD 2 - TrackPopupMenuEx DLL-based detection (fallback)
 // ============================================================
 
-static void* GetReturnAddress() {
-    void* stackTrace[3];
-    WORD frames = CaptureStackBackTrace(0, 3, stackTrace, NULL);
-    if (frames >= 3) return stackTrace[2];
-    return nullptr;
-}
-
-static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
-    HMODULE hModule = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)address, &hModule)) {
-        wchar_t path[MAX_PATH];
-        if (GetModuleFileNameW(hModule, path, MAX_PATH))
-            return (wcsstr(path, moduleName) != nullptr);
-    }
-    return false;
-}
-
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
     if (!g_settings.redirectSystemTray || !g_settings.enableRedirects)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
@@ -547,14 +550,18 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     if (guard.IsReentrant())
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
 
-    // --- Primary: subclass flag set on WM_RBUTTONUP (language-independent) ---
-    int contextType = g_trayContextType;
-    g_trayContextType = 0; // consume immediately
+    // Primary: subclass flag set on WM_RBUTTONUP (language-independent, cross-thread)
+    int contextType;
+    {
+        std::lock_guard<std::mutex> lk(g_trayContextMutex);
+        contextType = g_trayContextType;
+        g_trayContextType = 0;
+    }
 
     bool isAudioMenu   = (contextType == 1);
     bool isNetworkMenu = (contextType == 2);
 
-    // --- Fallback: DLL return-address detection (language-independent) ---
+    // Fallback: DLL return-address detection (language-independent)
     if (!isAudioMenu && !isNetworkMenu) {
         void* retAddr = GetReturnAddress();
         int itemCount = GetMenuItemCount(hMenu);
@@ -565,7 +572,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
             }
             else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
                 isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
-                Wh_Log(L"[TRAY-HOOK] Network menu via pnidui.dll retaddr (items=%d)", itemCount);
+                Wh_Log(L"[TRAY-HOOK] Network menu via pnidui.dll retaddr");
             }
             else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
                 isNetworkMenu = (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109);
@@ -580,9 +587,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
 
     int itemCount = GetMenuItemCount(hMenu);
-    Wh_Log(L"[TRAY-HOOK] %s menu, %d items", isAudioMenu ? L"AUDIO" : L"NETWORK", itemCount);
+    Wh_Log(L"[TRAY-HOOK] %s menu, %d items - proceeding with redirect", isAudioMenu ? L"AUDIO" : L"NETWORK", itemCount);
 
-    // Replace the target menu item ID with a sentinel so we can detect the selection.
+    // Replace the target menu item ID with a sentinel
     int targetIndex = isAudioMenu ? 0 : (itemCount - 1);
     UINT customId   = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO : TRAY_CUSTOM_ID_NETWORK;
     UINT originalId = GetMenuItemID(hMenu, targetIndex);
@@ -617,7 +624,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 }
 
 // ============================================================
-// URI MAPPINGS (unchanged)
+// URI MAPPINGS
 // ============================================================
 
 static std::unordered_map<std::wstring, std::wstring> g_mappings;
@@ -1095,6 +1102,31 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
     if (!g_settings.enableRedirects || !pei) return ShellExecuteExW_orig(pei);
 
+    // Direct SndVolSSO/pnidui ShellExecute interception (Win11/compatibility fix)
+    if (g_settings.redirectSystemTray) {
+        void* retAddr = GetReturnAddress();
+        bool isSndVol = IsAddressInModule(retAddr, L"SndVolSSO.dll");
+        bool isPnidui = IsAddressInModule(retAddr, L"pnidui.dll");
+        
+        if (isSndVol || isPnidui) {
+            bool hasMsSettings = IsMsSettings(pei->lpFile) || IsMsSettings(pei->lpParameters);
+            if (hasMsSettings) {
+                if (isSndVol) {
+                    Wh_Log(L"[SndVolSSO-ShellExec] Redirecting to classic Sound panel");
+                    OpenClassicSoundPanel();
+                    if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
+                    return TRUE;
+                }
+                if (isPnidui) {
+                    Wh_Log(L"[pnidui-ShellExec] Redirecting to classic Network panel");
+                    OpenClassicNetworkConnections();
+                    if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
+                    return TRUE;
+                }
+            }
+        }
+    }
+
     if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
@@ -1126,6 +1158,29 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
     if (!g_settings.enableRedirects) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
+
+    // Direct SndVolSSO/pnidui ShellExecute interception (Win11/compatibility fix)
+    if (g_settings.redirectSystemTray) {
+        void* retAddr = GetReturnAddress();
+        bool isSndVol = IsAddressInModule(retAddr, L"SndVolSSO.dll");
+        bool isPnidui = IsAddressInModule(retAddr, L"pnidui.dll");
+        
+        if (isSndVol || isPnidui) {
+            bool hasMsSettings = IsMsSettings(file) || IsMsSettings(params);
+            if (hasMsSettings) {
+                if (isSndVol) {
+                    Wh_Log(L"[SndVolSSO-ShellExecW] Redirecting to classic Sound panel");
+                    OpenClassicSoundPanel();
+                    return SHELL_EXECUTE_SUCCESS;
+                }
+                if (isPnidui) {
+                    Wh_Log(L"[pnidui-ShellExecW] Redirecting to classic Network panel");
+                    OpenClassicNetworkConnections();
+                    return SHELL_EXECUTE_SUCCESS;
+                }
+            }
+        }
+    }
 
     if (IsControlSystemParams(file, params)) {
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
@@ -1204,9 +1259,6 @@ HRESULT WINAPI IShellDispatch2_ShellExecute_hook(void* pThis, BSTR File, void* v
 
 // ============================================================
 // TRAY: METHOD 3 - Block immersive menus in SndVolSSO/pnidui (Win11 fix)
-// Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu to return false,
-// forcing classic Win32 menus so TrackPopupMenuEx is actually called.
-// Pattern borrowed from "eradicate-immersive-menus" by aubymori.
 // ============================================================
 
 static void InstallImmersiveMenuHooks() {
@@ -1220,9 +1272,8 @@ static void InstallImmersiveMenuHooks() {
 
     for (auto& t : targets) {
         HMODULE hMod = GetModuleHandleW(t.dll);
-        if (!hMod) continue; // not loaded yet — TrackPopupMenuEx fallback handles it
+        if (!hMod) continue;
 
-        // SndVolSSO.dll, pnidui.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
             {
                 L"bool "
@@ -1236,13 +1287,13 @@ static void InstallImmersiveMenuHooks() {
             },
             (void**)t.orig,
             (void*)ICMH_CAODTM_hook,
-            true // optional — don't fail if missing
+            true
         };
 
         if (WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1))
             Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
         else
-            Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s (may be absent on this build)", t.dll);
+            Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s", t.dll);
     }
 }
 
@@ -1276,7 +1327,7 @@ HWND WINAPI CreateWindowExW_Hook(
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.6");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.8");
     
     g_hOle32 = LoadLibraryW(L"ole32.dll");
     if (g_hOle32) {
@@ -1338,7 +1389,7 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     RemoveTraySubclass();
     if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.6 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.8 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
