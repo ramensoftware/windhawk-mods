@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **v10.0.8: Fixed tray context menu redirect for Audio on Windows 10 (cross-thread contextType fix)**
+- **v10.0.8: Fixed tray context menu redirect for Audio on the Windows 10 taskbar (which is based on Win32)**
 
 ---
 
