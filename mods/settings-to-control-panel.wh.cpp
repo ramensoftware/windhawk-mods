@@ -29,7 +29,7 @@ corresponding classic Control Panel applets using only native Windows components
 - Redirects numerous `ms-settings:` URIs to classic Control Panel
 - Anti-loop protection
 - Configurable fallback modes
-- **v10.0.8: Fixed tray context menu redirect for Audio on the Windows 10 taskbar (which is based on Win32)**
+- **v10.0.8: Fixed tray context menu redirect for Audio on Windows 10 (cross-thread contextType fix)**
 
 ---
 
@@ -1274,7 +1274,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = GetModuleHandleW(t.dll);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
+                // SndVolSSO.dll, pnidui.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSSO_pnidui_hooks = {
             {
                 L"bool "
 #ifdef _WIN64
@@ -1290,8 +1291,8 @@ static void InstallImmersiveMenuHooks() {
             true
         };
 
-        if (WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1))
-            Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
+        if (WindhawkUtils::HookSymbols(hMod, &sndVolSSO_pnidui_hooks, 1))   
+                 Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
         else
             Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s", t.dll);
     }
