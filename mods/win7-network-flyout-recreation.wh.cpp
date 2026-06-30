@@ -72,7 +72,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 
 If you encounter issues, please report them on the author of the mod.
 */
-// ==/WindhawkModReadme==
 // ==WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
