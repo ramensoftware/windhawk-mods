@@ -1,3 +1,8 @@
+## 1.0.2 ([Jun 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/10df87270e61881eaa75f976de21d0a3d9e58464/mods/autoscroll-win32.wh.cpp))
+
+1. Fixed possible explorer.exe crash on startup
+2. Fixed inverted horizontal scrolling
+
 ## 1.0.1 ([May 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d9e0a6536452c29607e43e8030a4dd03c7d7ee84/mods/autoscroll-win32.wh.cpp))
 
 1. Fixed middle-click "open in new tab" so it now works in hold mode

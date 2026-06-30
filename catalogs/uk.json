@@ -595,7 +595,7 @@
           12
         ],
         "ratingUsers": 12,
-        "updated": 1779455086000,
+        "updated": 1782806006000,
         "users": 246
       },
       "metadata": {
@@ -607,7 +607,7 @@
           "explorer.exe"
         ],
         "name": "AutoScroll Win32",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "balloon-sound-fix": {
