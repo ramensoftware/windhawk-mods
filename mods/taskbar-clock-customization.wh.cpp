@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more
-// @version         1.7.4
+// @version         1.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -83,7 +83,20 @@ patterns can be used:
   * `%disk_total%` - combined disk read and write speed.
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
+  * `%ram_used%` - used RAM amount in GB.
+  * `%ram_total%` - total RAM amount in GB.
+  * `%ram_committed%` - committed RAM usage (% of memory committed by apps,
+    backed by RAM or the page file).
+  * `%ram_committed_used%` - used committed RAM amount in GB.
+  * `%ram_committed_total%` - total committed RAM amount in GB.
   * `%gpu%` - GPU usage.
+  * `%vram%` - VRAM usage as a percentage of total dedicated VRAM.
+  * `%vram_used%` - used dedicated VRAM amount in GB.
+  * `%vram_total%` - total dedicated VRAM amount in GB.
+  * `%vram_shared%` - shared VRAM usage as a percentage of total shared VRAM
+    (system RAM used as extra GPU memory).
+  * `%vram_shared_used%` - used shared VRAM amount in GB.
+  * `%vram_shared_total%` - total shared VRAM pool size in GB.
   * `%cpu_temp%` - CPU temperature in °C (average of all ACPI thermal zones).
   * `%cpu_temp_f%` - CPU temperature in °F (average of all ACPI thermal zones).
   * `%battery%` - battery level percentage.
@@ -100,9 +113,11 @@ patterns can be used:
   * `%media_artist%` - currently playing media artist.
   * `%media_album%` - currently playing media album.
   * `%media_status%` - media playback status icon (⏯, ⏸, ⏹).
-  * `%media_info%` - combined media info (Artist - Title), truncated with
-    ellipsis. It's recommended to use this field on the taskbar, and other
-    fields in the tooltip.
+  * `%media_info%` - combined media info, truncated with ellipsis. Defaults to
+    "Artist - Title" while media is playing, but the format for both the playing
+    and the not playing state can be customized in the media player settings.
+    It's recommended to use this field on the taskbar, and other fields in the
+    tooltip.
 * `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
   using the location and format configured in settings.
 * `%web<n>%` - the web contents as configured in settings, truncated with
@@ -140,6 +155,14 @@ styles, such as the font color and size.
     syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
+- DateLocale: ""
+  $name: Date locale
+  $description: >-
+    The locale used for formatting the date and the week day. Leave empty for
+    the default locale. For the list of locale names, listed as "Language tag",
+    refer to the following page:
+
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/a9eac961-e77d-41a6-90a5-ce1a8b0cdb9c
 - WeekdayFormat: dddd
   $name: Week day format
   $description: The format for the %weekday% pattern.
@@ -188,8 +211,7 @@ styles, such as the font color and size.
   - NetworkMetricsFormat: mbs
     $name: Network metrics format
     $description: >-
-      The format to use for displaying the upload/download transfer rate. Also
-      used for the disk read/write speed.
+      The format to use for displaying the upload/download transfer rate.
     $options:
     - mbs: MB/s
     - mbsNumberOnly: MB/s, number only
@@ -201,7 +223,25 @@ styles, such as the font color and size.
     $name: Network metrics fixed decimal places
     $description: >-
       Always use this amount of decimal places for the upload/download transfer
-      rate (-1 means auto/same width). Also used for the disk read/write speed.
+      rate (-1 means auto/same width).
+  - DiskMetricsFormat: sameAsNetwork
+    $name: Disk metrics format
+    $description: >-
+      The format to use for displaying the disk read/write speed.
+    $options:
+    - sameAsNetwork: Same as network metrics format
+    - mbs: MB/s
+    - mbsNumberOnly: MB/s, number only
+    - mbsDynamic: MB/s or KB/s (dynamic)
+    - mbits: MBit/s
+    - mbitsNumberOnly: MBit/s, number only
+    - mbitsDynamic: MBit/s or KBit/s (dynamic)
+  - DiskMetricsFixedDecimals: -1
+    $name: Disk metrics fixed decimal places
+    $description: >-
+      Always use this amount of decimal places for the disk read/write speed
+      (-1 means auto/same width). Ignored when the disk metrics format is set to
+      be the same as network metrics.
   - PercentageFormat: spacePaddingAndSymbol
     $name: Percentage format
     $description: >-
@@ -228,8 +268,9 @@ styles, such as the font color and size.
   - GpuAdapterName: ""
     $name: GPU adapter name
     $description: >-
-      The GPU adapter to use for GPU usage metrics. Leave empty to sum all
-      adapters. Partial match is supported. To list adapters, run:
+      The GPU adapter to use for GPU usage and VRAM metrics. Leave empty to
+      auto-detect (uses the adapter with the most dedicated VRAM). Partial match
+      is supported. To list adapters, run:
 
       wmic path win32_videocontroller get Name
   $name: System performance metrics
@@ -244,10 +285,16 @@ styles, such as the font color and size.
     $description: >-
       Maximum characters for %media_info%. Longer strings are truncated with
       ellipsis. Set to 0 for no limit.
-  - NoMediaText: No media
-    $name: No media text
+  - MediaInfoFormat: "%media_artist% - %media_title%"
+    $name: Format when media is playing
     $description: >-
-      Text that will be shown for %media_info% when no media is playing.
+      The format of %media_info% while media is playing. Can contain any tags,
+      such as %media_artist%, %media_title%, %media_album%, and %media_status%.
+  - NoMediaText: No media
+    $name: Format when media is not playing
+    $description: >-
+      The text shown for %media_info% when no media is playing. Can contain any
+      tags, such as %date% or %time%.
   - RemoveBrackets: false
     $name: Remove brackets from info
     $description: >-
@@ -259,7 +306,7 @@ styles, such as the font color and size.
   $description: >-
     Get weather information for a specific location. Keep empty to use the
     current location. For details, refer to the documentation of wttr.in.
-- WebContentWeatherFormat: "%c \uD83C\uDF21\uFE0F%t \uD83C\uDF2C\uFE0F%w"
+- WebContentWeatherFormat: "%c \U0001F321\uFE0F%t \U0001F32C\uFE0F%w"
   $name: Weather format
   $description: >-
     The weather information format. For details, refer to the documentation of
@@ -335,6 +382,7 @@ styles, such as the font color and size.
     - Right: Right
     - Center: Center
     - Left: Left
+    - Justify: Justified
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size.
@@ -385,6 +433,11 @@ styles, such as the font color and size.
   - CharacterSpacing: 0
     $name: Character spacing
     $description: Can be a positive or a negative number.
+  - LineHeight: 0
+    $name: Line height
+    $description: >-
+      The line height in pixels, useful when the line contains multiple lines of
+      text (using the %newline% pattern). Set to zero for the default value.
   $name: Top line style (Windows 11 version 22H2 and newer)
 - DateStyle:
   - Hidden: false
@@ -400,6 +453,7 @@ styles, such as the font color and size.
     - Right: Right
     - Center: Center
     - Left: Left
+    - Justify: Justified
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size.
@@ -450,6 +504,11 @@ styles, such as the font color and size.
   - CharacterSpacing: 0
     $name: Character spacing
     $description: Can be a positive or a negative number.
+  - LineHeight: 0
+    $name: Line height
+    $description: >-
+      The line height in pixels, useful when the line contains multiple lines of
+      text (using the %newline% pattern). Set to zero for the default value.
   $name: Bottom line style (Windows 11 version 22H2 and newer)
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
@@ -531,6 +590,8 @@ enum class PercentageFormat {
 struct DataCollectionSettings {
     NetworkMetricsFormat networkMetricsFormat;
     int networkMetricsFixedDecimals;
+    NetworkMetricsFormat diskMetricsFormat;
+    int diskMetricsFixedDecimals;
     PercentageFormat percentageFormat;
     int updateInterval;
     StringSetting networkAdapterName;
@@ -540,6 +601,7 @@ struct DataCollectionSettings {
 struct MediaPlayerSettings {
     std::vector<StringSetting> ignoredPlayers;
     int maxLength;
+    StringSetting mediaInfoFormat;
     StringSetting noMediaText;
     bool removeBrackets;
 };
@@ -578,12 +640,14 @@ struct TextStyleSettings {
     StringSetting fontStyle;
     StringSetting fontStretch;
     int characterSpacing;
+    int lineHeight;
 };
 
 struct {
     bool showSeconds;
     StringSetting timeFormat;
     StringSetting dateFormat;
+    StringSetting dateLocale;
     StringSetting weekdayFormat;
     std::vector<std::wstring> weekdayFormatCustom;
     StringSetting topLine;
@@ -666,7 +730,18 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_diskWriteSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_diskTotalSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_ramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramTotalFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedTotalFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_gpuFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramTotalFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedTotalFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_batteryFormatted;
@@ -688,6 +763,12 @@ std::atomic<bool> g_mediaDataDirty{true};
 winrt::event_token g_mediaSessionsChangedToken;
 winrt::event_token g_mediaPropertiesChangedToken;
 winrt::event_token g_mediaPlaybackChangedToken;
+
+bool g_mediaActive = false;
+
+// Set while %media_info% expands its format string, to keep a stray
+// %media_info% tag inside that format from recursing into itself.
+bool g_inMediaInfoFormat = false;
 
 std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
@@ -981,10 +1062,26 @@ std::wstring ExtractTextFromXml(std::wstring xml) {
 }
 
 bool IsStrInDateTimePatternSettings(PCWSTR str) {
-    return wcsstr(g_settings.topLine, str) ||
-           wcsstr(g_settings.bottomLine, str) ||
-           wcsstr(g_settings.middleLine, str) ||
-           wcsstr(g_settings.tooltipLine, str);
+    if (wcsstr(g_settings.topLine, str) || wcsstr(g_settings.bottomLine, str) ||
+        wcsstr(g_settings.middleLine, str) ||
+        wcsstr(g_settings.tooltipLine, str)) {
+        return true;
+    }
+
+    // The media info format strings are expanded as part of %media_info%, so
+    // tags they contain (e.g. %cpu%) need their data collected too. Only search
+    // them when %media_info% itself appears in a configured line.
+    if (wcsstr(g_settings.topLine, L"%media_info%") ||
+        wcsstr(g_settings.bottomLine, L"%media_info%") ||
+        wcsstr(g_settings.middleLine, L"%media_info%") ||
+        wcsstr(g_settings.tooltipLine, L"%media_info%")) {
+        if (wcsstr(g_settings.mediaPlayer.mediaInfoFormat.get(), str) ||
+            wcsstr(g_settings.mediaPlayer.noMediaText.get(), str)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::wstring EscapeUrlComponent(PCWSTR input,
@@ -1636,22 +1733,30 @@ PCWSTR GetTimeFormattedTz(size_t index) {
     return timeFormattedTz.buffer;
 }
 
+// GetDateFormatEx treats an empty locale name as the invariant locale, so pass
+// nullptr (the user's default locale) when no locale is configured.
+PCWSTR GetDateLocaleName() {
+    return *g_settings.dateLocale ? g_settings.dateLocale.get() : nullptr;
+}
+
 PCWSTR GetDateFormattedWithExtra(std::vector<std::wstring>** extra) {
     if (g_dateFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
+
+        PCWSTR dateLocale = GetDateLocaleName();
 
         auto dateFormatParts =
             SplitTimeFormatString(g_settings.dateFormat.get());
 
         GetDateFormatEx_Original(
-            nullptr, DATE_AUTOLAYOUT, time,
+            dateLocale, DATE_AUTOLAYOUT, time,
             !dateFormatParts[0].empty() ? dateFormatParts[0].c_str() : nullptr,
             g_dateFormatted.buffer, ARRAYSIZE(g_dateFormatted.buffer), nullptr);
 
         g_dateFormattedExtra.resize(dateFormatParts.size() - 1);
         for (size_t i = 1; i < dateFormatParts.size(); i++) {
             WCHAR formatted[FORMATTED_BUFFER_SIZE];
-            GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+            GetDateFormatEx_Original(dateLocale, DATE_AUTOLAYOUT, time,
                                      !dateFormatParts[i].empty()
                                          ? dateFormatParts[i].c_str()
                                          : nullptr,
@@ -1703,7 +1808,7 @@ PCWSTR GetDateFormattedTz(size_t index) {
                 SplitTimeFormatString(g_settings.dateFormat.get());
 
             GetDateFormatEx_Original(
-                nullptr, DATE_AUTOLAYOUT, time,
+                GetDateLocaleName(), DATE_AUTOLAYOUT, time,
                 !dateFormatParts[0].empty() ? dateFormatParts[0].c_str()
                                             : nullptr,
                 dateFormattedTz.buffer, ARRAYSIZE(dateFormattedTz.buffer),
@@ -1720,7 +1825,7 @@ PCWSTR GetDateFormattedTz(size_t index) {
 
 void FormatWeekday(const SYSTEMTIME* time, PWSTR buffer, size_t bufferSize) {
     if (g_settings.weekdayFormatCustom.empty()) {
-        GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+        GetDateFormatEx_Original(GetDateLocaleName(), DATE_AUTOLAYOUT, time,
                                  *g_settings.weekdayFormat
                                      ? g_settings.weekdayFormat.get()
                                      : L"dddd",
@@ -1850,6 +1955,8 @@ PCWSTR GetTimezoneFormatted() {
     return g_timezoneFormatted.buffer;
 }
 
+constexpr double kGBInBytes = 1024.0 * 1024.0 * 1024.0;
+
 enum class MetricType {
     kUploadSpeed,
     kDownloadSpeed,
@@ -1857,10 +1964,112 @@ enum class MetricType {
     kDiskWriteSpeed,
     kCpu,
     kGpuUsage,
+    kVramUsed,
+    kVramSharedUsed,
     kCpuTemp,
 
     kCount,
 };
+
+// GPU adapter info from DXGI. This is static hardware capacity, independent of
+// the PDH sampling session: it is queried lazily and cached, keyed by the
+// configured adapter name so that changing the selection re-queries.
+struct DxgiAdapterInfo {
+    std::wstring description;
+    std::wstring luid;
+    SIZE_T dedicated_video_memory;
+    SIZE_T shared_system_memory;
+};
+
+std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(PCWSTR gpu_name, bool quiet) {
+    static std::optional<std::wstring> s_gpuName;
+    static std::optional<DxgiAdapterInfo> s_info;
+
+    std::wstring gpu_name_key = gpu_name ? gpu_name : L"";
+    if (s_gpuName == gpu_name_key) {
+        return s_info;
+    }
+
+    s_gpuName = gpu_name_key;
+    s_info.reset();
+
+    winrt::com_ptr<IDXGIFactory> factory;
+    if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.put())))) {
+        return std::nullopt;
+    }
+
+    DXGI_ADAPTER_DESC best_desc{};
+    bool found = false;
+
+    for (UINT i = 0;; i++) {
+        winrt::com_ptr<IDXGIAdapter> adapter;
+        if (factory->EnumAdapters(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+
+        DXGI_ADAPTER_DESC desc{};
+        if (FAILED(adapter->GetDesc(&desc))) {
+            continue;
+        }
+
+        if (!quiet) {
+            Wh_Log(L"DXGI adapter %u: %s (LUID: 0x%08X_0x%08X, VRAM: %zu)", i,
+                   desc.Description, desc.AdapterLuid.HighPart,
+                   desc.AdapterLuid.LowPart, desc.DedicatedVideoMemory);
+        }
+
+        // If a name is specified, check for a match.
+        if (gpu_name && *gpu_name) {
+            if (wcsstr(desc.Description, gpu_name)) {
+                best_desc = desc;
+                found = true;
+                break;
+            }
+        } else {
+            // Auto-select the one with most dedicated VRAM.
+            if (!found ||
+                desc.DedicatedVideoMemory > best_desc.DedicatedVideoMemory) {
+                best_desc = desc;
+                found = true;
+            }
+        }
+    }
+
+    if (!found) {
+        return std::nullopt;
+    }
+
+    WCHAR luid_str[32];
+    swprintf_s(luid_str, L"0x%08X_0x%08X", best_desc.AdapterLuid.HighPart,
+               best_desc.AdapterLuid.LowPart);
+
+    s_info = DxgiAdapterInfo{
+        best_desc.Description,
+        luid_str,
+        best_desc.DedicatedVideoMemory,
+        best_desc.SharedSystemMemory,
+    };
+
+    return s_info;
+}
+
+std::optional<double> GetDedicatedVramTotalGb() {
+    auto info =
+        GetDxgiAdapterInfo(g_settings.dataCollection.gpuAdapterName, true);
+    if (info && info->dedicated_video_memory > 0) {
+        return (double)info->dedicated_video_memory / kGBInBytes;
+    }
+    return std::nullopt;
+}
+
+std::optional<double> GetSharedVramTotalGb() {
+    auto info =
+        GetDxgiAdapterInfo(g_settings.dataCollection.gpuAdapterName, true);
+    if (info && info->shared_system_memory > 0) {
+        return (double)info->shared_system_memory / kGBInBytes;
+    }
+    return std::nullopt;
+}
 
 class QueryDataCollectionSession {
    public:
@@ -1899,7 +2108,6 @@ class QueryDataCollectionSession {
         const std::vector<std::wstring>& paths,
         PCWSTR adapter_name,
         bool quiet);
-    static std::wstring GetGpuLuidByName(PCWSTR gpu_name, bool quiet);
     static std::vector<std::wstring> FilterGpuPathsByAdapterName(
         const std::vector<std::wstring>& paths,
         PCWSTR gpu_name,
@@ -1912,10 +2120,14 @@ class QueryDataCollectionSession {
         auto paths = ExpandEnglishWildcard(counter_path, quiet);
 
         // Filter paths by adapter name if specified.
-        if (adapter_name && *adapter_name && !paths.empty()) {
-            if (type == MetricType::kGpuUsage) {
+        if (!paths.empty()) {
+            if (type == MetricType::kGpuUsage ||
+                type == MetricType::kVramUsed ||
+                type == MetricType::kVramSharedUsed) {
+                // For GPU metrics, we always filter (to auto-select the best
+                // adapter if name is empty).
                 paths = FilterGpuPathsByAdapterName(paths, adapter_name, quiet);
-            } else {
+            } else if (adapter_name && *adapter_name) {
                 paths =
                     FilterNetworkPathsByAdapterName(paths, adapter_name, quiet);
             }
@@ -1967,6 +2179,16 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
             break;
         case MetricType::kGpuUsage:
             counter_path = L"\\GPU Engine(*)\\Utilization Percentage";
+            is_wildcard = true;
+            adapter_name = g_settings.dataCollection.gpuAdapterName;
+            break;
+        case MetricType::kVramUsed:
+            counter_path = L"\\GPU Adapter Memory(*)\\Dedicated Usage";
+            is_wildcard = true;
+            adapter_name = g_settings.dataCollection.gpuAdapterName;
+            break;
+        case MetricType::kVramSharedUsed:
+            counter_path = L"\\GPU Adapter Memory(*)\\Shared Usage";
             is_wildcard = true;
             adapter_name = g_settings.dataCollection.gpuAdapterName;
             break;
@@ -2268,46 +2490,6 @@ QueryDataCollectionSession::FilterNetworkPathsByAdapterName(
     return filtered;
 }
 
-// Get the LUID for a GPU adapter by name using DXGI.
-std::wstring QueryDataCollectionSession::GetGpuLuidByName(PCWSTR gpu_name,
-                                                          bool quiet) {
-    winrt::com_ptr<IDXGIFactory> factory;
-    if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.put())))) {
-        return {};
-    }
-
-    for (UINT i = 0;; i++) {
-        winrt::com_ptr<IDXGIAdapter> adapter;
-        if (factory->EnumAdapters(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) {
-            break;
-        }
-
-        DXGI_ADAPTER_DESC desc{};
-        if (FAILED(adapter->GetDesc(&desc))) {
-            continue;
-        }
-
-        if (!quiet) {
-            Wh_Log(L"DXGI adapter %u: %s (LUID: 0x%08X_0x%08X)", i,
-                   desc.Description, desc.AdapterLuid.HighPart,
-                   desc.AdapterLuid.LowPart);
-        }
-
-        if (wcsstr(desc.Description, gpu_name)) {
-            WCHAR luid_str[32];
-            swprintf_s(luid_str, L"0x%08X_0x%08X", desc.AdapterLuid.HighPart,
-                       desc.AdapterLuid.LowPart);
-            if (!quiet) {
-                Wh_Log(L"Matched GPU: %s -> LUID %s", desc.Description,
-                       luid_str);
-            }
-            return luid_str;
-        }
-    }
-
-    return {};
-}
-
 // Filter GPU paths by adapter name (uses DXGI to map name to LUID).
 std::vector<std::wstring>
 QueryDataCollectionSession::FilterGpuPathsByAdapterName(
@@ -2318,13 +2500,17 @@ QueryDataCollectionSession::FilterGpuPathsByAdapterName(
         Wh_Log(L"Filtering GPU adapters by name: %s", gpu_name);
     }
 
-    // Get the LUID for the GPU name.
-    std::wstring target_luid = GetGpuLuidByName(gpu_name, quiet);
-    if (target_luid.empty()) {
+    auto info = GetDxgiAdapterInfo(gpu_name, quiet);
+    if (!info) {
         if (!quiet) {
             Wh_Log(L"GPU not found by name");
         }
         return {};
+    }
+
+    if (!quiet) {
+        Wh_Log(L"Selected GPU: %s -> LUID %s", info->description.c_str(),
+               info->luid.c_str());
     }
 
     std::vector<std::wstring> filtered;
@@ -2339,14 +2525,14 @@ QueryDataCollectionSession::FilterGpuPathsByAdapterName(
             continue;
         }
 
-        if (_wcsicmp(std::wstring(luid).c_str(), target_luid.c_str()) == 0) {
+        if (_wcsicmp(std::wstring(luid).c_str(), info->luid.c_str()) == 0) {
             filtered.push_back(path);
         }
     }
 
     if (filtered.empty()) {
         if (!quiet) {
-            Wh_Log(L"No GPU paths matched LUID %s", target_luid.c_str());
+            Wh_Log(L"No GPU paths matched LUID %s", info->luid.c_str());
         }
         return {};
     }
@@ -2384,7 +2570,19 @@ bool IsMediaPlayerIgnored(const winrt::hstring& appId) {
 void RemoveBracketedContent(std::wstring& str, wchar_t open, wchar_t close) {
     size_t start = 0;
     while ((start = str.find(open, start)) != std::wstring::npos) {
-        size_t end = str.find(close, start);
+        // Find the matching close bracket, tracking depth so that nested
+        // brackets of the same type, e.g. "(a (b))", are removed as a whole
+        // instead of leaving a dangling close bracket behind.
+        size_t end = std::wstring::npos;
+        int depth = 0;
+        for (size_t i = start; i < str.size(); i++) {
+            if (str[i] == open) {
+                depth++;
+            } else if (str[i] == close && --depth == 0) {
+                end = i;
+                break;
+            }
+        }
         if (end == std::wstring::npos) {
             break;
         }
@@ -2437,13 +2635,11 @@ std::wstring RemoveBracketsFromString(std::wstring_view input) {
 }
 
 void ClearMediaFormattedStrings() {
+    g_mediaActive = false;
     wcscpy_s(g_mediaTitleFormatted.buffer, L"");
     wcscpy_s(g_mediaArtistFormatted.buffer, L"");
     wcscpy_s(g_mediaAlbumFormatted.buffer, L"");
     wcscpy_s(g_mediaStatusFormatted.buffer, L"");
-    StringCopyTruncatedWithEllipsis(g_mediaInfoFormatted.buffer,
-                                    ARRAYSIZE(g_mediaInfoFormatted.buffer),
-                                    g_settings.mediaPlayer.noMediaText);
 }
 
 winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession
@@ -2539,6 +2735,8 @@ void RefreshMediaData() {
             return;
         }
 
+        g_mediaActive = true;
+
         // Get playback status as emoji
         auto status = playbackInfo.PlaybackStatus();
         using Status = winrt::Windows::Media::Control::
@@ -2559,8 +2757,9 @@ void RefreshMediaData() {
                 break;
         }
 
-        auto title = mediaProperties.Title();
-        auto artist = mediaProperties.Artist();
+        std::wstring title = RemoveBracketsFromString(mediaProperties.Title());
+        std::wstring artist =
+            RemoveBracketsFromString(mediaProperties.Artist());
         auto album = mediaProperties.AlbumTitle();
 
         StringCopyTruncatedWithEllipsis(g_mediaTitleFormatted.buffer,
@@ -2572,26 +2771,6 @@ void RefreshMediaData() {
         StringCopyTruncatedWithEllipsis(g_mediaAlbumFormatted.buffer,
                                         ARRAYSIZE(g_mediaAlbumFormatted.buffer),
                                         album.c_str());
-
-        // Create combined info with bracket removal
-        std::wstring processedArtist = RemoveBracketsFromString(artist);
-        std::wstring processedTitle = RemoveBracketsFromString(title);
-
-        std::wstring combinedInfo;
-        if (!processedArtist.empty() && !processedTitle.empty()) {
-            combinedInfo = processedArtist + L" - " + processedTitle;
-        } else if (!processedTitle.empty()) {
-            combinedInfo = processedTitle;
-        }
-
-        int maxLen = ARRAYSIZE(g_mediaInfoFormatted.buffer) - 1;
-        if (g_settings.mediaPlayer.maxLength > 0 &&
-            g_settings.mediaPlayer.maxLength < maxLen) {
-            maxLen = g_settings.mediaPlayer.maxLength;
-        }
-
-        StringCopyTruncatedWithEllipsis(g_mediaInfoFormatted.buffer, maxLen + 1,
-                                        combinedInfo.c_str());
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"RefreshMediaData error: %08X", hr);
@@ -2629,6 +2808,16 @@ void DataCollectionSessionInit() {
         IsStrInDateTimePatternSettings(L"%cpu%");
     metrics[static_cast<int>(MetricType::kGpuUsage)] =
         IsStrInDateTimePatternSettings(L"%gpu%");
+    // %vram% and %vram_used% both read the dedicated VRAM usage counter; the
+    // percentage is derived from it and the total reported by DXGI. The totals
+    // (%vram_total% / %vram_shared_total%) come straight from DXGI and need no
+    // session, so they don't gate session creation here.
+    metrics[static_cast<int>(MetricType::kVramUsed)] =
+        IsStrInDateTimePatternSettings(L"%vram%") ||
+        IsStrInDateTimePatternSettings(L"%vram_used%");
+    metrics[static_cast<int>(MetricType::kVramSharedUsed)] =
+        IsStrInDateTimePatternSettings(L"%vram_shared%") ||
+        IsStrInDateTimePatternSettings(L"%vram_shared_used%");
     metrics[static_cast<int>(MetricType::kCpuTemp)] =
         IsStrInDateTimePatternSettings(L"%cpu_temp%") ||
         IsStrInDateTimePatternSettings(L"%cpu_temp_f%");
@@ -2783,6 +2972,23 @@ void DataCollectionSampleIfNeeded() {
     }
 }
 
+// System memory status, sampled at most once per update interval. Empty if the
+// query failed.
+std::optional<MEMORYSTATUSEX> GetRamStatus() {
+    static MEMORYSTATUSEX status{};
+    static bool valid = false;
+    static DWORD lastFormatIndex = 0xFFFFFFFF;
+
+    DWORD formatIndex = GetDataCollectionFormatIndex();
+    if (lastFormatIndex != formatIndex) {
+        status.dwLength = sizeof(status);
+        valid = GlobalMemoryStatusEx(&status);
+        lastFormatIndex = formatIndex;
+    }
+
+    return valid ? std::optional<MEMORYSTATUSEX>(status) : std::nullopt;
+}
+
 std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
     int valStrLen = _scwprintf(L"%.17f", val);
     if (valStrLen < 0) {
@@ -2826,7 +3032,11 @@ std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
     return out;
 }
 
-void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+void FormatTransferSpeed(double val,
+                         NetworkMetricsFormat format,
+                         int fixedDecimals,
+                         PWSTR buffer,
+                         size_t bufferSize) {
     constexpr int kKBInBytes = 1024;
     constexpr int kMBInBytes = 1024 * kKBInBytes;
     constexpr int kKbitInBytes = 1000 / 8;
@@ -2835,7 +3045,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
     double valUnit;
     PCWSTR unit = L"";
 
-    switch (g_settings.dataCollection.networkMetricsFormat) {
+    switch (format) {
         case NetworkMetricsFormat::mbs:
             valUnit = val / kMBInBytes;
             unit = L" MB/s";
@@ -2878,7 +3088,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
     int digitsAfterDecimal = 0;
     PCWSTR prefix = L"";
 
-    if (g_settings.dataCollection.networkMetricsFixedDecimals == -1) {
+    if (fixedDecimals == -1) {
         // Keep identical width for <1000 values.
         if (valUnit < 10) {
             digitsAfterDecimal = 2;
@@ -2889,8 +3099,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
             prefix = L"\u2008";
         }
     } else {
-        digitsAfterDecimal =
-            g_settings.dataCollection.networkMetricsFixedDecimals;
+        digitsAfterDecimal = fixedDecimals;
     }
 
     std::wstring valUnitFormatted =
@@ -2898,6 +3107,18 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
 
     swprintf_s(buffer, bufferSize, L"%s%s%s", prefix, valUnitFormatted.c_str(),
                unit);
+}
+
+void FormatNetworkTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+    FormatTransferSpeed(val, g_settings.dataCollection.networkMetricsFormat,
+                        g_settings.dataCollection.networkMetricsFixedDecimals,
+                        buffer, bufferSize);
+}
+
+void FormatDiskTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+    FormatTransferSpeed(val, g_settings.dataCollection.diskMetricsFormat,
+                        g_settings.dataCollection.diskMetricsFixedDecimals,
+                        buffer, bufferSize);
 }
 
 void FormatPercentValue(int val, PWSTR buffer, size_t bufferSize, int maxVal) {
@@ -2964,7 +3185,7 @@ PCWSTR GetUploadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatNetworkTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -2981,7 +3202,7 @@ PCWSTR GetDownloadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatNetworkTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -3001,7 +3222,7 @@ PCWSTR GetTotalSpeedFormatted() {
                 return false;
             }
             double totalSpeed = *uploadSpeed + *downloadSpeed;
-            FormatTransferSpeed(totalSpeed, buffer, bufferSize);
+            FormatNetworkTransferSpeed(totalSpeed, buffer, bufferSize);
             return true;
         });
 }
@@ -3018,7 +3239,7 @@ PCWSTR GetDiskReadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatDiskTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -3035,7 +3256,7 @@ PCWSTR GetDiskWriteSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatDiskTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -3055,7 +3276,7 @@ PCWSTR GetDiskTotalSpeedFormatted() {
                 return false;
             }
             double totalSpeed = *readSpeed + *writeSpeed;
-            FormatTransferSpeed(totalSpeed, buffer, bufferSize);
+            FormatDiskTransferSpeed(totalSpeed, buffer, bufferSize);
             return true;
         });
 }
@@ -3080,17 +3301,87 @@ PCWSTR GetCpuFormatted() {
 }
 
 PCWSTR GetRamFormatted() {
+    return GetMetricFormatted(g_ramFormatted, [](PWSTR buffer,
+                                                 size_t bufferSize) {
+        auto status = GetRamStatus();
+        if (!status) {
+            return false;
+        }
+        // Cap to 99 to keep identical width in all cases.
+        int maxVal = 99;
+        FormatPercentValue(status->dwMemoryLoad, buffer, bufferSize, maxVal);
+        return true;
+    });
+}
+
+PCWSTR GetRamUsedFormatted() {
+    return GetMetricFormatted(g_ramUsedFormatted, [](PWSTR buffer,
+                                                     size_t bufferSize) {
+        auto status = GetRamStatus();
+        if (!status) {
+            return false;
+        }
+        double usedGb =
+            (double)(status->ullTotalPhys - status->ullAvailPhys) / kGBInBytes;
+        swprintf_s(buffer, bufferSize, L"%.1f", usedGb);
+        return true;
+    });
+}
+
+PCWSTR GetRamTotalFormatted() {
     return GetMetricFormatted(
-        g_ramFormatted, [](PWSTR buffer, size_t bufferSize) {
-            MEMORYSTATUSEX status{
-                .dwLength = sizeof(status),
-            };
-            if (!GlobalMemoryStatusEx(&status)) {
+        g_ramTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
                 return false;
             }
+            double totalGb = (double)status->ullTotalPhys / kGBInBytes;
+            swprintf_s(buffer, bufferSize, L"%.1f", totalGb);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status || status->ullTotalPageFile == 0) {
+                return false;
+            }
+            int committed = static_cast<int>(
+                ((status->ullTotalPageFile - status->ullAvailPageFile) * 100) /
+                status->ullTotalPageFile);
             // Cap to 99 to keep identical width in all cases.
             int maxVal = 99;
-            FormatPercentValue(status.dwMemoryLoad, buffer, bufferSize, maxVal);
+            FormatPercentValue(committed, buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedUsedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            double usedGb =
+                (double)(status->ullTotalPageFile - status->ullAvailPageFile) /
+                kGBInBytes;
+            swprintf_s(buffer, bufferSize, L"%.1f", usedGb);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedTotalFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            double totalGb = (double)status->ullTotalPageFile / kGBInBytes;
+            swprintf_s(buffer, bufferSize, L"%.1f", totalGb);
             return true;
         });
 }
@@ -3112,6 +3403,108 @@ PCWSTR GetGpuFormatted() {
         FormatPercentValue(static_cast<int>(*val), buffer, bufferSize, maxVal);
         return true;
     });
+}
+
+PCWSTR GetVramFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> usedBytes =
+                g_dataCollectionSession->QueryData(MetricType::kVramUsed);
+            std::optional<double> totalGb = GetDedicatedVramTotalGb();
+            if (!usedBytes || !totalGb || *totalGb <= 0) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            // Cap to 99 to keep identical width in all cases.
+            int maxVal = 99;
+            FormatPercentValue(static_cast<int>(usedGb / *totalGb * 100.0),
+                               buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetVramUsedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> val =
+                g_dataCollectionSession->QueryData(MetricType::kVramUsed);
+            if (!val) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%.1f", *val / kGBInBytes);
+            return true;
+        });
+}
+
+PCWSTR GetVramTotalFormatted() {
+    return GetMetricFormatted(
+        g_vramTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            std::optional<double> val = GetDedicatedVramTotalGb();
+            if (!val) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%.1f", *val);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> usedBytes =
+                g_dataCollectionSession->QueryData(MetricType::kVramSharedUsed);
+            std::optional<double> totalGb = GetSharedVramTotalGb();
+            if (!usedBytes || !totalGb || *totalGb <= 0) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            // Cap to 99 to keep identical width in all cases.
+            int maxVal = 99;
+            FormatPercentValue(static_cast<int>(usedGb / *totalGb * 100.0),
+                               buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedUsedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> val =
+                g_dataCollectionSession->QueryData(MetricType::kVramSharedUsed);
+            if (!val) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%.1f", *val / kGBInBytes);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedTotalFormatted() {
+    return GetMetricFormatted(
+        g_vramSharedTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            std::optional<double> val = GetSharedVramTotalGb();
+            if (!val) {
+                return false;
+            }
+            swprintf_s(buffer, bufferSize, L"%.1f", *val);
+            return true;
+        });
 }
 
 PCWSTR GetCpuTempFormatted() {
@@ -3250,8 +3643,38 @@ PCWSTR GetMediaStatusFormatted() {
     return g_mediaStatusFormatted.buffer;
 }
 
+int FormatLineNoLock(PWSTR buffer, size_t bufferSize, std::wstring_view format);
+
 PCWSTR GetMediaInfoFormatted() {
     RefreshMediaDataIfDirty();
+
+    // A %media_info% tag nested within a media info format expands to nothing.
+    if (g_inMediaInfoFormat) {
+        return L"";
+    }
+
+    if (g_mediaInfoFormatted.formatIndex != g_formatIndex) {
+        // The format strings may contain any tags, including media tags such as
+        // %media_artist% and %media_title%.
+        PCWSTR format = g_mediaActive
+                            ? g_settings.mediaPlayer.mediaInfoFormat.get()
+                            : g_settings.mediaPlayer.noMediaText.get();
+
+        int maxLen = ARRAYSIZE(g_mediaInfoFormatted.buffer) - 1;
+        if (g_settings.mediaPlayer.maxLength > 0 &&
+            g_settings.mediaPlayer.maxLength < maxLen) {
+            maxLen = g_settings.mediaPlayer.maxLength;
+        }
+
+        // Format directly into the buffer, capped at maxLen characters.
+        // FormatLineNoLock truncates with a trailing ellipsis.
+        g_inMediaInfoFormat = true;
+        FormatLineNoLock(g_mediaInfoFormatted.buffer, maxLen + 1, format);
+        g_inMediaInfoFormat = false;
+
+        g_mediaInfoFormatted.formatIndex = g_formatIndex;
+    }
+
     return g_mediaInfoFormatted.buffer;
 }
 
@@ -3305,7 +3728,18 @@ size_t ResolveFormatToken(
         {L"%disk_total%"sv, GetDiskTotalSpeedFormatted},
         {L"%cpu%"sv, GetCpuFormatted},
         {L"%ram%"sv, GetRamFormatted},
+        {L"%ram_used%"sv, GetRamUsedFormatted},
+        {L"%ram_total%"sv, GetRamTotalFormatted},
+        {L"%ram_committed%"sv, GetRamCommittedFormatted},
+        {L"%ram_committed_used%"sv, GetRamCommittedUsedFormatted},
+        {L"%ram_committed_total%"sv, GetRamCommittedTotalFormatted},
         {L"%gpu%"sv, GetGpuFormatted},
+        {L"%vram%"sv, GetVramFormatted},
+        {L"%vram_used%"sv, GetVramUsedFormatted},
+        {L"%vram_total%"sv, GetVramTotalFormatted},
+        {L"%vram_shared%"sv, GetVramSharedFormatted},
+        {L"%vram_shared_used%"sv, GetVramSharedUsedFormatted},
+        {L"%vram_shared_total%"sv, GetVramSharedTotalFormatted},
         {L"%cpu_temp%"sv, GetCpuTempFormatted},
         {L"%cpu_temp_f%"sv, GetCpuTempFFormatted},
         {L"%battery%"sv, GetBatteryFormatted},
@@ -3455,14 +3889,12 @@ void EnsureFormattingInitialized() {
     MediaSessionInit();
 }
 
-int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
+int FormatLineNoLock(PWSTR buffer,
+                     size_t bufferSize,
+                     std::wstring_view format) {
     if (bufferSize == 0) {
         return 0;
     }
-
-    std::lock_guard<std::mutex> guard(g_formatLineMutex);
-
-    EnsureFormattingInitialized();
 
     std::wstring_view formatSuffix = format;
 
@@ -3502,6 +3934,18 @@ int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
     return buffer - bufferStart;
 }
 
+int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
+    if (bufferSize == 0) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
+    EnsureFormattingInitialized();
+
+    return FormatLineNoLock(buffer, bufferSize, format);
+}
+
 #pragma region Win11Hooks
 
 DWORD g_refreshIconThreadId;
@@ -3531,7 +3975,7 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
 ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
     ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Original;
 
-using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
+using DateTimeIconContent_OnApplyTemplate_t = HRESULT(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
     DateTimeIconContent_OnApplyTemplate_Original;
 
@@ -3563,6 +4007,16 @@ void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
     LPVOID pThis,
     LPVOID param1,
     ClockSystemTrayIconDataModel_RefreshIcon_t original) {
+    // FormatLine creates the data collection session and the web content thread
+    // on demand, but it only runs while calling the original function below,
+    // after g_refreshIconNeedToAdjustTimer is set. Create them beforehand so
+    // the flag accounts for them, otherwise the first refresh keeps the default
+    // one-minute timer instead of shortening it to one second.
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        EnsureFormattingInitialized();
+    }
+
     g_refreshIconThreadId = GetCurrentThreadId();
     bool webContentPending = g_webContentUpdateThread && !g_webContentLoaded;
     g_refreshIconNeedToAdjustTimer =
@@ -3903,6 +4357,19 @@ void ApplyTextBlockStyles(
         textBlock.as<DependencyObject>().ClearValue(
             Controls::TextBlock::CharacterSpacingProperty());
     }
+
+    if (textStyleSettings && textStyleSettings->lineHeight) {
+        textBlock.LineHeight(textStyleSettings->lineHeight);
+        // Honor the line height exactly, even when it's smaller than the
+        // natural line height. Without this, lines never shrink below the
+        // font's default height.
+        textBlock.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::LineHeightProperty());
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::LineStackingStrategyProperty());
+    }
 }
 
 void ApplyDateTimeIconContentStyles(
@@ -3996,30 +4463,27 @@ void ApplyDateTimeIconContentStyles(
     clockElementStyleData->styleIndex = clockElementStyleIndex;
 }
 
-void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
+HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
     Wh_Log(L">");
 
-    DateTimeIconContent_OnApplyTemplate_Original(pThis);
+    HRESULT ret = DateTimeIconContent_OnApplyTemplate_Original(pThis);
 
-    IUnknown* dateTimeIconContentElementIUnknownPtr = *((IUnknown**)pThis + 1);
-    if (!dateTimeIconContentElementIUnknownPtr) {
-        return;
-    }
-
-    FrameworkElement dateTimeIconContentElement = nullptr;
-    dateTimeIconContentElementIUnknownPtr->QueryInterface(
-        winrt::guid_of<FrameworkElement>(),
-        winrt::put_abi(dateTimeIconContentElement));
-    if (!dateTimeIconContentElement) {
-        return;
+    FrameworkElement dateTimeIconContent = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(dateTimeIconContent));
+    if (!dateTimeIconContent) {
+        return ret;
     }
 
     try {
-        ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+        ApplyDateTimeIconContentStyles(dateTimeIconContent);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"Error %08X", hr);
     }
+
+    return ret;
 }
 
 HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis, LPVOID pArgs) {
@@ -4774,7 +5238,7 @@ bool HookSystemTraySymbols(HMODULE module) {
                 true,  // Added with feature flag 38762814
             },
             {
-                {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
                 &DateTimeIconContent_OnApplyTemplate_Original,
                 DateTimeIconContent_OnApplyTemplate_Hook,
                 true,
@@ -4827,17 +5291,14 @@ bool HookSystemTraySymbols(HMODULE module) {
     return true;
 }
 
-// Returns the module that hosts winrt::SystemTray::* in the current build.
-// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
-// Taskbar.View.dll and ExplorerExtensions.dll are kept as fallbacks so this
-// still works on older builds.
 HMODULE GetSystemTrayModuleHandle() {
     HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
         module = GetModuleHandle(L"Taskbar.View.dll");
         if (module) {
-            // First known module version without SystemTray is Taskbar.View.dll
-            // 2604.8002.200.6000.
+            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
+            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
+            // hook Taskbar.View.dll at this version and above.
             VS_FIXEDFILEINFO* fixedFileInfo =
                 GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor =
@@ -4881,10 +5342,27 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
+NetworkMetricsFormat ParseNetworkMetricsFormat(PCWSTR value) {
+    if (wcscmp(value, L"mbsNumberOnly") == 0) {
+        return NetworkMetricsFormat::mbsNumberOnly;
+    } else if (wcscmp(value, L"mbsDynamic") == 0) {
+        return NetworkMetricsFormat::mbsDynamic;
+    } else if (wcscmp(value, L"mbits") == 0) {
+        return NetworkMetricsFormat::mbits;
+    } else if (wcscmp(value, L"mbitsNumberOnly") == 0) {
+        return NetworkMetricsFormat::mbitsNumberOnly;
+    } else if (wcscmp(value, L"mbitsDynamic") == 0) {
+        return NetworkMetricsFormat::mbitsDynamic;
+    }
+
+    return NetworkMetricsFormat::mbs;
+}
+
 void LoadSettings() {
     g_settings.showSeconds = Wh_GetIntSetting(L"ShowSeconds");
     g_settings.timeFormat = StringSetting::make(L"TimeFormat");
     g_settings.dateFormat = StringSetting::make(L"DateFormat");
+    g_settings.dateLocale = StringSetting::make(L"DateLocale");
     g_settings.weekdayFormat = StringSetting::make(L"WeekdayFormat");
 
     g_settings.weekdayFormatCustom.clear();
@@ -4915,28 +5393,25 @@ void LoadSettings() {
     g_settings.maxWidth = Wh_GetIntSetting(L"MaxWidth");
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
 
-    g_settings.dataCollection.networkMetricsFormat = NetworkMetricsFormat::mbs;
-    StringSetting networkMetricsFormat =
-        StringSetting::make(L"DataCollection.NetworkMetricsFormat");
-    if (wcscmp(networkMetricsFormat, L"mbsNumberOnly") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbsNumberOnly;
-    } else if (wcscmp(networkMetricsFormat, L"mbsDynamic") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbsDynamic;
-    } else if (wcscmp(networkMetricsFormat, L"mbits") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbits;
-    } else if (wcscmp(networkMetricsFormat, L"mbitsNumberOnly") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbitsNumberOnly;
-    } else if (wcscmp(networkMetricsFormat, L"mbitsDynamic") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbitsDynamic;
-    }
+    g_settings.dataCollection.networkMetricsFormat = ParseNetworkMetricsFormat(
+        StringSetting::make(L"DataCollection.NetworkMetricsFormat"));
 
     g_settings.dataCollection.networkMetricsFixedDecimals =
         Wh_GetIntSetting(L"DataCollection.NetworkMetricsFixedDecimals");
+
+    StringSetting diskMetricsFormat =
+        StringSetting::make(L"DataCollection.DiskMetricsFormat");
+    if (wcscmp(diskMetricsFormat, L"sameAsNetwork") == 0) {
+        g_settings.dataCollection.diskMetricsFormat =
+            g_settings.dataCollection.networkMetricsFormat;
+        g_settings.dataCollection.diskMetricsFixedDecimals =
+            g_settings.dataCollection.networkMetricsFixedDecimals;
+    } else {
+        g_settings.dataCollection.diskMetricsFormat =
+            ParseNetworkMetricsFormat(diskMetricsFormat);
+        g_settings.dataCollection.diskMetricsFixedDecimals =
+            Wh_GetIntSetting(L"DataCollection.DiskMetricsFixedDecimals");
+    }
 
     g_settings.dataCollection.percentageFormat =
         PercentageFormat::spacePaddingAndSymbol;
@@ -4967,6 +5442,8 @@ void LoadSettings() {
 
     g_settings.mediaPlayer.maxLength =
         Wh_GetIntSetting(L"MediaPlayer.MaxLength");
+    g_settings.mediaPlayer.mediaInfoFormat =
+        StringSetting::make(L"MediaPlayer.MediaInfoFormat");
     g_settings.mediaPlayer.noMediaText =
         StringSetting::make(L"MediaPlayer.NoMediaText");
     g_settings.mediaPlayer.removeBrackets =
@@ -5086,6 +5563,7 @@ void LoadSettings() {
         StringSetting::make(L"TimeStyle.FontStretch");
     g_settings.timeStyle.characterSpacing =
         Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
+    g_settings.timeStyle.lineHeight = Wh_GetIntSetting(L"TimeStyle.LineHeight");
 
     g_settings.dateStyle.hidden = Wh_GetIntSetting(L"DateStyle.Hidden");
     g_settings.dateStyle.textColor =
@@ -5103,6 +5581,7 @@ void LoadSettings() {
         StringSetting::make(L"DateStyle.FontStretch");
     g_settings.dateStyle.characterSpacing =
         Wh_GetIntSetting(L"DateStyle.CharacterSpacing");
+    g_settings.dateStyle.lineHeight = Wh_GetIntSetting(L"DateStyle.LineHeight");
 
     g_clockElementStyleEnabled =
         (g_settings.maxWidth || g_settings.textSpacing ||
@@ -5110,12 +5589,14 @@ void LoadSettings() {
          *g_settings.timeStyle.textAlignment || g_settings.timeStyle.fontSize ||
          *g_settings.timeStyle.fontFamily || *g_settings.timeStyle.fontWeight ||
          *g_settings.timeStyle.fontStyle || *g_settings.timeStyle.fontStretch ||
-         g_settings.timeStyle.characterSpacing || g_settings.dateStyle.hidden ||
+         g_settings.timeStyle.characterSpacing ||
+         g_settings.timeStyle.lineHeight || g_settings.dateStyle.hidden ||
          *g_settings.dateStyle.textColor ||
          *g_settings.dateStyle.textAlignment || g_settings.dateStyle.fontSize ||
          *g_settings.dateStyle.fontFamily || *g_settings.dateStyle.fontWeight ||
          *g_settings.dateStyle.fontStyle || *g_settings.dateStyle.fontStretch ||
-         g_settings.dateStyle.characterSpacing);
+         g_settings.dateStyle.characterSpacing ||
+         g_settings.dateStyle.lineHeight);
     g_clockElementStyleIndex++;
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
@@ -5333,9 +5814,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     // Must use GetProcAddress for the functions below, otherwise the stubs in
     // kernel32.dll are being hooked.
@@ -5352,19 +5833,19 @@ BOOL Wh_ModInit() {
     }
 
     if (g_winVersion <= WinVersion::Win10) {
-        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
-                                           GetTimeFormatEx_Hook_Win10,
-                                           &GetTimeFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
-                                           GetDateFormatEx_Hook_Win10,
-                                           &GetDateFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetTimeFormatEx,
+                                       GetTimeFormatEx_Hook_Win10,
+                                       &GetTimeFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetDateFormatEx,
+                                       GetDateFormatEx_Hook_Win10,
+                                       &GetDateFormatEx_Original);
 
         auto pGetDateFormatW = (decltype(&GetDateFormatW))GetProcAddress(
             kernelBaseModule, "GetDateFormatW");
         if (pGetDateFormatW) {
-            WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatW,
-                                               GetDateFormatW_Hook_Win10,
-                                               &GetDateFormatW_Original);
+            WindhawkUtils::SetFunctionHook(pGetDateFormatW,
+                                           GetDateFormatW_Hook_Win10,
+                                           &GetDateFormatW_Original);
         }
     } else {
         if (g_winVersion >= WinVersion::Win11_22H2) {
@@ -5374,18 +5855,18 @@ BOOL Wh_ModInit() {
                 return FALSE;
             }
 
-            WindhawkUtils::Wh_SetFunctionHookT(
+            WindhawkUtils::SetFunctionHook(
                 pGetLocalTime, GetLocalTime_Hook_Win11, &GetLocalTime_Original);
         }
 
-        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
-                                           GetTimeFormatEx_Hook_Win11,
-                                           &GetTimeFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
-                                           GetDateFormatEx_Hook_Win11,
-                                           &GetDateFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(SendMessageW, SendMessageW_Hook,
-                                           &SendMessageW_Original);
+        WindhawkUtils::SetFunctionHook(pGetTimeFormatEx,
+                                       GetTimeFormatEx_Hook_Win11,
+                                       &GetTimeFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetDateFormatEx,
+                                       GetDateFormatEx_Hook_Win11,
+                                       &GetDateFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(SendMessageW, SendMessageW_Hook,
+                                       &SendMessageW_Original);
     }
 
     g_initialized = true;
