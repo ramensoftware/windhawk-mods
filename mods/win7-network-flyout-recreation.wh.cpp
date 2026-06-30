@@ -2,20 +2,29 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.4
+// @version        2.8.6
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi
+// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi -lmsimg32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Windows 7 Network Flyout Recreation
 
-This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a familiar, lightweight alternative.
+This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a recreation of the familiar, lightweight alternative from Windows 7.
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/ms.png)
+Screenshot of the light theme:
+
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/light.png)
+
+
+Screenshot of the dark theme:
+
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/dark.png)
+
+
 The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
 ## Features
 
@@ -26,10 +35,10 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Right-click context menu**: Quick access to network status and properties
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
-- **Language support**: English, Italian, Spanish, French, Russian, or auto-detect
+- **Language support**: English, Italian, Spanish, French, Russian, German, Portoguese or auto-detect
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
-
+- **Dual Theme Support (NEW)**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
 ## Requirements
 
 - **Windows 10** with the native taskbar
@@ -54,10 +63,17 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **m417z** — Code review
 - **Anixx** — Testing on Windows 11 23H2 and feedback
 - **sebastian08dm08-cpu** — Testing on Windows 10 1809
+## Changelog (version 2.8.6)
+- Added custom dark theme for the entire flyout UI
+- Added support for German and Portuguese languages
+- Implemented dark theme for password dialog and context menus
+- Improved the UI layout with dynamic refresh button positioning
+- Enhanced visual consistency with Windows 7 original design
 
 If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModReadme==
+// ==WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - language: auto
@@ -70,6 +86,8 @@ If you encounter issues, please report them on the author of the mod.
     - es: Español
     - fr: Français
     - ru: Русский
+    - de: Deutsch
+    - pt: Português
 - interceptNativeFlyout: true
   $name: Intercept system network flyout
   $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
@@ -85,6 +103,12 @@ If you encounter issues, please report them on the author of the mod.
 - useRoundedCorners: false
   $name: Rounded corners
   $description: Give the flyout window rounded corners. Looks better on Windows 11 or with the Aero theme enabled. Disabled by default for classic theme compatibility.
+- theme: light
+  $name: Theme
+  $description: Select the network flyout's theme
+  $options:
+    - light: Light (Classic Windows 7)
+    - dark: Dark (Custom)
 */
 // ==/WindhawkModSettings==
 #ifndef UNICODE
@@ -107,6 +131,8 @@ If you encounter issues, please report them on the author of the mod.
 #include <process.h>
 #include <psapi.h>
 
+// =========================================================
+// Dark context menu support (right-click menu only)
 #define WINDOW_WIDTH_BASE        300
 #define WINDOW_HEIGHT_BASE       405
 #define HEADER_HEIGHT_BASE       105
@@ -134,6 +160,7 @@ void InitGlobalFonts();
 void FreeGlobalFonts();
 void InitRefreshButtonRect(void);
 void RecalcArrowRect();
+void ApplyNativeControlsTheme();
 
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
@@ -175,22 +202,18 @@ static HANDLE g_hConnectThread = NULL;
 
 #define CLICK_DEBOUNCE_MS 600
 #define CONNECTION_TIMEOUT_MS 18000
-// Disconnection is faster than connection so 4 seconds is reasonable
 #define DISCONNECTION_TIMEOUT_MS 4000
-// Connection related definitions
 #define WLAN_REASON_CODE_INVALID_PROFILE    0x00038001  // 229377
 
-// BASE 64
-// Refresh normal - base64
+// Base64 resources
 static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAN9JREFUOE9joAkw3nrrPwhDuaSB6Ree/zddcZVozUxQGg4WHn/OkKLAB+URBigGzDzy8D/j9z8MPEyMDNeuXVtx9epVMagUToBiwILDTxkYfv5hePr2O4OWllaEtrb2K6gUGFi2H8PwGiOIsKw/hNPPxxvtMNTAxEAAzrCs2IthyPEOZ4hmPHJwA0DAsnAHwpZ+D4hmJDF0AFODAiyzN2HV0LX8wn+QHC55ooB54rL/M9aeJ8+AqcuO/zcMmYKhGSMh4QJTF25nSPTRgPJIAIdPXFZXME/6D8JQoUEFGBgAn8daV7VTN5UAAAAASUVORK5CYII=////v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT07u7u9vb2+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABRUExURev0/TO12pfQ5zWo1TiXzpnI45nE4TmOyqfL5Orz/DmHxo663Dl/wkuKyESGxTl4vTlxuDlrsoqn0Ddhppitz5WmxzFUlCpHfpKgvMPI0yA3YglAoVgAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAFRJREFUKFN9yEkSgDAIRFHibJyIs7n/QS2goxvLt2h+Qd+cQ0CWI5KiREBVNy3SeN/Z1aVeDKOGfSbxHMHMOsI+QXcOdl/LioBtRyTHiTBXjKh/RDeDBAMcwXjgKAAAAABJRU5ErkJggg==//9T3qpBX7Ilk83uLCM4kMlo+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhGETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQAAAAASUVORK5CYII=";
 
 static HICON g_hIconRefreshNormal = NULL;
 static INetworkListManager* g_pNLM = NULL;
-// NOTE: The custom network icon has been removed from the settings because it's not totally stable and right now I don't have enough time to work on it.
-// Therefore, I've left it over in the code and if I have more time and find a stabler way to implement it, I will add it. The same thing applies with support for dark theme.
+// Custom network icon: left in code but disabled (stability issues).
 
 // -------------------------------------------------------
-// Connection State Machine (simplified)
+// Connection state
 // -------------------------------------------------------
 typedef enum {
     CONN_STATE_IDLE = 0,
@@ -210,7 +233,8 @@ struct ModSettings {
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
-} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, FALSE };
+    int  theme;  // 0=light, 1=dark
+} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, FALSE, 0 };
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
@@ -224,10 +248,20 @@ void LoadSettings() {
         else if (_wcsicmp(lang, L"es") == 0) raw_language = 3;
         else if (_wcsicmp(lang, L"fr") == 0) raw_language = 4;
         else if (_wcsicmp(lang, L"ru") == 0) raw_language = 5;
+        else if (_wcsicmp(lang, L"de") == 0) raw_language = 6;
+        else if (_wcsicmp(lang, L"pt") == 0) raw_language = 7;
         Wh_FreeStringSetting(lang);
     }
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
+
+    LPCWSTR theme = Wh_GetStringSetting(L"theme");
+    int raw_theme = 0;
+    if (theme) {
+        if (_wcsicmp(theme, L"dark") == 0) raw_theme = 1;
+        else raw_theme = 0;
+        Wh_FreeStringSetting(theme);
+    }
 
     g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
     g_Settings.privacyMode               = raw_privacy     != 0;
@@ -235,11 +269,140 @@ void LoadSettings() {
     g_Settings.language                  = raw_language;
     g_Settings.enableHotkey              = raw_enableHotkey != 0;
     g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
+    g_Settings.theme                     = raw_theme;
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
         g_Settings.refreshInterval = 1000;
     }
 }
+
+// =========================================================
+// Dark context menu support (right-click only; light theme untouched).
+// =========================================================
+namespace DarkContextMenu {
+
+constexpr COLORREF kMenuBg = 0x2C2C2C; 
+
+static HBRUSH g_hMenuBrush = NULL;
+
+enum class AppMode {
+    Default,
+    AllowDark,
+    ForceDark,
+    ForceLight,
+    Max
+};
+
+using FlushMenuThemes_T     = void(WINAPI*)();
+using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
+
+static HMODULE g_hUxtheme = NULL;
+static FlushMenuThemes_T     pFlushMenuThemes    = nullptr;
+static SetPreferredAppMode_T pSetPreferredAppMode = nullptr;
+
+static decltype(&SetMenuInfo) SetMenuInfo_Original = nullptr;
+
+// Hook: inject dark background brush into popup menus when dark theme is active.
+WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo) {
+    if (g_Settings.theme != 1 || !g_hMenuBrush) {
+        return SetMenuInfo_Original(hMenu, lpInfo);
+    }
+
+    alignas(MENUINFO) BYTE buffer[256];
+    if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer)) {
+        return SetMenuInfo_Original(hMenu, lpInfo);
+    }
+
+    memcpy(buffer, lpInfo, lpInfo->cbSize);
+    auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
+    infoCopy->hbrBack = g_hMenuBrush;
+    return SetMenuInfo_Original(hMenu, infoCopy);
+}
+
+// Apply (or restore) dark menu theme.
+void Apply(BOOL dark) {
+    if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
+    pFlushMenuThemes();
+    pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
+}
+
+
+void Init() {
+    if (!g_hMenuBrush) {
+        g_hMenuBrush = CreateSolidBrush(kMenuBg);
+    }
+
+    g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (g_hUxtheme) {
+        pSetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
+        pFlushMenuThemes     = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original)) {
+        Wh_Log(L"DarkContextMenu: failed to hook SetMenuInfo");
+    }
+
+
+}
+
+// Call on settings change.
+void OnSettingsChanged() {
+    Apply(g_Settings.theme == 1);
+}
+
+// Call from Wh_ModUninit.
+void Uninit() {
+    Apply(FALSE);
+    if (g_hMenuBrush) {
+        DeleteObject(g_hMenuBrush);
+        g_hMenuBrush = NULL;
+    }
+    if (g_hUxtheme) {
+        FreeLibrary(g_hUxtheme);
+        g_hUxtheme = NULL;
+    }
+}
+
+} // namespace DarkContextMenu
+
+// -------------------------------------------------------
+// Theme color helper functions
+// -------------------------------------------------------
+COLORREF GetHeaderBgColor() {
+    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(235, 244, 253);
+}
+COLORREF GetContentBgColor() {
+    return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
+}
+COLORREF GetFooterBgColor() {
+    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(235, 244, 253);
+}
+COLORREF GetTextColor() {
+    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(0, 0, 0);
+}
+COLORREF GetSecondaryTextColor() {
+    return (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(110, 110, 110);
+}
+COLORREF GetLinkColor() {
+    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
+}
+COLORREF GetRowSelectedColor() {
+    return (g_Settings.theme == 1) ? RGB(40, 40, 50) : RGB(228, 241, 252);
+}
+COLORREF GetRowHoverColor() {
+    return (g_Settings.theme == 1) ? RGB(35, 35, 45) : RGB(242, 247, 253);
+}
+COLORREF GetRowSelectedBorderColor() {
+    return (g_Settings.theme == 1) ? RGB(60, 80, 120) : RGB(174, 212, 243);
+}
+COLORREF GetRowHoverBorderColor() {
+    return (g_Settings.theme == 1) ? RGB(50, 70, 100) : RGB(216, 231, 248);
+}
+
+COLORREF GetNetworkNameColor() {
+    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
+}
+
 // -------------------------------------------------------
 // Structures
 // -------------------------------------------------------
@@ -271,7 +434,6 @@ typedef struct {
     DWORD operationStartTime;  // For timeout detection
 } WifiNetworkItem;
 
-// Async connection context for non-blocking operations
 typedef struct {
     HWND hWndNotify;
     GUID interfaceGuid;
@@ -305,7 +467,7 @@ static void DetectWindowsVersion() {
            osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
 
     if (g_isWin11) {
-        // Rileva se è presente la barra delle applicazioni Win10 legacy su Win11
+
         HWND hTray    = FindWindowW(L"Shell_TrayWnd", NULL);
         HWND hNotify  = hTray   ? FindWindowExW(hTray,   NULL, L"TrayNotifyWnd",   NULL) : NULL;
         HWND hSysPager= hNotify ? FindWindowExW(hNotify, NULL, L"SysPager",        NULL) : NULL;
@@ -324,7 +486,7 @@ static void DetectWindowsVersion() {
             Wh_Log(L"Win11: Shell_TrayWnd not found — taskbar not ready yet");
         }
 
-        // Verifica presenza ExplorerPatcher
+
         WCHAR epPniduiPath[MAX_PATH];
         StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
                          L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
@@ -345,7 +507,7 @@ static void DetectWindowsVersion() {
     }
 }
 // -------------------------------------------------------
-// Global Variables (cleaned up)
+// Global variables
 // -------------------------------------------------------
 static ModContext g_Ctx        = {0};
 static BOOL       g_Initialized = FALSE;
@@ -355,10 +517,87 @@ HWND g_hWndButtonConnect   = NULL;
 HWND g_hWndCheckboxConnect = NULL;
 BOOL g_bListExpanded        = TRUE;
 
+// (WM_SETFONT) sia dal rendering owner-draw in tema scuro (WM_DRAWITEM).
+
+// serve gia' ad ApplyNativeControlsTheme, definita subito sotto.
+HFONT g_hFontButton    = NULL;
+
+
+// con cui g_hWndButtonConnect e' attualmente creato (owner-draw o nativo).
+// ricreare il bottone con il tipo giusto.
+int g_ButtonConnectIsOwnerDraw = -1;
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+static BOOL g_IsHoveringConnectButton = FALSE;
+
+void ApplyNativeControlsTheme() {
+    LPCWSTR themeName = (g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer";
+    
+
+    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        SetWindowTheme(g_hWndFlyout, themeName, NULL);
+        BOOL useDark = (g_Settings.theme == 1);
+        DwmSetWindowAttribute(g_hWndFlyout, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+        SetWindowPos(g_hWndFlyout, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
+    }
+    
+
+    if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
+        SetWindowTheme(g_hWndCheckboxConnect, themeName, NULL);
+
+
+    if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
+        // Se siamo in tema scuro, usa il tema DarkMode_Explorer
+        // che gestisce automaticamente hover, pressed, disabled
+        if (g_Settings.theme == 1) {
+            SetWindowTheme(g_hWndButtonConnect, L"DarkMode_Explorer", NULL);
+            // Rende il pulsante nativo ma con tema scuro
+            // Windows gestirà automaticamente hover, click, ecc.
+        } else {
+            SetWindowTheme(g_hWndButtonConnect, L"Explorer", NULL);
+        }
+    }
+
+
+    BOOL wantOwnerDraw = (g_Settings.theme == 1);
+
+    if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect) && g_ButtonConnectIsOwnerDraw != wantOwnerDraw) {
+
+        HWND hParent = GetParent(g_hWndButtonConnect);
+        RECT rcOld; GetWindowRect(g_hWndButtonConnect, &rcOld);
+        POINT ptTopLeft = { rcOld.left, rcOld.top };
+        ScreenToClient(hParent, &ptTopLeft);
+        int oldW = rcOld.right - rcOld.left;
+        int oldH = rcOld.bottom - rcOld.top;
+        BOOL wasVisible = IsWindowVisible(g_hWndButtonConnect);
+        BOOL wasEnabled = IsWindowEnabled(g_hWndButtonConnect);
+        WCHAR oldText[64]; GetWindowTextW(g_hWndButtonConnect, oldText, 64);
+
+        DestroyWindow(g_hWndButtonConnect);
+
+        g_hWndButtonConnect = CreateWindowExW(0, WC_BUTTONW, oldText,
+            WS_CHILD | (wasVisible ? WS_VISIBLE : 0) | (wantOwnerDraw ? BS_OWNERDRAW : BS_PUSHBUTTON),
+            ptTopLeft.x, ptTopLeft.y, oldW, oldH,
+            hParent, (HMENU)IDC_CONN_BUTTON, GetModuleHandle(NULL), NULL);
+        SendMessageW(g_hWndButtonConnect, WM_SETFONT, (WPARAM)g_hFontButton, TRUE);
+        EnableWindow(g_hWndButtonConnect, wasEnabled);
+        
+
+        if (g_Settings.theme == 1) {
+            SetWindowTheme(g_hWndButtonConnect, L"DarkMode_Explorer", NULL);
+        }
+
+        g_ButtonConnectIsOwnerDraw = wantOwnerDraw;
+    }
+}
+
 HFONT g_hFontNormal    = NULL;
 HFONT g_hFontBold      = NULL;
 HFONT g_hFontUnderline = NULL;
-HFONT g_hFontButton    = NULL;
 HFONT g_hFontCheckbox  = NULL;
 HFONT g_hFontArrow     = NULL;
 
@@ -375,35 +614,30 @@ int  g_ContextMenuTargetIndex = -1;
 
 RECT g_rcRefreshButton = { 0 };
 RECT g_rcArrowButton = { 0 };
+RECT g_rcCheckboxLabel = { 0 };
+BOOL g_bShowCheckboxLabel = FALSE;
 
 HICON g_hIconNetworkMap  = NULL;
 HICON g_hIconSignalBars[6] = { NULL };
 HICON g_hIconRefreshWin7 = NULL;
 
-// Single pending connection tracking
 int   g_PendingConnectIndex = -1;
 HWND  g_hTooltip = NULL;
 
 UINT_PTR g_RefreshTimer = 0;
-UINT_PTR g_TimeoutTimer = 0;  // Single global timeout timer
-
-HWND G_hSubclassedToolbar = nullptr;
+UINT_PTR g_TimeoutTimer = 0;  HWND G_hSubclassedToolbar = nullptr;
 
 
 
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
 
-// Mutex 
 static HANDLE g_hConnectMutex = NULL;
-// GDI+ rendering for high-quality icon scaling
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 
-// Cached GDI+ bitmaps for signal bar icons
 static void* g_pBitmapSignalBars[6] = { NULL };
 
-// GDI+ function pointers
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
 typedef int (WINAPI *GdipDrawImageRectIFunc)(void*, void*, int, int, int, int);
@@ -433,7 +667,7 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 static WCHAR g_TooltipBuffer[1024] = {0};
 
 // -------------------------------------------------------
-// Localization (unchanged)
+// Localization
 // -------------------------------------------------------
 typedef enum {
     STR_CURRENT_CONNECTED,
@@ -598,7 +832,7 @@ static const LocalePack g_Locales[] = {
         L"Propiedades",
         L"No hay conexiones disponibles",
         L"Hay conexiones disponibles",
-        L"Conectar automáticamente",
+        L"Conectar autom\u00E1ticamente",
         L"Conectarse a una red",
         L"Escriba la clave de seguridad de red",
         L"Clave de seguridad:",
@@ -626,7 +860,7 @@ static const LocalePack g_Locales[] = {
         L"No se pudo guardar el perfil de red (c\u00F3digo: %lu)",
         L"Error de conexi\u00F3n (c\u00F3digo: %lu)",
         L"Tiempo de conexi\u00F3n agotado",
-        L"Se agot\u00F3 el tiempo de espera de la conexi\u00F3n. Puede que la red esté fuera de alcance.",
+        L"Se agot\u00F3 el tiempo de espera de la conexi\u00F3n. Puede que la red est\u00E9 fuera de alcance.",
         L"Escriba una clave de seguridad de red.",
         L"Solucionar problemas",
         L"Abrir el Centro de redes y recursos compartidos",
@@ -724,7 +958,101 @@ static const LocalePack g_Locales[] = {
         L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043A\u043B\u044E\u0447 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438.",
         L"\u0423\u0441\u0442\u0440\u0430\u043D\u0435\u043D\u0438\u0435 \u043D\u0435\u043F\u043E\u043B\u0430\u0434\u043E\u043A",
         L"\u0426\u0435\u043D\u0442\u0440 \u0441\u0435\u0442\u0435\u0439 \u0438 \u043E\u0431\u0449\u0435\u0433\u043E \u0434\u043E\u0441\u0442\u0443\u043F\u0430",
-    }}
+    }},
+    { 0x0407, {
+        L"Verbunden mit:",
+        L"Internetzugriff",
+        L"WLAN-Verbindung",
+        L"Verbunden",
+        L"Netzwerkcenter \u00F6ffnen",
+        L"Verbinden",
+        L"Trennen",
+        L"Verbinden",
+        L"Trennen",
+        L"Status",
+        L"Eigenschaften",
+        L"Keine Verbindungen",
+        L"Verbindungen verf\u00FCgbar",
+        L"Automatisch verbinden",
+        L"Netzwerk verbinden",
+        L"Sicherheitsschl\u00FCssel eingeben:",
+        L"Schl\u00FCssel:",
+        L"Verstecken",
+        L"OK",
+        L"Abbrechen",
+        L"Fehler",
+        L"Falscher Schl\u00FCssel. Versuche neu.",
+        L"Verbindung zu %s fehlgeschlagen",
+        L"Netzwerk %d",
+        L"Sicherheit:",
+        L"Signal:",
+        L"Funktyp:",
+        L"Exzellent",
+        L"Gut",
+        L"Mittel",
+        L"Schwach",
+        L"Kein Signal",
+        L"Verbinde...",
+        L"Trenne...",
+        L"Status: Verbunden",
+        L"Status: Verbinde...",
+        L"Status: Nicht verbunden",
+        L"Fehler",
+        L"Profil speichern fehlgeschlagen (Code: %lu)",
+        L"Verbindungsfehler (Code: %lu)",
+        L"Zeit\u00FCberschreitung",
+        L"Verbindungsversuch abgebrochen. Netzwerk au\u00DFer Reichweite.",
+        L"Bitte Sicherheitsschl\u00FCssel eingeben.",
+        L"Problembehandlung",
+        L"Netzwerkcenter \u00F6ffnen",
+    }},
+    { 0x0816, {
+        L"Ligado a:",
+        L"Acesso \u00E0 Internet",
+        L"Rede Wi-Fi",
+        L"Ligado",
+        L"Abrir Centro de Rede",
+        L"Ligar",
+        L"Desligar",
+        L"Ligar",
+        L"Desligar",
+        L"Estado",
+        L"Propriedades",
+        L"Sem liga\u00E7\u00F5es",
+        L"Liga\u00E7\u00F5es dispon\u00EDveis",
+        L"Ligar automaticamente",
+        L"Ligar \u00E0 Rede",
+        L"Digite a chave de seguran\u00E7a:",
+        L"Chave:",
+        L"Ocultar",
+        L"OK",
+        L"Cancelar",
+        L"Falha",
+        L"Chave errada. Tente novamente.",
+        L"Falha ao ligar a %s",
+        L"Rede %d",
+        L"Seguran\u00E7a:",
+        L"Sinal:",
+        L"Tipo r\u00E1dio:",
+        L"Excelente",
+        L"Bom",
+        L"Razo\u00E1vel",
+        L"Fraco",
+        L"Sem sinal",
+        L"A ligar...",
+        L"A desligar...",
+        L"Estado: Ligado",
+        L"Estado: A ligar...",
+        L"Estado: N\u00E3o ligado",
+        L"Erro",
+        L"Falha ao guardar perfil (C\u00F3digo: %lu)",
+        L"Erro de liga\u00E7\u00E3o (C\u00F3digo: %lu)",
+        L"Tempo excedido",
+        L"Tentativa expirou. Rede fora de alcance.",
+        L"Insira a chave de seguran\u00E7a.",
+        L"Resolver problemas",
+        L"Abrir Centro de Rede",
+    }},
 };
 
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -749,6 +1077,8 @@ void DetermineLocale() {
         case 3: g_CurrentLocalePack = FindLocalePack(0x040A); break;
         case 4: g_CurrentLocalePack = FindLocalePack(0x040C); break;
         case 5: g_CurrentLocalePack = FindLocalePack(0x0419); break;
+        case 6: g_CurrentLocalePack = FindLocalePack(0x0407); break;
+        case 7: g_CurrentLocalePack = FindLocalePack(0x0816); break;
         default: {
             LANGID userLangId = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(userLangId);
@@ -791,6 +1121,7 @@ void ClearKeyboardFocus(void);
 BOOL IsInternetConnected(void);
 static BOOL AskForPasswordAndConnect(int index);
 void RecalcDpiMetrics(UINT dpi);
+static int GetTotalListHeight(void);  
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     if (!ssid || ssid[0] == L'\0') {
@@ -805,7 +1136,6 @@ static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     }
     Wh_Log(L"%s %s", prefix, safe);
 }
-// Base64 handling
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode function to create HICON
     static const WCHAR* tbl = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     
@@ -905,7 +1235,7 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
                 if (lastGoodBreak > 0) {
                     lineLen = lastGoodBreak;
                 } else {
-                    lineLen = i; // Spezza forzatamente se nessuno spazio
+                    lineLen = i;
                 }
                 break;
             }
@@ -972,17 +1302,37 @@ void DrawFocusRectangle(HDC hdc, const RECT* rcRow) {
     SelectObject(hdc, hOldBrush);
     DeleteObject(hPen);
 }
-
-// -------------------------------------------------------
-// Refresh button rect
-// -------------------------------------------------------
-void InitRefreshButtonRect() {
-    g_rcRefreshButton.right  = WINDOW_WIDTH - ScaleDpi(20);
-    g_rcRefreshButton.left   = g_rcRefreshButton.right - ScaleDpi(22);
-    g_rcRefreshButton.top    = ScaleDpi(8);
-    g_rcRefreshButton.bottom = ScaleDpi(30);
+void InitRefreshButtonRect(void) {
+    // Dimensioni base del pulsante (in pixel a 96 DPI)
+    const int buttonSize = ScaleDpi(16);
+    const int margin = ScaleDpi(8);
+    
+    // Calcola se c'è una barra di scorrimento
+    int totalListHeight = GetTotalListHeight();
+    int availableHeight = LIST_Y_END - LIST_Y_START;
+    BOOL hasScrollbar = (totalListHeight > availableHeight);
+    
+    // Posizione X di base (dal bordo destro)
+    int baseX = WINDOW_WIDTH - margin - buttonSize;
+    
+    // Se NON c'è la barra di scorrimento, sposta il pulsante del 4% più a destra
+    // e poi dell'1.3% più a sinistra (netto: +2.7% verso destra)
+    if (!hasScrollbar) {
+        baseX += (WINDOW_WIDTH * 4) / 100;     // +4% della larghezza finestra verso destra
+        baseX -= (WINDOW_WIDTH * 13) / 1000;   // -1.3% della larghezza finestra verso sinistra
+    }
+    
+    // Limite di sicurezza per evitare che esca completamente dallo schermo a destra
+    if (baseX + buttonSize > WINDOW_WIDTH) {
+        baseX = WINDOW_WIDTH - buttonSize;
+    }
+    
+    // Ripristinate le altezze originali esatte (altezza da terra precedente)
+    g_rcRefreshButton.left   = baseX;
+    g_rcRefreshButton.top    = ScaleDpi(2);  // <--- Altezza originale di prima
+    g_rcRefreshButton.right  = baseX + buttonSize;
+    g_rcRefreshButton.bottom = ScaleDpi(24); // <--- Altezza originale di prima
 }
-
 // -------------------------------------------------------
 // SSID display helper
 // -------------------------------------------------------
@@ -1012,7 +1362,7 @@ void LoadSystemIcons() {
         ExtractIconExW(L"shell32.dll", 238, &g_hIconRefreshWin7, NULL, 1);
 }
 
-// Initialize GDI+ for high-quality icon rendering
+// Initialize GDI\+.
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
     
@@ -1043,8 +1393,7 @@ static BOOL InitGdiPlusRendering() {
         return FALSE;
     }
 
-    // Start GDI+
-    typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
+        typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
     GdiplusStartupFunc pStartup = (GdiplusStartupFunc)GetProcAddress(g_hGdiPlus, "GdiplusStartup");
     if (!pStartup) {
         FreeLibrary(g_hGdiPlus);
@@ -1182,7 +1531,7 @@ void RefreshWifiData(HANDLE hClient) {
 
                     int converted = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)cleanSsid, (int)cleanLen, tempList[tempCount].ssid, 32);
                     if (converted <= 0) {
-                        // Fallback byte-per-byte se UTF-8 fallisce (encoding non standard)
+
                         for (size_t k = 0; k < cleanLen; k++)
                             tempList[tempCount].ssid[k] = (WCHAR)cleanSsid[k];
                         converted = (int)cleanLen;
@@ -1190,8 +1539,7 @@ void RefreshWifiData(HANDLE hClient) {
                     tempList[tempCount].ssid[converted] = L'\0';
                 }
 
-                // Check duplicates
-                BOOL duplicate = FALSE;
+                                BOOL duplicate = FALSE;
                 int sameSsidVariants = 0;
                 for (int d = 0; d < tempCount; d++) {
                     BOOL sameSsid = (wcscmp(tempList[d].ssid, tempList[tempCount].ssid) == 0);
@@ -1211,8 +1559,6 @@ void RefreshWifiData(HANDLE hClient) {
                         duplicate = TRUE;
                         break;
                     }
-                    // SSID uguale ma BSS/sicurezza diversi: non è lo stesso
-                    // ingresso, ma serve per numerare il suffisso di display.
                     sameSsidVariants++;
                 }
                 if (duplicate) continue;
@@ -1225,10 +1571,9 @@ void RefreshWifiData(HANDLE hClient) {
                 tempList[tempCount].hasInternetAccess = FALSE;
                 tempList[tempCount].connState = (network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED) ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
                 tempList[tempCount].operationStartTime = 0;
-                // Capture security algorithms
-                tempList[tempCount].authAlgorithm = network.dot11DefaultAuthAlgorithm;
+                                tempList[tempCount].authAlgorithm = network.dot11DefaultAuthAlgorithm;
                 tempList[tempCount].cipherAlgorithm = network.dot11DefaultCipherAlgorithm;
-                // 0 = nessun suffisso (prima variante vista), altrimenti 2,3,4...
+
                 tempList[tempCount].displaySuffix = (sameSsidVariants > 0) ? (sameSsidVariants + 1) : 0;
                 tempList[tempCount].hasBssid = FALSE;
                 ZeroMemory(tempList[tempCount].bssid, sizeof(tempList[tempCount].bssid));
@@ -1239,7 +1584,7 @@ void RefreshWifiData(HANDLE hClient) {
                     if (WlanGetNetworkBssList(hClient, &IfInfo.InterfaceGuid,
                             &network.dot11Ssid, network.dot11BssType,
                             network.bSecurityEnabled, NULL, &pBssDetailList) == ERROR_SUCCESS && pBssDetailList) {
-                        LONG bestRssi = -32768L; // RSSI realistico minimo, evita dipendenza da limits.h
+                        LONG bestRssi = -32768L;
                         for (DWORD b = 0; b < pBssDetailList->dwNumberOfItems; b++) {
                             const WLAN_BSS_ENTRY& bss = pBssDetailList->wlanBssEntries[b];
                             if (bss.lRssi > bestRssi) {
@@ -1274,7 +1619,7 @@ void RefreshWifiData(HANDLE hClient) {
     }
 }
 
-                // Move connected network to top
+                // Move connected to top.
                 if (tempList[tempCount].connState == CONN_STATE_CONNECTED && tempCount > 0) {
                     WifiNetworkItem tmp;
                     CopyMemory(&tmp, &tempList[0], sizeof(WifiNetworkItem));
@@ -1322,8 +1667,7 @@ WlanFreeMemory(pIfList);
     }
 }
 
-    // Preserve connection state for pending operations
-    EnterCriticalSection(&g_Ctx.csLock);
+        EnterCriticalSection(&g_Ctx.csLock);
     if (tempCount > 0 && tempCount <= 50) {
         WCHAR pendingSsid[33] = {0};
         BOOL hadPending = (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount);
@@ -1335,8 +1679,7 @@ WlanFreeMemory(pIfList);
                    g_NetworkList[g_PendingConnectIndex].connState);
         }
 
-        // Keep existing connection states for networks being connected/disconnected
-        for (int t = 0; t < tempCount; t++) {
+                for (int t = 0; t < tempCount; t++) {
             for (int e = 0; e < g_NetworkCount; e++) {
                 if (wcscmp(tempList[t].ssid, g_NetworkList[e].ssid) == 0) {
                     // Preserva lo stato di connessione per le operazioni in corso
@@ -1347,7 +1690,7 @@ WlanFreeMemory(pIfList);
                         tempList[t].operationStartTime = g_NetworkList[e].operationStartTime;
                     }
                     // IMPORTANTE: preserva hasProfile dalla lista esistente
-                    // Se la rete aveva un profilo, mantienilo anche dopo il refresh
+
                     if (g_NetworkList[e].hasProfile) {
                         tempList[t].hasProfile = TRUE;
                     }
@@ -1405,15 +1748,78 @@ typedef struct {
     BOOL   confirmed;
 } PasswordDlgData;
 
+static BOOL g_bPwdHoverOk     = FALSE;
+static BOOL g_bPwdHoverCancel = FALSE;
 LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PasswordDlgData* data = (PasswordDlgData*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     switch (uMsg) {
+    case WM_ERASEBKGND: {
+        HDC hdc = (HDC)wParam;
+        COLORREF bg = (g_Settings.theme == 1) ? RGB(20, 20, 20) : GetSysColor(COLOR_BTNFACE);
+        HBRUSH hBr = CreateSolidBrush(bg);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect(hdc, &rc, hBr);
+        DeleteObject(hBr);
+
+        // MODIFICA: Bordo aggiornato per l'altezza di 20 pixel (50 + 20 + 1 = 71)
+        if (g_Settings.theme == 1) {
+            HPEN hPen = CreatePen(PS_SOLID, 1, RGB(75, 75, 85)); 
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+            HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            
+            // Racchiude l'Edit control posizionato a (145, 50) con la nuova altezza (245, 20)
+            Rectangle(hdc, 144, 49, 145 + 245 + 1, 50 + 20 + 1);
+            
+            SelectObject(hdc, hOldBr);
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hPen);
+        }
+        return 1;
+    }
     case WM_NCHITTEST: {
         LRESULT r = DefWindowProcW(hwnd, uMsg, wParam, lParam);
         if (r==HTBOTTOM||r==HTBOTTOMLEFT||r==HTBOTTOMRIGHT||
             r==HTLEFT||r==HTRIGHT||r==HTTOP||r==HTTOPLEFT||r==HTTOPRIGHT)
             return HTCLIENT;
         return r;
+    }
+    case WM_MOUSEMOVE: {
+        if (g_Settings.theme == 1) {
+            HWND hBtnOk = GetDlgItem(hwnd, IDOK);
+            HWND hBtnCancel = GetDlgItem(hwnd, IDCANCEL);
+            POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+            ClientToScreen(hwnd, &pt);
+
+            BOOL wasHoverOk = g_bPwdHoverOk, wasHoverCancel = g_bPwdHoverCancel;
+            RECT rcOk, rcCancel;
+            g_bPwdHoverOk = FALSE;
+            g_bPwdHoverCancel = FALSE;
+            if (hBtnOk && GetWindowRect(hBtnOk, &rcOk) && PtInRect(&rcOk, pt))
+                g_bPwdHoverOk = TRUE;
+            if (hBtnCancel && GetWindowRect(hBtnCancel, &rcCancel) && PtInRect(&rcCancel, pt))
+                g_bPwdHoverCancel = TRUE;
+
+            if (wasHoverOk != g_bPwdHoverOk && hBtnOk) InvalidateRect(hBtnOk, NULL, FALSE);
+            if (wasHoverCancel != g_bPwdHoverCancel && hBtnCancel) InvalidateRect(hBtnCancel, NULL, FALSE);
+
+            if (wasHoverOk != g_bPwdHoverOk || wasHoverCancel != g_bPwdHoverCancel) {
+                TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
+                TrackMouseEvent(&tme);
+            }
+        }
+        break;
+    }
+    case WM_MOUSELEAVE: {
+        if (g_bPwdHoverOk || g_bPwdHoverCancel) {
+            HWND hBtnOk = GetDlgItem(hwnd, IDOK);
+            HWND hBtnCancel = GetDlgItem(hwnd, IDCANCEL);
+            g_bPwdHoverOk = FALSE;
+            g_bPwdHoverCancel = FALSE;
+            if (hBtnOk) InvalidateRect(hBtnOk, NULL, FALSE);
+            if (hBtnCancel) InvalidateRect(hBtnCancel, NULL, FALSE);
+        }
+        break;
     }
     case WM_CREATE: {
         CREATESTRUCTW* cs = (CREATESTRUCTW*)lParam;
@@ -1452,73 +1858,233 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             WS_CHILD|WS_VISIBLE, 15, 53, 125, 18, hwnd, NULL, cs->hInstance, NULL);
         SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
-        // RIMUOVI ES_PASSWORD dalla creazione dell'edit
-HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, WC_EDITW, L"",
-    WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,  // ← tolto ES_PASSWORD
-    145, 50, 245, 22, hwnd, (HMENU)101, cs->hInstance, NULL);
-SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
-// Imposta il cerchio nero come carattere di password (come Windows 7)
-SendMessageW(hEdit, EM_SETPASSWORDCHAR, 0x25CF, 0);  // ● = U+25CF
-SetFocus(hEdit);
+        BOOL bDarkPwd = (g_Settings.theme == 1);
+
+        DWORD dwEditExStyle = bDarkPwd ? 0 : WS_EX_CLIENTEDGE;
         
-        HWND hCheck = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_HIDE_CHARS),
-        WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 135, 80, 200, 18, hwnd, (HMENU)102, cs->hInstance, NULL);
-        SendMessageW(hCheck, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        // MODIFICA: Altezza ridotta da 22 a 20 pixel
+        HWND hEdit = CreateWindowExW(dwEditExStyle, WC_EDITW, L"",
+            WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,
+            145, 50, 245, 20, hwnd, (HMENU)101, cs->hInstance, NULL);
+        SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        SendMessageW(hEdit, EM_SETPASSWORDCHAR, 0x25CF, 0);
+        if (bDarkPwd) SetWindowTheme(hEdit, L"DarkMode_Explorer", NULL);
+        SetFocus(hEdit);
+        
+        HWND hCheck = CreateWindowExW(0, WC_BUTTONW, L"",
+            WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 135, 80, 18, 18, hwnd, (HMENU)102, cs->hInstance, NULL);
         SendMessageW(hCheck, BM_SETCHECK, BST_CHECKED, 0);
+        if (bDarkPwd) SetWindowTheme(hCheck, L"DarkMode_Explorer", NULL);
+        
+        HWND hCheckText = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_HIDE_CHARS),
+            WS_CHILD|WS_VISIBLE|SS_NOTIFY, 156, 80, 200, 18, hwnd, (HMENU)103, cs->hInstance, NULL);
+        SendMessageW(hCheckText, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        
+        if (bDarkPwd) {
+            InvalidateRect(hCheck, NULL, TRUE);
+            InvalidateRect(hCheckText, NULL, TRUE);
+            UpdateWindow(hwnd);
+        }
         
         RECT rcClient; GetClientRect(hwnd, &rcClient);
         int btnW = 85, btnH = 24, btnY = rcClient.bottom - 35;
         HWND hBtnOk = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_OK),
-            WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,
+            WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
             rcClient.right - btnW - 15, btnY, btnW, btnH, hwnd, (HMENU)IDOK, cs->hInstance, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        if (bDarkPwd) SetWindowTheme(hBtnOk, L"DarkMode_Explorer", NULL);
         HWND hBtnCancel = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_CANCEL),
-            WS_CHILD|WS_VISIBLE, rcClient.right - (btnW * 2) - 25, btnY, btnW, btnH,
+            WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : 0),
+            rcClient.right - (btnW * 2) - 25, btnY, btnW, btnH,
             hwnd, (HMENU)IDCANCEL, cs->hInstance, NULL);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
+        if (bDarkPwd) SetWindowTheme(hBtnCancel, L"DarkMode_Explorer", NULL);
+        break;
+    }
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
+        if (!pdis) break;
+        if (pdis->CtlID != IDOK && pdis->CtlID != IDCANCEL) break;
+        if (g_Settings.theme != 1) break;
+
+        BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
+        BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
+        BOOL isFocused  = (pdis->itemState & ODS_FOCUS) != 0;
+        BOOL isHovering = (pdis->CtlID == IDOK)     ? (g_bPwdHoverOk     && !isPressed && !isDisabled)
+                        : (pdis->CtlID == IDCANCEL) ? (g_bPwdHoverCancel && !isPressed && !isDisabled)
+                        : FALSE;
+
+        HDC  hdcReal = pdis->hDC;
+        RECT rc  = pdis->rcItem;
+        int  w = rc.right - rc.left;
+        int  h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) break;
+
+        WCHAR szText[64];
+        int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
+
+        COLORREF bgColor;
+        if (isDisabled) bgColor = RGB(50, 50, 58);
+        else if (isPressed) bgColor = RGB(35, 35, 45);
+        else if (isHovering) bgColor = RGB(70, 70, 85);
+        else bgColor = RGB(60, 60, 72);
+
+        COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
+        COLORREF darkColor  = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45)  : RGB(25, 25, 32));
+        COLORREF textColor  = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
+        COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
+
+        HDC hdcMem = CreateCompatibleDC(hdcReal);
+        HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
+        HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
+        RECT rcLocal = {0, 0, w, h};
+
+        HBRUSH hBrBg = CreateSolidBrush(bgColor);
+        FillRect(hdcMem, &rcLocal, hBrBg);
+        DeleteObject(hBrBg);
+
+        HPEN hPenLight = CreatePen(PS_SOLID, 1, lightColor);
+        HPEN hPenDark  = CreatePen(PS_SOLID, 1, darkColor);
+        HPEN hPenHover = isHovering ? CreatePen(PS_SOLID, 1, hoverBorder) : NULL;
+
+        HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPenLight);
+        MoveToEx(hdcMem, 0, h - 1, NULL); LineTo(hdcMem, 0, 0); LineTo(hdcMem, w - 1, 0);
+        SelectObject(hdcMem, hPenDark);
+        MoveToEx(hdcMem, w - 1, 0, NULL); LineTo(hdcMem, w - 1, h - 1); LineTo(hdcMem, 0, h - 1);
+
+        if (isHovering && hPenHover) {
+            SelectObject(hdcMem, hPenHover);
+            MoveToEx(hdcMem, 1, 1, NULL); LineTo(hdcMem, w - 2, 1); LineTo(hdcMem, w - 2, h - 2); LineTo(hdcMem, 1, h - 2); LineTo(hdcMem, 1, 1);
+            DeleteObject(hPenHover);
+        }
+
+        SelectObject(hdcMem, hOldPen); DeleteObject(hPenLight); DeleteObject(hPenDark);
+
+        if (isFocused) {
+            RECT rcFocus = rcLocal; InflateRect(&rcFocus, -3, -3);
+            HBRUSH hOldBr = (HBRUSH)SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+            SetTextColor(hdcMem, RGB(150, 150, 165)); DrawFocusRect(hdcMem, &rcFocus);
+            SelectObject(hdcMem, hOldBr);
+        }
+
+        SetBkMode(hdcMem, TRANSPARENT); SetTextColor(hdcMem, textColor);
+        HFONT hOldFont = (HFONT)SelectObject(hdcMem, (HFONT)SendMessageW(pdis->hwndItem, WM_GETFONT, 0, 0));
+        RECT rcText = rcLocal; if (isPressed) { rcText.left += 1; rcText.top += 1; }
+        DrawTextW(hdcMem, szText, textLen, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(hdcMem, hOldFont);
+        BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hOldBmpMem); DeleteObject(hBmpMem); DeleteDC(hdcMem);
         break;
     }
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
-        
-        if (GetDlgCtrlID(hwndCtrl) == 102) {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 0, 0));
-            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+        if (hwndCtrl == GetDlgItem(hwnd, 102) || hwndCtrl == GetDlgItem(hwnd, 103)) {
+            if (g_Settings.theme == 1) {
+                SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
+                static HBRUSH hBrushHideDark = NULL;
+                if (!hBrushHideDark) hBrushHideDark = CreateSolidBrush(RGB(20, 20, 20));
+                return (INT_PTR)hBrushHideDark;
+            } else {
+                SetBkColor(hdc, GetSysColor(COLOR_BTNFACE)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(0, 0, 0));
+                static HBRUSH hBrushHideLight = NULL;
+                if (!hBrushHideLight) hBrushHideLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+                return (INT_PTR)hBrushHideLight;
+            }
         }
-        
-        if (GetDlgCtrlID(hwndCtrl) == 200) {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 51, 153));
+        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
+                static HBRUSH hBrushCheckbox = NULL;
+                if (!hBrushCheckbox) hBrushCheckbox = CreateSolidBrush(chkBg);
+                return (INT_PTR)hBrushCheckbox;
+            } else if (g_Settings.theme == 1) {
+                COLORREF chkBg = GetFooterBgColor();
+                SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
+                static HBRUSH hBrushCheckboxDark = NULL;
+                if (!hBrushCheckboxDark) hBrushCheckboxDark = CreateSolidBrush(chkBg);
+                return (INT_PTR)hBrushCheckboxDark;
+            } else {
+                SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(255, 255, 255));
+                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+            }
+        }
+        if (g_Settings.theme == 1) {
+            SetBkColor(hdc, RGB(20, 20, 20)); SetTextColor(hdc, RGB(100, 200, 255)); SetBkMode(hdc, OPAQUE);
+            static HBRUSH hBrPwdStatic = NULL;
+            if (!hBrPwdStatic) hBrPwdStatic = CreateSolidBrush(RGB(20, 20, 20));
+            return (INT_PTR)hBrPwdStatic;
+        } else {
+            SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(14, 75, 184));
             return (INT_PTR)GetStockObject(NULL_BRUSH);
         }
-        
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(0, 0, 0));
-        return (INT_PTR)GetStockObject(NULL_BRUSH);
+    }
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        if (g_Settings.theme == 1) {
+            SetBkColor(hdc, RGB(40, 40, 50));
+            SetTextColor(hdc, RGB(255, 255, 255));
+            SetBkMode(hdc, OPAQUE);
+            static HBRUSH hBrEdit = NULL;
+            if (!hBrEdit) hBrEdit = CreateSolidBrush(RGB(40, 40, 50));
+            return (INT_PTR)hBrEdit;
+        }
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
     case WM_CTLCOLORBTN: {
-        HDC hdc = (HDC)wParam;
-        HWND hwndBtn = (HWND)lParam;
-        
-        if (GetDlgCtrlID(hwndBtn) == 102) {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 0, 0));
-            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+        HDC hdc = (HDC)wParam; HWND hwndBtn = (HWND)lParam;
+        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
+                static HBRUSH hBrushCheckboxBtn = NULL;
+                if (!hBrushCheckboxBtn) hBrushCheckboxBtn = CreateSolidBrush(chkBg);
+                return (INT_PTR)hBrushCheckboxBtn;
+            } else {
+                SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, RGB(255, 255, 255));
+                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+            }
         }
-        
+        if (hwndBtn == GetDlgItem(hwnd, 102)) {
+            if (g_Settings.theme == 1) {
+                SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE);
+                static HBRUSH hBrHideDark = NULL; if (!hBrHideDark) hBrHideDark = CreateSolidBrush(RGB(20, 20, 20));
+                return (INT_PTR)hBrHideDark;
+            } else {
+                SetBkColor(hdc, GetSysColor(COLOR_BTNFACE)); SetBkMode(hdc, OPAQUE);
+                static HBRUSH hBrHideLight = NULL; if (!hBrHideLight) hBrHideLight = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+                return (INT_PTR)hBrHideLight;
+            }
+        }
+        if (hwndBtn == GetDlgItem(hwnd, IDOK) || hwndBtn == GetDlgItem(hwnd, IDCANCEL)) {
+            if (g_Settings.theme == 1) {
+                SetBkColor(hdc, RGB(50, 50, 60)); SetTextColor(hdc, RGB(255, 255, 255)); SetBkMode(hdc, OPAQUE);
+                static HBRUSH hBrBtn = NULL; if (!hBrBtn) hBrBtn = CreateSolidBrush(RGB(50, 50, 60));
+                return (INT_PTR)hBrBtn;
+            }
+        }
         return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
-    
     case WM_COMMAND: {
-    if (LOWORD(wParam) == 102) {
-        HWND hEdit = GetDlgItem(hwnd, 101);
-        BOOL checked = SendMessageW((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-        SendMessageW(hEdit, EM_SETPASSWORDCHAR, checked ? 0x25CF : 0, 0);
-        InvalidateRect(hEdit, NULL, TRUE);
-        return 0;
-    }
+        if (LOWORD(wParam) == 103) {
+            HWND hCheck = GetDlgItem(hwnd, 102);
+            BOOL checked = SendMessageW(hCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            SendMessageW(hCheck, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
+            SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(102, BN_CLICKED), (LPARAM)hCheck);
+            return 0;
+        }
+        if (LOWORD(wParam) == 102) {
+            HWND hEdit = GetDlgItem(hwnd, 101);
+            BOOL checked = SendMessageW(GetDlgItem(hwnd, 102), BM_GETCHECK, 0, 0) == BST_CHECKED;
+            SendMessageW(hEdit, EM_SETPASSWORDCHAR, checked ? 0x25CF : 0, 0);
+            InvalidateRect(hEdit, NULL, TRUE);
+            return 0;
+        }
         if (LOWORD(wParam) == IDOK) {
             if (data) { 
                 GetDlgItemTextW(hwnd, 101, data->passwordBuffer, data->bufferSize); 
@@ -1541,15 +2107,15 @@ SetFocus(hEdit);
     }
     case WM_CLOSE:
         if (data) data->confirmed = FALSE;
-        DestroyWindow(hwnd); return 0;
+        DestroyWindow(hwnd); 
+        return 0;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
-
 BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize) {
     if (!SafeToAccessUI()) return FALSE;
 
-    // Evita che il flyout si nasconda durante la visualizzazione della dialog
+
     g_inPasswordPrompt = TRUE;
 
     HINSTANCE hInst = GetModuleHandle(NULL);
@@ -1578,6 +2144,16 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
         g_inPasswordPrompt = FALSE;
         return FALSE;
     }
+
+    if (g_Settings.theme == 1) {
+    BOOL useDark = TRUE;
+    DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+    // NON applicare DarkMode_Explorer all'intero dialogo
+    // SetWindowTheme(hDlg, L"DarkMode_Explorer", NULL);  <-- RIMOSSO
+    SetWindowPos(hDlg, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
+}
+
     ShowWindow(hDlg, SW_SHOW);
     EnableWindow(hParent, FALSE);
     
@@ -1621,8 +2197,7 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
 
     const WCHAR* connMode = autoConnect ? L"auto" : L"manual";
 
-    // Map algorithms to XML strings
-    const WCHAR* authStr = L"open";
+        const WCHAR* authStr = L"open";
     const WCHAR* encStr  = L"none";
 
     switch (item->authAlgorithm) {
@@ -1648,7 +2223,7 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
         default:                           encStr = L"AES";  break;
     }
 
-    // Detect Enterprise networks (WPA/WPA2/WPA3 without PSK)
+    // Detect enterprise networks.
     BOOL isEnterprise = (item->authAlgorithm == DOT11_AUTH_ALGO_WPA ||
                          item->authAlgorithm == DOT11_AUTH_ALGO_WPA3 ||
                          item->authAlgorithm == DOT11_AUTH_ALGO_RSNA);
@@ -1724,8 +2299,7 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
                                     DOT11_CIPHER_ALGORITHM cipherAlgorithm) {
     if (!profileXml) return FALSE;
 
-    // Stessa mappatura usata in BuildWlanProfileXml: il confronto deve
-    // sempre essere coerente con quello che il mod stesso scriverebbe.
+
     const WCHAR* expectedAuth = L"open";
     switch (authAlgorithm) {
         case DOT11_AUTH_ALGO_80211_OPEN:       expectedAuth = L"open";    break;
@@ -1751,9 +2325,9 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
         default:                              expectedEnc = L"AES";  break;
     }
 
-    // Rete open: basta che il profilo dichiari anch'esso authentication=open.
-    // Non richiediamo la presenza del tag <encryption> in questo caso,
-    // perché alcuni profili "open" storici lo omettono.
+
+
+
     if (authAlgorithm == DOT11_AUTH_ALGO_80211_OPEN) {
         return XmlTagEqualsCI(profileXml, L"authentication", L"open");
     }
@@ -1818,10 +2392,9 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     params.dot11BssType = ctx->dot11BssType;
     params.dwFlags = 0;
     // Se conosciamo il BSSID esatto (risolto in RefreshWifiData), lo passiamo
-    // per forzare la connessione a QUEL BSS specifico. Senza questo, quando
-    // esistono più AP con lo stesso SSID, WlanConnect con solo il nome profilo
-    // lascia al sistema la scelta del BSS: poteva connettersi a un AP diverso
-    // da quello mostrato/selezionato nella UI, oppure a uno irraggiungibile,
+
+
+
     // facendo apparire la riconnessione come "non funzionante".
     DOT11_BSSID_LIST bssidList;
     if (ctx->hasBssid) {
@@ -1877,7 +2450,7 @@ static BOOL AskForPasswordAndConnect(int index) {
         CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
     }
 
-    // La password serve SOLO se la rete è protetta e non ha un profilo salvato
+
     BOOL needsPassword = (item->isSecured && !item->hasProfile);
 
     if (needsPassword) {
@@ -1956,12 +2529,12 @@ void ConnectToNetwork(int index) {
         return;
     }
     
-    // ❌ RIMOSSO IL RESET PREMATURE:
+
     // if (item->connState == CONN_STATE_ERROR) {
     //     item->connState = CONN_STATE_IDLE;
     // }
     
-    // Resetta tutte le altre reti in stato "Connecting..." o "Error" prima di connettere
+
     for (int i = 0; i < g_NetworkCount; i++) {
         if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
                            g_NetworkList[i].connState == CONN_STATE_ERROR)) {
@@ -1979,7 +2552,7 @@ void DisconnectFromNetwork(int index) {
     WifiNetworkItem* item = &g_NetworkList[index];
     if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
     
-    // Resetta tutte le altre reti in stato "Connecting..." o "Error" prima di disconnettere
+
     for (int i = 0; i < g_NetworkCount; i++) {
         if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
                            g_NetworkList[i].connState == CONN_STATE_ERROR)) {
@@ -1993,9 +2566,9 @@ void DisconnectFromNetwork(int index) {
     g_PendingConnectIndex = index;
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-        // Polling più frequente per la disconnessione: il suo timeout
+
         // (DISCONNECTION_TIMEOUT_MS) è molto più corto di quello di
-        // connessione, quindi serve un intervallo di controllo proporzionato
+
         // per non aggiungere un ritardo extra percepibile sopra ai 4s.
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 1000, NULL);
     }
@@ -2029,7 +2602,7 @@ void CheckConnectionTimeouts() {
     
     if (item->operationStartTime == 0) return;
     
-    // Se è già connesso (RefreshWifiData l'ha aggiornato), resetta tutto
+
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -2041,7 +2614,7 @@ void CheckConnectionTimeouts() {
         return;
     }
     
-    // Se è in stato di errore, resetta senza mostrare messaggio
+
     if (item->connState == CONN_STATE_ERROR) {
         LogSsidSafe(L"Timeout check: connection already errored, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -2122,7 +2695,7 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
            connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
     
-    // Post to flyout thread — no UI/timer work on WLAN thread
+    // Post to flyout thread.
     PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 
                  (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
                  (LPARAM)connData->wlanReasonCode);
@@ -2144,15 +2717,11 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
     Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
            discData->wlanReasonCode, g_PendingConnectIndex);
 
-    // Marshal to the UI/flyout thread — do NOT mutate g_NetworkList here
-    // (that would race with WM_PAINT and RefreshWifiData on the flyout thread).
-    // WM_ASYNC_CONNECT_COMPLETE with wParam=0 and lParam=ERROR_SUCCESS is
-    // reused to signal a clean disconnect; the flyout thread will handle it.
+    // Post clean disconnect to flyout thread.
     PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
 
     if (g_TimeoutTimer && hFlyout) {
-        // Wake the timeout loop immediately so the UI updates without waiting
-        // for the next natural poll tick.
+        // Wake timeout loop immediately.
         PostMessageW(hFlyout, WM_TIMER, 1002, 0);
     }
 
@@ -2179,7 +2748,7 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
 // Signal icon drawing
 // -------------------------------------------------------
 
-// Draw an icon with bicubic interpolation for high-quality scaling
+// Draw icon with bicubic interpolation.
 static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, void** ppCached) {
     if (!hIcon) return;
     if (!g_hGdiPlus || !pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode) {
@@ -2206,8 +2775,8 @@ static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, vo
 
     void* gfx = NULL;
     if (pGdipGetImageGraphicsContext(dstBitmap, &gfx) == 0 && gfx) {
-        pGdipSetInterpolationMode(gfx, 7); // InterpolationModeHighQualityBicubic
-        pGdipSetPixelOffsetMode(gfx, 3);   // PixelOffsetModeHalf
+        pGdipSetInterpolationMode(gfx, 7); 
+        pGdipSetPixelOffsetMode(gfx, 3);   
         pGdipGraphicsClear(gfx, 0);
         pGdipDrawImageRectI(gfx, srcBitmap, 0, 0, w, h);
         pGdipDeleteGraphics(gfx);
@@ -2257,18 +2826,60 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     }
 }
 // -------------------------------------------------------
+// Tooltip fade
+// -------------------------------------------------------
+#define TOOLTIP_FADE_TIMER_ID  9100
+#define TOOLTIP_FADE_STEP      40    // alpha increment per tick
+#define TOOLTIP_FADE_INTERVAL  20    // ms between ticks (~12 steps = ~240ms)
+
+static BYTE  g_ttAlpha     = 255;
+static BOOL  g_ttFading    = FALSE;
+
+// Tooltip subclass: intercept WM_SHOWWINDOW to start fade-in.
+static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR) {
+    if (uMsg == WM_SHOWWINDOW && wParam) {
+        // Start fade-in: set alpha to 0 and kick off a timer.
+        g_ttAlpha  = 0;
+        g_ttFading = TRUE;
+        SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+        SetTimer(hWnd, TOOLTIP_FADE_TIMER_ID, TOOLTIP_FADE_INTERVAL, NULL);
+    }
+    if (uMsg == WM_TIMER && wParam == TOOLTIP_FADE_TIMER_ID) {
+        if (g_ttAlpha < (BYTE)(255 - TOOLTIP_FADE_STEP)) {
+            g_ttAlpha = (BYTE)(g_ttAlpha + TOOLTIP_FADE_STEP);
+            SetLayeredWindowAttributes(hWnd, 0, g_ttAlpha, LWA_ALPHA);
+        } else {
+            // Fully opaque: stop timer and remove layered flag.
+            KillTimer(hWnd, TOOLTIP_FADE_TIMER_ID);
+            g_ttAlpha  = 255;
+            g_ttFading = FALSE;
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        }
+        return 0;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// -------------------------------------------------------
 // Tooltip
 // -------------------------------------------------------
 void InitTooltip(HWND hwnd) {
     if (g_hTooltip) return;
-    g_hTooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
+    g_hTooltip = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED, TOOLTIPS_CLASS, NULL,
         WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
         hwnd, NULL, GetModuleHandle(NULL), NULL);
+    SetLayeredWindowAttributes(g_hTooltip, 0, 255, LWA_ALPHA);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTooltip, TooltipSubclassProc, 0);
     SendMessage(g_hTooltip, TTM_SETMAXTIPWIDTH,   0, 300);
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_AUTOPOP, 10000);
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_INITIAL, 400);
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_RESHOW,  200);
+    if (g_Settings.theme == 1) {
+        SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)RGB(30, 30, 30),   0);
+        SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)RGB(100, 200, 255), 0);
+        SetWindowTheme(g_hTooltip, L"DarkMode_Explorer", NULL);
+    }
 }
 
 void UpdateTooltipForRow(HWND hwnd, int index) {
@@ -2336,9 +2947,9 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     
     int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     
-    // Se la riga è completamente sopra l'area visibile, non mostrarla
+
     if (y + rowHeight <= LIST_Y_START) return FALSE;
-    // Se la riga è completamente sotto l'area visibile, non mostrarla
+
     if (y >= LIST_Y_END) return FALSE;
     
     rcRow->left   = 10;
@@ -2356,7 +2967,6 @@ int HitTestRows(int x, int y) {
     }
     return -1;
 }
-// Cache per la detection del bottone di rete
 typedef struct {
     int  buttonCount;
     int  networkId;
@@ -2369,14 +2979,13 @@ static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
 }
 
-// Inizializza i range di pnidui.dll (chiamare una volta sola)
+
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
 
-    // ExplorerPatcher può ridefinire pnidui.dll; prova prima la sua cartella
+
     HMODULE hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
     if (!hPnidui) {
-        // Fallback: pnidui.dll di sistema (presente su Win10 e Win11 pre-24H2 con legacy taskbar)
         hPnidui = GetModuleHandleW(L"pnidui.dll");
     }
     if (!hPnidui) {
@@ -2452,10 +3061,11 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
             ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
+        g_bShowCheckboxLabel = FALSE;
         return;
     }
     
-    // Calcola la posizione Y assoluta della riga selezionata (senza passare da GetRowRect)
+
     int rowY = LIST_Y_START;
     for (int i = 0; i < g_SelectedRowIndex; i++) {
         rowY += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
@@ -2468,19 +3078,28 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
                          item->connState == CONN_STATE_DISCONNECTING);
     
-    // Se la riga è completamente fuori dall'area visibile, nascondi tutto
+
     if (rowYRelative + rowHeight <= LIST_Y_START || rowYRelative >= LIST_Y_END) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
             ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
+        g_bShowCheckboxLabel = FALSE;
         return;
     }
     
     int btnX = WINDOW_WIDTH - 114 - scrollbarOffset;  // X position
-    int chkX = 18;  
+    int chkX = 18;
+    int chkYOffset = 0;
+    // Se la barra di scorrimento è attiva, sposta il checkbox "Connetti automaticamente"
+    // dell'1.9% + 0.5% più a sinistra e dell'1.3% più in alto (altrimenti resta come sta)
+    if (scrollbarOffset > 0) {
+        chkX -= (WINDOW_WIDTH * 19) / 1000;   // -1.9% della larghezza finestra verso sinistra
+        chkX -= (WINDOW_WIDTH * 5) / 1000;    // -0.5% della larghezza finestra verso sinistra
+        chkYOffset -= (WINDOW_HEIGHT * 13) / 1000;  // -1.3% dell'altezza finestra verso l'alto
+    }
     int btnY = rowYRelative + 35;  
-    int chkY = rowYRelative + 36;
+    int chkY = rowYRelative + 36 + chkYOffset;
     
     if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
     if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
@@ -2490,11 +3109,24 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     // Checkbox
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) {
         if (!isConnected && !isConnecting) {
-            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, 160, 20, TRUE);
-            SetWindowTextW(g_hWndCheckboxConnect, LOC(STR_CHK_CONNECT_AUTO));
+
+            // largo 160px (come prima) il suo WM_CTLCOLORSTATIC riempie l'intera
+
+            int boxSize = ScaleDpi(13);
+            int chkNativeW = boxSize + ScaleDpi(4);
+            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, 20, TRUE);
             ShowWindow(g_hWndCheckboxConnect, SW_SHOW);
+
+            // nativo, cosi' il colore del testo non dipende dal rendering a tema
+
+            g_rcCheckboxLabel.left   = chkX + boxSize + ScaleDpi(5);
+            g_rcCheckboxLabel.top    = chkY;
+            g_rcCheckboxLabel.right  = chkX + 160;
+            g_rcCheckboxLabel.bottom = chkY + 20;
+            g_bShowCheckboxLabel = TRUE;
         } else {
             ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
+            g_bShowCheckboxLabel = FALSE;
         }
     }
     
@@ -2518,12 +3150,11 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         }
     }
 }
-
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     if (itemIndex < 0 || itemIndex >= g_NetworkCount) return;
     g_ContextMenuTargetIndex = itemIndex;
     WifiNetworkItem* item = &g_NetworkList[itemIndex];
-    
+
     HMENU hMenu = CreatePopupMenu();
     if (item->connState == CONN_STATE_CONNECTED) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, LOC(STR_CTX_DISCONNECT));
@@ -2533,10 +3164,20 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     } else {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, LOC(STR_CTX_CONNECT));
     }
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
     
+
+    if (g_Settings.theme == 1) {
+        DarkContextMenu::Apply(TRUE);
+    }
+    
     int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN|TPM_RIGHTBUTTON|TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, NULL);
+    
+
+    if (g_Settings.theme == 1) {
+        DarkContextMenu::Apply(FALSE);
+    }
+    
     if (cmd > 0) {
         switch (cmd) {
         case IDM_CONNECT:
@@ -2566,7 +3207,7 @@ void EnsureRowVisible(int index) {
     int totalHeight = GetTotalListHeight();
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
 
-    // 1. Garantisce che la riga cliccata sia visibile (comportamento esistente)
+
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
@@ -2581,20 +3222,16 @@ void EnsureRowVisible(int index) {
         g_ScrollPos += rowTopRel;
     }
 
-    // 2. Se dopo l'espansione la lista totale supera l'area visibile,
-    //    preferisci scrollare quanto basta per non lasciare un vuoto
-    //    sotto l'ultima riga (evita la riga finale "tagliata" a metà
-    //    contro il footer quando si espande una riga in alto).
     if (totalHeight > visibleHeight) {
         if (g_ScrollPos < maxScroll && rowBottomRel <= visibleHeight) {
-            // c'è margine per scrollare e la riga cliccata resta comunque visibile:
+
             // verifica se l'ultima riga è scoperta e in tal caso scrolla quel poco che serve
-            int lastRowBottomAbs = totalHeight; // fine logica della lista
+            int lastRowBottomAbs = totalHeight;
             int lastRowBottomRel = lastRowBottomAbs - g_ScrollPos;
             if (lastRowBottomRel < visibleHeight) {
                 int needed = visibleHeight - lastRowBottomRel;
                 int newScroll = g_ScrollPos + needed;
-                // non scrollare oltre maxScroll, e non sacrificare la visibilità della riga cliccata
+
                 if (newScroll > maxScroll) newScroll = maxScroll;
                 int newRowTopRel = y - newScroll;
                 if (newRowTopRel >= 0) {
@@ -2610,7 +3247,7 @@ void EnsureRowVisible(int index) {
     SetScrollPos(g_hWndFlyout, SB_VERT, g_ScrollPos, TRUE);
 }
 // -------------------------------------------------------
-// Flyout Window Procedure (with removed old result/timeout cases)
+// Flyout Window Procedure
 // -------------------------------------------------------
 LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -2641,13 +3278,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         
         g_hWndButtonConnect = CreateWindowExW(0, WC_BUTTONW, L"",
-            WS_CHILD|BS_PUSHBUTTON, 0,0,0,0, hwnd,(HMENU)IDC_CONN_BUTTON,GetModuleHandle(NULL),NULL);
+            WS_CHILD | (g_Settings.theme == 1 ? BS_OWNERDRAW : BS_PUSHBUTTON),
+            0,0,0,0, hwnd,(HMENU)IDC_CONN_BUTTON,GetModuleHandle(NULL),NULL);
         SendMessageW(g_hWndButtonConnect, WM_SETFONT, (WPARAM)g_hFontButton, TRUE);
+        g_ButtonConnectIsOwnerDraw = (g_Settings.theme == 1);
         
         g_hWndCheckboxConnect = CreateWindowExW(0, WC_BUTTONW, L"",
             WS_CHILD|BS_AUTOCHECKBOX, 0,0,0,0, hwnd,(HMENU)IDC_AUTO_CHECKBOX,GetModuleHandle(NULL),NULL);
         SendMessageW(g_hWndCheckboxConnect, WM_SETFONT, (WPARAM)g_hFontCheckbox, TRUE);
         SendMessageW(g_hWndCheckboxConnect, BM_SETCHECK, BST_CHECKED, 0);
+        
+        ApplyNativeControlsTheme();
         
         RecalcArrowRect();
         InterlockedIncrement(&g_Ctx.refCount);
@@ -2669,7 +3310,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         } else if (wParam == 1002) {
             CheckConnectionTimeouts();
             UpdateLayoutGeometry();
-            // Usa FALSE per non cancellare lo sfondo
             InvalidateRect(hwnd, NULL, FALSE);
         }
         break;
@@ -2712,8 +3352,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 g_PendingConnectIndex = -1;
             }
         }
-        // Also clear any other networks stuck in DISCONNECTING/CONNECTED
-        for (int i = 0; i < g_NetworkCount; i++) {
+                for (int i = 0; i < g_NetworkCount; i++) {
             if (i == g_PendingConnectIndex) continue;
             if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
                 g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
@@ -2729,7 +3368,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
     
     if (opSuccess) {
-        // Connessione riuscita: aggiorna lo stato e pulisci
+
         if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
             g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
             g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
@@ -2740,12 +3379,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             g_TimeoutTimer = 0;
         }
     } else {
-        // Connessione fallita: analizza il tipo di errore
+
         if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
             WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
             
-            // Codici di errore WLAN che indicano un problema di autenticazione/password
-            // Questi significano "la password salvata non è più valida"
+
+
             static const DWORD authFailureCodes[] = {
                 0x00038001,  // WLAN_REASON_CODE_INVALID_PROFILE
                 0x00038002,  // MSM_REASON_CODE_INVALID_PROFILE_SCHEMA
@@ -2774,8 +3413,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                            MB_OK | MB_ICONERROR);
                 
             } else if (isAuthFailure && !item->hasProfile) {
-                // CASO 2: Errore di autenticazione ma senza profilo (prima connessione)
-                // → L'utente ha appena inserito una password sbagliata
                 Wh_Log(L"Auth failure for '%s' (code 0x%08X) — user-entered password was wrong", 
                        item->ssid, errorCode);
                 
@@ -2893,6 +3530,15 @@ case WM_MOUSEWHEEL: {
     }
     break;
 }
+    case WM_ERASEBKGND: {
+        HDC hdcErase = (HDC)wParam;
+        RECT rcClient;
+        GetClientRect(hwnd, &rcClient);
+        HBRUSH hBrErase = CreateSolidBrush(GetContentBgColor());
+        FillRect(hdcErase, &rcClient, hBrErase);
+        DeleteObject(hBrErase);
+        return 1;
+    }
     case WM_PAINT: {
         if (!SafeToAccessUI()) break;
         PAINTSTRUCT ps;
@@ -2902,26 +3548,24 @@ case WM_MOUSEWHEEL: {
         HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
 
         RECT rcHeader  = {0, 0, WINDOW_WIDTH, HEADER_HEIGHT};
-        HBRUSH hBrH = CreateSolidBrush(RGB(235,244,253)); FillRect(hdc, &rcHeader, hBrH); DeleteObject(hBrH);
+        HBRUSH hBrH = CreateSolidBrush(GetHeaderBgColor()); FillRect(hdc, &rcHeader, hBrH); DeleteObject(hBrH);
         RECT rcContent = {0, HEADER_HEIGHT, WINDOW_WIDTH, LIST_Y_END};
-        HBRUSH hBrC = CreateSolidBrush(RGB(255,255,255)); FillRect(hdc, &rcContent, hBrC); DeleteObject(hBrC);
+        HBRUSH hBrC = CreateSolidBrush(GetContentBgColor()); FillRect(hdc, &rcContent, hBrC); DeleteObject(hBrC);
         RECT rcFooter = GetFooterRect();
-        HBRUSH hBrF = CreateSolidBrush(RGB(225,230,242));
+        HBRUSH hBrF = CreateSolidBrush(GetFooterBgColor());
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
-        // Configura la scrollbar in base all'altezza totale
 int totalHeight = GetTotalListHeight();
 int visibleHeight = LIST_Y_END - LIST_Y_START;
-// int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
 
 SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
 SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
-        HPEN hPenSep = CreatePen(PS_SOLID, 1, RGB(214,223,234));
+        HPEN hPenSep = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, HEADER_HEIGHT, NULL); LineTo(hdc, WINDOW_WIDTH, HEADER_HEIGHT);
         SelectObject(hdc, hOldPen); DeleteObject(hPenSep);
 
-        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, RGB(180,193,210));
-        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, RGB(255,255,255));
+        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
+        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(80,80,85)  : RGB(255,255,255));
 
         SelectObject(hdc, hPenBevelDark);
         MoveToEx(hdc, 0, LIST_Y_END,     NULL); LineTo(hdc, WINDOW_WIDTH, LIST_Y_END);
@@ -2934,67 +3578,132 @@ SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
 
         BOOL isAnyConnected = (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
         SetBkMode(hdc, TRANSPARENT);
-        if (isAnyConnected) {
-            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, RGB(0,0,0));
-            TextOutW(hdc, 56, 18, LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
-            SelectObject(hdc, g_hFontBold);
-            WCHAR displaySsid[33]; GetDisplaySSID(0, displaySsid, 33);
-            DrawTextWithWrap(hdc, displaySsid, 56, 34, WINDOW_WIDTH - 70, 18);
-            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, RGB(110,110,110));
-            TextOutW(hdc, 56, 50, LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
-        } else {
-            SelectObject(hdc, g_hFontBold); SetTextColor(hdc, RGB(0,0,0));
-            TextOutW(hdc, 56, 22, LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
-            SelectObject(hdc, g_hFontNormal);
-            TextOutW(hdc, 56, 40, LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
-        }
+       if (isAnyConnected) {
+    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
+    TextOutW(hdc, 8, 8, LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
+    SelectObject(hdc, g_hFontBold);
+    SetTextColor(hdc, GetTextColor());
+    WCHAR displaySsid[33]; GetDisplaySSID(0, displaySsid, 33);
+    DrawTextWithWrap(hdc, displaySsid, 56, ScaleDpi(36), WINDOW_WIDTH - 70, 18);
+    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
+    TextOutW(hdc, 56, ScaleDpi(54), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
+} else {
+    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
+    TextOutW(hdc, 8, 8, LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
+    SelectObject(hdc, g_hFontBold);
+    SetTextColor(hdc, GetTextColor());
+    TextOutW(hdc, 56, ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
+}
         int iconSize = ScaleDpi(35*1.05); 
 HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
-if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-        // Ricalcola posizione refresh button (se scrollbar visibile, sposta a sinistra)
+if (hLargeIcon) DrawIconEx(hdc, 14, 37, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
 {
     int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
-    int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(13) : 0;
-    g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset;
+    BOOL hasScrollbar = (totalHeight > visibleHeight);
+    int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
+    int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
+
+    // Se la barra di scorrimento NON è attiva, sposta il pulsante del 4% più a destra
+    // e poi dell'1.3% più a sinistra (netto: +2.7% verso destra)
+    int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH * 4) / 100) - ((WINDOW_WIDTH * 13) / 1000));
+
+    g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift;
     g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
+
+    // Limite di sicurezza per evitare che esca completamente dallo schermo a destra
+    if (g_rcRefreshButton.right > WINDOW_WIDTH) {
+        int overflow = g_rcRefreshButton.right - WINDOW_WIDTH;
+        g_rcRefreshButton.right -= overflow;
+        g_rcRefreshButton.left  -= overflow;
+    }
 }
         if (g_IsHoveringRefresh) {
             RECT rcBtn = g_rcRefreshButton;
             
-            HBRUSH hBrBg = CreateSolidBrush(RGB(220, 238, 252));
-            FillRect(hdc, &rcBtn, hBrBg);
-            DeleteObject(hBrBg);
-            
-            HPEN hPenOuter = CreatePen(PS_SOLID, 1, RGB(174, 212, 243));
-            HPEN hOldPen = (HPEN)SelectObject(hdc, hPenOuter);
-            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            COLORREF refreshHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
+            COLORREF refreshHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
+            HBRUSH hBrBg = CreateSolidBrush(refreshHoverBg);
+            HPEN   hPenBorder = CreatePen(PS_SOLID, 1, refreshHoverBorder);
+            HPEN   hOldPen = (HPEN)SelectObject(hdc, hPenBorder);
+            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrBg);
             RoundRect(hdc, rcBtn.left, rcBtn.top, rcBtn.right, rcBtn.bottom, 4, 4);
-            
-            RECT rcInner = rcBtn;
-            rcInner.left += 1; rcInner.top += 1; 
-            rcInner.right -= 1; rcInner.bottom -= 1;
-            HPEN hPenInner = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
-            SelectObject(hdc, hPenInner);
-            RoundRect(hdc, rcInner.left, rcInner.top, rcInner.right, rcInner.bottom, 3, 3);
-            
             SelectObject(hdc, hOldPen);
             SelectObject(hdc, hOldBrush);
-            DeleteObject(hPenOuter);
-            DeleteObject(hPenInner);
+            DeleteObject(hBrBg);
+            DeleteObject(hPenBorder);
         }
         
+        // Disegna l'icona refresh dal base64, ricolorata per il tema scuro
         if (!g_hIconRefreshNormal) g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64);
-        if (g_hIconRefreshNormal)
-            DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
-                       g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
+        if (g_hIconRefreshNormal) {
+            if (g_Settings.theme == 0) {
+                // Tema chiaro: disegna direttamente
+                DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
+                           g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
+            } else {
+                // Tema scuro: ricolora i pixel usando GDI
+                ICONINFO ii = {0};
+                GetIconInfo(g_hIconRefreshNormal, &ii);
+                BITMAP bm = {0};
+                GetObject(ii.hbmColor, sizeof(bm), &bm);
+                int iw = bm.bmWidth, ih = bm.bmHeight;
 
-        SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, RGB(90,100,110));
+                HDC hdcTmp = CreateCompatibleDC(hdc);
+                BITMAPINFO bmi = {{0}};
+                bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth       = iw;
+                bmi.bmiHeader.biHeight      = -ih;
+                bmi.bmiHeader.biPlanes      = 1;
+                bmi.bmiHeader.biBitCount    = 32;
+                bmi.bmiHeader.biCompression = BI_RGB;
+                DWORD* pixels = NULL;
+                HBITMAP hBmpTmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&pixels, NULL, 0);
+                HBITMAP hOldBmpTmp = (HBITMAP)SelectObject(hdcTmp, hBmpTmp);
+
+                COLORREF bgCol = GetHeaderBgColor();
+                BYTE bgR = GetRValue(bgCol), bgG = GetGValue(bgCol), bgB = GetBValue(bgCol);
+                HBRUSH hBrTmp = CreateSolidBrush(bgCol);
+                RECT rcTmp = {0, 0, iw, ih};
+                FillRect(hdcTmp, &rcTmp, hBrTmp);
+                DeleteObject(hBrTmp);
+
+                DrawIconEx(hdcTmp, 0, 0, g_hIconRefreshNormal, iw, ih, 0, NULL, DI_NORMAL);
+
+
+                for (int p = 0; p < iw * ih; p++) {
+                    BYTE pb = (pixels[p])       & 0xFF;
+                    BYTE pg = (pixels[p] >> 8)  & 0xFF;
+                    BYTE pr = (pixels[p] >> 16) & 0xFF;
+                    if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
+                        continue;
+                    // Luminosita: piu e scuro, piu l'azzurro e intenso
+                    int lum = ((int)pr * 299 + (int)pg * 587 + (int)pb * 114) / 1000;
+                    int t = 255 - lum; // t alto = pixel scuro = colore pieno
+                    BYTE nr = (BYTE)(100 * t / 255);
+                    BYTE ng = (BYTE)(200 * t / 255);
+                    BYTE nb = (BYTE)(255 * t / 255);
+                    pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
+                }
+
+                BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
+
+                SelectObject(hdcTmp, hOldBmpTmp);
+                DeleteObject(hBmpTmp);
+                DeleteDC(hdcTmp);
+                if (ii.hbmColor) DeleteObject(ii.hbmColor);
+                if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+            }
+        }
+
+        SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
         TextOutW(hdc, 14, HEADER_HEIGHT - 24, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
         
         if (g_IsHoveringArrow) {
-            HBRUSH hBrA  = CreateSolidBrush(RGB(230,240,255));
-            HPEN   hPenA = CreatePen(PS_SOLID, 1, RGB(180,210,245));
+            COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
+            COLORREF arrowHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
+            HBRUSH hBrA  = CreateSolidBrush(arrowHoverBg);
+            HPEN   hPenA = CreatePen(PS_SOLID, 1, arrowHoverBorder);
             HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
             HBRUSH hOldBA = (HBRUSH)SelectObject(hdc, hBrA);
             RoundRect(hdc, g_rcArrowButton.left, g_rcArrowButton.top,
@@ -3003,7 +3712,7 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
             DeleteObject(hBrA); DeleteObject(hPenA);
         }
         RecalcArrowRect();
-        SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, RGB(50,50,50));
+        SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(180, 180, 180) : RGB(50, 50, 50));
         LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
         RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
         DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
@@ -3025,8 +3734,10 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
                 
                 if (isSelected || isHovered) {
                     RECT rcFullRow = rcRow; rcFullRow.left = 0; rcFullRow.right = WINDOW_WIDTH - 5;
-                    HBRUSH hBrBg  = CreateSolidBrush(isSelected ? RGB(228,241,252) : RGB(242,247,253));
-                    HPEN   hPenBg = CreatePen(PS_SOLID, 1, isSelected ? RGB(174,212,243) : RGB(216,231,248));
+                    COLORREF bgColor = isSelected ? GetRowSelectedColor() : GetRowHoverColor();
+                    COLORREF borderColor = isSelected ? GetRowSelectedBorderColor() : GetRowHoverBorderColor();
+                    HBRUSH hBrBg  = CreateSolidBrush(bgColor);
+                    HPEN   hPenBg = CreatePen(PS_SOLID, 1, borderColor);
                     HPEN   hOldP  = (HPEN)SelectObject(hdc, hPenBg);
                     HBRUSH hOldB  = (HBRUSH)SelectObject(hdc, hBrBg);
                     RoundRect(hdc, rcFullRow.left, rcFullRow.top, rcFullRow.right, rcFullRow.bottom, 3, 3);
@@ -3039,16 +3750,16 @@ if (hLargeIcon) DrawIconEx(hdc, 14, 20, hLargeIcon, iconSize, iconSize, 0, NULL,
                 WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
                 BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
                 SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
-                SetTextColor(hdc, RGB(0,0,255));
-                DrawTextWithWrap(hdc, ssidBuf, rcRow.left+10, rcRow.top+6, 
-                rcRow.right - rcRow.left - 50, 18);             WifiNetworkItem* item = &g_NetworkList[i];
+                SetTextColor(hdc, GetNetworkNameColor());
+                DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top+6, 
+rcRow.right - rcRow.left - 10, 18);       
+WifiNetworkItem* item = &g_NetworkList[i];
                 BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                          item->connState == CONN_STATE_DISCONNECTING);
 
 if (item->connState == CONN_STATE_CONNECTED) {
-    // Stato breve: resta a destra, sulla stessa riga del nome
     SelectObject(hdc, g_hFontBold);
-    SetTextColor(hdc, RGB(0,0,0));
+    SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
 
     RECT rcStatus;
     rcStatus.right = rcRow.right - 39 - scrollbarOffset;
@@ -3062,7 +3773,7 @@ if (item->connState == CONN_STATE_CONNECTED) {
 else if (isTransitioning) {
     // Stato di transizione: riga propria sotto il nome, tutta larghezza disponibile
     SelectObject(hdc, g_hFontNormal);
-    SetTextColor(hdc, RGB(128,128,128));
+    SetTextColor(hdc, GetSecondaryTextColor());
 
     const WCHAR* transitionText = (item->connState == CONN_STATE_CONNECTING)
         ? LOC(STR_CONNECTING) : LOC(STR_DISCONNECTING);
@@ -3081,7 +3792,7 @@ DrawNativeSignalIcon(hdc, rcRow.right - 10 - scrollbarOffset, rcRow.top+2, item-
         }
                 SelectClipRgn(hdc, NULL);
         SelectObject(hdc, g_IsHoveringLink ? g_hFontUnderline : g_hFontNormal);
-SetTextColor(hdc, RGB(14,75,184));
+SetTextColor(hdc, GetLinkColor());
 const wchar_t* footerText = LOC(STR_OPEN_SHARING_CENTER);
 SIZE textSize; GetTextExtentPoint32W(hdc, footerText, lstrlenW(footerText), &textSize);
 
@@ -3096,65 +3807,255 @@ if (g_Settings.useRoundedCorners) {
 }
 
 TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
+
+        if (g_bShowCheckboxLabel) {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(255,255,255) : RGB(0,0,0));
+            HFONT hOldFontChk = (HFONT)SelectObject(hdc, g_hFontCheckbox);
+            DrawTextW(hdc, LOC(STR_CHK_CONNECT_AUTO), -1, &g_rcCheckboxLabel, DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+            SelectObject(hdc, hOldFontChk);
+        }
+
         BitBlt(hdcReal, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, hdc, 0, 0, SRCCOPY);
         SelectObject(hdc, hOldBmp); DeleteObject(hBmp); DeleteDC(hdc);
         EndPaint(hwnd, &ps);
         break;
     }
-    case WM_CTLCOLORSTATIC: {
-        HDC hdc = (HDC)wParam;
-        HWND hwndCtrl = (HWND)lParam;
+case WM_DRAWITEM: {
+    LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
+    if (!pdis || pdis->CtlID != IDC_CONN_BUTTON) break;
+
+    // Solo per tema scuro
+    if (g_Settings.theme != 1) break;
+
+    BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
+    BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
+    
+
+    BOOL isHovering = g_IsHoveringConnectButton && !isPressed && !isDisabled;
+    
+    HDC  hdcReal = pdis->hDC;
+    RECT rc  = pdis->rcItem;
+    int  w = rc.right - rc.left;
+    int  h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) break;
+
+    WCHAR szText[64];
+    int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
+
+    COLORREF bgColor;
+    if (isDisabled) {
+        bgColor = RGB(50, 50, 58);
+    } else if (isPressed) {
+        bgColor = RGB(35, 35, 45);
+    } else if (isHovering) {
+        bgColor = RGB(70, 70, 85);  
+    } else {
+        bgColor = RGB(60, 60, 72);
+    }
+    
+    COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
+    COLORREF darkColor = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
+    COLORREF textColor = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
+    
+
+    COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0,0,0);
+
+    // Disegna su un bitmap di memoria
+    HDC hdcMem = CreateCompatibleDC(hdcReal);
+    HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
+    HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
+    RECT rcLocal = {0, 0, w, h};
+
+
+    HBRUSH hBrBg = CreateSolidBrush(bgColor);
+    FillRect(hdcMem, &rcLocal, hBrBg);
+    DeleteObject(hBrBg);
+
+
+    HPEN hPenLight = CreatePen(PS_SOLID, 1, lightColor);
+    HPEN hPenDark = CreatePen(PS_SOLID, 1, darkColor);
+    HPEN hPenHover = isHovering ? CreatePen(PS_SOLID, 1, hoverBorder) : NULL;
+    
+
+    HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPenLight);
+    MoveToEx(hdcMem, 0, h - 1, NULL);
+    LineTo(hdcMem, 0, 0);
+    LineTo(hdcMem, w - 1, 0);
+    
+
+    SelectObject(hdcMem, hPenDark);
+    MoveToEx(hdcMem, w - 1, 0, NULL);
+    LineTo(hdcMem, w - 1, h - 1);
+    LineTo(hdcMem, 0, h - 1);
+    
+
+    if (isHovering && hPenHover) {
+        SelectObject(hdcMem, hPenHover);
+        MoveToEx(hdcMem, 1, 1, NULL);
+        LineTo(hdcMem, w - 2, 1);
+        LineTo(hdcMem, w - 2, h - 2);
+        LineTo(hdcMem, 1, h - 2);
+        LineTo(hdcMem, 1, 1);
+        DeleteObject(hPenHover);
+    }
+    
+    SelectObject(hdcMem, hOldPen);
+    DeleteObject(hPenLight);
+    DeleteObject(hPenDark);
+
+    // Testo
+    SetBkMode(hdcMem, TRANSPARENT);
+    SetTextColor(hdcMem, textColor);
+    HFONT hOldFont = (HFONT)SelectObject(hdcMem, g_hFontButton);
+    RECT rcText = rcLocal;
+    if (isPressed) { rcText.left += 1; rcText.top += 1; }
+    DrawTextW(hdcMem, szText, textLen, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(hdcMem, hOldFont);
+
+
+    BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
+
+    SelectObject(hdcMem, hOldBmpMem);
+    DeleteObject(hBmpMem);
+    DeleteDC(hdcMem);
+    break;
+}
+case WM_CTLCOLORSTATIC: {
+    HDC hdc = (HDC)wParam;
+    HWND hwndCtrl = (HWND)lParam;
+    
+    // ----- GESTIONE SCRITTA "NASCONDI CARATTERI" -----
+    // Leggi il testo del controllo
+    WCHAR szText[100];
+    GetWindowTextW(hwndCtrl, szText, 100);
+    
+    // Se è la scritta "nascondi caratteri" in qualsiasi lingua
+    if (wcsstr(szText, L"nascondi") || wcsstr(szText, L"Hide") || 
+        wcsstr(szText, L"Ocultar") || wcsstr(szText, L"Masquer") ||
+        wcsstr(szText, L"Verstecken") || wcsstr(szText, L"Скрыть")) {
         
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
-                SetBkColor(hdc, RGB(228, 241, 252));
-                SetBkMode(hdc, OPAQUE);
-                SetTextColor(hdc, RGB(0, 0, 0));
-                
-                static HBRUSH hBrushCheckbox = NULL;
-                if (!hBrushCheckbox) {
-                    hBrushCheckbox = CreateSolidBrush(RGB(228, 241, 252));
-                }
-                return (INT_PTR)hBrushCheckbox;
-            } else {
-                SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, RGB(0, 0, 0));
-                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
-            }
+        // Colore dinamico in base al tema
+        if (g_Settings.theme == 1) {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));  // BIANCO per tema scuro
+        } else {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(0, 0, 0));        // NERO per tema chiaro
         }
-        
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(0, 0, 0));
         return (INT_PTR)GetStockObject(NULL_BRUSH);
     }
-    case WM_CTLCOLORBTN: {
-        HDC hdc = (HDC)wParam;
-        HWND hwndBtn = (HWND)lParam;
+    // ----- FINE GESTIONE SCRITTA "NASCONDI CARATTERI" -----
+    
+    // Gestione checkbox "Connetti automaticamente" (dalla finestra principale)
+    if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
         
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+        if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+            COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+            COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            SetBkColor(hdc, chkBg);
+            SetBkMode(hdc, OPAQUE);
+            SetTextColor(hdc, chkText);
             
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
-                SetBkColor(hdc, RGB(228, 241, 252));
-                SetBkMode(hdc, OPAQUE);
-                SetTextColor(hdc, RGB(0, 0, 0));
-                
-                static HBRUSH hBrushCheckboxBtn = NULL;
-                if (!hBrushCheckboxBtn) {
-                    hBrushCheckboxBtn = CreateSolidBrush(RGB(228, 241, 252));
-                }
-                return (INT_PTR)hBrushCheckboxBtn;
-            } else {
-                SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, RGB(0, 0, 0));
-                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+            static HBRUSH hBrushCheckbox = NULL;
+            static COLORREF lastChkBg = (COLORREF)-1;
+            if (!hBrushCheckbox || lastChkBg != chkBg) {
+                if (hBrushCheckbox) DeleteObject(hBrushCheckbox);
+                hBrushCheckbox = CreateSolidBrush(chkBg);
+                lastChkBg = chkBg;
             }
+            return (INT_PTR)hBrushCheckbox;
+        } else if (g_Settings.theme == 1) {
+            // intorno al segno di spunta. Usiamo lo stesso colore del footer.
+            COLORREF chkBg = GetFooterBgColor();
+            SetBkColor(hdc, chkBg);
+            SetBkMode(hdc, OPAQUE);
+            SetTextColor(hdc, RGB(255, 255, 255));
+
+            static HBRUSH hBrushCheckboxDark = NULL;
+            static COLORREF lastChkBgDark = (COLORREF)-1;
+            if (!hBrushCheckboxDark || lastChkBgDark != chkBg) {
+                if (hBrushCheckboxDark) DeleteObject(hBrushCheckboxDark);
+                hBrushCheckboxDark = CreateSolidBrush(chkBg);
+                lastChkBgDark = chkBg;
+            }
+            return (INT_PTR)hBrushCheckboxDark;
+        } else {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));
+            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
         }
-        
-        return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
+    
+    // Gestione label del dialogo password: azzurre per entrambi i temi
+    if (g_Settings.theme == 1) {
+        // Tema scuro: sfondo scuro, testo azzurro brillante
+        SetBkColor(hdc, RGB(20, 20, 20));
+        SetTextColor(hdc, RGB(100, 200, 255));
+        SetBkMode(hdc, OPAQUE);
+        static HBRUSH hBrPwdStatic = NULL;
+        static COLORREF lastBg = (COLORREF)-1;
+        COLORREF bg = RGB(20, 20, 20);
+        if (!hBrPwdStatic || lastBg != bg) {
+            if (hBrPwdStatic) DeleteObject(hBrPwdStatic);
+            hBrPwdStatic = CreateSolidBrush(bg);
+            lastBg = bg;
+        }
+        return (INT_PTR)hBrPwdStatic;
+    } else {
+        // Tema chiaro: sfondo trasparente, testo azzurro scuro
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(14, 75, 184));
+        return (INT_PTR)GetStockObject(NULL_BRUSH);
+    }
+}
+    case WM_CTLCOLORBTN: {
+    HDC hdc = (HDC)wParam;
+    HWND hwndBtn = (HWND)lParam;
+    
+    if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+        
+        if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+            COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+            COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            SetBkColor(hdc, chkBg);
+            SetBkMode(hdc, OPAQUE);
+            SetTextColor(hdc, chkText);
+            
+            static HBRUSH hBrushCheckboxBtn = NULL;
+            static COLORREF lastChkBtnBg = (COLORREF)-1;
+            if (!hBrushCheckboxBtn || lastChkBtnBg != chkBg) {
+                if (hBrushCheckboxBtn) DeleteObject(hBrushCheckboxBtn);
+                hBrushCheckboxBtn = CreateSolidBrush(chkBg);
+                lastChkBtnBg = chkBg;
+            }
+            return (INT_PTR)hBrushCheckboxBtn;
+        } else if (g_Settings.theme == 1) {
+
+            COLORREF chkBg = GetFooterBgColor();
+            SetBkColor(hdc, chkBg);
+            SetBkMode(hdc, OPAQUE);
+            SetTextColor(hdc, RGB(255, 255, 255));
+
+            static HBRUSH hBrushCheckboxBtnDark = NULL;
+            static COLORREF lastChkBtnBgDark = (COLORREF)-1;
+            if (!hBrushCheckboxBtnDark || lastChkBtnBgDark != chkBg) {
+                if (hBrushCheckboxBtnDark) DeleteObject(hBrushCheckboxBtnDark);
+                hBrushCheckboxBtnDark = CreateSolidBrush(chkBg);
+                lastChkBtnBgDark = chkBg;
+            }
+            return (INT_PTR)hBrushCheckboxBtnDark;
+        } else {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));
+            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+        }
+    }
+    
+    return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
     case WM_MOUSEMOVE: {
         int mx = LOWORD(lParam), my = HIWORD(lParam);
         POINT pt = {mx,my};
@@ -3163,16 +4064,34 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         BOOL wasRefresh = g_IsHoveringRefresh;
         BOOL wasArrow   = g_IsHoveringArrow;
         int  wasHov     = g_HoveredRowIndex;
+        
+
+        BOOL wasConnectHover = g_IsHoveringConnectButton;
+        
         g_IsHoveringLink    = PtInRect(&rcF, pt) != 0;
         g_IsHoveringRefresh = PtInRect(&g_rcRefreshButton, pt) != 0;
         g_IsHoveringArrow   = PtInRect(&g_rcArrowButton,   pt) != 0;
+        
+        if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect) && IsWindowVisible(g_hWndButtonConnect)) {
+            RECT rcConnect;
+            GetWindowRect(g_hWndButtonConnect, &rcConnect);
+            POINT ptScreen = pt;
+            ClientToScreen(hwnd, &ptScreen);
+            g_IsHoveringConnectButton = PtInRect(&rcConnect, ptScreen) != 0;
+        } else {
+            g_IsHoveringConnectButton = FALSE;
+        }
+        
         int newHovered = (my >= LIST_Y_START && my < LIST_Y_END) ? HitTestRows(mx,my) : -1;
         g_HoveredRowIndex = newHovered;
         if (newHovered != wasHov)
             UpdateTooltipForRow(hwnd, newHovered);
-        SetCursor(LoadCursor(NULL, (g_IsHoveringLink || g_IsHoveringRefresh || g_IsHoveringArrow) ? IDC_HAND : IDC_ARROW));
+        
+        SetCursor(LoadCursor(NULL, (g_IsHoveringLink || g_IsHoveringRefresh || g_IsHoveringArrow || g_IsHoveringConnectButton) ? IDC_HAND : IDC_ARROW));
+        
         if (wasLink!=g_IsHoveringLink || wasRefresh!=g_IsHoveringRefresh ||
-            wasArrow!=g_IsHoveringArrow || wasHov!=g_HoveredRowIndex) {
+            wasArrow!=g_IsHoveringArrow || wasHov!=g_HoveredRowIndex ||
+            wasConnectHover != g_IsHoveringConnectButton) {
             InvalidateRect(hwnd,NULL,FALSE);
             TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT),TME_LEAVE,hwnd,0};
             TrackMouseEvent(&tme);
@@ -3181,6 +4100,7 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     case WM_MOUSELEAVE:
         g_IsHoveringLink = g_IsHoveringRefresh = g_IsHoveringArrow = FALSE;
+        g_IsHoveringConnectButton = FALSE;
         g_HoveredRowIndex = -1;
         UpdateTooltipForRow(hwnd, -1);
         SetCursor(LoadCursor(NULL,IDC_ARROW));
@@ -3243,7 +4163,17 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
                     EnsureRowVisible(ci);
                 }
                 InvalidateRect(hwnd,NULL,FALSE);
+            } else if (g_SelectedRowIndex != -1) {
+                g_SelectedRowIndex = -1;
+                ClearKeyboardFocus();
+                UpdateLayoutGeometry();
+                InvalidateRect(hwnd,NULL,FALSE);
             }
+        } else if (g_SelectedRowIndex != -1) {
+            g_SelectedRowIndex = -1;
+            ClearKeyboardFocus();
+            UpdateLayoutGeometry();
+            InvalidateRect(hwnd,NULL,FALSE);
         }
         break;
     }
@@ -3258,6 +4188,13 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         }
         break;
     }
+    case WM_INITMENUPOPUP: {
+        if (g_Settings.theme == 1) {
+                        HWND hwndPopup = FindWindowW(L"#32768", NULL);
+            if (hwndPopup) SetWindowTheme(hwndPopup, L"DarkMode_Explorer", NULL);
+        }
+        break;
+    }
     case WM_COMMAND: {
         int wid = LOWORD(wParam);
         if (wid == IDC_CONN_BUTTON && g_SelectedRowIndex != -1) {
@@ -3268,7 +4205,7 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
     }
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) {
-            // Non nascondere se stiamo mostrando la finestra della password
+
             if (!g_inPasswordPrompt) {
                 ClearKeyboardFocus();
                 ShowWindow(hwnd, SW_HIDE);
@@ -3285,13 +4222,17 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
         if (g_RefreshTimer) { KillTimer(hwnd, g_RefreshTimer); g_RefreshTimer = 0; }
         if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
         InterlockedDecrement(&g_Ctx.refCount);
-        if (g_hTooltip) { DestroyWindow(g_hTooltip); g_hTooltip = NULL; }
+        if (g_hTooltip) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTooltip, TooltipSubclassProc);
+            DestroyWindow(g_hTooltip);
+            g_hTooltip = NULL;
+        }
         g_hWndFlyout = g_hWndButtonConnect = g_hWndCheckboxConnect = NULL;
         break;
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
-}// =====================================================================
-// Network icon detection — tramite pnidui.dll (metodo robusto)
+} // =====================================================================
+// Network icon detection via pnidui.dll
 // =====================================================================
 
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
@@ -3414,7 +4355,7 @@ WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, 0);
     return TRUE;
 }
 BOOL InstallTrayInterception() {
-    // Wrapper per compatibilità con codice esistente
+
     return InstallTrayInterceptionInternal();
 }
 
@@ -3424,7 +4365,7 @@ void RemoveTrayInterception() {
         G_hSubclassedToolbar = nullptr;
     }
 
-    // Resetta pnidui.dll's cache
+
     g_pniduiBase = NULL;
     g_pniduiEnd  = NULL;
 }
@@ -3459,7 +4400,7 @@ void ToggleFlyoutWindow() {
             RegisterClassW(&wc);
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
-            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; // Added WS_BORDER as requested
+            DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; 
             if (g_Settings.useRoundedCorners) dwStyle |= WS_THICKFRAME;
             AdjustWindowRectEx(&rcClient, dwStyle, FALSE, dwExStyle);
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
@@ -3473,7 +4414,7 @@ void ToggleFlyoutWindow() {
             ClearKeyboardFocus();
             ShowWindow(g_hWndFlyout, SW_HIDE);
         } else {
-            // Lazy WLAN open: if the service was unavailable at startup, try once now
+            // Lazy WLAN open on first show.
             if (!g_Ctx.hWlanClient) {
                 DWORD dwMaxClient = 2, dwCurVer = 0;
                 if (WlanOpenHandle(dwMaxClient, NULL, &dwCurVer, &g_Ctx.hWlanClient) == ERROR_SUCCESS) {
@@ -3487,6 +4428,7 @@ void ToggleFlyoutWindow() {
             }
             DetermineLocale();
             LoadSettings();
+            ApplyNativeControlsTheme();
             UINT dpi = GetDpiForWindow(g_hWndFlyout);
             if (dpi < 96) dpi = 96;
             if (dpi != g_dpi) RecalcDpiMetrics(dpi);
@@ -3513,9 +4455,8 @@ void ToggleFlyoutWindow() {
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
-    // Initialize COM on this thread 
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    // Open the WLAN handle here (off the init path) so we never block explorer.exe at startup
+        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    // Open WLAN handle off the init path to avoid blocking explorer.exe.
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -3618,9 +4559,13 @@ void SafeCleanup() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.8.4 ===");
+    Wh_Log(L"=== Wh_ModInit v2.8.6 ===");
     DetectWindowsVersion();
     LoadSettings();
+
+    // Install SetMenuInfo hook; apply dark theme if already selected.
+    DarkContextMenu::Init();
+
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
 
@@ -3647,23 +4592,29 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // NOTE: WlanOpenHandle is now done on the hotkey worker thread (see HotkeyThreadProc)
-    // to avoid blocking explorer.exe startup for up to 20s on machines without Wi-Fi.
-
+    // WlanOpenHandle is done on the hotkey thread (see HotkeyThreadProc).
     g_Initialized = TRUE;
     return TRUE;
 }
 void Wh_ModSettingsChanged() {
     BOOL oldRoundedCorners = g_Settings.useRoundedCorners;
+    int  oldTheme          = g_Settings.theme;
     LoadSettings();
     DetermineLocale();
 
-    if (oldRoundedCorners != g_Settings.useRoundedCorners) {
+    // Sync context menu dark/light state with theme setting.
+    DarkContextMenu::OnSettingsChanged();
+
+    BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
+                     || (oldTheme          != g_Settings.theme);
+
+    if (needRecreate) {
         if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             BOOL wasVisible = IsWindowVisible(g_hWndFlyout);
             SendMessageW(g_hWndFlyout, WM_SAFE_CLOSE, 0, 0);
             if (wasVisible) ToggleFlyoutWindow();
         }
+        return;
     }
 
 
@@ -3683,6 +4634,8 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
+
+    DarkContextMenu::Uninit();
 
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
