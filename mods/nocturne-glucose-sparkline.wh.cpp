@@ -199,18 +199,33 @@ struct GlucoseSnapshot {
 };
 
 std::mutex g_widgetMutex;
-winrt::Windows::UI::Core::CoreDispatcher g_dispatcher{nullptr};
+// g_dispatcher / g_borderStoryboard hold XAML/COM objects with non-trivial
+// destructors. They are intentionally heap-leaked (held by reference) so their
+// destructors never run during DLL_PROCESS_DETACH (process shutdown — explorer
+// restart, sign-out, reboot — where Wh_ModUninit is NOT called): releasing an STA
+// proxy after its apartment is gone can hang under the loader lock. Normal teardown
+// releases them on the UI thread in Wh_ModBeforeUninit while the apartment is alive,
+// so the leak only ever happens at real process exit, where the OS reclaims it.
+winrt::Windows::UI::Core::CoreDispatcher& g_dispatcher =
+    *new winrt::Windows::UI::Core::CoreDispatcher{nullptr};
 winrt::weak_ref<FrameworkElement> g_widgetRoot;
+winrt::weak_ref<FrameworkElement> g_rootGrid;  // captured for synchronous tile removal on disable
 GlucoseSnapshot g_lastSnapshot;  // replayed when the widget is (re)inserted
 
-std::thread g_readerThread;
+// Heap pointer with a trivial destructor. At process shutdown Wh_ModUninit is NOT
+// called and globals are destroyed during DLL_PROCESS_DETACH; a value std::thread
+// would still be joinable() there and ~std::thread() would call std::terminate(),
+// aborting the host. Leaking the pointer is safe (the OS reclaims the thread); the
+// real join + delete happens in Wh_ModUninit while the process is alive.
+std::thread* g_readerThread = nullptr;
 std::atomic<bool> g_running{false};
 std::atomic<bool> g_taskbarViewHooked{false};
 std::atomic<bool> g_insertPending{false};  // a deferred insertion is queued
 
-// The out-of-range alert pulse storyboard. Created on the UI thread and kept
-// alive so refreshes only Begin/Stop it (UI-thread only).
-Animation::Storyboard g_borderStoryboard{nullptr};
+// The out-of-range alert pulse storyboard. Created on the UI thread and kept alive so
+// refreshes only Begin/Stop it (UI-thread only). Heap-leaked (see g_dispatcher above).
+Animation::Storyboard& g_borderStoryboard =
+    *new Animation::Storyboard{nullptr};
 winrt::weak_ref<Media::SolidColorBrush> g_borderBrushTarget;
 
 // Re-entrancy guard: set while we position the host from *inside* the taskbar
@@ -1073,6 +1088,7 @@ static void InsertWidgetIfNeeded(FrameworkElement rootGrid) {
     try {
         std::lock_guard<std::mutex> lk(g_widgetMutex);
         g_widgetRoot = winrt::make_weak(tile);
+        g_rootGrid = winrt::make_weak(rootGrid);
         g_dispatcher = tile.Dispatcher();
         replay = g_lastSnapshot;
     } catch (...) {
@@ -1258,11 +1274,15 @@ void LoadSettings() {
 
 static void StartReader() {
     g_running.store(true);
-    g_readerThread = std::thread(ReaderLoop);
+    g_readerThread = new std::thread(ReaderLoop);
 }
 static void StopReader() {
     g_running.store(false);
-    if (g_readerThread.joinable()) g_readerThread.join();
+    if (g_readerThread) {
+        if (g_readerThread->joinable()) g_readerThread->join();
+        delete g_readerThread;
+        g_readerThread = nullptr;
+    }
 }
 
 BOOL Wh_ModInit() {
@@ -1287,18 +1307,56 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit nocturne-glucose-sparkline");
-    StopReader();
-    // Our tile is intentionally NOT removed here: dispatching tree mutation onto the UI
-    // thread at unload races the DLL being unloaded (use-after-free). The next insert
-    // (recompile/reload) clears the stale tile via InsertWidgetIfNeeded, and an explorer
-    // restart clears everything. A lingering tile after a plain disable is cosmetic.
+// Runs while the hooks and the XAML UI thread are still live (unlike Wh_ModUninit at
+// process shutdown), so this is where we revert our visible effect. Remove our tile
+// synchronously: dispatch the tree mutation onto the UI thread and WAIT for it, so the
+// tile is gone before the DLL unloads — no fire-and-forget use-after-free. The same
+// dispatch releases the UI/COM globals on their apartment thread.
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"BeforeUninit nocturne-glucose-sparkline");
+
+    winrt::Windows::UI::Core::CoreDispatcher disp{nullptr};
+    winrt::weak_ref<FrameworkElement> rootRef;
+    {
+        std::lock_guard<std::mutex> lk(g_widgetMutex);
+        disp = g_dispatcher;
+        rootRef = g_rootGrid;
+    }
+    if (!disp) return;  // never inserted a tile; nothing live to tear down
+
+    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    disp.TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+                     [rootRef, done]() {
+                         if (auto rg = rootRef.get())
+                             TaskbarHost::RemoveTile(rg, L"NocturneGlucoseTile");
+                         // Release UI/COM globals on the apartment thread.
+                         if (g_borderStoryboard) { try { g_borderStoryboard.Stop(); } catch (...) {} }
+                         g_borderStoryboard = nullptr;
+                         g_borderBrushTarget = {};
+                         std::lock_guard<std::mutex> lk(g_widgetMutex);
+                         g_widgetRoot = {};
+                         g_rootGrid = {};
+                         g_dispatcher = nullptr;
+                         if (done) SetEvent(done);
+                     });
+    // Bounded wait so a wedged UI thread can't hang unload indefinitely.
+    if (done) { WaitForSingleObject(done, 3000); CloseHandle(done); }
 }
 
-void Wh_ModSettingsChanged() {
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit nocturne-glucose-sparkline");
+    StopReader();  // join + delete the worker while the process is alive
+    // The tile and the UI/COM globals are torn down in Wh_ModBeforeUninit on the UI
+    // thread (apartment still valid). At process shutdown neither runs and the
+    // heap-leaked globals are reclaimed by the OS (see their declarations).
+}
+
+// Reload on a settings change. fontSize, lineThickness and the sparkline width/height
+// are baked into the tile's XAML at construction (BuildWidgetXaml) and can't be
+// re-applied in place, so we rebuild via the reload path: it re-runs Wh_ModInit and
+// InsertWidgetIfNeeded reconstructs the tile with the new geometry.
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"SettingsChanged");
-    StopReader();
-    LoadSettings();
-    StartReader();
+    *bReload = TRUE;
+    return TRUE;
 }
