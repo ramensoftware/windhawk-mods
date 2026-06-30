@@ -1,3 +1,17 @@
+## 1.8 ([Jun 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c016d1c9b8d23944d834dd41c1029f0d124ff858/mods/taskbar-clock-customization.wh.cpp))
+
+* Added new system performance metrics, contributed by [yalov](https://github.com/yalov):
+  * RAM metrics: `%ram_used%`, `%ram_total%`, `%ram_committed%`, `%ram_committed_used%`, and `%ram_committed_total%`.
+  * VRAM (Video RAM) metrics: `%vram%`, `%vram_used%`, `%vram_total%`, `%vram_shared%`, `%vram_shared_used%`, and `%vram_shared_total%`.
+* Improved media information customization: Both the playing format and the idle format of `%media_info%` can now be configured with custom patterns.
+* Added an option to customize the date locale.
+* Added an option to customize the disk metrics format independently from the network metrics format.
+* Added line height customization, useful when using newlines (`%newline%`).
+* Added a justified text alignment option.
+* Changed the behavior for multiple GPUs: instead of showing average metrics, the adapter with the most dedicated VRAM is now selected.
+* Fixed system metrics being frozen on startup until the clock is refreshed (for up to a minute).
+* Fixed compatibility with some ARM64 Windows 11 builds.
+
 ## 1.7.4 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00185dce0fd0a9b71e0fdaa09b0611224dfaa022/mods/taskbar-clock-customization.wh.cpp))
 
 * Minor improvements to system performance metrics collection.

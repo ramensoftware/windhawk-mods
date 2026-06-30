@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-06-30T19:56:08.000Z</updated>
+    <updated>2026-06-30T22:28:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#c016d1c9b8d23944d834dd41c1029f0d124ff858</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-06-30T22:28:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new system performance metrics, contributed by <a href="https://github.com/yalov">yalov</a>:</li>
+<li>RAM metrics: <code>%ram_used%</code>, <code>%ram_total%</code>, <code>%ram_committed%</code>, <code>%ram_committed_used%</code>, and <code>%ram_committed_total%</code>.</li>
+<li>VRAM (Video RAM) metrics: <code>%vram%</code>, <code>%vram_used%</code>, <code>%vram_total%</code>, <code>%vram_shared%</code>, <code>%vram_shared_used%</code>, and <code>%vram_shared_total%</code>.</li>
+<li>Improved media information customization: Both the playing format and the idle format of <code>%media_info%</code> can now be configured with custom patterns.</li>
+<li>Added an option to customize the date locale.</li>
+<li>Added an option to customize the disk metrics format independently from the network metrics format.</li>
+<li>Added line height customization, useful when using newlines (<code>%newline%</code>).</li>
+<li>Added a justified text alignment option.</li>
+<li>Changed the behavior for multiple GPUs: instead of showing average metrics, the adapter with the most dedicated VRAM is now selected.</li>
+<li>Fixed system metrics being frozen on startup until the clock is refreshed (for up to a minute).</li>
+<li>Fixed compatibility with some ARM64 Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on Empty Explorer 2.3.0]]></title>
         <id>https://windhawk.net/mods/click-on-empty-explorer#ccde902c8764bffba2413670fe38bd4c923200c1</id>
@@ -456,17 +479,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ctrl+Backspace Fix for Win32 Text Boxes 1.0.1]]></title>
-        <id>https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes#8816b488b2a762412178f53c1e8eef2b974516bf</id>
-        <link href="https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes"/>
-        <updated>2026-06-25T20:04:32.000Z</updated>
-        <content type="html"><![CDATA[<p>Excluded the <code>Scintilla</code> control to resolve text corruption with Unicode characters that caused a crash in Notepad++.</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
