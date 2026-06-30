@@ -2,12 +2,12 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.6
+// @version        2.8.7
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi -lmsimg32
+// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -35,7 +35,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Right-click context menu**: Quick access to network status and properties
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
-- **Language support**: English, Italian, Spanish, French, Russian, German, Portoguese or auto-detect
+- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese or auto-detect
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support (NEW)**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
@@ -63,7 +63,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **m417z** — Code review
 - **Anixx** — Testing on Windows 11 23H2 and feedback
 - **sebastian08dm08-cpu** — Testing on Windows 10 1809
-## Changelog (version 2.8.6)
+## Changelog (version 2.8.7)
 - Added custom dark theme for the entire flyout UI
 - Added support for German and Portuguese languages
 - Implemented dark theme for password dialog and context menus
@@ -274,15 +274,11 @@ void LoadSettings() {
         g_Settings.refreshInterval = 1000;
     }
 }
-
 // =========================================================
 // Dark context menu support (right-click only; light theme untouched).
 // =========================================================
 namespace DarkContextMenu {
 
-constexpr COLORREF kMenuBg = 0x2C2C2C; 
-
-static HBRUSH g_hMenuBrush = NULL;
 
 enum class AppMode {
     Default,
@@ -299,25 +295,6 @@ static HMODULE g_hUxtheme = NULL;
 static FlushMenuThemes_T     pFlushMenuThemes    = nullptr;
 static SetPreferredAppMode_T pSetPreferredAppMode = nullptr;
 
-static decltype(&SetMenuInfo) SetMenuInfo_Original = nullptr;
-
-// Hook: inject dark background brush into popup menus when dark theme is active.
-WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo) {
-    if (g_Settings.theme != 1 || !g_hMenuBrush) {
-        return SetMenuInfo_Original(hMenu, lpInfo);
-    }
-
-    alignas(MENUINFO) BYTE buffer[256];
-    if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer)) {
-        return SetMenuInfo_Original(hMenu, lpInfo);
-    }
-
-    memcpy(buffer, lpInfo, lpInfo->cbSize);
-    auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
-    infoCopy->hbrBack = g_hMenuBrush;
-    return SetMenuInfo_Original(hMenu, infoCopy);
-}
-
 // Apply (or restore) dark menu theme.
 void Apply(BOOL dark) {
     if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
@@ -325,37 +302,20 @@ void Apply(BOOL dark) {
     pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
 }
 
-
 void Init() {
-    if (!g_hMenuBrush) {
-        g_hMenuBrush = CreateSolidBrush(kMenuBg);
-    }
-
     g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_hUxtheme) {
         pSetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
         pFlushMenuThemes     = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
     }
-
-    if (!WindhawkUtils::SetFunctionHook(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original)) {
-        Wh_Log(L"DarkContextMenu: failed to hook SetMenuInfo");
-    }
-
-
 }
 
-// Call on settings change.
 void OnSettingsChanged() {
-    Apply(g_Settings.theme == 1);
+    return;
 }
 
-// Call from Wh_ModUninit.
 void Uninit() {
     Apply(FALSE);
-    if (g_hMenuBrush) {
-        DeleteObject(g_hMenuBrush);
-        g_hMenuBrush = NULL;
-    }
     if (g_hUxtheme) {
         FreeLibrary(g_hUxtheme);
         g_hUxtheme = NULL;
@@ -562,36 +522,8 @@ void ApplyNativeControlsTheme() {
     }
 
 
-    BOOL wantOwnerDraw = (g_Settings.theme == 1);
+ 
 
-    if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect) && g_ButtonConnectIsOwnerDraw != wantOwnerDraw) {
-
-        HWND hParent = GetParent(g_hWndButtonConnect);
-        RECT rcOld; GetWindowRect(g_hWndButtonConnect, &rcOld);
-        POINT ptTopLeft = { rcOld.left, rcOld.top };
-        ScreenToClient(hParent, &ptTopLeft);
-        int oldW = rcOld.right - rcOld.left;
-        int oldH = rcOld.bottom - rcOld.top;
-        BOOL wasVisible = IsWindowVisible(g_hWndButtonConnect);
-        BOOL wasEnabled = IsWindowEnabled(g_hWndButtonConnect);
-        WCHAR oldText[64]; GetWindowTextW(g_hWndButtonConnect, oldText, 64);
-
-        DestroyWindow(g_hWndButtonConnect);
-
-        g_hWndButtonConnect = CreateWindowExW(0, WC_BUTTONW, oldText,
-            WS_CHILD | (wasVisible ? WS_VISIBLE : 0) | (wantOwnerDraw ? BS_OWNERDRAW : BS_PUSHBUTTON),
-            ptTopLeft.x, ptTopLeft.y, oldW, oldH,
-            hParent, (HMENU)IDC_CONN_BUTTON, GetModuleHandle(NULL), NULL);
-        SendMessageW(g_hWndButtonConnect, WM_SETFONT, (WPARAM)g_hFontButton, TRUE);
-        EnableWindow(g_hWndButtonConnect, wasEnabled);
-        
-
-        if (g_Settings.theme == 1) {
-            SetWindowTheme(g_hWndButtonConnect, L"DarkMode_Explorer", NULL);
-        }
-
-        g_ButtonConnectIsOwnerDraw = wantOwnerDraw;
-    }
 }
 
 HFONT g_hFontNormal    = NULL;
@@ -3920,33 +3852,10 @@ case WM_DRAWITEM: {
     DeleteDC(hdcMem);
     break;
 }
-case WM_CTLCOLORSTATIC: {
+    case WM_CTLCOLORSTATIC: {
     HDC hdc = (HDC)wParam;
     HWND hwndCtrl = (HWND)lParam;
     
-    // ----- GESTIONE SCRITTA "NASCONDI CARATTERI" -----
-    // Leggi il testo del controllo
-    WCHAR szText[100];
-    GetWindowTextW(hwndCtrl, szText, 100);
-    
-    // Se è la scritta "nascondi caratteri" in qualsiasi lingua
-    if (wcsstr(szText, L"nascondi") || wcsstr(szText, L"Hide") || 
-        wcsstr(szText, L"Ocultar") || wcsstr(szText, L"Masquer") ||
-        wcsstr(szText, L"Verstecken") || wcsstr(szText, L"Скрыть")) {
-        
-        // Colore dinamico in base al tema
-        if (g_Settings.theme == 1) {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));  // BIANCO per tema scuro
-        } else {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 0, 0));        // NERO per tema chiaro
-        }
-        return (INT_PTR)GetStockObject(NULL_BRUSH);
-    }
-    // ----- FINE GESTIONE SCRITTA "NASCONDI CARATTERI" -----
-    
-    // Gestione checkbox "Connetti automaticamente" (dalla finestra principale)
     if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
         WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
         
@@ -3966,7 +3875,6 @@ case WM_CTLCOLORSTATIC: {
             }
             return (INT_PTR)hBrushCheckbox;
         } else if (g_Settings.theme == 1) {
-            // intorno al segno di spunta. Usiamo lo stesso colore del footer.
             COLORREF chkBg = GetFooterBgColor();
             SetBkColor(hdc, chkBg);
             SetBkMode(hdc, OPAQUE);
@@ -3989,7 +3897,6 @@ case WM_CTLCOLORSTATIC: {
     
     // Gestione label del dialogo password: azzurre per entrambi i temi
     if (g_Settings.theme == 1) {
-        // Tema scuro: sfondo scuro, testo azzurro brillante
         SetBkColor(hdc, RGB(20, 20, 20));
         SetTextColor(hdc, RGB(100, 200, 255));
         SetBkMode(hdc, OPAQUE);
@@ -4003,7 +3910,6 @@ case WM_CTLCOLORSTATIC: {
         }
         return (INT_PTR)hBrPwdStatic;
     } else {
-        // Tema chiaro: sfondo trasparente, testo azzurro scuro
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(14, 75, 184));
         return (INT_PTR)GetStockObject(NULL_BRUSH);
@@ -4187,13 +4093,7 @@ case WM_CTLCOLORSTATIC: {
         }
         break;
     }
-    case WM_INITMENUPOPUP: {
-        if (g_Settings.theme == 1) {
-                        HWND hwndPopup = FindWindowW(L"#32768", NULL);
-            if (hwndPopup) SetWindowTheme(hwndPopup, L"DarkMode_Explorer", NULL);
-        }
-        break;
-    }
+   
     case WM_COMMAND: {
         int wid = LOWORD(wParam);
         if (wid == IDC_CONN_BUTTON && g_SelectedRowIndex != -1) {
@@ -4558,11 +4458,10 @@ void SafeCleanup() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.8.6 ===");
+    Wh_Log(L"=== Wh_ModInit v2.8.7 ===");
     DetectWindowsVersion();
     LoadSettings();
 
-    // Install SetMenuInfo hook; apply dark theme if already selected.
     DarkContextMenu::Init();
 
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
