@@ -57,7 +57,7 @@ two coexist. Windows 11 only.
 /*
 - dataPath: ""
   $name: Summary JSON path
-  $description: Path to a V4 summary JSON (the raw V4SummaryResponse from GET /api/v4/summary). Set this to force a single source. Blank = auto: the desktop companion's %LOCALAPPDATA%\Nocturne\glucose.json plus the packaged Win11 widget's file, whichever is freshest. Supports %ENV% and ~.
+  $description: Path to a V4 summary JSON (the raw V4SummaryResponse from GET /api/v4/summary). Set this to force a single source. Blank = auto. The desktop companion's %LOCALAPPDATA%\Nocturne\glucose.json plus the packaged Win11 widget's file, whichever is freshest. Supports %ENV% and ~.
 - pollSeconds: 15
   $name: Poll interval (seconds)
   $description: How often the mod re-reads the summary JSON.
@@ -1148,14 +1148,15 @@ static HMODULE GetTaskbarViewModuleHandle() {
 }
 
 static bool HookTaskbarViewSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::OnTaskbarLayoutChildBoundsChanged(void))"},
             &TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original,
             TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"HookSymbols(Taskbar.View.dll) failed");
         return false;
     }
