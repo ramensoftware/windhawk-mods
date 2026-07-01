@@ -178,7 +178,6 @@ static HWND          g_hwndMain        = NULL;
 static HFONT         g_hFontUi         = NULL;
 static LONG volatile g_dialogOpen      = 0;
 static int           g_currentTab      = 0;
-static WNDPROC       g_origTabProc     = nullptr;
 
 static HWND          g_hwndStartCustom = NULL;
 static LONG volatile g_startCustomOpen = 0;
@@ -369,16 +368,6 @@ static void ShowStartCustomDialog(HWND parent);
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static DWORD WINAPI DialogThreadProc(LPVOID);
-
-static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_ERASEBKGND) {
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        FillRect((HDC)wp, &rc, GetSysColorBrush(COLOR_WINDOW));
-        return 1;
-    }
-    return CallWindowProcW(g_origTabProc, hwnd, msg, wp, lp);
-}
 
 class TaskbarSettingsProvider {
 public:
@@ -1418,8 +1407,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowTextW(hwnd, g_str.title);
 
         HWND hTab = GetDlgItem(hwnd, IDC_TAB_MAIN);
-        if (!g_origTabProc)
-            g_origTabProc = (WNDPROC)SetWindowLongPtrW(hTab, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
         
         auto addTab = [&](int i, const WCHAR* s) {
             TCITEMW ti = { TCIF_TEXT, 0, 0, (LPWSTR)s };
@@ -1624,11 +1611,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         break;
     }
     case WM_DESTROY:
-        if (g_origTabProc) {
-            HWND hTab = GetDlgItem(hwnd, IDC_TAB_MAIN);
-            if (hTab) SetWindowLongPtrW(hTab, GWLP_WNDPROC, (LONG_PTR)g_origTabProc);
-            g_origTabProc = nullptr;
-        }
         if (g_hFontUi)      { DeleteObject(g_hFontUi);      g_hFontUi      = NULL; }
         g_hwndMain = NULL;
         InterlockedExchange(&g_dialogOpen, 0);
