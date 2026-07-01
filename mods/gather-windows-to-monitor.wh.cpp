@@ -4,7 +4,7 @@
 // @description     Move eligible open windows to a chosen monitor with global hotkeys
 // @version         0.1.0
 // @author          Fred
-// @github          fjdiazt
+// @github          https://github.com/fjdiazt
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lshell32
 // ==/WindhawkMod==
