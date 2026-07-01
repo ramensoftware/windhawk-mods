@@ -570,7 +570,7 @@ function generateModsData(cache: GitCache) {
 
     validateModAuthorData(modAuthorData);
 
-    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 4));
+    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
 function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
@@ -629,9 +629,9 @@ async function generateModCatalogs(cache: GitCache) {
 
     const modTimes = {};
 
-    const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
+    const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
+    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, modTimes, cache);
+    fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
 
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
@@ -647,7 +647,29 @@ async function generateModCatalogs(cache: GitCache) {
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
         const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
-        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+
+        // Keep the original (English) name and description for searching,
+        // copying each field only if the translation changed it.
+        for (const [modId, mod] of Object.entries(catalogEnriched.mods)) {
+            const englishMod = englishCatalogEnriched.mods[modId];
+            if (!englishMod) {
+                continue;
+            }
+            const metadata = mod.metadata;
+            const englishMetadata = englishMod.metadata;
+            const englishPartial: { name?: string; description?: string } = {};
+            if (metadata.name !== englishMetadata.name) {
+                englishPartial.name = englishMetadata.name;
+            }
+            if (metadata.description !== englishMetadata.description) {
+                englishPartial.description = englishMetadata.description;
+            }
+            if (Object.keys(englishPartial).length > 0) {
+                mod.metadataEnglish = englishPartial;
+            }
+        }
+
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 2));
     }
 }
 

@@ -2,7 +2,7 @@
 // @id              never-auto-expand-explorer-tree-items
 // @name            Never Auto-Expand Explorer Tree Items
 // @description     Stops the unwanted auto-expansion of navigation pane items even if the "Expand to current folder" option is off
-// @version         1.0.1
+// @version         1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
@@ -21,18 +21,39 @@ even if the "Expand to current folder" option is off, specifically when:
 This mod prevents this unwanted auto-expansion behavior, keeping the navigation
 pane tidy.
 
-**Note:** The top-level "Desktop" item can still auto-expand when the
+**Note:** The "Desktop" root item can still auto-expand when the
 "Show all folders" option is on, keeping the navigation pane populated.
 
 | Before | After |
 | :----: | :---: |
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_before.png) | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/never-auto-expand-explorer-tree-items_after.png) |
+
+## Configuration
+* **Allow top-level items to auto-expand:** Allows top-level items to
+  auto-expand while keeping their nested items collapsed.
+  * Enable this option if you want the "This PC" item to auto-expand while
+    keeping its drive items collapsed.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- allowTopLevelItemAutoExpansion: false
+  $name: Allow top-level items to auto-expand
+  $description: >-
+    Allows top-level items to auto-expand while keeping their nested items
+    collapsed
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
+
+struct
+{
+    bool allowTopLevelItemAutoExpansion;
+} settings;
 
 // Helper: Verify if the tree view belongs to the File Explorer navigation pane
 bool IsExplorerNavigationPane(HWND hTreeView)
@@ -55,13 +76,11 @@ bool IsExplorerNavigationPane(HWND hTreeView)
             return false;
         }
 
-        if (GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)))
+        if (GetClassNameW(hRootWnd, szClassName, ARRAYSIZE(szClassName)) &&
+            (_wcsicmp(szClassName, L"CabinetWClass") == 0 ||
+                _wcsicmp(szClassName, L"#32770") == 0))
         {
-            if (_wcsicmp(szClassName, L"CabinetWClass") == 0 ||
-                _wcsicmp(szClassName, L"#32770") == 0)
-            {
-                return true;
-            }
+            return true;
         }
     }
 
@@ -98,17 +117,24 @@ bool IsUserInteractingWithTreeView(HWND hTreeView)
     return false;
 }
 
-// Helper: Check if the tree item is the only root node in the navigation pane
-// This ensures the top-level "Desktop" item can still auto-expand when the
+// Helper: Check if the tree item is the only root item in the navigation pane
+// This ensures the "Desktop" root item can still auto-expand when the
 // "Show all folders" option is on.
-bool IsSingleRootNode(HWND hTreeView, HTREEITEM hTreeItem)
+bool IsSingleRootItem(HWND hTreeView, HTREEITEM hTreeItem)
 {
     auto hFirstRootItem = TreeView_GetRoot(hTreeView);
-    if (hTreeItem == hFirstRootItem)
-    {
-        return TreeView_GetNextSibling(hTreeView, hFirstRootItem) == nullptr;
-    }
-    return false;
+    return (hTreeItem == hFirstRootItem &&
+        TreeView_GetNextSibling(hTreeView, hFirstRootItem) == nullptr);
+}
+
+// Helper: Check if the tree item is a top-level item
+// This allows top-level items such as "This PC" to auto-expand while keeping
+// their nested items (such as drives) collapsed.
+bool IsTopLevelItem(HWND hTreeView, HTREEITEM hTreeItem)
+{
+    HTREEITEM hParentItem = TreeView_GetParent(hTreeView, hTreeItem);
+    return (hParentItem == nullptr ||
+        hParentItem == TreeView_GetRoot(hTreeView));
 }
 
 // Hook for SendMessageW
@@ -128,9 +154,12 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
         if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
             _wcsicmp(szClassName, L"SysTreeView32") == 0)
         {
+            auto hTreeItem = reinterpret_cast<HTREEITEM>(lParam);
             if (IsExplorerNavigationPane(hWnd) &&
                 !IsUserInteractingWithTreeView(hWnd) &&
-                !IsSingleRootNode(hWnd, reinterpret_cast<HTREEITEM>(lParam)))
+                !IsSingleRootItem(hWnd, hTreeItem) &&
+                !(settings.allowTopLevelItemAutoExpansion &&
+                    IsTopLevelItem(hWnd, hTreeItem)))
             {
                 return 0;
             }
@@ -145,10 +174,13 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
             auto* pTreeViewNotify = reinterpret_cast<LPNMTREEVIEWW>(lParam);
             if (pTreeViewNotify->action == TVE_EXPAND)
             {
-                if (IsExplorerNavigationPane(pNotifyHeader->hwndFrom) &&
-                    !IsUserInteractingWithTreeView(pNotifyHeader->hwndFrom) &&
-                    !IsSingleRootNode(pNotifyHeader->hwndFrom,
-                        pTreeViewNotify->itemNew.hItem))
+                auto hTreeView = pNotifyHeader->hwndFrom;
+                auto hTreeItem = pTreeViewNotify->itemNew.hItem;
+                if (IsExplorerNavigationPane(hTreeView) &&
+                    !IsUserInteractingWithTreeView(hTreeView) &&
+                    !IsSingleRootItem(hTreeView, hTreeItem) &&
+                    !(settings.allowTopLevelItemAutoExpansion &&
+                        IsTopLevelItem(hTreeView, hTreeItem)))
                 {
                     return TRUE;
                 }
@@ -159,10 +191,19 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
     return SendMessageW_Original(hWnd, uMsg, wParam, lParam);
 }
 
+// Load settings
+void LoadSettings()
+{
+    settings.allowTopLevelItemAutoExpansion =
+        Wh_GetIntSetting(L"allowTopLevelItemAutoExpansion");
+}
+
 // Mod initialization
 BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
+
+    LoadSettings();
 
     WindhawkUtils::SetFunctionHook(
         SendMessageW,
@@ -171,4 +212,10 @@ BOOL Wh_ModInit()
     );
 
     return TRUE;
+}
+
+// Reload settings
+void Wh_ModSettingsChanged()
+{
+    LoadSettings();
 }
