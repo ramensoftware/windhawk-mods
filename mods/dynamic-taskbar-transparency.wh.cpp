@@ -2,7 +2,7 @@
 // @id              dynamic-taskbar-transparency
 // @name            Dynamic Taskbar Transparency
 // @description     Dynamically changes the Windows 11 taskbar XAML background transparency for desktop, Start, search, tray flyouts, task view, and maximized windows.
-// @version         0.3.6
+// @version         0.3.7
 // @author          11581
 // @github          https://github.com/r1file
 // @include         explorer.exe
@@ -26,6 +26,10 @@ It fades the rectangles with `Opacity` instead of applying a colored alpha
 overlay, and it can fall back to the captured existing style, clear the mod's
 local overrides for the Windows native/default style, clear, blur, or
 blur-backed acrylic.
+
+State detection is driven by shell/window events and uses heuristic window
+class/process-name matching for Start, search, task view, tray flyouts, and
+other shell surfaces. These heuristics can change between Windows 11 builds.
 
 Do not run this together with TranslucentTB or another tool that continuously
 writes the same taskbar background.
@@ -151,8 +155,6 @@ same general taskbar background use case.
 - detection:
   - fullscreenAsMaximized: true
     $name: Treat fullscreen windows as maximized
-  - pollingIntervalMs: 80
-    $name: Polling interval (ms)
   $name: Detection
 */
 // ==/WindhawkModSettings==
@@ -182,6 +184,7 @@ same general taskbar background use case.
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cwctype>
 #include <mutex>
 #include <string>
@@ -240,9 +243,7 @@ struct Settings {
     Appearance trayFlyoutOpened;
     Appearance otherInteraction;
     int animationDurationMs = 220;
-    int frameTimeMs = 16;
     bool fullscreenAsMaximized = true;
-    int pollingIntervalMs = 80;
 };
 
 struct ShellActivity {
@@ -287,8 +288,13 @@ ActiveAppearance g_activeAppearance;
 
 std::atomic<bool> g_stopWorker = false;
 std::thread* g_workerThread = nullptr;
+std::thread* g_winEventThread = nullptr;
+std::atomic<DWORD> g_winEventThreadId = 0;
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 std::atomic<bool> g_scanPending = false;
+std::atomic<bool> g_detectionPending = true;
+std::mutex g_detectionMutex;
+std::condition_variable g_detectionCondition;
 
 TaskbarDynamicState g_lastLoggedState = TaskbarDynamicState::desktop;
 bool g_hasLoggedState = false;
@@ -319,7 +325,7 @@ AppearanceStyle ParseStyle(const std::wstring& value) {
     if (value == L"fallback") {
         return AppearanceStyle::fallback;
     }
-    if (value == L"captured" || value == L"normal") {
+    if (value == L"captured") {
         return AppearanceStyle::captured;
     }
     if (value == L"native") {
@@ -381,12 +387,8 @@ void LoadSettings() {
 
     settings.animationDurationMs =
         ClampInt(Wh_GetIntSetting(L"animation.durationMs"), 0, 5000);
-    settings.frameTimeMs = 1000 / 60;
-
     settings.fullscreenAsMaximized =
         Wh_GetIntSetting(L"detection.fullscreenAsMaximized") != 0;
-    settings.pollingIntervalMs =
-        ClampInt(Wh_GetIntSetting(L"detection.pollingIntervalMs"), 30, 1000);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = settings;
@@ -1189,9 +1191,7 @@ ActiveAppearance GetActiveAppearance() {
 
 void DispatchApplyAppearance(const Appearance& appearance,
                              bool restoreOriginal,
-                             bool waitForCompletion = false,
-                             bool unusedForceClearNative = false) {
-    (void)unusedForceClearNative;
+                             bool waitForCompletion = false) {
     std::vector<BackgroundElementSnapshot> snapshot;
     {
         std::lock_guard<std::mutex> lock(g_elementsMutex);
@@ -1261,10 +1261,8 @@ void DispatchApplyAppearance(const Appearance& appearance,
         }
 
         if (completionEvent) {
-            if (WaitForSingleObject(completionEvent, 500) ==
-                WAIT_OBJECT_0) {
-                CloseHandle(completionEvent);
-            }
+            WaitForSingleObject(completionEvent, 500);
+            CloseHandle(completionEvent);
         }
     }
 }
@@ -1334,8 +1332,8 @@ void ReleaseTrackedBackgroundElements() {
         DWORD waitResult = WaitForSingleObject(completionEvent, 1000);
         if (waitResult == WAIT_OBJECT_0) {
             releasedAbis.push_back(item.abi);
-            CloseHandle(completionEvent);
         }
+        CloseHandle(completionEvent);
     }
 
     std::lock_guard<std::mutex> lock(g_elementsMutex);
@@ -1494,11 +1492,13 @@ void QueueScanFromElement(void* pThis) {
     try {
         FrameworkElement element = GetFrameworkElementFromNative(pThis);
         if (!element) {
+            g_scanPending = false;
             return;
         }
 
         auto dispatcher = element.Dispatcher();
         if (!dispatcher) {
+            g_scanPending = false;
             return;
         }
 
@@ -1995,6 +1995,125 @@ BYTE InterpolateOpacity(BYTE from, BYTE to, double progress) {
         std::lround(from + (to - from) * EaseOutCubic(progress)));
 }
 
+void RequestStateDetection() {
+    g_detectionPending = true;
+    g_detectionCondition.notify_one();
+}
+
+void CALLBACK WinEventProc(HWINEVENTHOOK,
+                           DWORD event,
+                           HWND hwnd,
+                           LONG idObject,
+                           LONG,
+                           DWORD,
+                           DWORD) {
+    if (event != EVENT_SYSTEM_FOREGROUND && idObject != OBJID_WINDOW) {
+        return;
+    }
+
+    if (event != EVENT_SYSTEM_FOREGROUND && !hwnd) {
+        return;
+    }
+
+    RequestStateDetection();
+}
+
+void WinEventThreadProc() {
+    g_winEventThreadId = GetCurrentThreadId();
+
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    HWINEVENTHOOK objectEventHook =
+        SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!objectEventHook) {
+        Wh_Log(L"Failed to hook window object events");
+    }
+
+    HWINEVENTHOOK locationEventHook =
+        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
+                        EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0,
+                        0, WINEVENT_OUTOFCONTEXT);
+    if (!locationEventHook) {
+        Wh_Log(L"Failed to hook window location events");
+    }
+
+    HWINEVENTHOOK cloakEventHook =
+        SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!cloakEventHook) {
+        Wh_Log(L"Failed to hook window cloak events");
+    }
+
+    HWINEVENTHOOK foregroundEventHook =
+        SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!foregroundEventHook) {
+        Wh_Log(L"Failed to hook foreground events");
+    }
+
+    RequestStateDetection();
+
+    BOOL result;
+    while ((result = GetMessageW(&msg, nullptr, 0, 0)) != 0) {
+        if (result == -1) {
+            break;
+        }
+
+        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+            break;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (objectEventHook) {
+        UnhookWinEvent(objectEventHook);
+    }
+    if (locationEventHook) {
+        UnhookWinEvent(locationEventHook);
+    }
+    if (cloakEventHook) {
+        UnhookWinEvent(cloakEventHook);
+    }
+    if (foregroundEventHook) {
+        UnhookWinEvent(foregroundEventHook);
+    }
+
+    g_winEventThreadId = 0;
+}
+
+void StartWinEventThread() {
+    if (g_winEventThread) {
+        return;
+    }
+
+    g_winEventThread = new std::thread(WinEventThreadProc);
+    for (int i = 0; i < 100 && g_winEventThreadId == 0; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void StopWinEventThread() {
+    if (!g_winEventThread) {
+        return;
+    }
+
+    DWORD threadId = g_winEventThreadId;
+    if (threadId) {
+        PostThreadMessageW(threadId, WM_APP, 0, 0);
+    }
+
+    if (g_winEventThread->joinable()) {
+        g_winEventThread->join();
+    }
+    delete g_winEventThread;
+    g_winEventThread = nullptr;
+    g_winEventThreadId = 0;
+}
+
 void WorkerLoop() {
     Appearance currentAppearance{};
     Appearance animationStartAppearance{};
@@ -2005,10 +2124,10 @@ void WorkerLoop() {
     bool loggedNoElements = false;
     const ULONGLONG workerStartTick = GetTickCount64();
     ULONGLONG animationStartTick = GetTickCount64();
-    ULONGLONG nextDetectionTick = 0;
     ShellActivity shellActivity{};
     StateResolution resolution{TaskbarDynamicState::desktop, L"desktop",
                                false};
+    constexpr int frameTimeMs = 1000 / 60;
 
     while (!g_stopWorker) {
         Settings settings{};
@@ -2019,12 +2138,10 @@ void WorkerLoop() {
 
         const ULONGLONG now = GetTickCount64();
 
-        if (!hasCurrentAppearance || now >= nextDetectionTick) {
+        if (!hasCurrentAppearance || g_detectionPending.exchange(false)) {
             const auto taskbars = FindTaskbars();
             shellActivity = DetectShellActivity();
             resolution = ResolveState(settings, shellActivity, taskbars);
-            nextDetectionTick =
-                now + static_cast<ULONGLONG>(settings.pollingIntervalMs);
 
             const TaskbarDynamicState state = resolution.state;
             if (!g_hasLoggedState || g_lastLoggedState != state) {
@@ -2116,24 +2233,21 @@ void WorkerLoop() {
             hasLastAppliedAppearance = true;
         }
 
-        int sleepMs = settings.frameTimeMs;
         if (animationDone) {
-            const ULONGLONG afterFrameTick = GetTickCount64();
-            const ULONGLONG untilDetection =
-                nextDetectionTick > afterFrameTick
-                    ? nextDetectionTick - afterFrameTick
-                    : 0;
-            sleepMs = untilDetection > 0
-                          ? static_cast<int>(std::min<ULONGLONG>(
-                                untilDetection, settings.pollingIntervalMs))
-                          : 1;
+            std::unique_lock<std::mutex> lock(g_detectionMutex);
+            g_detectionCondition.wait(lock, [] {
+                return g_stopWorker || g_detectionPending.load();
+            });
+        } else {
+            std::unique_lock<std::mutex> lock(g_detectionMutex);
+            g_detectionCondition.wait_for(
+                lock, std::chrono::milliseconds(frameTimeMs), [] {
+                    return g_stopWorker || g_detectionPending.load();
+                });
         }
-
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(std::max(1, sleepMs)));
     }
 
-    DispatchApplyAppearance(currentAppearance, true, true, false);
+    DispatchApplyAppearance(currentAppearance, true, true);
     {
         std::lock_guard<std::mutex> lock(g_activeAppearanceMutex);
         g_activeAppearance = {};
@@ -2243,17 +2357,22 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
+    StartWinEventThread();
+    RequestStateDetection();
     g_workerThread = new std::thread(WorkerLoop);
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    RequestStateDetection();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Dynamic Taskbar Transparency");
+    StopWinEventThread();
     g_stopWorker = true;
+    RequestStateDetection();
     if (g_workerThread) {
         if (g_workerThread->joinable()) {
             g_workerThread->join();
@@ -2262,6 +2381,5 @@ void Wh_ModUninit() {
         g_workerThread = nullptr;
     }
 
-    DispatchApplyAppearance(Appearance{}, true, true, false);
     ReleaseTrackedBackgroundElements();
 }
