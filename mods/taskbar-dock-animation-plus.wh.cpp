@@ -538,7 +538,7 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx, double intensity, 
         bounceTranslateOffset = normalizedWave * BOUNCE_TRANSLATE_Y * currentBounceIntensity;       
         
         if (ctx.isVertical) {
-            if (ctx.edge == TaskbarEdge::Right) {
+            if (ctx.edge == TaskbarEdge::Left) {
                 bounceTranslateOffset *= -1.0;
             }
         } else {
