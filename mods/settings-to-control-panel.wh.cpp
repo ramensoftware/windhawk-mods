@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.11
+// @version        10.0.10
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -30,7 +30,7 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- **New in 10.0.11: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
+- **New in 10.0.10: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
 
 ---
 
@@ -1103,30 +1103,7 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
     if (!g_settings.enableRedirects || !pei) return ShellExecuteExW_orig(pei);
-    // Direct SndVolSSO/pnidui ShellExecute interception (Win11/compatibility fix)
-    if (g_settings.redirectSystemTray) {
-        void* retAddr = GetReturnAddress();
-        bool isSndVol = IsAddressInModule(retAddr, L"SndVolSSO.dll");
-        bool isPnidui = IsAddressInModule(retAddr, L"pnidui.dll");
-        
-        if (isSndVol || isPnidui) {
-            bool hasMsSettings = IsMsSettings(pei->lpFile) || IsMsSettings(pei->lpParameters);
-            if (hasMsSettings) {
-                if (isSndVol) {
-                    Wh_Log(L"[SndVolSSO-ShellExec] Redirecting to classic Sound panel");
-                    OpenClassicSoundPanel();
-                    if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
-                    return TRUE;
-                }
-                if (isPnidui) {
-                    Wh_Log(L"[pnidui-ShellExec] Redirecting to classic Network panel");
-                    OpenClassicNetworkConnections();
-                    if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
-                    return TRUE;
-                }
-            }
-        }
-    }
+
     if (IsControlSystemParams(pei->lpFile, pei->lpParameters)) {
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
@@ -1158,28 +1135,7 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
     if (!g_settings.enableRedirects) return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
-    // Direct SndVolSSO/pnidui ShellExecute interception (Win11/compatibility fix)
-    if (g_settings.redirectSystemTray) {
-        void* retAddr = GetReturnAddress();
-        bool isSndVol = IsAddressInModule(retAddr, L"SndVolSSO.dll");
-        bool isPnidui = IsAddressInModule(retAddr, L"pnidui.dll");
-        
-        if (isSndVol || isPnidui) {
-            bool hasMsSettings = IsMsSettings(file) || IsMsSettings(params);
-            if (hasMsSettings) {
-                if (isSndVol) {
-                    Wh_Log(L"[SndVolSSO-ShellExecW] Redirecting to classic Sound panel");
-                    OpenClassicSoundPanel();
-                    return SHELL_EXECUTE_SUCCESS;
-                }
-                if (isPnidui) {
-                    Wh_Log(L"[pnidui-ShellExecW] Redirecting to classic Network panel");
-                    OpenClassicNetworkConnections();
-                    return SHELL_EXECUTE_SUCCESS;
-                }
-            }
-        }
-    }
+
     if (IsControlSystemParams(file, params)) {
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         return SHELL_EXECUTE_SUCCESS;
@@ -1329,7 +1285,7 @@ HWND WINAPI CreateWindowExW_Hook(
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.11");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.10");
     
     g_hOle32 = LoadLibraryW(L"ole32.dll");
     if (g_hOle32) {
@@ -1391,7 +1347,7 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     RemoveTraySubclass();
     if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.11 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.10 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
