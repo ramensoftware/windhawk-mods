@@ -2,7 +2,7 @@
 // @id              dynamic-taskbar-transparency
 // @name            Dynamic Taskbar Transparency
 // @description     Dynamically changes the Windows 11 taskbar XAML background transparency for desktop, Start, search, tray flyouts, task view, and maximized windows.
-// @version         0.3.7
+// @version         0.3.8
 // @author          11581
 // @github          https://github.com/r1file
 // @include         explorer.exe
@@ -14,6 +14,8 @@
 // ==WindhawkModReadme==
 /*
 # Dynamic Taskbar Transparency
+
+![Dynamic Taskbar Transparency demo](https://i.imgur.com/Ab7hMYp.gif)
 
 This mod applies a TranslucentTB-like state machine to the Windows 11 taskbar.
 It keeps the taskbar clear on the desktop or when no maximized window is
