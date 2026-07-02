@@ -7653,7 +7653,7 @@
           5
         ],
         "ratingUsers": 7,
-        "updated": 1779300155000,
+        "updated": 1783013830000,
         "users": 305
       },
       "metadata": {
@@ -7669,7 +7669,7 @@
           "explorer.exe"
         ],
         "name": "Remove UWP titlebars Lite",
-        "version": "1.1.0"
+        "version": "1.2"
       }
     },
     "neko-cat": {

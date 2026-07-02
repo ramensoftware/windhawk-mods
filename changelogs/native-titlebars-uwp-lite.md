@@ -1,3 +1,7 @@
+## 1.2 ([Jul 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c3cfb1e122539801e373fb76a7c6c228ff6eaf30/mods/native-titlebars-uwp-lite.wh.cpp))
+
+Improve the icon appearance and fix a bug when the icons were confused when two UWP apps were opened at the same time.
+
 ## 1.1.0 ([May 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/16941c0526e84fd525aae8bccb265ad89e2168e0/mods/native-titlebars-uwp-lite.wh.cpp))
 
 * Add support for proper icons in titlebars
