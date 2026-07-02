@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.10
+// @version        10.0.12
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -30,7 +30,7 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- **New in 10.0.10: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
+- **New in 10.0.12: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
 
 ---
 
@@ -87,11 +87,9 @@ Panel pages, using only native Windows components.
 
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <objbase.h>
 #include <shellapi.h>
 #include <commctrl.h>
 #include <psapi.h>
-#include <initguid.h>
 #include <string>
 #include <algorithm>
 #include <unordered_map>
@@ -103,21 +101,12 @@ Panel pages, using only native Windows components.
 #define TRAY_CUSTOM_ID_AUDIO    65001
 #define TRAY_CUSTOM_ID_NETWORK  65002
 
-// Dynamic COM handling
-typedef HRESULT (WINAPI *CoCreateInstance_t)(const GUID* rclsid, IUnknown* pUnkOuter, DWORD dwClsContext, const GUID* riid, void** ppv);
-static CoCreateInstance_t dyn_CoCreateInstance = nullptr;
-static HMODULE g_hOle32 = nullptr;
-
-// IShellDispatch2 vtable hook
-using IShellDispatch2_ShellExecute_t = HRESULT(WINAPI*)(void* pThis, BSTR File, void* vArgs, void* vDir, void* vOperation, void* vShow);
-static IShellDispatch2_ShellExecute_t IShellDispatch2_ShellExecute_orig = nullptr;
-
 // TrackPopupMenuEx hook (DLL-based fallback method)
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
 // Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
-// 0=none, 1=audio, 2=network. Thread-local: only valid for the UI thread that right-clicked.
+// 0=none, 1=audio, 2=network. Plain global guarded by g_trayContextMutex (not thread-local).
 static int g_trayContextType = 0;
 static std::mutex g_trayContextMutex;
 // ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu hook
@@ -126,11 +115,10 @@ using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
 
-static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) { return false; }
+static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND);
 
 // Constants
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
-#define PERS_ED_CLSID   L"shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
 #define PERS_WALLPAPER  L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageWallpaper"
 #define PERS_COLORS     L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageColorization"
@@ -198,6 +186,15 @@ struct ModSettings {
 };
 
 static ModSettings g_settings;
+
+// Definition of the forward-declared hook (needs g_settings to be visible).
+static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) {
+    // Only force classic Win32 menus while the tray redirect is enabled.
+    // When disabled, allow the immersive menu again (true = owner-draw allowed),
+    // restoring stock behavior without requiring a full mod reload.
+    if (!g_settings.redirectSystemTray) return true;
+    return false;
+}
 
 static void LoadSettings() {
     g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
@@ -1189,28 +1186,6 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
 
-HRESULT WINAPI IShellDispatch2_ShellExecute_hook(void* pThis, BSTR File, void* vArgs, void* vDir, 
-                                                  void* vOperation, void* vShow) {
-    if (IsChildProcess()) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-    HookGuard guard;
-    if (guard.IsReentrant()) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-    if (!g_settings.enableRedirects || !File) return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-
-    std::wstring fileStr(File);
-    std::wstring uri;
-    if (IsMsSettings(fileStr.c_str())) uri = NormalizeUri(fileStr);
-    else if (IsShellClsid(fileStr.c_str())) uri = ToLower(fileStr);
-
-    if (!uri.empty()) {
-        auto result = ResolveUri(uri, nullptr);
-        if (result.intercept) {
-            if (!result.target.empty()) LaunchTarget(result.target);
-            return S_OK;
-        }
-    }
-    return IShellDispatch2_ShellExecute_orig(pThis, File, vArgs, vDir, vOperation, vShow);
-}
-
 // ============================================================
 // TRAY: METHOD 3 - Block immersive menus in SndVolSSO/pnidui (Win11 fix)
 // Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu to return false,
@@ -1285,12 +1260,7 @@ HWND WINAPI CreateWindowExW_Hook(
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.10");
-    
-    g_hOle32 = LoadLibraryW(L"ole32.dll");
-    if (g_hOle32) {
-        dyn_CoCreateInstance = (CoCreateInstance_t)GetProcAddress(g_hOle32, "CoCreateInstance");
-    }
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.12");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1319,24 +1289,29 @@ BOOL Wh_ModInit() {
         if (pCPW) Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
     }
 
-    // Install tray hooks if enabled
+    // Tray hooks are installed unconditionally so that enabling
+    // "Redirect System Tray" at runtime works without a full mod reload.
+    // Both TrackPopupMenuEx_Hook and CreateWindowExW_Hook already self-gate
+    // on g_settings.redirectSystemTray at call time.
+
+    // Method 1: Toolbar subclassing (CreateWindowExW hook)
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     if (g_settings.redirectSystemTray) {
-        // Method 1: Toolbar subclassing (CreateWindowExW hook)
-        Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
         SetupTraySubclass();
+    }
 
-        // Method 2: Block immersive menus so Win32 TrackPopupMenuEx is called on Win11
-        InstallImmersiveMenuHooks();
+    // Method 2: Block immersive menus so Win32 TrackPopupMenuEx is called on Win11.
+    // Resolved once here; HookSymbols should not be called again for the same module.
+    InstallImmersiveMenuHooks();
 
-        // Method 3: TrackPopupMenuEx DLL-based detection (fallback)
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
-        if (hUser32) {
-            void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
-            if (pTrackPopupMenuEx) {
-                bool ok3 = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
-                Wh_Log(L"TrackPopupMenuEx hook=%d", ok3);
-            }
+    // Method 3: TrackPopupMenuEx DLL-based detection (fallback)
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
+    if (hUser32) {
+        void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
+        if (pTrackPopupMenuEx) {
+            bool ok3 = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
+            Wh_Log(L"TrackPopupMenuEx hook=%d", ok3);
         }
     }
 
@@ -1346,8 +1321,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     RemoveTraySubclass();
-    if (g_hOle32) { FreeLibrary(g_hOle32); g_hOle32 = nullptr; }
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.10 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.12 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
@@ -1361,6 +1335,8 @@ void Wh_ModSettingsChanged() {
     InitMappings();
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
-        InstallImmersiveMenuHooks();
     }
+    // Note: InstallImmersiveMenuHooks() is intentionally NOT called here.
+    // HookSymbols must only be resolved once per module (done in Wh_ModInit);
+    // ICMH_CAODTM_hook itself checks g_settings.redirectSystemTray at call time.
 }
