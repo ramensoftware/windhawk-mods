@@ -14,6 +14,8 @@
 /*
 # MacOS Minimize Animation
 
+![Demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif)
+
 Brings the classic macOS **genie** effect to Windows. When you minimize a window
 it warps and flows down into the taskbar; when you restore it, it flows back out.
 
@@ -51,6 +53,11 @@ system's own animation getting in the way.
 ## Settings
 - **Animation duration** - how long the effect lasts (50-2000 ms).
 - **Animate window restore (open)** - also play the reverse genie when restoring.
+- **Animate app launch (experimental)** - also play the genie when an application
+  window first opens. **Experimental and off by default**: it may briefly flash the
+  window before animating, may not catch borderless apps, and can occasionally fire
+  on splash / dialog windows. Leave it off and the mod behaves exactly like plain
+  minimize / restore.
 
 ## Notes
 - Works on all top-level windows; child / tiny / hidden windows are skipped.
@@ -130,6 +137,14 @@ std::mutex g_CacheMutex;
 std::atomic<int> g_durationMs{450};
 std::atomic<bool> g_openAnimation{true};
 std::atomic<bool> g_launchAnimation{false};
+
+// --- UNLOAD COORDINATION ---
+// Windhawk unmaps the mod DLL right after uninit, so any worker thread still
+// running mod code at that point would crash its host process. Workers register
+// here and abort promptly once g_unloading is set; Wh_ModBeforeUninit waits for
+// the count to drain before the DLL goes away.
+std::atomic<bool> g_unloading{false};
+std::atomic<int>  g_workerCount{0};
 
 void MacGenieLoadSettings() {
     int ms = Wh_GetIntSetting(L"duration_ms");
@@ -401,6 +416,10 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
         if (lastFrame) break;
 
+        // Mod is being unloaded: cut the animation short. The cleanup below still
+        // reveals the real window (rising) and re-enables its DWM transitions.
+        if (g_unloading.load(std::memory_order_relaxed)) break;
+
         // Block until the next DWM compose cycle - the vsync sync point.
         DwmFlush();
     }
@@ -435,6 +454,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         g_AnimActive.erase(data->hRealWnd);
     }
     delete data;
+    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -453,10 +473,25 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising) {
     // (ShowWindow, ShowWindowAsync, SetWindowPlacement, WM_SYSCOMMAND, ...), a single
     // gesture could otherwise start two overlapping ghosts. Any window we animate
     // also counts as "seen", so the launch path won't fire on it later (e.g. restore).
-    {
+    // New animations are also refused while the mod is unloading.
+    bool blocked = g_unloading.load(std::memory_order_relaxed);
+    if (!blocked) {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
-        if (!g_AnimActive.insert(hWnd).second) return;
-        g_LaunchSeen.insert(hWnd);
+        blocked = !g_AnimActive.insert(hWnd).second;
+        if (!blocked) g_LaunchSeen.insert(hWnd);
+    }
+    if (blocked) {
+        // Rising callers hide the window (WS_EX_LAYERED + alpha 0) BEFORE calling us
+        // and rely on the animation thread to reveal it at the end. If we bail here -
+        // e.g. the user restores a window whose minimize genie is still in flight -
+        // that reveal never comes, so undo the hide now or the restored window stays
+        // permanently invisible. (WS_EX_LAYERED is left in place: the original style
+        // isn't known here, and layered + alpha 255 renders normally.)
+        if (rising) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+        return;
     }
 
     // --- SMART ICON TRACKING ---
@@ -534,10 +569,12 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising) {
     DeleteDC(hMemDC);
     ReleaseDC(NULL, hScreenDC);
 
+    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     HANDLE hThread = CreateThread(NULL, 0, MacGenieAnimThread, data, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
     } else {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
         // Thread couldn't start - undo our state so we don't leave the window
         // invisible or with transitions permanently disabled.
         if (rising) {
@@ -583,10 +620,12 @@ static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow) {
 // Second half of the launch sequence: spawn the reveal worker (or roll back so the
 // window isn't left invisible with transitions disabled).
 static void MacGenieLaunchCommit(HWND hWnd) {
+    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     HANDLE h = CreateThread(NULL, 0, MacGenieLaunchThread, hWnd, 0, NULL);
     if (h) {
         CloseHandle(h);
     } else {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         MacGenieSetDwmTransitions(hWnd, TRUE);
     }
@@ -742,7 +781,7 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
     // cloak to lift, or PrintWindow would hand us a black rectangle.
     Sleep(60);
     for (int i = 0; i < 30; ++i) {
-        if (!IsWindow(hWnd)) break;
+        if (!IsWindow(hWnd) || g_unloading.load(std::memory_order_relaxed)) break;
         UINT cloaked = 0;
         if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) ||
             !cloaked) {
@@ -751,17 +790,22 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
         Sleep(50);
     }
 
-    if (!IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
-        // It went away / got minimized while we waited - make sure we didn't leave
-        // it hidden or with transitions disabled.
+    if (g_unloading.load(std::memory_order_relaxed) ||
+        !IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
+        // It went away / got minimized while we waited (or the mod is unloading) -
+        // make sure we didn't leave it hidden or with transitions disabled.
         if (IsWindow(hWnd)) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
             MacGenieSetDwmTransitions(hWnd, TRUE);
         }
+        g_workerCount.fetch_sub(1, std::memory_order_release);
         return 0;
     }
 
+    // If the one-genie guard blocks this (duplicate / unload race), it restores the
+    // window's alpha itself, so no reveal is ever lost.
     StartMacGenieAnim(hWnd, TRUE); // rising genie; reveals the real window at the end
+    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -778,6 +822,19 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     MacGenieLoadSettings();
+}
+
+// Windhawk unmaps the mod DLL right after Wh_ModUninit returns, so any worker
+// thread still running mod code at that point would crash its host process (and
+// with @include * that could be any process mid-animation). Signal workers to
+// abort and wait for them to drain: the animation loop checks the flag every
+// frame (~16 ms) and the launch worker every 50 ms, so this normally returns in
+// well under 100 ms; the cap only guards against a hung DWM.
+void Wh_ModBeforeUninit() {
+    g_unloading.store(true, std::memory_order_relaxed);
+    for (int i = 0; i < 300 && g_workerCount.load(std::memory_order_acquire) > 0; ++i) {
+        Sleep(10);
+    }
 }
 
 void Wh_ModUninit() {
