@@ -32,6 +32,7 @@ This mod is focused on the Classic theme, so may produce sub-optimal results in 
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <gdiplus.h>
+#include <vector>
 
 static const GUID BHID_SFUIObject_local =
     {0x3981e225, 0xf559, 0x11d3, {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
@@ -134,6 +135,33 @@ HWND FindOwningApplicationFrameWindow(HWND hWnd)
 }
 
 static ULONG_PTR g_gdiplusToken = 0;
+
+// Tracks every window we've subclassed so Wh_ModUninit can clean them
+// all up before the mod DLL is unloaded (otherwise a leftover subclass
+// would keep pointing at unloaded code and crash on the next message).
+static CRITICAL_SECTION g_csSubclassedWindows;
+static std::vector<HWND> g_subclassedWindows;
+
+void RememberSubclassedWindow(HWND hWnd)
+{
+    EnterCriticalSection(&g_csSubclassedWindows);
+    g_subclassedWindows.push_back(hWnd);
+    LeaveCriticalSection(&g_csSubclassedWindows);
+}
+
+void ForgetSubclassedWindow(HWND hWnd)
+{
+    EnterCriticalSection(&g_csSubclassedWindows);
+    for (auto it = g_subclassedWindows.begin(); it != g_subclassedWindows.end(); ++it)
+    {
+        if (*it == hWnd)
+        {
+            g_subclassedWindows.erase(it);
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_csSubclassedWindows);
+}
 
 void EnsureGdiplus()
 {
@@ -331,6 +359,7 @@ LRESULT CALLBACK SubclassProc(
     {
         RemovePropW(hWnd, L"NativeTitlebarIconSet");
         RemoveWindowSubclass(hWnd, SubclassProc, uIdSubclass);
+        ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -390,6 +419,7 @@ HWND WINAPI CreateWindowInBandEx_hook(
     if (res != NULL)
     {
         SetWindowSubclass(res, SubclassProc, 1, 0);
+        RememberSubclassedWindow(res);
 
         HWND hAppFrame = FindOwningApplicationFrameWindow(res);
 
@@ -426,6 +456,8 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 
 BOOL Wh_ModInit()
 {
+    InitializeCriticalSection(&g_csSubclassedWindows);
+
     Wh_SetFunctionHook((void *)GetProcAddress(LoadLibraryW(L"user32.dll"), "CreateWindowInBandEx"), (void *)CreateWindowInBandEx_hook, (void **)&CreateWindowInBandEx_orig);
 
     Wh_SetFunctionHook((void *)DwmExtendFrameIntoClientArea, (void *)DwmExtendFrameIntoClientArea_hook, (void **)&DwmExtendFrameIntoClientArea_orig);
@@ -446,4 +478,32 @@ BOOL Wh_ModInit()
     };
 
     return WindhawkUtils::HookSymbols(LoadLibraryW(L"ApplicationFrame.dll"), ApplicationFrame_dll_hooks, ARRAYSIZE(ApplicationFrame_dll_hooks));
+}
+
+void Wh_ModUninit()
+{
+    // Remove our subclass from every window we're still attached to,
+    // otherwise these windows would keep calling into SubclassProc
+    // after this DLL is unloaded, causing a crash.
+    EnterCriticalSection(&g_csSubclassedWindows);
+    std::vector<HWND> windowsCopy = g_subclassedWindows;
+    g_subclassedWindows.clear();
+    LeaveCriticalSection(&g_csSubclassedWindows);
+
+    for (HWND hWnd : windowsCopy)
+    {
+        if (IsWindow(hWnd))
+        {
+            RemovePropW(hWnd, L"NativeTitlebarIconSet");
+            RemoveWindowSubclass(hWnd, SubclassProc, 1);
+        }
+    }
+
+    DeleteCriticalSection(&g_csSubclassedWindows);
+
+    if (g_gdiplusToken != 0)
+    {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
 }
