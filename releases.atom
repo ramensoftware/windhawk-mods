@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-02T15:27:50.000Z</updated>
+    <updated>2026-07-02T16:27:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Restart Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-restart-explorer#4a3c818d05d01eb973e6dc8242ac8d5edc084066</id>
+        <link href="https://windhawk.net/mods/taskbar-restart-explorer"/>
+        <updated>2026-07-02T16:27:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds a Restart Explorer shortcut to the native rounded Windows 11 empty-taskbar
+context menu.</p>
+<p>This version hooks the taskbar settings context-menu build path in the actually
+loaded Taskbar.View.dll/ExplorerExtensions.dll module. It doesn't replace the
+classic popup menu, install global mouse hooks, or show a separate flyout.</p>
+<p>Demo:
+<img src="https://i.imgur.com/JrLPgxo.gif" alt="Taskbar Restart Explorer demo" /></p>
+<p>If the required symbols aren't available, the mod logs why and fails closed.</p>]]></content>
+        <author>
+            <name>Mgrmjp</name>
+            <uri>https://github.com/Mgrmjp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
         <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
@@ -742,38 +760,6 @@ When an open arrives with <strong>no armed context</strong> at all (the hit-test
         <author>
             <name>EDM115</name>
             <uri>https://github.com/EDM115</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix missing taskbar icons after sleep 2.0.0]]></title>
-        <id>https://windhawk.net/mods/fix-missing-taskbar-icons#b804f7b6f8902516a34c3af5dd7688e849d2e8fe</id>
-        <link href="https://windhawk.net/mods/fix-missing-taskbar-icons"/>
-        <updated>2026-06-16T19:43:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixmissingtaskbariconsaftersleep">Fix missing taskbar icons after sleep</h1>
-<p>Works around a Windows 11 bug where some taskbar icons go missing after the PC
-wakes from <strong>sleep or hibernate</strong>, normally requiring a manual <code>explorer.exe</code>
-restart.</p>
-<p>Instead of restarting explorer, this mod reproduces the exact refresh mechanism
-that the <em>Taskbar height and icon size</em> mod (m417z) uses: when triggered, it
-<strong>momentarily changes the taskbar height by 1 pixel and immediately reverts it</strong>.
-That tiny real change forces the taskbar's XAML layout to fully re-measure and
-re-render, which rebuilds the missing icons. A no-op message (which an earlier
-version tried) does <em>not</em> work — the layout has to actually change.</p>
-<ul>
-<li>In steady state the mod changes <strong>nothing</strong> — all of its hooks pass straight
-through to Windows, so your taskbar height, icon size, and dynamic icon
-scaling are untouched.</li>
-<li>On every resume it fires the 1px pulse a few times on a staggered schedule
-(configurable), to catch the taskbar whenever it settles into the broken state.</li>
-<li>Toggling the mod on triggers one pulse immediately, so the on/off switch
-doubles as a manual "refresh now" button for testing.</li>
-</ul>
-<p>This is a stripped-down fork of the <em>Taskbar height and icon size</em> mod: only the
-taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</p>
-<p>Only Windows 11 is supported.</p>]]></content>
-        <author>
-            <name>therealgorgan</name>
-            <uri>https://github.com/therealgorgan</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T15:27:50.000Z</updated>
+    <updated>2026-07-02T16:27:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Restart Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-restart-explorer#4a3c818d05d01eb973e6dc8242ac8d5edc084066</id>
+        <link href="https://windhawk.net/mods/taskbar-restart-explorer"/>
+        <updated>2026-07-02T16:27:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds a Restart Explorer shortcut to the native rounded Windows 11 empty-taskbar
+context menu.</p>
+<p>This version hooks the taskbar settings context-menu build path in the actually
+loaded Taskbar.View.dll/ExplorerExtensions.dll module. It doesn't replace the
+classic popup menu, install global mouse hooks, or show a separate flyout.</p>
+<p>Demo:
+<img src="https://i.imgur.com/JrLPgxo.gif" alt="Taskbar Restart Explorer demo" /></p>
+<p>If the required symbols aren't available, the mod logs why and fails closed.</p>]]></content>
+        <author>
+            <name>Mgrmjp</name>
+            <uri>https://github.com/Mgrmjp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
         <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
@@ -463,19 +481,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <author>
             <name>Valer100</name>
             <uri>https://github.com/Valer100</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.3.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#85926525df30b8fca5c589f5bcb17b98839b4fc9</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2026-06-27T19:31:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improve search menu handling when the "Start menu on the left" option is enabled - search menu is no longer affected when opened outside of the start menu (Win+S or taskbar search button).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

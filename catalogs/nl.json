@@ -11672,6 +11672,37 @@
         "version": "1.0"
       }
     },
+    "taskbar-restart-explorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783009630000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783009630000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Mgrmjp",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Adds a Restart Explorer shortcut to the native Windows 11 empty-taskbar context menu.",
+        "github": "https://github.com/Mgrmjp",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Restart Explorer",
+        "version": "1.0"
+      }
+    },
     "taskbar-scroll-actions": {
       "details": {
         "defaultSorting": 13275,
