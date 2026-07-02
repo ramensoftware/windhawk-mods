@@ -14020,7 +14020,7 @@
           2
         ],
         "ratingUsers": 2,
-        "updated": 1782554717000,
+        "updated": 1783003254000,
         "users": 75
       },
       "metadata": {
@@ -14035,7 +14035,7 @@
           "explorer.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "2.8.4"
+        "version": "2.8.7"
       }
     },
     "win7-style-uac-dim": {
