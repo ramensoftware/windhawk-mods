@@ -1205,10 +1205,10 @@ static void InstallImmersiveMenuHooks() {
         WindhawkUtils::HookSymbols(hMod, sndVolSSO_pnidui_hooks, 1);
     }
 
-    // Hook per shell32.dll per Dispositivi e Stampanti
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
+            // shell32.dll
             WindhawkUtils::SYMBOL_HOOK shell32_hooks[] = {
                 {{
                     L"bool "
