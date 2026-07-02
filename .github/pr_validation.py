@@ -1164,6 +1164,19 @@ def main():
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
+    if added_count != 0:
+        pr_body = os.environ.get('PR_BODY', '')
+        if '## Mod authorship' not in pr_body:
+            warnings += add_warning(
+                Path('.github/pull_request_template.md'),
+                1,
+                'New mod submissions must keep the "## Mod authorship" section from the'
+                ' pull request template'
+                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+                ' in the PR description, so reviewers know how the mod was authored.'
+                ' Please restore that section and fill it in.',
+            )
+
     for path in paths:
         print(f'Checking {path=}')
 
