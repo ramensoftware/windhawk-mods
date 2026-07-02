@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T17:51:38.000Z</updated>
+    <updated>2026-07-02T18:04:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 2.1.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#1f0ba9081e3851d184748875cc71eb5f4d6ec1ae</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-07-02T18:04:11.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixes the genie animation not playing for apps whose windows bypass the classic <code>ShowWindow</code> / <code>WM_SYSCOMMAND</code> paths:</p>
+<ul>
+<li><strong>New minimize hooks</strong>: <code>ShowWindowAsync</code>, <code>SetWindowPlacement</code>, and <code>CloseWindow</code> (which minimizes, despite its name). Apps with custom title bars - e.g. the Zed editor - minimize through these, so their own minimize button previously showed no animation while taskbar minimize worked. Also verified to fix minimize for Store/UWP apps such as the modern Media Player.</li>
+<li><strong>New launch path</strong>: <code>SetWindowPos</code> + <code>SWP_SHOWWINDOW</code> for frameworks that show their first window without <code>ShowWindow</code>, plus a bounded wait for DWM-cloaked (Store/UWP) windows to uncloak before snapshotting, so the launch genie doesn't warp a black frame.</li>
+<li><strong>Robustness</strong>: a one-genie-per-window guard - with several minimize entry points hooked, a single gesture could otherwise start two overlapping ghost animations. New hook paths also skip hidden/already-minimized windows (e.g. apps restoring a saved minimized session at startup).</li>
+</ul>
+<p>Existing behavior for classic Win32 windows is unchanged.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Companions 1.4.0]]></title>
         <id>https://windhawk.net/mods/neko-cat#5b733b3fa2ccf48f105212d1495530276c87fb51</id>
@@ -417,19 +434,6 @@ child process with a different executable name than expected.</li>
         <author>
             <name>TomberWolf</name>
             <uri>https://github.com/TomberWolf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.3.3]]></title>
-        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#cc21e7ca1840bb5de5d5a8f2b08d27312555d29c</id>
-        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
-        <updated>2026-06-27T20:50:30.000Z</updated>
-        <content type="html"><![CDATA[<p>This version reworks the tab transition into a smooth crossfade between the old and new views — for both the main left navigation (Processes, Performance, App history, …) and the Performance sub-pages (CPU, Memory, Disk, Network/Ethernet, Wi-Fi, GPU).</p>
-<p>To avoid a visible jump, on mouse-down the current view is frozen under a topmost, click-through layered overlay; Task Manager switches the tab underneath it invisibly, and a worker thread then locates the content edge via UI Automation, captures the new view once it has rendered, and crossfades the overlay from the old frame to the new one.</p>
-<p>The demo GIF has been updated to show the new animation.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
