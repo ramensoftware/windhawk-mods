@@ -1170,8 +1170,9 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
-            {
+        // SndVolSSO.dll, pnidui.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHooks[] = {
+            {{
                 L"bool "
 #ifdef _WIN64
                 L"__cdecl"
@@ -1182,14 +1183,12 @@ static void InstallImmersiveMenuHooks() {
                 L"(struct HMENU__ *,struct HWND__ *)"
             },
             (void**)t.orig,
-            (void*)ICMH_CAODTM_hook,
-            true
+            (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1);
+        WindhawkUtils::HookSymbols(hMod, sndVolSSOAndPniduiHooks, 1);
     }
 }
-
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 
