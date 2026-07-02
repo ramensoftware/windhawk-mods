@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         2.1.0
+// @version         2.1.1
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -124,6 +124,11 @@ struct MacGenieAnimData {
     int targetDockX;      // dynamically learned taskbar icon X position
     BOOL isRising;        // FALSE = minimize (flow in), TRUE = restore (flow out)
     LONG_PTR originalExStyle;
+    BOOL hiddenByCloak;   // rising only: TRUE = hidden via DWM cloak (restore path),
+                          // FALSE = via WS_EX_LAYERED + alpha 0 (launch path)
+    HANDLE hFirstFrameShown; // falling only: event signaled once the ghost's first
+                             // frame is composed on screen (thread owns this handle);
+                             // NULL when unused (rising)
 };
 
 // Handed to MacGenieLaunchThread: the launch worker needs the window's TRUE
@@ -166,6 +171,32 @@ void MacGenieLoadSettings() {
 void MacGenieSetDwmTransitions(HWND hWnd, BOOL enable) {
     BOOL disable = !enable;
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
+}
+
+// Hide / show a window at the DWM level. A cloaked window is simply not rendered
+// at all - frame included - while staying "visible" to Win32 and painting normally
+// underneath, so a restore can happen invisibly under the genie. The previous
+// approach (WS_EX_LAYERED + alpha 0) required DWM to rebuild the window's
+// redirection surface each time the style was freshly added, and until that rebuild
+// landed the bare window frame was composed for a few frames - a visible flash on
+// every restore. Cloaking has no such lag and leaves no state on the window.
+void MacGenieSetCloak(HWND hWnd, BOOL cloak) {
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
+}
+
+// Undo a rising caller's pre-animation hide (used whenever the animation can't run
+// or is refused): uncloak or un-hide depending on how the window was hidden, and
+// re-enable its DWM transitions. Without this the window would stay invisible.
+static void MacGenieUndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden) {
+    if (cloakHidden) {
+        MacGenieSetCloak(hWnd, FALSE);
+    } else {
+        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        if (!(originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+        }
+    }
+    MacGenieSetDwmTransitions(hWnd, TRUE);
 }
 
 // Should we animate this window at all? Skip child / tiny windows so the effect
@@ -419,7 +450,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
         if (firstFrame) {
             ShowWindow(hGhost, SW_SHOWNOACTIVATE);
-            firstFrame = FALSE;
         }
 
         if (lastFrame) break;
@@ -430,12 +460,26 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
         // Block until the next DWM compose cycle - the vsync sync point.
         DwmFlush();
+
+        if (firstFrame) {
+            firstFrame = FALSE;
+            // The first frame has now been composed on screen. For a minimize, the
+            // hook is holding the REAL minimize back until this moment - otherwise
+            // the window would vanish a few frames before the genie appears (a
+            // visible gap, especially on slow or power-throttled CPUs).
+            if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+        }
     }
 
     if (data->isRising) {
-        SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
-        if (!(data->originalExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+        // Reveal the real window the same way it was hidden.
+        if (data->hiddenByCloak) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+        } else {
+            SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+            }
         }
     }
 
@@ -457,6 +501,13 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     DeleteDC(hSrcDC);
     ReleaseDC(NULL, hScreenDC);
     DestroyWindow(hGhost);
+    // Unblock the waiting minimize hook in case we bailed out before the first
+    // frame was ever composed, then release the event (this thread owns it).
+    if (data->hFirstFrameShown) {
+        SetEvent(data->hFirstFrameShown);
+        CloseHandle(data->hFirstFrameShown);
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         g_AnimActive.erase(data->hRealWnd);
@@ -474,13 +525,20 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 // first, so re-reading GetWindowLongPtrW here would always see the layered bit and
 // the cleanup that removes it could never fire - the style would leak permanently.
 // Falling callers never touch layering and just pass the current style.
-void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle) {
+// `cloakHidden` says how a rising caller hid the window: TRUE = DWM cloak (restore),
+// FALSE = WS_EX_LAYERED + alpha 0 (launch) - the reveal must match the hide.
+void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden = FALSE) {
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
 
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0) {
+        // Can't animate - but a rising caller has already hidden the window, so
+        // never bail without undoing that.
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        return;
+    }
 
     // One genie per window at a time: with several minimize entry points hooked
     // (ShowWindow, ShowWindowAsync, SetWindowPlacement, WM_SYSCOMMAND, ...), a single
@@ -495,17 +553,12 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle) {
     }
     if (blocked) {
         if (rising) {
-            // Rising callers hide the window (WS_EX_LAYERED + alpha 0) BEFORE calling
-            // us and rely on the animation thread to reveal it at the end. If we bail
-            // here - e.g. the user restores a window whose minimize genie is still in
-            // flight - that reveal never comes, so undo the hide now (alpha, the
-            // layered bit if the window wasn't originally layered, and transitions)
-            // or the restored window stays permanently invisible.
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            if (!(originalExStyle & WS_EX_LAYERED)) {
-                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
-            }
-            MacGenieSetDwmTransitions(hWnd, TRUE);
+            // Rising callers hide the window BEFORE calling us and rely on the
+            // animation thread to reveal it at the end. If we bail here - e.g. the
+            // user restores a window whose minimize genie is still in flight - that
+            // reveal never comes, so undo the hide now or the restored window stays
+            // permanently invisible.
+            MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
         } else {
             // Falling: callers disabled DWM transitions before calling us. Re-enable
             // them only if no in-flight genie owns this window (a running worker
@@ -552,6 +605,7 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle) {
     data->isRising = rising;
     data->targetDockX = learnedTargetX; // Assign the learned coordinate
     data->originalExStyle = originalExStyle;
+    data->hiddenByCloak = cloakHidden;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -596,21 +650,48 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle) {
     DeleteDC(hMemDC);
     ReleaseDC(NULL, hScreenDC);
 
+    // For a minimize the caller performs the REAL minimize right after we return,
+    // so hold it back until the ghost's first frame is composed - otherwise the
+    // window vanishes a few frames before the genie appears (a visible gap,
+    // especially on slow / power-throttled CPUs). Two handles to one event: the
+    // animation thread owns its duplicate (signals + closes it), we own and wait on
+    // the original, so neither side can ever touch a freed handle.
+    HANDLE hFirstShown = NULL;
+    data->hFirstFrameShown = NULL;
+    if (!rising) {
+        hFirstShown = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (hFirstShown &&
+            !DuplicateHandle(GetCurrentProcess(), hFirstShown, GetCurrentProcess(),
+                             &data->hFirstFrameShown, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            data->hFirstFrameShown = NULL;   // no sync available - fall back to no wait
+        }
+    }
+
+    // Decide before spawning: once the thread runs, `data` belongs to it and may
+    // already be freed by the time we get here again.
+    bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
+
     g_workerCount.fetch_add(1, std::memory_order_relaxed);
     HANDLE hThread = CreateThread(NULL, 0, MacGenieAnimThread, data, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
+        if (hFirstShown) {
+            if (waitForFirstFrame) {
+                WaitForSingleObject(hFirstShown, 200);   // capped: worst case = old behavior
+            }
+            CloseHandle(hFirstShown);
+        }
     } else {
         g_workerCount.fetch_sub(1, std::memory_order_release);
         // Thread couldn't start - undo our state so we don't leave the window
         // invisible or with transitions permanently disabled.
         if (rising) {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            if (!(data->originalExStyle & WS_EX_LAYERED)) {
-                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, data->originalExStyle);
-            }
+            MacGenieUndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak);
+        } else {
+            MacGenieSetDwmTransitions(hWnd, TRUE);
         }
-        MacGenieSetDwmTransitions(hWnd, TRUE);
+        if (hFirstShown) CloseHandle(hFirstShown);
+        if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
         DeleteObject(data->hBitmap);
         delete data;
         std::lock_guard<std::mutex> lock(g_CacheMutex);
@@ -682,11 +763,12 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if ((nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) && IsIconic(hWnd)) {
         if (g_openAnimation.load(std::memory_order_relaxed) && MacGenieShouldAnimate(hWnd)) {
             MacGenieSetDwmTransitions(hWnd, FALSE);
-            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            // Cloak instead of WS_EX_LAYERED + alpha 0: the restore happens fully
+            // invisibly (frame included), with no layered-surface rebuild flash, and
+            // the window's styles are never touched.
+            MacGenieSetCloak(hWnd, TRUE);
             BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-            StartMacGenieAnim(hWnd, TRUE, exStyle);
+            StartMacGenieAnim(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
             return res;
         }
         return ShowWindow_Original(hWnd, nCmdShow);
@@ -733,11 +815,10 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                  g_openAnimation.load(std::memory_order_relaxed) &&
                  MacGenieShouldAnimate(hWnd)) {
             MacGenieSetDwmTransitions(hWnd, FALSE);
-            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+            // Cloak instead of WS_EX_LAYERED + alpha 0 - see the ShowWindow hook.
+            MacGenieSetCloak(hWnd, TRUE);
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-            StartMacGenieAnim(hWnd, TRUE, exStyle);
+            StartMacGenieAnim(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
             return res;
         }
     }
