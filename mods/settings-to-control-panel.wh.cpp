@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.17
+// @version        10.0.18
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -30,12 +30,13 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- Language-independent tray menu detection (uses hotplug.dll return address and structural menu parsing)
+- Tray menu detection
 ---
 ## Limitations
 
 - Windows 11 requires the classic Win32-style taskbar (e.g. via ExplorerPatcher)
 - Tray context menu interception only works with the classic Win32 taskbar
+- The device & printers system tray redirect could not work in complex configurations
 
 ---
 
@@ -52,8 +53,8 @@ Panel pages, using only native Windows components.
   $name: Enable Redirects
   $description: "Turns the mod on or off. When disabled, Settings opens normally as usual."
 - RedirectSystemTray: false
-  $name: Redirect System Tray Audio/Network
-  $description: "If enabled, right-clicking the Audio or Network icon near the clock and choosing 'Open Sound settings' or 'Open Network settings' will open the classic panel instead of the Settings app."
+  $name: Redirect System Tray Audio/Network/Device & Printers
+  $description: "If enabled, right-clicking the Audio or Network or Device & Printers icon near the clock and choosing 'Open Sound settings' or 'Open Network settings' or 'Open devices and printers' will open the classic panel instead of the Settings app."
 - UIOnlyRedirects: false
   $name: Non-Invasive Mode
   $description: "Only redirects clicks made in the UI. Doesn't touch programs that open Settings in other ways."
@@ -103,6 +104,8 @@ static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
+static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
+
 
 static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND);
 
@@ -551,9 +554,22 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
                     Wh_Log(L"[TRAY-HOOK] Device menu detected via dxgi.dll + ID 215");
                 }
             }
+            else if (IsAddressInModule(retAddr, L"shell32.dll")) {
+                // NUOVO: Rilevamento shell32.dll per Win11 23H2
+                // Cerca l'ID 215 in qualsiasi posizione del menu
+                for (int i = 0; i < itemCount; i++) {
+                    UINT itemId = GetMenuItemID(hMenu, i);
+                    if (itemId == 215) {
+                        isDeviceMenu = true;
+                        Wh_Log(L"[TRAY-HOOK] Device menu detected via shell32.dll + ID 215 at index %d", i);
+                        break;
+                    }
+                }
+            }
             else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
                 // Fallback for older Windows versions where hotplug.dll handles the menu
                 isDeviceMenu = true;
+                Wh_Log(L"[TRAY-HOOK] Device menu detected via hotplug.dll");
             }
         }
     }
@@ -1170,7 +1186,6 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // SndVolSSO.dll, pnidui.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHooks[] = {
             {{
                 L"bool "
@@ -1187,6 +1202,30 @@ static void InstallImmersiveMenuHooks() {
         };
 
         WindhawkUtils::HookSymbols(hMod, sndVolSSOAndPniduiHooks, 1);
+    }
+
+    // NUOVO: Hook per shell32.dll per Dispositivi e Stampanti
+    if (g_isWin11) {
+        HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+        if (hShell32) {
+            // Hook per la funzione del menu contestuale dispositivi
+            WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+                {{
+                    L"bool "
+#ifdef _WIN64
+                    L"__cdecl"
+#else
+                    L"__stdcall"
+#endif
+                    L" CDevicesAndPrintersFolder::_HandleContextMenu"
+                    L"(struct HMENU__ *,unsigned int)"
+                },
+                (void**)&g_icmhOrig_Shell32Devices,
+                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
+            };
+            
+            WindhawkUtils::HookSymbols(hShell32, shell32Hooks, 1);
+        }
     }
 }
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -1211,7 +1250,7 @@ HWND WINAPI CreateWindowExW_Hook(
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.17");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.18");
 
     DetectWindowsVersion();
     LoadSettings();
