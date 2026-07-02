@@ -15,14 +15,34 @@
 /*
 # Island Media Controls
 
-This version is rebuilt around the Windows 11 taskbar XAML tree. The compact
-media island is inserted as a XAML Grid into the taskbar layout, so it occupies
-real taskbar space instead of being a Win32 window layered over the taskbar.
+Bring the current media session directly into the Windows 11 taskbar with a
+compact, theme-aware island built from native XAML. Unlike a floating Win32
+overlay, the island is inserted into the taskbar layout as a real XAML Grid, so
+it fits naturally alongside your taskbar and system tray items.
 
-The island follows the Windows app theme and includes album art and smooth
-hover feedback. Clicking it replaces the compact control with a desktop XAML
-surface that uses native Acrylic, rounded XAML geometry, and display-synced
-CompositionTarget animation above the taskbar.
+## Preview
+
+| Dark mode | Light mode |
+| :---: | :---: |
+| ![Island Media Controls in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif) | ![Island Media Controls in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif) |
+
+## Features
+
+- **Native taskbar integration:** Choose from several system tray and taskbar
+  positions without placing a separate always-on-top window over the taskbar.
+- **Live media information:** See album artwork, track title, and artist at a
+  glance, with smooth transitions when the active media session changes.
+- **Expanded player:** Click the compact island to open a native XAML player
+  with artwork, playback progress, and previous, play/pause, and next controls.
+- **Light and dark themes:** Colors, text, surfaces, and controls automatically
+  follow the Windows app theme.
+- **Fluent visuals:** Native Acrylic, rounded XAML geometry, album-art color
+  accents, hover feedback, and display-synced animations keep interactions
+  fluid and consistent with Windows 11.
+- **Flexible customization:** Adjust position, size, spacing, shadows, hover
+  behavior, background material, expanded button style, and idle visibility.
+- **Artwork effects:** Add an optional album-art background wash and transform
+  low-resolution video thumbnails into a mesh gradient or energy-flame visual.
 */
 // ==/WindhawkModReadme==
 
