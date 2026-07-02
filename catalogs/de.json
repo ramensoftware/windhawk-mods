@@ -5856,6 +5856,34 @@
         "version": "1.0.0"
       }
     },
+    "gather-windows-to-monitor": {
+      "details": {
+        "defaultSorting": 9,
+        "published": 1783006070000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783006070000,
+        "users": 1
+      },
+      "metadata": {
+        "author": "Fred",
+        "compilerOptions": "-ldwmapi -lshell32",
+        "description": "Move eligible open windows to a chosen monitor with global hotkeys",
+        "github": "https://github.com/fjdiazt",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Gather Windows To Monitor",
+        "version": "0.1.0"
+      }
+    },
     "genie-minimize-animation": {
       "details": {
         "defaultSorting": 2590,

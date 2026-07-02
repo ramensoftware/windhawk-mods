@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T15:20:12.000Z</updated>
+    <updated>2026-07-02T15:27:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
+        <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
+        <link href="https://windhawk.net/mods/gather-windows-to-monitor"/>
+        <updated>2026-07-02T15:27:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="gatherwindowstomonitor">Gather Windows To Monitor</h1>
+<p>Global hotkeys gather visible application windows to a selected monitor work area.</p>
+<p>Configure hotkeys in Windhawk settings. Use strings such as <code>Ctrl+Alt+Shift+1</code>,
+<code>Ctrl+Win+M</code>, <code>F9</code>, or <code>None</code>.</p>
+<p>Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
+tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
+and untitled windows.</p>
+<p>Enable debug logging to see per-window skip reasons in the Windhawk log.</p>
+<p>Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
+the Windows Settings display number. Moving minimized windows without restoring is
+not attempted because it is not reliable for all apps.</p>]]></content>
+        <author>
+            <name>Fred</name>
+            <uri>https://github.com/fjdiazt</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.8]]></title>
         <id>https://windhawk.net/mods/dynamic-taskbar-transparency#2bdab8f5726d042025598ca446c44f4711c25f9b</id>
@@ -451,21 +472,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <updated>2026-06-27T19:31:34.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Improve search menu handling when the "Start menu on the left" option is enabled - search menu is no longer affected when opened outside of the start menu (Win+S or taskbar search button).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#912416791d3f7209475a3370335cf030283df833</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2026-06-27T18:26:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to move the search and task view buttons to the left.</li>
-<li>Fixed Start button context menu placement.</li>
-<li>Various improvements for multiple monitors and other scenarios.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

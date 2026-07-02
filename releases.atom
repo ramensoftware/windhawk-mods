@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-02T15:20:12.000Z</updated>
+    <updated>2026-07-02T15:27:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
+        <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
+        <link href="https://windhawk.net/mods/gather-windows-to-monitor"/>
+        <updated>2026-07-02T15:27:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="gatherwindowstomonitor">Gather Windows To Monitor</h1>
+<p>Global hotkeys gather visible application windows to a selected monitor work area.</p>
+<p>Configure hotkeys in Windhawk settings. Use strings such as <code>Ctrl+Alt+Shift+1</code>,
+<code>Ctrl+Win+M</code>, <code>F9</code>, or <code>None</code>.</p>
+<p>Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
+tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
+and untitled windows.</p>
+<p>Enable debug logging to see per-window skip reasons in the Windhawk log.</p>
+<p>Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
+the Windows Settings display number. Moving minimized windows without restoring is
+not attempted because it is not reliable for all apps.</p>]]></content>
+        <author>
+            <name>Fred</name>
+            <uri>https://github.com/fjdiazt</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.8]]></title>
         <id>https://windhawk.net/mods/dynamic-taskbar-transparency#2bdab8f5726d042025598ca446c44f4711c25f9b</id>
@@ -753,55 +774,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <author>
             <name>therealgorgan</name>
             <uri>https://github.com/therealgorgan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 2.0.2]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-properties#29bacda66445835d5b79e6657d124ca107540575</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-properties"/>
-        <updated>2026-06-15T17:39:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classictaskbarandstartmenuproperties">Classic Taskbar and Start Menu Properties</h1>
-<p>This Windhawk mod restores the classic "Taskbar and Start Menu Properties" dialog inspired by Windows 7.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Lock/Unlock the taskbar</strong></li>
-<li><strong>Auto-hide the taskbar</strong></li>
-<li><strong>Use small icons</strong></li>
-<li><strong>Configure taskbar button grouping</strong> (Always combine, Combine when full, Never combine)</li>
-<li><strong>Configure Aero Peek</strong></li>
-<li><strong>Start Menu customization</strong> — only settings that actually work on Windows 10 are included</li>
-<li><strong>Toolbars tab</strong> — Address, Links, Tablet PC Input Panel, Desktop</li>
-</ul>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/pic.PNG" alt="Classic Taskbar Properties Dialog" /></p>
-<h2 id="startmenusettingswindows10">Start Menu Settings (Windows 10)</h2>
-<p>| Setting | Registry Key | Notes |
-|---------|-------------|-------|
-| Show more tiles | Start<em>ShowMoreTiles | Works on Win10 |
-| Show app list | Start</em>ShowAppList | Works on Win10 |
-| Show recently added apps | Start<em>TrackProgs | Works on Win10 |
-| Use Start full screen | ForceStartSize | Works on Win10 |
-| Show recently opened items | Start</em>TrackDocs | Works on Win10 |
-| Show account notifications | Start<em>NotifyNewApps | Works on Win10 |
-| Search programs | Start</em>SearchPrograms | Works on Win10 |
-| Search files | Start_SearchFiles | Works on Win10 |
-| Folders on Start | Per-folder registry values | Win10 HKCU...\Start |</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>| Feature | Windows 10 21H2 | Windows 11 |
-|---------|----------------|------------|
-| Taskbar tab | Full support | Partial |
-| Start Menu tab | Full support | May vary |
-| Toolbars tab | Full support | Limited |
-| Position change | Not available | Not available |</p>
-<h2 id="knownlimitations">Known Limitations</h2>
-<ul>
-<li>Changing taskbar position is unavailable (risk of Explorer instability).</li>
-<li>Classic toolbars (Address, Links, Desktop) have limited support on newer Windows versions.</li>
-<li>Some Start Menu settings may require an Explorer restart or logout to take full effect.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
