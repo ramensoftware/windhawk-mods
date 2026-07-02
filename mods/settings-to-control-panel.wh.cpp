@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.14
+// @version        10.0.17
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -30,19 +30,7 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- **New in 10.0.14: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
-
----
-
-## Settings
-
-- **EnableRedirects** – Turns the mod on or off
-- **RedirectSystemTray** – When enabled, right-clicking the Audio or Network tray icon and choosing "Open Sound settings"/"Open Network settings" opens the classic panel instead of the Settings app
-- **UIOnlyRedirects** – A lighter mode: only redirects clicks made in the UI, leaving processes started by other programs alone
-- **FallbackMode** – What to do when a link has no classic equivalent page
-- **Win11CompatibilityMode** – Extra-safe mode for Windows 11
-- **MaxLaunchesPerUri** – Prevents the same window from being opened repeatedly in a loop
-
+- Language-independent tray menu detection (uses hotplug.dll return address and structural menu parsing)
 ---
 ## Limitations
 
@@ -100,22 +88,18 @@ Panel pages, using only native Windows components.
 // Custom IDs for tray menu redirection (TrackPopupMenuEx method)
 #define TRAY_CUSTOM_ID_AUDIO    65001
 #define TRAY_CUSTOM_ID_NETWORK  65002
+#define TRAY_CUSTOM_ID_DEVICES  65003
 
 // TrackPopupMenuEx hook (DLL-based fallback method)
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 
 // Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
-// 0=none, 1=audio, 2=network. Plain global guarded by g_trayContextMutex (not thread-local).
 static int g_trayContextType = 0;
-static DWORD g_trayContextTick = 0;   // GetTickCount() captured when the flag was set
+static DWORD g_trayContextTick = 0;
 static std::mutex g_trayContextMutex;
-// Ignore a tray-context flag older than this — a right-click that identified an
-// icon but never produced a TrackPopupMenuEx (menu suppressed/dismissed before the
-// popup) would otherwise leak into the *next* tray popup, possibly a different icon.
 static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
-// ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu hook
-// Forces classic Win32 menus in SndVolSSO.dll and pnidui.dll (Win11 fix).
+
 using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
@@ -133,7 +117,6 @@ static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
 #define WIN11_PASSTHROUGH   L"__PASSTHROUGH__"
 #define EASE_OF_ACCESS      L"explorer shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"
 
-// Forward declarations
 using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
 static CreateProcessW_t CreateProcessW_orig = nullptr;
 
@@ -142,13 +125,11 @@ using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
 
-// Core resolve logic struct
 struct ResolveResult {
     std::wstring target;
     bool intercept;
 };
 
-// Reentry guards
 static thread_local int g_hookDepth = 0;
 
 struct HookGuard {
@@ -157,7 +138,6 @@ struct HookGuard {
     bool IsReentrant() const { return g_hookDepth > 1; }
 };
 
-// Cross-process reentry guard
 static std::wstring g_childEnvBlock;
 
 static void BuildChildEnvironment() {
@@ -180,7 +160,6 @@ static bool IsChildProcess() {
     return GetEnvironmentVariableW(L"WH_STC_NOREDIRECT", nullptr, 0) > 0;
 }
 
-// Settings
 struct ModSettings {
     bool enableRedirects = true;
     bool redirectSystemTray = false;
@@ -192,11 +171,7 @@ struct ModSettings {
 
 static ModSettings g_settings;
 
-// Definition of the forward-declared hook (needs g_settings to be visible).
 static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) {
-    // Only force classic Win32 menus while the tray redirect is enabled.
-    // When disabled, allow the immersive menu again (true = owner-draw allowed),
-    // restoring stock behavior without requiring a full mod reload.
     if (!g_settings.redirectSystemTray) return true;
     return false;
 }
@@ -206,9 +181,8 @@ static void LoadSettings() {
     g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0;
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
 
-    // RAII wrapper: frees the string via Wh_FreeStringSetting on scope exit.
     WindhawkUtils::StringSetting fallbackSetting(Wh_GetStringSetting(L"FallbackMode"));
-    PCWSTR fallbackStr = fallbackSetting;  // implicit PCWSTR conversion
+    PCWSTR fallbackStr = fallbackSetting;
     if (fallbackStr[0] != L'\0') {
         int mode = _wtoi(fallbackStr);
         g_settings.fallbackMode = (mode >= 0 && mode <= 2) ? mode : 2;
@@ -220,14 +194,8 @@ static void LoadSettings() {
 
     int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
     g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
-
-    Wh_Log(L"EnableRedirects=%d RedirectSystemTray=%d UIOnly=%d Fallback=%d Win11Compat=%d MaxLaunches=%d",
-        (int)g_settings.enableRedirects, (int)g_settings.redirectSystemTray, (int)g_settings.uiOnlyRedirects,
-        g_settings.fallbackMode,
-        (int)g_settings.win11CompatibilityMode, g_settings.maxLaunchesPerUri);
 }
 
-// Win11 detection
 static bool g_isWin11 = false;
 
 static void DetectWindowsVersion() {
@@ -240,10 +208,8 @@ static void DetectWindowsVersion() {
         if (fn) fn(&osvi);
     }
     g_isWin11 = (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22000);
-    Wh_Log(L"Build %lu IsWin11=%d", osvi.dwBuildNumber, (int)g_isWin11);
 }
 
-// Bounce-back guard
 struct BounceRecord {
     DWORD lastRedirectTick = 0;
 };
@@ -264,14 +230,12 @@ static bool BounceGuardIsBounce(const std::wstring& uri) {
     if (it == g_bounceGuard.end()) return false;
     DWORD elapsed = GetTickCount() - it->second.lastRedirectTick;
     if (elapsed < BOUNCE_WINDOW_MS) {
-        Wh_Log(L"BOUNCE-BACK: '%s' returned %lu ms after redirect", uri.c_str(), elapsed);
         it->second.lastRedirectTick = 0;
         return true;
     }
     return false;
 }
 
-// Loop guard
 struct LaunchRecord {
     int count = 0;
     DWORD firstTick = 0;
@@ -300,11 +264,9 @@ static bool LoopGuardAllow(const std::wstring& target) {
         return true;
     }
 
-    Wh_Log(L"LOOP GUARD: suppressing launch of '%s' (%d times in %lu ms)", target.c_str(), rec.count, (now - rec.firstTick));
     return false;
 }
 
-// CLSID classification
 static const std::unordered_set<std::wstring> g_win11SafeClsids = {
     L"shell:::{025a5937-a6be-4686-a844-36fe4bec8b6d}",
     L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}",
@@ -355,15 +317,10 @@ static bool IsClsidLoopOnWin11(const std::wstring& lowerTarget) {
     return g_win11LoopClsids.count(base) > 0;
 }
 
-// String utilities
 static std::wstring ToLower(std::wstring s) {
     std::transform(s.begin(), s.end(), s.begin(), ::towlower);
     return s;
 }
-
-// ============================================================
-// TRAY: METHOD 1 - Toolbar subclassing (language-independent)
-// ============================================================
 
 static HWND g_hTrayToolbar = nullptr;
 static BYTE* g_sndVolSSOBase = nullptr;
@@ -371,7 +328,6 @@ static BYTE* g_sndVolSSOEnd = nullptr;
 static BYTE* g_pniduiBase = nullptr;
 static BYTE* g_pniduiEnd = nullptr;
 
-// Initialize DLL base/end for tray icon detection
 static bool InitTrayDllInfo() {
     if (g_sndVolSSOBase && g_pniduiBase) return true;
 
@@ -396,7 +352,6 @@ static bool InitTrayDllInfo() {
     return (g_sndVolSSOBase != nullptr || g_pniduiBase != nullptr);
 }
 
-// Identify tray button type via ATL class address in DLL
 static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     if (buttonIndex < 0) return 0;
 
@@ -410,7 +365,12 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     wchar_t className[256]{};
     if (!GetClassNameW(hIconWnd, className, 256)) return 0;
 
-    if (wcsncmp(className, L"ATL:", 4) != 0) return 0;
+    // Language-independent check: Safely Remove Hardware is a plain Shell_NotifyIcon
+    // and doesn't use an ATL class wrapper from a specific DLL. We ignore it here 
+    // and let TrackPopupMenuEx identify it via hotplug.dll return address.
+    if (wcsncmp(className, L"ATL:", 4) != 0) {
+        return 0;
+    }
 
     const wchar_t* hexPart = className + 4;
     ULONG_PTR addr = 0;
@@ -434,9 +394,7 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     return 0;
 }
 
-// Launch functions
 static void OpenClassicSoundPanel() {
-    Wh_Log(L"Opening classic Sound panel");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -448,7 +406,6 @@ static void OpenClassicSoundPanel() {
 }
 
 static void OpenClassicNetworkConnections() {
-    Wh_Log(L"Opening classic Network Connections");
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
@@ -459,9 +416,17 @@ static void OpenClassicNetworkConnections() {
     ShellExecuteExW_orig(&sei);
 }
 
-// Toolbar subclass proc — intercepts right-click on tray icons.
-// Sets g_trayContextType so TrackPopupMenuEx_Hook can identify the menu
-// without any text/language-dependent detection.
+static void OpenClassicDevicesAndPrinters() {
+    SHELLEXECUTEINFOW sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
+    sei.lpVerb = L"open";
+    sei.lpFile = L"explorer.exe";
+    sei.lpParameters = L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}";
+    sei.nShow = SW_SHOWNORMAL;
+    ShellExecuteExW_orig(&sei);
+}
+
 static LRESULT CALLBACK TrayToolbarSubclassProc(
     HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
@@ -474,13 +439,11 @@ static LRESULT CALLBACK TrayToolbarSubclassProc(
         if (hitIndex >= 0) {
             int buttonType = GetTrayButtonType(hwnd, hitIndex);
             if (buttonType == 1) {
-                Wh_Log(L"[TRAY-SUBCLASS] Audio icon right-clicked");
                 std::lock_guard<std::mutex> lk(g_trayContextMutex);
-                g_trayContextType = 1; // will be consumed by TrackPopupMenuEx_Hook
+                g_trayContextType = 1;
                 g_trayContextTick = GetTickCount();
             }
             else if (buttonType == 2) {
-                Wh_Log(L"[TRAY-SUBCLASS] Network icon right-clicked");
                 std::lock_guard<std::mutex> lk(g_trayContextMutex);
                 g_trayContextType = 2;
                 g_trayContextTick = GetTickCount();
@@ -490,7 +453,6 @@ static LRESULT CALLBACK TrayToolbarSubclassProc(
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-// Find tray toolbar
 static HWND FindTrayToolbar() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTray) return nullptr;
@@ -514,7 +476,6 @@ static void SetupTraySubclass() {
     if (!hToolbar) return;
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
         g_hTrayToolbar = hToolbar;
-        Wh_Log(L"[TRAY-SUBCLASS] Installed");
     }
 }
 
@@ -522,13 +483,8 @@ static void RemoveTraySubclass() {
     if (g_hTrayToolbar) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTrayToolbar, TrayToolbarSubclassProc);
         g_hTrayToolbar = nullptr;
-        Wh_Log(L"[TRAY-SUBCLASS] Removed");
     }
 }
-
-// ============================================================
-// TRAY: METHOD 2 - TrackPopupMenuEx DLL-based detection (fallback)
-// ============================================================
 
 static void* GetReturnAddress() {
     void* stackTrace[3];
@@ -546,7 +502,6 @@ static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
     }
     return false;
 }
-
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
     if (!g_settings.redirectSystemTray || !g_settings.enableRedirects)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
@@ -561,51 +516,109 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         std::lock_guard<std::mutex> lk(g_trayContextMutex);
         contextType = g_trayContextType;
         DWORD tick = g_trayContextTick;
-        g_trayContextType = 0; // consume immediately
+        g_trayContextType = 0;
         g_trayContextTick = 0;
-        // Drop stale context: a right-click that identified an icon but never
-        // produced a TrackPopupMenuEx (menu suppressed/dismissed first) would
-        // otherwise be consumed by the next tray popup — possibly a different icon.
         if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS) {
-            Wh_Log(L"[TRAY-HOOK] Dropping stale tray context (age %lu ms)", GetTickCount() - tick);
             contextType = 0;
         }
     }
 
     bool isAudioMenu   = (contextType == 1);
     bool isNetworkMenu = (contextType == 2);
+    bool isDeviceMenu  = false;
 
     // --- Fallback: DLL return-address detection (language-independent) ---
     if (!isAudioMenu && !isNetworkMenu) {
         void* retAddr = GetReturnAddress();
         int itemCount = GetMenuItemCount(hMenu);
-        if (itemCount > 0 && itemCount <= 6) {
+        if (itemCount > 0) {
             if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
-                isAudioMenu = true;
-                Wh_Log(L"[TRAY-HOOK] Audio menu via SndVolSSO.dll retaddr");
+                if (itemCount <= 6) isAudioMenu = true;
             }
             else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
-                isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
-                Wh_Log(L"[TRAY-HOOK] Network menu via pnidui.dll retaddr (items=%d)", itemCount);
+                if (itemCount <= 6) isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
             }
             else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
-                isNetworkMenu = (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109);
-                if (isNetworkMenu) Wh_Log(L"[TRAY-HOOK] Network menu via dxgi.dll retaddr");
+                // dxgi.dll handles both Network flyout (IDs 3107/3109) and 
+                // Device/Safely Remove Hardware flyout (ID 215 = "Open Devices and Printers")
+                if (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109) {
+                    isNetworkMenu = true;
+                }
+                // Check for device menu: item ID 215 is the language-independent
+                // identifier for "Open Devices and Printers"
+                else if (GetMenuItemID(hMenu, 0) == 215) {
+                    isDeviceMenu = true;
+                    Wh_Log(L"[TRAY-HOOK] Device menu detected via dxgi.dll + ID 215");
+                }
+            }
+            else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
+                // Fallback for older Windows versions where hotplug.dll handles the menu
+                isDeviceMenu = true;
             }
         }
-    } else {
-        Wh_Log(L"[TRAY-HOOK] %s menu via subclass flag", isAudioMenu ? L"Audio" : L"Network");
     }
 
-    if (!isAudioMenu && !isNetworkMenu)
+    if (!isAudioMenu && !isNetworkMenu && !isDeviceMenu)
         return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
 
     int itemCount = GetMenuItemCount(hMenu);
-    Wh_Log(L"[TRAY-HOOK] %s menu, %d items", isAudioMenu ? L"AUDIO" : L"NETWORK", itemCount);
+    const wchar_t* menuKind = isAudioMenu ? L"AUDIO" : (isNetworkMenu ? L"NETWORK" : L"DEVICE");
+    Wh_Log(L"[TRAY-HOOK] %s menu, %d items", menuKind, itemCount);
 
-    // Replace the target menu item ID with a sentinel so we can detect the selection.
-    int targetIndex = isAudioMenu ? 0 : (itemCount - 1);
-    UINT customId   = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO : TRAY_CUSTOM_ID_NETWORK;
+    // Find target item without any text matching.
+    // Audio: first item.
+    // Network: last non-separator item.
+    // Device: item with ID 215 ("Open Devices and Printers") — language-independent.
+    int targetIndex = -1;
+    
+    if (isAudioMenu) {
+        targetIndex = 0;
+    }
+    else if (isNetworkMenu) {
+        for (int i = itemCount - 1; i >= 0; i--) {
+            MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
+            miiCheck.fMask = MIIM_FTYPE;
+            if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
+                if (!(miiCheck.fType & MFT_SEPARATOR)) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+    else if (isDeviceMenu) {
+        // Find item with ID 215 — the language-independent ID for "Open Devices and Printers"
+        for (int i = 0; i < itemCount; i++) {
+            if (GetMenuItemID(hMenu, i) == 215) {
+                targetIndex = i;
+                break;
+            }
+        }
+        // Fallback: if ID 215 not found (unlikely), use first non-separator item
+        if (targetIndex == -1) {
+            for (int i = 0; i < itemCount; i++) {
+                MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
+                miiCheck.fMask = MIIM_FTYPE;
+                if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
+                    if (!(miiCheck.fType & MFT_SEPARATOR)) {
+                        targetIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (targetIndex == -1) {
+        Wh_Log(L"[TRAY-HOOK] No valid menu item found for %s menu", menuKind);
+        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+
+    Wh_Log(L"[TRAY-HOOK] %s menu target index=%d, ID=%u", menuKind, targetIndex, GetMenuItemID(hMenu, targetIndex));
+
+    UINT customId   = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO
+                     : isNetworkMenu ? TRAY_CUSTOM_ID_NETWORK
+                     : TRAY_CUSTOM_ID_DEVICES;
     UINT originalId = GetMenuItemID(hMenu, targetIndex);
 
     MENUITEMINFOW mii = { sizeof(MENUITEMINFOW) };
@@ -624,8 +637,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 
     if (selectedId == (int)customId) {
         Wh_Log(L"[TRAY-HOOK] User selected target item, redirecting");
-        if (isAudioMenu) OpenClassicSoundPanel();
-        else             OpenClassicNetworkConnections();
+        if (isAudioMenu)        OpenClassicSoundPanel();
+        else if (isNetworkMenu) OpenClassicNetworkConnections();
+        else                    OpenClassicDevicesAndPrinters();
         return 0;
     }
 
@@ -637,17 +651,12 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     return result;
 }
 
-// ============================================================
-// URI MAPPINGS (unchanged)
-// ============================================================
-
 static std::unordered_map<std::wstring, std::wstring> g_mappings;
 
 static void InitMappings() {
     const bool w11 = g_isWin11;
 
     g_mappings = {
-        // Personalization
         {L"ms-settings:personalization", PERS_ROOT},
         {L"ms-settings:personalization-colors", PERS_COLORS},
         {L"ms-settings:colors", PERS_COLORS},
@@ -658,21 +667,15 @@ static void InitMappings() {
         {L"ms-settings:background", PERS_WALLPAPER},
         {L"ms-settings:personalization-background-wallpaper", PERS_WALLPAPER},
         {L"ms-settings:personalization-background-slideshow", PERS_WALLPAPER},
-        
-        // Fonts & Color
         {L"ms-settings:fonts", L"shell:::{BD84B380-8CA2-1069-AB1D-08000948F534}"},
         {L"ms-settings:display-advanced-color", L"colorcpl.exe"},
         {L"ms-settings:colorcpl", L"colorcpl.exe"},
-        
-        // Display
         {L"ms-settings:display", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-advanced-graphics", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-adapter-properties", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:display-resolution", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
         {L"ms-settings:screenrotation", L"rundll32.exe display.dll,ShowAdapterSettings 0"},
-        
-        // System
         {L"ms-settings:about", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
         {L"ms-settings:system", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
         {L"ms-settings:sysinfo", w11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID},
@@ -688,15 +691,11 @@ static void InitMappings() {
         {L"ms-settings:appsforwebsites", L"appwiz.cpl"},
         {L"ms-settings:optionalfeatures", L"OptionalFeatures.exe"},
         {L"ms-settings:system-settings", L"shell:::{025A5937-A6BE-4686-A844-36FE4BEC8B6D}\\pageGlobalSettings"},
-        
-        // Power
         {L"ms-settings:powersleep", L"powercfg.cpl"},
         {L"ms-settings:battery", L"powercfg.cpl"},
         {L"ms-settings:batterysaver", L"powercfg.cpl"},
         {L"ms-settings:batterysaver-settings", L"powercfg.cpl"},
         {L"ms-settings:batterysaver-usagedetails", L"powercfg.cpl"},
-        
-        // Sound
         {L"ms-settings:audio", L"mmsys.cpl"},
         {L"ms-settings:sound-control-panel", L"control.exe /name Microsoft.Sound"},
         {L"ms-settings:sound-playback", L"control.exe mmsys.cpl,,0"},
@@ -708,16 +707,12 @@ static void InitMappings() {
         {L"ms-settings:sound-input", L"control.exe mmsys.cpl,,1"},
         {L"ms-settings:apps-volume", L"control.exe mmsys.cpl,,0"},
         {L"ms-settings:sound", L"control.exe mmsys.cpl,,0"},
-        
-        // Notifications / Taskbar
         {L"ms-settings:notifications", NOTIF_AREA_CLSID},
         {L"ms-settings:taskbar-notifications", NOTIF_AREA_CLSID},
         {L"ms-settings:taskbar-systemtray", NOTIF_AREA_CLSID},
         {L"ms-settings:notifications-systemtray", NOTIF_AREA_CLSID},
         {L"ms-settings:systemtray", NOTIF_AREA_CLSID},
         {L"ms-settings:notificationiconpreferences", NOTIF_AREA_CLSID},
-        
-        // Input devices
         {L"ms-settings:mousetouchpad", L"main.cpl"},
         {L"ms-settings:devices-touchpad", L"main.cpl"},
         {L"ms-settings:keyboard", L"main.cpl,,1"},
@@ -727,8 +722,6 @@ static void InitMappings() {
         {L"ms-settings:pen-windowsinksettings", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:devices-touch", w11 ? L"control.exe" : L"shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}"},
         {L"ms-settings:autoplay", L"shell:::{9C60DE1E-E5FC-40f4-A487-460851A8D915}"},
-        
-        // Devices / Printers
         {L"ms-settings:printers", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
         {L"ms-settings:printers-scanners", L"shell:::{2227A280-3AEA-1069-A2DE-08002B30309D}"},
         {L"ms-settings:bluetooth", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
@@ -737,8 +730,6 @@ static void InitMappings() {
         {L"ms-settings:mobile-devices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
         {L"ms-settings:camera", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
         {L"ms-settings:privacy-customdevices", L"shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}"},
-        
-        // Network
         {L"ms-settings:network", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-wifi", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:network-ethernet", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
@@ -754,8 +745,6 @@ static void InitMappings() {
         {L"ms-settings:network-firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:windowsdefender", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:network-places", L"shell:::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"},
-        
-        // Accounts
         {L"ms-settings:yourinfo", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
         {L"ms-settings:yourinfo-profile", L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}"},
         {L"ms-settings:emailandaccounts", L"shell:::{60632754-c523-4b62-b45c-4172da012619}"},
@@ -763,19 +752,13 @@ static void InitMappings() {
         {L"ms-settings:startupapps", L"msconfig.exe"},
         {L"ms-settings:netplwiz", L"shell:::{7A9D77BD-5403-11d2-8785-2E0420524153}"},
         {L"ms-settings:workplace", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ECDB0924-4208-451E-8EE0-373C0956DE16}"},
-        
-        // Default Apps
         {L"ms-settings:defaultapps", w11 ? WIN11_PASSTHROUGH : L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}"},
-        
-        // Time & Language
         {L"ms-settings:dateandtime", L"timedate.cpl"},
         {L"ms-settings:dateandtime-region", L"timedate.cpl"},
         {L"ms-settings:dateandtime-addclocks", L"timedate.cpl,,1"},
         {L"ms-settings:regionlanguage", L"intl.cpl"},
         {L"ms-settings:regionformatting", L"intl.cpl"},
         {L"ms-settings:language", L"intl.cpl"},
-        
-        // Ease of Access
         {L"ms-settings:easeofaccess", EASE_OF_ACCESS},
         {L"ms-settings:easeofaccess-narrator", EASE_OF_ACCESS},
         {L"ms-settings:easeofaccess-magnifier", EASE_OF_ACCESS},
@@ -788,52 +771,27 @@ static void InitMappings() {
         {L"ms-settings:easeofaccess-audio", EASE_OF_ACCESS},
         {L"ms-settings:easeofaccess-mouse", EASE_OF_ACCESS},
         {L"ms-settings:easeofaccess-keyboard", EASE_OF_ACCESS},
-        
-        // Recovery / Backup / Troubleshooting
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
         {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},        
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
-
-        // Gaming
         {L"ms-settings:gaming-gamebar", L"joy.cpl"},
-        
-        // File Explorer Options
         {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
-        
-        // Get Programs
         {L"ms-settings:appsfeatures-app", L"shell:::{15eae92e-f17a-4431-9f28-805e482dafd4}"},
-        
-        // Installed Updates
         {L"ms-settings:windowsupdate-history", L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}"},
-        
-        // Troubleshoot history
         {L"ms-settings:troubleshoot-history", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\historyPage"},
-        
-        // Keyboard
         {L"ms-settings:keyboard-advanced", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
         {L"ms-settings:keyboard-properties", L"shell:::{725BE8F7-668E-4C7B-8F90-46BDB0936430}"},
-        
-        // Problem Details / Reports
         {L"ms-settings:privacy-feedback", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReportDetails"},
         {L"ms-settings:problem-reporting-settings", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageSettings"},
         {L"ms-settings:problem-reports", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageProblems"},
         {L"ms-settings:reliability", L"shell:::{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\\pageReliabilityView"},
-        
-        // Speech Properties
         {L"ms-settings:speech", L"shell:::{D17D1D6D-CC3F-4815-8FE3-607E7D5D10B3}"},
-        
-        // Search Troubleshooting
         {L"ms-settings:search-diagnostics", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}\\searchPage"},
-        
-        // Control Panel All Tasks
         {L"ms-settings:controlpanel", L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}"},
-        
-        // Sign-in options
         {L"ms-settings:signinoptions", L"netplwiz"},
         {L"ms-settings:accounts-signinoptions", L"netplwiz"},
         {L"ms-settings:accounts-users", L"netplwiz"},
         {L"ms-settings:family-users", L"netplwiz"},
-        // Additional mappings
         {L"ms-settings:power", L"powercfg.cpl"},
         {L"ms-settings:display-hdr", L"colorcpl.exe"},
         {L"ms-settings:personalization-taskbar", NOTIF_AREA_CLSID},
@@ -842,7 +800,6 @@ static void InitMappings() {
         {L"ms-settings:storagesense", L"control.exe"},
     };
 
-    // Sovrascrivi i duplicati con i valori "Additional mappings" corretti
     g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
     g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
 
@@ -922,7 +879,6 @@ static bool HandleFallback(const std::wstring& uri) {
 }
 
 static void LaunchTarget(const std::wstring& command) {
-    Wh_Log(L"Launching: %s", command.c_str());
     if (!LoopGuardAllow(command)) return;
 
     std::wstring lower = ToLower(command);
@@ -969,7 +925,6 @@ static void LaunchTarget(const std::wstring& command) {
         if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
                                  (LPVOID)g_childEnvBlock.c_str(), nullptr, &si, &pi)) {
-            Wh_Log(L"CreateProcess failed for '%s' (%lu)", command.c_str(), GetLastError());
         } else {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
@@ -1018,7 +973,6 @@ static void LaunchTarget(const std::wstring& command) {
         if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
                                  (LPVOID)g_childEnvBlock.c_str(), nullptr, &si, &pi)) {
-            Wh_Log(L"CreateProcess failed for '%s' (error %lu)", cmdLine.c_str(), GetLastError());
             return;
         }
         CloseHandle(pi.hProcess);
@@ -1048,12 +1002,6 @@ static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
     return IsPersonalizationWindow(hwnd) ? PERS_WALLPAPER : PERS_ROOT;
 }
 
-// Solo le voci di Personalizzazione (CLSID {ED834ED6-...}) hanno una storia nota
-// di richiamare se stesse (bounce-back). Applicare il bounce-guard anche a lanci
-// diretti di eseguibili (es. msdt.exe per "troubleshoot") causa falsi positivi:
-// un utente che re-clicca entro la finestra di 3s perché lo strumento è lento ad
-// aprirsi (msdt.exe) si ritrova con il fallback verso ms-settings invece del
-// rilancio del target originale.
 static bool ShouldApplyBounceGuard(const std::wstring& uri) {
     return uri.find(L"personalization") != std::wstring::npos;
 }
@@ -1077,7 +1025,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
             bool handled = HandleFallback(uri);
             return {L"", handled};
         }
-        Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
         if (useBounceGuard) BounceGuardRecord(uri);
         return {t, true};
     }
@@ -1119,10 +1066,6 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     return (arg == L"system" || arg == L"microsoft.system");
 }
 
-// ============================================================
-// HOOKS
-// ============================================================
-
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
@@ -1141,9 +1084,6 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     else if (IsShellClsid(pei->lpFile)) uri = ToLower(pei->lpFile);
     else if (IsShellClsid(pei->lpParameters)) uri = ToLower(pei->lpParameters);
 
-    // Exact match only: a prefix test (uri.find(...)==0) would also swallow
-    // ms-settings:taskbar-notifications and ms-settings:taskbar-systemtray, both of
-    // which are mapped to NOTIF_AREA_CLSID below.
     if (uri == L"ms-settings:taskbar")
         return ShellExecuteExW_orig(pei);
 
@@ -1175,7 +1115,6 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     else if (IsShellClsid(file)) uri = ToLower(file);
     else if (IsShellClsid(params)) uri = ToLower(params);
 
-    // Exact match only — see ShellExecuteExW_hook for why a prefix test is wrong here.
     if (uri == L"ms-settings:taskbar")
         return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
@@ -1218,13 +1157,6 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
 
-// ============================================================
-// TRAY: METHOD 3 - Block immersive menus in SndVolSSO/pnidui (Win11 fix)
-// Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu to return false,
-// forcing classic Win32 menus so TrackPopupMenuEx is actually called.
-// Pattern borrowed from "eradicate-immersive-menus" by aubymori.
-// ============================================================
-
 static void InstallImmersiveMenuHooks() {
     struct DllHook {
         const wchar_t*   dll;
@@ -1235,16 +1167,9 @@ static void InstallImmersiveMenuHooks() {
     };
 
     for (auto& t : targets) {
-        // These DLLs are NOT loaded yet when explorer starts fresh (i.e. every boot):
-        // Wh_ModInit runs before explorer creates the tray, so GetModuleHandleW would
-        // return nullptr and the hook would silently never be installed -> the entire
-        // tray redirect would be dead until the mod was toggled. Force-load them from
-        // System32 (they aren't KnownDLLs, hence LOAD_LIBRARY_SEARCH_SYSTEM32) so the
-        // symbol exists to hook, the same way "eradicate-immersive-menus" does it.
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // SndVolSSO.dll, pnidui.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
             {
                 L"bool "
@@ -1258,19 +1183,12 @@ static void InstallImmersiveMenuHooks() {
             },
             (void**)t.orig,
             (void*)ICMH_CAODTM_hook,
-            true // optional — don't fail if missing
+            true
         };
 
-        if (WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1))
-            Wh_Log(L"[IMMERSIVE] Hooked ICMH_CAODTM in %s", t.dll);
-        else
-            Wh_Log(L"[IMMERSIVE] ICMH_CAODTM not found in %s (may be absent on this build)", t.dll);
+        WindhawkUtils::HookSymbols(hMod, &sndVolSSOAndPniduiHook, 1);
     }
 }
-
-// ============================================================
-// CreateWindowExW hook for toolbar subclassing
-// ============================================================
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
@@ -1284,8 +1202,6 @@ HWND WINAPI CreateWindowExW_Hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    // Test the setting FIRST: when the tray feature is off this avoids the wcscmp
-    // string compare on every single window creation in explorer.
     if (g_settings.redirectSystemTray && hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
         if (wcscmp(lpClassName, L"ToolbarWindow32") == 0) {
             SetupTraySubclass();
@@ -1295,32 +1211,24 @@ HWND WINAPI CreateWindowExW_Hook(
     return hwnd;
 }
 
-// ============================================================
-// Windhawk entry points
-// ============================================================
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.14");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.17");
 
     DetectWindowsVersion();
     LoadSettings();
     BuildChildEnvironment();
     InitMappings();
-    
-    Wh_Log(L"%zu URI mappings loaded", g_mappings.size());
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32) { Wh_Log(L"ERROR: could not load shell32.dll"); return FALSE; }
+    if (!hShell32) return FALSE;
 
     FARPROC pExW = GetProcAddress(hShell32, "ShellExecuteExW");
     FARPROC pW = GetProcAddress(hShell32, "ShellExecuteW");
-    if (!pExW || !pW) { Wh_Log(L"ERROR: required exports not found"); return FALSE; }
+    if (!pExW || !pW) return FALSE;
 
-    bool ok1 = Wh_SetFunctionHook((void*)pExW, (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
-    bool ok2 = Wh_SetFunctionHook((void*)pW, (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
-    Wh_Log(L"ShellExecuteExW hook=%d ShellExecuteW hook=%d", ok1, ok2);
-    if (!ok1 && !ok2) { Wh_Log(L"ERROR: failed to install any hooks"); return FALSE; }
+    Wh_SetFunctionHook((void*)pExW, (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
+    Wh_SetFunctionHook((void*)pW, (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
 
     HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
     if (!hKernel32) hKernel32 = LoadLibraryW(L"kernel32.dll");
@@ -1329,43 +1237,30 @@ BOOL Wh_ModInit() {
         if (pCPW) Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
     }
 
-    // Tray hooks are installed unconditionally so that enabling
-    // "Redirect System Tray" at runtime works without a full mod reload.
-    // Both TrackPopupMenuEx_Hook and CreateWindowExW_Hook already self-gate
-    // on g_settings.redirectSystemTray at call time.
-
-    // Method 1: Toolbar subclassing (CreateWindowExW hook)
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
     }
 
-    // Method 2: Block immersive menus so Win32 TrackPopupMenuEx is called on Win11.
-    // Resolved once here; HookSymbols should not be called again for the same module.
     InstallImmersiveMenuHooks();
 
-    // Method 3: TrackPopupMenuEx DLL-based detection (fallback)
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
     if (hUser32) {
         void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
         if (pTrackPopupMenuEx) {
-            bool ok3 = Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
-            Wh_Log(L"TrackPopupMenuEx hook=%d", ok3);
+            Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
         }
     }
 
-    Wh_Log(L"Ready");
     return TRUE;
 }
 
 void Wh_ModUninit() {
     RemoveTraySubclass();
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.14 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed, reloading");
     RemoveTraySubclass();
     g_sndVolSSOBase = nullptr;
     g_sndVolSSOEnd = nullptr;
@@ -1376,7 +1271,4 @@ void Wh_ModSettingsChanged() {
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
     }
-    // Note: InstallImmersiveMenuHooks() is intentionally NOT called here.
-    // HookSymbols must only be resolved once per module (done in Wh_ModInit);
-    // ICMH_CAODTM_hook itself checks g_settings.redirectSystemTray at call time.
 }
