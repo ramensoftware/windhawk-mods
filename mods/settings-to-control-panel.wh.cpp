@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.13
+// @version        10.0.14
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -30,7 +30,7 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- **New in 10.0.13: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
+- **New in 10.0.14: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
 
 ---
 
@@ -791,9 +791,9 @@ static void InitMappings() {
         
         // Recovery / Backup / Troubleshooting
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
-        {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
+        {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},        
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
-        
+
         // Gaming
         {L"ms-settings:gaming-gamebar", L"joy.cpl"},
         
@@ -1048,6 +1048,16 @@ static std::wstring ResolvePersonalizationBackground(HWND hwnd) {
     return IsPersonalizationWindow(hwnd) ? PERS_WALLPAPER : PERS_ROOT;
 }
 
+// Solo le voci di Personalizzazione (CLSID {ED834ED6-...}) hanno una storia nota
+// di richiamare se stesse (bounce-back). Applicare il bounce-guard anche a lanci
+// diretti di eseguibili (es. msdt.exe per "troubleshoot") causa falsi positivi:
+// un utente che re-clicca entro la finestra di 3s perché lo strumento è lento ad
+// aprirsi (msdt.exe) si ritrova con il fallback verso ms-settings invece del
+// rilancio del target originale.
+static bool ShouldApplyBounceGuard(const std::wstring& uri) {
+    return uri.find(L"personalization") != std::wstring::npos;
+}
+
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     if (uri == L"ms-settings:personalization-background") {
         if (BounceGuardIsBounce(uri)) return {L"", true};
@@ -1057,7 +1067,8 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     }
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
-        if (BounceGuardIsBounce(uri)) {
+        bool useBounceGuard = ShouldApplyBounceGuard(uri);
+        if (useBounceGuard && BounceGuardIsBounce(uri)) {
             bool handled = HandleFallback(uri);
             return {L"", handled};
         }
@@ -1067,7 +1078,7 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
             return {L"", handled};
         }
         Wh_Log(L"Mapped: %s -> %s", uri.c_str(), t.c_str());
-        BounceGuardRecord(uri);
+        if (useBounceGuard) BounceGuardRecord(uri);
         return {t, true};
     }
     if (uri.find(L"ms-settings:") == 0) {
@@ -1289,7 +1300,7 @@ HWND WINAPI CreateWindowExW_Hook(
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.13");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.14");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1350,7 +1361,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     RemoveTraySubclass();
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.13 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.14 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
