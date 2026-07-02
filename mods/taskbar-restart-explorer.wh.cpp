@@ -3,7 +3,7 @@
 // @name            Taskbar Restart Explorer
 // @description     Adds a Restart Explorer shortcut to the native Windows 11 empty-taskbar context menu.
 // @version         1.0
-// @author          https://github.com/Mgrmjp
+// @author          Mgrmjp
 // @github          https://github.com/Mgrmjp
 // @include         explorer.exe
 // @architecture    x86-64
@@ -288,11 +288,11 @@ HMODULE GetTaskbarViewModuleHandle() {
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     LogModuleInfo(module, L"Resolving taskbar symbols");
 
-    WindhawkUtils::SYMBOL_HOOK requiredHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
                 LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))",
-                LR"(?ShowTaskbarSettingsContextMenu@ContextMenus@implementation@Taskbar@winrt@@YAXAEBUFrameworkElement@Xaml@UI@Windows@4@AEBUTaskbarSettings@Shell@7WindowsUdk@4@AEBUContextRequestedEventArgs@Input@6784@_K@Z)",
             },
             &ContextMenus_ShowTaskbarSettingsContextMenu_Original,
             ContextMenus_ShowTaskbarSettingsContextMenu_Hook,
@@ -300,14 +300,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         {
             {
                 LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>,struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>::Append(struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const &)const )",
-                LR"(?Append@?$consume_Windows_Foundation_Collections_IVector@U?$IVector@UMenuFlyoutItemBase@Controls@Xaml@UI@Windows@winrt@@@Collections@Foundation@Windows@winrt@@UMenuFlyoutItemBase@Controls@Xaml@UI@45@@impl@winrt@@QEBA@AEBUMenuFlyoutItemBase@Controls@Xaml@UI@Windows@3@@Z)",
             },
             &MenuFlyoutItemBaseVector_Append_Original,
             MenuFlyoutItemBaseVector_Append_Hook,
         },
     };
 
-    if (!HookSymbols(module, requiredHooks, ARRAYSIZE(requiredHooks))) {
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"Skipping injection: missing symbols");
         return false;
     }
