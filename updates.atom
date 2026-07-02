@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T18:04:11.000Z</updated>
+    <updated>2026-07-02T19:09:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.2.1]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a6331a0a1240ac02de1b2e73e2109755bf8c816d</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-07-02T19:09:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Updated version number and screenshot in the mod description.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 2.1.0]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#1f0ba9081e3851d184748875cc71eb5f4d6ec1ae</id>
@@ -406,34 +417,6 @@ the microphone, the icon is immediately shown to alert the user.</p>
         <author>
             <name>Ikkecode</name>
             <uri>https://github.com/ikkecode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Borderless Fullscreen 1.1.0]]></title>
-        <id>https://windhawk.net/mods/borderless-fullscreen#c208c001106e00938f338cacf204cb1dfdf43528</id>
-        <link href="https://windhawk.net/mods/borderless-fullscreen"/>
-        <updated>2026-06-27T21:35:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="borderlessfullscreen">Borderless Fullscreen</h1>
-<p>Add an executable name (e.g. <code>game.exe</code>) to the target list and the app
-will automatically run without a title bar / border, stretched to fill
-the primary monitor's current resolution (multi monitor setup is planned
-for the next version).</p>
-<p>Optionally, set a fixed window size instead (the window will then be
-centered on the primary monitor) - useful for older games with a low
-native resolution.</p>
-<h2 id="howitworks">How it works</h2>
-<p>This mod runs in a separate, dedicated process and restores the original
-window style and size automatically if the app is removed from the
-target list, if the mod is disabled, or if the window is closed.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>If a target doesn't react, double-check the <em>exact</em> process name in
-Task Manager's Details tab while it's running. Some launchers start a
-child process with a different executable name than expected.</li>
-</ul>]]></content>
-        <author>
-            <name>TomberWolf</name>
-            <uri>https://github.com/TomberWolf</uri>
         </author>
     </entry>
 </feed>
