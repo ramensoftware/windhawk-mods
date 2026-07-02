@@ -1186,7 +1186,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHooks[] = {
+        // SndVolSSO.dll, pnidui.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSSO_pnidui_hooks[] = {
             {{
                 L"bool "
 #ifdef _WIN64
@@ -1201,15 +1202,14 @@ static void InstallImmersiveMenuHooks() {
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, sndVolSSOAndPniduiHooks, 1);
+        WindhawkUtils::HookSymbols(hMod, sndVolSSO_pnidui_hooks, 1);
     }
 
-    // NUOVO: Hook per shell32.dll per Dispositivi e Stampanti
+    // Hook per shell32.dll per Dispositivi e Stampanti
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // Hook per la funzione del menu contestuale dispositivi
-            WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+            WindhawkUtils::SYMBOL_HOOK shell32_hooks[] = {
                 {{
                     L"bool "
 #ifdef _WIN64
@@ -1224,7 +1224,7 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
             };
             
-            WindhawkUtils::HookSymbols(hShell32, shell32Hooks, 1);
+            WindhawkUtils::HookSymbols(hShell32, shell32_hooks, 1);
         }
     }
 }
