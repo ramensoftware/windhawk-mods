@@ -2901,7 +2901,7 @@
           4
         ],
         "ratingUsers": 4,
-        "updated": 1782154255000,
+        "updated": 1783003800000,
         "users": 101
       },
       "metadata": {
@@ -2913,7 +2913,7 @@
           "*"
         ],
         "name": "Custom Menu Height",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "custom-shutdown-dialog": {
