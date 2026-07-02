@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T14:56:13.000Z</updated>
+    <updated>2026-07-02T15:20:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.8]]></title>
+        <id>https://windhawk.net/mods/dynamic-taskbar-transparency#2bdab8f5726d042025598ca446c44f4711c25f9b</id>
+        <link href="https://windhawk.net/mods/dynamic-taskbar-transparency"/>
+        <updated>2026-07-02T15:20:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dynamictaskbartransparency">Dynamic Taskbar Transparency</h1>
+<p><img src="https://i.imgur.com/Ab7hMYp.gif" alt="Dynamic Taskbar Transparency demo" /></p>
+<p>This mod applies a TranslucentTB-like state machine to the Windows 11 taskbar.
+It keeps the taskbar clear on the desktop or when no maximized window is
+present, then restores or changes the taskbar appearance while Start, search,
+task view, notification/quick settings flyouts, tray flyouts, other shell
+interactions, or maximized windows are active.</p>
+<p>Version 0.3 edits the Windows 11 taskbar XAML background rectangles directly.
+It fades the rectangles with <code>Opacity</code> instead of applying a colored alpha
+overlay, and it can fall back to the captured existing style, clear the mod's
+local overrides for the Windows native/default style, clear, blur, or
+blur-backed acrylic.</p>
+<p>State detection is driven by shell/window events and uses heuristic window
+class/process-name matching for Start, search, task view, tray flyouts, and
+other shell surfaces. These heuristics can change between Windows 11 builds.</p>
+<p>Do not run this together with TranslucentTB or another tool that continuously
+writes the same taskbar background.</p>
+<p>Compared with taskbar-background-helper, this mod focuses on a TranslucentTB-
+style state machine: desktop/no-maximized-window, maximized windows, Start,
+search, task view, tray flyouts, notification/quick settings flyouts, and an
+optional catch-all for other shell surfaces can each choose their own
+appearance and fade duration. taskbar-background-helper is a lower-level
+background helper for always/maximized behavior and pairs well with Taskbar
+Styler; this mod adds per-shell-state switching and animation on top of the
+same general taskbar background use case.</p>]]></content>
+        <author>
+            <name>11581</name>
+            <uri>https://github.com/r1file</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Files 2 Folders 2.5]]></title>
         <id>https://windhawk.net/mods/files-2-folders#04683525522c0a20295ae6cbe1d6360c1ab1e80c</id>
@@ -435,21 +470,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Files 2 Folders 2.2]]></title>
-        <id>https://windhawk.net/mods/files-2-folders#fd63b735358811aff34f11c4ba5909f1b44688a4</id>
-        <link href="https://windhawk.net/mods/files-2-folders"/>
-        <updated>2026-06-27T14:19:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add nested-subfolder support to the <strong>Fixed name</strong> mode. A <code>/</code> (or <code>\</code>) in the name is now treated as a path separator, so <code>test/1/2/3/name</code> creates <code>test\1\2\3\name</code> and moves the selection into the final <code>name</code> folder.</li>
-<li>Intermediate folders are always created/reused as a stable path; only the last segment follows the existing "Fixed name: reuse an existing folder" reuse/numbering rule.</li>
-<li>Empty segments (from leading, trailing, or doubled separators) are ignored. Other modes (by name, by extension, by date) are unchanged.</li>
-</ul>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>

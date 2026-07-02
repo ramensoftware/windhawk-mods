@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-06-29T17:34:13.000Z</updated>
+    <updated>2026-07-02T15:20:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.8]]></title>
+        <id>https://windhawk.net/mods/dynamic-taskbar-transparency#2bdab8f5726d042025598ca446c44f4711c25f9b</id>
+        <link href="https://windhawk.net/mods/dynamic-taskbar-transparency"/>
+        <updated>2026-07-02T15:20:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="dynamictaskbartransparency">Dynamic Taskbar Transparency</h1>
+<p><img src="https://i.imgur.com/Ab7hMYp.gif" alt="Dynamic Taskbar Transparency demo" /></p>
+<p>This mod applies a TranslucentTB-like state machine to the Windows 11 taskbar.
+It keeps the taskbar clear on the desktop or when no maximized window is
+present, then restores or changes the taskbar appearance while Start, search,
+task view, notification/quick settings flyouts, tray flyouts, other shell
+interactions, or maximized windows are active.</p>
+<p>Version 0.3 edits the Windows 11 taskbar XAML background rectangles directly.
+It fades the rectangles with <code>Opacity</code> instead of applying a colored alpha
+overlay, and it can fall back to the captured existing style, clear the mod's
+local overrides for the Windows native/default style, clear, blur, or
+blur-backed acrylic.</p>
+<p>State detection is driven by shell/window events and uses heuristic window
+class/process-name matching for Start, search, task view, tray flyouts, and
+other shell surfaces. These heuristics can change between Windows 11 builds.</p>
+<p>Do not run this together with TranslucentTB or another tool that continuously
+writes the same taskbar background.</p>
+<p>Compared with taskbar-background-helper, this mod focuses on a TranslucentTB-
+style state machine: desktop/no-maximized-window, maximized windows, Start,
+search, task view, tray flyouts, notification/quick settings flyouts, and an
+optional catch-all for other shell surfaces can each choose their own
+appearance and fade duration. taskbar-background-helper is a lower-level
+background helper for always/maximized behavior and pairs well with Taskbar
+Styler; this mod adds per-shell-state switching and animation on top of the
+same general taskbar background use case.</p>]]></content>
+        <author>
+            <name>11581</name>
+            <uri>https://github.com/r1file</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
@@ -767,222 +802,6 @@ taskbar-height plumbing is kept (no icon-size, button-width, or search hooks).</
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Button Remapper 1.7.2]]></title>
-        <id>https://windhawk.net/mods/mouse-button-remap#073f0f0f798ceab2c0f67e6d7fb2a9a1b11ac201</id>
-        <link href="https://windhawk.net/mods/mouse-button-remap"/>
-        <updated>2026-06-15T14:16:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mousebuttonremapper">Mouse Button Remapper</h1>
-<p><img src="https://i.imgur.com/z2ndWbk.png" alt="Demo" /></p>
-<p>Remaps mouse buttons to keyboard keys, optionally with modifiers (Ctrl,
-Shift, Alt, Win). Supported buttons:</p>
-<ul>
-<li><strong>Upper side button</strong> = "Forward" (XButton2) — on most mice this is the
-side button closer to the front of the mouse.</li>
-<li><strong>Lower side button</strong> = "Back" (XButton1).</li>
-<li><strong>Middle button</strong> = pressing the scroll wheel.</li>
-<li><strong>Left button</strong> and <strong>Right button</strong> — see the warning below.</li>
-</ul>
-<p>Each button has its own on/off switch — when a button is disabled, it
-keeps its original function. If your mouse has the side buttons swapped,
-simply configure the other one.</p>
-<p>The mod runs as a tool mod in a dedicated process and installs a global
-low-level mouse hook, so it works system-wide (in every application)
-without injecting into the shell or other programs.</p>
-<h2 id="mousecompatibility">Mouse compatibility</h2>
-<p>By default, on virtually all mice the two side buttons are reported as
-standard mouse buttons — <strong>Forward</strong> (XButton2) and <strong>Back</strong> (XButton1) —
-and the middle button as the wheel click. Those are exactly the events
-this mod intercepts, so it works out of the box on a normal mouse with no
-vendor software.</p>
-<p>However, if the mouse's own software or onboard firmware remaps a button
-to a <strong>multimedia or keyboard function</strong> (e.g. "Refresh", "Play/Pause",
-"Browser Back"), that press is no longer sent as a mouse button — it
-arrives as a media/keyboard command that a mouse hook cannot see, so this
-mod can no longer remap it. If a button is not being intercepted, open
-your mouse software and set it back to the plain <strong>Forward</strong> / <strong>Back</strong> /
-<strong>Wheel click</strong> function, then assign the keyboard key here in the mod.
-In other words: let the mouse send a normal button, and let the mod do
-the remapping — do not remap the same button in both places.</p>
-<h2 id="configuration">Configuration</h2>
-<p>Each button has its own section in the mod settings:</p>
-<ol>
-<li><p><strong>Enabled</strong> — the master switch for that button. When unchecked, the
-button behaves exactly as the manufacturer intended and all other
-fields in the section are ignored. This lets you remap only one button
-and leave the rest untouched.</p></li>
-<li><p><strong>Key</strong> — the keyboard key sent while the button is held. Pick one
-from the dropdown (F1–F12, Enter, Esc, arrows, media keys, …). The
-key press mirrors the button press: key-down when you press the
-button, key-up when you release it. The original button action is
-suppressed only when the remap is active.</p></li>
-<li><p><strong>Custom key</strong> — used only when <strong>Key</strong> is set to
-<em>Custom (use field below)</em>. It lets you type any key the dropdown
-does not list. Accepted values:</p></li>
-</ol>
-<ul>
-<li><p><code>F1</code> … <code>F24</code></p></li>
-<li><p>single letters and digits: <code>A</code> … <code>Z</code>, <code>0</code> … <code>9</code></p></li>
-<li><p>named keys: <code>Enter</code>, <code>Esc</code>, <code>Tab</code>, <code>Space</code>, <code>Backspace</code>, <code>Delete</code>,
- <code>Insert</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>, <code>Down</code>,
- <code>Left</code>, <code>Right</code>, <code>PlayPause</code>, <code>Mute</code>, <code>VolumeUp</code>, <code>VolumeDown</code></p></li>
-<li><p>any Windows virtual-key code in hex, e.g. <code>0x74</code> (= F5) — see the
- "Virtual-Key Codes" page in Microsoft docs for the full list</p></li>
-<li><p>a full combo such as <code>Ctrl+F5</code> or <code>Ctrl + Shift + T</code> — modifiers
- typed here are combined with the <strong>Modifier</strong> dropdown selection</p>
-<p>If the value cannot be parsed, the remap is inactive and the button
-keeps its original function (a note is written to the mod's log,
-visible via "Show log" in Windhawk).</p></li>
-</ul>
-<ol>
-<li><p><strong>Modifier</strong> — keys held together with the main key, e.g. selecting
-<code>Ctrl</code> with key <code>F5</code> sends Ctrl+F5 (hard refresh in browsers).</p></li>
-<li><p><strong>Double-click action</strong> — optionally send a different key on
-double-click (e.g. single click = F5, double click = Ctrl+Shift+T).
-The double-click key/custom key/modifier fields work exactly like the
-single-click ones. Note: while this is enabled, the single-click
-action fires only after the system double-click interval passes
-without a second click, so it has a short delay; press-and-hold
-mirroring is also disabled for that button. When disabled (default),
-single clicks are instant.</p></li>
-</ol>
-<p>Changes are applied immediately after saving the settings — no restart
-needed.</p>
-<h2 id="mastertogglehotkey">Master toggle hotkey</h2>
-<p>An optional global keyboard shortcut that suspends/resumes all remaps at
-once — handy when the buttons' original functions are temporarily
-needed. Pick the modifiers and the key from the dropdowns; if the chosen
-combination is already taken by another application, the registration
-fails and a note is written to the mod's log — just pick a different
-combination. Every toggle shows a short on-screen indicator
-("Mouse remap: ON/OFF"); a confirmation sound can be enabled with the
-"Play a sound on toggle" option. The indicator scales with the screen
-and appears on the monitor under the cursor, so it stays readable on
-large / high-resolution displays. Remapping always starts active after
-the mod (re)starts.</p>
-<p><strong>Troubleshooting:</strong> if pressing the shortcut only produces a plain
-system beep and no on-screen indicator, the shortcut did not get
-registered. Open the mod's log (Show log in Windhawk) and look for a
-"RegisterHotKey failed" line — error 1409 means another application
-already owns that combination; pick a different one and save again.</p>
-<h2 id="gamemode">Game mode</h2>
-<p>When enabled, remapping is automatically suspended while the foreground
-window covers the entire screen — typical for games and fullscreen
-video. Note that this also applies to browsers in fullscreen (F11) mode.</p>
-<p>The fullscreen state is tracked efficiently: instead of being recomputed
-inside the mouse hook on every click, it is cached and only refreshed via
-window events (foreground change and window move/resize) while game mode
-is enabled, so the hook stays lightweight.</p>
-<h2 id="warningleftandrightbutton">⚠️ Warning: left and right button</h2>
-<p>Remapping the <strong>left button</strong> disables normal clicking system-wide while
-enabled — you will not be able to click anything with it, including the
-Windhawk window. Keep keyboard navigation in mind (Tab/Enter), or simply
-disable the mod from Windhawk using the keyboard if you lock yourself
-out. Remapping the <strong>right button</strong> similarly removes access to context
-menus (the keyboard Menu key still works). Both are disabled by default;
-enable them only if you know what you are doing.</p>
-<hr />
-<h1 id="mousebuttonremapperpolski">Mouse Button Remapper (polski)</h1>
-<p>Mod przemapowuje przyciski myszy na klawisze klawiatury, opcjonalnie z
-modyfikatorami (Ctrl, Shift, Alt, Win). Obsługiwane przyciski: <strong>górny
-boczny</strong> (Do przodu / XButton2), <strong>dolny boczny</strong> (Wstecz / XButton1),
-<strong>środkowy</strong> (klik kółka) oraz — z ostrzeżeniem poniżej — <strong>lewy</strong> i
-<strong>prawy</strong>. Mod działa jako „tool mod" w osobnym procesie i instaluje
-globalny hook myszy, więc działa we wszystkich aplikacjach bez
-wstrzykiwania się do powłoki ani innych programów.</p>
-<h2 id="zgodnomyszek">Zgodność myszek</h2>
-<p>Domyślnie w praktycznie każdej myszce dwa boczne przyciski są zgłaszane
-jako standardowe przyciski myszy — <strong>Do przodu</strong> (XButton2) i <strong>Wstecz</strong>
-(XButton1) — a środkowy jako klik kółka. Dokładnie te zdarzenia mod
-przechwytuje, więc na zwykłej myszce bez oprogramowania działa od razu.</p>
-<p>Jeśli jednak oprogramowanie myszki lub jej firmware przypisze przyciskowi
-<strong>funkcję multimedialną lub klawiaturową</strong> (np. „Refresh", „Play/Pause",
-„Wstecz przeglądarki"), takie naciśnięcie nie jest już wysyłane jako
-przycisk myszy — przychodzi jako komenda multimedialna/klawiatury, której
-hook myszy nie widzi, więc mod nie może go przemapować. Jeśli któryś
-przycisk nie jest przechwytywany, w oprogramowaniu myszki ustaw go z
-powrotem na zwykłe <strong>Do przodu</strong> / <strong>Wstecz</strong> / <strong>klik kółka</strong>, a klawisz
-przypisz tutaj w modzie. Krótko: niech myszka wysyła normalny przycisk, a
-przemapowaniem zajmie się mod — nie mapuj tego samego przycisku w obu
-miejscach naraz.</p>
-<h2 id="konfiguracja">Konfiguracja</h2>
-<p>Każdy przycisk ma własną sekcję:</p>
-<ol>
-<li><p><strong>Włączony</strong> — główny włącznik. Gdy odznaczony, przycisk działa tak,
-jak ustawił producent, a pozostałe pola są ignorowane. Dzięki temu
-można przemapować tylko jeden przycisk, a resztę zostawić.</p></li>
-<li><p><strong>Klawisz</strong> — klawisz wysyłany podczas trzymania przycisku, wybierany
-z listy (F1–F12, Enter, Esc, strzałki, klawisze multimedialne, …).
-Wciśnięcie klawisza odwzorowuje wciśnięcie przycisku: key-down przy
-naciśnięciu, key-up przy puszczeniu.</p></li>
-<li><p><strong>Klawisz niestandardowy</strong> — używany tylko, gdy <strong>Klawisz</strong> =
-<em>Niestandardowy (pole poniżej)</em>. Akceptuje:</p></li>
-</ol>
-<ul>
-<li><p><code>F1</code> … <code>F24</code>,</p></li>
-<li><p>pojedyncze litery i cyfry: <code>A</code> … <code>Z</code>, <code>0</code> … <code>9</code>,</p></li>
-<li><p>nazwy: <code>Enter</code>, <code>Esc</code>, <code>Tab</code>, <code>Space</code>, <code>Backspace</code>, <code>Delete</code>,
- <code>Insert</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>, <code>Down</code>,
- <code>Left</code>, <code>Right</code>, <code>PlayPause</code>, <code>Mute</code>, <code>VolumeUp</code>, <code>VolumeDown</code>,</p></li>
-<li><p>dowolny kod virtual-key w hex, np. <code>0x74</code> (= F5) — pełna lista na
- stronie "Virtual-Key Codes" w dokumentacji Microsoftu,</p></li>
-<li><p>pełną kombinację, np. <code>Ctrl+F5</code> albo <code>Ctrl + Shift + T</code> —
- modyfikatory wpisane tutaj sumują się z dropdownem <strong>Modyfikator</strong>.</p>
-<p>Jeśli wartości nie da się sparsować, bind jest nieaktywny i przycisk
-zachowuje oryginalną funkcję (informacja trafia do logu moda —
-"Show log" w Windhawk).</p></li>
-</ul>
-<ol>
-<li><p><strong>Modyfikator</strong> — klawisze trzymane razem z głównym klawiszem, np.
-<code>Ctrl</code> + klawisz <code>F5</code> wysyła Ctrl+F5 (twarde odświeżenie strony).</p></li>
-<li><p><strong>Akcja podwójnego kliknięcia</strong> — opcjonalnie inny klawisz przy
-dwukliku (np. pojedyncze kliknięcie = F5, podwójne = Ctrl+Shift+T).
-Pola klawisza/klawisza niestandardowego/modyfikatora dwukliku
-działają tak samo jak dla pojedynczego kliknięcia. Uwaga: gdy ta
-opcja jest włączona, akcja pojedynczego kliknięcia wykonuje się
-dopiero po upływie systemowego czasu dwukliku (krótkie opóźnienie),
-a odwzorowanie przytrzymania przycisku jest dla niego wyłączone.
-Gdy opcja jest wyłączona (domyślnie), pojedyncze kliknięcia działają
-natychmiast.</p></li>
-</ol>
-<p>Zmiany działają natychmiast po zapisaniu ustawień — bez restartu.</p>
-<h2 id="skrtwczaniawyczaniabindw">Skrót włączania/wyłączania bindów</h2>
-<p>Opcjonalny globalny skrót klawiszowy, który jednym naciśnięciem
-wstrzymuje/wznawia wszystkie bindy — przydatny, gdy chwilowo potrzebne
-są oryginalne funkcje przycisków. Modyfikatory i klawisz wybierasz z
-list — jeśli kombinacja jest już zajęta przez inny program, rejestracja
-się nie powiedzie, a informacja trafi do logu moda — wystarczy wybrać
-inną kombinację. Każde przełączenie pokazuje krótki wskaźnik na ekranie
-("Mouse remap: ON/OFF"); dźwięk potwierdzenia można włączyć opcją
-„Odtwarzaj dźwięk przy przełączeniu". Wskaźnik skaluje się do rozmiaru
-ekranu i pojawia się na monitorze pod kursorem, więc pozostaje czytelny
-na dużych ekranach i wysokiej rozdzielczości. Po (re)starcie moda bindy
-są zawsze aktywne.</p>
-<p><strong>Rozwiązywanie problemów:</strong> jeśli naciśnięcie skrótu daje tylko zwykły
-systemowy „ding" i wskaźnik się nie pokazuje, skrót nie został
-zarejestrowany. Otwórz log moda (Show log w Windhawk) i poszukaj linii
-"RegisterHotKey failed" — błąd 1409 oznacza, że kombinację zajmuje już
-inna aplikacja; wybierz inną i zapisz ponownie.</p>
-<h2 id="trybgry">Tryb gry</h2>
-<p>Gdy włączony, bindy są automatycznie wstrzymywane, dopóki okno na
-pierwszym planie zajmuje cały ekran — typowe dla gier i pełnoekranowego
-wideo. Uwaga: dotyczy to też przeglądarki w trybie pełnoekranowym (F11).</p>
-<p>Stan pełnego ekranu jest śledzony wydajnie: zamiast przeliczać go w haku
-myszy przy każdym kliknięciu, jest buforowany i odświeżany tylko przez
-zdarzenia okien (zmiana aktywnego okna oraz zmiana rozmiaru/pozycji),
-i tylko gdy tryb gry jest włączony — dzięki czemu hak pozostaje lekki.</p>
-<h2 id="ostrzeenielewyiprawyprzycisk">⚠️ Ostrzeżenie: lewy i prawy przycisk</h2>
-<p>Przemapowanie <strong>lewego przycisku</strong> blokuje normalne klikanie w całym
-systemie — nie klikniesz nim niczego, łącznie z oknem Windhawka. W razie
-zablokowania użyj nawigacji klawiaturą (Tab/Enter) albo wyłącz mod w
-Windhawku klawiaturą. Przemapowanie <strong>prawego przycisku</strong> odbiera dostęp
-do menu kontekstowych (działa jeszcze klawisz Menu na klawiaturze). Oba
-są domyślnie wyłączone — włączaj tylko świadomie.</p>]]></content>
-        <author>
-            <name>wygodad</name>
-            <uri>https://github.com/wygodad</uri>
         </author>
     </entry>
 </feed>
