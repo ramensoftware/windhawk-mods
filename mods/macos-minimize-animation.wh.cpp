@@ -126,6 +126,14 @@ struct MacGenieAnimData {
     LONG_PTR originalExStyle;
 };
 
+// Handed to MacGenieLaunchThread: the launch worker needs the window's TRUE
+// pre-hide extended style (captured at the hook site, before WS_EX_LAYERED was
+// added) so the layered bit can be removed again after the reveal.
+struct MacGenieLaunchData {
+    HWND     hWnd;
+    LONG_PTR originalExStyle;
+};
+
 // --- THE VAULTS ---
 std::unordered_map<HWND, HBITMAP> g_SnapshotCache;
 std::unordered_map<HWND, int> g_IconPositions; // Remembers where icons live
@@ -461,7 +469,12 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 // -------------------------------------------------------------------------
 // Core Setup Engine & Smart Tracking Logic
 // -------------------------------------------------------------------------
-void StartMacGenieAnim(HWND hWnd, BOOL rising) {
+// `originalExStyle` is the window's TRUE extended style, captured by the caller
+// BEFORE any WS_EX_LAYERED was added for the hide. Rising callers hide the window
+// first, so re-reading GetWindowLongPtrW here would always see the layered bit and
+// the cleanup that removes it could never fire - the style would leak permanently.
+// Falling callers never touch layering and just pass the current style.
+void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle) {
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
@@ -481,15 +494,29 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising) {
         if (!blocked) g_LaunchSeen.insert(hWnd);
     }
     if (blocked) {
-        // Rising callers hide the window (WS_EX_LAYERED + alpha 0) BEFORE calling us
-        // and rely on the animation thread to reveal it at the end. If we bail here -
-        // e.g. the user restores a window whose minimize genie is still in flight -
-        // that reveal never comes, so undo the hide now or the restored window stays
-        // permanently invisible. (WS_EX_LAYERED is left in place: the original style
-        // isn't known here, and layered + alpha 255 renders normally.)
         if (rising) {
+            // Rising callers hide the window (WS_EX_LAYERED + alpha 0) BEFORE calling
+            // us and rely on the animation thread to reveal it at the end. If we bail
+            // here - e.g. the user restores a window whose minimize genie is still in
+            // flight - that reveal never comes, so undo the hide now (alpha, the
+            // layered bit if the window wasn't originally layered, and transitions)
+            // or the restored window stays permanently invisible.
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            if (!(originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+            }
             MacGenieSetDwmTransitions(hWnd, TRUE);
+        } else {
+            // Falling: callers disabled DWM transitions before calling us. Re-enable
+            // them only if no in-flight genie owns this window (a running worker
+            // re-enables them itself when it finishes) - otherwise a minimize gesture
+            // landing during unload would leave them force-disabled on the window.
+            bool owned;
+            {
+                std::lock_guard<std::mutex> lock(g_CacheMutex);
+                owned = g_AnimActive.count(hWnd) != 0;
+            }
+            if (!owned) MacGenieSetDwmTransitions(hWnd, TRUE);
         }
         return;
     }
@@ -524,7 +551,7 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising) {
     data->height = h;
     data->isRising = rising;
     data->targetDockX = learnedTargetX; // Assign the learned coordinate
-    data->originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    data->originalExStyle = originalExStyle;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -598,9 +625,12 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam);   // defined below
 
 // Arm the launch animation for a window about to be shown for the first time: check
 // eligibility, kill its DWM transition and hide it (alpha 0) *before* the real show
-// call, so the system's own open animation never appears. Returns true if armed -
-// the caller must perform its original show call, then MacGenieLaunchCommit(hWnd).
-static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow) {
+// call, so the system's own open animation never appears. On success writes the
+// window's TRUE pre-hide extended style to *origExOut (needed to remove the layered
+// bit again later) - the caller must perform its original show call, then
+// MacGenieLaunchCommit(hWnd, origEx).
+static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
+    if (g_unloading.load(std::memory_order_relaxed)) return false;   // no new workers past the drain
     if (!g_launchAnimation.load(std::memory_order_relaxed)) return false;
     if (nCmdShow != SW_SHOW && nCmdShow != SW_SHOWNORMAL &&
         nCmdShow != SW_SHOWDEFAULT && nCmdShow != SW_SHOWMAXIMIZED) return false;
@@ -612,21 +642,29 @@ static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow) {
     }
     MacGenieSetDwmTransitions(hWnd, FALSE);
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    *origExOut = exStyle;
     SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
     return true;
 }
 
 // Second half of the launch sequence: spawn the reveal worker (or roll back so the
-// window isn't left invisible with transitions disabled).
-static void MacGenieLaunchCommit(HWND hWnd) {
+// window isn't left invisible, layered, or with transitions disabled).
+static void MacGenieLaunchCommit(HWND hWnd, LONG_PTR originalExStyle) {
+    MacGenieLaunchData* ld = new MacGenieLaunchData();
+    ld->hWnd = hWnd;
+    ld->originalExStyle = originalExStyle;
     g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    HANDLE h = CreateThread(NULL, 0, MacGenieLaunchThread, hWnd, 0, NULL);
+    HANDLE h = CreateThread(NULL, 0, MacGenieLaunchThread, ld, 0, NULL);
     if (h) {
         CloseHandle(h);
     } else {
         g_workerCount.fetch_sub(1, std::memory_order_release);
+        delete ld;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        if (!(originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+        }
         MacGenieSetDwmTransitions(hWnd, TRUE);
     }
 }
@@ -635,7 +673,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
         if (MacGenieShouldAnimate(hWnd)) {
             MacGenieSetDwmTransitions(hWnd, FALSE);
-            StartMacGenieAnim(hWnd, FALSE);
+            StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
         }
         return ShowWindow_Original(hWnd, nCmdShow);
     }
@@ -648,7 +686,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-            StartMacGenieAnim(hWnd, TRUE);
+            StartMacGenieAnim(hWnd, TRUE, exStyle);
             return res;
         }
         return ShowWindow_Original(hWnd, nCmdShow);
@@ -658,9 +696,10 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     // and kill its DWM transition *before* the real ShowWindow, so the system's own
     // open animation never appears - then the genie plays it in. (Windows created
     // already-visible just open normally, which is better than double-animating.)
-    if (MacGenieLaunchPrepare(hWnd, nCmdShow)) {
+    LONG_PTR launchOrigEx;
+    if (MacGenieLaunchPrepare(hWnd, nCmdShow, &launchOrigEx)) {
         BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-        MacGenieLaunchCommit(hWnd);
+        MacGenieLaunchCommit(hWnd, launchOrigEx);
         return res;
     }
 
@@ -686,7 +725,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
         if (cmd == SC_MINIMIZE) {
             if (MacGenieShouldAnimate(hWnd)) {
                 MacGenieSetDwmTransitions(hWnd, FALSE);
-                StartMacGenieAnim(hWnd, FALSE);
+                StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
             }
             return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
         }
@@ -698,7 +737,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-            StartMacGenieAnim(hWnd, TRUE);
+            StartMacGenieAnim(hWnd, TRUE, exStyle);
             return res;
         }
     }
@@ -718,7 +757,7 @@ static void MacGenieTryMinimizeAnim(HWND hWnd) {
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
     if (!MacGenieShouldAnimate(hWnd)) return;
     MacGenieSetDwmTransitions(hWnd, FALSE);
-    StartMacGenieAnim(hWnd, FALSE);
+    StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
 }
 
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
@@ -727,10 +766,13 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
         MacGenieTryMinimizeAnim(hWnd);
     }
     // Launch parity with ShowWindow: some apps show their first window async.
-    else if (MacGenieLaunchPrepare(hWnd, nCmdShow)) {
-        BOOL res = ShowWindowAsync_Original(hWnd, nCmdShow);
-        MacGenieLaunchCommit(hWnd);
-        return res;
+    else {
+        LONG_PTR launchOrigEx;
+        if (MacGenieLaunchPrepare(hWnd, nCmdShow, &launchOrigEx)) {
+            BOOL res = ShowWindowAsync_Original(hWnd, nCmdShow);
+            MacGenieLaunchCommit(hWnd, launchOrigEx);
+            return res;
+        }
     }
     return ShowWindowAsync_Original(hWnd, nCmdShow);
 }
@@ -757,10 +799,13 @@ BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
 // costs one flag test.
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
                               int cx, int cy, UINT uFlags) {
-    if ((uFlags & SWP_SHOWWINDOW) && MacGenieLaunchPrepare(hWnd, SW_SHOW)) {
-        BOOL res = SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-        MacGenieLaunchCommit(hWnd);
-        return res;
+    if (uFlags & SWP_SHOWWINDOW) {
+        LONG_PTR launchOrigEx;
+        if (MacGenieLaunchPrepare(hWnd, SW_SHOW, &launchOrigEx)) {
+            BOOL res = SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+            MacGenieLaunchCommit(hWnd, launchOrigEx);
+            return res;
+        }
     }
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
@@ -773,7 +818,10 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
 // then snapshot it and play the rising genie. Runs off the ShowWindow hook so the
 // app's own thread isn't blocked while we wait.
 DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
-    HWND hWnd = (HWND)lpParam;
+    MacGenieLaunchData* ld = (MacGenieLaunchData*)lpParam;
+    HWND hWnd = ld->hWnd;
+    LONG_PTR originalExStyle = ld->originalExStyle;
+    delete ld;
 
     // Let the freshly-shown (still hidden) window paint its content first, otherwise
     // the genie would warp a blank frame. Store / UWP-style apps additionally stay
@@ -793,9 +841,12 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
     if (g_unloading.load(std::memory_order_relaxed) ||
         !IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
         // It went away / got minimized while we waited (or the mod is unloading) -
-        // make sure we didn't leave it hidden or with transitions disabled.
+        // make sure we didn't leave it hidden, layered, or with transitions disabled.
         if (IsWindow(hWnd)) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            if (!(originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+            }
             MacGenieSetDwmTransitions(hWnd, TRUE);
         }
         g_workerCount.fetch_sub(1, std::memory_order_release);
@@ -803,8 +854,8 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
     }
 
     // If the one-genie guard blocks this (duplicate / unload race), it restores the
-    // window's alpha itself, so no reveal is ever lost.
-    StartMacGenieAnim(hWnd, TRUE); // rising genie; reveals the real window at the end
+    // window's visibility and style itself, so no reveal is ever lost.
+    StartMacGenieAnim(hWnd, TRUE, originalExStyle); // rising genie; reveals the real window
     g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
