@@ -2,11 +2,11 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.12
+// @version        10.0.13
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @compilerOptions -lshell32 -lcomctl32 -lpsapi
+// @compilerOptions -lcomctl32 -lpsapi
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -30,7 +30,7 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- **New in 10.0.12: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
+- **New in 10.0.13: more reliable tray menu detection.** When you right-click the Audio or Network icon near the clock, the mod now uses three different methods, each as a backup for the others, to correctly figure out which icon you clicked. Works regardless of which language Windows is set to.
 
 ---
 
@@ -108,7 +108,12 @@ static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 // Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
 // 0=none, 1=audio, 2=network. Plain global guarded by g_trayContextMutex (not thread-local).
 static int g_trayContextType = 0;
+static DWORD g_trayContextTick = 0;   // GetTickCount() captured when the flag was set
 static std::mutex g_trayContextMutex;
+// Ignore a tray-context flag older than this — a right-click that identified an
+// icon but never produced a TrackPopupMenuEx (menu suppressed/dismissed before the
+// popup) would otherwise leak into the *next* tray popup, possibly a different icon.
+static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 // ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu hook
 // Forces classic Win32 menus in SndVolSSO.dll and pnidui.dll (Win11 fix).
 using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
@@ -201,14 +206,15 @@ static void LoadSettings() {
     g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0;
     g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
 
-    PCWSTR fallbackStr = Wh_GetStringSetting(L"FallbackMode");
+    // RAII wrapper: frees the string via Wh_FreeStringSetting on scope exit.
+    WindhawkUtils::StringSetting fallbackSetting(Wh_GetStringSetting(L"FallbackMode"));
+    PCWSTR fallbackStr = fallbackSetting;  // implicit PCWSTR conversion
     if (fallbackStr[0] != L'\0') {
         int mode = _wtoi(fallbackStr);
         g_settings.fallbackMode = (mode >= 0 && mode <= 2) ? mode : 2;
     } else {
         g_settings.fallbackMode = 2;
     }
-    Wh_FreeStringSetting(fallbackStr);
 
     g_settings.win11CompatibilityMode = Wh_GetIntSetting(L"Win11CompatibilityMode") != 0;
 
@@ -471,11 +477,13 @@ static LRESULT CALLBACK TrayToolbarSubclassProc(
                 Wh_Log(L"[TRAY-SUBCLASS] Audio icon right-clicked");
                 std::lock_guard<std::mutex> lk(g_trayContextMutex);
                 g_trayContextType = 1; // will be consumed by TrackPopupMenuEx_Hook
+                g_trayContextTick = GetTickCount();
             }
             else if (buttonType == 2) {
                 Wh_Log(L"[TRAY-SUBCLASS] Network icon right-clicked");
                 std::lock_guard<std::mutex> lk(g_trayContextMutex);
                 g_trayContextType = 2;
+                g_trayContextTick = GetTickCount();
             }
         }
     }
@@ -552,7 +560,16 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     {
         std::lock_guard<std::mutex> lk(g_trayContextMutex);
         contextType = g_trayContextType;
+        DWORD tick = g_trayContextTick;
         g_trayContextType = 0; // consume immediately
+        g_trayContextTick = 0;
+        // Drop stale context: a right-click that identified an icon but never
+        // produced a TrackPopupMenuEx (menu suppressed/dismissed first) would
+        // otherwise be consumed by the next tray popup — possibly a different icon.
+        if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS) {
+            Wh_Log(L"[TRAY-HOOK] Dropping stale tray context (age %lu ms)", GetTickCount() - tick);
+            contextType = 0;
+        }
     }
 
     bool isAudioMenu   = (contextType == 1);
@@ -733,7 +750,6 @@ static void InitMappings() {
         {L"ms-settings:network-proxy", L"inetcpl.cpl,,4"},
         {L"ms-settings:network-status", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
         {L"ms-settings:network-dialup", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}"},
-        {L"ms-settings:network-advancedsettings", L"shell:::{8E908FC9-BECC-40f6-915B-F4CA0E70D03D}"},
         {L"ms-settings:firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:network-firewall", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
         {L"ms-settings:windowsdefender", L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}"},
@@ -774,7 +790,6 @@ static void InitMappings() {
         {L"ms-settings:easeofaccess-keyboard", EASE_OF_ACCESS},
         
         // Recovery / Backup / Troubleshooting
-        {L"ms-settings:backup", L"shell:::{B98A2BEA-7D42-4558-8BD1-832F41BAC6FD}"},
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
         {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
@@ -825,13 +840,15 @@ static void InitMappings() {
         {L"ms-settings:multitasking", L"control.exe"},
         {L"ms-settings:storage", L"control.exe"},
         {L"ms-settings:storagesense", L"control.exe"},
-        {L"ms-settings:backup", L"control.exe /name Microsoft.BackupAndRestore"},
-        {L"ms-settings:network-advancedsettings", L"control.exe /name Microsoft.NetworkAndSharingCenter"},
     };
+
+    // Sovrascrivi i duplicati con i valori "Additional mappings" corretti
+    g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
+    g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
 
     if (g_isWin11) {
         g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
-    };
+    }
 }
 
 static std::wstring NormalizeUri(const std::wstring& uri) {
@@ -1113,7 +1130,10 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     else if (IsShellClsid(pei->lpFile)) uri = ToLower(pei->lpFile);
     else if (IsShellClsid(pei->lpParameters)) uri = ToLower(pei->lpParameters);
 
-    if (!uri.empty() && uri.find(L"ms-settings:taskbar") == 0)
+    // Exact match only: a prefix test (uri.find(...)==0) would also swallow
+    // ms-settings:taskbar-notifications and ms-settings:taskbar-systemtray, both of
+    // which are mapped to NOTIF_AREA_CLSID below.
+    if (uri == L"ms-settings:taskbar")
         return ShellExecuteExW_orig(pei);
 
     if (!uri.empty()) {
@@ -1144,7 +1164,8 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
     else if (IsShellClsid(file)) uri = ToLower(file);
     else if (IsShellClsid(params)) uri = ToLower(params);
 
-    if (!uri.empty() && uri.find(L"ms-settings:taskbar") == 0)
+    // Exact match only — see ShellExecuteExW_hook for why a prefix test is wrong here.
+    if (uri == L"ms-settings:taskbar")
         return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 
     if (!uri.empty()) {
@@ -1203,8 +1224,14 @@ static void InstallImmersiveMenuHooks() {
     };
 
     for (auto& t : targets) {
-        HMODULE hMod = GetModuleHandleW(t.dll);
-        if (!hMod) continue; // not loaded yet — TrackPopupMenuEx fallback handles it
+        // These DLLs are NOT loaded yet when explorer starts fresh (i.e. every boot):
+        // Wh_ModInit runs before explorer creates the tray, so GetModuleHandleW would
+        // return nullptr and the hook would silently never be installed -> the entire
+        // tray redirect would be dead until the mod was toggled. Force-load them from
+        // System32 (they aren't KnownDLLs, hence LOAD_LIBRARY_SEARCH_SYSTEM32) so the
+        // symbol exists to hook, the same way "eradicate-immersive-menus" does it.
+        HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!hMod) continue;
 
         // SndVolSSO.dll, pnidui.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSSOAndPniduiHook = {
@@ -1246,8 +1273,10 @@ HWND WINAPI CreateWindowExW_Hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    if (hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
-        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0 && g_settings.redirectSystemTray) {
+    // Test the setting FIRST: when the tray feature is off this avoids the wcscmp
+    // string compare on every single window creation in explorer.
+    if (g_settings.redirectSystemTray && hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0) {
             SetupTraySubclass();
         }
     }
@@ -1260,7 +1289,7 @@ HWND WINAPI CreateWindowExW_Hook(
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.12");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.13");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1321,7 +1350,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     RemoveTraySubclass();
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.12 unloaded.");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.13 unloaded.");
 }
 
 void Wh_ModSettingsChanged() {
