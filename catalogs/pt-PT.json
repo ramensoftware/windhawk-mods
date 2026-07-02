@@ -7136,7 +7136,7 @@
           27
         ],
         "ratingUsers": 30,
-        "updated": 1783015451000,
+        "updated": 1783019847000,
         "users": 689
       },
       "metadata": {
@@ -7149,7 +7149,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "2.1.0"
+        "version": "2.1.1"
       }
     },
     "magnifier-headless": {
