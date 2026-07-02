@@ -1,19 +1,19 @@
 // ==WindhawkMod==
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
-// @description Restores the classic "Taskbar and Start Menu Properties" dialog with full functionality. Includes all tabs (Taskbar, Navigation, Start Menu, Toolbars). Designed for Windows 10 and 11. Now with Windows 7/8.1 profile switching.
-// @version 2.4.0
+// @description Restores the classic "Taskbar and Start Menu Properties" dialog (Taskbar, Start Menu, Toolbars tabs) for Windows 10 and 11, Windows 7 style.
+// @version 2.7.1
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
-// @compilerOptions -lgdi32 -lcomctl32 -luser32 -lole32 -lshlwapi -lshell32 -luxtheme -ldwmapi -luuid
+// @compilerOptions -lgdi32 -lcomctl32 -luser32 -lole32 -lshlwapi -lshell32 -luxtheme -ldwmapi -luuid -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Classic Taskbar and Start Menu Properties
-This Windhawk mod attempts to recreate the classic "Taskbar and Start Menu Properties" dialog 
-for Windows 10 and 11, with optional Windows 7/8.1 profile switching.
+This Windhawk mod attempts to recreate the classic Windows 7 "Taskbar and Start Menu Properties" dialog
+for Windows 10 and 11.
 
 **IMPORTANT**: This mod is provided as-is with no guarantees of full functionality. 
 It is a best-effort recreation that works within the limitations of modern Windows. 
@@ -26,25 +26,19 @@ Windows version, and installed modifications.
 - Use small icons/buttons
 - Configure taskbar button grouping (Always combine, Combine when full, Never combine)
 - Configure Aero Peek
-- Windows 7/8.1 profile switching with Navigation tab (experimental)
-- **NEW**: Functional Address/Links/Desktop/Tablet PC toolbars, shown as a separate bar docked next to the system tray (since the modern taskbar no longer supports embedded classic toolbars/deskbands)
+- Functional Address/Links/Desktop/Tablet PC toolbars using Windows' native toolbars
 
 ## What This Mod Tries To Do
 - Start Menu customization (where supported by the OS)
-- Toolbar warning option
 
 ## What This Mod Does NOT Do
 - It cannot guarantee 100% original behavior from older Windows versions
 - It cannot change the taskbar position reliably due to the complexity of Windows' architecture
-- It cannot embed toolbars directly inside the native Windows 10/11 taskbar surface (the modern taskbar has no rebar/deskband hosting mechanism); instead, a functional companion toolbar window is docked next to the system tray
-- Navigation tab features are mostly cosmetic on Windows 10/11
-
-## Windows 7 vs Windows 8.1 Mode
-The mod can switch between two UI profiles:
-- **Windows 7 Mode**: 3 tabs (Taskbar, Start Menu, Toolbars)
-- **Windows 8.1 Mode**: 4 tabs (Taskbar, Navigation, Start Menu, Toolbars)
-
-These profiles only change the appearance and available options — they do not magically restore missing Windows components.
+## Known Issues
+- **Desktop toolbar**: Currently not functional on Windows 10/11
+- **Taskbar position**: Changing position requires Explorer restart
+- **Some Start Menu settings**: May not work on all Windows versions
+- **Tablet Input PC**: Works partially
 */
 // ==/WindhawkModReadme==
 
@@ -57,25 +51,6 @@ These profiles only change the appearance and available options — they do not 
     - auto: Auto
     - en: English
     - it: Italiano
-- profile: win7
-  $name: OS Profile
-  $description: Select Windows version profile for UI appearance.
-  $options:
-    - win7: Windows 7
-    - win81: Windows 8.1
-- toolbarMode: auto
-  $name: Gestione Toolbar (Toolbar Mode)
-  $description: Scegli come gestire le toolbar. Su Win10 o Win11 con barra legacy (ExplorerPatcher), puoi usare quelle native di Windows.
-  $options:
-    - auto: Automatico (Usa native se disponibili, companion altrimenti)
-    - companion: Forza Toolbar Ricreata (Companion)
-    - native: Forza Toolbar Native (Windows 10 / ExplorerPatcher)
-- showToolbarWarning: true
-  $name: Show Toolbar Warning
-  $description: Show warning message when enabling classic toolbars.
-  $options:
-    - true: Yes
-    - false: No
 */
 // ==/WindhawkModSettings==
 
@@ -85,20 +60,18 @@ These profiles only change the appearance and available options — they do not 
 #include <shellapi.h>
 #include <strsafe.h>
 #include <uxtheme.h>
+#include <windhawk_api.h>
 #include <dwmapi.h>
+#include <servprov.h>
+#include <ocidl.h> 
 
-// NOTE: INITGUID must be defined before including shlobj.h/knownfolders.h so
-// that FOLDERID_Links / FOLDERID_Desktop get concrete definitions in this
-// translation unit. Without this, linking fails with "undefined reference"
-// on MinGW toolchains that don't automatically link uuid.lib.
+
 #define INITGUID
 #include <shlobj.h>
 #include <knownfolders.h>
 #undef INITGUID
 #include <objbase.h>
 
-#include <vector>
-#include <string>
 
 #ifndef SIID_TASKBAR
 #define SIID_TASKBAR 39
@@ -244,8 +217,8 @@ static constexpr LPCWSTR kSMKey = L"Software\\Microsoft\\Windows\\CurrentVersion
 static constexpr LPCWSTR kStartFolderKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Start";
 
 static const WCHAR* kAddrBandGUID = L"{01E04581-4EEE-11D0-BFE9-00AA005B4383}";
-static const WCHAR* kLinksBandGUID = L"{0E5CBF21-15B6-11D2-9F3E-00C04FA31A86}";
-static const WCHAR* kDeskBandGUID = L"{D82BE2B0-5764-11D0-A96E-00C04FD705A2}";
+static const WCHAR* kLinksBandGUID = L"{4B5C7545-4275-11D1-B92B-00A0C90312E1}";
+static const WCHAR* kDeskBandGUID  = L"{D82BE2B0-5764-11D0-A96E-00C04FD705A2}";
 
 static const DWORD kPowerValues[] = { 2, 4, 16, 64, 256, 512, 1024 };
 
@@ -275,17 +248,6 @@ static const DWORD kPowerValues[] = { 2, 4, 16, 64, 256, 512, 1024 };
 #define IDC_CHK_MRU_ITEMS 5007
 #define IDC_TXT_TOOLBARS_INFO 6001
 #define IDC_LST_TOOLBARS 6002
-#define IDC_GRP_CORNER_NAV 8001
-#define IDC_CHK_CHARMS 8002
-#define IDC_CHK_SWITCH_APPS 8003
-#define IDC_CHK_POWERSHELL 8004
-#define IDC_GRP_START_SCREEN 8005
-#define IDC_CHK_DESKTOP_START 8006
-#define IDC_CHK_BG_ON_START 8007
-#define IDC_CHK_START_DISPLAY 8008
-#define IDC_CHK_APPS_VIEW 8009
-#define IDC_CHK_SEARCH_EVERY 8010
-#define IDC_CHK_DESKTOP_FIRST 8011
 #define IDC_START_GRP_TILES 7001
 #define IDC_CHK_MORE_TILES 7002
 #define IDC_CHK_APP_LIST 7003
@@ -310,7 +272,7 @@ static const DWORD kPowerValues[] = { 2, 4, 16, 64, 256, 512, 1024 };
 
 struct Strings {
     WCHAR title[128];
-    WCHAR tab_taskbar[64], tab_start[64], tab_toolbars[64], tab_navigation[64];
+    WCHAR tab_taskbar[64], tab_start[64], tab_toolbars[64];
     WCHAR btn_ok[32], btn_cancel[32], btn_apply[32];
     WCHAR grp_appearance[64], chk_lock[64], chk_hide[64], chk_small[64];
     WCHAR txt_location[64], txt_buttons[64];
@@ -342,26 +304,10 @@ struct Strings {
     WCHAR start_chk_folder_network[32], start_chk_folder_personal[32];
     WCHAR start_info_restart[256];
     WCHAR start_msg_saved[512], start_msg_saved_title[64];
-    WCHAR toolbars_warn_title[64], toolbars_warn_text[384];
-    WCHAR grp_corner_nav[64];
-    WCHAR chk_charms[256];
-    WCHAR chk_switch_apps[256];
-    WCHAR chk_powershell[256];
-    WCHAR grp_start_screen[64];
-    WCHAR chk_desktop_start[256];
-    WCHAR chk_bg_on_start[256];
-    WCHAR chk_start_display[256];
-    WCHAR chk_apps_view[256];
-    WCHAR chk_search_every[256];
-    WCHAR chk_desktop_first[256];
 };
 
 static Strings g_str;
 static WCHAR g_language[8] = L"auto";
-static WCHAR g_profile[8] = L"win7";
-static WCHAR g_toolbarMode[16] = L"auto"; // Nuovo setting aggiunto
-static bool g_showToolbarWarning = true;
-static bool g_hideNonFunctional = false;
 
 struct StartSetting {
     LPCWSTR regKey;
@@ -404,11 +350,7 @@ static const StartFolder g_startFolders[] = {
     { L"UserFolderVisibility", IDC_CHK_FOLDER_PERSONAL },
 };
 
-static bool IsWin81Profile() {
-    return (wcscmp(g_profile, L"win81") == 0);
-}
 
-static void UpdateSearchEverywhereState(HWND hwnd);
 static void ShowTaskbarProperties();
 static void ShowStartCustomDialog(HWND parent);
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -473,60 +415,6 @@ public:
     }
     static void SetStartFolderVisible(LPCWSTR valueName, bool visible) {
         RegSetDWordSafe(HKEY_CURRENT_USER, kStartFolderKey, valueName, visible ? 1 : 0);
-    }
-    static bool GetCharmsEnabled() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi", L"DisableCharms", 1) == 0;
-    }
-    static void SetCharmsEnabled(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi", L"DisableCharms", enabled ? 0 : 1);
-    }
-    static bool GetCornerSwitchApps() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi", L"DisableTLcorner", 0) == 0;
-    }
-    static void SetCornerSwitchApps(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi", L"DisableTLcorner", enabled ? 0 : 1);
-    }
-    static bool GetPowerShellWinX() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"DontUsePowerShellOnWinX", 0) == 0;
-    }
-    static void SetPowerShellWinX(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"DontUsePowerShellOnWinX", enabled ? 0 : 1);
-    }
-    static bool GetDesktopFirst() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"OpenAtLogon", 0) != 0;
-    }
-    static void SetDesktopFirst(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"OpenAtLogon", enabled ? 1 : 0);
-    }
-    static bool GetBackgroundOnStart() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent", L"MotionAccentId_v1.00", 1) != 0;
-    }
-    static void SetBackgroundOnStart(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent", L"MotionAccentId_v1.00", enabled ? 1 : 0);
-    }
-    static bool GetStartOnCurrentDisplay() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"MonitorOverride", 0) != 0;
-    }
-    static void SetStartOnCurrentDisplay(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"MonitorOverride", enabled ? 1 : 0);
-    }
-    static bool GetAppsViewAuto() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"MakeAllAppsDefault", 0) != 0;
-    }
-    static void SetAppsViewAuto(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"MakeAllAppsDefault", enabled ? 1 : 0);
-    }
-    static bool GetSearchEverywhere() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"GlobalSearch", 1) != 0;
-    }
-    static void SetSearchEverywhere(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"GlobalSearch", enabled ? 1 : 0);
-    }
-    static bool GetDesktopAppsFirst() {
-        return RegGetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"DesktopFirst", 0) != 0;
-    }
-    static void SetDesktopAppsFirst(bool enabled) {
-        RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartPage", L"DesktopFirst", enabled ? 1 : 0);
     }
     static bool GetToolbarEnabled(LPCWSTR name) {
         if (wcscmp(name, L"TabletPC") == 0)
@@ -603,39 +491,6 @@ static void SetFontAllChildren(HWND hwnd, HFONT hf) {
     EnumChildWindows(hwnd, SetFontChildProc, (LPARAM)hf);
 }
 
-// =====================================================================
-// Funzioni di utilità per rilevamento Toolbar Native vs Companion
-// =====================================================================
-
-// Rileva se è presente la barra delle applicazioni legacy (Win10 o Win11 con ExplorerPatcher/RetroBar)
-// Verificando l'esistenza del controllo "ReBarWindow32" all'interno di "Shell_TrayWnd"
-static bool IsLegacyTaskbarPresent() {
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hTray) {
-        HWND hRebar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
-        if (hRebar) {
-            return true; 
-        }
-    }
-    return false;
-}
-
-// Determina se dobbiamo mostrare la barra ricreata (companion)
-static bool ShouldUseCompanionToolbars() {
-    if (wcscmp(g_toolbarMode, L"companion") == 0) {
-        return true;
-    }
-    if (wcscmp(g_toolbarMode, L"native") == 0) {
-        return false;
-    }
-    // "auto" mode: Usa le toolbar native se la barra legacy/Win10 è presente, altrimenti usa la companion
-    return !IsLegacyTaskbarPresent();
-}
-// =====================================================================
-// TOOLBAR NATIVE tramite ITrayDeskBand (l'API che usa Explorer stesso)
-// Funziona su Win10 e Win11 con taskbar legacy (ExplorerPatcher).
-// =====================================================================
-
 static const CLSID CLSID_CTP_TrayDeskBand =
     {0xE6442437,0x6C68,0x4F52,{0x94,0xDD,0x2C,0xFE,0xD2,0x67,0xEF,0xB9}};
 static const IID IID_CTP_ITrayDeskBand =
@@ -643,11 +498,8 @@ static const IID IID_CTP_ITrayDeskBand =
 static const CLSID CLSID_CTP_AddressBand =
     {0x01E04581,0x4EEE,0x11D0,{0xBF,0xE9,0x00,0xAA,0x00,0x5B,0x43,0x83}};
 static const CLSID CLSID_CTP_LinksBand =
-    {0x0E5CBF21,0x15B6,0x11D2,{0x9F,0x3E,0x00,0xC0,0x4F,0xA3,0x1A,0x86}};
-static const CLSID CLSID_CTP_DesktopBand =
-    {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
+    {0x0E5CBF21,0xD15F,0x11D0,{0x83,0x01,0x00,0xAA,0x00,0x5B,0x43,0x83}};
 
-// Definita a mano per evitare conflitti con SDK diversi
 struct CTP_ITrayDeskBand : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE ShowDeskBand(REFCLSID clsid) = 0;
     virtual HRESULT STDMETHODCALLTYPE HideDeskBand(REFCLSID clsid) = 0;
@@ -659,7 +511,7 @@ enum CtpBandOp { CTP_BAND_HIDE = 0, CTP_BAND_SHOW = 1, CTP_BAND_QUERY = 2 };
 
 static bool NativeDeskBandOp(const CLSID& band, CtpBandOp op, bool* pShown) {
     HRESULT hrInit = OleInitialize(NULL);
-    bool needUninit = SUCCEEDED(hrInit); // RPC_E_CHANGED_MODE = COM già attivo, ok comunque
+    bool needUninit = SUCCEEDED(hrInit);
     bool ok = false;
     CTP_ITrayDeskBand* pTray = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_CTP_TrayDeskBand, NULL,
@@ -667,12 +519,16 @@ static bool NativeDeskBandOp(const CLSID& band, CtpBandOp op, bool* pShown) {
         IID_CTP_ITrayDeskBand, (void**)&pTray);
     if (SUCCEEDED(hr) && pTray) {
         switch (op) {
-        case CTP_BAND_SHOW:
-            ok = SUCCEEDED(pTray->ShowDeskBand(band));
+        case CTP_BAND_SHOW: {
+            HRESULT r = pTray->ShowDeskBand(band);
+            ok = SUCCEEDED(r);
             break;
-        case CTP_BAND_HIDE:
-            ok = SUCCEEDED(pTray->HideDeskBand(band));
+        }
+        case CTP_BAND_HIDE: {
+            HRESULT r = pTray->HideDeskBand(band);
+            ok = SUCCEEDED(r);
             break;
+        }
         case CTP_BAND_QUERY: {
             HRESULT q = pTray->IsDeskBandShown(band);
             if (pShown) *pShown = (q == S_OK);
@@ -685,6 +541,24 @@ static bool NativeDeskBandOp(const CLSID& band, CtpBandOp op, bool* pShown) {
     if (needUninit) OleUninitialize();
     return ok;
 }
+static const CLSID CLSID_ISFBand_Desktop =
+    {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
+
+static void RefreshNativeDeskBandRegistration() {
+    HRESULT hrInit = OleInitialize(NULL);
+    bool needUninit = SUCCEEDED(hrInit);
+    CTP_ITrayDeskBand* pTray = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_CTP_TrayDeskBand, NULL,
+        CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
+        IID_CTP_ITrayDeskBand, (void**)&pTray);
+    if (SUCCEEDED(hr) && pTray) {
+        pTray->DeskBandRegistrationChanged();
+        pTray->Release();
+    }
+    if (needUninit) OleUninitialize();
+}
+
+
 static void InitLocalization() {
     bool useItalian = false;
     if (wcscmp(g_language, L"it") == 0) {
@@ -698,31 +572,21 @@ static void InitLocalization() {
     StringCchCopyW(g_str.tab_taskbar, 64, useItalian ? L"Barra delle applicazioni" : L"Taskbar");
     StringCchCopyW(g_str.tab_start, 64, useItalian ? L"Menu Start" : L"Start Menu");
     StringCchCopyW(g_str.tab_toolbars, 64, useItalian ? L"Barre degli strumenti" : L"Toolbars");
-    StringCchCopyW(g_str.tab_navigation, 64, useItalian ? L"Navigazione" : L"Navigation");
     StringCchCopyW(g_str.btn_ok, 32, L"OK");
     StringCchCopyW(g_str.btn_cancel, 32, useItalian ? L"Annulla" : L"Cancel");
     StringCchCopyW(g_str.btn_apply, 32, useItalian ? L"Applica" : L"Apply");
     StringCchCopyW(g_str.grp_appearance, 64, useItalian ? L"Aspetto della barra delle applicazioni" : L"Taskbar appearance");
     StringCchCopyW(g_str.chk_lock, 64, useItalian ? L"Blocca la barra delle applicazioni" : L"Lock the taskbar");
     StringCchCopyW(g_str.chk_hide, 64, useItalian ? L"Nascondi automaticamente la barra delle applicazioni" : L"Auto-hide the taskbar");
-    if (IsWin81Profile()) {
-        StringCchCopyW(g_str.chk_small, 64, useItalian ? L"Usa pulsanti della barra delle applicazioni piccoli" : L"Use small taskbar buttons");
-    } else {
-        StringCchCopyW(g_str.chk_small, 64, useItalian ? L"Usa icone piccole" : L"Use small icons");
-    }
+    StringCchCopyW(g_str.chk_small, 64, useItalian ? L"Usa icone piccole" : L"Use small icons");
     StringCchCopyW(g_str.txt_location, 64, useItalian ? L"Posizione sullo schermo:" : L"Taskbar location:");
     StringCchCopyW(g_str.txt_buttons, 64, useItalian ? L"Pulsanti della barra\ndelle applicazioni:" : L"Taskbar buttons:");
     StringCchCopyW(g_str.grp_notif, 64, useItalian ? L"Area di notifica" : L"Notification area");
     StringCchCopyW(g_str.txt_notif, 128, useItalian ? L"Consente di personalizzare le icone e le notifiche nell'area di notifica." : L"Customize which icons and notifications appear.");
     StringCchCopyW(g_str.btn_cust_notif, 32, useItalian ? L"Personalizza..." : L"Customize...");
     StringCchCopyW(g_str.grp_aero, 64, useItalian ? L"Anteprima del desktop con Aero Peek" : L"Preview desktop with Aero Peek");
-    if (IsWin81Profile()) {
-        StringCchCopyW(g_str.chk_aero, 64, useItalian ? L"Usa Peek per l'anteprima del desktop su ''Mostra desktop''" : L"Use Peek to view the desktop when hovering ''Show Desktop''.");
-        StringCchCopyW(g_str.txt_aero, 256, useItalian ? L"Consente di visualizzare temporaneamente il desktop portando il puntatore sul pulsante Mostra desktop alla fine della barra delle applicazioni." : L"Temporarily view the desktop when you move your mouse to the Show desktop button.");
-    } else {
-        StringCchCopyW(g_str.chk_aero, 64, useItalian ? L"Usa Aero Peek per visualizzare l'anteprima del desktop" : L"Use Aero Peek to preview the desktop.");
-        StringCchCopyW(g_str.txt_aero, 256, useItalian ? L"Consente di visualizzare temporaneamente il desktop portando il puntatore sul pulsante Mostra desktop alla fine della barra delle applicazioni." : L"Temporarily view the desktop when you move your mouse to the Show desktop button.");
-    }
+    StringCchCopyW(g_str.chk_aero, 64, useItalian ? L"Usa Aero Peek per visualizzare l'anteprima del desktop" : L"Use Aero Peek to preview the desktop.");
+    StringCchCopyW(g_str.txt_aero, 256, useItalian ? L"Consente di visualizzare temporaneamente il desktop portando il puntatore sul pulsante Mostra desktop alla fine della barra delle applicazioni." : L"Temporarily view the desktop when you move your mouse to the Show desktop button.");
     StringCchCopyW(g_str.link_help, 128, useItalian ? L"<a>Personalizzazione della barra delle applicazioni</a>" : L"<a>How do I customize the taskbar?</a>");
     StringCchCopyW(g_str.pos_left, 32, useItalian ? L"A sinistra" : L"Left");
     StringCchCopyW(g_str.pos_top, 32, useItalian ? L"In alto" : L"Top");
@@ -749,23 +613,12 @@ static void InitLocalization() {
     StringCchCopyW(g_str.toolbar_links, 32, useItalian ? L"Collegamenti" : L"Links");
     StringCchCopyW(g_str.toolbar_tabletpc, 32, useItalian ? L"Pannello input Tablet PC" : L"Tablet PC Input Panel");
     StringCchCopyW(g_str.toolbar_desktop, 32, useItalian ? L"Desktop" : L"Desktop");
-    StringCchCopyW(g_str.grp_corner_nav, 64, useItalian ? L"Esplorazione degli angoli" : L"Corner navigation");
-    StringCchCopyW(g_str.chk_charms, 256, useItalian ? L"Quando si punta nell'angolo superiore destro, mostra le icone della barra dei Charm" : L"When I point to the upper-right corner, show the charms");
-    StringCchCopyW(g_str.chk_switch_apps, 256, useItalian ? L"Quando si fa clic nell'angolo superiore sinistro, passa da un'app recente all'altra" : L"When I click the upper-left corner, switch between my recent apps");
-    StringCchCopyW(g_str.chk_powershell, 256, useItalian ? L"Sostituisci il Prompt dei comandi con Windows PowerShell nel menu quando si fa clic con il pulsante destro del mouse nell'angolo inferiore sinistro o si preme il tasto Windows + X" : L"Replace Command Prompt with Windows PowerShell in the menu when I right-click the lower-left corner or press Windows key +X");
-    StringCchCopyW(g_str.grp_start_screen, 64, useItalian ? L"Schermata Start" : L"Start screen");
-    StringCchCopyW(g_str.chk_desktop_start, 256, useItalian ? L"Mostra il desktop invece della schermata Start all'accesso o alla chiusura di tutte le app in una schermata" : L"When I sign in or close all apps on a screen, go to the desktop instead of Start");
-    StringCchCopyW(g_str.chk_bg_on_start, 256, useItalian ? L"Mostra lo sfondo del desktop nella schermata Start" : L"Show my desktop background on Start");
-    StringCchCopyW(g_str.chk_start_display, 256, useItalian ? L"Mostra Start sullo schermo in uso quando si preme il tasto LOGO WINDOWS" : L"Show Start on the display I'm using when I press the Windows logo key");
-    StringCchCopyW(g_str.chk_apps_view, 256, useItalian ? L"Mostra automaticamente la visualizzazione App quando si accede a Start" : L"Show the Apps view automatically when I go to Start");
-    StringCchCopyW(g_str.chk_search_every, 256, useItalian ? L"Cerca ovunque invece che solo nelle app nella visualizzazione App" : L"Search everywhere instead of just my apps when I search from the Apps view");
-    StringCchCopyW(g_str.chk_desktop_first, 256, useItalian ? L"Elenca prima le app desktop nella visualizzazione App quando \u00e8 ordinata per categoria" : L"List desktop apps first in the Apps view when it's sorted by category");
 
     if (useItalian) {
         StringCchCopyW(g_str.about_title, 64, L"Informazioni sulla mod");
         StringCchCopyW(g_str.about_text, 4096,
             L"Classic Taskbar Properties\r\n\r\n"
-            L"Questa mod per Windhawk ripristina la classica finestra \"Propriet\u00e0 della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\n"
+            L"Questa mod per Windhawk ricrea la classica finestra \"Propriet\u00e0 della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\n"
             L"Funzionalit\u00e0 attualmente disponibili:\r\n"
             L"- Blocca la barra delle applicazioni\r\n"
             L"- Nascondi automaticamente la barra delle applicazioni\r\n"
@@ -773,9 +626,7 @@ static void InitLocalization() {
             L"- Configura la combinazione dei pulsanti della barra delle applicazioni\r\n"
             L"- Configura Aero Peek\r\n"
             L"- Accesso rapido alle impostazioni dell'area di notifica\r\n"
-            L"- Profilo Windows 7/8.1 con tab Navigazione\r\n"
-            L"- Opzione per disabilitare le opzioni non funzionanti\r\n"
-            L"- Barre degli strumenti native o ricreate (Indirizzo, Collegamenti, Desktop, Tablet PC)\r\n\r\n"
+            L"- Barre degli strumenti native (Indirizzo, Collegamenti, Desktop, Tablet PC)\r\n\r\n"
             L"Limitazioni note:\r\n"
             L"- La modifica della posizione della barra delle applicazioni non \u00e8 supportata direttamente.\r\n"
             L"- Alcune impostazioni richiedono il riavvio di Explorer.");
@@ -788,7 +639,7 @@ static void InitLocalization() {
         StringCchCopyW(g_str.about_title, 64, L"About this mod");
         StringCchCopyW(g_str.about_text, 4096,
             L"Classic Taskbar Properties\r\n\r\n"
-            L"This Windhawk mod restores the classic \"Taskbar and Start Menu Properties\" dialog inspired by classic Windows versions.\r\n\r\n"
+            L"This Windhawk mod recreates the classic \"Taskbar and Start Menu Properties\" dialog inspired by classic Windows versions.\r\n\r\n"
             L"Currently available features:\r\n"
             L"- Lock the taskbar\r\n"
             L"- Auto-hide the taskbar\r\n"
@@ -796,9 +647,7 @@ static void InitLocalization() {
             L"- Configure taskbar button grouping\r\n"
             L"- Configure Aero Peek\r\n"
             L"- Quick access to notification area settings\r\n"
-            L"- Windows 7/8.1 profile with Navigation tab\r\n"
-            L"- Option to disable non-functional options\r\n"
-            L"- Native or recreated toolbars (Address, Links, Desktop, Tablet PC)\r\n\r\n"
+            L"- Native toolbars (Address, Links, Desktop, Tablet PC)\r\n\r\n"
             L"Known limitations:\r\n"
             L"- Taskbar position change is unavailable natively.\r\n"
             L"- Some settings require Explorer restart.");
@@ -809,7 +658,6 @@ static void InitLocalization() {
         StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Show more tiles on Start");
     }
     
-    // Inizializza i restanti testi del menu start
     StringCchCopyW(g_str.start_chk_app_list, 64, useItalian ? L"Mostra elenco app nel menu Start" : L"Show app list in Start menu");
     StringCchCopyW(g_str.start_chk_recent_apps, 64, useItalian ? L"Mostra app aggiunte di recente" : L"Show recently added apps");
     StringCchCopyW(g_str.start_chk_fullscreen, 64, useItalian ? L"Usa Start a schermo intero" : L"Use Start full screen");
@@ -830,10 +678,6 @@ static void InitLocalization() {
     StringCchCopyW(g_str.start_info_restart, 256, useItalian ? L"Nota: alcune modifiche potrebbero richiedere il riavvio di Explorer per essere applicate." : L"Note: some changes may require an Explorer restart or logout to take full effect.");
     StringCchCopyW(g_str.start_msg_saved, 512, useItalian ? L"Impostazioni del menu Start salvate.\n\nAlcune modifiche potrebbero richiedere il logout o il riavvio di Explorer." : L"Start menu settings saved.\n\nSome changes may require logout or Explorer restart to take full effect.");
     StringCchCopyW(g_str.start_msg_saved_title, 64, useItalian ? L"Impostazioni salvate" : L"Settings saved");
-    StringCchCopyW(g_str.toolbars_warn_title, 64, useItalian ? L"Barre degli strumenti" : L"Toolbars");
-    StringCchCopyW(g_str.toolbars_warn_text, 384, useItalian ? 
-        L"Nota: Se le toolbar native non sono supportate o sono state disattivate, gli strumenti verranno mostrati nella barra companion ricreata accanto all'orologio." :
-        L"Note: If native toolbars are unsupported or disabled, toolbars will be shown in the recreated companion bar docked next to the tray.");
 }
 
 static void LoadLanguageSetting() {
@@ -846,677 +690,24 @@ static void LoadLanguageSetting() {
     Wh_FreeStringSetting(lang);
 }
 
-static void LoadProfileSetting() {
-    LPCWSTR profile = Wh_GetStringSetting(L"profile");
-    if (profile && wcslen(profile) > 0 && wcslen(profile) < 8) {
-        StringCchCopyW(g_profile, 8, profile);
-    } else {
-        StringCchCopyW(g_profile, 8, L"win7");
-    }
-    Wh_FreeStringSetting(profile);
-}
-
-static void LoadToolbarModeSetting() {
-    LPCWSTR mode = Wh_GetStringSetting(L"toolbarMode");
-    if (mode && wcslen(mode) > 0 && wcslen(mode) < 16) {
-        StringCchCopyW(g_toolbarMode, 16, mode);
-    } else {
-        StringCchCopyW(g_toolbarMode, 16, L"auto");
-    }
-    Wh_FreeStringSetting(mode);
-}
-
-static void LoadHideNonFunctionalSetting() {
-    LPCWSTR hideNF = Wh_GetStringSetting(L"hideNonFunctional");
-    if (hideNF && wcslen(hideNF) > 0) {
-        g_hideNonFunctional = (wcscmp(hideNF, L"true") == 0);
-    } else {
-        g_hideNonFunctional = false;
-    }
-    Wh_FreeStringSetting(hideNF);
-}
-
-static void LoadToolbarWarningSetting() {
-    LPCWSTR showWarning = Wh_GetStringSetting(L"showToolbarWarning");
-    if (showWarning && wcslen(showWarning) > 0) {
-        g_showToolbarWarning = (wcscmp(showWarning, L"true") == 0);
-    } else {
-        g_showToolbarWarning = true;
-    }
-    Wh_FreeStringSetting(showWarning);
-}
-
-// =====================================================================
-// Real functional toolbars (Address / Links / Desktop / Tablet PC)
-// Companion Window (usata solo quando native non attive/non supportate)
-// =====================================================================
-#define WM_RTB_REBUILD (WM_APP + 1)
-#define IDC_RTB_ADDR_EDIT 9101
-#define IDC_RTB_ADDR_GO 9102
-#define IDC_RTB_DESK_BTN 9104
-#define IDC_RTB_TABLET_BTN 9105
-#define IDC_RTB_LINKS_BTN_BASE 9200
-#define IDC_RTB_DESKMENU_BASE 9500
-
-struct RealToolbarState {
-    bool address = false;
-    bool links = false;
-    bool desktop = false;
-    bool tablet = false;
-};
-
-static HWND g_hwndRealToolbarHost = NULL;
-static HWND g_hwndAddrEdit = NULL;
-static HWND g_hwndLinksToolbar = NULL;
-static HFONT g_hRtbFont = NULL;
-static HWINEVENTHOOK g_hTaskbarEventHook = NULL;
-static HANDLE g_realToolbarThread = NULL;
-static DWORD g_realToolbarThreadId = 0;
-static RealToolbarState g_rtbState;
-static std::vector<std::wstring> g_linksNames;
-static std::vector<std::wstring> g_linksPaths;
-static std::vector<std::wstring> g_desktopNames;
-static std::vector<std::wstring> g_desktopPaths;
-static std::vector<int> g_rtbSeparatorX;
-
-#define RTB_STATE_NORMAL 0
-#define RTB_STATE_HOT 1
-#define RTB_STATE_PRESSED 2
-
-static void PositionRealToolbarHost();
-static void RebuildRealToolbarContents();
-static void DestroyRealToolbarChildren();
-
-static void LaunchShellPath(HWND owner, LPCWSTR path) {
-    if (!path || !*path) return;
-    if (ShellExecuteW_orig)
-        ShellExecuteW_orig(owner, L"open", path, NULL, NULL, SW_SHOWNORMAL);
-    else
-        ShellExecuteW(owner, L"open", path, NULL, NULL, SW_SHOWNORMAL);
-}
-
-static void EnumerateFolderItems(REFKNOWNFOLDERID folderId,
-    std::vector<std::wstring>& outNames,
-    std::vector<std::wstring>& outPaths,
-    int maxItems) {
-    outNames.clear();
-    outPaths.clear();
-    PWSTR pszPath = NULL;
-    if (FAILED(SHGetKnownFolderPath(folderId, 0, NULL, &pszPath)) || !pszPath)
-        return;
-    WCHAR search[MAX_PATH];
-    StringCchPrintfW(search, MAX_PATH, L"%s\\*", pszPath);
-    WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(search, &fd);
-    if (hFind != INVALID_HANDLE_VALUE) {
-        do {
-            if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
-            if (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) continue;
-            if (_wcsicmp(fd.cFileName, L"desktop.ini") == 0) continue;
-            WCHAR fullPath[MAX_PATH];
-            StringCchPrintfW(fullPath, MAX_PATH, L"%s\\%s", pszPath, fd.cFileName);
-            WCHAR displayName[MAX_PATH];
-            StringCchCopyW(displayName, MAX_PATH, fd.cFileName);
-            WCHAR* ext = PathFindExtensionW(displayName);
-            if (ext && (_wcsicmp(ext, L".lnk") == 0 || _wcsicmp(ext, L".url") == 0))
-                *ext = L'\0';
-            outNames.push_back(displayName);
-            outPaths.push_back(fullPath);
-            if ((int)outNames.size() >= maxItems) break;
-        } while (FindNextFileW(hFind, &fd));
-        FindClose(hFind);
-    }
-    CoTaskMemFree(pszPath);
-}
-
-static void FillVerticalGradient(HDC hdc, const RECT& rc, COLORREF top, COLORREF bottom) {
-    int h = rc.bottom - rc.top;
-    if (rc.right <= rc.left || h <= 0) return;
-    int r1 = GetRValue(top), g1 = GetGValue(top), b1 = GetBValue(top);
-    int r2 = GetRValue(bottom), g2 = GetGValue(bottom), b2 = GetBValue(bottom);
-    for (int i = 0; i < h; i++) {
-        int r = r1 + ((r2 - r1) * i) / h;
-        int g = g1 + ((g2 - g1) * i) / h;
-        int b = b1 + ((b2 - b1) * i) / h;
-        RECT rcLine = { rc.left, rc.top + i, rc.right, rc.top + i + 1 };
-        HBRUSH hBr = CreateSolidBrush(RGB(r, g, b));
-        FillRect(hdc, &rcLine, hBr);
-        DeleteObject(hBr);
-    }
-}
-
-static void DrawWin7Button(HDC hdc, RECT rc, LPCWSTR text, HFONT hFont, int state) {
-    COLORREF top, bottom, border;
-    switch (state) {
-    case RTB_STATE_PRESSED:
-        top = RGB(178, 209, 244);
-        bottom = RGB(137, 181, 229);
-        border = RGB(65, 121, 178);
-        break;
-    case RTB_STATE_HOT:
-        top = RGB(235, 246, 253);
-        bottom = RGB(201, 228, 250);
-        border = RGB(122, 180, 231);
-        break;
-    default:
-        top = RGB(253, 253, 253);
-        bottom = RGB(233, 234, 236);
-        border = RGB(172, 172, 172);
-        break;
-    }
-    FillVerticalGradient(hdc, rc, top, bottom);
-    HPEN hPenBorder = CreatePen(PS_SOLID, 1, border);
-    HPEN hPenOld = (HPEN)SelectObject(hdc, hPenBorder);
-    HBRUSH hBrOld = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
-    SelectObject(hdc, hBrOld);
-    SelectObject(hdc, hPenOld);
-    DeleteObject(hPenBorder);
-    if (state != RTB_STATE_PRESSED) {
-        HPEN hHi = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
-        HPEN hHiOld = (HPEN)SelectObject(hdc, hHi);
-        MoveToEx(hdc, rc.left + 1, rc.top + 1, NULL);
-        LineTo(hdc, rc.right - 1, rc.top + 1);
-        SelectObject(hdc, hHiOld);
-        DeleteObject(hHi);
-    }
-    HFONT hFontOld = (HFONT)SelectObject(hdc, hFont);
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(0, 0, 0));
-    RECT rcText = rc;
-    if (state == RTB_STATE_PRESSED) OffsetRect(&rcText, 1, 1);
-    DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    SelectObject(hdc, hFontOld);
-}
-
-static LRESULT CALLBACK Win7ButtonSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR uIdSubclass, DWORD_PTR) {
-    switch (msg) {
-    case WM_MOUSEMOVE: {
-        LONG_PTR state = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-        if (state != RTB_STATE_HOT && state != RTB_STATE_PRESSED) {
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, RTB_STATE_HOT);
-            InvalidateRect(hwnd, NULL, FALSE);
-        }
-        TRACKMOUSEEVENT tme = { sizeof(tme) };
-        tme.dwFlags = TME_LEAVE;
-        tme.hwndTrack = hwnd;
-        TrackMouseEvent(&tme);
-        break;
-    }
-    case WM_MOUSELEAVE:
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, RTB_STATE_NORMAL);
-        InvalidateRect(hwnd, NULL, FALSE);
-        break;
-    case WM_LBUTTONDOWN:
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, RTB_STATE_PRESSED);
-        InvalidateRect(hwnd, NULL, FALSE);
-        break;
-    case WM_LBUTTONUP:
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, RTB_STATE_HOT);
-        InvalidateRect(hwnd, NULL, FALSE);
-        break;
-    case WM_NCDESTROY:
-        RemoveWindowSubclass(hwnd, Win7ButtonSubclassProc, uIdSubclass);
-        break;
-    }
-    return DefSubclassProc(hwnd, msg, wp, lp);
-}
-
-static void MakeWin7OwnerDrawButton(HWND hBtn) {
-    if (!hBtn) return;
-    LONG_PTR style = GetWindowLongPtrW(hBtn, GWL_STYLE);
-    SetWindowLongPtrW(hBtn, GWL_STYLE, style | BS_OWNERDRAW);
-    SetWindowLongPtrW(hBtn, GWLP_USERDATA, RTB_STATE_NORMAL);
-    SetWindowSubclass(hBtn, Win7ButtonSubclassProc, 1, 0);
-}
-
-static HWND CreateFlatToolbarButtons(HWND parent, const std::vector<std::wstring>& names, int idBase, int height) {
-    HWND hTb = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL,
-        WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_LIST |
-        TBSTYLE_TRANSPARENT | CCS_NODIVIDER | CCS_NORESIZE | CCS_NOPARENTALIGN,
-        0, 0, 0, height, parent, NULL, GetModuleHandleW(NULL), NULL);
-    if (!hTb) return NULL;
-    SendMessageW(hTb, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
-    SendMessageW(hTb, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
-    SetWindowTheme(hTb, L"Explorer", NULL);
-    std::vector<TBBUTTON> btns;
-    for (size_t i = 0; i < names.size(); i++) {
-        int strIdx = (int)SendMessageW(hTb, TB_ADDSTRINGW, 0, (LPARAM)names[i].c_str());
-        TBBUTTON b = {};
-        b.iBitmap = I_IMAGENONE;
-        b.idCommand = idBase + (int)i;
-        b.fsState = TBSTATE_ENABLED;
-        b.fsStyle = BTNS_AUTOSIZE | BTNS_SHOWTEXT;
-        b.iString = strIdx;
-        btns.push_back(b);
-    }
-    if (!btns.empty())
-        SendMessageW(hTb, TB_ADDBUTTONSW, btns.size(), (LPARAM)btns.data());
-    SendMessageW(hTb, TB_AUTOSIZE, 0, 0);
-    return hTb;
-}
-
-static LRESULT CALLBACK AddrEditSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR) {
-    if (msg == WM_KEYDOWN && wp == VK_RETURN) {
-        SendMessageW(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(IDC_RTB_ADDR_GO, BN_CLICKED), 0);
-        return 0;
-    }
-    if (msg == WM_NCDESTROY) {
-        RemoveWindowSubclass(hwnd, AddrEditSubclassProc, 1);
-    }
-    return DefSubclassProc(hwnd, msg, wp, lp);
-}
-
-static void DestroyRealToolbarChildren() {
-    if (!g_hwndRealToolbarHost) return;
-    HWND h;
-    while ((h = GetWindow(g_hwndRealToolbarHost, GW_CHILD)) != NULL)
-        DestroyWindow(h);
-    g_hwndAddrEdit = NULL;
-    g_hwndLinksToolbar = NULL;
-}
-
-static void PositionRealToolbarHost() {
-    if (!g_hwndRealToolbarHost) return;
-    if (!g_rtbState.address && !g_rtbState.links && !g_rtbState.desktop && !g_rtbState.tablet) {
-        ShowWindow(g_hwndRealToolbarHost, SW_HIDE);
-        return;
-    }
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray || !IsWindow(hTray) || !IsWindowVisible(hTray)) {
-        ShowWindow(g_hwndRealToolbarHost, SW_HIDE);
-        return;
-    }
-    RECT rcTray; GetWindowRect(hTray, &rcTray);
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    RECT rcNotify = {0};
-    bool haveNotify = hNotify && GetWindowRect(hNotify, &rcNotify);
-    RECT rcHost; GetWindowRect(g_hwndRealToolbarHost, &rcHost);
-    int hostW = rcHost.right - rcHost.left;
-    int hostW_H = rcHost.bottom - rcHost.top;
-    bool vertical = (rcTray.bottom - rcTray.top) > (rcTray.right - rcTray.left);
-    int x, y;
-    if (!vertical) {
-        int barH = rcTray.bottom - rcTray.top;
-        int refLeft = haveNotify ? rcNotify.left : (rcTray.right - 160);
-        x = refLeft - hostW - 4;
-        if (x < rcTray.left + 2) x = rcTray.left + 2;
-        y = rcTray.top + (barH - hostW_H) / 2;
-    } else {
-        int barW = rcTray.right - rcTray.left;
-        int refTop = haveNotify ? rcNotify.top : (rcTray.bottom - 160);
-        x = rcTray.left + (barW - hostW) / 2;
-        y = refTop - hostW_H - 4;
-        if (y < rcTray.top + 2) y = rcTray.top + 2;
-    }
-    SetWindowPos(g_hwndRealToolbarHost, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-}
-
-static void RebuildRealToolbarContents() {
-    if (!g_hwndRealToolbarHost) return;
-
-    // Se l'utente ha configurato l'uso delle toolbar native (o la barra legacy le supporta),
-    // nascondiamo istantaneamente la companion window ricreata.
-    if (!ShouldUseCompanionToolbars()) {
-        ShowWindow(g_hwndRealToolbarHost, SW_HIDE);
-        return;
-    }
-
-    g_rtbState.address = TaskbarSettingsProvider::GetToolbarEnabled(L"Address");
-    g_rtbState.links = TaskbarSettingsProvider::GetToolbarEnabled(L"Links");
-    g_rtbState.desktop = TaskbarSettingsProvider::GetToolbarEnabled(L"Desktop");
-    g_rtbState.tablet = TaskbarSettingsProvider::GetToolbarEnabled(L"TabletPC");
-    DestroyRealToolbarChildren();
-    if (!g_rtbState.address && !g_rtbState.links && !g_rtbState.desktop && !g_rtbState.tablet) {
-        ShowWindow(g_hwndRealToolbarHost, SW_HIDE);
-        return;
-    }
-    HDC hdc = GetDC(g_hwndRealToolbarHost);
-    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-    ReleaseDC(g_hwndRealToolbarHost, hdc);
-    int barHeight = MulDiv(26, dpiY, 96);
-    if (g_hRtbFont) { DeleteObject(g_hRtbFont); g_hRtbFont = NULL; }
-    g_hRtbFont = CreateFontW(-MulDiv(9, dpiY, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    g_rtbSeparatorX.clear();
-    bool havePrevGroup = false;
-    int curX = 5;
-    if (g_rtbState.address) {
-        HWND hLbl = CreateWindowExW(0, L"Static", L"Address:", WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE,
-            curX, 0, 46, barHeight, g_hwndRealToolbarHost, NULL, GetModuleHandleW(NULL), NULL);
-        SendMessageW(hLbl, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-        curX += 46 + 2;
-        g_hwndAddrEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"Edit", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            curX, 3, 130, barHeight - 6, g_hwndRealToolbarHost, (HMENU)(INT_PTR)IDC_RTB_ADDR_EDIT, GetModuleHandleW(NULL), NULL);
-        SendMessageW(g_hwndAddrEdit, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-        SetWindowSubclass(g_hwndAddrEdit, AddrEditSubclassProc, 1, 0);
-        curX += 130 + 3;
-        HWND hGo = CreateWindowExW(0, L"Button", L"Vai", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            curX, 2, 32, barHeight - 4, g_hwndRealToolbarHost, (HMENU)(INT_PTR)IDC_RTB_ADDR_GO, GetModuleHandleW(NULL), NULL);
-        SendMessageW(hGo, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-        MakeWin7OwnerDrawButton(hGo);
-        curX += 32 + 8;
-        havePrevGroup = true;
-    }
-    if (g_rtbState.links) {
-        if (havePrevGroup) { g_rtbSeparatorX.push_back(curX - 5); curX += 4; }
-        EnumerateFolderItems(FOLDERID_Links, g_linksNames, g_linksPaths, 12);
-        g_hwndLinksToolbar = CreateFlatToolbarButtons(g_hwndRealToolbarHost, g_linksNames, IDC_RTB_LINKS_BTN_BASE, barHeight);
-        if (g_hwndLinksToolbar) {
-            SendMessageW(g_hwndLinksToolbar, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-            RECT rc; GetWindowRect(g_hwndLinksToolbar, &rc);
-            int w = rc.right - rc.left;
-            SetWindowPos(g_hwndLinksToolbar, NULL, curX, 0, w, barHeight, SWP_NOZORDER);
-            curX += w + 8;
-        }
-        havePrevGroup = true;
-    }
-    if (g_rtbState.desktop) {
-        if (havePrevGroup) { g_rtbSeparatorX.push_back(curX - 5); curX += 4; }
-        HWND hDeskBtn = CreateWindowExW(0, L"Button", L"Desktop \u00bb", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            curX, 2, 74, barHeight - 4, g_hwndRealToolbarHost, (HMENU)(INT_PTR)IDC_RTB_DESK_BTN, GetModuleHandleW(NULL), NULL);
-        SendMessageW(hDeskBtn, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-        MakeWin7OwnerDrawButton(hDeskBtn);
-        curX += 74 + 8;
-        havePrevGroup = true;
-    }
-    if (g_rtbState.tablet) {
-        if (havePrevGroup) { g_rtbSeparatorX.push_back(curX - 5); curX += 4; }
-        HWND hTabBtn = CreateWindowExW(0, L"Button", L"Pannello input", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            curX, 2, 84, barHeight - 4, g_hwndRealToolbarHost, (HMENU)(INT_PTR)IDC_RTB_TABLET_BTN, GetModuleHandleW(NULL), NULL);
-        SendMessageW(hTabBtn, WM_SETFONT, (WPARAM)g_hRtbFont, TRUE);
-        MakeWin7OwnerDrawButton(hTabBtn);
-        curX += 84 + 5;
-    } else {
-        curX += 1;
-    }
-    SetWindowPos(g_hwndRealToolbarHost, NULL, 0, 0, curX, barHeight, SWP_NOMOVE | SWP_NOZORDER);
-    PositionRealToolbarHost();
-    ShowWindow(g_hwndRealToolbarHost, SW_SHOWNOACTIVATE);
-}
-
-static LRESULT CALLBACK RealToolbarHostWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    switch (msg) {
-    case WM_ERASEBKGND:
-        return 1;
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        RECT rc; GetClientRect(hwnd, &rc);
-        HDC hMem = CreateCompatibleDC(hdc);
-        HBITMAP hBmp = CreateCompatibleBitmap(hdc, rc.right > 1 ? rc.right : 1, rc.bottom > 1 ? rc.bottom : 1);
-        HBITMAP hOldBmp = (HBITMAP)SelectObject(hMem, hBmp);
-        FillVerticalGradient(hMem, rc, RGB(248, 249, 250), RGB(212, 218, 225));
-        HPEN hHi = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
-        HPEN hPenOld = (HPEN)SelectObject(hMem, hHi);
-        MoveToEx(hMem, 0, 0, NULL); LineTo(hMem, rc.right, 0);
-        SelectObject(hMem, hPenOld);
-        DeleteObject(hHi);
-        HPEN hBorder = CreatePen(PS_SOLID, 1, RGB(137, 142, 148));
-        hPenOld = (HPEN)SelectObject(hMem, hBorder);
-        HBRUSH hBrOld = (HBRUSH)SelectObject(hMem, GetStockObject(NULL_BRUSH));
-        Rectangle(hMem, rc.left, rc.top, rc.right, rc.bottom);
-        SelectObject(hMem, hBrOld);
-        SelectObject(hMem, hPenOld);
-        DeleteObject(hBorder);
-        for (int sepX : g_rtbSeparatorX) {
-            if (sepX <= rc.left || sepX >= rc.right - 2) continue;
-            HPEN hDark = CreatePen(PS_SOLID, 1, RGB(170, 176, 182));
-            HPEN hLight = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
-            HPEN pOld = (HPEN)SelectObject(hMem, hDark);
-            MoveToEx(hMem, sepX, 4, NULL); LineTo(hMem, sepX, rc.bottom - 4);
-            SelectObject(hMem, hLight);
-            MoveToEx(hMem, sepX + 1, 4, NULL); LineTo(hMem, sepX + 1, rc.bottom - 4);
-            SelectObject(hMem, pOld);
-            DeleteObject(hDark);
-            DeleteObject(hLight);
-        }
-        BitBlt(hdc, 0, 0, rc.right, rc.bottom, hMem, 0, 0, SRCCOPY);
-        SelectObject(hMem, hOldBmp);
-        DeleteObject(hBmp);
-        DeleteDC(hMem);
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
-    case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT dis = (LPDRAWITEMSTRUCT)lp;
-        if (dis->CtlType == ODT_BUTTON) {
-            WCHAR text[64];
-            GetWindowTextW(dis->hwndItem, text, 64);
-            int state = (int)GetWindowLongPtrW(dis->hwndItem, GWLP_USERDATA);
-            DrawWin7Button(dis->hDC, dis->rcItem, text, g_hRtbFont, state);
-            return TRUE;
-        }
-        break;
-    }
-    case WM_CTLCOLORSTATIC: {
-        static HBRUSH hBkBrush = NULL;
-        if (!hBkBrush) hBkBrush = CreateSolidBrush(RGB(233, 237, 241));
-        HDC hdcCtl = (HDC)wp;
-        SetBkMode(hdcCtl, TRANSPARENT);
-        return (LRESULT)hBkBrush;
-    }
-    case WM_CTLCOLOREDIT: {
-        HDC hdcCtl = (HDC)wp;
-        SetBkColor(hdcCtl, RGB(255, 255, 255));
-        return (LRESULT)GetStockObject(WHITE_BRUSH);
-    }
-    case WM_COMMAND: {
-        WORD id = LOWORD(wp);
-        if (id == IDC_RTB_ADDR_GO) {
-            WCHAR buf[1024];
-            GetWindowTextW(g_hwndAddrEdit, buf, 1024);
-            if (buf[0]) {
-                LaunchShellPath(hwnd, buf);
-                SetWindowTextW(g_hwndAddrEdit, L"");
-            }
-        } else if (id == IDC_RTB_DESK_BTN) {
-            EnumerateFolderItems(FOLDERID_Desktop, g_desktopNames, g_desktopPaths, 40);
-            HMENU hMenu = CreatePopupMenu();
-            for (size_t i = 0; i < g_desktopNames.size(); i++)
-                AppendMenuW(hMenu, MF_STRING, (UINT)(IDC_RTB_DESKMENU_BASE + i), g_desktopNames[i].c_str());
-            if (g_desktopNames.empty())
-                AppendMenuW(hMenu, MF_STRING | MF_GRAYED, 0, L"(vuota)");
-            RECT rcBtn; GetWindowRect(GetDlgItem(hwnd, IDC_RTB_DESK_BTN), &rcBtn);
-            SetForegroundWindow(hwnd);
-            TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_BOTTOMALIGN, rcBtn.left, rcBtn.top, 0, hwnd, NULL);
-            DestroyMenu(hMenu);
-        } else if (id == IDC_RTB_TABLET_BTN) {
-            WCHAR path[MAX_PATH];
-            ExpandEnvironmentStringsW(L"%CommonProgramFiles%\\microsoft shared\\ink\\TabTip.exe", path, MAX_PATH);
-            LaunchShellPath(hwnd, path);
-        } else if (id >= IDC_RTB_LINKS_BTN_BASE && id < IDC_RTB_LINKS_BTN_BASE + 100) {
-            size_t idx = id - IDC_RTB_LINKS_BTN_BASE;
-            if (idx < g_linksPaths.size()) LaunchShellPath(hwnd, g_linksPaths[idx].c_str());
-        } else if (id >= IDC_RTB_DESKMENU_BASE && id < IDC_RTB_DESKMENU_BASE + 100) {
-            size_t idx = id - IDC_RTB_DESKMENU_BASE;
-            if (idx < g_desktopPaths.size()) LaunchShellPath(hwnd, g_desktopPaths[idx].c_str());
-        }
-        break;
-    }
-    case WM_RTB_REBUILD:
-        RebuildRealToolbarContents();
-        InvalidateRect(hwnd, NULL, TRUE);
-        break;
-    case WM_TIMER:
-        if (wp == 1) PositionRealToolbarHost();
-        break;
-    case WM_DESTROY:
-        KillTimer(hwnd, 1);
-        break;
-    }
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-static ATOM RegisterRealToolbarHostClass() {
-    static ATOM atom = 0;
-    if (atom) return atom;
-    WNDCLASSEXW wc = { sizeof(wc) };
-    wc.lpfnWndProc = RealToolbarHostWndProc;
-    wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"CTP_RealToolbarHost";
-    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
-    wc.hbrBackground = GetSysColorBrush(COLOR_3DFACE);
-    atom = RegisterClassExW(&wc);
-    return atom;
-}
-
-static void CALLBACK RtbWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
-    if (idObject != OBJID_WINDOW || !hwnd || event != EVENT_OBJECT_LOCATIONCHANGE) return;
-    WCHAR cls[64];
-    GetClassNameW(hwnd, cls, 64);
-    if (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"TrayNotifyWnd") == 0)
-        PositionRealToolbarHost();
-}
-
-static DWORD WINAPI RealToolbarThreadProc(LPVOID) {
-    OleInitialize(NULL);
-    INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_BAR_CLASSES | ICC_STANDARD_CLASSES };
-    InitCommonControlsEx(&icex);
-    RegisterRealToolbarHostClass();
-    g_hwndRealToolbarHost = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"CTP_RealToolbarHost", L"",
-        WS_POPUP | WS_CLIPCHILDREN, 0, 0, 10, 10, NULL, NULL, GetModuleHandleW(NULL), NULL);
-    if (g_hwndRealToolbarHost) {
-        RebuildRealToolbarContents();
-        SetTimer(g_hwndRealToolbarHost, 1, 500, NULL);
-        g_hTaskbarEventHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-            NULL, RtbWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    }
-    MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    if (g_hTaskbarEventHook) { UnhookWinEvent(g_hTaskbarEventHook); g_hTaskbarEventHook = NULL; }
-    if (g_hwndRealToolbarHost && IsWindow(g_hwndRealToolbarHost)) DestroyWindow(g_hwndRealToolbarHost);
-    g_hwndRealToolbarHost = NULL;
-    if (g_hRtbFont) { DeleteObject(g_hRtbFont); g_hRtbFont = NULL; }
-    OleUninitialize();
-    return 0;
-}
-
-// Funzione per ottenere il comando dal menu contestuale della taskbar
-static UINT GetToolbarCommandFromContextMenu(LPCWSTR toolbarName) {
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray) return 0;
-    
-    IShellFolder* psfDesktop = NULL;
-    if (FAILED(SHGetDesktopFolder(&psfDesktop))) return 0;
-    
-    LPITEMIDLIST pidl = NULL;
-    if (FAILED(SHGetSpecialFolderLocation(NULL, CSIDL_DESKTOP, &pidl))) {
-        psfDesktop->Release();
-        return 0;
-    }
-    
-    IContextMenu* pcm = NULL;
-    if (SUCCEEDED(psfDesktop->GetUIObjectOf(hTray, 1, (LPCITEMIDLIST*)&pidl, 
-                                            IID_IContextMenu, NULL, (void**)&pcm))) {
-        HMENU hPopup = CreatePopupMenu();
-        if (SUCCEEDED(pcm->QueryContextMenu(hPopup, 0, 1, 0x7FFF, CMF_NORMAL))) {
-            int count = GetMenuItemCount(hPopup);
-            for (int i = 0; i < count; i++) {
-                WCHAR menuText[256];
-                if (GetMenuStringW(hPopup, i, menuText, 256, MF_BYPOSITION)) {
-                    if (StrStrIW(menuText, L"Toolbar") || StrStrIW(menuText, L"Barre")) {
-                        HMENU hSubMenu = GetSubMenu(hPopup, i);
-                        if (hSubMenu) {
-                            int subCount = GetMenuItemCount(hSubMenu);
-                            for (int j = 0; j < subCount; j++) {
-                                WCHAR subText[256];
-                                if (GetMenuStringW(hSubMenu, j, subText, 256, MF_BYPOSITION)) {
-                                    if (StrStrIW(subText, toolbarName)) {
-                                        UINT cmd = GetMenuItemID(hSubMenu, j);
-                                        DestroyMenu(hPopup);
-                                        pcm->Release();
-                                        CoTaskMemFree(pidl);
-                                        psfDesktop->Release();
-                                        return cmd;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        DestroyMenu(hPopup);
-        pcm->Release();
-    }
-    
-    CoTaskMemFree(pidl);
-    psfDesktop->Release();
-    return 0;
-}
-
 static void ApplyToolbars(bool addr, bool links, bool tablet, bool desk) {
-    bool useNative = !ShouldUseCompanionToolbars();
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
 
-    if (useNative) {
-        // INDIRIZZI: Mantieni la tua implementazione nativa
-        NativeDeskBandOp(CLSID_CTP_AddressBand, addr ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
-        
-        // LINKS e DESKTOP: Usa il menu contestuale di Windows invece delle API native
-        if (links) {
-            UINT cmd = GetToolbarCommandFromContextMenu(L"Links");
-            if (cmd) {
-                HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-                if (hTray) PostMessageW(hTray, WM_COMMAND, cmd, 0);
-            }
-        }
-        if (desk) {
-            UINT cmd = GetToolbarCommandFromContextMenu(L"Desktop");
-            if (cmd) {
-                HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-                if (hTray) PostMessageW(hTray, WM_COMMAND, cmd, 0);
-            }
-        }
-        
-        // Tablet PC: gestito via registro
-        if (tablet) {
-            TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", true);
-        }
-        
-        // Nascondi la companion window
-        if (g_hwndRealToolbarHost && IsWindow(g_hwndRealToolbarHost)) {
-            ShowWindow(g_hwndRealToolbarHost, SW_HIDE);
-        }
-    } else {
-        // Percorso COMPANION: Indirizzi usa la tua implementazione
-        TaskbarSettingsProvider::SetToolbarEnabled(L"Address", addr);
-        
-        // LINKS e DESKTOP: In modalità companion, prova comunque il menu contestuale
-        if (links) {
-            UINT cmd = GetToolbarCommandFromContextMenu(L"Links");
-            if (cmd) {
-                HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-                if (hTray) PostMessageW(hTray, WM_COMMAND, cmd, 0);
-            } else {
-                TaskbarSettingsProvider::SetToolbarEnabled(L"Links", true);
-            }
-        }
-        if (desk) {
-            UINT cmd = GetToolbarCommandFromContextMenu(L"Desktop");
-            if (cmd) {
-                HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-                if (hTray) PostMessageW(hTray, WM_COMMAND, cmd, 0);
-            } else {
-                TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
-            }
-        }
-        
-        TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", tablet);
-        
-        // Aggiorna la companion window (per Indirizzi)
-        if (g_hwndRealToolbarHost && IsWindow(g_hwndRealToolbarHost))
-            PostMessageW(g_hwndRealToolbarHost, WM_RTB_REBUILD, 0, 0);
-    }
+    NativeDeskBandOp(CLSID_CTP_AddressBand, addr ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
+    TaskbarSettingsProvider::SetToolbarEnabled(L"Address", addr);
+
+    NativeDeskBandOp(CLSID_CTP_LinksBand, links ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
+    TaskbarSettingsProvider::SetToolbarEnabled(L"Links", links);
+
+    NativeDeskBandOp(CLSID_ISFBand_Desktop, desk ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
+    TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk);
+
+    TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", tablet);
 
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray) SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
 }
+
 static void InitToolbarsList(HWND hList) {
     ListView_SetExtendedListViewStyle(hList, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
     ListView_DeleteAllItems(hList);
@@ -1529,9 +720,8 @@ static void InitToolbarsList(HWND hList) {
 
     const WCHAR* names[] = { g_str.toolbar_address, g_str.toolbar_links, g_str.toolbar_tabletpc, g_str.toolbar_desktop };
     const WCHAR* keys[]  = { L"Address", L"Links", L"TabletPC", L"Desktop" };
-    const CLSID* clsids[] = { &CLSID_CTP_AddressBand, &CLSID_CTP_LinksBand, NULL, &CLSID_CTP_DesktopBand };
-
-    bool useNative = !ShouldUseCompanionToolbars();
+    const CLSID* clsids[] = { &CLSID_CTP_AddressBand, &CLSID_CTP_LinksBand, NULL, &CLSID_ISFBand_Desktop };
+    RefreshNativeDeskBandRegistration();
 
     for (int i = 0; i < 4; i++) {
         LVITEMW lvi = {};
@@ -1540,12 +730,23 @@ static void InitToolbarsList(HWND hList) {
         lvi.pszText = (LPWSTR)names[i];
         ListView_InsertItem(hList, &lvi);
 
-        bool checked = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]);
-        if (useNative && clsids[i]) {
-            bool shown = false;
-            if (NativeDeskBandOp(*clsids[i], CTP_BAND_QUERY, &shown))
-                checked = shown; // stato reale dalla taskbar
+        bool checked = false;
+        bool shown = false;
+        bool got = false;
+
+        if (i == 2) {
+            shown = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]);
+            got = true;
+        } else if (clsids[i]) {
+            got = NativeDeskBandOp(*clsids[i], CTP_BAND_QUERY, &shown);
         }
+
+        if (got) {
+            checked = shown;
+        } else {
+            checked = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]);
+        }
+
         ListView_SetCheckState(hList, i, checked ? TRUE : FALSE);
     }
 }
@@ -1554,17 +755,6 @@ static const int kTaskbarCtls[] = {
     IDC_TXT_LOCATION, IDC_COMBO_LOCATION, IDC_TXT_BUTTONS, IDC_COMBO_BUTTONS,
     IDC_GRP_NOTIF, IDC_TXT_NOTIF, IDC_BTN_CUST_NOTIF,
     IDC_GRP_AERO, IDC_TXT_AERO, IDC_CHK_AEROPEEK, IDC_LINK_HELP, 0
-};
-static const int kNavigationCtls[] = {
-    IDC_GRP_CORNER_NAV, IDC_CHK_CHARMS, IDC_CHK_SWITCH_APPS, IDC_CHK_POWERSHELL,
-    IDC_GRP_START_SCREEN, IDC_CHK_DESKTOP_START, IDC_CHK_BG_ON_START,
-    IDC_CHK_START_DISPLAY, IDC_CHK_APPS_VIEW, IDC_CHK_SEARCH_EVERY,
-    IDC_CHK_DESKTOP_FIRST, 0
-};
-static const int kNonFunctionalNavCtls[] = {
-    IDC_CHK_CHARMS, IDC_CHK_SWITCH_APPS,
-    IDC_CHK_DESKTOP_START, IDC_CHK_BG_ON_START, IDC_CHK_START_DISPLAY,
-    IDC_CHK_APPS_VIEW, IDC_CHK_SEARCH_EVERY, IDC_CHK_DESKTOP_FIRST, 0
 };
 static const int kStartCtls[] = {
     IDC_TXT_START_INFO, IDC_BTN_START_CUST,
@@ -1581,45 +771,11 @@ static void ShowGroup(HWND hwnd, const int* ids, bool show) {
     }
 }
 
-static void ApplyNonFunctionalControlsState(HWND hwnd) {
-    if (!IsWin81Profile()) return;
-    bool shouldDisable = g_hideNonFunctional;
-    for (int i = 0; kNonFunctionalNavCtls[i]; i++) {
-        HWND h = GetDlgItem(hwnd, kNonFunctionalNavCtls[i]);
-        if (h) {
-            EnableWindow(h, !shouldDisable);
-            if (shouldDisable) {
-                SendMessageW(h, BM_SETCHECK, BST_UNCHECKED, 0);
-            }
-        }
-    }
-}
-
 static void SwitchTab(HWND hwnd, int tab) {
     g_currentTab = tab;
-    if (IsWin81Profile()) {
-        ShowGroup(hwnd, kTaskbarCtls, tab == 0);
-        ShowGroup(hwnd, kNavigationCtls, tab == 1);
-        ShowGroup(hwnd, kStartCtls, tab == 2);
-        ShowGroup(hwnd, kToolbarCtls, tab == 3);
-        ApplyNonFunctionalControlsState(hwnd);
-    } else {
-        ShowGroup(hwnd, kNavigationCtls, false);
-        ShowGroup(hwnd, kTaskbarCtls, tab == 0);
-        ShowGroup(hwnd, kStartCtls, tab == 1);
-        ShowGroup(hwnd, kToolbarCtls, tab == 2);
-    }
-}
-
-static void UpdateSearchEverywhereState(HWND hwnd) {
-    if (!IsWin81Profile()) return;
-    HWND hAppsView = GetDlgItem(hwnd, IDC_CHK_APPS_VIEW);
-    HWND hSearchEvery = GetDlgItem(hwnd, IDC_CHK_SEARCH_EVERY);
-    if (hAppsView && hSearchEvery) {
-        bool appsViewChecked = (SendMessageW(hAppsView, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        bool shouldEnable = appsViewChecked && !g_hideNonFunctional;
-        EnableWindow(hSearchEvery, shouldEnable);
-    }
+    ShowGroup(hwnd, kTaskbarCtls, tab == 0);
+    ShowGroup(hwnd, kStartCtls, tab == 1);
+    ShowGroup(hwnd, kToolbarCtls, tab == 2);
 }
 
 static void BalanceTextAndCombo(HWND hwndDlg, int idStatic, int idCombo) {
@@ -1653,103 +809,6 @@ static void BalanceTextAndCombo(HWND hwndDlg, int idStatic, int idCombo) {
     }
     SetWindowPos(hStatic, NULL, rcStatic.left, rcStatic.top, newStaticWidth, rcStatic.bottom - rcStatic.top, SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(hCombo, NULL, newComboX, rcCombo.top, newComboWidth, rcCombo.bottom - rcCombo.top, SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-static int MeasureWrappedTextHeightPx(HWND hCtrl, LPCWSTR text) {
-    HFONT hFont = (HFONT)SendMessageW(hCtrl, WM_GETFONT, 0, 0);
-    if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-    RECT rc; GetClientRect(hCtrl, &rc);
-    HDC hdc = GetDC(hCtrl);
-    HFONT hOld = (HFONT)SelectObject(hdc, hFont);
-    RECT rcCalc = { 0, 0, rc.right, 0 };
-    DrawTextW(hdc, text, -1, &rcCalc, DT_WORDBREAK | DT_CALCRECT | DT_LEFT);
-    SelectObject(hdc, hOld);
-    ReleaseDC(hCtrl, hdc);
-    return rcCalc.bottom - rcCalc.top;
-}
-
-static void AutoSizeMultilineControl(HWND hwndDlg, int controlId, int minCyPx, const int* belowControlIds) {
-    HWND hCtrl = GetDlgItem(hwndDlg, controlId);
-    if (!hCtrl) return;
-    WCHAR text[512];
-    GetWindowTextW(hCtrl, text, 512);
-    int neededCyPx = MeasureWrappedTextHeightPx(hCtrl, text);
-    if (neededCyPx < minCyPx) neededCyPx = minCyPx;
-    RECT rcCtrl; GetWindowRect(hCtrl, &rcCtrl);
-    MapWindowPoints(NULL, hwndDlg, (LPPOINT)&rcCtrl, 2);
-    int curCyPx = rcCtrl.bottom - rcCtrl.top;
-    int deltaPx = neededCyPx - curCyPx;
-    if (deltaPx == 0) return;
-    SetWindowPos(hCtrl, NULL, rcCtrl.left, rcCtrl.top, rcCtrl.right - rcCtrl.left, neededCyPx, SWP_NOZORDER | SWP_NOACTIVATE);
-    if (belowControlIds) {
-        for (int i = 0; belowControlIds[i]; i++) {
-            HWND h = GetDlgItem(hwndDlg, belowControlIds[i]);
-            if (!h) continue;
-            RECT r; GetWindowRect(h, &r);
-            MapWindowPoints(NULL, hwndDlg, (LPPOINT)&r, 2);
-            SetWindowPos(h, NULL, r.left, r.top + deltaPx, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
-}
-
-static void ApplySettings(HWND hwnd) {
-    bool lock = (SendDlgItemMessageW(hwnd, IDC_CHK_LOCK, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    bool hide = (SendDlgItemMessageW(hwnd, IDC_CHK_HIDE, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    bool small_i = (SendDlgItemMessageW(hwnd, IDC_CHK_SMALL, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    bool aero = (SendDlgItemMessageW(hwnd, IDC_CHK_AEROPEEK, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    DWORD glom = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_BUTTONS, CB_GETCURSEL, 0, 0);
-    TaskbarSettingsProvider::SetLockState(lock);
-    TaskbarSettingsProvider::SetSmallIcons(small_i);
-    TaskbarSettingsProvider::SetGlomLevel(glom);
-    TaskbarSettingsProvider::SetAeroPeekEnabled(aero);
-    APPBARDATA abd = { sizeof(APPBARDATA) };
-    abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-    abd.lParam = hide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
-    SHAppBarMessage(ABM_SETSTATE, &abd);
-    DWORD powerSel = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_POWER, CB_GETCURSEL, 0, 0);
-    if (powerSel < 7)
-        TaskbarSettingsProvider::SetPowerAction(kPowerValues[powerSel]);
-    bool mruProg = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_PROG, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    bool mruItems = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_ITEMS, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    TaskbarSettingsProvider::SetStartMruProgs(mruProg);
-    TaskbarSettingsProvider::SetStartMruItems(mruItems);
-    if (IsWin81Profile()) {
-        bool powershell = (SendDlgItemMessageW(hwnd, IDC_CHK_POWERSHELL, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        TaskbarSettingsProvider::SetPowerShellWinX(powershell);
-        if (!g_hideNonFunctional) {
-            bool charms = (SendDlgItemMessageW(hwnd, IDC_CHK_CHARMS, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool switchApps = (SendDlgItemMessageW(hwnd, IDC_CHK_SWITCH_APPS, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool desktopStart = (SendDlgItemMessageW(hwnd, IDC_CHK_DESKTOP_START, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool bgOnStart = (SendDlgItemMessageW(hwnd, IDC_CHK_BG_ON_START, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool startDisplay = (SendDlgItemMessageW(hwnd, IDC_CHK_START_DISPLAY, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool appsView = (SendDlgItemMessageW(hwnd, IDC_CHK_APPS_VIEW, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool searchEvery = (SendDlgItemMessageW(hwnd, IDC_CHK_SEARCH_EVERY, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            bool desktopFirst = (SendDlgItemMessageW(hwnd, IDC_CHK_DESKTOP_FIRST, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            TaskbarSettingsProvider::SetCharmsEnabled(charms);
-            TaskbarSettingsProvider::SetCornerSwitchApps(switchApps);
-            TaskbarSettingsProvider::SetDesktopFirst(desktopStart);
-            TaskbarSettingsProvider::SetBackgroundOnStart(bgOnStart);
-            TaskbarSettingsProvider::SetStartOnCurrentDisplay(startDisplay);
-            TaskbarSettingsProvider::SetAppsViewAuto(appsView);
-            TaskbarSettingsProvider::SetSearchEverywhere(searchEvery);
-            TaskbarSettingsProvider::SetDesktopAppsFirst(desktopFirst);
-        }
-    }
-    HWND hList = GetDlgItem(hwnd, IDC_LST_TOOLBARS);
-    if (hList) {
-        bool addr = (ListView_GetCheckState(hList, 0) != 0);
-        bool links = (ListView_GetCheckState(hList, 1) != 0);
-        bool tablet = (ListView_GetCheckState(hList, 2) != 0);
-        bool desk = (ListView_GetCheckState(hList, 3) != 0);
-        bool classicToolbarChecked = addr || links || desk;
-        ApplyToolbars(addr, links, tablet, desk);
-        
-        // Se le toolbar companion sono disattivate via impostazioni, informiamo l'utente
-        if (classicToolbarChecked && g_showToolbarWarning && ShouldUseCompanionToolbars()) {
-            MessageBoxW(hwnd, g_str.toolbars_warn_text, g_str.toolbars_warn_title, MB_OK | MB_ICONINFORMATION);
-        }
-    }
-    SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
 }
 
 static void ShowAboutDialog(HWND parent) {
@@ -1937,6 +996,37 @@ static void ShowStartCustomDialog(HWND parent) {
     }
 }
 
+static void ApplySettings(HWND hwnd) {
+    bool lock = (SendDlgItemMessageW(hwnd, IDC_CHK_LOCK, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool hide = (SendDlgItemMessageW(hwnd, IDC_CHK_HIDE, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool small_i = (SendDlgItemMessageW(hwnd, IDC_CHK_SMALL, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool aero = (SendDlgItemMessageW(hwnd, IDC_CHK_AEROPEEK, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    DWORD glom = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_BUTTONS, CB_GETCURSEL, 0, 0);
+    TaskbarSettingsProvider::SetLockState(lock);
+    TaskbarSettingsProvider::SetSmallIcons(small_i);
+    TaskbarSettingsProvider::SetGlomLevel(glom);
+    TaskbarSettingsProvider::SetAeroPeekEnabled(aero);
+    APPBARDATA abd = { sizeof(APPBARDATA) };
+    abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    abd.lParam = hide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
+    SHAppBarMessage(ABM_SETSTATE, &abd);
+    DWORD powerSel = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_POWER, CB_GETCURSEL, 0, 0);
+    if (powerSel < 7)
+        TaskbarSettingsProvider::SetPowerAction(kPowerValues[powerSel]);
+    bool mruProg = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_PROG, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool mruItems = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_ITEMS, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    TaskbarSettingsProvider::SetStartMruProgs(mruProg);
+    TaskbarSettingsProvider::SetStartMruItems(mruItems);
+    HWND hList = GetDlgItem(hwnd, IDC_LST_TOOLBARS);
+    if (hList) {
+        bool addr = (ListView_GetCheckState(hList, 0) != 0);
+        bool links = (ListView_GetCheckState(hList, 1) != 0);
+        bool tablet = (ListView_GetCheckState(hList, 2) != 0);
+        bool desk = (ListView_GetCheckState(hList, 3) != 0);
+        ApplyToolbars(addr, links, tablet, desk);
+    }
+    SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
+}
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -1963,16 +1053,9 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             TCITEMW ti = { TCIF_TEXT, 0, 0, (LPWSTR)s };
             SendMessageW(hTab, TCM_INSERTITEMW, i, (LPARAM)&ti);
         };
-        if (IsWin81Profile()) {
-            addTab(0, g_str.tab_taskbar);
-            addTab(1, g_str.tab_navigation);
-            addTab(2, g_str.tab_start);
-            addTab(3, g_str.tab_toolbars);
-        } else {
-            addTab(0, g_str.tab_taskbar);
-            addTab(1, g_str.tab_start);
-            addTab(2, g_str.tab_toolbars);
-        }
+        addTab(0, g_str.tab_taskbar);
+        addTab(1, g_str.tab_start);
+        addTab(2, g_str.tab_toolbars);
         const DialogControlBinding bindings[] = {
             { IDC_GRP_APPEARANCE, g_str.grp_appearance }, { IDC_CHK_LOCK, g_str.chk_lock },
             { IDC_CHK_HIDE, g_str.chk_hide }, { IDC_CHK_SMALL, g_str.chk_small },
@@ -1988,42 +1071,10 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             { IDC_LINK_HELP, g_str.link_help },
         };
         for (const auto& b : bindings) SetDlgItemTextW(hwnd, b.controlId, b.text);
-        if (IsWin81Profile()) {
-            SetDlgItemTextW(hwnd, IDC_GRP_CORNER_NAV, g_str.grp_corner_nav);
-            SetDlgItemTextW(hwnd, IDC_CHK_CHARMS, g_str.chk_charms);
-            SetDlgItemTextW(hwnd, IDC_CHK_SWITCH_APPS, g_str.chk_switch_apps);
-            SetDlgItemTextW(hwnd, IDC_CHK_POWERSHELL, g_str.chk_powershell);
-            SetDlgItemTextW(hwnd, IDC_GRP_START_SCREEN, g_str.grp_start_screen);
-            SetDlgItemTextW(hwnd, IDC_CHK_DESKTOP_START, g_str.chk_desktop_start);
-            SetDlgItemTextW(hwnd, IDC_CHK_BG_ON_START, g_str.chk_bg_on_start);
-            SetDlgItemTextW(hwnd, IDC_CHK_START_DISPLAY, g_str.chk_start_display);
-            SetDlgItemTextW(hwnd, IDC_CHK_APPS_VIEW, g_str.chk_apps_view);
-            SetDlgItemTextW(hwnd, IDC_CHK_SEARCH_EVERY, g_str.chk_search_every);
-            SetDlgItemTextW(hwnd, IDC_CHK_DESKTOP_FIRST, g_str.chk_desktop_first);
-            SendDlgItemMessageW(hwnd, IDC_CHK_CHARMS, BM_SETCHECK, TaskbarSettingsProvider::GetCharmsEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_SWITCH_APPS, BM_SETCHECK, TaskbarSettingsProvider::GetCornerSwitchApps() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_POWERSHELL, BM_SETCHECK, TaskbarSettingsProvider::GetPowerShellWinX() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_DESKTOP_START, BM_SETCHECK, TaskbarSettingsProvider::GetDesktopFirst() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_BG_ON_START, BM_SETCHECK, TaskbarSettingsProvider::GetBackgroundOnStart() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_START_DISPLAY, BM_SETCHECK, TaskbarSettingsProvider::GetStartOnCurrentDisplay() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_APPS_VIEW, BM_SETCHECK, TaskbarSettingsProvider::GetAppsViewAuto() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_SEARCH_EVERY, BM_SETCHECK, TaskbarSettingsProvider::GetSearchEverywhere() ? BST_CHECKED : BST_UNCHECKED, 0);
-            SendDlgItemMessageW(hwnd, IDC_CHK_DESKTOP_FIRST, BM_SETCHECK, TaskbarSettingsProvider::GetDesktopAppsFirst() ? BST_CHECKED : BST_UNCHECKED, 0);
-        }
         if (g_hFontUi) {
             SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFontUi, TRUE);
             SetFontAllChildren(hwnd, g_hFontUi);
             UpdateWindow(hwnd);
-        }
-        if (IsWin81Profile()) {
-            static const int belowAero[] = { 0 };
-            AutoSizeMultilineControl(hwnd, IDC_CHK_AEROPEEK, 12, belowAero);
-            static const int belowPowershell[] = {
-                IDC_GRP_START_SCREEN, IDC_CHK_DESKTOP_START, IDC_CHK_BG_ON_START,
-                IDC_CHK_START_DISPLAY, IDC_CHK_APPS_VIEW, IDC_CHK_SEARCH_EVERY,
-                IDC_CHK_DESKTOP_FIRST, 0
-            };
-            AutoSizeMultilineControl(hwnd, IDC_CHK_POWERSHELL, 12, belowPowershell);
         }
         BalanceTextAndCombo(hwnd, IDC_TXT_LOCATION, IDC_COMBO_LOCATION);
         BalanceTextAndCombo(hwnd, IDC_TXT_BUTTONS, IDC_COMBO_BUTTONS);
@@ -2062,11 +1113,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SendDlgItemMessageW(hwnd, IDC_CHK_SMALL, BM_SETCHECK, (szSmall != 0) ? BST_CHECKED : BST_UNCHECKED, 0);
         SendDlgItemMessageW(hwnd, IDC_CHK_AEROPEEK, BM_SETCHECK, aeroPeek ? BST_CHECKED : BST_UNCHECKED, 0);
         SendMessageW(hCL, CB_SETCURSEL, (edge < 4) ? (WPARAM)edge : 3, 0);
-        if (IsWin81Profile()) {
-            SendMessageW(hCB, CB_SETCURSEL, 0, 0);
-        } else {
-            SendMessageW(hCB, CB_SETCURSEL, (glom < 3) ? (WPARAM)glom : 0, 0);
-        }
+        SendMessageW(hCB, CB_SETCURSEL, (glom < 3) ? (WPARAM)glom : 0, 0);
         DWORD curPower = TaskbarSettingsProvider::GetPowerAction();
         int powerIdx = 0;
         for (int i = 0; i < 7; i++) {
@@ -2106,9 +1153,6 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             && id != IDOK && id != IDCANCEL && id != IDC_BTN_APPLY
             && id != IDC_BTN_CUST_NOTIF && id != IDC_BTN_START_CUST)
             EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), TRUE);
-        if (id == IDC_CHK_APPS_VIEW && act == BN_CLICKED) {
-            UpdateSearchEverywhereState(hwnd);
-        }
         if (id == IDOK) { ApplySettings(hwnd); if (IsWindow(hwnd)) DestroyWindow(hwnd); }
         else if (id == IDCANCEL) { DestroyWindow(hwnd); }
         else if (id == IDC_BTN_APPLY) { ApplySettings(hwnd); if (IsWindow(hwnd)) EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), FALSE); }
@@ -2200,17 +1244,6 @@ static HWND BuildAndShowDialog() {
     addCtrl(SS_LEFT, 0, 18, 179, 226, 30, IDC_TXT_AERO, L"Static", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 213, 226, 12, IDC_CHK_AEROPEEK, L"Button", L"");
     addCtrl(WS_TABSTOP, 0, 12, 238, 238, 10, IDC_LINK_HELP, L"SysLink", L"");
-    addCtrl(BS_GROUPBOX, 0, 12, 22, 238, 86, IDC_GRP_CORNER_NAV, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 35, 226, 20, IDC_CHK_CHARMS, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 57, 226, 20, IDC_CHK_SWITCH_APPS, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 79, 226, 26, IDC_CHK_POWERSHELL, L"Button", L"");
-    addCtrl(BS_GROUPBOX, 0, 12, 112, 238, 124, IDC_GRP_START_SCREEN, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 125, 226, 20, IDC_CHK_DESKTOP_START, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 147, 226, 12, IDC_CHK_BG_ON_START, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 161, 226, 20, IDC_CHK_START_DISPLAY, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 183, 226, 22, IDC_CHK_APPS_VIEW, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 32, 200, 212, 18, IDC_CHK_SEARCH_EVERY, L"Button", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 219, 226, 20, IDC_CHK_DESKTOP_FIRST, L"Button", L"");
     addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 84, 271, 52, 14, IDOK, L"Button", L"OK");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 140, 271, 52, 14, IDCANCEL, L"Button", L"Cancel");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 196, 271, 58, 14, IDC_BTN_APPLY, L"Button", L"Apply");
@@ -2308,10 +1341,6 @@ BOOL Wh_ModInit() {
     InterlockedExchange(&g_startCustomOpen, 0);
     BuildChildEnvironment();
     LoadLanguageSetting();
-    LoadProfileSetting();
-    LoadToolbarModeSetting(); // Caricamento nuova opzione
-    LoadToolbarWarningSetting();
-    LoadHideNonFunctionalSetting();
     InitLocalization();
     EnsureThemeActCtx();
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -2325,25 +1354,16 @@ BOOL Wh_ModInit() {
             (void*)ShellExecuteW_hook,
             (void**)&ShellExecuteW_orig);
     }
-    g_realToolbarThread = CreateThread(NULL, 0, RealToolbarThreadProc, NULL, 0, &g_realToolbarThreadId);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (g_realToolbarThreadId) {
-        PostThreadMessageW(g_realToolbarThreadId, WM_QUIT, 0, 0);
-    }
-    if (g_realToolbarThread) {
-        WaitForSingleObject(g_realToolbarThread, 3000);
-        CloseHandle(g_realToolbarThread);
-        g_realToolbarThread = NULL;
-    }
     if (g_hwndMain && IsWindow(g_hwndMain))
         PostMessageW(g_hwndMain, WM_CLOSE, 0, 0);
     if (g_hwndStartCustom && IsWindow(g_hwndStartCustom))
         PostMessageW(g_hwndStartCustom, WM_CLOSE, 0, 0);
     if (g_dialogThread) {
-        WaitForSingleObject(g_dialogThread, 5000);
+        WaitForSingleObject(g_dialogThread, 1500);
         CloseHandle(g_dialogThread);
         g_dialogThread = NULL;
     }
@@ -2357,30 +1377,5 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadLanguageSetting();
-    LoadProfileSetting();
-    LoadToolbarModeSetting(); // Aggiornamento runtime nuova opzione
-    LoadToolbarWarningSetting();
-    LoadHideNonFunctionalSetting();
     InitLocalization();
-    
-    // Forza l'aggiornamento/la distruzione della barra ricreata a seconda della nuova preferenza
-    if (g_hwndRealToolbarHost && IsWindow(g_hwndRealToolbarHost)) {
-        PostMessageW(g_hwndRealToolbarHost, WM_RTB_REBUILD, 0, 0);
-    }
-    
-    if (g_hwndMain && IsWindow(g_hwndMain) && IsWin81Profile()) {
-        for (int i = 0; kNonFunctionalNavCtls[i]; i++) {
-            HWND h = GetDlgItem(g_hwndMain, kNonFunctionalNavCtls[i]);
-            if (h) {
-                EnableWindow(h, !g_hideNonFunctional);
-                if (g_hideNonFunctional) {
-                    SendMessageW(h, BM_SETCHECK, BST_UNCHECKED, 0);
-                }
-            }
-        }
-        InvalidateRect(g_hwndMain, NULL, TRUE);
-        UpdateWindow(g_hwndMain);
-    }
 }
-
-
