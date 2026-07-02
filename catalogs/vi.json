@@ -7674,7 +7674,7 @@
           11
         ],
         "ratingUsers": 17,
-        "updated": 1780386919000,
+        "updated": 1783014698000,
         "users": 73
       },
       "metadata": {
@@ -7686,7 +7686,7 @@
           "windhawk.exe"
         ],
         "name": "Desktop Companions",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "net-toggle": {

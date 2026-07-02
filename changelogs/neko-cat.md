@@ -1,3 +1,25 @@
+## 1.4.0 ([Jul 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5b733b3fa2ccf48f105212d1495530276c87fb51/mods/neko-cat.wh.cpp))
+
+**feat:** Added Neko Dog, context menus, and multi‑monitor improvements.
+
+### Added
+- **Neko Dog:** New desktop companion, selectable in settings or mixed with existing litters.  
+- **Right‑Click Menu:** Quickly change behaviors (Chase Mouse, Pace, Play With Window).  
+- **Save Last Behavior:** Companions now remember their active behavior after restart.  
+
+### Improved
+- **Multi‑Monitor Bounds:** Behaviors now align correctly to the monitor edges.  
+- **Run Around Physics:** Natural rest cycles (~45s play, ~15s nap) and realistic ball physics with angles/reflections.  
+- **Leg Animations:** Walking/running animations scale to actual distance traveled (improved overall animation).
+- **Drag & Drop:** Dropping a companion resumes their previous behavior (except Play With Window mode).  
+- **Behavior Logic:** Smoother movement and state transitions.  
+- **Assets:** Downloads now point to latest commit including Neko Dog assets.  
+
+### Fixed
+- **Multi‑Monitor Bugs:** Companions no longer go off‑screen or get stuck.  
+- **Window Maximizing:** Double‑clicking companions no longer maximizes underlying windows.  
+- **Theme Switcher Leak:** Cleaned up dynamic theme loading to prevent memory leaks.
+
 ## 1.3.0 ([Jun 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7afddcbd4e0e0300474719100693301b898f1be3/mods/neko-cat.wh.cpp))
 
 ## ✨ New Features

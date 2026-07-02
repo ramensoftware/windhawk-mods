@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T17:37:10.000Z</updated>
+    <updated>2026-07-02T17:51:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Companions 1.4.0]]></title>
+        <id>https://windhawk.net/mods/neko-cat#5b733b3fa2ccf48f105212d1495530276c87fb51</id>
+        <link href="https://windhawk.net/mods/neko-cat"/>
+        <updated>2026-07-02T17:51:38.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>feat:</strong> Added Neko Dog, context menus, and multi‑monitor improvements.</p>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Neko Dog:</strong> New desktop companion, selectable in settings or mixed with existing litters.  </li>
+<li><strong>Right‑Click Menu:</strong> Quickly change behaviors (Chase Mouse, Pace, Play With Window).  </li>
+<li><strong>Save Last Behavior:</strong> Companions now remember their active behavior after restart.  </li>
+</ul>
+<h3 id="improved">Improved</h3>
+<ul>
+<li><strong>Multi‑Monitor Bounds:</strong> Behaviors now align correctly to the monitor edges.  </li>
+<li><strong>Run Around Physics:</strong> Natural rest cycles (~45s play, ~15s nap) and realistic ball physics with angles/reflections.  </li>
+<li><strong>Leg Animations:</strong> Walking/running animations scale to actual distance traveled (improved overall animation).</li>
+<li><strong>Drag & Drop:</strong> Dropping a companion resumes their previous behavior (except Play With Window mode).  </li>
+<li><strong>Behavior Logic:</strong> Smoother movement and state transitions.  </li>
+<li><strong>Assets:</strong> Downloads now point to latest commit including Neko Dog assets.  </li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Multi‑Monitor Bugs:</strong> Companions no longer go off‑screen or get stuck.  </li>
+<li><strong>Window Maximizing:</strong> Double‑clicking companions no longer maximizes underlying windows.  </li>
+<li><strong>Theme Switcher Leak:</strong> Cleaned up dynamic theme loading to prevent memory leaks.</li>
+</ul>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove UWP titlebars Lite 1.2]]></title>
         <id>https://windhawk.net/mods/native-titlebars-uwp-lite#c3cfb1e122539801e373fb76a7c6c228ff6eaf30</id>
@@ -398,52 +430,6 @@ child process with a different executable name than expected.</li>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on Empty Explorer 2.1.1]]></title>
-        <id>https://windhawk.net/mods/click-on-empty-explorer#17537dd9bf6b29f13a26dfe0cadf8eeecd76a86d</id>
-        <link href="https://windhawk.net/mods/click-on-empty-explorer"/>
-        <updated>2026-06-27T20:40:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="clickonemptyexplorer">Click on Empty Explorer</h1>
-<p>Configure what happens when you double click, middle click, or double middle click on
-empty space in File Explorer. Supports 12 different actions.</p>
-<h2 id="howitworks">How it works</h2>
-<p>This mod intercepts mouse clicks on the blank area of File Explorer's file list (where
-no file or folder is located) and performs the action you've configured.</p>
-<ul>
-<li><strong>Double left click</strong> — Windows natively detects double clicks. No delay at all.</li>
-<li><strong>Middle click</strong> — If only a single-click action is set (double middle click is
-disabled), the action fires instantly with no delay, just like left click.</li>
-<li><strong>Double middle click</strong> — Windows does not natively support double middle click, so
-the mod uses a timer-based detection. When you middle click, the mod waits for your
-system's double-click time (typically 500ms). If you middle click again within that
-window, it counts as a double click and fires the double-click action instead.</li>
-<li>If both single and double middle click are set: single click is delayed by the
-double-click detection window.</li>
-<li>If only double middle click is set: only double clicks trigger the action.</li>
-</ul>
-<h2 id="actions">Actions</h2>
-<ul>
-<li><strong>Go Up</strong> — Navigate to the parent folder</li>
-<li><strong>Go Back</strong> — Navigate back in history</li>
-<li><strong>Go Forward</strong> — Navigate forward in history</li>
-<li><strong>Refresh</strong> — Refresh the current view</li>
-<li><strong>New Tab</strong> — Open a new blank tab (Win11)</li>
-<li><strong>Duplicate Tab</strong> — Open the current folder in a new tab (Win11)</li>
-<li><strong>Close Tab</strong> — Close the current tab (Win11)</li>
-<li><strong>New Folder</strong> — Create a new folder in the current view</li>
-<li><strong>Copy Path</strong> — Copy the current folder path to clipboard</li>
-<li><strong>Go to Desktop</strong> — Navigate to the Desktop</li>
-<li><strong>Go to Home</strong> — Navigate to Quick Access / Home</li>
-<li><strong>None</strong> — Do nothing</li>
-</ul>
-<h2 id="windowsversionsupport">Windows version support</h2>
-<p>Requires Windows 10 or later. Tab-related actions (New Tab, Duplicate Tab, Close Tab)
-require Windows 11 for tabbed Explorer support.</p>]]></content>
-        <author>
-            <name>LiHua81</name>
-            <uri>https://github.com/LiHua81</uri>
         </author>
     </entry>
 </feed>
