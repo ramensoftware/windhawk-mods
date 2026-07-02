@@ -1,3 +1,11 @@
+## 2.5 ([Jul 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/04683525522c0a20295ae6cbe1d6360c1ab1e80c/mods/files-2-folders.wh.cpp))
+
+- Adds an **Operation** segmented control (Move - fast / Move - safe / Copy) to the dialog, above the mode list. Picking one changes the operation for just that run without touching the **Operation** setting.
+- Adds two optional aids for building nested subfolder paths in **Fixed name** mode (each with its own settings toggle, on by default):
+  - A live breadcrumb preview line under the box (e.g. typing `archive/incoming` shows `archive › incoming`).
+  - An **Add level** (`+`) button that appends a `\` separator and refocuses the box.
+- Two new settings: `showNestedPreview`, `showAddLevelButton`.
+
 ## 2.2 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd63b735358811aff34f11c4ba5909f1b44688a4/mods/files-2-folders.wh.cpp))
 
 * Add nested-subfolder support to the **Fixed name** mode. A `/` (or `\`) in the name is now treated as a path separator, so `test/1/2/3/name` creates `test\1\2\3\name` and moves the selection into the final `name` folder.

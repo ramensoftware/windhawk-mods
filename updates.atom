@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-02T14:50:00.000Z</updated>
+    <updated>2026-07-02T14:56:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Files 2 Folders 2.5]]></title>
+        <id>https://windhawk.net/mods/files-2-folders#04683525522c0a20295ae6cbe1d6360c1ab1e80c</id>
+        <link href="https://windhawk.net/mods/files-2-folders"/>
+        <updated>2026-07-02T14:56:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds an <strong>Operation</strong> segmented control (Move - fast / Move - safe / Copy) to the dialog, above the mode list. Picking one changes the operation for just that run without touching the <strong>Operation</strong> setting.</li>
+<li>Adds two optional aids for building nested subfolder paths in <strong>Fixed name</strong> mode (each with its own settings toggle, on by default):</li>
+<li>A live breadcrumb preview line under the box (e.g. typing <code>archive/incoming</code> shows <code>archive › incoming</code>).</li>
+<li>An <strong>Add level</strong> (<code>+</code>) button that appends a <code>\</code> separator and refocuses the box.</li>
+<li>Two new settings: <code>showNestedPreview</code>, <code>showAddLevelButton</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Menu Height 1.1]]></title>
         <id>https://windhawk.net/mods/custom-menu-height#9dc9145d6cb2577c40c716476cc086d3231c9ab1</id>
@@ -433,21 +450,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <author>
             <name>tria</name>
             <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Flyout Positions 1.3]]></title>
-        <id>https://windhawk.net/mods/shell-flyout-positions#a9ed1f6989d728bc1fad2d5ad23f5d30117b64cf</id>
-        <link href="https://windhawk.net/mods/shell-flyout-positions"/>
-        <updated>2026-06-27T13:54:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added options to align the Start menu to the left, center, or right of the Start button.</li>
-<li>Added a "Windows default" option for the notification center, the action center, and the Start menu vertical alignment to reduce the impact for unused settings.</li>
-<li>Various improvements for multiple monitors, auto-hide, restore on unload, and other scenarios.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
