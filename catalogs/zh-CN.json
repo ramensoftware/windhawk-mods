@@ -2556,6 +2556,37 @@
         "version": "1.0.2"
       }
     },
+    "compact-start-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783021936000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783021936000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Asteski",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Cleans up the Windows 11 Start menu by showing only a compact, ungrouped All apps view.",
+        "github": "https://github.com/Asteski",
+        "include": [
+          "StartMenuExperienceHost.exe"
+        ],
+        "name": "Compact Start Menu",
+        "version": "1.0.0"
+      }
+    },
     "confirm-closing-multiple-explorer-tabs": {
       "details": {
         "defaultSorting": 3120,

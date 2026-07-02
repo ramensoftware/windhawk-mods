@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-02T16:27:10.000Z</updated>
+    <updated>2026-07-02T19:52:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Compact Start Menu 1.0.0]]></title>
+        <id>https://windhawk.net/mods/compact-start-menu#5b32bb24425ef9af3e7769665f667b8144352a20</id>
+        <link href="https://windhawk.net/mods/compact-start-menu"/>
+        <updated>2026-07-02T19:52:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="compactstartmenu">Compact Start Menu</h1>
+<p>This mod simplifies the Start Menu by directly adjusting All apps XAML sections.</p>
+<p>| All apps without header (default) | Pinned without header + Separator + All apps in List view |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/1.png" alt="Default" /> | <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/2.png" alt="Pinned section and separator" /> |</p>
+<h3 id="features">Features:</h3>
+<ul>
+<li><strong>Shows "All apps":</strong> Keeps the app list visible.</li>
+<li><strong>Optional pinned section hiding:</strong> Can hide or show the section with pinned apps.</li>
+<li><strong>Optional recommended section hiding:</strong> Can hide or show the section with recent files.</li>
+<li><strong>Optional section separators:</strong> Can add thin separator lines between sections.</li>
+<li><strong>Optional section headers:</strong> Can hide pinned and recommended headers independently.</li>
+<li><strong>Hides group headers:</strong> Removes the visible All apps group headers in grid and list views.</li>
+<li><strong>Compacts grid view:</strong> Reduces group-header spacing in the All apps grid.</li>
+<li><strong>Optional top header:</strong> Can hide the All apps title/view row.</li>
+<li><strong>Optional category view hiding:</strong> Can hide the Category option from the view selector.</li>
+<li><strong>Hidden header icon gap:</strong> Can adjust the first icon row spacing when the top header is hidden.</li>
+<li><strong>Scrollbar modes:</strong> Can show, hide, or reveal the visual All apps scroll bar only while scrolling.</li>
+</ul>
+<h3 id="instructions">Instructions:</h3>
+<ul>
+<li>Enable the mod in Windhawk.</li>
+<li><strong>Restart StartMenuExperienceHost.exe</strong>, sign out/in, or restart your computer to apply changes.</li>
+</ul>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Restart Explorer 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-restart-explorer#4a3c818d05d01eb973e6dc8242ac8d5edc084066</id>
@@ -668,98 +702,6 @@ mod by <strong>aubymori</strong>.</p>]]></content>
         <author>
             <name>Math Shamenson</name>
             <uri>https://github.com/insane66613</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar multi-tray 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-multi-tray#dc839cd068c2485f5339538d4c6a64fe809e4282</id>
-        <link href="https://windhawk.net/mods/taskbar-multi-tray"/>
-        <updated>2026-06-17T16:15:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarmultitray">Taskbar multi-tray</h1>
-<p>Windows 11 Windhawk mod for controlling taskbar tray and control-center visibility across multi-monitor setups.<br />
-The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers, and the component filter can target every taskbar or only copied/non-primary taskbars.</p>
-<h2 id="whatitcontrols">What it controls</h2>
-<p><strong>Tray</strong> means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, and the XAML containers Windows creates for them.<br />
-<strong>Control center</strong> means the Windows 11 control-center button (connection status, volume, battery level, …) <em>without</em> the notification/date-time button which Windows can already hide and display on all monitors (we don't handle that one). Together they form what Windows calls the "Action center" surface. We also don't target (yet) the aero peek button.<br />
-The <code>components</code> setting chooses which surfaces the mod keeps visible :</p>
-<ul>
-<li><code>all</code> : tray icons, hidden icons, and control center</li>
-<li><code>tray</code> : tray icons and hidden icons, the notification/date-time button stays visible because Windows treats it as part of the date/time surface, while the control-center button is hidden</li>
-<li><code>controlCenter</code> : control center and notification/date-time only, promoted tray icons and the hidden-icons entry point are hidden</li>
-</ul>
-<p><code>componentsScope</code> controls whether that choice affects every taskbar or only copied/non-primary taskbars. In copied-taskbars-only mode, the primary taskbar keeps the native tray and control center visible.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><code>monitorMode</code> : <code>all</code> or <code>selected</code></li>
-<li><code>selectedMonitors</code> : comma-separated one-based monitor numbers, used only with <code>monitorMode=selected</code></li>
-<li><code>components</code> : <code>all</code>, <code>tray</code>, or <code>controlCenter</code></li>
-<li><code>componentsScope</code> : <code>allTaskbars</code> or <code>copiedTaskbars</code></li>
-<li><code>enableTreeDump</code> : adds bounded XAML child-tree dumps when Windhawk logging is enabled</li>
-</ul>
-<p>Monitor numbering follows <code>EnumDisplayMonitors</code> order for the current session. The numbers can change after hot-plug, docking, display sleep, or reboot.</p>
-<h2 id="demoscreenshots">Demo screenshots</h2>
-<p><img src="https://i.imgur.com/C0VTSGB.jpeg" alt="enable-everywhere-tray-apps" />
-<img src="https://i.imgur.com/UVH38vQ.jpeg" alt="enable-everywhere-control-center" />
-<img src="https://i.imgur.com/3yDk1vi.jpeg" alt="tray-select" />
-<img src="https://i.imgur.com/s9l2chj.jpeg" alt="control-select" /></p>
-<h2 id="compatibilityandsafety">Compatibility and safety</h2>
-<p>This mod targets <strong>only</strong> Windows 11, and <strong>only</strong> the newer versions.<br />
-It cannot be applied to the Windows 10 taskbar as-is. Windows 10 exposes the notification area through the older Explorer/Win32 taskbar window hierarchy, with classes such as <code>Shell_TrayWnd</code>, <code>TrayNotifyWnd</code>, pager/toolbar controls, and the classic notification-area icon model. This mod instead targets the Windows 11 taskbar implementation : XAML/WinUI-hosted taskbar surfaces and Windows 11-specific elements such as <code>SystemTrayFrame</code>, <code>NotifyIconStack</code>, <code>NotificationAreaIcons</code>, <code>ControlCenterButton</code>, and ShellHost-hosted flyouts. Those objects, bindings, and flyout paths simply do not exist in the same form on Windows 10.<br />
-The old "Windows 10 taskbar on Windows 11" approach worked differently : tools such as <a href="https://github.com/valinet/ExplorerPatcher/wiki/ExplorerPatcher%27s-taskbar-implementation">ExplorerPatcher</a> could rely on Microsoft still shipping enough of the legacy Windows 10 taskbar code inside earlier Windows 11 builds, then switch Explorer back to that legacy path. For reference, Windows 11 version 22H2 is OS build <code>22621</code>, which users can check with <code>winver</code>. Starting with the newer Windows 11 24H2 line (OS build <code>26100</code>), that stock legacy taskbar path is no longer available in the same way, so ExplorerPatcher moved to a custom reimplemented Windows 10-style taskbar based mostly on the code present in Windows 11 22H2. This mod does not reimplement a taskbar, it modifies the native Windows 11 XAML taskbar that is already running.<br />
-Compatibility with other mods that touch the taskbar isn't guaranteed. Feel free to report an issue in case of incompatibility, crash or any other bug. In that case, enable Windhawk logging for the mod and provide the relevant log entries.
-Windhawk controls whether log entries are emitted. The mod logs settings, taskbar selection, XAML element state, binding reuse, proxy/native flyout contexts, monitor redirection, placement translation, hook availability, startup retries, and cleanup when that toggle is enabled. <code>enableTreeDump</code> only adds bounded XAML child-tree dumps for layout investigation.</p>
-<h3 id="knownissues">Known issues</h3>
-<p><em>Those are problems that are identified and will be fixed in future updates</em></p>
-<ul>
-<li>[ ] Moving icons from the hidden-icons flyout back to the visible tray on a copied taskbar doesn't work. Either do it from the primary taskbar or if you have already a copied flyout open, move the icon to the area of the primary taskbar's tray strip and release it there.</li>
-<li>[ ] Extra items injected into the tray strip (language selector, emoji/keyboard/stylus icon, other shortcuts, or other mods) won't be duplicated</li>
-</ul>
-<hr />
-<h2 id="howitworks">How it works</h2>
-<p>This section is the technical map of the mod, following the architecture from injection to pixels.</p>
-<h3 id="processandhooklayout">Process and hook layout</h3>
-<p>The mod is injected into <code>explorer.exe</code> (owner of every taskbar window and its XAML island) and <code>ShellHost.exe</code> (host of the <code>Win+A</code> control center and several flyouts on Windows 11 24H2+), <code>GetTargetProcess</code> picks the role at init. Explorer gets the <code>taskbar.dll</code> symbol hooks (<code>TrayUI::StartTaskbar</code>, <code>TrayUI::_SetStuckMonitor</code>, <code>CSecondaryTray::InitModelAndHost</code>, plus the <code>CTaskBand</code>/<code>CSecondaryTaskBand</code> accessors used to reach the XAML), resolved in a single <code>HookSymbols</code> pass so one drifted symbol fails the whole load instead of half-loading. Both processes get the user32 hooks (<code>MonitorFromPoint/Rect/Window</code>, <code>SetWindowPos</code>, <code>MoveWindow</code>, <code>SetWindowPlacement</code>, <code>DeferWindowPos</code>, <code>EnumDisplayDevicesW</code>, <code>DispatchMessageW</code>). ShellHost additionally hooks <code>twinui.pcshell.dll</code>'s <code>ImmersiveMonitorHelper</code> (optional, placement degrades gracefully without it).<br />
-The two processes coordinate through a <code>.shared</code> PE section (<code>SharedProxyState</code>) guarded by a seqlock : writers flip a generation counter odd before touching the data and even after, readers retry until a stable even generation brackets their copy. The hooks are hot (every monitor query and window placement in two processes), so the no-context case is settled by a cheap shared-monitor read before any seqlock snapshot is taken, and each active-context hook works from one coherent stack copy instead of a mutable process-local mirror. Settings are immutable snapshots swapped atomically (<code>GetSettings</code>/<code>PublishSettings</code>), so hooks on any thread read coherent values without locks. Monitor numbers are one-based <code>EnumDisplayMonitors</code> positions for the current session, cached behind a short-TTL reader/writer snapshot that display changes invalidate eagerly.</p>
-<h3 id="reachingthetaskbarxaml">Reaching the taskbar XAML</h3>
-<p>Each taskbar window (<code>Shell_TrayWnd</code>, <code>Shell_SecondaryTrayWnd</code>) hosts a XAML island, and no public API maps an HWND to its <code>XamlRoot</code>. The mod follows Explorer's own objects instead : the window's <code>CTaskBand</code>/<code>CSecondaryTaskBand</code> is located by matching the <code>ITaskListWndSite</code> vtable pointer across the window-long slots, its <code>GetTaskbarHost()</code> returns a <code>std::shared_ptr&lt;TaskbarHost&gt;</code> by value, the offset of the hosted XAML element inside <code>TaskbarHost</code> is read out of the compiled prologue of <code>TaskbarHost::FrameHeight</code> (x64 <code>add rcx, imm8</code>/ARM64 <code>ldr x8, [x0, #imm]</code> encodings, so no hardcoded struct layout can silently rot), and the temporary <code>shared_ptr</code> is released through <code>std::_Ref_count_base::_Decref</code>. From the hosted element, <code>XamlRoot.Content -&gt; SystemTray.SystemTrayFrame -&gt; SystemTrayFrameGrid</code> is the container under which every tray surface the mod touches lives.</p>
-<h3 id="theapplypass">The apply pass</h3>
-<p><code>ApplyStyle</code> runs per taskbar, always on the taskbar thread : at startup from the <code>TrayUI::StartTaskbar</code> hook, on demand through <code>RunFromWindowThread</code> (a <code>WH_CALLWNDPROC</code> hook plus <code>SendMessageTimeout(SMTO_ABORTIFHUNG)</code>, so a hung Explorer cannot deadlock the caller), for hot-plugged taskbars from <code>CSecondaryTray::InitModelAndHost</code>, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or <code>SystemTrayFrameGrid</code> is not ready yet. The pass collects every tray element in a single child walk (<code>CollectTrayElements</code>), forces the configured surfaces (<code>NotifyIconStack</code>, <code>NotificationAreaIcons</code>, <code>ControlCenterButton</code>, <code>NotificationCenterButton</code>) visible and hit-testable, resets non-selected taskbars to the default secondary look, lets the control center keep its natural content width, and measures both the control-center width and promoted-icon-area width that click hit-testing uses later. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the width measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.</p>
-<h3 id="contentsharingthesingletonbindings">Content : sharing the singleton bindings</h3>
-<p>Windows keeps exactly one real notification-area model, and the mod never duplicates the native icon manager or its <code>std::shared_ptr</code> ownership. Instead, the real-tray owner's elements act as a binding source : their <code>DataContext</code>/<code>ItemsSource</code>/(non-UIElement) <code>Content</code> are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. <code>UIElement</code> content is never shared, a XAML element cannot live in two trees. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the <code>TrayUI::_SetStuckMonitor</code> hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (<code>0x5B8</code>). Tray icon drag/drop state follows the island that most recently attached the singleton tray <code>ItemsSource</code>, so drag hover/down/up over a managed tray strip re-attaches the tray icon sources to the taskbar under the pointer before native XAML handles the move or drop. When a drag leaves the hidden-icons overflow popup, the message stream can still be captured by the popup window, so the dispatch hook resolves the taskbar from the live screen point and forces a fresh re-attach after each hidden-overflow open.</p>
-<h3 id="leftclicksoncopiedsurfacesclickedmonitorcontexts">Left clicks on copied surfaces : clicked-monitor contexts</h3>
-<p>A window subclass on every managed taskbar hit-tests left clicks against DPI-scaled right-edge metrics ([show desktop][notification/clock][measured control center][measured promoted icons][chevron]). A click on a copied control-center or hidden-icons surface arms a short-lived <strong>flyout context</strong> : monitor, flyout kind, tick deadline, chevron anchor point, taskbar rectangle and target DPI, published through the shared seqlock so ShellHost redirects too. While a context is armed :</p>
-<ul>
-<li><code>MonitorFrom*</code> queries resolve to the clicked monitor, gated by target-side filters so only ambiguous geometry, the clicked taskbar itself, known flyout popups (<code>ControlCenterWindow</code>, <code>TopLevelWindowForOverflowXamlIsland</code>, the control-center windowed popup), and the hidden-tray drag visual while a tray drag/drop context is active are redirected</li>
-<li><code>EnumDisplayDevicesW</code> reports the clicked display as the primary device</li>
-<li><code>ImmersiveMonitorHelper</code> is connected to the clicked monitor's center</li>
-<li>placement calls for the known popups are rewritten : DPI-rescaled between source and target monitors, anchored to the captured chevron point for the overflow flyout, pinned to the armed taskbar's edge with a small gap, and clamped into the target work area</li>
-</ul>
-<p>Contexts expire lazily through their tick deadline (no timers ever run on Explorer's taskbar windows for this), are shortened right after popup placement so they cannot linger, and are dropped by right-click input or left clicks outside the copied surfaces. Every context read validates the armed monitor handle against the live topology first, so a hot-plugged display drops the context instead of redirecting to a dead handle.<br />
-When an open arrives with <strong>no armed context</strong> at all (the hit-test depends on measured icon widths that tray-icon changes can shift, and pen/touch input bypasses the subclass left-click path), the placement hooks arm a last-chance cursor-derived context : a known flyout popup placed while not yet visible, with the cursor on a managed taskbar whose monitor differs from the requested placement, is treated as a click on that taskbar (cursor point as the overflow anchor) and translated through the same path. The rescue never touches re-placements of an already-visible flyout, so a delayed popup cannot chase the cursor across monitors.</p>
-<h3 id="rightclicksoncontrolcentericonsthethreelayerfix">Right clicks on control-center icons : the three-layer fix</h3>
-<p>The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each of the three layers below is load-bearing :</p>
-<ol>
-<li><strong>Menu ownership follows the pointer</strong>. The per-item context-menu state binds to whichever <code>ControlCenterButton</code> attached the shared <code>ItemsSource</code> most recently, and a right press over any other island kills Explorer inside the island's input processing, before the taskbar window receives a single message. The mod therefore re-attaches the hovered taskbar's items source while no button is down (mouse-move/pointer-update seen in the <code>DispatchMessageW</code> hook, <code>WM_SETCURSOR</code> forwarded to the subclassed taskbar), with the right-press dispatch itself as a last resort. Mid-press input never re-attaches, that would eat the active click.</li>
-<li><strong><code>ShowAt</code> is intercepted through regular function hooks</strong>. The menus are flyouts created lazily on first open and cached inside Windows' view-model, reachable through no tree walk and no public API (<code>Popup.AssociatedFlyout</code> is WinUI-only, system XAML tops out at <code>IPopup4</code>). Throwaway <code>MenuFlyout</code>/<code>Flyout</code> instances expose the class vtables shared by every instance, and their <code>IFlyoutBase::ShowAt</code> (slot 14) and <code>IFlyoutBase5::ShowAt</code> (slot 12) entries are read to find the concrete implementation functions. Windhawk regular function hooks are installed on those functions; the ABI vtables are never patched. The hook is a pure pass-through unless the placement target sits inside a <code>ControlCenterButton</code> subtree.</li>
-<li><strong>Per-island proxies beat the XamlRoot lock</strong>. A flyout's <code>XamlRoot</code> is settable only before its first show, afterwards it is locked to its first island forever, and showing it anchored to another island is the exact crashing call. The mod keeps one proxy <code>MenuFlyout</code> per island, created with its <code>XamlRoot</code> set before first use. When a locked cached menu is asked to open on a foreign island, its items, which carry the native command handlers, are moved into that island's proxy, the proxy is shown at the original target, and the crashy native <code>ShowAt</code> is suppressed (<code>S_OK</code> without showing). Borrowed items are handed back to their home menu at the start of the next control-center interaction and on unload, with a guard against duplicating a menu Windows rebuilt in the meantime.</li>
-</ol>
-<h3 id="whatstaysnative">What stays native</h3>
-<p>The notification/date-time button is untouched : Windows gives every taskbar its own items for it and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.</p>
-<h3 id="lifecycleandsafety">Lifecycle and safety</h3>
-<p>Unload is strictly ordered : the unloading flag flips every hook to pass-through, pending retries are cancelled, contexts and caches cleared, and then, on the taskbar's own thread, subclasses are removed, native styles and control-center menu ownership are restored, and borrowed proxy items returned before the mod's code can vanish. No low timer ids are ever used on Explorer's windows (small ids collide with native taskbar timers, a confirmed past crash source). WinRT references live in heap-backed holders cleared only on normal reload/settings paths, never during process detach, so COM releases cannot run at an unsafe time.</p>
-<hr />
-<h2 id="attribution">Attribution</h2>
-<ul>
-<li>Author : <a href="https://github.com/EDM115">@EDM115</a> with great help from AI Agents</li>
-<li><a href="https://openai.com/index/introducing-gpt-5-5/">GPT 5.5 High/Extra High</a> in <a href="https://chatgpt.com/codex">Codex</a> for the groundwork</li>
-<li><a href="https://developers.openai.com/api/docs/models/gpt-5.5-pro">GPT 5.5 Pro</a> in <a href="https://chatgpt.com/">ChatGPT</a> for code review and bug fixes</li>
-<li><a href="https://www.anthropic.com/news/claude-fable-5-mythos-5">Fable 5 Max</a> in <a href="https://zed.dev/">Zed</a> for fixing hard bugs and refactoring</li>
-<li>Idea : <a href="https://github.com/rutaaa">@rutaaa</a> (no he didn't bully me into doing this 😭)</li>
-<li>License : MIT</li>
-</ul>]]></content>
-        <author>
-            <name>EDM115</name>
-            <uri>https://github.com/EDM115</uri>
         </author>
     </entry>
 </feed>
