@@ -331,6 +331,7 @@ ProgressBar g_popupXamlProgress = nullptr;
 ScaleTransform g_popupXamlProgressScale = nullptr;
 Border g_popupXamlProgressTrack = nullptr;
 Border g_popupXamlProgressFill = nullptr;
+Border g_popupXamlProgressHitTarget = nullptr;
 controls::Canvas g_popupXamlProgressGlowMask = nullptr;
 mediax::RectangleGeometry g_popupXamlProgressGlowClip = nullptr;
 std::vector<Border> g_popupXamlProgressGlowLayers;
@@ -3586,6 +3587,7 @@ void ResetPopupXamlElementState() {
     g_popupXamlProgressScale = nullptr;
     g_popupXamlProgressTrack = nullptr;
     g_popupXamlProgressFill = nullptr;
+    g_popupXamlProgressHitTarget = nullptr;
     g_popupXamlProgressGlowMask = nullptr;
     g_popupXamlProgressGlowClip = nullptr;
     g_popupXamlProgressGlowLayers.clear();
@@ -3808,6 +3810,11 @@ bool InitializePopupXamlHost(HWND hwnd) {
         progressGlowCore.Opacity(0.0);
         canvas.Children().Append(progressGlowCore);
 
+        Border progressHitTarget;
+        progressHitTarget.Height(22);
+        progressHitTarget.Background(Brush(Color(0x01, 0x00, 0x00, 0x00)));
+        canvas.Children().Append(progressHitTarget);
+
         StackPanel controlsPanel;
         controlsPanel.Orientation(controls::Orientation::Horizontal);
         controlsPanel.RenderTransformOrigin({0.5, 0.5});
@@ -3835,8 +3842,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
             }));
         canvas.Children().Append(controlsPanel);
 
-        canvas.PointerPressed([](auto const& sender,
-                                 input::PointerRoutedEventArgs const& e) {
+        progressHitTarget.PointerPressed([](auto const& sender,
+                                            input::PointerRoutedEventArgs const& e) {
             try {
                 if (!g_popupXamlProgressTrack || PopupProgress() < 0.75) {
                     return;
@@ -3854,15 +3861,22 @@ bool InitializePopupXamlHost(HWND hwnd) {
                     point.Y >= -hitPadding && point.Y <= height + hitPadding) {
                     UpdatePopupSeekPreview(point.X / width);
                     if (auto element = sender.template try_as<UIElement>()) {
-                        element.CapturePointer(e.Pointer());
+                        if (!element.CapturePointer(e.Pointer())) {
+                            EndPopupSeek(false);
+                            return;
+                        }
                     }
                     e.Handled(true);
                 }
             } catch (...) {
+                try {
+                    EndPopupSeek(false);
+                } catch (...) {
+                }
             }
         });
-        canvas.PointerMoved([](auto const&,
-                               input::PointerRoutedEventArgs const& e) {
+        progressHitTarget.PointerMoved([](auto const&,
+                                          input::PointerRoutedEventArgs const& e) {
             try {
                 if (!g_popupSeekDragging || !g_popupXamlProgressTrack) {
                     return;
@@ -3877,13 +3891,12 @@ bool InitializePopupXamlHost(HWND hwnd) {
             } catch (...) {
             }
         });
-        canvas.PointerReleased([](auto const& sender,
-                                  input::PointerRoutedEventArgs const& e) {
+        progressHitTarget.PointerReleased([](auto const& sender,
+                                             input::PointerRoutedEventArgs const& e) {
+            if (!g_popupSeekDragging) {
+                return;
+            }
             try {
-                if (!g_popupSeekDragging) {
-                    return;
-                }
-
                 if (g_popupXamlProgressTrack) {
                     double width = g_popupXamlProgressTrack.ActualWidth();
                     if (width > 0.0) {
@@ -3891,7 +3904,15 @@ bool InitializePopupXamlHost(HWND hwnd) {
                         UpdatePopupSeekPreview(point.X / width);
                     }
                 }
+            } catch (...) {
+                // Commit the last valid preview even if the final pointer sample
+                // can't be resolved while the popup is being relaid out.
+            }
+            try {
                 EndPopupSeek(true);
+            } catch (...) {
+            }
+            try {
                 if (auto element = sender.template try_as<UIElement>()) {
                     element.ReleasePointerCapture(e.Pointer());
                 }
@@ -3899,8 +3920,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
             } catch (...) {
             }
         });
-        canvas.PointerCanceled([](auto const& sender,
-                                  input::PointerRoutedEventArgs const& e) {
+        progressHitTarget.PointerCanceled([](auto const& sender,
+                                             input::PointerRoutedEventArgs const& e) {
             try {
                 if (!g_popupSeekDragging) {
                     return;
@@ -3913,8 +3934,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
             } catch (...) {
             }
         });
-        canvas.PointerCaptureLost([](auto const&,
-                                     input::PointerRoutedEventArgs const&) {
+        progressHitTarget.PointerCaptureLost([](auto const&,
+                                                input::PointerRoutedEventArgs const&) {
             try {
                 if (g_popupSeekDragging) {
                     EndPopupSeek(false);
@@ -3954,6 +3975,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_popupXamlProgressScale = progressScale;
         g_popupXamlProgressTrack = progressTrack;
         g_popupXamlProgressFill = progressFill;
+        g_popupXamlProgressHitTarget = progressHitTarget;
         g_popupXamlProgressGlowMask = progressGlowMask;
         g_popupXamlProgressGlowClip = progressGlowClip;
         g_popupXamlProgressGlowLayers = progressGlowLayers;
@@ -4212,6 +4234,17 @@ void UpdatePopupXamlVisuals() {
         g_popupXamlProgressTrack.CornerRadius({radius, radius, radius, radius});
         controls::Canvas::SetLeft(g_popupXamlProgressTrack, progressLeft);
         controls::Canvas::SetTop(g_popupXamlProgressTrack, progressTop);
+    }
+    if (g_popupXamlProgressHitTarget) {
+        double hitHeight = std::max(22.0, progressHeight + 16.0);
+        g_popupXamlProgressHitTarget.Visibility(
+            showControls ? Visibility::Visible : Visibility::Collapsed);
+        g_popupXamlProgressHitTarget.Width(progressWidth);
+        g_popupXamlProgressHitTarget.Height(hitHeight);
+        controls::Canvas::SetLeft(g_popupXamlProgressHitTarget, progressLeft);
+        controls::Canvas::SetTop(
+            g_popupXamlProgressHitTarget,
+            progressTop - (hitHeight - std::max(4.0, progressHeight)) * 0.5);
     }
     double progressThickness = std::max(4.0, progressHeight);
     double playedWidth = std::max(0.0, progressWidth * progressRatio);
@@ -4958,14 +4991,6 @@ void EndPopupSeek(bool commit) {
             g_popupSeekCommitTargetTicks = targetTicks;
             g_popupSeekCommitUntil = g_popupSeekPreviewUntil;
         }
-        if (g_popupXamlProgress) {
-            g_popupLiveProgressValue =
-                commitRatio * g_popupXamlProgress.Maximum();
-            g_popupXamlProgress.Value(g_popupLiveProgressValue);
-        }
-        if (g_popupXamlElapsed && state.durationTicks > 0) {
-            g_popupXamlElapsed.Text(FormatMediaTime(targetTicks));
-        }
         {
             std::lock_guard lock(g_mediaMutex);
             if (g_media.hasSession && g_media.durationTicks > 0) {
@@ -4974,8 +4999,23 @@ void EndPopupSeek(bool commit) {
                 g_mediaStateTimestamp = now;
             }
         }
+
+        // Queue the provider seek before touching XAML. UI elements can become
+        // temporarily invalid during popup relayout; that must never suppress
+        // the actual playback-position change.
         SeekToMediaPosition(ratio);
-        StartPopupXamlRenderLoop();
+        try {
+            if (g_popupXamlProgress) {
+                g_popupLiveProgressValue =
+                    commitRatio * g_popupXamlProgress.Maximum();
+                g_popupXamlProgress.Value(g_popupLiveProgressValue);
+            }
+            if (g_popupXamlElapsed && state.durationTicks > 0) {
+                g_popupXamlElapsed.Text(FormatMediaTime(targetTicks));
+            }
+            StartPopupXamlRenderLoop();
+        } catch (...) {
+        }
     } else {
         g_popupSeekPreviewUntil = {};
         {
@@ -5451,6 +5491,7 @@ void DestroyExpandedPopup() {
     g_popupXamlProgressScale = nullptr;
     g_popupXamlProgressTrack = nullptr;
     g_popupXamlProgressFill = nullptr;
+    g_popupXamlProgressHitTarget = nullptr;
     g_popupXamlProgressGlowMask = nullptr;
     g_popupXamlProgressGlowClip = nullptr;
     g_popupXamlProgressGlowLayers.clear();
