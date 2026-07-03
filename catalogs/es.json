@@ -7447,6 +7447,38 @@
         "version": "1.0.0"
       }
     },
+    "monitor-rounded-edges": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783085755000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783085755000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "crazyboyybs",
+        "compilerOptions": "-lUser32 -lGdi32 -ld2d1 -lShell32 -lOle32",
+        "description": "Aplica esquinas redondeadas suaves en todos los monitores via Direct2D. Soporta estilos circular y squircle (superelipse), con borde interior opcional y soporte de pantalla completa.",
+        "github": "https://github.com/crazyboyybs",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Bordes Redondeados del Monitor",
+        "version": "1.0"
+      },
+      "metadataEnglish": {
+        "description": "Applies smooth, anti-aliased rounded corners to all monitors via Direct2D. Supports circular and squircle (superellipse) styles, with an optional inner accent border and fullscreen awareness.",
+        "name": "Monitor Rounded Edges"
+      }
+    },
     "monitor-sleep-button": {
       "details": {
         "defaultSorting": 1460,
