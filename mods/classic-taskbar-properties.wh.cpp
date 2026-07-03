@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
-// @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7(Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
+// @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
 // @version 2.9.1
 // @author babamohammed
 // @github https://github.com/babamohammed2022
@@ -1277,7 +1277,8 @@ static bool InstallTaskbarPositionHooks() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // explorer.exe
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))"},
             &TrayUI_GetStuckInfo_Original,
@@ -1304,7 +1305,7 @@ static bool InstallTaskbarPositionHooks() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, explorerExeHooks, ARRAYSIZE(explorerExeHooks))) {
         Wh_Log(L"InstallTaskbarPositionHooks: HookSymbols fallito su explorer.exe");
         return false;
     }
