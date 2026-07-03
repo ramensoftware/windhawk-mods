@@ -1,28 +1,37 @@
 // ==WindhawkMod==
-// @id              jonaos-glass-widgets-graggable
-// @name            JonaOS Glass Widgets (Draggable)
-// @description     Achieve that Premium Glass morph widgets and elevate your Windows Display to look Clean, Professional, High-end and Futuristic.
-// @version         3.4
+// @id              jonaos-glass-widgets-draggable
+// @name            JonaOS Glass Widgets
+// @description     Adds draggable glass-style desktop widgets for calendar, clock, media, volume, battery, search, personalization, network, Bluetooth, and accessibility shortcuts.
+// @version         3.5
 // @author          Jona like It, Code It
 // @github          https://github.com/SeniorMajor7
-// @include         explorer.exe
-// @compilerOptions -lcomctl32 -lgdi32 -luxtheme -ldwmapi -lgdiplus -lole32 -luuid -lshell32 -lshlwapi
+// @include         windhawk.exe
+// @compilerOptions -lcomctl32 -lgdi32 -luxtheme -ldwmapi -lgdiplus -lole32 -luuid -lshell32
 // @license         MIT
 // @architecture    x86-64
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-// JonaOS Liquid Glass Widgets
-// "Achieve that Premium Glass morph widgets and elevate your Windows Display to look Clean, Professional, High-end and Futuristic".
-// The light mode works best on DARK WALLPAPERS only.
-//"<img width="478" height="376" alt="Image" src="https://github.com/user-attachments/assets/afa6c355-4a19-40d8-b055-a3a5a7d7b2a5" /> "Light mode"
-//<img width="479" height="370" alt="Image" src="https://github.com/user-attachments/assets/f0fdf3c9-e95d-4701-92ee-165c981f4eda" /> "Dark mode"
-//<img width="475" height="362" alt="Image" src="https://github.com/user-attachments/assets/a90c3cf5-ee5a-4d24-90ab-1e53ffa7ef61" /> "Acrylic/Translucent"
-//<img width="475" height="369" alt="Image" src="https://github.com/user-attachments/assets/497b525c-ea6f-4d2e-b113-e97c1bd3c5d8" /> "Mica"
-//<img width="484" height="363" alt="Image" src="https://github.com/user-attachments/assets/358af692-960e-4269-91a5-bf1acc3a8e0b" /> "Tabbed Mica"
-//<img width="476" height="371" alt="Image" src="https://github.com/user-attachments/assets/38353d6d-321c-4331-b4c5-224b68cf18f7" /> "No DWM Background"
-//" Change the Appearance mode. Corner roundness. Switch off any widget"
-// "It is better to leave all settings in default since they are designed perfectly except for the appearance mode which the user can change according to their tastes and preferance
+JonaOS Glass Widgets adds a group of draggable desktop widgets to Explorer's
+desktop layer. The widgets include:
+
+- Calendar
+- Now Playing media controls
+- Clock
+- Volume
+- Battery
+- Windows Search and Personalization shortcuts
+- WiFi, Hotspot, Bluetooth, and Accessibility shortcuts
+
+Each widget can be enabled or disabled individually. You can also adjust the
+position, size, appearance mode, opacity, corner roundness, font, and colors.
+
+The automatic layout places the widgets on the selected desktop side when a
+widget's X position is set to `-1`. Drag a widget with the mouse to move it for
+the current session, or set explicit X/Y values in the settings for a persistent
+custom layout.
+
+Light mode works best on dark wallpapers.
 */
 // ==/WindhawkModReadme==
 
@@ -35,7 +44,7 @@
   - left: Left side
   - right: Right side
 
-- AppearanceMode: Light
+- AppearanceMode: light
   $name: Default appearance mode
   $options:
   - light: Light mode
@@ -381,8 +390,6 @@
 #define NOMINMAX
 #endif
 
-#include <wbemidl.h>
-#include <comdef.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
@@ -390,9 +397,6 @@
 #include <uxtheme.h>
 #include <commctrl.h>
 #include <shellapi.h>
-#include <shlobj.h>
-#include <shobjidl.h>
-#include <shlwapi.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <math.h>
@@ -400,8 +404,6 @@
 #include <time.h>
 #include <algorithm>
 #include <memory>
-
-#pragma comment(lib, "shlwapi.lib")
 
 extern "C" {
     const GUID CLSID_MMDeviceEnumerator = {0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}};
@@ -436,6 +438,8 @@ using namespace Gdiplus;
 
 #define CLASS_NAME L"JonaOSLiquidGlassWidgetWindow"
 #define TIMER_ID 1001
+#define WM_APP_SETTINGS_CHANGED (WM_APP + 1)
+#define WM_APP_QUIT (WM_APP + 2)
 #define AUTO_MARGIN 32
 #define PI_D 3.14159265358979323846
 
@@ -531,6 +535,10 @@ static HINSTANCE g_hinst = nullptr;
 static HWND g_parent = nullptr;
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_comInitialized = false;
+static bool g_uiThreadInitSucceeded = false;
+static HANDLE g_uiThread = nullptr;
+static DWORD g_uiThreadId = 0;
+static HANDLE g_readyEvent = nullptr;
 static WCHAR g_side[16] = L"right";
 static WCHAR g_defaultFont[64] = L"Calibri";
 static AppearanceMode g_defaultAppearance = AppearanceMode::Light;
@@ -540,12 +548,6 @@ static int g_defaultOpacity = 255;
 static int g_defaultRoundness = 26;
 
 static const int PILE_WIDTH = 380;
-static const int PILE_HEIGHT = 821;
-static const int ACTION_WIDGET_GAP = 30;
-
-static HBITMAP g_nowPlayingThumb = nullptr;
-static WCHAR g_nowPlayingFilePath[MAX_PATH] = {0};
-
 static WidgetWindow g_widgets[] = {
     {WidgetType::Calendar, L"Calendar", L"JonaOS Calendar Widget", 0, 0, 360, 170, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::NowPlaying, L"NowPlaying", L"JonaOS Now Playing Widget", 190, 200, 170, 170, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
@@ -553,7 +555,7 @@ static WidgetWindow g_widgets[] = {
     {WidgetType::Volume, L"Volume", L"JonaOS Volume Widget", 0, 400, 360, 35, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::Battery, L"Battery", L"JonaOS Battery Widget", 0, 465, 360, 35, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::WindowsSearch, L"WindowsSearch", L"JonaOS Windows Search Widget", 0, 530, 170, 35, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
-    {WidgetType::Personalization, L"Personalization", L"JonaOS Personalization Widget", 170 + ACTION_WIDGET_GAP, 530, 170, 35, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
+    {WidgetType::Personalization, L"Personalization", L"JonaOS Personalization Widget", 200, 530, 170, 35, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::Wifi, L"Wifi", L"JonaOS WiFi Widget", 0, 595, 70, 70, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::Hotspot, L"Hotspot", L"JonaOS Hotspot Widget", 96, 595, 70, 70, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
     {WidgetType::Bluetooth, L"Bluetooth", L"JonaOS Bluetooth Widget", 192, 595, 70, 70, nullptr, {}, {}, {}, 0, false, false, false, {}, {}, HitZone::None},
@@ -693,6 +695,8 @@ static void ApplyPerWidgetDefaultLabelColors(WidgetWindow& widget) {
 static void LoadWidgetConfig(WidgetWindow& widget) {
     WCHAR settingName[128];
     WCHAR modeText[32];
+    WCHAR widgetColorText[64];
+    WCHAR labelColorText[64];
 
     swprintf_s(settingName, L"%sEnabled", widget.prefix);
     widget.cfg.enabled = Wh_GetIntSetting(settingName) != 0;
@@ -724,22 +728,18 @@ static void LoadWidgetConfig(WidgetWindow& widget) {
     widget.cfg.cornerRadius = roundnessSetting <= 0 ? g_defaultRoundness : ClampInt(roundnessSetting, 0, 96);
 
     swprintf_s(settingName, L"%sWidgetColor", widget.prefix);
-    PCWSTR widgetColor = Wh_GetStringSetting(settingName);
-    widget.cfg.widgetColor = ParseRgb(widgetColor, ThemeWidgetColor(widget.cfg.appearance));
-    if (widgetColor) {
-        Wh_FreeStringSetting(widgetColor);
-    }
+    LoadStringSetting(settingName, widgetColorText, _countof(widgetColorText), L"");
+    widget.cfg.widgetColor = ParseRgb(widgetColorText, ThemeWidgetColor(widget.cfg.appearance));
 
     swprintf_s(settingName, L"%sLabelColor", widget.prefix);
-    PCWSTR labelColor = Wh_GetStringSetting(settingName);
-    widget.cfg.labelColor = ParseRgb(labelColor, ThemeLabelColor(widget.cfg.appearance));
-    if (labelColor) {
-        Wh_FreeStringSetting(labelColor);
-    }
+    LoadStringSetting(settingName, labelColorText, _countof(labelColorText), L"");
+    widget.cfg.labelColor = ParseRgb(labelColorText, ThemeLabelColor(widget.cfg.appearance));
 
     wcsncpy_s(widget.cfg.fontName, _countof(widget.cfg.fontName), g_defaultFont, _TRUNCATE);
 
-    ApplyPerWidgetDefaultLabelColors(widget);
+    if (!labelColorText[0]) {
+        ApplyPerWidgetDefaultLabelColors(widget);
+    }
 }
 
 static void LoadSettings() {
@@ -751,53 +751,38 @@ static void LoadSettings() {
 
     g_defaultAppearance = ParseAppearance(modeText, AppearanceMode::Light);
     g_layoutTop = ClampInt(Wh_GetIntSetting(L"LayoutTop"), 0, 2000);
-    if (g_layoutTop == 0) {
-        g_layoutTop = 32;
-    }
-
     g_layoutGap = ClampInt(Wh_GetIntSetting(L"LayoutGap"), 0, 80);
-    if (g_layoutGap == 0) {
-        g_layoutGap = 10;
-    }
-
     g_defaultOpacity = ClampInt(Wh_GetIntSetting(L"WidgetOpacity"), 1, 255);
-    if (g_defaultOpacity == 1) {
-        g_defaultOpacity = 255;
-    }
-
     g_defaultRoundness = ClampInt(Wh_GetIntSetting(L"WidgetRoundness"), 0, 96);
-    if (g_defaultRoundness == 0) {
-        g_defaultRoundness = 26;
-    }
 
     g_widgets[0].defaultOffsetX = 0;
     g_widgets[0].defaultOffsetY = 0;
 
     int calendarH = g_widgets[0].defaultHeight;
-    int rowY = calendarH + 30;
+    int rowY = calendarH + g_layoutGap;
     g_widgets[2].defaultOffsetX = 0;
     g_widgets[2].defaultOffsetY = rowY;
-    g_widgets[1].defaultOffsetX = g_widgets[2].defaultWidth + 26;
+    g_widgets[1].defaultOffsetX = g_widgets[2].defaultWidth + g_layoutGap;
     g_widgets[1].defaultOffsetY = rowY;
 
     int rowHeight = g_widgets[2].defaultHeight;
-    int volumeY = rowY + rowHeight + 30;
+    int volumeY = rowY + rowHeight + g_layoutGap;
     g_widgets[3].defaultOffsetX = 0;
     g_widgets[3].defaultOffsetY = volumeY;
 
-    int batteryY = volumeY + g_widgets[3].defaultHeight + 30;
+    int batteryY = volumeY + g_widgets[3].defaultHeight + g_layoutGap;
     g_widgets[4].defaultOffsetX = 0;
     g_widgets[4].defaultOffsetY = batteryY;
 
-    int actionsY = batteryY + g_widgets[4].defaultHeight + 30;
+    int actionsY = batteryY + g_widgets[4].defaultHeight + g_layoutGap;
     g_widgets[5].defaultOffsetX = 0;
     g_widgets[5].defaultOffsetY = actionsY;
-    g_widgets[6].defaultOffsetX = g_widgets[5].defaultWidth + ACTION_WIDGET_GAP;
+    g_widgets[6].defaultOffsetX = g_widgets[5].defaultWidth + g_layoutGap;
     g_widgets[6].defaultOffsetY = actionsY;
 
-    int utilitiesY = actionsY + g_widgets[5].defaultHeight + 30;
+    int utilitiesY = actionsY + g_widgets[5].defaultHeight + g_layoutGap;
     for (int i = 7; i <= 10; i++) {
-        g_widgets[i].defaultOffsetX = (i - 7) * (g_widgets[i].defaultWidth + 26);
+        g_widgets[i].defaultOffsetX = (i - 7) * (g_widgets[i].defaultWidth + g_layoutGap);
         g_widgets[i].defaultOffsetY = utilitiesY;
     }
 
@@ -906,10 +891,10 @@ static void ApplyGlass(HWND hwnd, const WidgetConfig& cfg) {
     SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
 
     if (cfg.appearance != AppearanceMode::Acrylic &&
-    cfg.appearance != AppearanceMode::Mica &&
-    cfg.appearance != AppearanceMode::Tabbed) {
-    SetLayeredWindowAttributes(hwnd, 0, (BYTE)cfg.opacity, LWA_ALPHA);
-}
+        cfg.appearance != AppearanceMode::Mica &&
+        cfg.appearance != AppearanceMode::Tabbed) {
+        SetLayeredWindowAttributes(hwnd, 0, (BYTE)cfg.opacity, LWA_ALPHA);
+    }
 
     int cornerPreference = DWMWCP_ROUND;
     DwmSetWindowAttribute(
@@ -1053,7 +1038,6 @@ static void DrawSlider(HDC hdc, RECT trackRc, int value, COLORREF trackColor, CO
     g.FillPath(&thumbBrush, thumbPath.get());
 }
 
-// -------------------- Endpoint volume helper (existing) --------------------
 static bool GetEndpointVolume(float* volume, BOOL* muted) {
     if (volume) {
         *volume = 0.0f;
@@ -1096,117 +1080,14 @@ static bool GetEndpointVolume(float* volume, BOOL* muted) {
         enumerator->Release();
     }
 
-    return TRUE;
+    return SUCCEEDED(hr);
 }
 
-// -------------------- Media thumbnail & Play behavior helpers --------------------
-static void FreeNowPlayingThumbnail() {
-    if (g_nowPlayingThumb) {
-        DeleteObject(g_nowPlayingThumb);
-        g_nowPlayingThumb = nullptr;
-    }
-    g_nowPlayingFilePath[0] = 0;
-}
-
-static bool GetFirstAudioFileInMusicLibrary(WCHAR* outPath, size_t cchOut) {
-    PWSTR musicPath = nullptr;
-    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Music, KF_FLAG_DEFAULT, nullptr, &musicPath);
-    if (FAILED(hr) || !musicPath) {
-        return false;
-    }
-
-    bool found = false;
-    WCHAR searchPath[MAX_PATH];
-    PathCombineW(searchPath, musicPath, L"*.*");
-
-    WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(searchPath, &fd);
-    if (hFind != INVALID_HANDLE_VALUE) {
-        do {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                LPCWSTR ext = PathFindExtensionW(fd.cFileName);
-                if (ext && (*ext)) {
-                    if (_wcsicmp(ext, L".mp3") == 0 || _wcsicmp(ext, L".flac") == 0 ||
-                        _wcsicmp(ext, L".m4a") == 0 || _wcsicmp(ext, L".wav") == 0 ||
-                        _wcsicmp(ext, L".wma") == 0 || _wcsicmp(ext, L".aac") == 0) {
-                        PathCombineW(outPath, musicPath, fd.cFileName);
-                        found = true;
-                        break;
-                    }
-                }
-            }
-        } while (FindNextFileW(hFind, &fd));
-        FindClose(hFind);
-    }
-
-    CoTaskMemFree(musicPath);
-    return found;
-}
-
-static bool LoadThumbnailForFile(PCWSTR filePath, int thumbSize, HBITMAP* outBitmap) {
-    if (!filePath || !*filePath || !outBitmap) {
-        return false;
-    }
-
-    *outBitmap = nullptr;
-
-    IShellItem* psi = nullptr;
-    HRESULT hr = SHCreateItemFromParsingName(filePath, nullptr, IID_PPV_ARGS(&psi));
-    if (FAILED(hr) || !psi) {
-        return false;
-    }
-
-    IShellItemImageFactory* factory = nullptr;
-    hr = psi->QueryInterface(IID_PPV_ARGS(&factory));
-    if (SUCCEEDED(hr) && factory) {
-        SIZE size = { thumbSize, thumbSize };
-        HBITMAP hbmp = nullptr;
-        hr = factory->GetImage(size, SIIGBF_BIGGERSIZEOK, &hbmp);
-        if (SUCCEEDED(hr) && hbmp) {
-            *outBitmap = hbmp;
-            factory->Release();
-            psi->Release();
-            return true;
-        }
-        factory->Release();
-    }
-
-    psi->Release();
-    return false;
-}
-
-static void TryLoadNowPlayingThumbnailFromMusicLibrary() {
-    FreeNowPlayingThumbnail();
-
-    WCHAR filePath[MAX_PATH] = {0};
-    if (!GetFirstAudioFileInMusicLibrary(filePath, _countof(filePath))) {
-        return;
-    }
-
-    HBITMAP hbmp = nullptr;
-    if (LoadThumbnailForFile(filePath, 128, &hbmp)) {
-        g_nowPlayingThumb = hbmp;
-        wcsncpy_s(g_nowPlayingFilePath, _countof(g_nowPlayingFilePath), filePath, _TRUNCATE);
-    }
-}
-
-static void OpenDefaultMediaPlayerAndPlay() {
-    WCHAR filePath[MAX_PATH] = {0};
-    if (GetFirstAudioFileInMusicLibrary(filePath, _countof(filePath))) {
-        ShellExecuteW(nullptr, L"open", filePath, nullptr, nullptr, SW_SHOWNORMAL);
-        FreeNowPlayingThumbnail();
-        HBITMAP hbmp = nullptr;
-        if (LoadThumbnailForFile(filePath, 128, &hbmp)) {
-            g_nowPlayingThumb = hbmp;
-            wcsncpy_s(g_nowPlayingFilePath, _countof(g_nowPlayingFilePath), filePath, _TRUNCATE);
-        }
-    } else {
-        ShellExecuteW(nullptr, L"open", L"shell:MusicLibrary", nullptr, nullptr, SW_SHOWNORMAL);
-    }
-
+// -------------------- Media key helpers --------------------
+static void SendMediaKey(WORD virtualKey) {
     INPUT input = {};
     input.type = INPUT_KEYBOARD;
-    input.ki.wVk = VK_MEDIA_PLAY_PAUSE;
+    input.ki.wVk = virtualKey;
     SendInput(1, &input, sizeof(INPUT));
     input.ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(1, &input, sizeof(INPUT));
@@ -1589,22 +1470,8 @@ static void DrawNowPlaying(HWND hwnd, HDC hdc, const WidgetConfig& cfg, RECT rc)
 
     RECT thumbRc = {12, 72, 72, 142};
 
-    if (g_nowPlayingThumb) {
-        Bitmap* bmp = Bitmap::FromHBITMAP(g_nowPlayingThumb, nullptr);
-        if (bmp) {
-            Graphics graphics(hdc);
-            graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-            Rect dest(thumbRc.left, thumbRc.top, thumbRc.right - thumbRc.left, thumbRc.bottom - thumbRc.top);
-            graphics.DrawImage(bmp, dest);
-            delete bmp;
-        } else {
-            DrawPill(hdc, thumbRc, BlendColor(cfg.widgetColor, cfg.labelColor, 20), 200);
-            DrawMusicNoteIcon(hdc, thumbRc, UtilityIconColor(cfg));
-        }
-    } else {
-        DrawPill(hdc, thumbRc, BlendColor(cfg.widgetColor, cfg.labelColor, 20), 200);
-        DrawMusicNoteIcon(hdc, thumbRc, UtilityIconColor(cfg));
-    }
+    DrawPill(hdc, thumbRc, BlendColor(cfg.widgetColor, cfg.labelColor, 20), 200);
+    DrawMusicNoteIcon(hdc, thumbRc, UtilityIconColor(cfg));
 
     RECT metaRc = {84, 72, width - 12, 120};
     DrawTextBlock(hdc, L"Track metadata is not available in this Windhawk context.", metaRc, bodyFont, subtle, DT_LEFT | DT_WORDBREAK);
@@ -1633,23 +1500,39 @@ static bool SetSystemVolumePercent(int percent) {
     IMMDeviceEnumerator* enumerator = nullptr;
     IMMDevice* device = nullptr;
     IAudioEndpointVolume* endpoint = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, IID_IMMDeviceEnumerator, (void**)&enumerator);
-    if (FAILED(hr)) return false;
+
+    HRESULT hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
+                                  IID_IMMDeviceEnumerator, (void**)&enumerator);
+    if (FAILED(hr)) {
+        return false;
+    }
+
     hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
-    if (SUCCEEDED(hr)) hr = device->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, nullptr, (void**)&endpoint);
+    if (SUCCEEDED(hr)) {
+        hr = device->Activate(IID_IAudioEndpointVolume, CLSCTX_ALL, nullptr, (void**)&endpoint);
+    }
+
     if (SUCCEEDED(hr) && endpoint) {
         hr = endpoint->SetMasterVolumeLevelScalar(scalar, nullptr);
         endpoint->Release();
     }
-    if (device) device->Release();
-    if (enumerator) enumerator->Release();
+    if (device) {
+        device->Release();
+    }
+    if (enumerator) {
+        enumerator->Release();
+    }
+
     return SUCCEEDED(hr);
 }
 
 static int GetSystemVolumePercent() {
     float vol = 0.0f;
     BOOL muted = FALSE;
-    if (!GetEndpointVolume(&vol, &muted)) return -1;
+    if (!GetEndpointVolume(&vol, &muted)) {
+        return -1;
+    }
+
     return ClampInt((int)round(vol * 100.0f), 0, 100);
 }
 
@@ -1940,7 +1823,6 @@ static void DestroyWidgets() {
             widget.hwnd = nullptr;
         }
     }
-    FreeNowPlayingThumbnail();
 }
 
 static void MoveWidgetToScreenPoint(WidgetWindow* widget, int screenX, int screenY) {
@@ -1979,27 +1861,17 @@ static void FinishWidgetClick(WidgetWindow* widget) {
 
     switch (widget->pendingClick) {
         case HitZone::MediaPrev: {
-            INPUT input = {};
-            input.type = INPUT_KEYBOARD;
-            input.ki.wVk = VK_MEDIA_PREV_TRACK;
-            SendInput(1, &input, sizeof(INPUT));
-            input.ki.dwFlags = KEYEVENTF_KEYUP;
-            SendInput(1, &input, sizeof(INPUT));
+            SendMediaKey(VK_MEDIA_PREV_TRACK);
             break;
         }
         case HitZone::MediaPlayPause:
-            OpenDefaultMediaPlayerAndPlay();
+            SendMediaKey(VK_MEDIA_PLAY_PAUSE);
             if (widget->hwnd) {
                 InvalidateRect(widget->hwnd, nullptr, TRUE);
             }
             break;
         case HitZone::MediaNext: {
-            INPUT input = {};
-            input.type = INPUT_KEYBOARD;
-            input.ki.wVk = VK_MEDIA_NEXT_TRACK;
-            SendInput(1, &input, sizeof(INPUT));
-            input.ki.dwFlags = KEYEVENTF_KEYUP;
-            SendInput(1, &input, sizeof(INPUT));
+            SendMediaKey(VK_MEDIA_NEXT_TRACK);
             break;
         }
         case HitZone::UtilityButton:
@@ -2163,9 +2035,6 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             }
             return 0;
         case WM_DESTROY:
-            if (widget && widget->type == WidgetType::NowPlaying) {
-                FreeNowPlayingThumbnail();
-            }
             return 0;
     }
 
@@ -2187,40 +2056,7 @@ static bool RegisterWidgetClass() {
     return RegisterClassExW(&wc) != 0;
 }
 
-BOOL Wh_ModInit() {
-    g_hinst = GetModuleHandleW(nullptr);
-
-    HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    g_comInitialized = SUCCEEDED(coHr);
-
-    GdiplusStartupInput gdiplusStartupInput;
-    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok) {
-        Wh_Log(L"Failed to initialize GDI+");
-        if (g_comInitialized) {
-            CoUninitialize();
-            g_comInitialized = false;
-        }
-        return FALSE;
-    }
-
-    LoadSettings();
-
-    if (!RegisterWidgetClass()) {
-        Wh_Log(L"Failed to register widget window class");
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        if (g_comInitialized) {
-            CoUninitialize();
-            g_comInitialized = false;
-        }
-        return FALSE;
-    }
-
-    CreateWidgets();
-    return TRUE;
-}
-
-void Wh_ModUninit() {
+static void CleanupUiThreadResources() {
     DestroyWidgets();
     UnregisterClassW(CLASS_NAME, g_hinst);
 
@@ -2235,8 +2071,293 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
-    DestroyWidgets();
+static DWORD WINAPI UiThreadProc(LPVOID) {
+    g_uiThreadInitSucceeded = false;
+    g_hinst = GetModuleHandleW(nullptr);
+
+    HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    g_comInitialized = SUCCEEDED(coHr);
+
+    GdiplusStartupInput gdiplusStartupInput;
+    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok) {
+        Wh_Log(L"Failed to initialize GDI+");
+        if (g_comInitialized) {
+            CoUninitialize();
+            g_comInitialized = false;
+        }
+        if (g_readyEvent) {
+            SetEvent(g_readyEvent);
+        }
+        return FALSE;
+    }
+
     LoadSettings();
+
+    if (!RegisterWidgetClass()) {
+        Wh_Log(L"Failed to register widget window class");
+        GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        if (g_comInitialized) {
+            CoUninitialize();
+            g_comInitialized = false;
+        }
+        if (g_readyEvent) {
+            SetEvent(g_readyEvent);
+        }
+        return FALSE;
+    }
+
     CreateWidgets();
+    g_uiThreadInitSucceeded = true;
+
+    if (g_readyEvent) {
+        SetEvent(g_readyEvent);
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.hwnd == nullptr && msg.message == WM_APP_QUIT) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        if (msg.hwnd == nullptr && msg.message == WM_APP_SETTINGS_CHANGED) {
+            DestroyWidgets();
+            LoadSettings();
+            CreateWidgets();
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    CleanupUiThreadResources();
+    return 0;
+}
+
+BOOL WhTool_ModInit() {
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_readyEvent) {
+        Wh_Log(L"Failed to create ready event");
+        return FALSE;
+    }
+
+    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
+    if (!g_uiThread) {
+        Wh_Log(L"Failed to create UI thread");
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+        return FALSE;
+    }
+
+    if (WaitForSingleObject(g_readyEvent, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"UI thread didn't signal readiness in time");
+    }
+
+    CloseHandle(g_readyEvent);
+    g_readyEvent = nullptr;
+    return g_uiThreadInitSucceeded ? TRUE : FALSE;
+}
+
+void WhTool_ModSettingsChanged() {
+    if (g_uiThreadId) {
+        PostThreadMessageW(g_uiThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    if (g_uiThreadId) {
+        PostThreadMessageW(g_uiThreadId, WM_APP_QUIT, 0, 0);
+    }
+
+    if (g_uiThread) {
+        if (WaitForSingleObject(g_uiThread, 5000) != WAIT_OBJECT_0) {
+            Wh_Log(L"UI thread didn't exit in time");
+            ExitProcess(1);
+        }
+
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+        g_uiThreadId = 0;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
