@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         2.1.1
+// @version         2.2.0
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -58,12 +58,16 @@ system's own animation getting in the way.
   window before animating, may not catch borderless apps, and can occasionally fire
   on splash / dialog windows. Leave it off and the mod behaves exactly like plain
   minimize / restore.
+- **Multi-monitor support (experimental)** - play the genie on the monitor the
+  window is on, targeting that monitor's taskbar edge, instead of always the
+  primary monitor's. **Experimental and off by default.**
 
 ## Notes
 - Works on all top-level windows; child / tiny / hidden windows are skipped.
 - DWM transitions are temporarily disabled on the animated window and restored
   afterwards, so the system's own minimize/restore animation doesn't fight ours.
-- The genie currently targets the primary monitor's taskbar edge.
+- By default the genie targets the primary monitor's taskbar edge; enable
+  **Multi-monitor support** to play it on the monitor the window is on.
 
 # Getting started
 Check out the documentation
@@ -85,6 +89,11 @@ Check out the documentation
     Play a genie when an application window first opens. Experimental: may briefly
     flash the window before animating, may not catch borderless apps, and can
     occasionally fire on splash/dialog windows.
+- multi_monitor: false
+  $name: Multi-monitor support (experimental)
+  $description: >-
+    Play the genie on the monitor the window is on and target that monitor's
+    taskbar edge, instead of always the primary monitor's.
 */
 // ==/WindhawkModSettings==
 
@@ -119,6 +128,9 @@ struct MacGenieAnimData {
     HWND hRealWnd;
     HBITMAP hBitmap;      // snapshot of the window (a DDB at original size)
     RECT targetRect;      // the window's on-screen rect when the anim started
+    RECT monRect;         // monitor the genie plays on, in virtual-screen coords
+                          // (the window's monitor when multi-monitor support is
+                          // enabled, else the primary)
     int width;
     int height;
     int targetDockX;      // dynamically learned taskbar icon X position
@@ -150,6 +162,7 @@ std::mutex g_CacheMutex;
 std::atomic<int> g_durationMs{450};
 std::atomic<bool> g_openAnimation{true};
 std::atomic<bool> g_launchAnimation{false};
+std::atomic<bool> g_multiMonitor{false};
 
 // --- UNLOAD COORDINATION ---
 // Windhawk unmaps the mod DLL right after uninit, so any worker thread still
@@ -166,6 +179,7 @@ void MacGenieLoadSettings() {
     g_durationMs.store(ms, std::memory_order_relaxed);
     g_openAnimation.store(Wh_GetIntSetting(L"open_animation") != 0, std::memory_order_relaxed);
     g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
+    g_multiMonitor.store(Wh_GetIntSetting(L"multi_monitor") != 0, std::memory_order_relaxed);
 }
 
 void MacGenieSetDwmTransitions(HWND hWnd, BOOL enable) {
@@ -247,19 +261,23 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     const int W = data->width;
     const int H = data->height;
-    const int screenW = GetSystemMetrics(SM_CXSCREEN);
-    const int screenH = GetSystemMetrics(SM_CYSCREEN);
+    // The monitor the genie plays on, in virtual-screen coordinates (left/top can
+    // be negative on secondary monitors). With multi-monitor support disabled the
+    // caller fills this with the primary screen rect, which reproduces the old
+    // SM_CXSCREEN/SM_CYSCREEN math exactly.
+    const RECT mon = data->monRect;
 
     const int origLeft = data->targetRect.left;
     const int origTop  = data->targetRect.top;
     const float origCenterX = (float)origLeft + W * 0.5f;
 
-    // Where the genie funnels to: the learned taskbar icon X, at the very bottom.
+    // Where the genie funnels to: the learned taskbar icon X, at the very bottom
+    // of the monitor the genie plays on.
     int dockX = data->targetDockX;
-    if (dockX < 0) dockX = 0;
-    if (dockX > screenW) dockX = screenW;
+    if (dockX < mon.left) dockX = mon.left;
+    if (dockX > mon.right) dockX = mon.right;
     const float dockXf = (float)dockX;
-    const float dockY  = (float)screenH;          // flow into the taskbar edge
+    const float dockY  = (float)mon.bottom;      // flow into the taskbar edge
     float neckW = W * 0.03f;
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
@@ -270,11 +288,10 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
     int boundTop    = origTop;
-    int boundBottom = screenH;
-    if (boundLeft < 0) boundLeft = 0;
-    if (boundRight > screenW) boundRight = screenW;
-    if (boundTop < 0) boundTop = 0;
-    if (boundBottom > screenH) boundBottom = screenH;
+    int boundBottom = mon.bottom;
+    if (boundLeft < mon.left) boundLeft = mon.left;
+    if (boundRight > mon.right) boundRight = mon.right;
+    if (boundTop < mon.top) boundTop = mon.top;
     int boundW = boundRight - boundLeft;
     int boundH = boundBottom - boundTop;
     if (boundW < 1) boundW = 1;
@@ -574,16 +591,44 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cl
         return;
     }
 
+    // The monitor the genie plays on. Multi-monitor support (experimental) uses
+    // the monitor the window is on, so the genie flows into that monitor's
+    // taskbar edge; otherwise (or if the monitor can't be queried) it's the
+    // primary screen rect, which reproduces the old behavior exactly.
+    bool multiMon = g_multiMonitor.load(std::memory_order_relaxed);
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (!multiMon ||
+        !GetMonitorInfoW(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+        mi.rcMonitor.left   = 0;
+        mi.rcMonitor.top    = 0;
+        mi.rcMonitor.right  = GetSystemMetrics(SM_CXSCREEN);
+        mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+
     // --- SMART ICON TRACKING ---
     POINT pt;
     GetCursorPos(&pt);
     RECT workArea;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+    if (multiMon) {
+        // "Is the cursor over a taskbar?" = outside the work area of the monitor
+        // the CURSOR is on. The primary-only SPI_GETWORKAREA test below would
+        // match every cursor position on a secondary monitor, so a plain
+        // title-bar minimize there would mislearn the cursor X as the icon spot.
+        MONITORINFO cursorMi;
+        cursorMi.cbSize = sizeof(cursorMi);
+        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &cursorMi)) {
+            workArea = cursorMi.rcWork;
+        } else {
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+        }
+    } else {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+    }
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int learnedTargetX = screenWidth / 2; // Default to center
+    int learnedTargetX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2; // Default to center
 
-    // If the mouse is outside the main desktop area (e.g. hovering over the taskbar)
+    // If the mouse is outside the desktop area (e.g. hovering over the taskbar)
     if (!PtInRect(&workArea, pt)) {
         learnedTargetX = pt.x; // Steal the mouse X coordinate!
         std::lock_guard<std::mutex> lock(g_CacheMutex);
@@ -600,6 +645,7 @@ void StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cl
     MacGenieAnimData* data = new MacGenieAnimData();
     data->hRealWnd = hWnd;
     data->targetRect = rect;
+    data->monRect = mi.rcMonitor;
     data->width = w;
     data->height = h;
     data->isRising = rising;
