@@ -1273,12 +1273,11 @@ static void WINAPI TrayUI__HandleSettingChange_Hook(void* pThis, void* p1, void*
 static bool InstallTaskbarPositionHooks() {
     HMODULE module = GetModuleHandleW(nullptr);
     if (!module) {
-        Wh_Log(L"InstallTaskbarPositionHooks: GetModuleHandle(NULL) fallito");
+        Wh_Log(L"InstallTaskbarPositionHooks: GetModuleHandle(NULL) failed");
         return false;
     }
 
-    // explorer.exe
-    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
         {
             {LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))"},
             &TrayUI_GetStuckInfo_Original,
@@ -1305,13 +1304,13 @@ static bool InstallTaskbarPositionHooks() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, explorerExeHooks, ARRAYSIZE(explorerExeHooks))) {
-        Wh_Log(L"InstallTaskbarPositionHooks: HookSymbols fallito su explorer.exe");
+    if (!WindhawkUtils::HookSymbols(module, explorer_exe_hooks, ARRAYSIZE(explorer_exe_hooks))) {
+        Wh_Log(L"InstallTaskbarPositionHooks: HookSymbols failed on explorer.exe");
         return false;
     }
 
     g_taskbarPosHooksInstalled = true;
-    Wh_Log(L"InstallTaskbarPositionHooks: TUTTI e 5 gli hook installati con successo");
+    Wh_Log(L"InstallTaskbarPositionHooks: All 5 hooks successfully installed");
     return true;
 }
 
