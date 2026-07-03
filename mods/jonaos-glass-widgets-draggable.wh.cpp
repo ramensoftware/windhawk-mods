@@ -2,13 +2,12 @@
 // @id              jonaos-glass-widgets-draggable
 // @name            JonaOS Glass Widgets
 // @description     Adds draggable glass-style desktop widgets for calendar, clock, media, volume, battery, search, personalization, network, Bluetooth, and accessibility shortcuts.
-// @version         3.5
+// @version         3.6
 // @author          Jona like It, Code It
 // @github          https://github.com/SeniorMajor7
 // @include         windhawk.exe
 // @compilerOptions -lcomctl32 -lgdi32 -luxtheme -ldwmapi -lgdiplus -lole32 -luuid -lshell32
 // @license         MIT
-// @architecture    x86-64
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -420,6 +419,10 @@ using namespace Gdiplus;
 #define DWMWA_SYSTEMBACKDROP_TYPE 38
 #endif
 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
 #ifndef DWMWCP_ROUND
 #define DWMWCP_ROUND 2
 #endif
@@ -458,6 +461,8 @@ struct WINDOWCOMPOSITIONATTRIBDATA {
 
 enum {
     WCA_ACCENT_POLICY = 19,
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_BLURBEHIND = 3,
     ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
 };
 
@@ -574,6 +579,12 @@ static bool IsLightTheme(AppearanceMode mode) {
     return mode == AppearanceMode::Light;
 }
 
+static bool IsAdvancedAppearance(AppearanceMode mode) {
+    return mode == AppearanceMode::Acrylic ||
+           mode == AppearanceMode::Mica ||
+           mode == AppearanceMode::Tabbed;
+}
+
 static COLORREF ParseRgb(PCWSTR text, COLORREF fallback) {
     int r = 0;
     int g = 0;
@@ -599,6 +610,10 @@ static AppearanceMode ParseAppearance(PCWSTR text, AppearanceMode fallback) {
         return AppearanceMode::Dark;
     }
 
+    if (_wcsicmp(text, L"acrylic") == 0) {
+        return AppearanceMode::Acrylic;
+    }
+
     if (_wcsicmp(text, L"mica") == 0) {
         return AppearanceMode::Mica;
     }
@@ -611,7 +626,7 @@ static AppearanceMode ParseAppearance(PCWSTR text, AppearanceMode fallback) {
         return AppearanceMode::None;
     }
 
-    return AppearanceMode::Acrylic;
+    return fallback;
 }
 
 static void LoadStringSetting(PCWSTR name, PWSTR buffer, size_t cchBuffer, PCWSTR fallback) {
@@ -859,7 +874,7 @@ static int ResolveWidgetY(const WidgetWindow& widget) {
     return g_layoutTop + widget.defaultOffsetY;
 }
 
-static void ApplyLegacyAcrylic(HWND hwnd, COLORREF tintColor) {
+static void ApplyLegacyAccent(HWND hwnd, AppearanceMode appearance, COLORREF tintColor) {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     auto setWindowCompositionAttribute =
         (SetWindowCompositionAttribute_t)GetProcAddress(user32, "SetWindowCompositionAttribute");
@@ -873,7 +888,13 @@ static void ApplyLegacyAcrylic(HWND hwnd, COLORREF tintColor) {
     BYTE b = GetBValue(tintColor);
 
     ACCENT_POLICY accent = {};
-    accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
+    if (appearance == AppearanceMode::Acrylic) {
+        accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
+    } else if (appearance == AppearanceMode::Mica || appearance == AppearanceMode::Tabbed) {
+        accent.AccentState = ACCENT_ENABLE_BLURBEHIND;
+    } else {
+        accent.AccentState = ACCENT_DISABLED;
+    }
     accent.AccentFlags = 2;
     accent.GradientColor = (0x55 << 24) | (b << 16) | (g << 8) | r;
 
@@ -890,11 +911,9 @@ static void ApplyGlass(HWND hwnd, const WidgetConfig& cfg) {
     exStyle |= WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
     SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
 
-    if (cfg.appearance != AppearanceMode::Acrylic &&
-        cfg.appearance != AppearanceMode::Mica &&
-        cfg.appearance != AppearanceMode::Tabbed) {
-        SetLayeredWindowAttributes(hwnd, 0, (BYTE)cfg.opacity, LWA_ALPHA);
-    }
+    // Layered widgets must be initialized for regular WM_PAINT output to show.
+    // Without this, only the solid Light/Dark modes are reliably visible.
+    SetLayeredWindowAttributes(hwnd, 0, (BYTE)cfg.opacity, LWA_ALPHA);
 
     int cornerPreference = DWMWCP_ROUND;
     DwmSetWindowAttribute(
@@ -903,6 +922,13 @@ static void ApplyGlass(HWND hwnd, const WidgetConfig& cfg) {
         &cornerPreference,
         sizeof(cornerPreference));
 
+    BOOL useDarkBackdrop = !IsLightTheme(cfg.appearance);
+    DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        &useDarkBackdrop,
+        sizeof(useDarkBackdrop));
+
     int backdrop = GetDwmBackdropValue(cfg.appearance);
     HRESULT hr = DwmSetWindowAttribute(
         hwnd,
@@ -910,8 +936,14 @@ static void ApplyGlass(HWND hwnd, const WidgetConfig& cfg) {
         &backdrop,
         sizeof(backdrop));
 
-    if (FAILED(hr) && cfg.appearance == AppearanceMode::Acrylic) {
-        ApplyLegacyAcrylic(hwnd, cfg.widgetColor);
+    // Acrylic needs the legacy accent path for a visible translucent blur on
+    // desktop widgets. Mica/Tabbed keep the DWM path when it is accepted.
+    if (cfg.appearance == AppearanceMode::Acrylic || FAILED(hr)) {
+        ApplyLegacyAccent(hwnd, cfg.appearance, cfg.widgetColor);
+    }
+
+    if (IsAdvancedAppearance(cfg.appearance) && FAILED(hr)) {
+        Wh_Log(L"DWM backdrop unavailable, using drawn/legacy fallback for widget");
     }
 
     MARGINS margins = {-1, -1, -1, -1};
@@ -966,11 +998,33 @@ static void DrawGlassFrame(HDC hdc, const WidgetConfig& cfg, RECT rc) {
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
     graphics.SetCompositingMode(CompositingModeSourceOver);
 
-    BYTE alpha = (cfg.appearance == AppearanceMode::Acrylic ||
-                  cfg.appearance == AppearanceMode::Mica ||
-                  cfg.appearance == AppearanceMode::Tabbed)
-                     ? 108
-                     : 235;
+    BYTE alpha = 235;
+    BYTE borderAlpha = IsLightTheme(cfg.appearance) ? 50 : 75;
+
+    switch (cfg.appearance) {
+        case AppearanceMode::Acrylic:
+            alpha = 118;
+            borderAlpha = 105;
+            break;
+        case AppearanceMode::Mica:
+            alpha = 178;
+            borderAlpha = 90;
+            break;
+        case AppearanceMode::Tabbed:
+            alpha = 204;
+            borderAlpha = 120;
+            break;
+        case AppearanceMode::None:
+            alpha = 0;
+            borderAlpha = 0;
+            break;
+        case AppearanceMode::Light:
+        case AppearanceMode::Dark:
+        default:
+            alpha = 235;
+            break;
+    }
+
     BYTE r = GetRValue(cfg.widgetColor);
     BYTE g = GetGValue(cfg.widgetColor);
     BYTE b = GetBValue(cfg.widgetColor);
@@ -979,10 +1033,22 @@ static void DrawGlassFrame(HDC hdc, const WidgetConfig& cfg, RECT rc) {
     auto path = CreateRoundRectPath(rect, (REAL)cfg.cornerRadius);
 
     SolidBrush fill(Color(alpha, r, g, b));
-    Pen border(Color(IsLightTheme(cfg.appearance) ? 50 : 75, 255, 255, 255), 1.0f);
+    Pen border(Color(borderAlpha, 255, 255, 255), 1.0f);
 
-    graphics.FillPath(&fill, path.get());
-    graphics.DrawPath(&border, path.get());
+    if (alpha > 0) {
+        graphics.FillPath(&fill, path.get());
+    }
+
+    if (cfg.appearance == AppearanceMode::Tabbed) {
+        RectF topBand(1.0f, 1.0f, (REAL)(rc.right - rc.left - 2), std::min(34.0f, rect.Height));
+        auto bandPath = CreateRoundRectPath(topBand, (REAL)cfg.cornerRadius);
+        SolidBrush band(Color(52, 255, 255, 255));
+        graphics.FillPath(&band, bandPath.get());
+    }
+
+    if (borderAlpha > 0) {
+        graphics.DrawPath(&border, path.get());
+    }
 }
 
 static void DrawPill(HDC hdc, RECT rc, COLORREF color, BYTE alpha) {
