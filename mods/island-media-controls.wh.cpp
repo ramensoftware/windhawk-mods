@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lversion -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -33,7 +33,8 @@ it fits naturally alongside your taskbar and system tray items.
 - **Live media information:** See album artwork, track title, and artist at a
   glance, with smooth transitions when the active media session changes.
 - **Expanded player:** Click the compact island to open a native XAML player
-  with artwork, playback progress, and previous, play/pause, and next controls.
+  with artwork, seekable playback progress, and previous, play/pause, and next
+  controls.
 - **Light and dark themes:** Colors, text, surfaces, and controls automatically
   follow the Windows app theme.
 - **Fluent visuals:** Native Acrylic, rounded XAML geometry, album-art color
@@ -151,6 +152,8 @@ it fits naturally alongside your taskbar and system tray items.
 #include <cstdint>
 #include <cmath>
 #include <climits>
+#include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -231,6 +234,8 @@ using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
 using Std_Ref_Decref_t = void(WINAPI*)(void* pThis);
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
 using WindowThreadProc = void (*)(void*);
+using MediaCommand =
+    std::function<void(gsm::GlobalSystemMediaTransportControlsSession const&)>;
 
 Settings g_settings;
 std::mutex g_mediaMutex;
@@ -247,7 +252,10 @@ std::chrono::steady_clock::time_point g_pendingMediaSwitchSince;
 int g_pendingMediaSwitchCount = 0;
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_mediaThreadRunning = false;
-std::thread g_mediaThread;
+std::thread* g_mediaThread = nullptr;
+std::mutex g_mediaCommandMutex;
+std::condition_variable g_mediaCommandCv;
+std::deque<MediaCommand> g_mediaCommands;
 
 HWND g_taskbarWnd = nullptr;
 Grid g_playerGrid = nullptr;
@@ -255,19 +263,12 @@ FrameworkElement g_injectionParent = nullptr;
 int g_playerColumn = -1;
 bool g_expanded = false;
 ScaleTransform g_islandScale = nullptr;
-ScaleTransform g_expandScale = nullptr;
-TranslateTransform g_expandTranslate = nullptr;
 uint64_t g_lastThumbnailHash = 0;
 winrt::event_token g_hoverRenderingToken{};
 bool g_hoverRenderingHooked = false;
 double g_currentHoverScale = 1.0;
 double g_targetHoverScale = 1.0;
 std::chrono::steady_clock::time_point g_lastHoverFrameTime{};
-winrt::event_token g_expandRenderingToken{};
-bool g_expandRenderingHooked = false;
-double g_currentExpandProgress = 0.0;
-double g_targetExpandProgress = 0.0;
-std::chrono::steady_clock::time_point g_lastExpandFrameTime{};
 bool g_lastDarkMode = false;
 bool g_themeVisualsValid = false;
 bool g_popupXamlThemeValid = false;
@@ -552,10 +553,11 @@ std::vector<uint8_t> ReadThumbnailBytes(streams::IRandomAccessStreamReference co
         }
 
         uint32_t size = static_cast<uint32_t>(size64);
-        streams::Buffer buffer(size);
-        stream.ReadAsync(buffer, size, streams::InputStreamOptions::None).get();
+        auto buffer = stream.ReadAsync(streams::Buffer(size), size,
+                                       streams::InputStreamOptions::None)
+                          .get();
         streams::DataReader reader = streams::DataReader::FromBuffer(buffer);
-        bytes.resize(reader.UnconsumedBufferLength());
+        bytes.resize(buffer.Length());
         if (!bytes.empty()) {
             reader.ReadBytes(winrt::array_view<uint8_t>(bytes));
         }
@@ -648,7 +650,12 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
     }
 
     if (tid == GetCurrentThreadId()) {
-        proc(param);
+        try {
+            proc(param);
+        } catch (...) {
+            Wh_Log(L"Island: exception in taskbar-thread callback");
+            return false;
+        }
         return true;
     }
 
@@ -661,7 +668,11 @@ bool RunFromWindowThread(HWND hwnd, WindowThreadProc proc, void* param) {
                     RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == innerMsg) {
                     auto payload = reinterpret_cast<Payload*>(cwp->lParam);
-                    payload->proc(payload->param);
+                    try {
+                        payload->proc(payload->param);
+                    } catch (...) {
+                        Wh_Log(L"Island: exception in taskbar-thread hook callback");
+                    }
                 }
             }
             return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -988,19 +999,31 @@ void RefreshMediaState() {
     SetMedia(std::move(state));
 }
 
-void RunMediaCommand(void (*command)(gsm::GlobalSystemMediaTransportControlsSession const&)) {
-    std::thread([command] {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        try {
-            auto session = CurrentSession();
-            if (session) {
-                command(session);
-                Sleep(100);
-                RefreshMediaState();
-            }
-        } catch (...) {
-        }
-    }).detach();
+void RunMediaCommand(MediaCommand command) {
+    if (!command || g_unloading || !g_mediaThreadRunning) {
+        return;
+    }
+
+    {
+        std::lock_guard lock(g_mediaCommandMutex);
+        g_mediaCommands.push_back(std::move(command));
+    }
+    g_mediaCommandCv.notify_one();
+}
+
+void SeekToMediaPosition(double ratio) {
+    MediaState state = SnapshotMedia();
+    if (!state.hasSession || state.durationTicks <= 0) {
+        return;
+    }
+
+    ratio = Clamp(ratio, 0.0, 1.0);
+    int64_t positionTicks = static_cast<int64_t>(
+        std::llround(static_cast<double>(state.durationTicks) * ratio));
+    RunMediaCommand([positionTicks](
+                        gsm::GlobalSystemMediaTransportControlsSession const& session) {
+        session.TryChangePlaybackPositionAsync(positionTicks).get();
+    });
 }
 
 uint64_t ThumbnailHash(std::vector<uint8_t> const& bytes) {
@@ -1275,274 +1298,6 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
     if (stream) stream->Release();
     return output;
 }
-
-std::vector<uint8_t> CreateAbstractAlbumCoverBytes(std::vector<uint8_t> const& bytes, bool bottomFadeToMiddle = false) {
-    std::vector<uint8_t> output;
-    if (bytes.empty()) {
-        return output;
-    }
-
-    // Abstract color-wash pipeline for low-resolution artwork:
-    //   original thumbnail -> tiny sampling grid -> light blur -> macro-block averaging
-    //   -> saturation/brightness lift -> color quantization -> PNG.
-    // This deliberately avoids treating a browser thumbnail as a sharp photo when
-    // the source is already low-res; instead it turns it into a soft Fluent-like
-    // color field for the control-card/backdrop wash layers.
-    constexpr UINT kLowDetailSize = 18;
-    constexpr UINT kBlurRadius = 1;
-    constexpr int kPreBlurPasses = 2;
-    constexpr UINT kMacroBlock = 3;
-    constexpr double kSaturation = 1.20;
-    constexpr double kBrightness = 1.04;
-    constexpr int kQuantStep = 24;
-    const UINT stride = kLowDetailSize * 4;
-    const UINT bufferSize = stride * kLowDetailSize;
-
-    IStream* stream = SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size()));
-    IWICImagingFactory* factory = nullptr;
-    IWICBitmapDecoder* decoder = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICBitmapScaler* scaler = nullptr;
-    IWICFormatConverter* converter = nullptr;
-    IStream* outStream = nullptr;
-    IWICBitmapEncoder* encoder = nullptr;
-    IWICBitmapFrameEncode* outFrame = nullptr;
-    IPropertyBag2* propertyBag = nullptr;
-
-    HRESULT hr = stream ? S_OK : E_FAIL;
-    if (SUCCEEDED(hr)) {
-        hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                              IID_PPV_ARGS(&factory));
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateDecoderFromStream(stream, nullptr,
-                                              WICDecodeMetadataCacheOnLoad, &decoder);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = decoder->GetFrame(0, &frame);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateBitmapScaler(&scaler);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = scaler->Initialize(frame, kLowDetailSize, kLowDetailSize,
-                                WICBitmapInterpolationModeFant);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateFormatConverter(&converter);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = converter->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA,
-                                   WICBitmapDitherTypeNone, nullptr, 0,
-                                   WICBitmapPaletteTypeCustom);
-    }
-
-    std::vector<BYTE> pixels(bufferSize);
-    if (SUCCEEDED(hr)) {
-        hr = converter->CopyPixels(nullptr, stride, bufferSize, pixels.data());
-    }
-
-    auto boxBlurPass = [&] {
-        std::vector<BYTE> source = pixels;
-        for (UINT y = 0; y < kLowDetailSize; ++y) {
-            for (UINT x = 0; x < kLowDetailSize; ++x) {
-                int sumB = 0;
-                int sumG = 0;
-                int sumR = 0;
-                int sumA = 0;
-                int count = 0;
-                int left = std::max(0, static_cast<int>(x) - static_cast<int>(kBlurRadius));
-                int right = std::min(static_cast<int>(kLowDetailSize) - 1,
-                                     static_cast<int>(x) + static_cast<int>(kBlurRadius));
-                int top = std::max(0, static_cast<int>(y) - static_cast<int>(kBlurRadius));
-                int bottom = std::min(static_cast<int>(kLowDetailSize) - 1,
-                                      static_cast<int>(y) + static_cast<int>(kBlurRadius));
-                for (int yy = top; yy <= bottom; ++yy) {
-                    for (int xx = left; xx <= right; ++xx) {
-                        BYTE* pixel = source.data() +
-                            (static_cast<size_t>(yy) * kLowDetailSize + xx) * 4;
-                        sumB += pixel[0];
-                        sumG += pixel[1];
-                        sumR += pixel[2];
-                        sumA += pixel[3];
-                        ++count;
-                    }
-                }
-                BYTE* target = pixels.data() +
-                    (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
-                target[0] = static_cast<BYTE>(sumB / count);
-                target[1] = static_cast<BYTE>(sumG / count);
-                target[2] = static_cast<BYTE>(sumR / count);
-                target[3] = static_cast<BYTE>(sumA / count);
-            }
-        }
-    };
-
-    auto clampByte = [](double value) -> BYTE {
-        value = Clamp(value, 0.0, 255.0);
-        return static_cast<BYTE>(std::lround(value));
-    };
-
-    auto posterize = [&](int value) -> BYTE {
-        value = Clamp(value, 0, 255);
-        int quantized = ((value + kQuantStep / 2) / kQuantStep) * kQuantStep;
-        return static_cast<BYTE>(Clamp(quantized, 0, 255));
-    };
-
-    auto macroBlockAveragePass = [&] {
-        std::vector<BYTE> source = pixels;
-        for (UINT by = 0; by < kLowDetailSize; by += kMacroBlock) {
-            for (UINT bx = 0; bx < kLowDetailSize; bx += kMacroBlock) {
-                UINT blockRight = std::min(kLowDetailSize, bx + kMacroBlock);
-                UINT blockBottom = std::min(kLowDetailSize, by + kMacroBlock);
-                int sumB = 0;
-                int sumG = 0;
-                int sumR = 0;
-                int sumA = 0;
-                int count = 0;
-                for (UINT y = by; y < blockBottom; ++y) {
-                    for (UINT x = bx; x < blockRight; ++x) {
-                        BYTE* pixel = source.data() +
-                            (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
-                        sumB += pixel[0];
-                        sumG += pixel[1];
-                        sumR += pixel[2];
-                        sumA += pixel[3];
-                        ++count;
-                    }
-                }
-                BYTE avgB = static_cast<BYTE>(sumB / count);
-                BYTE avgG = static_cast<BYTE>(sumG / count);
-                BYTE avgR = static_cast<BYTE>(sumR / count);
-                BYTE avgA = static_cast<BYTE>(sumA / count);
-                for (UINT y = by; y < blockBottom; ++y) {
-                    for (UINT x = bx; x < blockRight; ++x) {
-                        BYTE* target = pixels.data() +
-                            (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
-                        target[0] = avgB;
-                        target[1] = avgG;
-                        target[2] = avgR;
-                        target[3] = avgA;
-                    }
-                }
-            }
-        }
-    };
-
-    auto abstractColorPass = [&] {
-        for (UINT y = 0; y < kLowDetailSize; ++y) {
-            for (UINT x = 0; x < kLowDetailSize; ++x) {
-                BYTE* pixel = pixels.data() +
-                    (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
-                double b = pixel[0];
-                double g = pixel[1];
-                double r = pixel[2];
-                double luma = 0.114 * b + 0.587 * g + 0.299 * r;
-                b = (luma + (b - luma) * kSaturation) * kBrightness;
-                g = (luma + (g - luma) * kSaturation) * kBrightness;
-                r = (luma + (r - luma) * kSaturation) * kBrightness;
-                pixel[0] = posterize(clampByte(b));
-                pixel[1] = posterize(clampByte(g));
-                pixel[2] = posterize(clampByte(r));
-            }
-        }
-    };
-
-    if (SUCCEEDED(hr)) {
-        for (int pass = 0; pass < kPreBlurPasses; ++pass) {
-            boxBlurPass();
-        }
-        macroBlockAveragePass();
-        abstractColorPass();
-    }
-
-    if (SUCCEEDED(hr) && bottomFadeToMiddle) {
-        // Expanded-surface color wash: keep only a low-frequency album glow
-        // near the bottom of the rounded background shell. The image itself
-        // carries a vertical alpha gradient: fully transparent from the top to
-        // the middle, then easing to a stronger translucent value at the bottom.
-        const double kBottomAlpha = IsDarkModeApprox() ? 0.72 : 0.88;
-        const double middle = (static_cast<double>(kLowDetailSize) - 1.0) * 0.50;
-        const double bottom = static_cast<double>(kLowDetailSize) - 1.0;
-        for (UINT y = 0; y < kLowDetailSize; ++y) {
-            double amount = 0.0;
-            if (static_cast<double>(y) > middle && bottom > middle) {
-                amount = (static_cast<double>(y) - middle) / (bottom - middle);
-                amount = Clamp(amount, 0.0, 1.0);
-                amount = amount * amount * amount * (amount * (amount * 6.0 - 15.0) + 10.0);
-            }
-            double alphaScale = kBottomAlpha * amount;
-            for (UINT x = 0; x < kLowDetailSize; ++x) {
-                BYTE* pixel = pixels.data() +
-                    (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
-                pixel[3] = static_cast<BYTE>(std::lround(pixel[3] * alphaScale));
-                pixel[0] = static_cast<BYTE>(std::lround(pixel[0] * alphaScale));
-                pixel[1] = static_cast<BYTE>(std::lround(pixel[1] * alphaScale));
-                pixel[2] = static_cast<BYTE>(std::lround(pixel[2] * alphaScale));
-            }
-        }
-    }
-
-    if (SUCCEEDED(hr)) {
-        hr = CreateStreamOnHGlobal(nullptr, TRUE, &outStream);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->Initialize(outStream, WICBitmapEncoderNoCache);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->CreateNewFrame(&outFrame, &propertyBag);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->Initialize(propertyBag);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->SetSize(kLowDetailSize, kLowDetailSize);
-    }
-    WICPixelFormatGUID pixelFormat = GUID_WICPixelFormat32bppPBGRA;
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->SetPixelFormat(&pixelFormat);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->WritePixels(kLowDetailSize, stride, bufferSize, pixels.data());
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->Commit();
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->Commit();
-    }
-    if (SUCCEEDED(hr)) {
-        HGLOBAL memory = nullptr;
-        hr = GetHGlobalFromStream(outStream, &memory);
-        if (SUCCEEDED(hr) && memory) {
-            SIZE_T size = GlobalSize(memory);
-            void* data = GlobalLock(memory);
-            if (data && size > 0) {
-                auto first = static_cast<uint8_t*>(data);
-                output.assign(first, first + size);
-            }
-            if (data) {
-                GlobalUnlock(memory);
-            }
-        }
-    }
-
-    if (propertyBag) propertyBag->Release();
-    if (outFrame) outFrame->Release();
-    if (encoder) encoder->Release();
-    if (outStream) outStream->Release();
-    if (converter) converter->Release();
-    if (scaler) scaler->Release();
-    if (frame) frame->Release();
-    if (decoder) decoder->Release();
-    if (factory) factory->Release();
-    if (stream) stream->Release();
-    return output;
-}
-
 
 winrt::Windows::UI::Color DefaultPopupAccentColor() {
     return Color(0xFF, 0x4F, 0x7D, 0xE8);
@@ -2042,205 +1797,6 @@ std::vector<uint8_t> CreateMeshGradientAlbumCoverBytes(std::vector<uint8_t> cons
 }
 
 
-std::vector<uint8_t> CreateRibbonWaveAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
-    if (bytes.empty()) {
-        return {};
-    }
-
-    constexpr UINT kSampleSize = 14;
-    constexpr UINT kOutputSize = 128;
-    const UINT stride = kSampleSize * 4;
-    const UINT bufferSize = stride * kSampleSize;
-
-    IStream* stream = SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size()));
-    IWICImagingFactory* factory = nullptr;
-    IWICBitmapDecoder* decoder = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICBitmapScaler* scaler = nullptr;
-    IWICFormatConverter* converter = nullptr;
-
-    HRESULT hr = stream ? S_OK : E_FAIL;
-    if (SUCCEEDED(hr)) {
-        hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                              IID_PPV_ARGS(&factory));
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateDecoderFromStream(stream, nullptr,
-                                              WICDecodeMetadataCacheOnLoad, &decoder);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = decoder->GetFrame(0, &frame);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateBitmapScaler(&scaler);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = scaler->Initialize(frame, kSampleSize, kSampleSize,
-                                WICBitmapInterpolationModeFant);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateFormatConverter(&converter);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = converter->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA,
-                                   WICBitmapDitherTypeNone, nullptr, 0,
-                                   WICBitmapPaletteTypeCustom);
-    }
-
-    std::vector<BYTE> sample(bufferSize);
-    if (SUCCEEDED(hr)) {
-        hr = converter->CopyPixels(nullptr, stride, bufferSize, sample.data());
-    }
-    if (FAILED(hr)) {
-        if (converter) converter->Release();
-        if (scaler) scaler->Release();
-        if (frame) frame->Release();
-        if (decoder) decoder->Release();
-        if (factory) factory->Release();
-        if (stream) stream->Release();
-        return {};
-    }
-
-    auto averageRectColor = [&](int x0, int y0, int x1, int y1, double sat = 1.14, double bri = 1.03)
-        -> winrt::Windows::UI::Color {
-        long sumB = 0, sumG = 0, sumR = 0, sumA = 0, count = 0;
-        x0 = std::clamp(x0, 0, static_cast<int>(kSampleSize) - 1);
-        y0 = std::clamp(y0, 0, static_cast<int>(kSampleSize) - 1);
-        x1 = std::clamp(x1, x0 + 1, static_cast<int>(kSampleSize));
-        y1 = std::clamp(y1, y0 + 1, static_cast<int>(kSampleSize));
-        for (int y = y0; y < y1; ++y) {
-            for (int x = x0; x < x1; ++x) {
-                BYTE* pixel = sample.data() + (static_cast<size_t>(y) * kSampleSize + x) * 4;
-                sumB += pixel[0]; sumG += pixel[1]; sumR += pixel[2]; sumA += pixel[3]; ++count;
-            }
-        }
-        if (count <= 0) return DefaultPopupAccentColor();
-        return BoostArtworkColor(Color(static_cast<BYTE>(sumA / count),
-                                       static_cast<BYTE>(sumR / count),
-                                       static_cast<BYTE>(sumG / count),
-                                       static_cast<BYTE>(sumB / count)), sat, bri);
-    };
-
-    struct SalientSample {
-        winrt::Windows::UI::Color color = DefaultPopupAccentColor();
-        float x = 0.68f;
-        float y = 0.34f;
-        double score = -1.0;
-    };
-    SalientSample salient;
-    for (UINT y = 0; y < kSampleSize; ++y) {
-        for (UINT x = 0; x < kSampleSize; ++x) {
-            BYTE* pixel = sample.data() + (static_cast<size_t>(y) * kSampleSize + x) * 4;
-            double b = pixel[0], g = pixel[1], r = pixel[2];
-            double maxChannel = std::max({r, g, b});
-            double minChannel = std::min({r, g, b});
-            double chroma = maxChannel - minChannel;
-            double saturation = maxChannel > 1.0 ? chroma / maxChannel : 0.0;
-            double luma = 0.299 * r + 0.587 * g + 0.114 * b;
-            double lumaWindow = 1.0 - std::abs(luma - 150.0) / 150.0;
-            lumaWindow = Clamp(lumaWindow, 0.0, 1.0);
-            double score = saturation * saturation * (0.42 + 0.58 * lumaWindow) *
-                           (0.40 + 0.60 * (chroma / 255.0));
-            if (score > salient.score) {
-                salient.score = score;
-                salient.color = BoostArtworkColor(Color(pixel[3], pixel[2], pixel[1], pixel[0]), 1.42, 1.10);
-                salient.x = kSampleSize > 1 ? static_cast<float>(x) / (kSampleSize - 1) : 0.68f;
-                salient.y = kSampleSize > 1 ? static_cast<float>(y) / (kSampleSize - 1) : 0.34f;
-            }
-        }
-    }
-    salient.x = std::clamp(salient.x, 0.18f, 0.84f);
-    salient.y = std::clamp(salient.y, 0.18f, 0.82f);
-
-    auto c00 = averageRectColor(0, 0, 6, 6);
-    auto c10 = averageRectColor(8, 0, 14, 6);
-    auto c01 = averageRectColor(0, 8, 6, 14);
-    auto c11 = averageRectColor(8, 8, 14, 14);
-    auto cCenter = averageRectColor(3, 3, 11, 11, 1.10, 1.05);
-    auto ribbonColor1 = averageRectColor(2, 5, 12, 10, 1.24, 1.08);
-    auto ribbonColor2 = averageRectColor(0, 6, 8, 14, 1.18, 1.04);
-    auto ribbonAccent = salient.color;
-    auto ribbonAccentSoft = BoostArtworkColor(ribbonAccent, 1.08, 1.17);
-
-    std::vector<BYTE> out(static_cast<size_t>(kOutputSize) * kOutputSize * 4);
-    auto lerpColor = [](winrt::Windows::UI::Color a, winrt::Windows::UI::Color b, double t)
-        -> winrt::Windows::UI::Color {
-        t = Clamp(t, 0.0, 1.0);
-        auto L = [&](BYTE av, BYTE bv) -> BYTE {
-            return static_cast<BYTE>(std::clamp(std::lround(av * (1.0 - t) + bv * t), 0l, 255l));
-        };
-        return Color(255, L(a.R, b.R), L(a.G, b.G), L(a.B, b.B));
-    };
-
-    for (UINT y = 0; y < kOutputSize; ++y) {
-        double fy = kOutputSize > 1 ? static_cast<double>(y) / (kOutputSize - 1) : 0.0;
-        for (UINT x = 0; x < kOutputSize; ++x) {
-            double fx = kOutputSize > 1 ? static_cast<double>(x) / (kOutputSize - 1) : 0.0;
-            // Base background: bilinear blend of 4 corners + soft center lift.
-            double topBlend = 1.0 - fy;
-            auto top = lerpColor(c00, c10, fx);
-            auto bottom = lerpColor(c01, c11, fx);
-            auto base = lerpColor(bottom, top, topBlend);
-            double centerGlow = std::exp(-((fx - 0.5) * (fx - 0.5) + (fy - 0.48) * (fy - 0.48)) / (2.0 * 0.24 * 0.24));
-            double r = base.R * (1.0 - 0.22 * centerGlow) + cCenter.R * (0.22 * centerGlow);
-            double g = base.G * (1.0 - 0.22 * centerGlow) + cCenter.G * (0.22 * centerGlow);
-            double b = base.B * (1.0 - 0.22 * centerGlow) + cCenter.B * (0.22 * centerGlow);
-
-            // Ribbon 1: broad main wave.
-            double y1 = 0.33 + 0.09 * std::sin((fx * 1.08 + 0.03) * 6.28318530718) + 0.05 * (fx - 0.5);
-            double d1 = std::abs(fy - y1);
-            double w1 = std::exp(-(d1 * d1) / (2.0 * 0.070 * 0.070));
-            r = r * (1.0 - 0.34 * w1) + ribbonColor1.R * (0.34 * w1);
-            g = g * (1.0 - 0.34 * w1) + ribbonColor1.G * (0.34 * w1);
-            b = b * (1.0 - 0.34 * w1) + ribbonColor1.B * (0.34 * w1);
-
-            // Ribbon 2: secondary crossing wave.
-            double y2 = 0.62 + 0.08 * std::sin((fx * 0.86 + 0.31) * 6.28318530718) - 0.06 * (fx - 0.5);
-            double d2 = std::abs(fy - y2);
-            double w2 = std::exp(-(d2 * d2) / (2.0 * 0.058 * 0.058));
-            r = r * (1.0 - 0.26 * w2) + ribbonColor2.R * (0.26 * w2);
-            g = g * (1.0 - 0.26 * w2) + ribbonColor2.G * (0.26 * w2);
-            b = b * (1.0 - 0.26 * w2) + ribbonColor2.B * (0.26 * w2);
-
-            // Accent ribbon: tighter and more saturated, following the salient color position.
-            double y3 = salient.y + 0.06 * std::sin((fx * 1.22 + salient.x * 0.65) * 6.28318530718) +
-                        0.035 * (fx - salient.x);
-            double d3 = fy - y3;
-            double core3 = std::exp(-(d3 * d3) / (2.0 * 0.038 * 0.038));
-            double halo3 = std::exp(-(d3 * d3) / (2.0 * 0.090 * 0.090));
-            r = r * (1.0 - 0.36 * core3) + ribbonAccent.R * (0.36 * core3);
-            g = g * (1.0 - 0.36 * core3) + ribbonAccent.G * (0.36 * core3);
-            b = b * (1.0 - 0.36 * core3) + ribbonAccent.B * (0.36 * core3);
-            r = r * (1.0 - 0.14 * halo3) + ribbonAccentSoft.R * (0.14 * halo3);
-            g = g * (1.0 - 0.14 * halo3) + ribbonAccentSoft.G * (0.14 * halo3);
-            b = b * (1.0 - 0.14 * halo3) + ribbonAccentSoft.B * (0.14 * halo3);
-
-            // Add a subtle specular rim on the accent ribbon to keep a premium feel.
-            double rim = std::exp(-((d3 + 0.010) * (d3 + 0.010)) / (2.0 * 0.018 * 0.018));
-            double sheen = 0.11 * rim;
-            r = r * (1.0 - sheen) + 255.0 * sheen;
-            g = g * (1.0 - sheen) + 255.0 * sheen;
-            b = b * (1.0 - sheen) + 255.0 * sheen;
-
-            size_t idx = (static_cast<size_t>(y) * kOutputSize + x) * 4;
-            out[idx + 0] = static_cast<BYTE>(std::clamp(std::lround(b), 0l, 255l));
-            out[idx + 1] = static_cast<BYTE>(std::clamp(std::lround(g), 0l, 255l));
-            out[idx + 2] = static_cast<BYTE>(std::clamp(std::lround(r), 0l, 255l));
-            out[idx + 3] = 255;
-        }
-    }
-
-    if (converter) converter->Release();
-    if (scaler) scaler->Release();
-    if (frame) frame->Release();
-    if (decoder) decoder->Release();
-    if (factory) factory->Release();
-    if (stream) stream->Release();
-    return EncodePbgraPngBytes(kOutputSize, kOutputSize, out);
-}
-
-
-
 struct AdaptiveArtworkPalette {
     winrt::Windows::UI::Color tl = DefaultPopupAccentColor();
     winrt::Windows::UI::Color tr = DefaultPopupAccentColor();
@@ -2489,78 +2045,6 @@ std::vector<uint8_t> CreateEnergyFlameAlbumCoverBytes(std::vector<uint8_t> const
     });
 }
 
-std::vector<uint8_t> CreateCalmMeshAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
-    AdaptiveArtworkPalette pal;
-    if (!ExtractAdaptiveArtworkPalette(bytes, pal)) {
-        return {};
-    }
-    auto coolA = LerpArtworkColor(pal.tl, pal.center, 0.52);
-    auto coolB = LerpArtworkColor(pal.tr, pal.bl, 0.42);
-    auto aqua = BoostArtworkColor(LerpArtworkColor(pal.accentSoft, pal.center, 0.45), 1.06, 1.10);
-    return RenderAdaptiveArtworkTemplate(pal, [&](double fx, double fy, RenderColorD& c) {
-        auto top = LerpArtworkColor(coolA, pal.tr, fx);
-        auto bottom = LerpArtworkColor(pal.bl, pal.br, fx);
-        BlendRenderColor(c, LerpArtworkColor(bottom, top, 1.0 - fy), 1.0);
-        BlendRenderColor(c, pal.tl, 0.56 * GaussianBlobWeight(fx, fy, 0.12, 0.20, 0.40, 0.34, 0.12));
-        BlendRenderColor(c, pal.tr, 0.42 * GaussianBlobWeight(fx, fy, 0.84, 0.16, 0.34, 0.34, 0.14));
-        BlendRenderColor(c, aqua, 0.46 * GaussianBlobWeight(fx, fy, 0.58, 0.68, 0.48, 0.24, -0.34));
-        BlendRenderColor(c, pal.accentSoft, 0.18 * DiagonalBeamWeight(fx, fy, 0.78, 0.30, -0.56, 0.34, 0.11));
-        BlendRenderColor(c, pal.center, 0.20 * RibbonWeight(fx, fy, 0.64, 0.04, 0.98, 0.32, -0.05, 0.09));
-    });
-}
-
-std::vector<uint8_t> CreatePinkRibbonAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
-    AdaptiveArtworkPalette pal;
-    if (!ExtractAdaptiveArtworkPalette(bytes, pal)) {
-        return {};
-    }
-    auto blush = BoostArtworkColor(LerpArtworkColor(pal.center, Color(255, 255, 225, 232), 0.52), 1.03, 1.06);
-    auto vivid = BoostArtworkColor(LerpArtworkColor(pal.accent, pal.tl, 0.18), 1.26, 1.06);
-    return RenderAdaptiveArtworkTemplate(pal, [&](double fx, double fy, RenderColorD& c) {
-        BlendRenderColor(c, blush, 0.92);
-        BlendRenderColor(c, vivid, 0.70 * GaussianBlobWeight(fx, fy, 0.14, 0.14, 0.36, 0.18, 0.44));
-        BlendRenderColor(c, pal.center, 0.36 * GaussianBlobWeight(fx, fy, 0.42, 0.32, 0.26, 0.16, -0.32));
-        BlendRenderColor(c, pal.accentSoft, 0.48 * RibbonWeight(fx, fy, 0.18, 0.055, 1.08, 0.10, 0.06, 0.05));
-        BlendRenderColor(c, vivid, 0.36 * RibbonWeight(fx, fy, 0.40, 0.038, 1.15, 0.46, -0.04, 0.06));
-        BlendRenderColor(c, pal.bright, 0.18 * DiagonalBeamWeight(fx, fy, 0.58, 0.26, -0.68, 0.24, 0.10));
-    });
-}
-
-std::vector<uint8_t> CreateOrangeVolumeAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
-    AdaptiveArtworkPalette pal;
-    if (!ExtractAdaptiveArtworkPalette(bytes, pal)) {
-        return {};
-    }
-    auto body = BoostArtworkColor(LerpArtworkColor(pal.center, pal.accent, 0.32), 1.10, 1.08);
-    auto light = BoostArtworkColor(LerpArtworkColor(body, Color(255, 255, 235, 96), 0.58), 1.06, 1.08);
-    auto shadow = LerpArtworkColor(pal.dark, pal.bl, 0.40);
-    return RenderAdaptiveArtworkTemplate(pal, [&](double fx, double fy, RenderColorD& c) {
-        BlendRenderColor(c, body, 0.94);
-        BlendRenderColor(c, light, 0.94 * GaussianBlobWeight(fx, fy, 0.62, 0.16, 0.26, 0.30, 0.12));
-        BlendRenderColor(c, shadow, 0.34 * GaussianBlobWeight(fx, fy, 0.30, 0.64, 0.42, 0.34, -0.30));
-        BlendRenderColor(c, pal.accentSoft, 0.22 * GaussianBlobWeight(fx, fy, 0.28, 0.84, 0.28, 0.22, -0.36));
-        BlendRenderColor(c, pal.bright, 0.12 * DiagonalBeamWeight(fx, fy, 0.56, 0.24, -0.46, 0.38, 0.14));
-    });
-}
-
-std::vector<uint8_t> CreatePurpleBeamAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
-    AdaptiveArtworkPalette pal;
-    if (!ExtractAdaptiveArtworkPalette(bytes, pal)) {
-        return {};
-    }
-    auto deep = LerpArtworkColor(pal.dark, Color(255, 34, 18, 86), 0.54);
-    auto purple = BoostArtworkColor(LerpArtworkColor(pal.accent, pal.tr, 0.28), 1.18, 1.04);
-    auto pink = BoostArtworkColor(LerpArtworkColor(pal.accentSoft, Color(255, 255, 150, 175), 0.32), 1.08, 1.10);
-    return RenderAdaptiveArtworkTemplate(pal, [&](double fx, double fy, RenderColorD& c) {
-        BlendRenderColor(c, deep, 1.0);
-        BlendRenderColor(c, purple, 0.58 * GaussianBlobWeight(fx, fy, 0.18, 0.32, 0.38, 0.30, 0.20));
-        BlendRenderColor(c, pink, 0.42 * GaussianBlobWeight(fx, fy, 0.76, 0.42, 0.24, 0.26, -0.30));
-        BlendRenderColor(c, pink, 0.46 * DiagonalBeamWeight(fx, fy, 0.72, 0.34, -0.60, 0.34, 0.08));
-        BlendRenderColor(c, purple, 0.24 * DiagonalBeamWeight(fx, fy, 0.60, 0.22, -0.48, 0.28, 0.10));
-        BlendRenderColor(c, pal.bright, 0.18 * GaussianBlobWeight(fx, fy, 0.70, 0.40, 0.12, 0.18, 0.0));
-    });
-}
-
 std::vector<uint8_t> CreateDisplayAlbumCoverBytes(std::vector<uint8_t> const& bytes) {
     if (bytes.empty()) {
         return {};
@@ -2579,16 +2063,6 @@ std::vector<uint8_t> CreateDisplayAlbumCoverBytes(std::vector<uint8_t> const& by
     return abstractBytes.empty() ? bytes : abstractBytes;
 }
 
-
-double ColorLuminance(winrt::Windows::UI::Color const& color) {
-    return 0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B;
-}
-
-winrt::Windows::UI::Color ContrastTextColorFor(winrt::Windows::UI::Color const& color) {
-    BYTE channel = ColorLuminance(color) > 150.0 ? static_cast<BYTE>(0x10)
-                                                 : static_cast<BYTE>(0xFF);
-    return Color(0xFF, channel, channel, channel);
-}
 
 winrt::Windows::UI::Color ExtractAlbumAccentColor(std::vector<uint8_t> const& bytes) {
     if (bytes.empty()) {
@@ -2946,10 +2420,6 @@ double PopupProgress() {
     return SmoothStep(g_popupAnimationProgress);
 }
 
-double PopupHorizontalProgress() {
-    return PopupProgress();
-}
-
 int LerpInt(int from, int to, double progress) {
     return static_cast<int>(std::lround(from + (to - from) * progress));
 }
@@ -3083,10 +2553,6 @@ mediax::Brush PopupShadowBrush() {
                       : Color(0x46, 0x00, 0x00, 0x00));
 }
 
-mediax::Brush PopupControlStrokeBrush() {
-    return Brush(Color(0x00, 0x00, 0x00, 0x00));
-}
-
 void CalculatePopupFinalLayout(RECT const& finalRect,
                                RECT& artRect,
                                RECT& cardRect,
@@ -3101,7 +2567,6 @@ void CalculatePopupFinalLayout(RECT const& finalRect,
                      finalRect.right - kPopupHostShadowMargin,
                      finalRect.bottom - kPopupHostShadowMargin};
     int finalWidth = surfaceRect.right - surfaceRect.left;
-    int finalHeight = surfaceRect.bottom - surfaceRect.top;
     int targetArt = PopupTargetArtSize(finalRect.right - finalRect.left,
                                        finalRect.bottom - finalRect.top);
 
@@ -3192,9 +2657,7 @@ bool PopupShouldExpandRight(MONITORINFO const& monitorInfo) {
 }
 
 constexpr int kDwmCornerDoNotRound = 1;
-constexpr int kDwmCornerRound = 2;
 constexpr int kDwmBackdropNone = 1;
-constexpr int kDwmBackdropTransient = 3;
 constexpr DWORD kDwmColorNone = 0xFFFFFFFE;  // DWMWA_COLOR_NONE.
 
 DWORD PopupNativeBorderColorRef() {
@@ -3865,6 +3328,75 @@ void InitializePopupCompositionShadow() {
     }
 }
 
+void ResetPopupXamlElementState() {
+    g_popupXamlSource = nullptr;
+    g_popupXamlChild = nullptr;
+    g_popupXamlRoot = nullptr;
+    g_popupXamlCanvas = nullptr;
+    g_popupXamlShadow = nullptr;
+    g_popupXamlShadowVisual = nullptr;
+    g_popupXamlDropShadow = nullptr;
+    g_popupXamlBackdrop = nullptr;
+    g_popupXamlBackdropScale = nullptr;
+    g_popupXamlBackdropTranslate = nullptr;
+    g_popupXamlBackdropCoverFade = nullptr;
+    g_popupXamlBackdropCover = nullptr;
+    g_popupXamlBackdropTint = nullptr;
+    g_popupXamlPanelCoverFrame = nullptr;
+    g_popupXamlPanelCoverScale = nullptr;
+    g_popupXamlPanelCoverTranslate = nullptr;
+    g_popupXamlPanelCoverFade = nullptr;
+    g_popupXamlPanelCover = nullptr;
+    g_popupXamlPanel = nullptr;
+    g_popupXamlPanelScale = nullptr;
+    g_popupXamlPanelTranslate = nullptr;
+    g_popupXamlArtFrame = nullptr;
+    g_popupXamlArtScale = nullptr;
+    g_popupXamlArtTranslate = nullptr;
+    g_popupXamlArtFade = nullptr;
+    g_popupXamlArt = nullptr;
+    g_popupXamlTitle = nullptr;
+    g_popupXamlArtist = nullptr;
+    g_popupXamlOutgoingTitle = nullptr;
+    g_popupXamlOutgoingArtist = nullptr;
+    g_popupXamlTitleTranslate = nullptr;
+    g_popupXamlArtistTranslate = nullptr;
+    g_popupXamlOutgoingTitleTranslate = nullptr;
+    g_popupXamlOutgoingArtistTranslate = nullptr;
+    g_popupTextBaseOpacity = 1.0;
+    g_popupTextTransitionActive = false;
+    g_popupXamlElapsed = nullptr;
+    g_popupXamlDuration = nullptr;
+    g_popupXamlProgress = nullptr;
+    g_popupXamlProgressScale = nullptr;
+    g_popupXamlProgressTrack = nullptr;
+    g_popupXamlProgressFill = nullptr;
+    g_popupXamlProgressGlowMask = nullptr;
+    g_popupXamlProgressGlowClip = nullptr;
+    g_popupXamlProgressGlowLayers.clear();
+    g_popupXamlProgressCoreBlurLayers.clear();
+    g_popupXamlProgressGlowCore = nullptr;
+    g_popupXamlControls = nullptr;
+    g_popupXamlControlsScale = nullptr;
+    g_popupXamlThumbnailHash = UINT64_MAX;
+    g_popupXamlBackdropCoverEnabled = false;
+    g_popupAccentThumbnailHash = UINT64_MAX;
+    g_popupAccentColorValid = false;
+    g_popupAccentColor = DefaultPopupAccentColor();
+    g_popupDisplayedAccentColorValid = false;
+    g_popupDisplayedAccentColor = DefaultPopupAccentColor();
+    g_popupAccentTransitionFrom = DefaultPopupAccentColor();
+    g_popupAccentTransitionTo = DefaultPopupAccentColor();
+    g_popupMediaTransitionProgress = 1.0;
+    g_popupMediaTransitionActive = false;
+    g_popupCoverTransitionActive = false;
+    g_popupXamlThemeValid = false;
+    g_popupXamlThemeMaterial.clear();
+    g_popupXamlThemeButtonStyle.clear();
+    g_popupXamlThemeShadowDepth = -1;
+    g_popupXamlThemeShadowOpacity = -1;
+}
+
 bool InitializePopupXamlHost(HWND hwnd) {
     try {
         g_popupXamlSource = hosting::DesktopWindowXamlSource();
@@ -4088,6 +3620,27 @@ bool InitializePopupXamlHost(HWND hwnd) {
             }));
         canvas.Children().Append(controlsPanel);
 
+        canvas.PointerPressed([](auto const&,
+                                 input::PointerRoutedEventArgs const& e) {
+            if (!g_popupXamlProgressTrack || PopupProgress() < 0.75) {
+                return;
+            }
+
+            auto point = e.GetCurrentPoint(g_popupXamlProgressTrack).Position();
+            double width = g_popupXamlProgressTrack.ActualWidth();
+            double height = g_popupXamlProgressTrack.ActualHeight();
+            if (width <= 0.0) {
+                return;
+            }
+
+            constexpr double hitPadding = 8.0;
+            if (point.X >= 0.0 && point.X <= width &&
+                point.Y >= -hitPadding && point.Y <= height + hitPadding) {
+                SeekToMediaPosition(point.X / width);
+                e.Handled(true);
+            }
+        });
+
         root.Children().Append(canvas);
         g_popupXamlSource.Content(root);
 
@@ -4132,8 +3685,14 @@ bool InitializePopupXamlHost(HWND hwnd) {
         ShowWindow(g_popupXamlChild, SW_SHOWNA);
         return true;
     } catch (...) {
-        g_popupXamlChild = nullptr;
-        g_popupXamlSource = nullptr;
+        if (g_popupXamlSource) {
+            try {
+                g_popupXamlSource.Content(nullptr);
+                g_popupXamlSource.Close();
+            } catch (...) {
+            }
+        }
+        ResetPopupXamlElementState();
         return false;
     }
 }
@@ -4386,14 +3945,6 @@ void UpdatePopupXamlVisuals() {
         controls::Canvas::SetLeft(g_popupXamlProgressFill, progressLeft);
         controls::Canvas::SetTop(g_popupXamlProgressFill, progressTop);
     }
-    bool showProgressGlow = showControls && controlsOpacity > 0.001 &&
-                            playedWidth >= std::max(7.0, progressThickness * 1.6) &&
-                            progressRatio > 0.001;
-    double glowCenterX = progressScreen.left - popupScreen.left +
-                         (progressScreen.right - progressScreen.left) * progressRatio;
-    double glowCenterY = progressScreen.top - popupScreen.top +
-                         (progressScreen.bottom - progressScreen.top) * 0.5;
-
     if (g_popupXamlProgressGlowMask) {
         g_popupXamlProgressGlowMask.Visibility(Visibility::Collapsed);
         g_popupXamlProgressGlowMask.Opacity(0.0);
@@ -5097,15 +4648,30 @@ void FinishCloseExpandedPopup(HWND hwnd) {
     g_popupLiveProgressValid = false;
     g_popupLiveProgressKey.clear();
     g_popupLiveProgressFrameTime = {};
-    g_pendingMediaSwitchKey.clear();
-    g_pendingMediaSwitchCount = 0;
-    g_pendingMediaSwitchSince = {};
+    {
+        std::lock_guard lock(g_mediaMutex);
+        g_pendingMediaSwitchKey.clear();
+        g_pendingMediaSwitchCount = 0;
+        g_pendingMediaSwitchSince = {};
+    }
     g_expanded = false;
-    SetCompactIslandSuppressed(false);
+    try {
+        SetCompactIslandSuppressed(false);
+    } catch (...) {
+        Wh_Log(L"Island: failed to restore compact island after closing popup");
+        try {
+            if (g_playerGrid) {
+                g_playerGrid.Opacity(1.0);
+                g_playerGrid.IsHitTestVisible(true);
+            }
+        } catch (...) {
+        }
+    }
 }
 
 void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
                           winrt::Windows::Foundation::IInspectable const&) {
+    try {
     if (!g_popupXamlRoot || !g_expandedPopup || g_unloading) {
         StopPopupXamlRenderLoop();
         return;
@@ -5149,6 +4715,10 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
             UpdatePlayerContents();
         }
     }
+    } catch (...) {
+        Wh_Log(L"Island: exception in popup rendering callback");
+        FinishCloseExpandedPopup(g_expandedPopup);
+    }
 }
 
 void StartPopupXamlRenderLoop() {
@@ -5161,6 +4731,7 @@ void StartPopupXamlRenderLoop() {
 }
 
 LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    try {
     switch (message) {
         case WM_ERASEBKGND:
             return 1;
@@ -5177,6 +4748,24 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             RECT client{};
             GetClientRect(hwnd, &client);
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            RECT art{};
+            RECT card{};
+            RECT title{};
+            RECT artist{};
+            RECT progress{};
+            RECT elapsed{};
+            RECT duration{};
+            RECT controls{};
+            CalculatePopupFinalLayout(client, art, card, title, artist, progress,
+                                      elapsed, duration, controls);
+            RECT progressHitTarget = progress;
+            InflateRect(&progressHitTarget, 0, 8);
+            if (PtInRect(&progressHitTarget, point) && progress.right > progress.left) {
+                SeekToMediaPosition(
+                    static_cast<double>(point.x - progress.left) /
+                    static_cast<double>(progress.right - progress.left));
+                return 0;
+            }
             for (int i = 0; i < 3; ++i) {
                 RECT button = PopupButtonRect(i, client.right, client.bottom);
                 if (!PtInRect(&button, point)) {
@@ -5259,6 +4848,11 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             return 0;
     }
     return DefWindowProcW(hwnd, message, wParam, lParam);
+    } catch (...) {
+        Wh_Log(L"Island: exception in expanded popup window callback");
+        FinishCloseExpandedPopup(hwnd);
+        return 0;
+    }
 }
 
 bool EnsureExpandedPopup() {
@@ -5501,14 +5095,6 @@ void ApplyExpandedState() {
 
     g_playerGrid.Width(g_settings.compactWidth);
 
-    if (g_expandScale) {
-        g_expandScale.ScaleX(1.0);
-        g_expandScale.ScaleY(1.0);
-    }
-    if (g_expandTranslate) {
-        g_expandTranslate.Y(0.0);
-    }
-
     if (auto backgroundFe = FindChildByName(g_playerGrid, L"Island_Background")) {
         if (auto background = backgroundFe.try_as<Border>()) {
             background.CornerRadius({20, 20, 20, 20});
@@ -5554,59 +5140,7 @@ void ApplyExpandedState() {
     }
 }
 
-void StopExpandRenderLoop() {
-    if (g_expandRenderingHooked) {
-        try {
-            mediax::CompositionTarget::Rendering(g_expandRenderingToken);
-        } catch (...) {
-        }
-        g_expandRenderingHooked = false;
-    }
-}
-
-void OnExpandRendering(winrt::Windows::Foundation::IInspectable const&,
-                       winrt::Windows::Foundation::IInspectable const&) {
-    try {
-        if (!g_playerGrid || g_unloading) {
-            StopExpandRenderLoop();
-            return;
-        }
-
-        auto now = std::chrono::steady_clock::now();
-        double dtSec = 1.0 / 60.0;
-        if (g_lastExpandFrameTime.time_since_epoch().count() != 0) {
-            dtSec = std::chrono::duration_cast<std::chrono::microseconds>(
-                        now - g_lastExpandFrameTime)
-                        .count() /
-                    1000000.0;
-        }
-        g_lastExpandFrameTime = now;
-        dtSec = Clamp(dtSec, 0.0, 0.05);
-
-        double alpha = 1.0 - std::exp(-22.0 * dtSec);
-        alpha = Clamp(alpha, 0.0, 1.0);
-        g_currentExpandProgress +=
-            (g_targetExpandProgress - g_currentExpandProgress) * alpha;
-
-        if (std::abs(g_targetExpandProgress - g_currentExpandProgress) < 0.001) {
-            g_currentExpandProgress = g_targetExpandProgress;
-        }
-
-        ApplyExpandedState();
-
-        if (std::abs(g_targetExpandProgress - g_currentExpandProgress) < 0.001) {
-            StopExpandRenderLoop();
-            g_lastExpandFrameTime = {};
-        }
-    } catch (...) {
-        StopExpandRenderLoop();
-    }
-}
-
 void StartExpandRenderLoop(bool expanded) {
-    StopExpandRenderLoop();
-    g_currentExpandProgress = 0.0;
-    g_targetExpandProgress = 0.0;
     ApplyExpandedState();
     if (expanded) {
         StopHoverRenderLoop();
@@ -5625,20 +5159,53 @@ void StartExpandRenderLoop(bool expanded) {
     }
 }
 
+bool InjectIslandGrid();
+
 void MediaThreadProc() {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     while (g_mediaThreadRunning) {
-        RefreshMediaState();
-        HWND hwnd = g_taskbarWnd;
-        if (hwnd) {
-            RunFromWindowThread(hwnd, [](void*) { UpdatePlayerContents(); }, nullptr);
+        std::deque<MediaCommand> commands;
+        {
+            std::lock_guard lock(g_mediaCommandMutex);
+            commands.swap(g_mediaCommands);
         }
 
-        int waited = 0;
-        while (g_mediaThreadRunning && waited < g_settings.pollIntervalMs) {
-            Sleep(100);
-            waited += 100;
+        if (!commands.empty()) {
+            auto session = CurrentSession();
+            if (session) {
+                for (auto& command : commands) {
+                    try {
+                        command(session);
+                    } catch (...) {
+                    }
+                }
+            }
         }
+
+        RefreshMediaState();
+        HWND hwnd = g_taskbarWnd;
+        if (!hwnd || !IsWindow(hwnd)) {
+            hwnd = FindCurrentProcessTaskbarWnd();
+        }
+        if (hwnd) {
+            RunFromWindowThread(
+                hwnd,
+                [](void* param) {
+                    HWND taskbarWnd = reinterpret_cast<HWND>(param);
+                    if (!g_playerGrid) {
+                        g_taskbarWnd = taskbarWnd;
+                        InjectIslandGrid();
+                    } else {
+                        UpdatePlayerContents();
+                    }
+                },
+                reinterpret_cast<void*>(hwnd));
+        }
+
+        std::unique_lock lock(g_mediaCommandMutex);
+        g_mediaCommandCv.wait_for(
+            lock, std::chrono::milliseconds(g_settings.pollIntervalMs),
+            [] { return !g_mediaThreadRunning || !g_mediaCommands.empty(); });
     }
 }
 
@@ -5647,14 +5214,21 @@ void StartMediaThread() {
         return;
     }
     g_mediaThreadRunning = true;
-    g_mediaThread = std::thread(MediaThreadProc);
+    g_mediaThread = new std::thread(MediaThreadProc);
 }
 
 void StopMediaThread() {
     g_mediaThreadRunning = false;
-    if (g_mediaThread.joinable()) {
-        g_mediaThread.join();
+    g_mediaCommandCv.notify_all();
+    if (g_mediaThread) {
+        if (g_mediaThread->joinable()) {
+            g_mediaThread->join();
+        }
+        delete g_mediaThread;
+        g_mediaThread = nullptr;
     }
+    std::lock_guard lock(g_mediaCommandMutex);
+    g_mediaCommands.clear();
 }
 
 TextBlock MakeTextBlock(const wchar_t* name, double fontSize, bool semibold) {
@@ -5774,26 +5348,13 @@ Grid BuildIslandGrid() {
     wrapper.Background(Brush(Color(0x01, 0, 0, 0)));
     wrapper.RenderTransformOrigin({0.5, 1.0});
 
-    TransformGroup transforms;
     ScaleTransform hoverScale;
     hoverScale.ScaleX(1.0);
     hoverScale.ScaleY(1.0);
-    ScaleTransform expandScale;
-    expandScale.ScaleX(1.0);
-    expandScale.ScaleY(1.0);
-    TranslateTransform expandTranslate;
-    expandTranslate.Y(0.0);
-    transforms.Children().Append(hoverScale);
-    transforms.Children().Append(expandScale);
-    transforms.Children().Append(expandTranslate);
-    wrapper.RenderTransform(transforms);
+    wrapper.RenderTransform(hoverScale);
     g_islandScale = hoverScale;
-    g_expandScale = expandScale;
-    g_expandTranslate = expandTranslate;
     g_currentHoverScale = 1.0;
     g_targetHoverScale = 1.0;
-    g_currentExpandProgress = 0.0;
-    g_targetExpandProgress = 0.0;
 
     Border background;
     background.Name(L"Island_Background");
@@ -6013,6 +5574,7 @@ void UpdatePlayerContents() {
         return;
     }
 
+    try {
     MediaState state = SnapshotMedia();
 
     // Some media sessions briefly report a new title before the new thumbnail is
@@ -6372,11 +5934,20 @@ void UpdatePlayerContents() {
     g_playerGrid.Visibility((g_settings.hideWhenNoMedia && !state.hasSession)
                                 ? Visibility::Collapsed
                                 : Visibility::Visible);
+    } catch (...) {
+        Wh_Log(L"Island: exception while updating player contents");
+        if (g_expandedPopup && IsWindowVisible(g_expandedPopup)) {
+            try {
+                BeginCloseExpandedPopup();
+            } catch (...) {
+                FinishCloseExpandedPopup(g_expandedPopup);
+            }
+        }
+    }
 }
 
 void RemoveIslandGrid() {
     StopHoverRenderLoop();
-    StopExpandRenderLoop();
     StopCompactTextRenderLoop();
     DestroyExpandedPopup();
 
@@ -6385,8 +5956,6 @@ void RemoveIslandGrid() {
         g_injectionParent = nullptr;
         g_playerColumn = -1;
         g_islandScale = nullptr;
-        g_expandScale = nullptr;
-        g_expandTranslate = nullptr;
         g_compactTitleText = nullptr;
         g_compactArtistText = nullptr;
         g_compactTextHost = nullptr;
@@ -6451,8 +6020,6 @@ void RemoveIslandGrid() {
     g_playerColumn = -1;
     g_expanded = false;
     g_islandScale = nullptr;
-    g_expandScale = nullptr;
-    g_expandTranslate = nullptr;
     g_compactTitleText = nullptr;
     g_compactArtistText = nullptr;
     g_compactTextHost = nullptr;
@@ -6472,8 +6039,6 @@ void RemoveIslandGrid() {
     g_popupXamlThemeShadowOpacity = -1;
     g_currentHoverScale = 1.0;
     g_targetHoverScale = 1.0;
-    g_currentExpandProgress = 0.0;
-    g_targetExpandProgress = 0.0;
 }
 
 bool InjectIslandGrid() {
