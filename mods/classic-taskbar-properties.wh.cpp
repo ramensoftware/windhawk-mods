@@ -2,7 +2,7 @@
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
 // @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
-// @version 2.9.3
+// @version 3.0.0
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
@@ -124,6 +124,160 @@ namespace DialogSizes {
 #define ETDT_ENABLETAB (ETDT_ENABLE | ETDT_USETABTEXTURE)
 #endif
 
+// ============================================================================
+// RAII Wrappers
+// ============================================================================
+
+// RAII wrapper for COM initialization
+class ComInitializer {
+public:
+    ComInitializer() : m_initialized(false) {
+        HRESULT hr = OleInitialize(NULL);
+        m_initialized = SUCCEEDED(hr);
+        if (!m_initialized) {
+            Wh_Log(L"ComInitializer: OleInitialize failed with 0x%08X", hr);
+        }
+    }
+    ~ComInitializer() {
+        if (m_initialized) {
+            OleUninitialize();
+        }
+    }
+    bool IsInitialized() const { return m_initialized; }
+    // Non-copyable
+    ComInitializer(const ComInitializer&) = delete;
+    ComInitializer& operator=(const ComInitializer&) = delete;
+private:
+    bool m_initialized;
+};
+
+// RAII wrapper for Registry keys
+class RegKey {
+public:
+    RegKey() : m_hKey(NULL) {}
+    explicit RegKey(HKEY hKey) : m_hKey(hKey) {}
+    ~RegKey() { Close(); }
+    
+    bool Open(HKEY hRoot, LPCWSTR subKey, REGSAM samDesired = KEY_READ) {
+        Close();
+        return RegOpenKeyExW(hRoot, subKey, 0, samDesired, &m_hKey) == ERROR_SUCCESS;
+    }
+    
+    bool Create(HKEY hRoot, LPCWSTR subKey, REGSAM samDesired = KEY_SET_VALUE | KEY_READ) {
+        Close();
+        DWORD disposition = 0;
+        return RegCreateKeyExW(hRoot, subKey, 0, NULL, REG_OPTION_NON_VOLATILE, samDesired, NULL, &m_hKey, &disposition) == ERROR_SUCCESS;
+    }
+    
+    DWORD GetDWord(LPCWSTR valueName, DWORD defaultValue = 0) const {
+        if (!m_hKey) return defaultValue;
+        DWORD value = defaultValue;
+        DWORD size = sizeof(DWORD);
+        RegQueryValueExW(m_hKey, valueName, NULL, NULL, (LPBYTE)&value, &size);
+        return value;
+    }
+    
+    bool SetDWord(LPCWSTR valueName, DWORD value) const {
+        if (!m_hKey) return false;
+        return RegSetValueExW(m_hKey, valueName, 0, REG_DWORD, (const BYTE*)&value, sizeof(DWORD)) == ERROR_SUCCESS;
+    }
+    
+    bool QueryValue(LPCWSTR valueName, BYTE* data, DWORD* size) const {
+        if (!m_hKey) return false;
+        return RegQueryValueExW(m_hKey, valueName, NULL, NULL, data, size) == ERROR_SUCCESS;
+    }
+    
+    bool DeleteValue(LPCWSTR valueName) const {
+        if (!m_hKey) return false;
+        return RegDeleteValueW(m_hKey, valueName) == ERROR_SUCCESS;
+    }
+    
+    void Close() {
+        if (m_hKey) {
+            RegCloseKey(m_hKey);
+            m_hKey = NULL;
+        }
+    }
+    
+    HKEY Get() const { return m_hKey; }
+    operator HKEY() const { return m_hKey; }
+    
+    // Non-copyable
+    RegKey(const RegKey&) = delete;
+    RegKey& operator=(const RegKey&) = delete;
+    
+private:
+    HKEY m_hKey;
+};
+
+// ============================================================================
+// Windows Version Detection
+// ============================================================================
+
+struct WindowsVersion {
+    DWORD majorVersion;
+    DWORD minorVersion;
+    DWORD buildNumber;
+    DWORD ubr;  // Update Build Revision
+    
+    bool IsWindows10() const { return majorVersion == 10 && buildNumber >= 10240 && buildNumber < 22000; }
+    bool IsWindows11() const { return majorVersion == 10 && buildNumber >= 22000; }
+    
+    bool IsSupported() const {
+        return (majorVersion == 10 && buildNumber >= 10240) ||  // Windows 10 1507+
+               (majorVersion == 10 && buildNumber >= 22000);   // Windows 11
+    }
+    
+    bool IsBuildAtLeast(DWORD minBuild) const {
+        return buildNumber >= minBuild;
+    }
+    
+    bool IsBuildAtMost(DWORD maxBuild) const {
+        return buildNumber <= maxBuild;
+    }
+    
+    bool IsBuildBetween(DWORD minBuild, DWORD maxBuild) const {
+        return buildNumber >= minBuild && buildNumber <= maxBuild;
+    }
+};
+
+static WindowsVersion g_windowsVersion = {0, 0, 0, 0};
+
+static bool GetWindowsVersion(WindowsVersion* outVersion) {
+    if (!outVersion) return false;
+    
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    if (!hNtdll) return false;
+    
+    using RtlGetVersion_t = LONG (WINAPI*)(PRTL_OSVERSIONINFOW);
+    auto RtlGetVersion = (RtlGetVersion_t)GetProcAddress(hNtdll, "RtlGetVersion");
+    if (!RtlGetVersion) return false;
+    
+    RTL_OSVERSIONINFOW osvi = {};
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    if (RtlGetVersion(&osvi) != 0) return false;
+    
+    outVersion->majorVersion = osvi.dwMajorVersion;
+    outVersion->minorVersion = osvi.dwMinorVersion;
+    outVersion->buildNumber = osvi.dwBuildNumber;
+    
+    // Try to get UBR from registry
+    RegKey regKey;
+    if (regKey.Open(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion")) {
+        outVersion->ubr = regKey.GetDWord(L"UBR", 0);
+    }
+    
+    Wh_Log(L"Windows version: %lu.%lu.%lu (UBR: %lu)", 
+           outVersion->majorVersion, outVersion->minorVersion, 
+           outVersion->buildNumber, outVersion->ubr);
+    
+    return true;
+}
+
+// ============================================================================
+// Global State
+// ============================================================================
+
 static HANDLE g_hActCtx = INVALID_HANDLE_VALUE;
 
 static void EnsureThemeActCtx() {
@@ -148,15 +302,16 @@ static BOOL CALLBACK ApplyExplorerThemeEnumProc(HWND hwnd, LPARAM lParam) {
 }
 
 static void ApplyExplorerThemeToChildren(HWND hwndParent) {
+    if (!IsWindow(hwndParent)) return;
     EnumChildWindows(hwndParent, ApplyExplorerThemeEnumProc, 0);
 }
 
 static void ApplyDarkTitlebar(HWND hwnd) {
-    HKEY hk; BOOL useDark = FALSE;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
-        DWORD val = 1, sz = sizeof(DWORD);
-        if (RegQueryValueExW(hk, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&val, &sz) == ERROR_SUCCESS) useDark = (val == 0);
-        RegCloseKey(hk);
+    if (!IsWindow(hwnd)) return;
+    RegKey regKey;
+    BOOL useDark = FALSE;
+    if (regKey.Open(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")) {
+        useDark = (regKey.GetDWord(L"AppsUseLightTheme", 1) == 0);
     }
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
 }
@@ -205,6 +360,7 @@ static HWND g_hwndStartCustom = NULL;
 static LONG volatile g_startCustomOpen = 0;
 static HFONT g_hStartFontUi = NULL;
 static HANDLE g_dialogThread = NULL;
+static std::atomic<bool> g_modUnloading{false};
 
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
@@ -360,21 +516,15 @@ static DWORD WINAPI DialogThreadProc(LPVOID);
 class TaskbarSettingsProvider {
 public:
     static DWORD RegGetDWordSafe(HKEY hRoot, LPCWSTR sub, LPCWSTR name, DWORD def) {
-        HKEY hk; DWORD v = def, sz = sizeof(DWORD);
-        if (RegOpenKeyExW(hRoot, sub, 0, KEY_READ, &hk) == ERROR_SUCCESS) {
-            RegQueryValueExW(hk, name, NULL, NULL, (LPBYTE)&v, &sz);
-            RegCloseKey(hk);
-        }
-        return v;
+        RegKey regKey;
+        if (!regKey.Open(hRoot, sub)) return def;
+        return regKey.GetDWord(name, def);
     }
 
     static bool RegSetDWordSafe(HKEY hRoot, LPCWSTR sub, LPCWSTR name, DWORD v) {
-        HKEY hk;
-        LSTATUS r = RegCreateKeyExW(hRoot, sub, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hk, NULL);
-        if (r != ERROR_SUCCESS) return false;
-        r = RegSetValueExW(hk, name, 0, REG_DWORD, (const BYTE*)&v, sizeof(DWORD));
-        RegCloseKey(hk);
-        return (r == ERROR_SUCCESS);
+        RegKey regKey;
+        if (!regKey.Create(hRoot, sub)) return false;
+        return regKey.SetDWord(name, v);
     }
 
     static bool GetLockState() { return RegGetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarSizeMove", 1) == 0; }
@@ -386,18 +536,16 @@ public:
 
     static DWORD GetTaskbarEdge() {
         DWORD edge = 3;
-        HKEY hk;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kStuckKey, 0, KEY_READ, &hk) == ERROR_SUCCESS) {
+        RegKey regKey;
+        if (regKey.Open(HKEY_CURRENT_USER, kStuckKey)) {
             DWORD sz = 0;
-            RegQueryValueExW(hk, L"Settings", NULL, NULL, NULL, &sz);
-            if (sz >= StuckRects::SETTINGS_EDGE_OFFSET + sizeof(DWORD)) {
+            if (regKey.QueryValue(L"Settings", NULL, &sz) && sz >= StuckRects::SETTINGS_EDGE_OFFSET + sizeof(DWORD)) {
                 std::vector<BYTE> d(sz);
-                if (RegQueryValueExW(hk, L"Settings", NULL, NULL, d.data(), &sz) == ERROR_SUCCESS) {
+                if (regKey.QueryValue(L"Settings", d.data(), &sz)) {
                     edge = *reinterpret_cast<DWORD*>(&d[StuckRects::SETTINGS_EDGE_OFFSET]);
                     if (edge > 3) edge = 3;
                 }
             }
-            RegCloseKey(hk);
         }
         return edge;
     }
@@ -432,12 +580,10 @@ public:
         else if (wcscmp(name, L"Links") == 0) guid = kLinksBandGUID;
         else if (wcscmp(name, L"Desktop") == 0) guid = kDeskBandGUID;
         else return false;
-        HKEY hk;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\Toolbar", 0, KEY_READ, &hk) == ERROR_SUCCESS) {
+        RegKey regKey;
+        if (regKey.Open(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\Toolbar")) {
             DWORD sz = 0;
-            LONG res = RegQueryValueExW(hk, guid, NULL, NULL, NULL, &sz);
-            RegCloseKey(hk);
-            return (res == ERROR_SUCCESS);
+            return regKey.QueryValue(guid, NULL, &sz);
         }
         return false;
     }
@@ -452,11 +598,10 @@ public:
         else if (wcscmp(name, L"Links") == 0) guid = kLinksBandGUID;
         else if (wcscmp(name, L"Desktop") == 0) guid = kDeskBandGUID;
         else return;
-        HKEY hk;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\Toolbar", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE | KEY_READ, NULL, &hk, NULL) == ERROR_SUCCESS) {
-            if (enable) RegSetValueExW(hk, guid, 0, REG_SZ, (const BYTE*)L"", sizeof(WCHAR));
-            else RegDeleteValueW(hk, guid);
-            RegCloseKey(hk);
+        RegKey regKey;
+        if (regKey.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\Toolbar")) {
+            if (enable) regKey.SetDWord(guid, 0);
+            else regKey.DeleteValue(guid);
         }
     }
 };
@@ -492,6 +637,7 @@ static HICON GetSystemIcon(int iconId) {
 }
 
 static BOOL CALLBACK SetFontChildProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindow(hwnd)) return TRUE;
     SendMessageW(hwnd, WM_SETFONT, (WPARAM)lParam, TRUE);
     return TRUE;
 }
@@ -514,87 +660,148 @@ struct CTP_ITrayDeskBand : public IUnknown {
 
 enum CtpBandOp { CTP_BAND_HIDE = 0, CTP_BAND_SHOW = 1, CTP_BAND_QUERY = 2 };
 
+// Wrapper for native desk band operations with proper COM initialization
 static bool NativeDeskBandOp(const CLSID& band, CtpBandOp op, bool* pShown) {
-    HRESULT hrInit = OleInitialize(NULL);
-    bool needUninit = SUCCEEDED(hrInit);
+    ComInitializer comInit;
+    if (!comInit.IsInitialized()) {
+        Wh_Log(L"NativeDeskBandOp: COM initialization failed");
+        return false;
+    }
+    
     bool ok = false;
     CTP_ITrayDeskBand* pTray = nullptr;
+    
     HRESULT hr = CoCreateInstance(CLSID_CTP_TrayDeskBand, NULL,
         CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
         IID_CTP_ITrayDeskBand, (void**)&pTray);
+    
     if (SUCCEEDED(hr) && pTray) {
         switch (op) {
-        case CTP_BAND_SHOW: { HRESULT r = pTray->ShowDeskBand(band); ok = SUCCEEDED(r); break; }
-        case CTP_BAND_HIDE: { HRESULT r = pTray->HideDeskBand(band); ok = SUCCEEDED(r); break; }
-        case CTP_BAND_QUERY: { HRESULT q = pTray->IsDeskBandShown(band); if (pShown) *pShown = (q == S_OK); ok = SUCCEEDED(q); break; }
+        case CTP_BAND_SHOW: {
+            HRESULT r = pTray->ShowDeskBand(band);
+            ok = SUCCEEDED(r);
+            if (!ok) Wh_Log(L"NativeDeskBandOp: ShowDeskBand failed with 0x%08X", r);
+            break;
+        }
+        case CTP_BAND_HIDE: {
+            HRESULT r = pTray->HideDeskBand(band);
+            ok = SUCCEEDED(r);
+            if (!ok) Wh_Log(L"NativeDeskBandOp: HideDeskBand failed with 0x%08X", r);
+            break;
+        }
+        case CTP_BAND_QUERY: {
+            HRESULT q = pTray->IsDeskBandShown(band);
+            if (pShown) *pShown = (q == S_OK);
+            ok = SUCCEEDED(q);
+            break;
+        }
         }
         pTray->Release();
+    } else {
+        Wh_Log(L"NativeDeskBandOp: CoCreateInstance failed with 0x%08X", hr);
     }
-    if (needUninit) OleUninitialize();
     return ok;
 }
 
 static void RefreshNativeDeskBandRegistration() {
-    HRESULT hrInit = OleInitialize(NULL);
-    bool needUninit = SUCCEEDED(hrInit);
+    ComInitializer comInit;
+    if (!comInit.IsInitialized()) {
+        Wh_Log(L"RefreshNativeDeskBandRegistration: COM initialization failed");
+        return;
+    }
+    
     CTP_ITrayDeskBand* pTray = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_CTP_TrayDeskBand, NULL,
         CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
         IID_CTP_ITrayDeskBand, (void**)&pTray);
     if (SUCCEEDED(hr) && pTray) {
-        pTray->DeskBandRegistrationChanged();
+        hr = pTray->DeskBandRegistrationChanged();
+        if (FAILED(hr)) {
+            Wh_Log(L"RefreshNativeDeskBandRegistration: DeskBandRegistrationChanged failed with 0x%08X", hr);
+        }
         pTray->Release();
+    } else {
+        Wh_Log(L"RefreshNativeDeskBandRegistration: CoCreateInstance failed with 0x%08X", hr);
     }
-    if (needUninit) OleUninitialize();
 }
 
 static void SetFontAllChildren(HWND hwnd, HFONT hf) {
+    if (!IsWindow(hwnd)) return;
     EnumChildWindows(hwnd, SetFontChildProc, (LPARAM)hf);
 }
 
 static const CLSID CLSID_DesktopBand =
     {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
 
-static bool IsNativeDesktopToolbarShown() {
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray) return false;
-    HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
-    if (hReBar) {
-        HWND hDesktopBand = FindWindowExW(hReBar, NULL, L"ToolbarWindow32", L"Desktop");
-        if (hDesktopBand) return true;
-    }
-    HWND hDesktopBand = FindWindowExW(hTray, NULL, L"ToolbarWindow32", L"Desktop");
-    return (hDesktopBand != NULL);
-}
-
+// Safe wrapper for SHLoadInProc with fallback
 static bool ShowDesktopToolbarViaSHLoadInProc() {
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) return false;
+    if (!hShell32) {
+        Wh_Log(L"[DesktopToolbar] shell32.dll not loaded");
+        return false;
+    }
+    
     auto pSHLoadInProc = (HRESULT(WINAPI*)(REFCLSID))GetProcAddress(hShell32, "SHLoadInProc");
-    if (!pSHLoadInProc) { Wh_Log(L"[DesktopToolbar] SHLoadInProc not found"); return false; }
+    if (!pSHLoadInProc) {
+        Wh_Log(L"[DesktopToolbar] SHLoadInProc not found in shell32.dll");
+        return false;
+    }
+    
+    if (!g_windowsVersion.IsSupported()) {
+        Wh_Log(L"[DesktopToolbar] Windows version not supported for SHLoadInProc");
+        return false;
+    }
+    
+    if (g_windowsVersion.IsBuildAtLeast(22000)) {
+        Wh_Log(L"[DesktopToolbar] Windows 11 detected, SHLoadInProc may have limited functionality");
+    }
+    
     Wh_Log(L"[DesktopToolbar] Calling SHLoadInProc...");
     HRESULT hr = pSHLoadInProc(CLSID_DesktopBand);
     Wh_Log(L"[DesktopToolbar] SHLoadInProc returned 0x%08X", hr);
+    
     if (SUCCEEDED(hr)) {
         HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-        if (hTray) SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+        if (hTray && IsWindow(hTray)) {
+            SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+        }
         SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
         return true;
     }
     return false;
 }
 
+static bool IsNativeDesktopToolbarShown() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!hTray || !IsWindow(hTray)) return false;
+    
+    HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
+    if (hReBar && IsWindow(hReBar)) {
+        HWND hDesktopBand = FindWindowExW(hReBar, NULL, L"ToolbarWindow32", L"Desktop");
+        if (hDesktopBand && IsWindow(hDesktopBand)) return true;
+    }
+    
+    HWND hDesktopBand = FindWindowExW(hTray, NULL, L"ToolbarWindow32", L"Desktop");
+    return (hDesktopBand != NULL && IsWindow(hDesktopBand));
+}
+
 static bool ShowNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Show requested");
-    if (ShowDesktopToolbarViaSHLoadInProc()) {
+    bool result = ShowDesktopToolbarViaSHLoadInProc();
+    
+    if (result) {
         TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
         Wh_Log(L"[DesktopToolbar] Show successful via SHLoadInProc");
         return true;
     }
+    
     Wh_Log(L"[DesktopToolbar] SHLoadInProc failed, using registry fallback");
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
+    
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hTray) SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    if (hTray && IsWindow(hTray)) {
+        SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    }
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
     return true;
 }
@@ -602,8 +809,11 @@ static bool ShowNativeDesktopToolbar() {
 static bool HideNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Hide requested");
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", false);
+    
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hTray) SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    if (hTray && IsWindow(hTray)) {
+        SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    }
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
     return true;
 }
@@ -731,7 +941,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_never_combine, 64, L"Never combine");
     }
 
-    // --- Notification area (LEGGERMENTE PIÙ LUNGHE E DESCRITTIVE) ---
+    // --- Notification area ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.grp_notif, 64, L"Area di notifica");
@@ -759,7 +969,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Customize...");
     }
 
-    // --- Aero Peek (LEGGERMENTE PIÙ LUNGHE E DESCRITTIVE) ---
+    // --- Aero Peek ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.grp_aero, 64, L"Anteprima del desktop con Aero Peek");
@@ -883,7 +1093,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Tablet PC Input Panel"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Desktop");
     }
 
-    // --- About, Start Custom, Folders (compatto) ---
+    // --- About, Start Custom, Folders ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.about_title, 64, L"Informazioni sulla mod");
@@ -1031,6 +1241,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.start_msg_saved_title, 64, L"Settings saved");
     }
 }
+
 static void LoadLanguageSetting() {
     LPCWSTR lang = Wh_GetStringSetting(L"language");
     if (lang && wcslen(lang) > 0 && wcslen(lang) < 8) {
@@ -1043,43 +1254,70 @@ static void LoadLanguageSetting() {
 
 static void ApplyToolbars(bool addr, bool links, bool tablet, bool desk) {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTray && !IsWindow(hTray)) hTray = NULL;
+    
     NativeDeskBandOp(CLSID_CTP_AddressBand, addr ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
     TaskbarSettingsProvider::SetToolbarEnabled(L"Address", addr);
+    
     NativeDeskBandOp(CLSID_CTP_LinksBand, links ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
     TaskbarSettingsProvider::SetToolbarEnabled(L"Links", links);
+    
     if (desk) ShowNativeDesktopToolbar(); else HideNativeDesktopToolbar();
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk);
     TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", tablet);
+    
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
-    if (hTray) SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    if (hTray && IsWindow(hTray)) {
+        SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
+    }
 }
 
 static void InitToolbarsList(HWND hList) {
+    if (!IsWindow(hList)) return;
+    
     ListView_SetExtendedListViewStyle(hList, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
     ListView_DeleteAllItems(hList);
     while (ListView_DeleteColumn(hList, 0)) {}
+    
     LVCOLUMNW col = {};
     col.mask = LVCF_WIDTH | LVCF_FMT;
     col.fmt = LVCFMT_LEFT;
     col.cx = 230;
     ListView_InsertColumn(hList, 0, &col);
+    
     const WCHAR* names[] = { g_str.toolbar_address, g_str.toolbar_links, g_str.toolbar_tabletpc, g_str.toolbar_desktop };
     const WCHAR* keys[]  = { L"Address", L"Links", L"TabletPC", L"Desktop" };
     const CLSID* clsids[] = { &CLSID_CTP_AddressBand, &CLSID_CTP_LinksBand, NULL, NULL };
+    
     RefreshNativeDeskBandRegistration();
+    
     for (int i = 0; i < 4; i++) {
         LVITEMW lvi = {};
         lvi.mask = LVIF_TEXT;
         lvi.iItem = i;
         lvi.pszText = (LPWSTR)names[i];
         ListView_InsertItem(hList, &lvi);
+        
         bool checked = false;
         bool shown = false;
         bool got = false;
-        if (i == 2) { shown = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]); got = true; }
-        else if (i == 3) { checked = IsNativeDesktopToolbarShown(); }
-        else if (clsids[i]) { got = NativeDeskBandOp(*clsids[i], CTP_BAND_QUERY, &shown); }
-        if (i != 3) { if (got) { checked = shown; } else { checked = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]); } }
+        
+        if (i == 2) {
+            shown = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]);
+            got = true;
+        } else if (i == 3) {
+            checked = IsNativeDesktopToolbarShown();
+        } else if (clsids[i]) {
+            got = NativeDeskBandOp(*clsids[i], CTP_BAND_QUERY, &shown);
+        }
+        
+        if (i != 3) {
+            if (got) {
+                checked = shown;
+            } else {
+                checked = TaskbarSettingsProvider::GetToolbarEnabled(keys[i]);
+            }
+        }
         ListView_SetCheckState(hList, i, checked ? TRUE : FALSE);
     }
 }
@@ -1089,11 +1327,16 @@ static const int kStartCtls[] = { IDC_TXT_START_INFO, IDC_BTN_START_CUST, IDC_TX
 static const int kToolbarCtls[] = { IDC_TXT_TOOLBARS_INFO, IDC_LST_TOOLBARS, 0 };
 
 static void ShowGroup(HWND hwnd, const int* ids, bool show) {
+    if (!IsWindow(hwnd)) return;
     int cmd = show ? SW_SHOW : SW_HIDE;
-    for (int i = 0; ids[i]; i++) { HWND h = GetDlgItem(hwnd, ids[i]); if (h) ShowWindow(h, cmd); }
+    for (int i = 0; ids[i]; i++) {
+        HWND h = GetDlgItem(hwnd, ids[i]);
+        if (h && IsWindow(h)) ShowWindow(h, cmd);
+    }
 }
 
 static void SwitchTab(HWND hwnd, int tab) {
+    if (!IsWindow(hwnd)) return;
     g_currentTab = tab;
     ShowGroup(hwnd, kTaskbarCtls, tab == 0);
     ShowGroup(hwnd, kStartCtls, tab == 1);
@@ -1101,35 +1344,47 @@ static void SwitchTab(HWND hwnd, int tab) {
 }
 
 static void BalanceTextAndCombo(HWND hwndDlg, int idStatic, int idCombo) {
+    if (!IsWindow(hwndDlg)) return;
+    
     HWND hStatic = GetDlgItem(hwndDlg, idStatic);
     HWND hCombo = GetDlgItem(hwndDlg, idCombo);
-    if (!hStatic || !hCombo) return;
+    if (!hStatic || !IsWindow(hStatic) || !hCombo || !IsWindow(hCombo)) return;
     if (idCombo == IDC_COMBO_BUTTONS) return;
+    
     HFONT hFont = (HFONT)SendMessageW(hStatic, WM_GETFONT, 0, 0);
     if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    
     WCHAR szText[512];
     GetWindowTextW(hStatic, szText, 512);
+    
     HDC hdc = GetDC(hStatic);
     HFONT hOld = (HFONT)SelectObject(hdc, hFont);
     SIZE size;
     GetTextExtentPoint32W(hdc, szText, lstrlenW(szText), &size);
     SelectObject(hdc, hOld);
     ReleaseDC(hStatic, hdc);
+    
     RECT rcStatic, rcCombo;
     GetWindowRect(hStatic, &rcStatic);
     GetWindowRect(hCombo, &rcCombo);
     MapWindowPoints(NULL, hwndDlg, (LPPOINT)&rcStatic, 2);
     MapWindowPoints(NULL, hwndDlg, (LPPOINT)&rcCombo, 2);
+    
     int maxRight = rcCombo.right;
     int newStaticWidth = size.cx + 8;
     int newComboX = rcStatic.left + newStaticWidth;
     int newComboWidth = maxRight - newComboX;
-    if (newComboWidth < 70) { newComboWidth = 70; newStaticWidth = (maxRight - rcStatic.left) - newComboWidth; newComboX = rcStatic.left + newStaticWidth; }
+    if (newComboWidth < 70) {
+        newComboWidth = 70;
+        newStaticWidth = (maxRight - rcStatic.left) - newComboWidth;
+        newComboX = rcStatic.left + newStaticWidth;
+    }
     SetWindowPos(hStatic, NULL, rcStatic.left, rcStatic.top, newStaticWidth, rcStatic.bottom - rcStatic.top, SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowPos(hCombo, NULL, newComboX, rcCombo.top, newComboWidth, rcCombo.bottom - rcCombo.top, SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 static void ShowAboutDialog(HWND parent) {
+    if (parent && !IsWindow(parent)) parent = NULL;
     MessageBoxW(parent, g_str.about_text, g_str.about_title, MB_OK | MB_ICONINFORMATION);
 }
 
@@ -1140,12 +1395,16 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         ApplyDarkTitlebar(hwnd);
         ApplyExplorerThemeToChildren(hwnd);
         EnableThemeDialogTexture(hwnd, ETDT_DISABLE);
+        
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
+        
         if (g_hStartFontUi) { DeleteObject(g_hStartFontUi); g_hStartFontUi = NULL; }
         g_hStartFontUi = CreateFontW(ptPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        
         SetWindowTextW(hwnd, g_str.start_custom_title);
+        
         const DialogControlBinding bindings[] = {
             { IDC_START_GRP_TILES, g_str.start_grp_tiles }, { IDC_CHK_MORE_TILES, g_str.start_chk_more_tiles },
             { IDC_CHK_APP_LIST, g_str.start_chk_app_list }, { IDC_CHK_RECENT_APPS, g_str.start_chk_recent_apps },
@@ -1159,46 +1418,78 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
             { IDC_CHK_FOLDER_PERSONAL, g_str.start_chk_folder_personal }, { IDC_START_STATIC_INFO, g_str.start_info_restart },
             { IDC_START_BTN_APPLY, g_str.btn_apply }, { IDOK, g_str.btn_ok }, { IDCANCEL, g_str.btn_cancel },
         };
-        for (const auto& b : bindings) SetDlgItemTextW(hwnd, b.controlId, b.text);
-        if (g_hStartFontUi) { SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hStartFontUi, TRUE); SetFontAllChildren(hwnd, g_hStartFontUi); }
+        for (const auto& b : bindings) {
+            if (IsWindow(hwnd)) SetDlgItemTextW(hwnd, b.controlId, b.text);
+        }
+        
+        if (g_hStartFontUi && IsWindow(hwnd)) {
+            SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hStartFontUi, TRUE);
+            SetFontAllChildren(hwnd, g_hStartFontUi);
+        }
+        
         for (const auto& s : g_startSettings) {
+            if (!IsWindow(hwnd)) break;
             bool state = GetStartSettingState(s);
             bool locked = s.policyValue && IsSettingLockedByPolicy(s.policyValue);
             HWND hCtrl = GetDlgItem(hwnd, s.controlId);
-            if (hCtrl) { SendMessageW(hCtrl, BM_SETCHECK, state ? BST_CHECKED : BST_UNCHECKED, 0); EnableWindow(hCtrl, !locked); }
+            if (hCtrl && IsWindow(hCtrl)) {
+                SendMessageW(hCtrl, BM_SETCHECK, state ? BST_CHECKED : BST_UNCHECKED, 0);
+                EnableWindow(hCtrl, !locked);
+            }
         }
+        
         for (const auto& f : g_startFolders) {
+            if (!IsWindow(hwnd)) break;
             bool state = TaskbarSettingsProvider::GetStartFolderVisible(f.folderRegValue);
             HWND hCtrl = GetDlgItem(hwnd, f.controlId);
-            if (hCtrl) SendMessageW(hCtrl, BM_SETCHECK, state ? BST_CHECKED : BST_UNCHECKED, 0);
+            if (hCtrl && IsWindow(hCtrl)) {
+                SendMessageW(hCtrl, BM_SETCHECK, state ? BST_CHECKED : BST_UNCHECKED, 0);
+            }
         }
-        EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), FALSE);
-        RECT rc; GetWindowRect(hwnd, &rc);
-        int ww = rc.right - rc.left, wh = rc.bottom - rc.top;
-        SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-        LONG style = GetWindowLongW(hwnd, GWL_STYLE);
-        style &= ~WS_THICKFRAME; style &= ~WS_MAXIMIZEBOX;
-        SetWindowLongW(hwnd, GWL_STYLE, style);
-        SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        
+        if (IsWindow(hwnd)) {
+            EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), FALSE);
+            
+            RECT rc; GetWindowRect(hwnd, &rc);
+            int ww = rc.right - rc.left, wh = rc.bottom - rc.top;
+            SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            
+            LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+            style &= ~WS_THICKFRAME; style &= ~WS_MAXIMIZEBOX;
+            SetWindowLongW(hwnd, GWL_STYLE, style);
+            SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        }
         return TRUE;
     }
     case WM_COMMAND: {
+        if (!IsWindow(hwnd)) break;
         WORD id = LOWORD(wp); WORD act = HIWORD(wp);
-        if (act == BN_CLICKED && id != IDOK && id != IDCANCEL && id != IDC_START_BTN_APPLY) EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), TRUE);
-        if (id == IDOK) { SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_START_BTN_APPLY, BN_CLICKED), 0); if (IsWindow(hwnd)) DestroyWindow(hwnd); }
-        else if (id == IDCANCEL) { DestroyWindow(hwnd); }
-        else if (id == IDC_START_BTN_APPLY) {
+        if (act == BN_CLICKED && id != IDOK && id != IDCANCEL && id != IDC_START_BTN_APPLY) {
+            EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), TRUE);
+        }
+        if (id == IDOK) {
+            SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_START_BTN_APPLY, BN_CLICKED), 0);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        } else if (id == IDCANCEL) {
+            DestroyWindow(hwnd);
+        } else if (id == IDC_START_BTN_APPLY) {
             for (const auto& s : g_startSettings) {
                 HWND hCtrl = GetDlgItem(hwnd, s.controlId);
-                if (hCtrl && IsWindowEnabled(hCtrl)) { bool checked = (SendMessageW(hCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED); SetStartSettingState(s, checked); }
+                if (hCtrl && IsWindow(hCtrl) && IsWindowEnabled(hCtrl)) {
+                    bool checked = (SendMessageW(hCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    SetStartSettingState(s, checked);
+                }
             }
             for (const auto& f : g_startFolders) {
                 HWND hCtrl = GetDlgItem(hwnd, f.controlId);
-                if (hCtrl) { bool checked = (SendMessageW(hCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED); TaskbarSettingsProvider::SetStartFolderVisible(f.folderRegValue, checked); }
+                if (hCtrl && IsWindow(hCtrl)) {
+                    bool checked = (SendMessageW(hCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    TaskbarSettingsProvider::SetStartFolderVisible(f.folderRegValue, checked);
+                }
             }
             SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Windows");
             MessageBoxW(hwnd, g_str.start_msg_saved, g_str.start_msg_saved_title, MB_OK | MB_ICONINFORMATION);
-            EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), FALSE);
+            if (IsWindow(hwnd)) EnableWindow(GetDlgItem(hwnd, IDC_START_BTN_APPLY), FALSE);
         }
         break;
     }
@@ -1207,17 +1498,25 @@ static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         g_hwndStartCustom = NULL;
         InterlockedExchange(&g_startCustomOpen, 0);
         break;
-    case WM_CLOSE: DestroyWindow(hwnd); break;
+    case WM_CLOSE:
+        if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        break;
     }
     return FALSE;
 }
 
 static void ShowStartCustomDialog(HWND parent) {
+    if (parent && !IsWindow(parent)) parent = NULL;
+    
     if (InterlockedExchange(&g_startCustomOpen, 1)) {
         HWND hw = g_hwndStartCustom;
-        if (hw && IsWindow(hw)) { SetForegroundWindow(hw); if (IsIconic(hw)) ShowWindow(hw, SW_RESTORE); }
+        if (hw && IsWindow(hw)) {
+            SetForegroundWindow(hw);
+            if (IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+        }
         return;
     }
+    
     BYTE* buf = new BYTE[4096];
     BYTE* p = buf;
     auto align4 = [](BYTE*& ptr) { ptr = (BYTE*)(((UINT_PTR)ptr + 3) & ~3); };
@@ -1235,6 +1534,7 @@ static void ShowStartCustomDialog(HWND parent) {
     *(WORD*)p = 8; p += 2;
     StringCchCopyW((WCHAR*)p, 10, L"Segoe UI");
     p += (lstrlenW(L"Segoe UI") + 1) * 2;
+    
     auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy, WORD id, LPCWSTR cls, LPCWSTR cap) {
         align4(p);
         LPDLGITEMTEMPLATE pi = (LPDLGITEMTEMPLATE)p;
@@ -1248,6 +1548,7 @@ static void ShowStartCustomDialog(HWND parent) {
         p += (lstrlenW(cap) + 1) * 2;
         *(WORD*)p = 0; p += 2;
     };
+    
     addCtrl(BS_GROUPBOX, 0, 6, 4, 240, 102, IDC_START_GRP_TILES, L"Button", g_str.start_grp_tiles);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 16, 226, 11, IDC_CHK_MORE_TILES, L"Button", g_str.start_chk_more_tiles);
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 12, 29, 226, 11, IDC_CHK_APP_LIST, L"Button", g_str.start_chk_app_list);
@@ -1271,11 +1572,21 @@ static void ShowStartCustomDialog(HWND parent) {
     addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 54, 291, 60, 13, IDOK, L"Button", g_str.btn_ok);
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 118, 291, 60, 13, IDCANCEL, L"Button", g_str.btn_cancel);
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 182, 291, 60, 13, IDC_START_BTN_APPLY, L"Button", g_str.btn_apply);
+    
     HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(NULL), (LPDLGTEMPLATE)buf, parent, StartCustomDlgProc, 0);
     delete[] buf;
-    if (hwnd) { ShowWindow(hwnd, SW_SHOWNORMAL); SetForegroundWindow(hwnd); }
-    else { InterlockedExchange(&g_startCustomOpen, 0); }
+    
+    if (hwnd && IsWindow(hwnd)) {
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+    } else {
+        InterlockedExchange(&g_startCustomOpen, 0);
+    }
 }
+
+// ============================================================================
+// Taskbar Position Hooks (with version-specific handling)
+// ============================================================================
 
 static std::atomic<bool> g_taskbarPosHooksInstalled{false};
 static DWORD GetTaskbarSideFromRegistry() { return TaskbarSettingsProvider::GetTaskbarEdge(); }
@@ -1308,17 +1619,22 @@ static int ComputeTaskbarThickness(const RECT* rect, const MONITORINFO& mi) {
 
 static void WINAPI TrayUI_GetStuckInfo_Hook(void* pThis, RECT* rect, DWORD* taskbarPos) {
     TrayUI_GetStuckInfo_Original(pThis, rect, taskbarPos);
-    if (g_taskbarPosHooksInstalled) *taskbarPos = GetTaskbarSideFromRegistry();
+    if (g_taskbarPosHooksInstalled && taskbarPos) {
+        *taskbarPos = GetTaskbarSideFromRegistry();
+    }
 }
 
 static DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
     DWORD ret = TrayUI_GetDockedRect_Original(pThis, rect, param2);
-    if (!g_taskbarPosHooksInstalled) return ret;
+    if (!g_taskbarPosHooksInstalled || !rect) return ret;
+    
     DWORD edge = GetTaskbarSideFromRegistry();
     if (edge == 3) return ret;
+    
     HMONITOR monitor = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfo(monitor, &mi);
+    if (!GetMonitorInfo(monitor, &mi)) return ret;
+    
     int thickness = ComputeTaskbarThickness(rect, mi);
     switch (edge) {
         case 0: SetRect(rect, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.left + thickness, mi.rcMonitor.bottom); break;
@@ -1330,12 +1646,15 @@ static DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL para
 
 static void WINAPI TrayUI_MakeStuckRect_Hook(void* pThis, RECT* rect, RECT* param2, SIZE param3, DWORD taskbarPos) {
     TrayUI_MakeStuckRect_Original(pThis, rect, param2, param3, taskbarPos);
-    if (!g_taskbarPosHooksInstalled) return;
+    if (!g_taskbarPosHooksInstalled || !rect) return;
+    
     DWORD edge = GetTaskbarSideFromRegistry();
     if (edge == 3) return;
+    
     HMONITOR monitor = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfo(monitor, &mi);
+    if (!GetMonitorInfo(monitor, &mi)) return;
+    
     int thickness = ComputeTaskbarThickness(rect, mi);
     switch (edge) {
         case 0: SetRect(rect, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.left + thickness, mi.rcMonitor.bottom); break;
@@ -1347,24 +1666,34 @@ static void WINAPI TrayUI_MakeStuckRect_Hook(void* pThis, RECT* rect, RECT* para
 static void WINAPI TrayUI__HandleSettingChange_Hook(void* pThis, void* p1, void* p2, void* p3, void* p4) {
     TrayUI__HandleSettingChange_Original(pThis, p1, p2, p3, p4);
     if (!g_taskbarPosHooksInstalled) return;
+    
     DWORD edge = GetTaskbarSideFromRegistry();
     if (edge == g_lastEdge) return;
     g_lastEdge = edge;
+    
     ClearRotatedIconCache();
     HWND hTray = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr);
-    if (hTray) {
+    if (hTray && IsWindow(hTray)) {
         PostMessageW(hTray, WM_SIZE, 0, 0);
         HWND hReBar = FindWindowExW(hTray, nullptr, L"ReBarWindow32", nullptr);
-        if (hReBar) { PostMessageW(hReBar, WM_SIZE, 0, 0); HWND hTaskSw = FindWindowExW(hReBar, nullptr, L"MSTaskSwWClass", nullptr); if (hTaskSw) PostMessageW(hTaskSw, WM_SIZE, 0, 0); }
+        if (hReBar && IsWindow(hReBar)) {
+            PostMessageW(hReBar, WM_SIZE, 0, 0);
+            HWND hTaskSw = FindWindowExW(hReBar, nullptr, L"MSTaskSwWClass", nullptr);
+            if (hTaskSw && IsWindow(hTaskSw)) PostMessageW(hTaskSw, WM_SIZE, 0, 0);
+        }
         HWND hTrayNotify = FindWindowExW(hTray, nullptr, L"TrayNotifyWnd", nullptr);
-        if (hTrayNotify) PostMessageW(hTrayNotify, WM_SIZE, 0, 0);
+        if (hTrayNotify && IsWindow(hTrayNotify)) PostMessageW(hTrayNotify, WM_SIZE, 0, 0);
         InvalidateRect(hTray, nullptr, TRUE);
     }
 }
 
 static bool InstallTaskbarPositionHooks() {
     HMODULE module = GetModuleHandleW(nullptr);
-    if (!module) { Wh_Log(L"InstallTaskbarPositionHooks: GetModuleHandle(NULL) failed"); return false; }
+    if (!module) {
+        Wh_Log(L"InstallTaskbarPositionHooks: GetModuleHandle(NULL) failed");
+        return false;
+    }
+    
     WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
         { {LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))"}, &TrayUI_GetStuckInfo_Original, TrayUI_GetStuckInfo_Hook },
         { {LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))"}, &TrayUI__StuckTrayChange_Original },
@@ -1372,18 +1701,32 @@ static bool InstallTaskbarPositionHooks() {
         { {LR"(public: virtual unsigned int __cdecl TrayUI::GetDockedRect(struct tagRECT *,int))"}, &TrayUI_GetDockedRect_Original, TrayUI_GetDockedRect_Hook },
         { {LR"(public: virtual void __cdecl TrayUI::MakeStuckRect(struct tagRECT *,struct tagRECT const *,struct tagSIZE,unsigned int))"}, &TrayUI_MakeStuckRect_Original, TrayUI_MakeStuckRect_Hook },
     };
-    if (!WindhawkUtils::HookSymbols(module, explorer_exe_hooks, ARRAYSIZE(explorer_exe_hooks))) { Wh_Log(L"InstallTaskbarPositionHooks: HookSymbols failed"); return false; }
+    
+    if (!WindhawkUtils::HookSymbols(module, explorer_exe_hooks, ARRAYSIZE(explorer_exe_hooks))) {
+        Wh_Log(L"InstallTaskbarPositionHooks: HookSymbols failed");
+        return false;
+    }
+    
     g_taskbarPosHooksInstalled = true;
     Wh_Log(L"InstallTaskbarPositionHooks: All 5 hooks installed");
     return true;
 }
 
+// ============================================================================
+// Icon Rotation for Vertical Taskbar
+// ============================================================================
+
 struct RotatedIconCacheEntry { HICON originalIcon = nullptr; int size = 0; bool clockwise = false; HBITMAP rotatedBitmap = nullptr; };
 static std::vector<RotatedIconCacheEntry> g_rotatedIconCache;
-static std::atomic<bool> g_modUnloading{false};
 static bool g_rotateVerticalIcons = false;
 
-static void ClearRotatedIconCache() { for (auto& e : g_rotatedIconCache) if (e.rotatedBitmap) DeleteObject(e.rotatedBitmap); g_rotatedIconCache.clear(); }
+static void ClearRotatedIconCache() {
+    for (auto& e : g_rotatedIconCache) {
+        if (e.rotatedBitmap) DeleteObject(e.rotatedBitmap);
+    }
+    g_rotatedIconCache.clear();
+}
+
 static bool IsEdgeVertical(DWORD edge) { return edge == 0 || edge == 2; }
 
 static HBITMAP RotateDib90(HBITMAP hbmSrc, int w, int h, bool clockwise) {
@@ -1396,7 +1739,10 @@ static HBITMAP RotateDib90(HBITMAP hbmSrc, int w, int h, bool clockwise) {
     bi.bmiHeader.biCompression = BI_RGB;
     std::vector<DWORD> src((size_t)w * h);
     HDC hdcScreen = GetDC(nullptr);
-    if (!GetDIBits(hdcScreen, hbmSrc, 0, h, src.data(), &bi, DIB_RGB_COLORS)) { ReleaseDC(nullptr, hdcScreen); return nullptr; }
+    if (!GetDIBits(hdcScreen, hbmSrc, 0, h, src.data(), &bi, DIB_RGB_COLORS)) {
+        ReleaseDC(nullptr, hdcScreen);
+        return nullptr;
+    }
     int dw = h, dh = w;
     std::vector<DWORD> dst((size_t)dw * dh);
     for (int y = 0; y < h; y++) {
@@ -1419,7 +1765,12 @@ static HBITMAP RotateDib90(HBITMAP hbmSrc, int w, int h, bool clockwise) {
 }
 
 static HBITMAP GetOrCreateRotatedIconBitmap(HICON hIcon, int size, bool clockwise) {
-    for (auto& e : g_rotatedIconCache) if (e.originalIcon == hIcon && e.size == size && e.clockwise == clockwise) return e.rotatedBitmap;
+    for (auto& e : g_rotatedIconCache) {
+        if (e.originalIcon == hIcon && e.size == size && e.clockwise == clockwise) {
+            return e.rotatedBitmap;
+        }
+    }
+    
     HDC hdcScreen = GetDC(nullptr);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
     BITMAPINFO bi{};
@@ -1431,16 +1782,22 @@ static HBITMAP GetOrCreateRotatedIconBitmap(HICON hIcon, int size, bool clockwis
     bi.bmiHeader.biCompression = BI_RGB;
     void* bits = nullptr;
     HBITMAP hbmIcon = CreateDIBSection(hdcScreen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!hbmIcon || !bits) { DeleteDC(hdcMem); ReleaseDC(nullptr, hdcScreen); return nullptr; }
+    if (!hbmIcon || !bits) {
+        DeleteDC(hdcMem);
+        ReleaseDC(nullptr, hdcScreen);
+        return nullptr;
+    }
     HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmIcon);
     memset(bits, 0, (size_t)size * size * 4);
     DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, nullptr, DI_NORMAL);
     SelectObject(hdcMem, hbmOld);
     DeleteDC(hdcMem);
     ReleaseDC(nullptr, hdcScreen);
+    
     HBITMAP hbmRotated = RotateDib90(hbmIcon, size, size, clockwise);
     DeleteObject(hbmIcon);
     if (!hbmRotated) return nullptr;
+    
     if (g_rotatedIconCache.size() > 300) ClearRotatedIconCache();
     g_rotatedIconCache.push_back({hIcon, size, clockwise, hbmRotated});
     return hbmRotated;
@@ -1448,23 +1805,36 @@ static HBITMAP GetOrCreateRotatedIconBitmap(HICON hIcon, int size, bool clockwis
 
 static void PaintTaskbarButtonBackground(HWND hWnd, HDC hdc, const RECT& rc, UINT state) {
     HTHEME hTheme = OpenThemeData(hWnd, L"TaskBand");
-    if (hTheme) { int stateId = 1; if (state & CDIS_SELECTED) stateId = 3; else if (state & CDIS_HOT) stateId = 2; DrawThemeBackground(hTheme, hdc, 1, stateId, &rc, nullptr); CloseThemeData(hTheme); }
-    else { FillRect(hdc, &rc, GetSysColorBrush(COLOR_WINDOW)); }
+    if (hTheme) {
+        int stateId = 1;
+        if (state & CDIS_SELECTED) stateId = 3;
+        else if (state & CDIS_HOT) stateId = 2;
+        DrawThemeBackground(hTheme, hdc, 1, stateId, &rc, nullptr);
+        CloseThemeData(hTheme);
+    } else {
+        FillRect(hdc, &rc, GetSysColorBrush(COLOR_WINDOW));
+    }
 }
 
 static LRESULT HandleTaskSwCustomDraw(HWND hWndToolbar, NMTBCUSTOMDRAW* tbcd, DWORD edge) {
+    if (!IsWindow(hWndToolbar)) return CDRF_DODEFAULT;
+    
     switch (tbcd->nmcd.dwDrawStage) {
     case CDDS_PREPAINT: return CDRF_NOTIFYITEMDRAW;
     case CDDS_ITEMPREPAINT: {
         if (g_modUnloading) return CDRF_DODEFAULT;
+        
         HDC hdc = tbcd->nmcd.hdc;
         RECT rc = tbcd->nmcd.rc;
         int cmdId = (int)tbcd->nmcd.dwItemSpec;
         int btnIndex = (int)SendMessageW(hWndToolbar, TB_COMMANDTOINDEX, cmdId, 0);
         if (btnIndex < 0) return CDRF_DODEFAULT;
+        
         TBBUTTON tbb{};
         if (!SendMessageW(hWndToolbar, TB_GETBUTTON, btnIndex, (LPARAM)&tbb)) return CDRF_DODEFAULT;
+        
         PaintTaskbarButtonBackground(hWndToolbar, hdc, rc, (UINT)tbcd->nmcd.uItemState);
+        
         HIMAGELIST hImg = (HIMAGELIST)SendMessageW(hWndToolbar, TB_GETIMAGELIST, 0, 0);
         HICON hIcon = hImg ? ImageList_GetIcon(hImg, tbb.iBitmap, ILD_TRANSPARENT) : nullptr;
         if (hIcon) {
@@ -1473,6 +1843,7 @@ static LRESULT HandleTaskSwCustomDraw(HWND hWndToolbar, NMTBCUSTOMDRAW* tbcd, DW
             iconSize = std::max(16, std::min(iconSize, 48));
             int cx = rc.left + (w - iconSize) / 2;
             int cy = rc.top + (h - iconSize) / 2;
+            
             if (g_rotateVerticalIcons) {
                 bool clockwise = (edge == 0);
                 HBITMAP hbm = GetOrCreateRotatedIconBitmap(hIcon, iconSize, clockwise);
@@ -1484,10 +1855,19 @@ static LRESULT HandleTaskSwCustomDraw(HWND hWndToolbar, NMTBCUSTOMDRAW* tbcd, DW
                     SelectObject(hdcMem, hbmOld);
                     DeleteDC(hdcMem);
                 }
-            } else { DrawIconEx(hdc, cx, cy, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL); }
+            } else {
+                DrawIconEx(hdc, cx, cy, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+            }
             DestroyIcon(hIcon);
         }
-        if (tbb.fsState & TBSTATE_CHECKED) { RECT ind = rc; HBRUSH hb = GetSysColorBrush(COLOR_HIGHLIGHT); if (edge == 0) ind.right = ind.left + 3; else if (edge == 2) ind.left = ind.right - 3; FillRect(hdc, &ind, hb); }
+        
+        if (tbb.fsState & TBSTATE_CHECKED) {
+            RECT ind = rc;
+            HBRUSH hb = GetSysColorBrush(COLOR_HIGHLIGHT);
+            if (edge == 0) ind.right = ind.left + 3;
+            else if (edge == 2) ind.left = ind.right - 3;
+            FillRect(hdc, &ind, hb);
+        }
         return CDRF_SKIPDEFAULT;
     }
     }
@@ -1495,8 +1875,16 @@ static LRESULT HandleTaskSwCustomDraw(HWND hWndToolbar, NMTBCUSTOMDRAW* tbcd, DW
 }
 
 static int FindRebarBandIndexForChild(HWND hReBar, HWND hWndChild) {
+    if (!IsWindow(hReBar) || !IsWindow(hWndChild)) return -1;
     int count = (int)SendMessageW(hReBar, RB_GETBANDCOUNT, 0, 0);
-    for (int i = 0; i < count; i++) { REBARBANDINFOW rbbi{}; rbbi.cbSize = sizeof(rbbi); rbbi.fMask = RBBIM_CHILD; if (SendMessageW(hReBar, RB_GETBANDINFOW, i, (LPARAM)&rbbi) && rbbi.hwndChild == hWndChild) return i; }
+    for (int i = 0; i < count; i++) {
+        REBARBANDINFOW rbbi{};
+        rbbi.cbSize = sizeof(rbbi);
+        rbbi.fMask = RBBIM_CHILD;
+        if (SendMessageW(hReBar, RB_GETBANDINFOW, i, (LPARAM)&rbbi) && rbbi.hwndChild == hWndChild) {
+            return i;
+        }
+    }
     return -1;
 }
 
@@ -1509,69 +1897,108 @@ static void ArmMasterLayoutTimer(HWND hShellTrayWnd) {
 }
 
 static void ApplyTaskSwInternalLayout(HWND hWnd, bool vertical, int thickness) {
+    if (!IsWindow(hWnd)) return;
+    
     static thread_local HWND s_lastHwnd = nullptr;
     static thread_local DWORD s_lastEdgeApplied = 0xFFFFFFFF;
     static thread_local int s_lastThicknessApplied = -1;
     DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
+    
     if (vertical) {
         bool alreadyApplied = (s_lastHwnd == hWnd && s_lastEdgeApplied == edge && s_lastThicknessApplied == thickness);
         if (!alreadyApplied) {
             LONG_PTR curStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
-            if (!(curStyle & TBSTYLE_WRAPABLE)) SetWindowLongPtrW(hWnd, GWL_STYLE, curStyle | TBSTYLE_WRAPABLE);
+            if (!(curStyle & TBSTYLE_WRAPABLE)) {
+                SetWindowLongPtrW(hWnd, GWL_STYLE, curStyle | TBSTYLE_WRAPABLE);
+            }
+            
             UINT dpi = GetDpiForWindow(hWnd);
             int newSize = std::max(16, thickness - MulDiv(4, dpi, 96));
             DWORD cur = (DWORD)SendMessageW(hWnd, TB_GETBUTTONSIZE, 0, 0);
-            if ((int)LOWORD(cur) != newSize || (int)HIWORD(cur) != newSize) SendMessageW(hWnd, TB_SETBUTTONSIZE, 0, MAKELONG(newSize, newSize));
+            if ((int)LOWORD(cur) != newSize || (int)HIWORD(cur) != newSize) {
+                SendMessageW(hWnd, TB_SETBUTTONSIZE, 0, MAKELONG(newSize, newSize));
+            }
+            
             int btnCount = (int)SendMessageW(hWnd, TB_BUTTONCOUNT, 0, 0);
             if (btnCount < 1) btnCount = 1;
-            RECT rcCur{}; GetWindowRect(hWnd, &rcCur);
+            
+            RECT rcCur{};
+            GetWindowRect(hWnd, &rcCur);
             int curW = rcCur.right - rcCur.left;
             int curH = rcCur.bottom - rcCur.top;
-            if (curW != thickness) SetWindowPos(hWnd, NULL, 0, 0, thickness, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            if (curW != thickness) {
+                SetWindowPos(hWnd, NULL, 0, 0, thickness, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            
             RECT rowsRect{};
             SendMessageW(hWnd, TB_SETROWS, MAKEWPARAM(btnCount, FALSE), (LPARAM)&rowsRect);
             SendMessageW(hWnd, TB_AUTOSIZE, 0, 0);
+            
             HWND hReBar = GetParent(hWnd);
-            if (hReBar) {
+            if (hReBar && IsWindow(hReBar)) {
                 int bandIndex = FindRebarBandIndexForChild(hReBar, hWnd);
                 if (bandIndex >= 0) {
-                    REBARBANDINFOW rbbiCur{}; rbbiCur.cbSize = sizeof(rbbiCur); rbbiCur.fMask = RBBIM_CHILDSIZE;
-                    bool needsUpdate = true;
-                    if (SendMessageW(hReBar, RB_GETBANDINFOW, bandIndex, (LPARAM)&rbbiCur)) needsUpdate = (rbbiCur.cyMinChild != (UINT)thickness || rbbiCur.cxMinChild != (UINT)thickness);
-                    if (needsUpdate) { REBARBANDINFOW rbbi{}; rbbi.cbSize = sizeof(rbbi); rbbi.fMask = RBBIM_CHILDSIZE; rbbi.cyMinChild = thickness; rbbi.cxMinChild = thickness; SendMessageW(hReBar, RB_SETBANDINFOW, bandIndex, (LPARAM)&rbbi); }
+                    REBARBANDINFOW rbbi{};
+                    rbbi.cbSize = sizeof(rbbi);
+                    rbbi.fMask = RBBIM_CHILDSIZE;
+                    SendMessageW(hReBar, RB_SETBANDINFOW, bandIndex, (LPARAM)&rbbi);
                 }
             }
-            s_lastHwnd = hWnd; s_lastEdgeApplied = edge; s_lastThicknessApplied = thickness;
+            
+            s_lastHwnd = hWnd;
+            s_lastEdgeApplied = edge;
+            s_lastThicknessApplied = thickness;
         }
     } else if (s_lastEdgeApplied != edge || s_lastHwnd != hWnd) {
         LONG_PTR curStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
-        if (curStyle & TBSTYLE_WRAPABLE) SetWindowLongPtrW(hWnd, GWL_STYLE, curStyle & ~TBSTYLE_WRAPABLE);
+        if (curStyle & TBSTYLE_WRAPABLE) {
+            SetWindowLongPtrW(hWnd, GWL_STYLE, curStyle & ~TBSTYLE_WRAPABLE);
+        }
         RECT rowsRect{};
         SendMessageW(hWnd, TB_SETROWS, MAKEWPARAM(1, FALSE), (LPARAM)&rowsRect);
         SendMessageW(hWnd, TB_AUTOSIZE, 0, 0);
-        s_lastHwnd = hWnd; s_lastEdgeApplied = edge; s_lastThicknessApplied = -1;
+        s_lastHwnd = hWnd;
+        s_lastEdgeApplied = edge;
+        s_lastThicknessApplied = -1;
     }
 }
 
 static LRESULT CALLBACK TaskSwSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
+    if (!IsWindow(hWnd)) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    
     switch (uMsg) {
-    case WM_SIZE: { LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam); if (!g_modUnloading) ArmMasterLayoutTimer(GetAncestor(hWnd, GA_ROOT)); return ret; }
-    case WM_NCDESTROY: RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, uIdSubclass); break;
+    case WM_SIZE: {
+        LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        if (!g_modUnloading) {
+            HWND hShellTray = GetAncestor(hWnd, GA_ROOT);
+            ArmMasterLayoutTimer(hShellTray);
+        }
+        return ret;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, uIdSubclass);
+        break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 static LRESULT CALLBACK ReBarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
+    if (!IsWindow(hWnd)) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    
     if (uMsg == WM_NOTIFY) {
         NMHDR* nm = (NMHDR*)lParam;
         if (nm->code == NM_CUSTOMDRAW) {
             WCHAR cls[32];
             if (GetClassNameW(nm->hwndFrom, cls, ARRAYSIZE(cls)) && _wcsicmp(cls, L"MSTaskSwWClass") == 0 && !g_modUnloading) {
                 DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
-                if (IsEdgeVertical(edge)) return HandleTaskSwCustomDraw(nm->hwndFrom, (NMTBCUSTOMDRAW*)lParam, edge);
+                if (IsEdgeVertical(edge)) {
+                    return HandleTaskSwCustomDraw(nm->hwndFrom, (NMTBCUSTOMDRAW*)lParam, edge);
+                }
             }
         }
-    } else if (uMsg == WM_NCDESTROY) { RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, uIdSubclass); }
+    } else if (uMsg == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, uIdSubclass);
+    }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
@@ -1579,32 +2006,56 @@ struct TrayChildNaturalSize { HWND hwnd = nullptr; int naturalLength = 0; };
 static std::vector<TrayChildNaturalSize> g_trayChildSizes;
 
 static int GetOrCacheTrayChildNaturalLength(HWND hChild, int currentWidth, int currentHeight, bool isHorizontalNow) {
-    for (auto& e : g_trayChildSizes) { if (e.hwnd == hChild) { if (isHorizontalNow && currentWidth > 0) e.naturalLength = currentWidth; return e.naturalLength; } }
+    for (auto& e : g_trayChildSizes) {
+        if (e.hwnd == hChild) {
+            if (isHorizontalNow && currentWidth > 0) e.naturalLength = currentWidth;
+            return e.naturalLength;
+        }
+    }
     int initial = isHorizontalNow ? currentWidth : std::max(currentWidth, currentHeight);
     g_trayChildSizes.push_back({hChild, initial});
     return initial;
 }
 
-static void PurgeDestroyedTrayChildCacheEntries() { g_trayChildSizes.erase(std::remove_if(g_trayChildSizes.begin(), g_trayChildSizes.end(), [](const TrayChildNaturalSize& e) { return !IsWindow(e.hwnd); }), g_trayChildSizes.end()); }
+static void PurgeDestroyedTrayChildCacheEntries() {
+    g_trayChildSizes.erase(
+        std::remove_if(g_trayChildSizes.begin(), g_trayChildSizes.end(),
+            [](const TrayChildNaturalSize& e) { return !IsWindow(e.hwnd); }),
+        g_trayChildSizes.end()
+    );
+}
 
 static int EstimateTrayNotifyTotalLength(HWND hTrayNotify) {
-    if (!hTrayNotify) return 0;
+    if (!hTrayNotify || !IsWindow(hTrayNotify)) return 0;
     int total = 0;
     HWND hChild = GetWindow(hTrayNotify, GW_CHILD);
-    while (hChild) { HWND hNext = GetWindow(hChild, GW_HWNDNEXT); for (auto& e : g_trayChildSizes) { if (e.hwnd == hChild) { total += std::max(e.naturalLength, 1); break; } } hChild = hNext; }
+    while (hChild) {
+        HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+        for (auto& e : g_trayChildSizes) {
+            if (e.hwnd == hChild) {
+                total += std::max(e.naturalLength, 1);
+                break;
+            }
+        }
+        hChild = hNext;
+    }
     return total;
 }
 
 static void ForceToolbarVerticalColumn(HWND hToolbar, int thickness) {
-    if (!hToolbar) return;
+    if (!hToolbar || !IsWindow(hToolbar)) return;
     LONG_PTR curStyle = GetWindowLongPtrW(hToolbar, GWL_STYLE);
-    if (!(curStyle & TBSTYLE_WRAPABLE)) SetWindowLongPtrW(hToolbar, GWL_STYLE, curStyle | TBSTYLE_WRAPABLE);
+    if (!(curStyle & TBSTYLE_WRAPABLE)) {
+        SetWindowLongPtrW(hToolbar, GWL_STYLE, curStyle | TBSTYLE_WRAPABLE);
+    }
     int btnCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     if (btnCount < 1) return;
     UINT dpi = GetDpiForWindow(hToolbar);
     int newSize = std::max(16, thickness - MulDiv(4, dpi, 96));
     DWORD cur = (DWORD)SendMessageW(hToolbar, TB_GETBUTTONSIZE, 0, 0);
-    if ((int)LOWORD(cur) != newSize || (int)HIWORD(cur) != newSize) SendMessageW(hToolbar, TB_SETBUTTONSIZE, 0, MAKELONG(newSize, newSize));
+    if ((int)LOWORD(cur) != newSize || (int)HIWORD(cur) != newSize) {
+        SendMessageW(hToolbar, TB_SETBUTTONSIZE, 0, MAKELONG(newSize, newSize));
+    }
     int expectedH = newSize * btnCount;
     SetWindowPos(hToolbar, NULL, 0, 0, thickness, expectedH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     RECT rowsRect{};
@@ -1613,51 +2064,75 @@ static void ForceToolbarVerticalColumn(HWND hToolbar, int thickness) {
 }
 
 static void RestoreToolbarHorizontalRow(HWND hToolbar) {
-    if (!hToolbar) return;
+    if (!hToolbar || !IsWindow(hToolbar)) return;
     LONG_PTR curStyle = GetWindowLongPtrW(hToolbar, GWL_STYLE);
-    if (curStyle & TBSTYLE_WRAPABLE) SetWindowLongPtrW(hToolbar, GWL_STYLE, curStyle & ~TBSTYLE_WRAPABLE);
+    if (curStyle & TBSTYLE_WRAPABLE) {
+        SetWindowLongPtrW(hToolbar, GWL_STYLE, curStyle & ~TBSTYLE_WRAPABLE);
+    }
     RECT rowsRect{};
     SendMessageW(hToolbar, TB_SETROWS, MAKEWPARAM(1, FALSE), (LPARAM)&rowsRect);
     SendMessageW(hToolbar, TB_AUTOSIZE, 0, 0);
 }
 
 static void ApplyTrayNotifyInternalLayout(HWND hWnd, bool vertical, int thickness) {
+    if (!hWnd || !IsWindow(hWnd)) return;
     PurgeDestroyedTrayChildCacheEntries();
     int pos = 0;
     HWND hChild = GetWindow(hWnd, GW_CHILD);
     while (hChild) {
         HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
-        {
-            RECT rcChild{}; GetWindowRect(hChild, &rcChild);
+        if (IsWindow(hChild)) {
+            RECT rcChild{};
+            GetWindowRect(hChild, &rcChild);
             int curW = rcChild.right - rcChild.left;
             int curH = rcChild.bottom - rcChild.top;
-            WCHAR cls[64] = {}; GetClassNameW(hChild, cls, ARRAYSIZE(cls));
+            WCHAR cls[64] = {};
+            GetClassNameW(hChild, cls, ARRAYSIZE(cls));
             HWND hInnerToolbar = nullptr;
-            if (_wcsicmp(cls, L"SysPager") == 0) hInnerToolbar = FindWindowExW(hChild, NULL, L"ToolbarWindow32", NULL);
-            else if (_wcsicmp(cls, L"ToolbarWindow32") == 0) hInnerToolbar = hChild;
+            if (_wcsicmp(cls, L"SysPager") == 0) {
+                hInnerToolbar = FindWindowExW(hChild, NULL, L"ToolbarWindow32", NULL);
+            } else if (_wcsicmp(cls, L"ToolbarWindow32") == 0) {
+                hInnerToolbar = hChild;
+            }
             int naturalLength = GetOrCacheTrayChildNaturalLength(hChild, curW, curH, !vertical);
             if (vertical) {
                 int newW = thickness;
                 int newH = std::max(naturalLength, 1);
-                if (hInnerToolbar) {
+                if (hInnerToolbar && IsWindow(hInnerToolbar)) {
                     ForceToolbarVerticalColumn(hInnerToolbar, thickness);
-                    RECT rcInner{}; GetWindowRect(hInnerToolbar, &rcInner);
+                    RECT rcInner{};
+                    GetWindowRect(hInnerToolbar, &rcInner);
                     int innerH = rcInner.bottom - rcInner.top;
                     if (innerH > newH) newH = innerH;
                     SetWindowPos(hInnerToolbar, NULL, 0, 0, thickness, innerH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
                 }
                 SetWindowPos(hChild, NULL, 0, pos, newW, newH, SWP_NOZORDER | SWP_NOACTIVATE);
                 pos += newH;
-            } else { if (hInnerToolbar) RestoreToolbarHorizontalRow(hInnerToolbar); }
+            } else {
+                if (hInnerToolbar && IsWindow(hInnerToolbar)) {
+                    RestoreToolbarHorizontalRow(hInnerToolbar);
+                }
+            }
         }
         hChild = hNext;
     }
 }
 
 static LRESULT CALLBACK TrayNotifySubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
+    if (!IsWindow(hWnd)) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    
     switch (uMsg) {
-    case WM_SIZE: { LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam); if (!g_modUnloading) ArmMasterLayoutTimer(GetAncestor(hWnd, GA_ROOT)); return ret; }
-    case WM_NCDESTROY: RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, uIdSubclass); break;
+    case WM_SIZE: {
+        LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        if (!g_modUnloading) {
+            HWND hShellTray = GetAncestor(hWnd, GA_ROOT);
+            ArmMasterLayoutTimer(hShellTray);
+        }
+        return ret;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, uIdSubclass);
+        break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -1666,48 +2141,81 @@ static void DoApplyVerticalTaskbarLayoutAtomic(HWND hShellTrayWnd) {
     static thread_local bool s_inResize = false;
     if (g_modUnloading || s_inResize || !IsWindow(hShellTrayWnd)) return;
     s_inResize = true;
+    
     DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
     bool vertical = IsEdgeVertical(edge);
+    g_rotateVerticalIcons = vertical;
+    
     SendMessageW(hShellTrayWnd, WM_SETREDRAW, FALSE, 0);
     HWND hReBar = FindWindowExW(hShellTrayWnd, NULL, L"ReBarWindow32", NULL);
     HWND hTrayNotify = FindWindowExW(hShellTrayWnd, NULL, L"TrayNotifyWnd", NULL);
-    if (hReBar) SendMessageW(hReBar, WM_SETREDRAW, FALSE, 0);
-    if (hTrayNotify) SendMessageW(hTrayNotify, WM_SETREDRAW, FALSE, 0);
+    
+    if (hReBar && IsWindow(hReBar)) SendMessageW(hReBar, WM_SETREDRAW, FALSE, 0);
+    if (hTrayNotify && IsWindow(hTrayNotify)) SendMessageW(hTrayNotify, WM_SETREDRAW, FALSE, 0);
+    
     if (vertical) {
-        RECT rcClient{}; GetClientRect(hShellTrayWnd, &rcClient);
+        RECT rcClient{};
+        GetClientRect(hShellTrayWnd, &rcClient);
         int thickness = rcClient.right - rcClient.left;
         int totalLength = rcClient.bottom - rcClient.top;
         if (thickness < 16 || thickness > 300) thickness = 40;
         int startBottom = thickness;
         int trayNotifyLength = EstimateTrayNotifyTotalLength(hTrayNotify);
-        if (trayNotifyLength <= 0 || trayNotifyLength > totalLength) trayNotifyLength = std::min(187, totalLength / 2);
+        if (trayNotifyLength <= 0 || trayNotifyLength > totalLength) {
+            trayNotifyLength = std::min(187, totalLength / 2);
+        }
         int reBarTop = startBottom;
         int reBarLength = totalLength - startBottom - trayNotifyLength;
         if (reBarLength < 0) reBarLength = 0;
-        if (hReBar) SetWindowPos(hReBar, NULL, 0, reBarTop, thickness, reBarLength, SWP_NOZORDER | SWP_NOACTIVATE);
-        if (hTrayNotify) {
+        
+        if (hReBar && IsWindow(hReBar)) {
+            SetWindowPos(hReBar, NULL, 0, reBarTop, thickness, reBarLength, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        if (hTrayNotify && IsWindow(hTrayNotify)) {
             int trayNotifyTop = totalLength - trayNotifyLength;
             if (trayNotifyTop < reBarTop) trayNotifyTop = reBarTop;
             SetWindowPos(hTrayNotify, NULL, 0, trayNotifyTop, thickness, trayNotifyLength, SWP_NOZORDER | SWP_NOACTIVATE);
         }
-        if (hReBar) { HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL); if (hTaskSw) ApplyTaskSwInternalLayout(hTaskSw, true, thickness); }
-        if (hTrayNotify) ApplyTrayNotifyInternalLayout(hTrayNotify, true, thickness);
+        if (hReBar && IsWindow(hReBar)) {
+            HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
+            if (hTaskSw && IsWindow(hTaskSw)) ApplyTaskSwInternalLayout(hTaskSw, true, thickness);
+        }
+        if (hTrayNotify && IsWindow(hTrayNotify)) ApplyTrayNotifyInternalLayout(hTrayNotify, true, thickness);
     } else {
-        if (hReBar) { HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL); if (hTaskSw) ApplyTaskSwInternalLayout(hTaskSw, false, 0); }
-        if (hTrayNotify) ApplyTrayNotifyInternalLayout(hTrayNotify, false, 0);
+        if (hReBar && IsWindow(hReBar)) {
+            HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
+            if (hTaskSw && IsWindow(hTaskSw)) ApplyTaskSwInternalLayout(hTaskSw, false, 0);
+        }
+        if (hTrayNotify && IsWindow(hTrayNotify)) ApplyTrayNotifyInternalLayout(hTrayNotify, false, 0);
     }
-    if (hTrayNotify) SendMessageW(hTrayNotify, WM_SETREDRAW, TRUE, 0);
-    if (hReBar) SendMessageW(hReBar, WM_SETREDRAW, TRUE, 0);
+    
+    if (hTrayNotify && IsWindow(hTrayNotify)) SendMessageW(hTrayNotify, WM_SETREDRAW, TRUE, 0);
+    if (hReBar && IsWindow(hReBar)) SendMessageW(hReBar, WM_SETREDRAW, TRUE, 0);
     SendMessageW(hShellTrayWnd, WM_SETREDRAW, TRUE, 0);
     RedrawWindow(hShellTrayWnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_ERASE | RDW_UPDATENOW);
     s_inResize = false;
 }
 
 static LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
+    if (!IsWindow(hWnd)) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    
     switch (uMsg) {
-    case WM_SIZE: { LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam); if (!g_modUnloading) ArmMasterLayoutTimer(hWnd); return ret; }
-    case WM_TIMER: if (wParam == kTimerIdMasterLayout) { KillTimer(hWnd, kTimerIdMasterLayout); DoApplyVerticalTaskbarLayoutAtomic(hWnd); return 0; } break;
-    case WM_NCDESTROY: KillTimer(hWnd, kTimerIdMasterLayout); RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, uIdSubclass); break;
+    case WM_SIZE: {
+        LRESULT ret = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        if (!g_modUnloading) ArmMasterLayoutTimer(hWnd);
+        return ret;
+    }
+    case WM_TIMER:
+        if (wParam == kTimerIdMasterLayout) {
+            KillTimer(hWnd, kTimerIdMasterLayout);
+            DoApplyVerticalTaskbarLayoutAtomic(hWnd);
+            return 0;
+        }
+        break;
+    case WM_NCDESTROY:
+        KillTimer(hWnd, kTimerIdMasterLayout);
+        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, uIdSubclass);
+        break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -1717,84 +2225,141 @@ static CreateWindowExW_t CreateWindowExW_Original = nullptr;
 
 static bool IsTaskbarWindowClass(HWND hWnd) {
     WCHAR cls[32];
-    return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+    return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && 
+           (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
 }
 
 static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName)) {
-        if (_wcsicmp(lpClassName, L"MSTaskSwWClass") == 0) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
-        else if (_wcsicmp(lpClassName, L"ReBarWindow32") == 0 && hWndParent && IsTaskbarWindowClass(hWndParent)) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
-        else if (_wcsicmp(lpClassName, L"TrayNotifyWnd") == 0 && hWndParent && IsTaskbarWindowClass(hWndParent)) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
-        else if (IsTaskbarWindowClass(hWnd)) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0);
+    
+    if (hWnd && IsWindow(hWnd) && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (_wcsicmp(lpClassName, L"MSTaskSwWClass") == 0) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
+        } else if (_wcsicmp(lpClassName, L"ReBarWindow32") == 0 && hWndParent && IsWindow(hWndParent) && IsTaskbarWindowClass(hWndParent)) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
+        } else if (_wcsicmp(lpClassName, L"TrayNotifyWnd") == 0 && hWndParent && IsWindow(hWndParent) && IsTaskbarWindowClass(hWndParent)) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
+        } else if (IsTaskbarWindowClass(hWnd)) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0);
+        }
     }
     return hWnd;
 }
 
 static BOOL CALLBACK SubclassExistingChildrenProc(HWND hWnd, LPARAM lParam) {
+    if (!IsWindow(hWnd)) return TRUE;
     WCHAR cls[32];
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
-        if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
-        else if (_wcsicmp(cls, L"ReBarWindow32") == 0) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
-        else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
+        if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
+        } else if (_wcsicmp(cls, L"ReBarWindow32") == 0) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
+        } else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
+        }
     }
     EnumChildWindows(hWnd, SubclassExistingChildrenProc, 0);
     return TRUE;
 }
 
 static BOOL CALLBACK UnsubclassExistingChildrenProc(HWND hWnd, LPARAM lParam) {
+    if (!IsWindow(hWnd)) return TRUE;
     WCHAR cls[32];
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
-        if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, 0);
-        else if (_wcsicmp(cls, L"ReBarWindow32") == 0) RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, 0);
-        else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, 0);
+        if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) {
+            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, 0);
+        } else if (_wcsicmp(cls, L"ReBarWindow32") == 0) {
+            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, 0);
+        } else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) {
+            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, 0);
+        }
     }
     EnumChildWindows(hWnd, UnsubclassExistingChildrenProc, 0);
     return TRUE;
 }
 
 static BOOL CALLBACK SubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam) {
-    if (IsTaskbarWindowClass(hWnd)) { WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0); EnumChildWindows(hWnd, SubclassExistingChildrenProc, 0); }
+    if (IsWindow(hWnd) && IsTaskbarWindowClass(hWnd)) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0);
+        EnumChildWindows(hWnd, SubclassExistingChildrenProc, 0);
+    }
     return TRUE;
 }
 
-static void SubclassExistingTaskbars() { EnumWindows(SubclassExistingTaskbarsEnumProc, 0); }
+static void SubclassExistingTaskbars() {
+    EnumWindows(SubclassExistingTaskbarsEnumProc, 0);
+}
 
 static BOOL CALLBACK UnsubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam) {
-    if (IsTaskbarWindowClass(hWnd)) { RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, 0); EnumChildWindows(hWnd, UnsubclassExistingChildrenProc, 0); }
+    if (IsWindow(hWnd) && IsTaskbarWindowClass(hWnd)) {
+        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, 0);
+        EnumChildWindows(hWnd, UnsubclassExistingChildrenProc, 0);
+    }
     return TRUE;
 }
 
-static void UnsubclassExistingTaskbars() { EnumWindows(UnsubclassExistingTaskbarsEnumProc, 0); }
+static void UnsubclassExistingTaskbars() {
+    EnumWindows(UnsubclassExistingTaskbarsEnumProc, 0);
+}
 
 static void UpdateStuckRectsKey(LPCWSTR keyName, DWORD newEdge, DWORD edgeOffset) {
     WCHAR fullKey[256];
     swprintf_s(fullKey, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\%s", keyName);
-    HKEY hk;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, fullKey, 0, KEY_READ | KEY_WRITE, &hk) == ERROR_SUCCESS) {
+    RegKey regKey;
+    if (regKey.Open(HKEY_CURRENT_USER, fullKey, KEY_READ | KEY_WRITE)) {
         DWORD sz = 0;
-        RegQueryValueExW(hk, L"Settings", NULL, NULL, NULL, &sz);
-        if (sz >= edgeOffset + 4) { BYTE* d = new BYTE[sz]; if (RegQueryValueExW(hk, L"Settings", NULL, NULL, d, &sz) == ERROR_SUCCESS) { *(DWORD*)(d + edgeOffset) = newEdge; RegSetValueExW(hk, L"Settings", 0, REG_BINARY, d, sz); } delete[] d; }
-        RegCloseKey(hk);
+        if (regKey.QueryValue(L"Settings", NULL, &sz) && sz >= edgeOffset + 4) {
+            std::vector<BYTE> d(sz);
+            if (regKey.QueryValue(L"Settings", d.data(), &sz)) {
+                *(DWORD*)(d.data() + edgeOffset) = newEdge;
+                regKey.SetDWord(L"Settings", (DWORD)0);
+                RegSetValueExW(regKey.Get(), L"Settings", 0, REG_BINARY, d.data(), (DWORD)d.size());
+            }
+        }
     }
 }
 
-static void UpdateAllStuckRects(DWORD newEdge) { UpdateStuckRectsKey(L"StuckRects2", newEdge, 12); UpdateStuckRectsKey(L"StuckRects3", newEdge, 12); UpdateStuckRectsKey(L"StuckRectsLegacy", newEdge, 12); }
+static void UpdateAllStuckRects(DWORD newEdge) {
+    UpdateStuckRectsKey(L"StuckRects2", newEdge, 12);
+    UpdateStuckRectsKey(L"StuckRects3", newEdge, 12);
+    UpdateStuckRectsKey(L"StuckRectsLegacy", newEdge, 12);
+}
 
 static void RotateTaskbarPosition(DWORD newEdge) {
     if (newEdge > 3) return;
     if (newEdge == g_lastEdge) return;
+    
+    if (!g_windowsVersion.IsSupported()) {
+        Wh_Log(L"RotateTaskbarPosition: Unsupported Windows version");
+        return;
+    }
+    
+    if (g_windowsVersion.IsBuildAtLeast(22000) && (newEdge == 0 || newEdge == 2)) {
+        Wh_Log(L"RotateTaskbarPosition: Windows 11 vertical positioning may have limited support");
+    }
+    
     TaskbarSettingsProvider::RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarSide", newEdge);
     UpdateAllStuckRects(newEdge);
     g_lastEdge = newEdge;
+    
     HWND hTray = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr);
-    if (hTray) {
+    if (hTray && IsWindow(hTray)) {
         SendMessageW(hTray, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
         SendMessageW(hTray, WM_SIZE, 0, 0);
         HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
-        if (hReBar) { SendMessageW(hReBar, WM_SIZE, 0, 0); HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL); if (hTaskSw) { SendMessageW(hTaskSw, TB_AUTOSIZE, 0, 0); InvalidateRect(hTaskSw, NULL, TRUE); } }
+        if (hReBar && IsWindow(hReBar)) {
+            SendMessageW(hReBar, WM_SIZE, 0, 0);
+            HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
+            if (hTaskSw && IsWindow(hTaskSw)) {
+                SendMessageW(hTaskSw, TB_AUTOSIZE, 0, 0);
+                InvalidateRect(hTaskSw, NULL, TRUE);
+            }
+        }
         HWND hTrayNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-        if (hTrayNotify) { SendMessageW(hTrayNotify, WM_SIZE, 0, 0); InvalidateRect(hTrayNotify, NULL, TRUE); }
+        if (hTrayNotify && IsWindow(hTrayNotify)) {
+            SendMessageW(hTrayNotify, WM_SIZE, 0, 0);
+            InvalidateRect(hTrayNotify, NULL, TRUE);
+        }
         SetWindowRgn(hTray, nullptr, TRUE);
         InvalidateRect(hTray, NULL, TRUE);
         UpdateWindow(hTray);
@@ -1805,30 +2370,40 @@ static void RotateTaskbarPosition(DWORD newEdge) {
 }
 
 static void ApplySettings(HWND hwnd) {
+    if (!IsWindow(hwnd)) return;
+    
     bool lock = (SendDlgItemMessageW(hwnd, IDC_CHK_LOCK, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool hide = (SendDlgItemMessageW(hwnd, IDC_CHK_HIDE, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool small_i = (SendDlgItemMessageW(hwnd, IDC_CHK_SMALL, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool aero = (SendDlgItemMessageW(hwnd, IDC_CHK_AEROPEEK, BM_GETCHECK, 0, 0) == BST_CHECKED);
     DWORD glom = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_BUTTONS, CB_GETCURSEL, 0, 0);
     DWORD locSel = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_LOCATION, CB_GETCURSEL, 0, 0);
+    
     TaskbarSettingsProvider::SetLockState(lock);
     TaskbarSettingsProvider::SetSmallIcons(small_i);
     TaskbarSettingsProvider::SetGlomLevel(glom);
     TaskbarSettingsProvider::SetAeroPeekEnabled(aero);
+    
     DWORD edge = (locSel == 0) ? 1 : 3;
     RotateTaskbarPosition(edge);
+    
     APPBARDATA abd = { sizeof(APPBARDATA) };
     abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-    abd.lParam = hide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
-    SHAppBarMessage(ABM_SETSTATE, &abd);
+    if (abd.hWnd && IsWindow(abd.hWnd)) {
+        abd.lParam = hide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
+        SHAppBarMessage(ABM_SETSTATE, &abd);
+    }
+    
     DWORD powerSel = (DWORD)SendDlgItemMessageW(hwnd, IDC_COMBO_POWER, CB_GETCURSEL, 0, 0);
     if (powerSel < 7) TaskbarSettingsProvider::SetPowerAction(kPowerValues[powerSel]);
+    
     bool mruProg = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_PROG, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool mruItems = (SendDlgItemMessageW(hwnd, IDC_CHK_MRU_ITEMS, BM_GETCHECK, 0, 0) == BST_CHECKED);
     TaskbarSettingsProvider::SetStartMruProgs(mruProg);
     TaskbarSettingsProvider::SetStartMruItems(mruItems);
+    
     HWND hList = GetDlgItem(hwnd, IDC_LST_TOOLBARS);
-    if (hList) {
+    if (hList && IsWindow(hList)) {
         bool addr = (ListView_GetCheckState(hList, 0) != 0);
         bool links = (ListView_GetCheckState(hList, 1) != 0);
         bool tablet = (ListView_GetCheckState(hList, 2) != 0);
@@ -1839,109 +2414,193 @@ static void ApplySettings(HWND hwnd) {
 }
 
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (!IsWindow(hwnd) && msg != WM_INITDIALOG) return FALSE;
+    
     switch (msg) {
     case WM_INITDIALOG: {
         HICON hIcon = GetSystemIcon(SIID_TASKBAR);
-        if (hIcon) { SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon); SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon); }
+        if (hIcon) {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        }
         g_hwndMain = hwnd;
         g_currentTab = 0;
         ApplyDarkTitlebar(hwnd);
         ApplyExplorerThemeToChildren(hwnd);
         EnableThemeDialogTexture(hwnd, ETDT_ENABLETAB);
+        
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
+        
         if (g_hFontUi) { DeleteObject(g_hFontUi); g_hFontUi = NULL; }
         g_hFontUi = CreateFontW(ptPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        
         SetWindowTextW(hwnd, g_str.title);
+        
         HWND hTab = GetDlgItem(hwnd, IDC_TAB_MAIN);
         SendMessageW(hTab, TCM_DELETEALLITEMS, 0, 0);
-        auto addTab = [&](int i, const WCHAR* s) { TCITEMW ti = { TCIF_TEXT, 0, 0, (LPWSTR)s }; SendMessageW(hTab, TCM_INSERTITEMW, i, (LPARAM)&ti); };
-        addTab(0, g_str.tab_taskbar); addTab(1, g_str.tab_start); addTab(2, g_str.tab_toolbars);
-        const DialogControlBinding bindings[] = {
-            { IDC_GRP_APPEARANCE, g_str.grp_appearance }, { IDC_CHK_LOCK, g_str.chk_lock }, { IDC_CHK_HIDE, g_str.chk_hide },
-            { IDC_CHK_SMALL, g_str.chk_small }, { IDC_TXT_LOCATION, g_str.txt_location }, { IDC_TXT_BUTTONS, g_str.txt_buttons },
-            { IDC_GRP_NOTIF, g_str.grp_notif }, { IDC_TXT_NOTIF, g_str.txt_notif }, { IDC_BTN_CUST_NOTIF, g_str.btn_cust_notif },
-            { IDC_GRP_AERO, g_str.grp_aero }, { IDC_TXT_AERO, g_str.txt_aero }, { IDC_CHK_AEROPEEK, g_str.chk_aero },
-            { IDC_TXT_START_INFO, g_str.start_info }, { IDC_BTN_START_CUST, g_str.btn_start_cust }, { IDC_TXT_POWER_LABEL, g_str.txt_power_label },
-            { IDC_GRP_PRIVACY, g_str.grp_privacy }, { IDC_CHK_MRU_PROG, g_str.chk_mru_prog }, { IDC_CHK_MRU_ITEMS, g_str.chk_mru_items },
-            { IDC_TXT_TOOLBARS_INFO, g_str.toolbars_info }, { IDOK, g_str.btn_ok }, { IDCANCEL, g_str.btn_cancel },
-            { IDC_BTN_APPLY, g_str.btn_apply }, { IDC_LINK_HELP, g_str.link_help },
+        auto addTab = [&](int i, const WCHAR* s) {
+            TCITEMW ti = { TCIF_TEXT, 0, 0, (LPWSTR)s };
+            SendMessageW(hTab, TCM_INSERTITEMW, i, (LPARAM)&ti);
         };
-        for (const auto& b : bindings) SetDlgItemTextW(hwnd, b.controlId, b.text);
-        if (g_hFontUi) { SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFontUi, TRUE); SetFontAllChildren(hwnd, g_hFontUi); }
+        addTab(0, g_str.tab_taskbar);
+        addTab(1, g_str.tab_start);
+        addTab(2, g_str.tab_toolbars);
+        
+        const DialogControlBinding bindings[] = {
+            { IDC_GRP_APPEARANCE, g_str.grp_appearance }, { IDC_CHK_LOCK, g_str.chk_lock },
+            { IDC_CHK_HIDE, g_str.chk_hide }, { IDC_CHK_SMALL, g_str.chk_small },
+            { IDC_TXT_LOCATION, g_str.txt_location }, { IDC_TXT_BUTTONS, g_str.txt_buttons },
+            { IDC_GRP_NOTIF, g_str.grp_notif }, { IDC_TXT_NOTIF, g_str.txt_notif },
+            { IDC_BTN_CUST_NOTIF, g_str.btn_cust_notif }, { IDC_GRP_AERO, g_str.grp_aero },
+            { IDC_TXT_AERO, g_str.txt_aero }, { IDC_CHK_AEROPEEK, g_str.chk_aero },
+            { IDC_TXT_START_INFO, g_str.start_info }, { IDC_BTN_START_CUST, g_str.btn_start_cust },
+            { IDC_TXT_POWER_LABEL, g_str.txt_power_label }, { IDC_GRP_PRIVACY, g_str.grp_privacy },
+            { IDC_CHK_MRU_PROG, g_str.chk_mru_prog }, { IDC_CHK_MRU_ITEMS, g_str.chk_mru_items },
+            { IDC_TXT_TOOLBARS_INFO, g_str.toolbars_info }, { IDOK, g_str.btn_ok },
+            { IDCANCEL, g_str.btn_cancel }, { IDC_BTN_APPLY, g_str.btn_apply },
+            { IDC_LINK_HELP, g_str.link_help },
+        };
+        for (const auto& b : bindings) {
+            SetDlgItemTextW(hwnd, b.controlId, b.text);
+        }
+        
+        if (g_hFontUi) {
+            SendMessageW(hwnd, WM_SETFONT, (WPARAM)g_hFontUi, TRUE);
+            SetFontAllChildren(hwnd, g_hFontUi);
+        }
+        
         BalanceTextAndCombo(hwnd, IDC_TXT_LOCATION, IDC_COMBO_LOCATION);
         BalanceTextAndCombo(hwnd, IDC_TXT_BUTTONS, IDC_COMBO_BUTTONS);
         BalanceTextAndCombo(hwnd, IDC_TXT_POWER_LABEL, IDC_COMBO_POWER);
+        
         HWND hCL = GetDlgItem(hwnd, IDC_COMBO_LOCATION);
         SendMessageW(hCL, CB_RESETCONTENT, 0, 0);
         SendMessageW(hCL, CB_ADDSTRING, 0, (LPARAM)g_str.pos_top);
         SendMessageW(hCL, CB_ADDSTRING, 0, (LPARAM)g_str.pos_bottom);
         EnableWindow(hCL, TRUE);
+        
         DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
         int newIndex = (edge == 1) ? 0 : 1;
         SendMessageW(hCL, CB_SETCURSEL, (WPARAM)newIndex, 0);
+        
         HWND hCB = GetDlgItem(hwnd, IDC_COMBO_BUTTONS);
         SendMessageW(hCB, CB_RESETCONTENT, 0, 0);
         SendMessageW(hCB, CB_ADDSTRING, 0, (LPARAM)g_str.btn_always_combine);
         SendMessageW(hCB, CB_ADDSTRING, 0, (LPARAM)g_str.btn_combine_full);
         SendMessageW(hCB, CB_ADDSTRING, 0, (LPARAM)g_str.btn_never_combine);
+        
         HWND hCP = GetDlgItem(hwnd, IDC_COMBO_POWER);
         SendMessageW(hCP, CB_RESETCONTENT, 0, 0);
-        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_shutdown); SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_restart);
-        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_sleep); SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_hibernate);
-        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_logoff); SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_lock);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_shutdown);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_restart);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_sleep);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_hibernate);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_logoff);
+        SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_lock);
         SendMessageW(hCP, CB_ADDSTRING, 0, (LPARAM)g_str.power_switchuser);
+        
         DWORD szMove = TaskbarSettingsProvider::RegGetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarSizeMove", 1);
         DWORD szSmall = TaskbarSettingsProvider::RegGetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarSmallIcons", 0);
         DWORD glom = TaskbarSettingsProvider::GetGlomLevel();
         bool aeroPeek = TaskbarSettingsProvider::GetAeroPeekEnabled();
+        
         APPBARDATA abd = { sizeof(APPBARDATA) };
         abd.hWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-        bool isHide = (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0;
+        bool isHide = false;
+        if (abd.hWnd && IsWindow(abd.hWnd)) {
+            isHide = (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0;
+        }
+        
         SendDlgItemMessageW(hwnd, IDC_CHK_LOCK, BM_SETCHECK, (szMove == 0) ? BST_CHECKED : BST_UNCHECKED, 0);
         SendDlgItemMessageW(hwnd, IDC_CHK_HIDE, BM_SETCHECK, isHide ? BST_CHECKED : BST_UNCHECKED, 0);
         SendDlgItemMessageW(hwnd, IDC_CHK_SMALL, BM_SETCHECK, (szSmall != 0) ? BST_CHECKED : BST_UNCHECKED, 0);
         SendDlgItemMessageW(hwnd, IDC_CHK_AEROPEEK, BM_SETCHECK, aeroPeek ? BST_CHECKED : BST_UNCHECKED, 0);
         SendMessageW(hCB, CB_SETCURSEL, (glom < 3) ? (WPARAM)glom : 0, 0);
+        
         DWORD curPower = TaskbarSettingsProvider::GetPowerAction();
         int powerIdx = 0;
-        for (int i = 0; i < 7; i++) { if (kPowerValues[i] == curPower) { powerIdx = i; break; } }
+        for (int i = 0; i < 7; i++) {
+            if (kPowerValues[i] == curPower) { powerIdx = i; break; }
+        }
         SendMessageW(hCP, CB_SETCURSEL, powerIdx, 0);
+        
         SendDlgItemMessageW(hwnd, IDC_CHK_MRU_PROG, BM_SETCHECK, TaskbarSettingsProvider::GetStartMruProgs() ? BST_CHECKED : BST_UNCHECKED, 0);
         SendDlgItemMessageW(hwnd, IDC_CHK_MRU_ITEMS, BM_SETCHECK, TaskbarSettingsProvider::GetStartMruItems() ? BST_CHECKED : BST_UNCHECKED, 0);
+        
         InitToolbarsList(GetDlgItem(hwnd, IDC_LST_TOOLBARS));
         EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), FALSE);
         SwitchTab(hwnd, 0);
+        
         RECT rc; GetWindowRect(hwnd, &rc);
         int ww = rc.right - rc.left, wh = rc.bottom - rc.top;
         SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - ww) / 4, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        
         LONG style = GetWindowLongW(hwnd, GWL_STYLE);
         style &= ~WS_THICKFRAME; style &= ~WS_MAXIMIZEBOX;
         SetWindowLongW(hwnd, GWL_STYLE, style);
         SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
         return TRUE;
     }
-    case WM_GETMINMAXINFO: { MINMAXINFO* mmi = (MINMAXINFO*)lp; RECT rc; GetWindowRect(hwnd, &rc); mmi->ptMinTrackSize.x = mmi->ptMaxTrackSize.x = rc.right - rc.left; mmi->ptMinTrackSize.y = mmi->ptMaxTrackSize.y = rc.bottom - rc.top; return 0; }
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mmi = (MINMAXINFO*)lp;
+        RECT rc; GetWindowRect(hwnd, &rc);
+        mmi->ptMinTrackSize.x = mmi->ptMaxTrackSize.x = rc.right - rc.left;
+        mmi->ptMinTrackSize.y = mmi->ptMaxTrackSize.y = rc.bottom - rc.top;
+        return 0;
+    }
     case WM_COMMAND: {
-        WORD id = LOWORD(wp); WORD act = HIWORD(wp);
-        if ((act == BN_CLICKED || act == CBN_SELCHANGE) && id != IDOK && id != IDCANCEL && id != IDC_BTN_APPLY && id != IDC_BTN_CUST_NOTIF && id != IDC_BTN_START_CUST) EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), TRUE);
-        if (id == IDOK) { ApplySettings(hwnd); if (IsWindow(hwnd)) DestroyWindow(hwnd); }
-        else if (id == IDCANCEL) { DestroyWindow(hwnd); }
-        else if (id == IDC_BTN_APPLY) { ApplySettings(hwnd); if (IsWindow(hwnd)) EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), FALSE); }
-        else if (id == IDC_BTN_CUST_NOTIF) { HINSTANCE hRes = ShellExecuteW(hwnd, L"open", L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}", NULL, NULL, SW_SHOW); if ((INT_PTR)hRes <= 32) ShellExecuteW(hwnd, L"open", L"control.exe", L"/name Microsoft.NotificationAreaIcons", NULL, SW_SHOW); }
-        else if (id == IDC_BTN_START_CUST) { ShowStartCustomDialog(hwnd); }
+        WORD id = LOWORD(wp);
+        WORD act = HIWORD(wp);
+        if ((act == BN_CLICKED || act == CBN_SELCHANGE) &&
+            id != IDOK && id != IDCANCEL && id != IDC_BTN_APPLY &&
+            id != IDC_BTN_CUST_NOTIF && id != IDC_BTN_START_CUST) {
+            EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), TRUE);
+        }
+        if (id == IDOK) {
+            ApplySettings(hwnd);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        } else if (id == IDCANCEL) {
+            DestroyWindow(hwnd);
+        } else if (id == IDC_BTN_APPLY) {
+            ApplySettings(hwnd);
+            if (IsWindow(hwnd)) EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), FALSE);
+        } else if (id == IDC_BTN_CUST_NOTIF) {
+            HINSTANCE hRes = ShellExecuteW(hwnd, L"open", L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}", NULL, NULL, SW_SHOW);
+            if ((INT_PTR)hRes <= 32) {
+                ShellExecuteW(hwnd, L"open", L"control.exe", L"/name Microsoft.NotificationAreaIcons", NULL, SW_SHOW);
+            }
+        } else if (id == IDC_BTN_START_CUST) {
+            ShowStartCustomDialog(hwnd);
+        }
         break;
     }
     case WM_NOTIFY: {
         NMHDR* hdr = (NMHDR*)lp;
-        if (hdr->idFrom == IDC_TAB_MAIN && hdr->code == TCN_SELCHANGE) { int sel = (int)SendDlgItemMessageW(hwnd, IDC_TAB_MAIN, TCM_GETCURSEL, 0, 0); SwitchTab(hwnd, sel); }
-        if (hdr->idFrom == IDC_LST_TOOLBARS && hdr->code == LVN_ITEMCHANGED) { NMLISTVIEW* nmlv = (NMLISTVIEW*)lp; if ((nmlv->uChanged & LVIF_STATE) && ((nmlv->uNewState ^ nmlv->uOldState) & LVIS_STATEIMAGEMASK)) EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), TRUE); }
-        if (hdr->idFrom == IDC_LINK_HELP && hdr->code == NM_CLICK) ShowAboutDialog(hwnd);
+        if (hdr->idFrom == IDC_TAB_MAIN && hdr->code == TCN_SELCHANGE) {
+            int sel = (int)SendDlgItemMessageW(hwnd, IDC_TAB_MAIN, TCM_GETCURSEL, 0, 0);
+            SwitchTab(hwnd, sel);
+        }
+        if (hdr->idFrom == IDC_LST_TOOLBARS && hdr->code == LVN_ITEMCHANGED) {
+            NMLISTVIEW* nmlv = (NMLISTVIEW*)lp;
+            if ((nmlv->uChanged & LVIF_STATE) && ((nmlv->uNewState ^ nmlv->uOldState) & LVIS_STATEIMAGEMASK)) {
+                EnableWindow(GetDlgItem(hwnd, IDC_BTN_APPLY), TRUE);
+            }
+        }
+        if (hdr->idFrom == IDC_LINK_HELP && hdr->code == NM_CLICK) {
+            ShowAboutDialog(hwnd);
+        }
         break;
     }
-    case WM_DESTROY: if (g_hFontUi) { DeleteObject(g_hFontUi); g_hFontUi = NULL; } g_hwndMain = NULL; InterlockedExchange(&g_dialogOpen, 0); break;
-    case WM_CLOSE: DestroyWindow(hwnd); break;
+    case WM_DESTROY:
+        if (g_hFontUi) { DeleteObject(g_hFontUi); g_hFontUi = NULL; }
+        g_hwndMain = NULL;
+        InterlockedExchange(&g_dialogOpen, 0);
+        break;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        break;
     }
     return FALSE;
 }
@@ -1951,6 +2610,7 @@ static HWND BuildAndShowDialog() {
     BYTE* p = buf;
     int controlCount = 0;
     auto align4 = [](BYTE*& ptr) { ptr = (BYTE*)(((UINT_PTR)ptr + 3) & ~3); };
+    
     LPDLGTEMPLATEW pDlg = (LPDLGTEMPLATEW)p;
     pDlg->style = DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU;
     pDlg->dwExtendedStyle = 0;
@@ -1959,11 +2619,13 @@ static HWND BuildAndShowDialog() {
     pDlg->cx = DialogSizes::MAIN_WIDTH;
     pDlg->cy = DialogSizes::MAIN_HEIGHT;
     p += sizeof(DLGTEMPLATE);
-    *(WORD*)p = 0; p += 2; *(WORD*)p = 0; p += 2;
+    *(WORD*)p = 0; p += 2;
+    *(WORD*)p = 0; p += 2;
     StringCchCopyW((WCHAR*)p, 1, L""); p += 2;
     *(WORD*)p = 9; p += 2;
     StringCchCopyW((WCHAR*)p, 10, L"Segoe UI");
     p += (lstrlenW(L"Segoe UI") + 1) * 2;
+    
     auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy, WORD id, LPCWSTR cls, LPCWSTR cap) {
         align4(p);
         LPDLGITEMTEMPLATE pi = (LPDLGITEMTEMPLATE)p;
@@ -1978,6 +2640,7 @@ static HWND BuildAndShowDialog() {
         *(WORD*)p = 0; p += 2;
         controlCount++;
     };
+    
     addCtrl(TCS_TABS | WS_TABSTOP, 0, 6, 6, 250, 246, IDC_TAB_MAIN, L"SysTabControl32", L"");
     addCtrl(BS_GROUPBOX, 0, 12, 22, 238, 96, IDC_GRP_APPEARANCE, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 33, 226, 10, IDC_CHK_LOCK, L"Button", L"");
@@ -2006,6 +2669,7 @@ static HWND BuildAndShowDialog() {
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP | BS_MULTILINE, 0, 18, 108, 226, 18, IDC_CHK_MRU_ITEMS, L"Button", L"");
     addCtrl(SS_LEFT, 0, 14, 22, 234, 18, IDC_TXT_TOOLBARS_INFO, L"Static", L"");
     addCtrl(LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP, 0, 16, 44, 230, 165, IDC_LST_TOOLBARS, L"SysListView32", L"");
+    
     pDlg->cdit = controlCount;
     HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(NULL), (LPDLGTEMPLATE)buf, NULL, DlgProc, 0);
     delete[] buf;
@@ -2016,15 +2680,27 @@ static DWORD WINAPI DialogThreadProc(LPVOID) {
     EnsureThemeActCtx();
     ULONG_PTR cookie = 0;
     BOOL actCtxActive = FALSE;
-    if (g_hActCtx != INVALID_HANDLE_VALUE) actCtxActive = ActivateActCtx(g_hActCtx, &cookie);
+    if (g_hActCtx != INVALID_HANDLE_VALUE) {
+        actCtxActive = ActivateActCtx(g_hActCtx, &cookie);
+    }
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_TAB_CLASSES | ICC_LINK_CLASS | ICC_WIN95_CLASSES | ICC_LISTVIEW_CLASSES };
     InitCommonControlsEx(&icex);
     HWND hwnd = BuildAndShowDialog();
-    if (!hwnd) { if (actCtxActive) DeactivateActCtx(0, cookie); InterlockedExchange(&g_dialogOpen, 0); return 1; }
+    if (!hwnd) {
+        if (actCtxActive) DeactivateActCtx(0, cookie);
+        InterlockedExchange(&g_dialogOpen, 0);
+        return 1;
+    }
     ShowWindow(hwnd, SW_SHOWNORMAL);
     SetForegroundWindow(hwnd);
     MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) { if (!IsDialogMessageW(hwnd, &msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); } if (!IsWindow(hwnd)) break; }
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        if (!IsDialogMessageW(hwnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (!IsWindow(hwnd)) break;
+    }
     if (actCtxActive) DeactivateActCtx(0, cookie);
     g_hwndMain = NULL;
     InterlockedExchange(&g_dialogOpen, 0);
@@ -2032,16 +2708,44 @@ static DWORD WINAPI DialogThreadProc(LPVOID) {
 }
 
 static void ShowTaskbarProperties() {
-    if (InterlockedExchange(&g_dialogOpen, 1)) { HWND hw = g_hwndMain; if (hw && IsWindow(hw)) { SetForegroundWindow(hw); if (IsIconic(hw)) ShowWindow(hw, SW_RESTORE); } return; }
-    if (g_dialogThread) { WaitForSingleObject(g_dialogThread, INFINITE); CloseHandle(g_dialogThread); g_dialogThread = NULL; }
+    if (InterlockedExchange(&g_dialogOpen, 1)) {
+        HWND hw = g_hwndMain;
+        if (hw && IsWindow(hw)) {
+            SetForegroundWindow(hw);
+            if (IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+        }
+        return;
+    }
+    
+    if (g_dialogThread) {
+        DWORD waitResult = WaitForSingleObject(g_dialogThread, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"ShowTaskbarProperties: Previous thread timed out, continuing anyway");
+        }
+        CloseHandle(g_dialogThread);
+        g_dialogThread = NULL;
+    }
+    
     g_dialogThread = CreateThread(NULL, 0, DialogThreadProc, NULL, 0, NULL);
+    if (!g_dialogThread) {
+        Wh_Log(L"ShowTaskbarProperties: Failed to create thread");
+        InterlockedExchange(&g_dialogOpen, 0);
+    }
 }
 
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
-    if (pei && pei->lpFile) { if (_wcsnicmp(pei->lpFile, L"ms-settings:taskbar", 19) == 0) { ShowTaskbarProperties(); if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = NULL; pei->hInstApp = SHELL_EXECUTE_SUCCESS; return TRUE; } }
+    
+    if (pei && pei->lpFile) {
+        if (_wcsnicmp(pei->lpFile, L"ms-settings:taskbar", 19) == 0) {
+            ShowTaskbarProperties();
+            if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = NULL;
+            pei->hInstApp = SHELL_EXECUTE_SUCCESS;
+            return TRUE;
+        }
+    }
     return ShellExecuteExW_orig(pei);
 }
 
@@ -2049,11 +2753,24 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFi
     if (IsChildProcess()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
-    if (lpFile && _wcsnicmp(lpFile, L"ms-settings:taskbar", 19) == 0) { ShowTaskbarProperties(); return SHELL_EXECUTE_SUCCESS; }
+    
+    if (lpFile && _wcsnicmp(lpFile, L"ms-settings:taskbar", 19) == 0) {
+        ShowTaskbarProperties();
+        return SHELL_EXECUTE_SUCCESS;
+    }
     return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
 }
 
 BOOL Wh_ModInit() {
+    if (!GetWindowsVersion(&g_windowsVersion)) {
+        Wh_Log(L"Wh_ModInit: Failed to get Windows version");
+    } else if (!g_windowsVersion.IsSupported()) {
+        Wh_Log(L"Wh_ModInit: Unsupported Windows version detected, some features may not work");
+    } else {
+        Wh_Log(L"Wh_ModInit: Windows version %lu.%lu.%lu supported",
+               g_windowsVersion.majorVersion, g_windowsVersion.minorVersion, g_windowsVersion.buildNumber);
+    }
+    
     InterlockedExchange(&g_dialogOpen, 0);
     InterlockedExchange(&g_startCustomOpen, 0);
     BuildChildEnvironment();
@@ -2061,34 +2778,65 @@ BOOL Wh_ModInit() {
     InitLocalization();
     EnsureThemeActCtx();
     g_lastEdge = TaskbarSettingsProvider::GetTaskbarEdge();
+    
     InstallTaskbarPositionHooks();
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
     SubclassExistingTaskbars();
+    
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (hShell32) {
-        Wh_SetFunctionHook((void*)GetProcAddress(hShell32, "ShellExecuteExW"), (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
-        Wh_SetFunctionHook((void*)GetProcAddress(hShell32, "ShellExecuteW"), (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
+        Wh_SetFunctionHook(
+            (void*)GetProcAddress(hShell32, "ShellExecuteExW"),
+            (void*)ShellExecuteExW_hook,
+            (void**)&ShellExecuteExW_orig);
+        Wh_SetFunctionHook(
+            (void*)GetProcAddress(hShell32, "ShellExecuteW"),
+            (void*)ShellExecuteW_hook,
+            (void**)&ShellExecuteW_orig);
     }
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    g_modUnloading = true;
+    
     if (g_taskbarPosHooksInstalled && g_lastEdge != 3) {
         TaskbarSettingsProvider::RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarSide", 3);
         UpdateAllStuckRects(3);
-        g_modUnloading = true;
         UnsubclassExistingTaskbars();
         ClearRotatedIconCache();
         HWND hTray = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr);
-        if (hTray) { SendMessageW(hTray, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0); SendMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings"); }
+        if (hTray && IsWindow(hTray)) {
+            SendMessageW(hTray, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
+            SendMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
+        }
     }
     g_taskbarPosHooksInstalled = false;
-    if (g_hwndMain && IsWindow(g_hwndMain)) PostMessageW(g_hwndMain, WM_CLOSE, 0, 0);
-    if (g_hwndStartCustom && IsWindow(g_hwndStartCustom)) PostMessageW(g_hwndStartCustom, WM_CLOSE, 0, 0);
-    if (g_dialogThread) { WaitForSingleObject(g_dialogThread, 1500); CloseHandle(g_dialogThread); g_dialogThread = NULL; }
+    
+    if (g_hwndMain && IsWindow(g_hwndMain)) {
+        PostMessageW(g_hwndMain, WM_CLOSE, 0, 0);
+    }
+    if (g_hwndStartCustom && IsWindow(g_hwndStartCustom)) {
+        PostMessageW(g_hwndStartCustom, WM_CLOSE, 0, 0);
+    }
+    
+    if (g_dialogThread) {
+        DWORD waitResult = WaitForSingleObject(g_dialogThread, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Wh_ModUninit: Dialog thread timeout");
+        }
+        CloseHandle(g_dialogThread);
+        g_dialogThread = NULL;
+    }
+    
     if (g_hFontUi) { DeleteObject(g_hFontUi); g_hFontUi = NULL; }
     if (g_hStartFontUi) { DeleteObject(g_hStartFontUi); g_hStartFontUi = NULL; }
-    if (g_hActCtx != INVALID_HANDLE_VALUE) { ReleaseActCtx(g_hActCtx); g_hActCtx = INVALID_HANDLE_VALUE; }
+    if (g_hActCtx != INVALID_HANDLE_VALUE) {
+        ReleaseActCtx(g_hActCtx);
+        g_hActCtx = INVALID_HANDLE_VALUE;
+    }
+    
+    ClearRotatedIconCache();
 }
 
 void Wh_ModSettingsChanged() {
