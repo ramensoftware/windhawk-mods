@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-04T11:02:59.000Z</updated>
+    <updated>2026-07-04T14:38:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Island Media Controls 0.9.27]]></title>
+        <id>https://windhawk.net/mods/island-media-controls#1f7614c178f23c0662bc8f677207cb9998bb9340</id>
+        <link href="https://windhawk.net/mods/island-media-controls"/>
+        <updated>2026-07-04T14:38:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="islandmediacontrols">Island Media Controls</h1>
+<p>Bring the current media session directly into the Windows 11 taskbar with a
+compact, theme-aware island built from native XAML. Unlike a floating Win32
+overlay, the island is inserted into the taskbar layout as a real XAML Grid, so
+it fits naturally alongside your taskbar and system tray items.</p>
+<h2 id="preview">Preview</h2>
+<p>| Dark mode | Light mode |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif" alt="Island Media Controls in dark mode" /> | <img src="https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif" alt="Island Media Controls in light mode" /> |</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Native taskbar integration:</strong> Choose from several system tray and taskbar
+positions without placing a separate always-on-top window over the taskbar.</li>
+<li><strong>Live media information:</strong> See album artwork, track title, and artist at a
+glance, with smooth transitions when the active media session changes.</li>
+<li><strong>Expanded player:</strong> Click the compact island to open a native XAML player
+with artwork, seekable playback progress, and previous, play/pause, and next
+controls.</li>
+<li><strong>Light and dark themes:</strong> Colors, text, surfaces, and controls automatically
+follow the Windows app theme.</li>
+<li><strong>Fluent visuals:</strong> Native Acrylic, rounded XAML geometry, album-art color
+accents, hover feedback, and display-synced animations keep interactions
+fluid and consistent with Windows 11.</li>
+<li><strong>Flexible customization:</strong> Adjust position, size, spacing, shadows, hover
+behavior, background material, expanded button style, and idle visibility.</li>
+<li><strong>Artwork effects:</strong> Add an optional album-art background wash and choose
+whether low-resolution video thumbnails use the original browser artwork,
+a mesh gradient, or an energy-flame visual.</li>
+</ul>]]></content>
+        <author>
+            <name>usho</name>
+            <uri>https://github.com/usho-lear</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.2]]></title>
         <id>https://windhawk.net/mods/disable-inactive-menubar-greying#c31d06a195bfa0cf47cb700c22d23b5c68f78709</id>
@@ -500,20 +539,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>LiHua81</name>
             <uri>https://github.com/LiHua81</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AutoScroll Win32 1.0.2]]></title>
-        <id>https://windhawk.net/mods/autoscroll-win32#10df87270e61881eaa75f976de21d0a3d9e58464</id>
-        <link href="https://windhawk.net/mods/autoscroll-win32"/>
-        <updated>2026-06-30T07:53:26.000Z</updated>
-        <content type="html"><![CDATA[<ol>
-<li>Fixed possible explorer.exe crash on startup</li>
-<li>Fixed inverted horizontal scrolling</li>
-</ol>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

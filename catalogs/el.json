@@ -6540,6 +6540,38 @@
         "version": "1.0.0"
       }
     },
+    "island-media-controls": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783175924000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783175924000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "usho",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore",
+        "description": "Dynamic island-like media controls for the Windows 11 taskbar.",
+        "github": "https://github.com/usho-lear",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Island Media Controls",
+        "version": "0.9.27"
+      }
+    },
     "isretailready-false": {
       "details": {
         "defaultSorting": 54,
