@@ -1091,21 +1091,23 @@ void SeekToMediaPosition(double ratio) {
     RunMediaCommand([absolutePositionTicks, relativePositionTicks,
                      providerReportsSeekSupport](
                         gsm::GlobalSystemMediaTransportControlsSession const& session) {
+        // Keep the relative timestamp first for compatibility with Apple Music
+        // and with the earlier mod version that could seek it successfully.
         bool changed = session
                            .TryChangePlaybackPositionAsync(
-                               absolutePositionTicks)
+                               relativePositionTicks)
                            .get();
-        // A few providers expose a non-zero StartTime but still interpret seek
-        // requests as offsets. Retry only when the standards-compliant absolute
-        // request was rejected.
+        // Standards-compliant providers with a non-zero StartTime may require
+        // an absolute timeline timestamp, so use that only as the fallback.
         if (!changed && absolutePositionTicks != relativePositionTicks) {
             changed = session
                           .TryChangePlaybackPositionAsync(
-                              relativePositionTicks)
+                              absolutePositionTicks)
                           .get();
         }
-        Wh_Log(L"Island: seek result=%d advertised=%d target=%lld",
+        Wh_Log(L"Island: seek result=%d advertised=%d relative=%lld absolute=%lld",
                changed, providerReportsSeekSupport,
+               static_cast<long long>(relativePositionTicks),
                static_cast<long long>(absolutePositionTicks));
     });
 }
