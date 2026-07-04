@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -116,6 +116,8 @@ it fits naturally alongside your taskbar and system tray items.
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <tlhelp32.h>
+#include <uiautomation.h>
 #include <shlwapi.h>
 #include <wincodec.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
@@ -431,6 +433,110 @@ winrt::Windows::UI::Color ColorFromPbgra(BYTE const* pixel) {
         static_cast<BYTE>(Clamp(std::lround(pixel[2] * inverseAlpha), 0L, 255L)),
         static_cast<BYTE>(Clamp(std::lround(pixel[1] * inverseAlpha), 0L, 255L)),
         static_cast<BYTE>(Clamp(std::lround(pixel[0] * inverseAlpha), 0L, 255L)));
+}
+
+DWORD FindAppleMusicProcessId() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    PROCESSENTRY32W entry{sizeof(entry)};
+    DWORD processId = 0;
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (_wcsicmp(entry.szExeFile, L"AppleMusic.exe") == 0) {
+                processId = entry.th32ProcessID;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return processId;
+}
+
+bool TrySeekAppleMusicWithUiAutomation(double ratio) {
+    DWORD processId = FindAppleMusicProcessId();
+    if (!processId) {
+        return false;
+    }
+
+    IUIAutomation* automation = nullptr;
+    IUIAutomationElement* root = nullptr;
+    IUIAutomationCondition* processCondition = nullptr;
+    IUIAutomationCondition* idCondition = nullptr;
+    IUIAutomationCondition* combinedCondition = nullptr;
+    IUIAutomationElement* scrubber = nullptr;
+    IUnknown* unknown = nullptr;
+    IUIAutomationRangeValuePattern* range = nullptr;
+    bool succeeded = false;
+
+    HRESULT result = CoCreateInstance(CLSID_CUIAutomation, nullptr,
+                                      CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(&automation));
+    VARIANT processVariant{};
+    processVariant.vt = VT_I4;
+    processVariant.lVal = static_cast<LONG>(processId);
+    VARIANT idVariant{};
+    idVariant.vt = VT_BSTR;
+    idVariant.bstrVal = SysAllocString(L"LCDScrubber");
+
+    if (SUCCEEDED(result)) {
+        result = automation->GetRootElement(&root);
+    }
+    if (SUCCEEDED(result)) {
+        result = automation->CreatePropertyCondition(
+            UIA_ProcessIdPropertyId, processVariant, &processCondition);
+    }
+    if (SUCCEEDED(result) && idVariant.bstrVal) {
+        result = automation->CreatePropertyCondition(
+            UIA_AutomationIdPropertyId, idVariant, &idCondition);
+    }
+    if (SUCCEEDED(result)) {
+        result = automation->CreateAndCondition(
+            processCondition, idCondition, &combinedCondition);
+    }
+    if (SUCCEEDED(result)) {
+        result = root->FindFirst(TreeScope_Subtree, combinedCondition,
+                                 &scrubber);
+        if (SUCCEEDED(result) && !scrubber) {
+            result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+        }
+    }
+    if (SUCCEEDED(result)) {
+        result = scrubber->GetCurrentPattern(UIA_RangeValuePatternId,
+                                             &unknown);
+    }
+    if (SUCCEEDED(result)) {
+        result = unknown->QueryInterface(IID_PPV_ARGS(&range));
+    }
+    if (SUCCEEDED(result)) {
+        BOOL readOnly = TRUE;
+        double minimum = 0.0;
+        double maximum = 0.0;
+        result = range->get_CurrentIsReadOnly(&readOnly);
+        if (SUCCEEDED(result)) result = range->get_CurrentMinimum(&minimum);
+        if (SUCCEEDED(result)) result = range->get_CurrentMaximum(&maximum);
+        if (SUCCEEDED(result) && !readOnly && maximum > minimum) {
+            double value = minimum +
+                           (maximum - minimum) * Clamp(ratio, 0.0, 1.0);
+            result = range->SetValue(value);
+            succeeded = SUCCEEDED(result);
+        }
+    }
+
+    VariantClear(&idVariant);
+    if (range) range->Release();
+    if (unknown) unknown->Release();
+    if (scrubber) scrubber->Release();
+    if (combinedCondition) combinedCondition->Release();
+    if (idCondition) idCondition->Release();
+    if (processCondition) processCondition->Release();
+    if (root) root->Release();
+    if (automation) automation->Release();
+
+    Wh_Log(L"Island: Apple Music UI Automation seek result=%d hr=0x%08X",
+           succeeded, static_cast<unsigned>(result));
+    return succeeded;
 }
 
 SolidColorBrush Brush(winrt::Windows::UI::Color color) {
@@ -1089,17 +1195,22 @@ void SeekToMediaPosition(double ratio) {
         state.timelineStartTicks + relativePositionTicks;
     bool providerReportsSeekSupport = state.canSeek;
     RunMediaCommand([absolutePositionTicks, relativePositionTicks,
-                     providerReportsSeekSupport](
+                     providerReportsSeekSupport, ratio](
                         gsm::GlobalSystemMediaTransportControlsSession const& session) {
         try {
-            // Keep the relative timestamp first for compatibility with Apple Music
-            // and with the earlier mod version that could seek it successfully.
+            auto source = session.SourceAppUserModelId();
+            bool isAppleMusic =
+                std::wstring_view(source).find(L"AppleMusic") !=
+                std::wstring_view::npos;
+            if (isAppleMusic && !providerReportsSeekSupport &&
+                TrySeekAppleMusicWithUiAutomation(ratio)) {
+                return;
+            }
+
             bool changed = session
                                .TryChangePlaybackPositionAsync(
                                    relativePositionTicks)
                                .get();
-            // Standards-compliant providers with a non-zero StartTime may require
-            // an absolute timeline timestamp, so use that only as the fallback.
             if (!changed && absolutePositionTicks != relativePositionTicks) {
                 changed = session
                               .TryChangePlaybackPositionAsync(
@@ -1107,7 +1218,7 @@ void SeekToMediaPosition(double ratio) {
                               .get();
             }
             Wh_Log(L"Island: seek source=%s result=%d advertised=%d relative=%lld absolute=%lld",
-                   session.SourceAppUserModelId().c_str(), changed,
+                   source.c_str(), changed,
                    providerReportsSeekSupport,
                    static_cast<long long>(relativePositionTicks),
                    static_cast<long long>(absolutePositionTicks));
