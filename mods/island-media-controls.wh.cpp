@@ -1091,24 +1091,31 @@ void SeekToMediaPosition(double ratio) {
     RunMediaCommand([absolutePositionTicks, relativePositionTicks,
                      providerReportsSeekSupport](
                         gsm::GlobalSystemMediaTransportControlsSession const& session) {
-        // Keep the relative timestamp first for compatibility with Apple Music
-        // and with the earlier mod version that could seek it successfully.
-        bool changed = session
-                           .TryChangePlaybackPositionAsync(
-                               relativePositionTicks)
-                           .get();
-        // Standards-compliant providers with a non-zero StartTime may require
-        // an absolute timeline timestamp, so use that only as the fallback.
-        if (!changed && absolutePositionTicks != relativePositionTicks) {
-            changed = session
-                          .TryChangePlaybackPositionAsync(
-                              absolutePositionTicks)
-                          .get();
+        try {
+            // Keep the relative timestamp first for compatibility with Apple Music
+            // and with the earlier mod version that could seek it successfully.
+            bool changed = session
+                               .TryChangePlaybackPositionAsync(
+                                   relativePositionTicks)
+                               .get();
+            // Standards-compliant providers with a non-zero StartTime may require
+            // an absolute timeline timestamp, so use that only as the fallback.
+            if (!changed && absolutePositionTicks != relativePositionTicks) {
+                changed = session
+                              .TryChangePlaybackPositionAsync(
+                                  absolutePositionTicks)
+                              .get();
+            }
+            Wh_Log(L"Island: seek source=%s result=%d advertised=%d relative=%lld absolute=%lld",
+                   session.SourceAppUserModelId().c_str(), changed,
+                   providerReportsSeekSupport,
+                   static_cast<long long>(relativePositionTicks),
+                   static_cast<long long>(absolutePositionTicks));
+        } catch (winrt::hresult_error const& error) {
+            Wh_Log(L"Island: seek source=%s failed=0x%08X",
+                   session.SourceAppUserModelId().c_str(),
+                   static_cast<unsigned>(error.code().value));
         }
-        Wh_Log(L"Island: seek result=%d advertised=%d relative=%lld absolute=%lld",
-               changed, providerReportsSeekSupport,
-               static_cast<long long>(relativePositionTicks),
-               static_cast<long long>(absolutePositionTicks));
     });
 }
 
@@ -5887,7 +5894,10 @@ void MediaThreadProc() {
         }
 
         if (!commands.empty()) {
-            auto session = CurrentSessionFromManager(manager);
+            // Resolve a fresh manager/session for commands. Apple Music can keep
+            // reporting through a long-lived GSMTC session while rejecting
+            // control requests issued through that stale session object.
+            auto session = CurrentSession();
             if (session) {
                 for (auto& command : commands) {
                     try {
