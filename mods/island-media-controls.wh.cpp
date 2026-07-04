@@ -395,6 +395,10 @@ TranslateTransform g_compactOutgoingTitleTranslate = nullptr;
 TranslateTransform g_compactOutgoingArtistTranslate = nullptr;
 Image g_compactAlbumArtImage = nullptr;
 Image g_compactAlbumArtFade = nullptr;
+ProgressBar g_compactProgress = nullptr;
+winrt::event_token g_compactProgressRenderingToken{};
+bool g_compactProgressRenderingHooked = false;
+std::chrono::steady_clock::time_point g_lastCompactProgressFrameTime;
 winrt::event_token g_compactTextRenderingToken{};
 bool g_compactTextRenderingHooked = false;
 double g_compactTextProgress = 1.0;
@@ -4672,6 +4676,91 @@ void SetCompactIslandSuppressed(bool suppressed);
 void StartPopupXamlRenderLoop();
 void StopHoverRenderLoop();
 void StopCompactTextRenderLoop();
+void StopCompactProgressRenderLoop();
+
+bool UpdateCompactProgressFromSnapshot() {
+    if (!g_compactProgress) {
+        return false;
+    }
+
+    std::chrono::steady_clock::time_point timestamp;
+    MediaState state = SnapshotMediaWithTimestamp(timestamp);
+    int64_t positionTicks = state.positionTicks;
+    if (state.hasSession && state.isPlaying && state.durationTicks > 0 &&
+        timestamp.time_since_epoch().count() != 0) {
+        double ageSeconds =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - timestamp)
+                .count() /
+            1000.0;
+        // The event-driven media worker has a 30-second safety refresh, so local
+        // interpolation can remain smooth between provider timeline events.
+        ageSeconds = Clamp(ageSeconds, 0.0, 30.0);
+        positionTicks +=
+            static_cast<int64_t>(ageSeconds * 10000000.0);
+    }
+
+    double value = 0.0;
+    if (state.hasSession && state.durationTicks > 0) {
+        positionTicks = std::clamp<int64_t>(
+            positionTicks, 0, state.durationTicks);
+        value = Clamp(static_cast<double>(positionTicks) /
+                          static_cast<double>(state.durationTicks) * 1000.0,
+                      0.0, 1000.0);
+    }
+    g_compactProgress.Value(value);
+    return state.hasSession && state.isPlaying && state.durationTicks > 0;
+}
+
+void StopCompactProgressRenderLoop() {
+    if (!g_compactProgressRenderingHooked) {
+        return;
+    }
+    try {
+        mediax::CompositionTarget::Rendering(
+            g_compactProgressRenderingToken);
+    } catch (...) {
+    }
+    g_compactProgressRenderingHooked = false;
+    g_lastCompactProgressFrameTime = {};
+}
+
+void OnCompactProgressRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    try {
+        if (!g_playerGrid || !g_compactProgress || g_expanded || g_unloading) {
+            StopCompactProgressRenderLoop();
+            return;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        if (g_lastCompactProgressFrameTime.time_since_epoch().count() != 0 &&
+            now - g_lastCompactProgressFrameTime <
+                std::chrono::milliseconds(33)) {
+            return;
+        }
+        g_lastCompactProgressFrameTime = now;
+
+        if (!UpdateCompactProgressFromSnapshot()) {
+            StopCompactProgressRenderLoop();
+        }
+    } catch (...) {
+        StopCompactProgressRenderLoop();
+    }
+}
+
+void StartCompactProgressRenderLoop() {
+    if (!g_compactProgress || g_compactProgressRenderingHooked ||
+        g_expanded || g_unloading) {
+        return;
+    }
+    g_lastCompactProgressFrameTime = {};
+    g_compactProgressRenderingToken =
+        mediax::CompositionTarget::Rendering(OnCompactProgressRendering);
+    g_compactProgressRenderingHooked = true;
+}
+
 void ResetCompactTextAnimationVisuals() {
     try {
         if (g_compactTitleTranslate) {
@@ -5082,6 +5171,7 @@ void SetCompactIslandSuppressed(bool suppressed) {
 
     if (suppressed) {
         StopCompactTextRenderLoop();
+        StopCompactProgressRenderLoop();
         ResetCompactTextAnimationVisuals();
     }
 
@@ -6182,6 +6272,7 @@ Grid BuildIslandGrid() {
     progress.Minimum(0);
     progress.Maximum(1000);
     progress.Value(0);
+    g_compactProgress = progress;
     details.Children().Append(progress);
     content.Children().Append(details);
 
@@ -6301,15 +6392,12 @@ void UpdatePlayerContents() {
             }
         }
     }
-    if (auto progressFe = FindChildByName(g_playerGrid, L"Island_Progress")) {
-        if (auto progress = progressFe.try_as<ProgressBar>()) {
-            double value = 0.0;
-            if (state.durationTicks > 0) {
-                value = Clamp(static_cast<double>(state.positionTicks) /
-                                  static_cast<double>(state.durationTicks) * 1000.0,
-                              0.0, 1000.0);
-            }
-            progress.Value(value);
+    if (g_compactProgress) {
+        bool shouldInterpolate = UpdateCompactProgressFromSnapshot();
+        if (shouldInterpolate && !g_expanded) {
+            StartCompactProgressRenderLoop();
+        } else {
+            StopCompactProgressRenderLoop();
         }
     }
     bool compactArtChanged = false;
@@ -6593,6 +6681,7 @@ void UpdatePlayerContents() {
 void RemoveIslandGrid() {
     StopHoverRenderLoop();
     StopCompactTextRenderLoop();
+    StopCompactProgressRenderLoop();
     DestroyExpandedPopup();
 
     if (!g_injectionParent || !g_playerGrid) {
@@ -6611,6 +6700,7 @@ void RemoveIslandGrid() {
         g_compactOutgoingArtistTranslate = nullptr;
         g_compactAlbumArtImage = nullptr;
         g_compactAlbumArtFade = nullptr;
+        g_compactProgress = nullptr;
         g_compactTextInitialized = false;
         g_compactLastTitle.clear();
         g_compactLastArtist.clear();
@@ -6671,6 +6761,7 @@ void RemoveIslandGrid() {
     g_compactOutgoingArtistText = nullptr;
     g_compactTitleTranslate = nullptr;
     g_compactArtistTranslate = nullptr;
+    g_compactProgress = nullptr;
     g_compactTextInitialized = false;
     g_compactLastTitle.clear();
     g_compactLastArtist.clear();
