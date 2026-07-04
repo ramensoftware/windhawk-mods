@@ -223,6 +223,8 @@ struct MediaState {
     std::wstring artist;
     bool hasSession = false;
     bool isPlaying = false;
+    bool canSeek = false;
+    int64_t timelineStartTicks = 0;
     int64_t positionTicks = 0;
     int64_t durationTicks = 0;
     std::vector<uint8_t> thumbnailBytes;
@@ -1052,6 +1054,12 @@ void RefreshMediaState(
             state.isPlaying =
                 playback.PlaybackStatus() ==
                 gsm::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+            try {
+                state.canSeek =
+                    playback.Controls().IsPlaybackPositionEnabled();
+            } catch (...) {
+                state.canSeek = false;
+            }
 
             auto props = session.TryGetMediaPropertiesAsync().get();
             state.title = props.Title().empty() ? L"Unknown title" : std::wstring(props.Title());
@@ -1060,10 +1068,16 @@ void RefreshMediaState(
             state.thumbnailBytes = ReadThumbnailBytes(props.Thumbnail());
 
             auto timeline = session.GetTimelineProperties();
-            state.positionTicks = timeline.Position().count();
             int64_t start = timeline.StartTime().count();
             int64_t end = timeline.EndTime().count();
+            int64_t position = timeline.Position().count();
+            state.timelineStartTicks = start;
             state.durationTicks = end > start ? end - start : 0;
+            state.positionTicks = state.durationTicks > 0
+                                      ? std::clamp<int64_t>(
+                                            position - start, 0,
+                                            state.durationTicks)
+                                      : 0;
         }
     } catch (...) {
         state = {};
@@ -1090,11 +1104,30 @@ void SeekToMediaPosition(double ratio) {
     }
 
     ratio = Clamp(ratio, 0.0, 1.0);
-    int64_t positionTicks = static_cast<int64_t>(
+    int64_t relativePositionTicks = static_cast<int64_t>(
         std::llround(static_cast<double>(state.durationTicks) * ratio));
-    RunMediaCommand([positionTicks](
+    int64_t absolutePositionTicks =
+        state.timelineStartTicks + relativePositionTicks;
+    bool providerReportsSeekSupport = state.canSeek;
+    RunMediaCommand([absolutePositionTicks, relativePositionTicks,
+                     providerReportsSeekSupport](
                         gsm::GlobalSystemMediaTransportControlsSession const& session) {
-        session.TryChangePlaybackPositionAsync(positionTicks).get();
+        bool changed = session
+                           .TryChangePlaybackPositionAsync(
+                               absolutePositionTicks)
+                           .get();
+        // A few providers expose a non-zero StartTime but still interpret seek
+        // requests as offsets. Retry only when the standards-compliant absolute
+        // request was rejected.
+        if (!changed && absolutePositionTicks != relativePositionTicks) {
+            changed = session
+                          .TryChangePlaybackPositionAsync(
+                              relativePositionTicks)
+                          .get();
+        }
+        Wh_Log(L"Island: seek result=%d advertised=%d target=%lld",
+               changed, providerReportsSeekSupport,
+               static_cast<long long>(absolutePositionTicks));
     });
 }
 
