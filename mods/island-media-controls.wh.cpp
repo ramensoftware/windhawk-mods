@@ -257,10 +257,6 @@ double g_popupSeekCommitRatio = 0.0;
 int64_t g_popupSeekCommitTargetTicks = 0;
 std::chrono::steady_clock::time_point g_popupSeekCommitUntil;
 
-MediaState g_pendingMediaSwitchState;
-std::wstring g_pendingMediaSwitchKey;
-std::chrono::steady_clock::time_point g_pendingMediaSwitchSince;
-int g_pendingMediaSwitchCount = 0;
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_mediaThreadRunning = false;
 std::thread* g_mediaThread = nullptr;
@@ -899,66 +895,6 @@ void SetMedia(MediaState&& state) {
     std::wstring currentKey = MediaContentKey(g_media);
     std::wstring nextKey = MediaContentKey(state);
 
-    if (g_media.hasSession && !state.hasSession) {
-        // Browser sessions sometimes disappear for a poll right after pausing.
-        // Do not turn that into a visible "No media" / text animation unless it
-        // stays gone.
-        std::wstring noSessionKey = L"__no_session__";
-        if (g_pendingMediaSwitchKey != noSessionKey) {
-            g_pendingMediaSwitchKey = noSessionKey;
-            g_pendingMediaSwitchSince = now;
-            g_pendingMediaSwitchCount = 1;
-            return;
-        }
-        ++g_pendingMediaSwitchCount;
-        double stableMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              now - g_pendingMediaSwitchSince)
-                              .count();
-        if (g_pendingMediaSwitchCount < 3 && stableMs < 2500.0) {
-            return;
-        }
-    }
-
-    bool isDifferentMedia = g_media.hasSession && state.hasSession &&
-                            !currentKey.empty() && !nextKey.empty() &&
-                            currentKey != nextKey;
-
-    if (isDifferentMedia) {
-        // Browsers can expose several GSMTC sessions at the same time. Pausing
-        // the active tab may briefly make another tab/session become
-        // GetCurrentSession(), which used to flash the other title/accent while
-        // the cover stayed on the previous media.
-        //
-        // If the new candidate is not playing, treat it as background noise and
-        // keep the current media. If it is playing, accept it only after it stays
-        // stable across several polls.
-        if (!state.isPlaying) {
-            g_pendingMediaSwitchKey.clear();
-            g_pendingMediaSwitchCount = 0;
-            g_pendingMediaSwitchSince = {};
-            return;
-        }
-
-        if (nextKey != g_pendingMediaSwitchKey) {
-            g_pendingMediaSwitchKey = nextKey;
-            g_pendingMediaSwitchState = state;
-            g_pendingMediaSwitchSince = now;
-            g_pendingMediaSwitchCount = 1;
-            return;
-        }
-
-        g_pendingMediaSwitchState = state;
-        ++g_pendingMediaSwitchCount;
-        double stableMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              now - g_pendingMediaSwitchSince)
-                              .count();
-        if (g_pendingMediaSwitchCount < 3 && stableMs < 1900.0) {
-            return;
-        }
-
-        state = g_pendingMediaSwitchState;
-    }
-
     bool sameMedia = g_media.hasSession && state.hasSession &&
                      !currentKey.empty() && currentKey == nextKey &&
                      state.durationTicks > 0 && g_media.durationTicks == state.durationTicks;
@@ -1012,12 +948,6 @@ void SetMedia(MediaState&& state) {
         }
     }
 
-    if (!isDifferentMedia || nextKey == currentKey || !state.hasSession) {
-        g_pendingMediaSwitchKey.clear();
-        g_pendingMediaSwitchCount = 0;
-        g_pendingMediaSwitchSince = {};
-    }
-
     g_media = std::move(state);
     g_mediaStateTimestamp = now;
 }
@@ -1027,10 +957,55 @@ void RequestMediaRefresh() {
     g_mediaCommandCv.notify_one();
 }
 
+gsm::GlobalSystemMediaTransportControlsSession SelectBestSession(
+    gsm::GlobalSystemMediaTransportControlsSessionManager const& manager) {
+    try {
+        if (!manager) {
+            return nullptr;
+        }
+
+        auto current = manager.GetCurrentSession();
+        gsm::GlobalSystemMediaTransportControlsSession first{nullptr};
+        gsm::GlobalSystemMediaTransportControlsSession firstPlaying{nullptr};
+        for (auto const& session : manager.GetSessions()) {
+            if (!first) {
+                first = session;
+            }
+
+            bool isPlaying = false;
+            try {
+                isPlaying =
+                    session.GetPlaybackInfo().PlaybackStatus() ==
+                    gsm::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+            } catch (...) {
+            }
+            if (!isPlaying) {
+                continue;
+            }
+
+            if (current &&
+                winrt::get_abi(session) == winrt::get_abi(current)) {
+                return session;
+            }
+            if (!firstPlaying) {
+                firstPlaying = session;
+            }
+        }
+
+        if (firstPlaying) {
+            return firstPlaying;
+        }
+        return current ? current : first;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
 gsm::GlobalSystemMediaTransportControlsSession CurrentSession() {
     try {
-        auto manager = gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        return manager.GetCurrentSession();
+        auto manager =
+            gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        return SelectBestSession(manager);
     } catch (...) {
         return nullptr;
     }
@@ -1040,7 +1015,7 @@ gsm::GlobalSystemMediaTransportControlsSession CurrentSessionFromManager(
     gsm::GlobalSystemMediaTransportControlsSessionManager const& manager) {
     try {
         if (manager) {
-            return manager.GetCurrentSession();
+            return SelectBestSession(manager);
         }
     } catch (...) {
     }
@@ -5069,9 +5044,9 @@ void UpdatePopupLiveProgressFromSnapshot() {
                             now - timestamp)
                             .count() /
                         1000.0;
-        // Keep the progress visually in sync between GSMTC polls, but do not let
-        // a stale snapshot extrapolate too far.
-        ageSec = Clamp(ageSec, 0.0, 1.25);
+        // Keep progress moving between event-driven timeline updates. The media
+        // worker performs a 30-second fallback refresh if a provider goes quiet.
+        ageSec = Clamp(ageSec, 0.0, 30.0);
         livePositionTicks += static_cast<int64_t>(ageSec * 10000000.0);
     }
 
@@ -5234,12 +5209,6 @@ void FinishCloseExpandedPopup(HWND hwnd) {
         g_popupSeekCommitRatio = 0.0;
         g_popupSeekCommitTargetTicks = 0;
         g_popupSeekCommitUntil = {};
-    }
-    {
-        std::lock_guard lock(g_mediaMutex);
-        g_pendingMediaSwitchKey.clear();
-        g_pendingMediaSwitchCount = 0;
-        g_pendingMediaSwitchSince = {};
     }
     g_expanded = false;
     try {
@@ -5800,49 +5769,87 @@ bool InjectIslandGrid();
 void MediaThreadProc() {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
-    gsm::GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
-    gsm::GlobalSystemMediaTransportControlsSession eventSession{nullptr};
-    winrt::event_token sessionsChangedToken{};
-    winrt::event_token currentSessionChangedToken{};
-    winrt::event_token mediaPropertiesChangedToken{};
-    winrt::event_token playbackInfoChangedToken{};
-    winrt::event_token timelinePropertiesChangedToken{};
-
-    auto clearSessionEvents = [&] {
-        try {
-            if (eventSession) {
-                eventSession.MediaPropertiesChanged(mediaPropertiesChangedToken);
-                eventSession.PlaybackInfoChanged(playbackInfoChangedToken);
-                eventSession.TimelinePropertiesChanged(timelinePropertiesChangedToken);
-            }
-        } catch (...) {
-        }
-        eventSession = nullptr;
-        mediaPropertiesChangedToken = {};
-        playbackInfoChangedToken = {};
-        timelinePropertiesChangedToken = {};
+    struct SessionEventSubscription {
+        gsm::GlobalSystemMediaTransportControlsSession session{nullptr};
+        winrt::event_token mediaPropertiesChangedToken{};
+        winrt::event_token playbackInfoChangedToken{};
+        winrt::event_token timelinePropertiesChangedToken{};
     };
 
-    auto subscribeCurrentSessionEvents = [&] {
+    gsm::GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
+    std::vector<SessionEventSubscription> sessionEventSubscriptions;
+    std::atomic_bool sessionListChanged = true;
+    winrt::event_token sessionsChangedToken{};
+    winrt::event_token currentSessionChangedToken{};
+
+    auto clearSessionEvents = [&] {
+        for (auto& subscription : sessionEventSubscriptions) {
+            if (subscription.session) {
+                try {
+                    subscription.session.MediaPropertiesChanged(
+                        subscription.mediaPropertiesChangedToken);
+                } catch (...) {
+                }
+                try {
+                    subscription.session.PlaybackInfoChanged(
+                        subscription.playbackInfoChangedToken);
+                } catch (...) {
+                }
+                try {
+                    subscription.session.TimelinePropertiesChanged(
+                        subscription.timelinePropertiesChangedToken);
+                } catch (...) {
+                }
+            }
+        }
+        sessionEventSubscriptions.clear();
+    };
+
+    auto subscribeAllSessionEvents = [&] {
+        clearSessionEvents();
         try {
             if (!manager) {
                 return;
             }
 
-            auto nextSession = manager.GetCurrentSession();
-            if (winrt::get_abi(nextSession) == winrt::get_abi(eventSession)) {
-                return;
-            }
-
-            clearSessionEvents();
-            eventSession = nextSession;
-            if (eventSession) {
-                mediaPropertiesChangedToken = eventSession.MediaPropertiesChanged(
-                    [](auto const&, auto const&) { RequestMediaRefresh(); });
-                playbackInfoChangedToken = eventSession.PlaybackInfoChanged(
-                    [](auto const&, auto const&) { RequestMediaRefresh(); });
-                timelinePropertiesChangedToken = eventSession.TimelinePropertiesChanged(
-                    [](auto const&, auto const&) { RequestMediaRefresh(); });
+            for (auto const& session : manager.GetSessions()) {
+                SessionEventSubscription subscription;
+                subscription.session = session;
+                try {
+                    subscription.mediaPropertiesChangedToken =
+                        session.MediaPropertiesChanged(
+                            [](auto const&, auto const&) {
+                                RequestMediaRefresh();
+                            });
+                    subscription.playbackInfoChangedToken =
+                        session.PlaybackInfoChanged(
+                            [](auto const&, auto const&) {
+                                RequestMediaRefresh();
+                            });
+                    subscription.timelinePropertiesChangedToken =
+                        session.TimelinePropertiesChanged(
+                            [](auto const&, auto const&) {
+                                RequestMediaRefresh();
+                            });
+                    sessionEventSubscriptions.push_back(
+                        std::move(subscription));
+                } catch (...) {
+                    try {
+                        session.MediaPropertiesChanged(
+                            subscription.mediaPropertiesChangedToken);
+                    } catch (...) {
+                    }
+                    try {
+                        session.PlaybackInfoChanged(
+                            subscription.playbackInfoChangedToken);
+                    } catch (...) {
+                    }
+                    try {
+                        session.TimelinePropertiesChanged(
+                            subscription.timelinePropertiesChangedToken);
+                    } catch (...) {
+                    }
+                }
             }
         } catch (...) {
             clearSessionEvents();
@@ -5854,10 +5861,14 @@ void MediaThreadProc() {
             gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
         if (manager) {
             sessionsChangedToken = manager.SessionsChanged(
-                [](auto const&, auto const&) { RequestMediaRefresh(); });
+                [&](auto const&, auto const&) {
+                    sessionListChanged = true;
+                    RequestMediaRefresh();
+                });
             currentSessionChangedToken = manager.CurrentSessionChanged(
                 [](auto const&, auto const&) { RequestMediaRefresh(); });
-            subscribeCurrentSessionEvents();
+            subscribeAllSessionEvents();
+            sessionListChanged = false;
         }
     } catch (...) {
         manager = nullptr;
@@ -5894,7 +5905,9 @@ void MediaThreadProc() {
                              fallbackPollDue;
 
         if (shouldRefresh) {
-            subscribeCurrentSessionEvents();
+            if (sessionListChanged.exchange(false)) {
+                subscribeAllSessionEvents();
+            }
             RefreshMediaState(manager);
             lastFallbackPoll = now;
 
