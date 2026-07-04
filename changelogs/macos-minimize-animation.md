@@ -1,3 +1,13 @@
+## 2.2.0 ([Jul 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/01929c0699e86e614c42934ca6aab388e1068647/mods/macos-minimize-animation.wh.cpp))
+
+Adds an experimental **Multi-monitor support** setting (off by default), as requested by a user on the mod page.
+
+When enabled, the genie plays on the monitor the window is on and flows into that monitor's taskbar edge, instead of always targeting the primary monitor. Works with negative virtual-screen coordinates (monitors left of / above the primary).
+
+Also fixes, when the option is enabled, the taskbar-hover detection for icon-position learning: the previous primary-only work-area test matched every cursor position on a secondary monitor, so a plain title-bar minimize there mislearned the cursor X as the taskbar icon position. It now checks the work area of the monitor the cursor is on.
+
+With the setting off, behavior is unchanged from v2.1.1.
+
 ## 2.1.1 ([Jul 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/51bb09f1a2f997764267bc016299b00c3bda12cc/mods/macos-minimize-animation.wh.cpp))
 
 Follow-up to #4659 (merged while this final commit was being pushed) - two user-visible timing fixes, found by testing under CPU throttling (battery saver), where both artifacts become clearly visible:

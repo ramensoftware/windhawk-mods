@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-03T13:35:55.000Z</updated>
+    <updated>2026-07-04T11:02:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.2]]></title>
+        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#c31d06a195bfa0cf47cb700c22d23b5c68f78709</id>
+        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
+        <updated>2026-07-04T11:02:59.000Z</updated>
+        <content type="html"><![CDATA[<p>Remove unwanted effects, simplify code, remove a memory leak</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 2.2.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#01929c0699e86e614c42934ca6aab388e1068647</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-07-04T11:01:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds an experimental <strong>Multi-monitor support</strong> setting (off by default), as requested by a user on the mod page.</p>
+<p>When enabled, the genie plays on the monitor the window is on and flows into that monitor's taskbar edge, instead of always targeting the primary monitor. Works with negative virtual-screen coordinates (monitors left of / above the primary).</p>
+<p>Also fixes, when the option is enabled, the taskbar-hover detection for icon-position learning: the previous primary-only work-area test matched every cursor position on a secondary monitor, so a plain title-bar minimize there mislearned the cursor X as the taskbar icon position. It now checks the work area of the monitor the cursor is on.</p>
+<p>With the setting off, behavior is unchanged from v2.1.1.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-fluent-media-player#145b63f3d04a7f9c04353a6ac87a2d9a4314103a</id>
+        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
+        <updated>2026-07-04T11:00:48.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li><strong>Context Menu Settings</strong> section</li>
+<li>Configurable item list — choose which items appear in the context menu and in what order</li>
+<li><strong>Repeat style</strong> — submenu (Repeat off / Repeat all / Repeat one) or a single toggle button that cycles through modes and reflects the current state in its label</li>
+<li><strong>Shuffle style</strong> — submenu (Shuffle off / Shuffle on) or a toggle button with live on/off label</li>
+<li><strong>Context menu icon style</strong> — pick Fluent Icons or MDL2 Assets (Outline/Filled), or inherit from Media Buttons Style</li>
+<li><strong>Context menu icon color and opacity</strong> — independent from player button color settings</li>
+<li><strong>"Show Open Windhawk button"</strong> toggle — the separator above it hides automatically when both it and Restart Player are off</li>
+<li><strong>"Nothing" option</strong> in Media buttons order and Context menu items lists — useful as an empty placeholder slot</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Idle auto-hide timer now ticks independently of media events — timeout values above 1 second now work correctly <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/5">#5</a></li>
+<li>Player no longer disappears when <strong>Hide when no media</strong> is disabled and <strong>Idle auto-hide</strong> is set to 0</li>
+<li>When title or artist placeholder text is empty, the scroll-view container now collapses properly — a single visible line is displayed without the hidden element reserving space</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><strong>Visualizer idle bar height</strong> is now specified in pixels (0–15 px) instead of percentage — default changed from 15% to 3 px</li>
+<li>Bar width minimum is now 0 (hides bars entirely) instead of 1</li>
+<li><code>ExtractAlbumPalette</code> now uses the internal <code>DecodeImageToBGRA</code> helper instead of the WinRT <code>BitmapDecoder</code> pipeline</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Monitor Rounded Edges 1.0]]></title>
         <id>https://windhawk.net/mods/monitor-rounded-edges#9abd14f057189eb058eab8901042511d5cfef0d2</id>
@@ -456,96 +514,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.1]]></title>
-        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#1e8d5224d6c438602744da41174e6c0427d2f3da</id>
-        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
-        <updated>2026-06-29T20:26:09.000Z</updated>
-        <content type="html"><![CDATA[<p>Documentation-only fix: the two readme demo GIFs (crossfade and slide) were pointing at filenames whose cached copies on the image proxy showed the wrong animation. This points them at fresh <code>-v2</code> filenames so the correct crossfade and slide demos are shown. No code changes.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-06-29T17:34:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="macosminimizeanimation">MacOS Minimize Animation</h1>
-<p><img src="https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif" alt="Demo" /></p>
-<p>Brings the classic macOS <strong>genie</strong> effect to Windows. When you minimize a window
-it warps and flows down into the taskbar; when you restore it, it flows back out.</p>
-<p>Eye candy for something you do a hundred times a day.</p>
-<h2 id="seeitinaction">See it in action</h2>
-<ul>
-<li>Compile the mod with the button on the left or with Ctrl+B.</li>
-<li>Enable the mod and open any normal window (Explorer, a browser, Notepad…).</li>
-<li>Minimize it with the title bar <code>[-]</code> button or <code>Win</code>+<code>Down</code> and watch it warp
-and pour into the taskbar.</li>
-<li>Restore it from the taskbar and watch the genie play in reverse.</li>
-<li>Tweak the <strong>Animation duration</strong> in the settings to taste.</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Real genie warp.</strong> The window is sliced into horizontal strips that curve and
-funnel toward the taskbar (the bottom flows in first), instead of just shrinking.</li>
-<li><strong>Actually smooth.</strong> Progress is driven by real elapsed time and every rendered
-frame is gated on the DWM compose cycle (<code>DwmFlush</code>), so each frame you render is
-exactly one frame you see - perfectly aligned with vsync at any duration you set.</li>
-<li><strong>Smoothstep easing</strong> instead of a linear ramp, so it eases in and out.</li>
-<li><strong>Clean edges and fade</strong> via a per-pixel-alpha layered surface.</li>
-<li><strong>Smart targeting.</strong> The mod learns where each app's taskbar icon is (from where
-your cursor was when you minimized) and aims the genie at that spot next time.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>ShowWindow</code> and <code>DefWindowProcW</code> to catch minimize / restore
-requests. It snapshots the window, then on a dedicated high-priority thread it
-draws a transparent layered "ghost" window that warps the snapshot frame by frame
-into the taskbar, leaving the real window to minimize behind it without the
-system's own animation getting in the way.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Animation duration</strong> - how long the effect lasts (50-2000 ms).</li>
-<li><strong>Animate window restore (open)</strong> - also play the reverse genie when restoring.</li>
-<li><strong>Animate app launch (experimental)</strong> - also play the genie when an application
-window first opens. <strong>Experimental and off by default</strong>: it may briefly flash the
-window before animating, may not catch borderless apps, and can occasionally fire
-on splash / dialog windows. Leave it off and the mod behaves exactly like plain
-minimize / restore.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Works on all top-level windows; child / tiny / hidden windows are skipped.</li>
-<li>DWM transitions are temporarily disabled on the animated window and restored
-afterwards, so the system's own minimize/restore animation doesn't fight ours.</li>
-<li>The genie currently targets the primary monitor's taskbar edge.</li>
-</ul>
-<h1 id="gettingstarted">Getting started</h1>
-<p>Check out the documentation
-<a href="https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod">here</a>.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Tab Slide Animation 0.4.0]]></title>
-        <id>https://windhawk.net/mods/taskmgr-tab-slide-animation#a2dc42dae82c5bfdd6bebb8cef79b93f091b9664</id>
-        <link href="https://windhawk.net/mods/taskmgr-tab-slide-animation"/>
-        <updated>2026-06-29T17:30:00.000Z</updated>
-        <content type="html"><![CDATA[<p>This version adds a selectable animation style alongside the existing crossfade:</p>
-<ul>
-<li><strong>Animation type</strong> setting - <strong>Crossfade</strong> (default, the previous behavior) or <strong>Slide</strong> (the old view slides out while the new one slides in; left/right, or up/down via <em>Slide vertically</em>).</li>
-<li>Both styles use the same no-visual-jump approach: the current view is frozen under a topmost, click-through overlay at mouse-down, so Task Manager switches the tab underneath it invisibly, and the animation always starts from the old frame.</li>
-<li>Robustness fix: if the window is moved or resized mid-animation, the overlay is now hidden immediately instead of lingering as a detached "ghost" copy at the old location.</li>
-</ul>
-<p>The readme demo now shows both the crossfade and slide animations.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>

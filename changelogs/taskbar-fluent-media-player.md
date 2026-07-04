@@ -1,3 +1,25 @@
+## 1.5.0 ([Jul 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/145b63f3d04a7f9c04353a6ac87a2d9a4314103a/mods/taskbar-fluent-media-player.wh.cpp))
+
+### Added
+- **Context Menu Settings** section
+  - Configurable item list — choose which items appear in the context menu and in what order
+  - **Repeat style** — submenu (Repeat off / Repeat all / Repeat one) or a single toggle button that cycles through modes and reflects the current state in its label
+  - **Shuffle style** — submenu (Shuffle off / Shuffle on) or a toggle button with live on/off label
+  - **Context menu icon style** — pick Fluent Icons or MDL2 Assets (Outline/Filled), or inherit from Media Buttons Style
+  - **Context menu icon color and opacity** — independent from player button color settings
+  - **"Show Open Windhawk button"** toggle — the separator above it hides automatically when both it and Restart Player are off
+- **"Nothing" option** in Media buttons order and Context menu items lists — useful as an empty placeholder slot
+
+### Fixed
+- Idle auto-hide timer now ticks independently of media events — timeout values above 1 second now work correctly [#5](https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/5)
+- Player no longer disappears when **Hide when no media** is disabled and **Idle auto-hide** is set to 0
+- When title or artist placeholder text is empty, the scroll-view container now collapses properly — a single visible line is displayed without the hidden element reserving space
+
+### Changed
+- **Visualizer idle bar height** is now specified in pixels (0–15 px) instead of percentage — default changed from 15% to 3 px
+- Bar width minimum is now 0 (hides bars entirely) instead of 1
+- `ExtractAlbumPalette` now uses the internal `DecodeImageToBGRA` helper instead of the WinRT `BitmapDecoder` pipeline
+
 ## 1.4.0 ([Jun 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1fa4d7fa3995d334df2bba31d035d361b851414a/mods/taskbar-fluent-media-player.wh.cpp))
 
 ### Added

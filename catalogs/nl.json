@@ -3253,7 +3253,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1782107030000,
+        "updated": 1783162979000,
         "users": 17
       },
       "metadata": {
@@ -3265,7 +3265,7 @@
           "explorer.exe"
         ],
         "name": "Disable Inactive Menubar Greying",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "disable-ms-teams-hotkey": {
@@ -7151,7 +7151,7 @@
           50
         ],
         "ratingUsers": 60,
-        "updated": 1783019847000,
+        "updated": 1783162885000,
         "users": 2141
       },
       "metadata": {
@@ -7164,7 +7164,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "2.1.1"
+        "version": "2.2.0"
       }
     },
     "magnifier-headless": {
@@ -11130,7 +11130,7 @@
           121
         ],
         "ratingUsers": 129,
-        "updated": 1782129442000,
+        "updated": 1783162848000,
         "users": 3056
       },
       "metadata": {
@@ -11142,7 +11142,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Fluent Media Player",
-        "version": "1.4.0"
+        "version": "1.5.0"
       }
     },
     "taskbar-grouping": {
