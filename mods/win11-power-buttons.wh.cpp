@@ -2,8 +2,10 @@
 // @id              win11-power-buttons
 // @name            Windows 11 Start Menu Power Buttons
 // @name:zh-CN      Windows 11 开始菜单一键电源按钮
+// @name:ja-JP      Windows 11 スタート メニュー電源ボタン
 // @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
+// @description:ja-JP Windows 11 のスタート メニュー上にある既定の電源メニューを置き換えます。カスタマイズ可能な「シャットダウン」「再起動」「サインアウト」「スリープ」「休止状態」「ロック」をワンクリックで行うボタンを追加します。
 // @version         1.0.2
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
@@ -33,8 +35,10 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
 - alignment: right
   $name: Alignment
   $name:zh-CN: 对齐方式
+  $name:ja-JP: 配置
   $description: Aligns the buttons within the NavigationPane.
   $description:zh-CN: 设置按钮组在导航窗格中的对齐方式。
+  $description:ja-JP: ナビゲーション ペイン内のボタンを配置します。
   $options:
     - left: Left
     - center: Center
@@ -43,18 +47,26 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
     - left: 左对齐
     - center: 居中
     - right: 右对齐
+  $options:ja-JP:
+    - left: 左
+    - center: 中央
+    - right: 右
 
 - confirm_before_action: false
   $name: Confirm before power actions
   $name:zh-CN: 执行前确认
+  $name:ja-JP: 電源の操作を行う前に確認する
   $description: Show a confirmation dialog before executing power actions.
   $description:zh-CN: 在执行电源操作前显示确认对话框。
+  $description:ja-JP: 電源の操作を行う前に確認のダイアログを表示します。
 
 - buttons: [sleep, signout, restart, shutdown]
-  $name:zh-CN: 按钮与排序
   $name: Buttons & Order
+  $name:zh-CN: 按钮与排序
+  $name:ja-JP: ボタンと配列
   $description: Select which buttons to display and their order. Duplicates are ignored.
   $description:zh-CN: 选择要显示的按钮以及它们的顺序，重复项会被忽略。
+  $description:ja-JP: 表示するボタンとその配列を選択してください。重複は無視されます。
   $options:
     - shutdown: Shut down
     - restart: Restart
@@ -69,6 +81,13 @@ Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and 
     - sleep: 睡眠
     - hibernate: 休眠
     - lock: 锁定
+  $options:ja-JP:
+    - shutdown: シャットダウン
+    - restart: 再起動
+    - signout: サインアウト
+    - sleep: スリープ
+    - hibernate: 休止状態
+    - lock: ロック
 */
 // ==/WindhawkModSettings==
 
@@ -232,31 +251,37 @@ static std::wstring GetActionDisplayName(PowerAction action) {
         case PowerAction::Shutdown:
             switch (lang) {
                 case LANG_CHINESE: return L"关机";
+                case LANG_JAPANESE: return L"シャットダウン";
                 default: return L"Shut down";
             }
         case PowerAction::Restart:
             switch (lang) {
                 case LANG_CHINESE: return L"重启";
+                case LANG_JAPANESE: return L"再起動";
                 default: return L"Restart";
             }
         case PowerAction::SignOut:
             switch (lang) {
                 case LANG_CHINESE: return L"注销";
+                case LANG_JAPANESE: return L"サインアウト";
                 default: return L"Sign out";
             }
         case PowerAction::Sleep:
             switch (lang) {
                 case LANG_CHINESE: return L"睡眠";
+                case LANG_JAPANESE: return L"スリープ";
                 default: return L"Sleep";
             }
         case PowerAction::Hibernate:
             switch (lang) {
                 case LANG_CHINESE: return L"休眠";
+                case LANG_JAPANESE: return L"休止状態";
                 default: return L"Hibernate";
             }
         case PowerAction::Lock:
             switch (lang) {
                 case LANG_CHINESE: return L"锁定";
+                case LANG_JAPANESE: return L"ロック";
                 default: return L"Lock";
             }
     }
@@ -267,6 +292,8 @@ static std::wstring GetConfirmTitle() {
     switch (PRIMARYLANGID(GetThreadUILanguage())) {
         case LANG_CHINESE:
             return L"确认电源操作";
+        case LANG_JAPANESE:
+            return L"操作の確認";
         default:
             return  L"Confirm Power Action";
     }
@@ -277,6 +304,8 @@ static std::wstring GetConfirmMessage(PowerAction action) {
     switch (PRIMARYLANGID(GetThreadUILanguage())) {
         case LANG_CHINESE:
             return L"您确定要执行" + actionName + L"吗？";
+        case LANG_JAPANESE:
+            return actionName + L"を実行してもよろしいですか？";
         default:
             for (auto& c : actionName) c = towlower(c);
             return  L"Are you sure you want to " + actionName + L"?";
