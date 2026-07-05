@@ -194,7 +194,7 @@ void LoadSettings() {
     ParseIntTuple(marStr.get(), g_settings.PillMarginHorizontal, g_settings.PillMarginBottom);
     
     WindhawkUtils::StringSetting radiusStr(Wh_GetStringSetting(L"Pill.PillRadius"));
-    if (radiusStr.get()) {
+    if (radiusStr.get()[0]) {
         try {
             g_settings.PillRadius = std::stod(radiusStr.get());
         } catch (...) { g_settings.PillRadius = 1.5; }
@@ -202,7 +202,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting animStr(Wh_GetStringSetting(L"Animation.AnimationStyle"));
     g_settings.AnimationStyle = 0;
-    if (animStr.get()) {
+    if (animStr.get()[0]) {
         if (wcscmp(animStr.get(), L"bounce") == 0) g_settings.AnimationStyle = 1;
         else if (wcscmp(animStr.get(), L"linear") == 0) g_settings.AnimationStyle = 2;
         else if (wcscmp(animStr.get(), L"easein") == 0) g_settings.AnimationStyle = 4;
@@ -216,7 +216,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting cmStr(Wh_GetStringSetting(L"Colors.ColorMode"));
     g_settings.ColorMode = 0;
-    if (cmStr.get()) {
+    if (cmStr.get()[0]) {
         if (wcscmp(cmStr.get(), L"custom") == 0) g_settings.ColorMode = 1;
         else if (wcscmp(cmStr.get(), L"icon") == 0) g_settings.ColorMode = 2;
     }
@@ -225,7 +225,7 @@ void LoadSettings() {
     g_settings.ParsedDarkColor = std::nullopt;
     g_settings.ParsedSolidColor = std::nullopt;
     WindhawkUtils::StringSetting colorStr(Wh_GetStringSetting(L"Colors.CustomColor"));
-    if (colorStr.get()) {
+    if (colorStr.get()[0]) {
         std::wstring colorStrWs = colorStr.get();
         
         size_t commaPos = colorStrWs.find(L',');
@@ -1362,26 +1362,20 @@ bool HookSearchUxDllSymbols(HMODULE module) {
             {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
             &SearchIconButton_UpdateVisualStates_Original,
             SearchIconButton_UpdateVisualStates_Hook,
+            true
+        },
+        {
+            {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
+            &SearchIconButton_UpdateVisualStates_Original,
+            SearchIconButton_UpdateVisualStates_Hook,
+            true
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(module, searchUxHooks, ARRAYSIZE(searchUxHooks))) {
-        Wh_Log(L"Failed to hook SearchUx.UI.dll (SearchIconButton::UpdateVisualStates). Trying PlayStateChange...");
-        // SearchUx.UI.dll
-        WindhawkUtils::SYMBOL_HOOK searchUxHooks2[] = {
-            {
-                {
-                    L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)",
-                    L"?PlayStateChange@SearchIconButton@implementation@SearchUI@SearchUx@winrt@@IEAAXXZ"
-                },
-                &SearchIconButton_UpdateVisualStates_Original,
-                SearchIconButton_UpdateVisualStates_Hook,
-            }
-        };
-        if (!WindhawkUtils::HookSymbols(module, searchUxHooks2, ARRAYSIZE(searchUxHooks2))) {
-            Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
-            return false;
-        }
+    WindhawkUtils::HookSymbols(module, searchUxHooks, ARRAYSIZE(searchUxHooks));
+    if (!SearchIconButton_UpdateVisualStates_Original) {
+        Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
+        return false;
     }
     return true;
 }
@@ -1436,22 +1430,15 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Taskbar Elastic Pill Mod");
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"Uninitializing Taskbar Elastic Pill Mod (Before)");
     g_unloading = true;
-    for (int i = 0; i < 200 && g_asyncExtractCount > 0; i++) {
-        Sleep(10);
-    }
     
     std::vector<std::shared_ptr<PillContext>> localPills;
     {
         std::lock_guard<std::mutex> lock(g_pillsMutex);
         localPills = g_pillContexts;
         g_pillContexts.clear();
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_easingMutex);
-        g_easingCaches->clear();
     }
 
     std::vector<AttachedEvent> localEvents;
@@ -1549,9 +1536,16 @@ void Wh_ModUninit() {
     }
 
     if (pending->load() > 0 && eventLifetime.get()) {
-        if (WaitForSingleObject(eventLifetime.get(), 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Timeout waiting for pill cleanup on UI threads");
-        }
+        WaitForSingleObject(eventLifetime.get(), INFINITE);
+    }
+    Sleep(50); // Let layout settle
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninitializing Taskbar Elastic Pill Mod");
+    {
+        std::lock_guard<std::mutex> lock(g_easingMutex);
+        g_easingCaches->clear();
     }
 }
 
