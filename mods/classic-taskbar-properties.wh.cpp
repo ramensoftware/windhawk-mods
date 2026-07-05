@@ -2,7 +2,7 @@
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
 // @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
-// @version 3.0.0
+// @version 3.1.0
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
@@ -45,11 +45,8 @@ Windows version, and installed modifications.
   position combo box. Only Top and Bottom rotation is supported for now; Left/Right requires
   more work due to the added complexity and may be added in a future version.
 - **Desktop toolbar**: Currently not available, more documentation is required for a proper implementation.
-- **Some Start Menu settings**: May not work on all Windows versions
+- **Some Start Menu settings**: May not work on all Windows versions as
 - **Tablet Input PC**: Works partially
-- **Clock text layout when vertical**: the clock box is resized/stacked correctly, but its
-  internal text re-wrap (two lines) is handled by undocumented Explorer code and may look
-  slightly off; it will not overflow off-screen anymore.
 ## Credits 
 - Anixx - Testing on Windows 11 23H2 with Classic Theme
 - sebastian08dm08-cpu - Testing on Windows 10 1809
@@ -105,7 +102,7 @@ namespace StuckRects {
 
 namespace DialogSizes {
     constexpr short MAIN_WIDTH = 262;
-    constexpr short MAIN_HEIGHT = 290;
+    constexpr short MAIN_HEIGHT = 271;
     constexpr short START_WIDTH = 252;
     constexpr short START_HEIGHT = 310;
 }
@@ -124,11 +121,6 @@ namespace DialogSizes {
 #define ETDT_ENABLETAB (ETDT_ENABLE | ETDT_USETABTEXTURE)
 #endif
 
-// ============================================================================
-// RAII Wrappers
-// ============================================================================
-
-// RAII wrapper for COM initialization
 class ComInitializer {
 public:
     ComInitializer() : m_initialized(false) {
@@ -144,14 +136,12 @@ public:
         }
     }
     bool IsInitialized() const { return m_initialized; }
-    // Non-copyable
     ComInitializer(const ComInitializer&) = delete;
     ComInitializer& operator=(const ComInitializer&) = delete;
 private:
     bool m_initialized;
 };
 
-// RAII wrapper for Registry keys
 class RegKey {
 public:
     RegKey() : m_hKey(NULL) {}
@@ -202,7 +192,6 @@ public:
     HKEY Get() const { return m_hKey; }
     operator HKEY() const { return m_hKey; }
     
-    // Non-copyable
     RegKey(const RegKey&) = delete;
     RegKey& operator=(const RegKey&) = delete;
     
@@ -210,34 +199,22 @@ private:
     HKEY m_hKey;
 };
 
-// ============================================================================
-// Windows Version Detection
-// ============================================================================
-
 struct WindowsVersion {
     DWORD majorVersion;
     DWORD minorVersion;
     DWORD buildNumber;
-    DWORD ubr;  // Update Build Revision
+    DWORD ubr;
     
     bool IsWindows10() const { return majorVersion == 10 && buildNumber >= 10240 && buildNumber < 22000; }
     bool IsWindows11() const { return majorVersion == 10 && buildNumber >= 22000; }
     
     bool IsSupported() const {
-        return (majorVersion == 10 && buildNumber >= 10240) ||  // Windows 10 1507+
-               (majorVersion == 10 && buildNumber >= 22000);   // Windows 11
+        return (majorVersion == 10 && buildNumber >= 10240) ||
+               (majorVersion == 10 && buildNumber >= 22000);
     }
     
     bool IsBuildAtLeast(DWORD minBuild) const {
         return buildNumber >= minBuild;
-    }
-    
-    bool IsBuildAtMost(DWORD maxBuild) const {
-        return buildNumber <= maxBuild;
-    }
-    
-    bool IsBuildBetween(DWORD minBuild, DWORD maxBuild) const {
-        return buildNumber >= minBuild && buildNumber <= maxBuild;
     }
 };
 
@@ -261,9 +238,8 @@ static bool GetWindowsVersion(WindowsVersion* outVersion) {
     outVersion->minorVersion = osvi.dwMinorVersion;
     outVersion->buildNumber = osvi.dwBuildNumber;
     
-    // Try to get UBR from registry
     RegKey regKey;
-    if (regKey.Open(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion")) {
+    if (regKey.Open(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\NT\\CurrentVersion")) {
         outVersion->ubr = regKey.GetDWord(L"UBR", 0);
     }
     
@@ -273,10 +249,6 @@ static bool GetWindowsVersion(WindowsVersion* outVersion) {
     
     return true;
 }
-
-// ============================================================================
-// Global State
-// ============================================================================
 
 static HANDLE g_hActCtx = INVALID_HANDLE_VALUE;
 
@@ -296,7 +268,8 @@ static void EnsureThemeActCtx() {
 static BOOL CALLBACK ApplyExplorerThemeEnumProc(HWND hwnd, LPARAM lParam) {
     wchar_t cls[64] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    if (_wcsicmp(cls, L"SysTabControl32") == 0 || _wcsicmp(cls, L"SysListView32") == 0)
+    if (_wcsicmp(cls, L"SysTabControl32") == 0 || _wcsicmp(cls, L"SysListView32") == 0 ||
+        _wcsicmp(cls, L"Button") == 0 || _wcsicmp(cls, L"ComboBox") == 0)
         SetWindowTheme(hwnd, L"Explorer", nullptr);
     return TRUE;
 }
@@ -660,7 +633,6 @@ struct CTP_ITrayDeskBand : public IUnknown {
 
 enum CtpBandOp { CTP_BAND_HIDE = 0, CTP_BAND_SHOW = 1, CTP_BAND_QUERY = 2 };
 
-// Wrapper for native desk band operations with proper COM initialization
 static bool NativeDeskBandOp(const CLSID& band, CtpBandOp op, bool* pShown) {
     ComInitializer comInit;
     if (!comInit.IsInitialized()) {
@@ -733,7 +705,6 @@ static void SetFontAllChildren(HWND hwnd, HFONT hf) {
 static const CLSID CLSID_DesktopBand =
     {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
 
-// Safe wrapper for SHLoadInProc with fallback
 static bool ShowDesktopToolbarViaSHLoadInProc() {
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) {
@@ -836,7 +807,6 @@ static void InitLocalization() {
 
     StringCchCopyW(g_str.btn_ok, 32, L"OK");
 
-    // --- Tab names ---
     switch (lang) {
         case LANG_IT: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra delle applicazioni"); StringCchCopyW(g_str.tab_start, 64, L"Menu Start"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barre degli strumenti"); break;
         case LANG_FR: StringCchCopyW(g_str.tab_taskbar, 64, L"Barre des tâches"); StringCchCopyW(g_str.tab_start, 64, L"Menu Démarrer"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barres d'outils"); break;
@@ -845,7 +815,6 @@ static void InitLocalization() {
         default: StringCchCopyW(g_str.tab_taskbar, 64, L"Taskbar"); StringCchCopyW(g_str.tab_start, 64, L"Start Menu"); StringCchCopyW(g_str.tab_toolbars, 64, L"Toolbars");
     }
 
-    // --- Title ---
     switch (lang) {
         case LANG_IT: StringCchCopyW(g_str.title, 128, L"Propriet\u00e0 della barra delle applicazioni e del menu Start"); break;
         case LANG_FR: StringCchCopyW(g_str.title, 128, L"Propri\u00e9t\u00e9s de la barre des t\u00e2ches et du menu D\u00e9marrer"); break;
@@ -854,7 +823,6 @@ static void InitLocalization() {
         default: StringCchCopyW(g_str.title, 128, L"Taskbar and Start Menu Properties");
     }
 
-    // --- Pulsanti ---
     switch (lang) {
         case LANG_IT: StringCchCopyW(g_str.btn_cancel, 32, L"Annulla"); StringCchCopyW(g_str.btn_apply, 32, L"Applica"); break;
         case LANG_FR: StringCchCopyW(g_str.btn_cancel, 32, L"Annuler"); StringCchCopyW(g_str.btn_apply, 32, L"Appliquer"); break;
@@ -863,7 +831,6 @@ static void InitLocalization() {
         default: StringCchCopyW(g_str.btn_cancel, 32, L"Cancel"); StringCchCopyW(g_str.btn_apply, 32, L"Apply");
     }
 
-    // --- Taskbar appearance ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.grp_appearance, 64, L"Aspetto della barra delle applicazioni");
@@ -925,7 +892,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_combine_full, 64, L"Группировать при заполнении");
             StringCchCopyW(g_str.btn_never_combine, 64, L"Не группировать");
             break;
-        default: // EN
+        default:
             StringCchCopyW(g_str.grp_appearance, 64, L"Taskbar appearance");
             StringCchCopyW(g_str.chk_lock, 64, L"Lock the taskbar");
             StringCchCopyW(g_str.chk_hide, 64, L"Auto-hide the taskbar");
@@ -941,7 +908,6 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_never_combine, 64, L"Never combine");
     }
 
-    // --- Notification area ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.grp_notif, 64, L"Area di notifica");
@@ -963,13 +929,12 @@ static void InitLocalization() {
             StringCchCopyW(g_str.txt_notif, 128, L"Позволяет настроить значки и уведомления, отображаемые в области уведомлений панели задач.");
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Настроить...");
             break;
-        default: // EN
+        default:
             StringCchCopyW(g_str.grp_notif, 64, L"Notification area");
             StringCchCopyW(g_str.txt_notif, 128, L"Customize which icons and notifications appear in the notification area of the taskbar.");
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Customize...");
     }
 
-    // --- Aero Peek ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.grp_aero, 64, L"Anteprima del desktop con Aero Peek");
@@ -995,14 +960,13 @@ static void InitLocalization() {
             StringCchCopyW(g_str.chk_aero, 64, L"Использовать Aero Peek для предпросмотра рабочего стола");
             StringCchCopyW(g_str.link_help, 128, L"<a>Как настроить панель задач?</a>");
             break;
-        default: // EN
+        default:
             StringCchCopyW(g_str.grp_aero, 64, L"Preview desktop with Aero Peek");
             StringCchCopyW(g_str.txt_aero, 256, L"Temporarily view the desktop when you move your mouse to the Show desktop button at the end of the taskbar.");
             StringCchCopyW(g_str.chk_aero, 64, L"Use Aero Peek to preview the desktop");
             StringCchCopyW(g_str.link_help, 128, L"<a>How do I customize the taskbar?</a>");
     }
 
-    // --- Start Menu ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.start_info, 256, L"Per personalizzare l'aspetto dei collegamenti, delle icone e dei menu nel menu Start, fare clic su Personalizza.");
@@ -1065,7 +1029,6 @@ static void InitLocalization() {
             StringCchCopyW(g_str.chk_mru_items, 128, L"Store and display recently opened items in the Start menu and the taskbar");
     }
 
-    // --- Toolbars ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.toolbars_info, 128, L"Selezionare le barre degli strumenti da aggiungere alla barra delle applicazioni.");
@@ -1093,7 +1056,6 @@ static void InitLocalization() {
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Tablet PC Input Panel"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Desktop");
     }
 
-    // --- About, Start Custom, Folders ---
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.about_title, 64, L"Informazioni sulla mod");
@@ -1211,7 +1173,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.start_msg_saved, 512, L"Настройки меню Пуск сохранены.\n\nНекоторые изменения могут потребовать выхода из системы или перезапуска Explorer для полного применения.");
             StringCchCopyW(g_str.start_msg_saved_title, 64, L"Настройки сохранены");
             break;
-        default: // EN
+        default:
             StringCchCopyW(g_str.about_title, 64, L"About this mod");
             StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nThis Windhawk mod recreates the classic \"Taskbar and Start Menu Properties\" dialog inspired by classic Windows versions.\r\n\r\nCurrently available features:\r\n- Lock the taskbar\r\n- Auto-hide the taskbar\r\n- Use small icons\r\n- Configure taskbar button grouping\r\n- Configure Aero Peek\r\n- Quick access to notification area settings\r\n- Native toolbars (Address, Links, Tablet PC)\r\n- Taskbar rotation (Top/Bottom only)\r\n\r\nKnown limitations:\r\n- Left and Right positions not supported\r\n- Desktop toolbar is currently not available\r\n- Some settings require Explorer restart.");
             StringCchCopyW(g_str.warn_position_title, 64, L"Taskbar position");
@@ -1584,10 +1546,6 @@ static void ShowStartCustomDialog(HWND parent) {
     }
 }
 
-// ============================================================================
-// Taskbar Position Hooks (with version-specific handling)
-// ============================================================================
-
 static std::atomic<bool> g_taskbarPosHooksInstalled{false};
 static DWORD GetTaskbarSideFromRegistry() { return TaskbarSettingsProvider::GetTaskbarEdge(); }
 static void ClearRotatedIconCache();
@@ -1711,10 +1669,6 @@ static bool InstallTaskbarPositionHooks() {
     Wh_Log(L"InstallTaskbarPositionHooks: All 5 hooks installed");
     return true;
 }
-
-// ============================================================================
-// Icon Rotation for Vertical Taskbar
-// ============================================================================
 
 struct RotatedIconCacheEntry { HICON originalIcon = nullptr; int size = 0; bool clockwise = false; HBITMAP rotatedBitmap = nullptr; };
 static std::vector<RotatedIconCacheEntry> g_rotatedIconCache;
@@ -2534,8 +2488,16 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SwitchTab(hwnd, 0);
         
         RECT rc; GetWindowRect(hwnd, &rc);
-        int ww = rc.right - rc.left, wh = rc.bottom - rc.top;
-        SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - ww) / 4, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+int wh = rc.bottom - rc.top;  // rimossa la variabile ww
+{
+    MONITORINFO mi = { sizeof(mi) };
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+    GetMonitorInfo(hMon, &mi);
+    const int kEdgeMargin = 8;
+    int x = mi.rcWork.left + kEdgeMargin;
+    int y = mi.rcWork.bottom - wh - kEdgeMargin;
+    SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
         
         LONG style = GetWindowLongW(hwnd, GWL_STYLE);
         style &= ~WS_THICKFRAME; style &= ~WS_MAXIMIZEBOX;
@@ -2641,8 +2603,8 @@ static HWND BuildAndShowDialog() {
         controlCount++;
     };
     
-    addCtrl(TCS_TABS | WS_TABSTOP, 0, 6, 6, 250, 246, IDC_TAB_MAIN, L"SysTabControl32", L"");
-    addCtrl(BS_GROUPBOX, 0, 12, 22, 238, 96, IDC_GRP_APPEARANCE, L"Button", L"");
+    addCtrl(TCS_TABS | WS_TABSTOP, 0, 6, 6, 250, 232, IDC_TAB_MAIN, L"SysTabControl32", L"");
+    addCtrl(BS_GROUPBOX, 0, 12, 22, 238, 86, IDC_GRP_APPEARANCE, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 33, 226, 10, IDC_CHK_LOCK, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 45, 226, 10, IDC_CHK_HIDE, L"Button", L"");
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 57, 226, 10, IDC_CHK_SMALL, L"Button", L"");
@@ -2650,16 +2612,20 @@ static HWND BuildAndShowDialog() {
     addCtrl(CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 0, 132, 71, 112, 100, IDC_COMBO_LOCATION, L"ComboBox", L"");
     addCtrl(SS_LEFT | SS_EDITCONTROL, 0, 18, 89, 95, 18, IDC_TXT_BUTTONS, L"Static", L"");
     addCtrl(CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 0, 80, 87, 164, 70, IDC_COMBO_BUTTONS, L"ComboBox", L"");
-    addCtrl(BS_GROUPBOX, 0, 12, 120, 238, 46, IDC_GRP_NOTIF, L"Button", L"");
-    addCtrl(SS_LEFT, 0, 18, 131, 148, 26, IDC_TXT_NOTIF, L"Static", L"");
-    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 172, 134, 70, 14, IDC_BTN_CUST_NOTIF, L"Button", L"");
-    addCtrl(BS_GROUPBOX, 0, 12, 168, 238, 66, IDC_GRP_AERO, L"Button", L"");
-    addCtrl(SS_LEFT, 0, 18, 179, 226, 30, IDC_TXT_AERO, L"Static", L"");
-    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 213, 226, 12, IDC_CHK_AEROPEEK, L"Button", L"");
-    addCtrl(WS_TABSTOP, 0, 12, 238, 238, 10, IDC_LINK_HELP, L"SysLink", L"");
-    addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 84, 271, 52, 14, IDOK, L"Button", L"OK");
-    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 140, 271, 52, 14, IDCANCEL, L"Button", L"Cancel");
-    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 196, 271, 58, 14, IDC_BTN_APPLY, L"Button", L"Apply");
+    addCtrl(BS_GROUPBOX, 0, 12, 112, 238, 44, IDC_GRP_NOTIF, L"Button", L"");
+    addCtrl(SS_LEFT, 0, 18, 123, 148, 26, IDC_TXT_NOTIF, L"Static", L"");
+    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 172, 126, 70, 14, IDC_BTN_CUST_NOTIF, L"Button", L"");
+    addCtrl(BS_GROUPBOX, 0, 12, 158, 238, 60, IDC_GRP_AERO, L"Button", L"");
+    addCtrl(SS_LEFT, 0, 18, 169, 226, 30, IDC_TXT_AERO, L"Static", L"");
+    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 18, 203, 226, 12, IDC_CHK_AEROPEEK, L"Button", L"");
+    addCtrl(WS_TABSTOP, 0, 12, 222, 238, 10, IDC_LINK_HELP, L"SysLink", L"");
+    // Standard Windows dialog button size is 50x14 DLU. The row is right-aligned to
+    // x=250, the same right margin used by the group boxes/list above (12 DLU from
+    // the 262-wide dialog edge), then shifted ~8% further right versus the previous
+    // 84/140/196 layout - the max shift that still keeps Apply inside the dialog.
+    addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 88, 252, 50, 14, IDOK, L"Button", L"OK");
+    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 144, 252, 50, 14, IDCANCEL, L"Button", L"Cancel");
+    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 200, 252, 50, 14, IDC_BTN_APPLY, L"Button", L"Apply");
     addCtrl(SS_LEFT, 0, 14, 22, 162, 26, IDC_TXT_START_INFO, L"Static", L"");
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 180, 22, 66, 14, IDC_BTN_START_CUST, L"Button", L"");
     addCtrl(SS_LEFT, 0, 14, 56, 100, 10, IDC_TXT_POWER_LABEL, L"Static", L"");
