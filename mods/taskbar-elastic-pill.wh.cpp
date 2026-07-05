@@ -106,7 +106,13 @@ struct Settings {
 
 std::mutex g_settingsMutex;
 std::mutex g_pillsMutex;
-std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Rectangle>> g_injectedPills;
+struct PillContext {
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Rectangle> pill;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> activeBtn;
+    winrt::event_token layoutToken{};
+};
+std::vector<std::shared_ptr<PillContext>> g_pillContexts;
 std::atomic<bool> g_unloading{false};
 
 struct EasingCache {
@@ -288,6 +294,162 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
+void UpdatePillPosition(
+    winrt::Windows::UI::Xaml::Shapes::Rectangle const& p,
+    winrt::Windows::UI::Xaml::Controls::Grid const& g,
+    winrt::Windows::UI::Xaml::FrameworkElement const& b,
+    Settings const& localSettings)
+{
+    auto transform = b.TransformToVisual(g);
+    auto point = transform.TransformPoint({0, 0});
+
+    double pillW = p.ActualWidth() > 0 ? p.ActualWidth() : p.Width();
+    if (pillW < 1.0) pillW = 1.0;
+    float targetX = (float)(point.X + (b.ActualWidth() / 2.0) - (pillW / 2.0)) + (float)localSettings.PillMarginHorizontal;
+    
+    auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(p);
+    float lastTargetX = std::numeric_limits<float>::quiet_NaN();
+    visual.Properties().TryGetScalar(L"LastTargetX", lastTargetX);
+
+    if (std::isnan(lastTargetX) || std::abs(lastTargetX - targetX) > 0.1f) {
+        visual.Properties().InsertScalar(L"LastTargetX", targetX);
+
+        if (std::isnan(lastTargetX)) {
+            visual.Offset(winrt::Windows::Foundation::Numerics::float3(targetX, visual.Offset().y, 0));
+            visual.Properties().InsertScalar(L"LeftX", targetX);
+            visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
+            visual.StopAnimation(L"Scale");
+            visual.Scale(winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
+        } else {
+            auto compositor = visual.Compositor();
+            DWORD tid = GetCurrentThreadId();
+            EasingCache cache;
+            {
+                std::lock_guard<std::mutex> lock(g_easingMutex);
+                if (g_easingCaches.size() > 10) {
+                    for (auto it = g_easingCaches.begin(); it != g_easingCaches.end(); ) {
+                        if (it->first == tid) { ++it; continue; }
+                        HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, it->first);
+                        if (hThread) {
+                            if (WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) {
+                                it = g_easingCaches.erase(it);
+                            } else { ++it; }
+                            CloseHandle(hThread);
+                        } else { it = g_easingCaches.erase(it); }
+                    }
+                }
+                cache = g_easingCaches[tid];
+            }
+
+            if (cache.compositor != compositor) {
+                cache.compositor = compositor;
+                cache.stretchLeadEase = compositor.CreateCubicBezierEasingFunction({0.0f, 0.0f}, {0.0f, 1.0f});
+                cache.stretchTrailEase = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.2f, 1.0f});
+                cache.squishEase = compositor.CreateCubicBezierEasingFunction({0.25f, 0.1f}, {0.25f, 1.0f});
+                cache.linearEase = compositor.CreateLinearEasingFunction();
+                cache.easeIn = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {1.0f, 1.0f});
+                cache.easeOut = compositor.CreateCubicBezierEasingFunction({0.0f, 0.0f}, {0.5f, 1.0f});
+                cache.easeInOut = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.5f, 1.0f});
+                
+                std::lock_guard<std::mutex> lock(g_easingMutex);
+                g_easingCaches[tid] = cache;
+            }
+
+            if (localSettings.FadeTransition) {
+                auto opacityAnim = compositor.CreateScalarKeyFrameAnimation();
+                opacityAnim.InsertKeyFrame(0.0f, 1.0f);
+                opacityAnim.InsertKeyFrame(0.5f, 0.0f);
+                opacityAnim.InsertKeyFrame(1.0f, 1.0f);
+                opacityAnim.Duration(std::chrono::milliseconds(300));
+                visual.Properties().StartAnimation(L"FadeOpacity", opacityAnim);
+            }
+
+            int animStyle = localSettings.AnimationStyle;
+            if (animStyle == 1 || animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) {
+                visual.StopAnimation(L"Scale");
+                visual.Scale(winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
+            }
+
+            if (animStyle == 1) { // Bounce
+                auto anim = compositor.CreateSpringScalarAnimation();
+                anim.Target(L"Offset.X");
+                anim.FinalValue(targetX);
+                anim.DampingRatio(0.6f);
+                anim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(50)));
+                visual.StartAnimation(L"Offset.X", anim);
+            } else if (animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) { 
+                auto anim = compositor.CreateScalarKeyFrameAnimation();
+                CompositionEasingFunction easing = nullptr;
+                if (animStyle == 2) easing = cache.linearEase;
+                else if (animStyle == 4) easing = cache.easeIn;
+                else if (animStyle == 5) easing = cache.easeOut;
+                else if (animStyle == 6) easing = cache.easeInOut;
+
+                anim.InsertKeyFrame(1.0f, targetX, easing);
+                anim.Duration(std::chrono::milliseconds(200));
+                visual.StartAnimation(L"Offset.X", anim);
+            } else if (animStyle == 3) { // Squish
+                visual.StopAnimation(L"Scale");
+                auto scaleAnim = compositor.CreateVector3KeyFrameAnimation();
+                scaleAnim.InsertKeyFrame(0.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
+                scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.5f, 0.5f, 1.0f), cache.squishEase);
+                scaleAnim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f), cache.squishEase);
+                scaleAnim.Duration(std::chrono::milliseconds(300));
+
+                visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)localSettings.PillHeight / 2.0f, 0));
+                visual.StartAnimation(L"Scale", scaleAnim);
+
+                auto moveAnim = compositor.CreateScalarKeyFrameAnimation();
+                moveAnim.InsertKeyFrame(1.0f, targetX, cache.squishEase);
+                moveAnim.Duration(std::chrono::milliseconds(300));
+                visual.StartAnimation(L"Offset.X", moveAnim);
+            } else { // Stretch or Stretch-Squish
+                float targetLeft = targetX;
+                float targetRight = targetX + (float)pillW;
+                float currentLeft = lastTargetX;
+                bool movingRight = targetLeft > currentLeft;
+
+                auto propSet = visual.Properties();
+
+                auto leftAnim = compositor.CreateScalarKeyFrameAnimation();
+                leftAnim.InsertKeyFrame(1.0f, targetLeft, movingRight ? cache.stretchTrailEase : cache.stretchLeadEase);
+                leftAnim.Duration(std::chrono::milliseconds(300));
+
+                auto rightAnim = compositor.CreateScalarKeyFrameAnimation();
+                rightAnim.InsertKeyFrame(1.0f, targetRight, movingRight ? cache.stretchLeadEase : cache.stretchTrailEase);
+                rightAnim.Duration(std::chrono::milliseconds(300));
+
+                propSet.StartAnimation(L"LeftX", leftAnim);
+                propSet.StartAnimation(L"RightX", rightAnim);
+
+                auto offsetExp = compositor.CreateExpressionAnimation(L"props.LeftX");
+                offsetExp.SetReferenceParameter(L"props", propSet);
+                visual.StartAnimation(L"Offset.X", offsetExp);
+
+                if (animStyle == 7) { // Stretch-Squish
+                    auto squishAnim = compositor.CreateScalarKeyFrameAnimation();
+                    squishAnim.InsertKeyFrame(0.0f, 1.0f);
+                    squishAnim.InsertKeyFrame(0.5f, 0.5f, cache.squishEase);
+                    squishAnim.InsertKeyFrame(1.0f, 1.0f, cache.squishEase);
+                    squishAnim.Duration(std::chrono::milliseconds(300));
+                    propSet.InsertScalar(L"SquishY", 1.0f);
+                    propSet.StartAnimation(L"SquishY", squishAnim);
+                    
+                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, props.SquishY, 1.0)");
+                    scaleExp.SetReferenceParameter(L"props", propSet);
+                    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, (float)localSettings.PillHeight / 2.0f, 0));
+                    visual.StartAnimation(L"Scale", scaleExp);
+                } else {
+                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, 1.0, 1.0)");
+                    scaleExp.SetReferenceParameter(L"props", propSet);
+                    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, 0, 0));
+                    visual.StartAnimation(L"Scale", scaleExp);
+                }
+            }
+        }
+    }
+}
+
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
@@ -400,15 +562,47 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             // ALWAYS ensure pill is tracked, even if created by previous mod instance
             {
                 std::lock_guard<std::mutex> lock(g_pillsMutex);
-                auto it = std::find_if(g_injectedPills.begin(), g_injectedPills.end(), [&](const auto& wp){ return wp.get() == pill; });
-                if (it == g_injectedPills.end()) {
-                    if (g_injectedPills.size() > 50) {
-                        g_injectedPills.erase(
-                            std::remove_if(g_injectedPills.begin(), g_injectedPills.end(),
-                                [](auto& wp) { return wp.get() == nullptr; }),
-                            g_injectedPills.end());
+                auto it = std::find_if(g_pillContexts.begin(), g_pillContexts.end(), [&](const auto& ctx){ return ctx->pill.get() == pill; });
+                std::shared_ptr<PillContext> ctx;
+                if (it == g_pillContexts.end()) {
+                    if (g_pillContexts.size() > 50) {
+                        g_pillContexts.erase(
+                            std::remove_if(g_pillContexts.begin(), g_pillContexts.end(),
+                                [](auto& ctx) { return ctx->pill.get() == nullptr; }),
+                            g_pillContexts.end());
                     }
-                    g_injectedPills.push_back(pill);
+                    ctx = std::make_shared<PillContext>();
+                    ctx->pill = pill;
+                    ctx->grid = grid;
+                    
+                    ctx->layoutToken = pill.LayoutUpdated([weakCtx = std::weak_ptr<PillContext>(ctx)](auto&&, auto&&) {
+                        auto lockedCtx = weakCtx.lock();
+                        if (!lockedCtx) return;
+                        auto p = lockedCtx->pill.get();
+                        auto g = lockedCtx->grid.get();
+                        auto b = lockedCtx->activeBtn.get();
+                        if (!p || !g || !b) return;
+
+                        Settings currentSettings;
+                        { std::lock_guard<std::mutex> sLock(g_settingsMutex); currentSettings = g_settings; }
+                        
+                        try {
+                            UpdatePillPosition(p, g, b, currentSettings);
+                        } catch (...) { Wh_Log(L"Exception in LayoutUpdated handler"); }
+                    });
+
+                    g_pillContexts.push_back(ctx);
+                } else {
+                    ctx = *it;
+                }
+
+                if (isActive) {
+                    ctx->activeBtn = button;
+                    try {
+                        UpdatePillPosition(pill, grid, button, localSettings);
+                    } catch (...) {}
+                } else if (ctx->activeBtn.get() == button) {
+                    ctx->activeBtn = nullptr;
                 }
             }
 
@@ -457,166 +651,6 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                 }
             }
 
-            if (isActive) {
-                auto transform = button.TransformToVisual(grid);
-                auto point = transform.TransformPoint({0, 0});
-
-                double pillW = pill.ActualWidth() > 0 ? pill.ActualWidth() : pill.Width();
-                if (pillW < 1.0) pillW = 1.0;
-                float targetX = (float)(point.X + (button.ActualWidth() / 2.0) - (pillW / 2.0)) + (float)localSettings.PillMarginHorizontal;
-                
-                float lastTargetX = std::numeric_limits<float>::quiet_NaN();
-                visual.Properties().TryGetScalar(L"LastTargetX", lastTargetX);
-
-                if (std::isnan(lastTargetX) || std::abs(lastTargetX - targetX) > 0.1f) {
-                    visual.Properties().InsertScalar(L"LastTargetX", targetX);
-
-                    if (std::isnan(lastTargetX)) {
-                        // First appearance: snap to position without animation
-                        visual.Offset(winrt::Windows::Foundation::Numerics::float3(targetX, visual.Offset().y, 0));
-                        visual.Properties().InsertScalar(L"LeftX", targetX);
-                        visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
-                        visual.StopAnimation(L"Scale");
-                        visual.Scale(winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
-                    } else {
-                        // Cached easing functions (persist across calls on UI thread)
-                        DWORD tid = GetCurrentThreadId();
-                        EasingCache cache;
-                        {
-                            std::lock_guard<std::mutex> lock(g_easingMutex);
-                            if (g_easingCaches.size() > 10) {
-                                for (auto it = g_easingCaches.begin(); it != g_easingCaches.end(); ) {
-                                    if (it->first == tid) { ++it; continue; }
-                                    HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, it->first);
-                                    if (hThread) {
-                                        if (WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) {
-                                            it = g_easingCaches.erase(it);
-                                        } else {
-                                            ++it;
-                                        }
-                                        CloseHandle(hThread);
-                                    } else {
-                                        it = g_easingCaches.erase(it);
-                                    }
-                                }
-                            }
-                            cache = g_easingCaches[tid];
-                        }
-
-                        if (cache.compositor != compositor) {
-                            cache.compositor = compositor;
-                            cache.stretchLeadEase = compositor.CreateCubicBezierEasingFunction({0.0f, 0.0f}, {0.0f, 1.0f});
-                            cache.stretchTrailEase = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.2f, 1.0f});
-                            cache.squishEase = compositor.CreateCubicBezierEasingFunction({0.25f, 0.1f}, {0.25f, 1.0f});
-                            cache.linearEase = compositor.CreateLinearEasingFunction();
-                            cache.easeIn = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {1.0f, 1.0f});
-                            cache.easeOut = compositor.CreateCubicBezierEasingFunction({0.0f, 0.0f}, {0.5f, 1.0f});
-                            cache.easeInOut = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.5f, 1.0f});
-                            
-                            std::lock_guard<std::mutex> lock(g_easingMutex);
-                            g_easingCaches[tid] = cache;
-                        }
-
-                        if (localSettings.FadeTransition) {
-                            auto opacityAnim = compositor.CreateScalarKeyFrameAnimation();
-                            opacityAnim.InsertKeyFrame(0.0f, 1.0f);
-                            opacityAnim.InsertKeyFrame(0.5f, 0.0f);
-                            opacityAnim.InsertKeyFrame(1.0f, 1.0f);
-                            opacityAnim.Duration(std::chrono::milliseconds(300));
-                            visual.Properties().StartAnimation(L"FadeOpacity", opacityAnim);
-                        }
-
-                        int animStyle = localSettings.AnimationStyle;
-
-                        // Reset scale for non-scale-animating styles
-                        if (animStyle == 1 || animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) {
-                            visual.StopAnimation(L"Scale");
-                            visual.Scale(winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
-                        }
-
-                        if (animStyle == 1) { // Bounce
-                            auto anim = compositor.CreateSpringScalarAnimation();
-                            anim.Target(L"Offset.X");
-                            anim.FinalValue(targetX);
-                            anim.DampingRatio(0.6f);
-                            anim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(50)));
-                            visual.StartAnimation(L"Offset.X", anim);
-                        } else if (animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) { // Linear, Ease-In, Ease-Out, Ease-In-Out
-                            auto anim = compositor.CreateScalarKeyFrameAnimation();
-                            CompositionEasingFunction easing = nullptr;
-                            if (animStyle == 2) easing = cache.linearEase;
-                            else if (animStyle == 4) easing = cache.easeIn;
-                            else if (animStyle == 5) easing = cache.easeOut;
-                            else if (animStyle == 6) easing = cache.easeInOut;
-
-                            anim.InsertKeyFrame(1.0f, targetX, easing);
-                            anim.Duration(std::chrono::milliseconds(200));
-                            visual.StartAnimation(L"Offset.X", anim);
-                        } else if (animStyle == 3) { // Squish
-                            visual.StopAnimation(L"Scale");
-                            
-                            auto scaleAnim = compositor.CreateVector3KeyFrameAnimation();
-                            scaleAnim.InsertKeyFrame(0.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
-                            scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.5f, 0.5f, 1.0f), cache.squishEase);
-                            scaleAnim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f), cache.squishEase);
-                            scaleAnim.Duration(std::chrono::milliseconds(300));
-
-                            visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)localSettings.PillHeight / 2.0f, 0));
-                            visual.StartAnimation(L"Scale", scaleAnim);
-
-                            auto moveAnim = compositor.CreateScalarKeyFrameAnimation();
-                            moveAnim.InsertKeyFrame(1.0f, targetX, cache.squishEase);
-                            moveAnim.Duration(std::chrono::milliseconds(300));
-                            visual.StartAnimation(L"Offset.X", moveAnim);
-                        } else { // Stretch (0) or Stretch-Squish (7)
-                            float targetLeft = targetX;
-                            float targetRight = targetX + (float)pillW;
-                            
-                            float currentLeft = lastTargetX;
-                            bool movingRight = targetLeft > currentLeft;
-
-                            auto propSet = visual.Properties();
-
-                            auto leftAnim = compositor.CreateScalarKeyFrameAnimation();
-                            leftAnim.InsertKeyFrame(1.0f, targetLeft, movingRight ? cache.stretchTrailEase : cache.stretchLeadEase);
-                            leftAnim.Duration(std::chrono::milliseconds(300));
-
-                            auto rightAnim = compositor.CreateScalarKeyFrameAnimation();
-                            rightAnim.InsertKeyFrame(1.0f, targetRight, movingRight ? cache.stretchLeadEase : cache.stretchTrailEase);
-                            rightAnim.Duration(std::chrono::milliseconds(300));
-
-                            propSet.StartAnimation(L"LeftX", leftAnim);
-                            propSet.StartAnimation(L"RightX", rightAnim);
-
-                            auto offsetExp = compositor.CreateExpressionAnimation(L"props.LeftX");
-                            offsetExp.SetReferenceParameter(L"props", propSet);
-                            visual.StartAnimation(L"Offset.X", offsetExp);
-
-                            if (animStyle == 7) { // Stretch-Squish
-                                auto squishAnim = compositor.CreateScalarKeyFrameAnimation();
-                                squishAnim.InsertKeyFrame(0.0f, 1.0f);
-                                squishAnim.InsertKeyFrame(0.5f, 0.5f, cache.squishEase);
-                                squishAnim.InsertKeyFrame(1.0f, 1.0f, cache.squishEase);
-                                squishAnim.Duration(std::chrono::milliseconds(300));
-                                propSet.InsertScalar(L"SquishY", 1.0f);
-                                propSet.StartAnimation(L"SquishY", squishAnim);
-                                
-                                auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, props.SquishY, 1.0)");
-                                scaleExp.SetReferenceParameter(L"props", propSet);
-                                
-                                visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, (float)localSettings.PillHeight / 2.0f, 0));
-                                visual.StartAnimation(L"Scale", scaleExp);
-                            } else {
-                                auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, 1.0, 1.0)");
-                                scaleExp.SetReferenceParameter(L"props", propSet);
-                                
-                                visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, 0, 0));
-                                visual.StartAnimation(L"Scale", scaleExp);
-                            }
-                        }
-                    }
-                }
-            }
         } catch (...) {
             Wh_Log(L"Exception in UpdateVisualStates hook");
         }
@@ -683,11 +717,11 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Elastic Pill Mod");
     g_unloading = true;
     
-    std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Rectangle>> localPills;
+    std::vector<std::shared_ptr<PillContext>> localPills;
     {
         std::lock_guard<std::mutex> lock(g_pillsMutex);
-        localPills = g_injectedPills;
-        g_injectedPills.clear();
+        localPills = g_pillContexts;
+        g_pillContexts.clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_easingMutex);
@@ -699,8 +733,10 @@ void Wh_ModUninit() {
     std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if(h) CloseHandle(h); });
     auto pending = std::make_shared<std::atomic<int>>((int)localPills.size());
 
-    for (auto& weakPill : localPills) {
-        if (auto pill = weakPill.get()) {
+    for (auto& ctx : localPills) {
+        if (auto pill = ctx->pill.get()) {
+            try { pill.LayoutUpdated(ctx->layoutToken); } catch(...) {}
+            
             auto dispatcher = pill.Dispatcher();
             if (dispatcher) {
                 if (dispatcher.HasThreadAccess()) {
