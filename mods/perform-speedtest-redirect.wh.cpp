@@ -5,6 +5,8 @@
 // @version         1.3.0
 // @author          mynameistito
 // @github          https://github.com/mynameistito
+// @twitter         https://x.com/mynameistito
+// @homepage        https://mynameistito.com
 // @license         MIT
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
