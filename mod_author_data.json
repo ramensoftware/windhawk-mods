@@ -590,7 +590,10 @@
   "https://github.com/mynameistito": {
     "author": "mynameistito",
     "github": "https://github.com/mynameistito",
-    "homepages": []
+    "homepages": [
+      "https://mynameistito.com"
+    ],
+    "twitter": "https://x.com/mynameistito"
   },
   "https://github.com/n1d3v": {
     "author": "bricktapper!",

@@ -1,3 +1,11 @@
+## 1.3.0 ([Jul 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f837f4d05fbf60c84379db208824c10eca099e2c/mods/perform-speedtest-redirect.wh.cpp))
+
+* Add Action Center support via `ShellHost.exe` and the `linkid=2325015` target substring.
+* Add command execution mode through the new `Action text` setting, while keeping URL replacement as the default.
+* Add configurable target substrings and runtime settings reload.
+* Remove stale `ShellExecuteW` and `ShellExecuteExW` hooks, using `CreateProcessW` interception only.
+* Fix bare URL handling in command mode and avoid logging full command lines or configured actions.
+
 ## 1.2.2 ([Mar 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1c888f9b5404e1f03ca934fce7524bfa68bfb597/mods/perform-speedtest-redirect.wh.cpp))
 
 - Refactors implementation with no functional changes: same 3 hooks, same URL detection and
