@@ -1376,7 +1376,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks1[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks1[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -1384,12 +1384,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
     bool success = true;
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks1, ARRAYSIZE(taskbarViewHooks1))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks1, ARRAYSIZE(taskbarViewDllHooks1))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll (TaskListButton)");
         success = false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks2[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks2[] = {
         {
             {
                 L"public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnExperienceToggleButtonVisualStateChanged(struct winrt::Taskbar::ITaskbarButton const &,struct winrt::Taskbar::TaskbarButtonVisualStateChangedEventArgs const &)",
@@ -1399,7 +1400,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             OnExperienceToggleButtonVisualStateChanged_Hook,
         }
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks2, ARRAYSIZE(taskbarViewHooks2))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks2, ARRAYSIZE(taskbarViewDllHooks2))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll (OnExperienceToggleButtonVisualStateChanged)");
     }
 
@@ -1411,7 +1412,8 @@ HMODULE GetSearchUxModuleHandle() {
 }
 
 bool HookSearchUxDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK searchUxHooks[] = {
+    // SearchUx.UI.dll
+    WindhawkUtils::SYMBOL_HOOK searchUxDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
             &SearchIconButton_UpdateVisualStates_Original,
@@ -1419,9 +1421,10 @@ bool HookSearchUxDllSymbols(HMODULE module) {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(module, searchUxHooks, ARRAYSIZE(searchUxHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, searchUxDllHooks, ARRAYSIZE(searchUxDllHooks))) {
         Wh_Log(L"Failed to hook SearchUx.UI.dll (SearchIconButton::UpdateVisualStates). Trying PlayStateChange...");
-        WindhawkUtils::SYMBOL_HOOK searchUxHooks2[] = {
+        // SearchUx.UI.dll
+        WindhawkUtils::SYMBOL_HOOK searchUxDllHooks2[] = {
             {
                 {
                     L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)",
@@ -1431,7 +1434,7 @@ bool HookSearchUxDllSymbols(HMODULE module) {
                 SearchIconButton_UpdateVisualStates_Hook,
             }
         };
-        if (!WindhawkUtils::HookSymbols(module, searchUxHooks2, ARRAYSIZE(searchUxHooks2))) {
+        if (!WindhawkUtils::HookSymbols(module, searchUxDllHooks2, ARRAYSIZE(searchUxDllHooks2))) {
             Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
             return false;
         }
