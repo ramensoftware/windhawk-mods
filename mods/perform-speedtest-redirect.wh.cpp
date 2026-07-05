@@ -20,7 +20,7 @@
 /*
 # Perform Speed Test Redirect
 
-![PSR Image](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/perform-speedtest-redirect/psr.png)
+![PSR Image](https://raw.githubusercontent.com/mynameistito/windhawk-perform-speedtest/refs/heads/main/psr.png)
 
 When you right-click the network icon in the Windows taskbar and click
 **"Perform speed test"**, Windows normally launches the browser to:
