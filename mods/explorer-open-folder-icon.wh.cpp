@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
-// @compilerOptions -lshell32 -lcomctl32
+// @compilerOptions -lcomctl32
 // @architecture    x86-64
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -35,7 +35,6 @@ for selected folders in the Folders tree. This mod restores that behavior to Win
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>
 #include <windhawk_utils.h>
 #include <shlobj.h>
 #include <commctrl.h>
@@ -78,13 +77,11 @@ void SetOpenFolderIcon(HWND hwndTree, LPTVITEMW ptvi)
     }
 }
 
-#define CNscTree__hwndTree(pThis) *((HWND *)pThis + 47)
-
 void (*CNscTree__OnGetDisplayInfo_orig)(class CNscTree *, LPNMTVDISPINFOEXW);
 void CNscTree__OnGetDisplayInfo_hook(class CNscTree *pThis, LPNMTVDISPINFOEXW pnm)
 {
     CNscTree__OnGetDisplayInfo_orig(pThis, pnm);
-    SetOpenFolderIcon(CNscTree__hwndTree(pThis), (LPTVITEMW)&pnm->item);
+    SetOpenFolderIcon(pnm->hdr.hwndFrom, (LPTVITEMW)&pnm->item);
 }
 
 SUBCLASSPROC CNscTree_s_SubClassTreeWndProc_orig;
