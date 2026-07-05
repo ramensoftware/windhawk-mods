@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.18
+// @version        10.0.20
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -21,7 +21,7 @@ Panel pages, using only native Windows components.
 ## Compatibility
 
 - **Windows 10** – Mostly complete support
-- **Windows 11** – Partial support (requires the Win32 taskbar, e.g. via ExplorerPatcher)
+- **Windows 11** – Partial support
 
 ---
 
@@ -30,13 +30,12 @@ Panel pages, using only native Windows components.
 - Redirects many `ms-settings:` links to the classic Control Panel
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
-- Tray menu detection
+- Tray menu detection (experimental)
 ---
 ## Limitations
 
-- Windows 11 requires the classic Win32-style taskbar (e.g. via ExplorerPatcher)
-- Tray context menu interception only works with the classic Win32 taskbar
-- The device & printers system tray redirect could not work in complex configurations
+- The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10 and previous versions). If using Windows 11, it might function decently but it is still an experimental feature.
+- The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
 
 ---
 
@@ -53,7 +52,7 @@ Panel pages, using only native Windows components.
   $name: Enable Redirects
   $description: "Turns the mod on or off. When disabled, Settings opens normally as usual."
 - RedirectSystemTray: false
-  $name: Redirect System Tray Audio/Network/Device & Printers
+  $name: Redirect System Tray Audio/Network/Device & Printers (EXPERIMENTAL)
   $description: "If enabled, right-clicking the Audio or Network or Device & Printers icon near the clock and choosing 'Open Sound settings' or 'Open Network settings' or 'Open devices and printers' will open the classic panel instead of the Settings app."
 - UIOnlyRedirects: false
   $name: Non-Invasive Mode
@@ -1250,7 +1249,7 @@ HWND WINAPI CreateWindowExW_Hook(
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.18");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.20");
 
     DetectWindowsVersion();
     LoadSettings();
