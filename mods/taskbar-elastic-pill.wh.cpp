@@ -102,7 +102,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
 #include <memory>
 
 struct Settings {
-    int PillMarginBottom = 4;
+    int PillMarginBottom = 0;
     int PillMarginHorizontal = 0;
     int PillWidth = 16;
     int PillHeight = 3;
@@ -148,7 +148,7 @@ struct EasingCache {
     winrt::Windows::UI::Composition::CompositionEasingFunction easeInOut{nullptr};
 };
 
-std::map<DWORD, EasingCache> g_easingCaches;
+std::map<DWORD, EasingCache>* g_easingCaches = new std::map<DWORD, EasingCache>();
 std::mutex g_easingMutex;
 
 std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring_view hexView) {
@@ -186,53 +186,47 @@ void LoadSettings() {
     std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
     
     g_settings.PillWidth = 16; g_settings.PillHeight = 3;
-    PCWSTR dimStr = Wh_GetStringSetting(L"Pill.Dimensions");
-    ParseIntTuple(dimStr, g_settings.PillWidth, g_settings.PillHeight);
-    if (dimStr) Wh_FreeStringSetting(dimStr);
+    WindhawkUtils::StringSetting dimStr(Wh_GetStringSetting(L"Pill.Dimensions"));
+    ParseIntTuple(dimStr.get(), g_settings.PillWidth, g_settings.PillHeight);
 
     g_settings.PillMarginHorizontal = 0; g_settings.PillMarginBottom = 0;
-    PCWSTR marStr = Wh_GetStringSetting(L"Pill.Margins");
-    ParseIntTuple(marStr, g_settings.PillMarginHorizontal, g_settings.PillMarginBottom);
-    if (marStr) Wh_FreeStringSetting(marStr);
+    WindhawkUtils::StringSetting marStr(Wh_GetStringSetting(L"Pill.Margins"));
+    ParseIntTuple(marStr.get(), g_settings.PillMarginHorizontal, g_settings.PillMarginBottom);
     
-    PCWSTR radiusStr = Wh_GetStringSetting(L"Pill.PillRadius");
-    if (radiusStr) {
+    WindhawkUtils::StringSetting radiusStr(Wh_GetStringSetting(L"Pill.PillRadius"));
+    if (radiusStr.get()) {
         try {
-            g_settings.PillRadius = std::stod(radiusStr);
+            g_settings.PillRadius = std::stod(radiusStr.get());
         } catch (...) { g_settings.PillRadius = 1.5; }
-        Wh_FreeStringSetting(radiusStr);
     }
 
-    PCWSTR animStr = Wh_GetStringSetting(L"Animation.AnimationStyle");
+    WindhawkUtils::StringSetting animStr(Wh_GetStringSetting(L"Animation.AnimationStyle"));
     g_settings.AnimationStyle = 0;
-    if (animStr) {
-        if (wcscmp(animStr, L"bounce") == 0) g_settings.AnimationStyle = 1;
-        else if (wcscmp(animStr, L"linear") == 0) g_settings.AnimationStyle = 2;
-        else if (wcscmp(animStr, L"easein") == 0) g_settings.AnimationStyle = 4;
-        else if (wcscmp(animStr, L"easeout") == 0) g_settings.AnimationStyle = 5;
-        else if (wcscmp(animStr, L"easeinout") == 0) g_settings.AnimationStyle = 6;
-        Wh_FreeStringSetting(animStr);
+    if (animStr.get()) {
+        if (wcscmp(animStr.get(), L"bounce") == 0) g_settings.AnimationStyle = 1;
+        else if (wcscmp(animStr.get(), L"linear") == 0) g_settings.AnimationStyle = 2;
+        else if (wcscmp(animStr.get(), L"easein") == 0) g_settings.AnimationStyle = 4;
+        else if (wcscmp(animStr.get(), L"easeout") == 0) g_settings.AnimationStyle = 5;
+        else if (wcscmp(animStr.get(), L"easeinout") == 0) g_settings.AnimationStyle = 6;
     }
     g_settings.FadeTransition = Wh_GetIntSetting(L"Animation.FadeTransition") != 0;
     g_settings.SquishTransition = Wh_GetIntSetting(L"Animation.SquishTransition") != 0;
     g_settings.HideInactiveDots = Wh_GetIntSetting(L"Pill.HideInactiveDots") != 0;
     g_settings.TrackSystemButtons = Wh_GetIntSetting(L"Pill.TrackSystemButtons") != 0;
 
-    PCWSTR cmStr = Wh_GetStringSetting(L"Colors.ColorMode");
+    WindhawkUtils::StringSetting cmStr(Wh_GetStringSetting(L"Colors.ColorMode"));
     g_settings.ColorMode = 0;
-    if (cmStr) {
-        if (wcscmp(cmStr, L"custom") == 0) g_settings.ColorMode = 1;
-        else if (wcscmp(cmStr, L"icon") == 0) g_settings.ColorMode = 2;
-        Wh_FreeStringSetting(cmStr);
+    if (cmStr.get()) {
+        if (wcscmp(cmStr.get(), L"custom") == 0) g_settings.ColorMode = 1;
+        else if (wcscmp(cmStr.get(), L"icon") == 0) g_settings.ColorMode = 2;
     }
 
     g_settings.ParsedLightColor = std::nullopt;
     g_settings.ParsedDarkColor = std::nullopt;
     g_settings.ParsedSolidColor = std::nullopt;
-    PCWSTR colorStr = Wh_GetStringSetting(L"Colors.CustomColor");
-    if (colorStr) {
-        std::wstring colorStrWs = colorStr;
-        Wh_FreeStringSetting(colorStr);
+    WindhawkUtils::StringSetting colorStr(Wh_GetStringSetting(L"Colors.CustomColor"));
+    if (colorStr.get()) {
+        std::wstring colorStrWs = colorStr.get();
         
         size_t commaPos = colorStrWs.find(L',');
         if (commaPos != std::wstring::npos) {
@@ -276,7 +270,7 @@ struct AttachedEvent {
     winrt::event_token token;
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
 };
-std::vector<AttachedEvent> g_attachedEvents;
+std::vector<AttachedEvent>* g_attachedEvents = new std::vector<AttachedEvent>();
 std::mutex g_attachedEventsMutex;
 
 struct HSL {
@@ -392,34 +386,16 @@ using namespace winrt::Windows::UI::Xaml::Media;
 using namespace winrt::Windows::UI::Xaml::Hosting;
 using namespace winrt::Windows::UI::Composition;
 
-bool IsSafeToQueryInterface(void* pUnk, HMODULE expectedModule) {
-    if (IsBadReadPtr(pUnk, sizeof(void*))) return false;
-    void** vtable = *(void***)pUnk;
-    if (IsBadReadPtr(vtable, sizeof(void*) * 3)) return false;
-    
-    void* qi = vtable[0];
-    if (IsBadReadPtr(qi, 1)) return false;
-    
-    HMODULE funcModule = nullptr;
-    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)qi, &funcModule)) {
-        return funcModule == expectedModule;
+FrameworkElement GetFrameworkElementFromNative(void* pThis) {
+    if (!pThis) return nullptr;
+    try {
+        void* iunknownPtr = (void**)pThis + 3;
+        winrt::Windows::Foundation::IUnknown iunknown;
+        winrt::copy_from_abi(iunknown, iunknownPtr);
+        return iunknown.as<winrt::Windows::UI::Xaml::FrameworkElement>();
+    } catch (...) {
+        return nullptr;
     }
-    return false;
-}
-
-FrameworkElement GetFrameworkElementFromNative(void* pThis, HMODULE expectedModule) {
-    if (!pThis || !expectedModule) return nullptr;
-    for (int i = 0; i < 10; i++) {
-        void* ptr = (void**)pThis + i;
-        if (IsSafeToQueryInterface(ptr, expectedModule)) {
-            ::IUnknown* pUnk = (::IUnknown*)ptr;
-            winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
-            if (SUCCEEDED(pUnk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
-                return result;
-            }
-        }
-    }
-    return nullptr;
 }
 
 FrameworkElement GetFrameworkElementFromInterface(void* pInterface) {
@@ -723,34 +699,9 @@ bool UpdatePillPosition(
             auto compositor = visual.Compositor();
             DWORD tid = GetCurrentThreadId();
             EasingCache cache;
-            std::vector<DWORD> deadThreads;
             {
                 std::lock_guard<std::mutex> lock(g_easingMutex);
-                if (g_easingCaches.size() > 30) {
-                    for (auto const& [threadId, _] : g_easingCaches) {
-                        if (threadId != tid) deadThreads.push_back(threadId);
-                    }
-                }
-            }
-            if (!deadThreads.empty()) {
-                std::vector<DWORD> confirmedDead;
-                for (DWORD threadId : deadThreads) {
-                    HANDLE hThread = OpenThread(SYNCHRONIZE, FALSE, threadId);
-                    if (hThread) {
-                        if (WaitForSingleObject(hThread, 0) == WAIT_OBJECT_0) confirmedDead.push_back(threadId);
-                        CloseHandle(hThread);
-                    } else {
-                        confirmedDead.push_back(threadId);
-                    }
-                }
-                if (!confirmedDead.empty()) {
-                    std::lock_guard<std::mutex> lock(g_easingMutex);
-                    for (DWORD threadId : confirmedDead) g_easingCaches.erase(threadId);
-                }
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_easingMutex);
-                cache = g_easingCaches[tid];
+                cache = (*g_easingCaches)[tid];
             }
 
             if (cache.compositor != compositor) {
@@ -764,7 +715,7 @@ bool UpdatePillPosition(
                 cache.easeInOut = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.5f, 1.0f});
                 
                 std::lock_guard<std::mutex> lock(g_easingMutex);
-                g_easingCaches[tid] = cache;
+                (*g_easingCaches)[tid] = cache;
             }
 
             if (localSettings.FadeTransition) {
@@ -929,7 +880,7 @@ void AttachStateChangedHandler(winrt::Windows::UI::Xaml::VisualStateGroup const&
     auto dispatcher = button.Dispatcher();
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        g_attachedEvents.push_back({winrt::make_weak(group), token, dispatcher});
+        g_attachedEvents->push_back({winrt::make_weak(group), token, dispatcher});
     }
 }
 
@@ -954,7 +905,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
 
-    auto elem = GetFrameworkElementFromNative(pThis, g_taskbarViewModule);
+    auto elem = GetFrameworkElementFromNative(pThis);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1334,7 +1285,7 @@ void WINAPI SearchIconButton_UpdateVisualStates_Hook(void* pThis) {
     SearchIconButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
 
-    auto elem = GetFrameworkElementFromNative(pThis, g_searchUxModule);
+    auto elem = GetFrameworkElementFromNative(pThis);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1375,36 +1326,28 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks1[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
-        }
-    };
-    bool success = true;
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks1, ARRAYSIZE(taskbarViewHooks1))) {
-        Wh_Log(L"Failed to hook Taskbar.View.dll (TaskListButton)");
-        success = false;
-    }
-
-    // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks2[] = {
+            false
+        },
         {
             {
-                L"public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnExperienceToggleButtonVisualStateChanged(struct winrt::Taskbar::ITaskbarButton const &,struct winrt::Taskbar::TaskbarButtonVisualStateChangedEventArgs const &)",
-                L"?OnExperienceToggleButtonVisualStateChanged@TaskbarResources@implementation@Taskbar@winrt@@QEAAXAEBUITaskbarButton@34@AEBUTaskbarButtonVisualStateChangedEventArgs@34@@Z"
+                L"public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnExperienceToggleButtonVisualStateChanged(struct winrt::Taskbar::ITaskbarButton const &,struct winrt::Taskbar::TaskbarButtonVisualStateChangedEventArgs const &)"
             },
             &OnExperienceToggleButtonVisualStateChanged_Original,
             OnExperienceToggleButtonVisualStateChanged_Hook,
+            true
         }
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks2, ARRAYSIZE(taskbarViewHooks2))) {
-        Wh_Log(L"Failed to hook Taskbar.View.dll (OnExperienceToggleButtonVisualStateChanged)");
+    
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
+        Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
+        return false;
     }
-
-    return success;
+    return true;
 }
 
 HMODULE GetSearchUxModuleHandle() {
@@ -1466,23 +1409,27 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Elastic Pill Mod");
     LoadSettings();
 
-    if (HMODULE m = GetTaskbarViewModuleHandle()) {
+    HMODULE m = GetTaskbarViewModuleHandle();
+    if (m) {
         g_taskbarViewDllLoaded = true;
         g_taskbarViewModule = m;
         if (!HookTaskbarViewDllSymbols(m)) return FALSE;
-    } else {
+    }
+    
+    HMODULE sm = GetSearchUxModuleHandle();
+    if (sm) {
+        g_searchUxDllLoaded = true;
+        g_searchUxModule = sm;
+        HookSearchUxDllSymbols(sm);
+    }
+    
+    if (!m || !sm) {
         HMODULE kb = GetModuleHandle(L"kernelbase.dll");
         auto pLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW");
         if (!WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original)) {
             Wh_Log(L"Failed to hook LoadLibraryExW");
             return FALSE;
         }
-    }
-    
-    if (HMODULE sm = GetSearchUxModuleHandle()) {
-        g_searchUxDllLoaded = true;
-        g_searchUxModule = sm;
-        HookSearchUxDllSymbols(sm);
     }
     
     return TRUE;
@@ -1503,14 +1450,14 @@ void Wh_ModUninit() {
     }
     {
         std::lock_guard<std::mutex> lock(g_easingMutex);
-        g_easingCaches.clear();
+        g_easingCaches->clear();
     }
 
     std::vector<AttachedEvent> localEvents;
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        localEvents = g_attachedEvents;
-        g_attachedEvents.clear();
+        localEvents = *g_attachedEvents;
+        g_attachedEvents->clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_attachedGroupsMutex);
@@ -1610,22 +1557,28 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     std::lock_guard<std::mutex> lock(g_pillsMutex);
+    std::vector<winrt::Windows::UI::Core::CoreDispatcher> dispatched;
     for (auto& ctx : g_pillContexts) {
         auto p = ctx->pill.get();
         auto a = ctx->activeBtn.get();
         auto g = ctx->grid.get();
         if (p && a && g) {
             if (auto dispatcher = p.Dispatcher()) {
-                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [p, g, a]() {
-                    Settings localSettings;
-                    { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-                    try { 
-                        UpdatePillPosition(p, g, a, localSettings); 
-                        EnsurePillAndPosition(a, true, localSettings); 
-                    } catch (...) {}
-                });
-                break; // Only need to dispatch once per UI thread, but this will do it once total. 
-                       // Better: just dispatch once total if we find a valid dispatcher.
+                bool alreadyDispatched = false;
+                for (auto& d : dispatched) {
+                    if (d == dispatcher) { alreadyDispatched = true; break; }
+                }
+                if (!alreadyDispatched) {
+                    dispatched.push_back(dispatcher);
+                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [p, g, a]() {
+                        Settings localSettings;
+                        { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+                        try { 
+                            UpdatePillPosition(p, g, a, localSettings); 
+                            EnsurePillAndPosition(a, true, localSettings); 
+                        } catch (...) {}
+                    });
+                }
             }
         }
     }
