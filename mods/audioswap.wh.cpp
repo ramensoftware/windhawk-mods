@@ -17,6 +17,10 @@ Instantly cycle between multiple audio output devices from your system tray — 
 
 > Works great alongside **[MicSwitch](https://windhawk.net/mods/microswap)** — the companion mod that brings the same tray experience to microphone input control.
 
+![Settings Dashboard](https://i.imgur.com/gN7yFC0.png)
+
+![Tray Icon](https://i.imgur.com/DbhGcxI.png)
+
 ---
 
 ## How to Use
