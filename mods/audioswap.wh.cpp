@@ -2,7 +2,7 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         2.2.0
+// @version         2.2.1
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
@@ -153,6 +153,7 @@ static const GUID AUDIOSWAP_TRAY_GUID =
 #define WM_RELOAD_ALL              (WM_USER + 7)  // full reload after dashboard save
 #define WM_PRIORITY_DEVICE_ACTIVE  (WM_USER + 8)  // lParam = heap-alloc'd WCHAR* device ID
 #define WM_REBIND_VOLUME_CALLBACK  (WM_USER + 9)  // rebind IAudioEndpointVolumeCallback after default-device change
+#define WM_REFRESH_DEVICE_LIST     (WM_USER + 10) // refresh dashboard device combos after hot-plug
 #define TRAY_RECT_INIT_TIMER 99   // one-shot retry timer for Shell_NotifyIconGetRect
 
 // Sentinel context GUID — distinguishes volume changes triggered by our own
@@ -165,6 +166,7 @@ static const GUID kVolumeChangeCtx =
 #define MENU_OPEN_WINDHAWK   9000
 #define IDC_BTN_KOFI         9002
 #define MENU_SOUND_SETTINGS  9003
+#define IDC_PERSISTENT_MUTE  9004
 
 // With NOTIFYICON_VERSION_4 active Windows changes the tray notifications:
 //   left-click  → NIN_SELECT       (instead of / alongside WM_LBUTTONUP)
@@ -216,10 +218,11 @@ static WCHAR  g_cachedDevName[MAX_DEVICE_SLOTS][256] = {};
 static int    g_deviceSlotCount = 2;
 static bool   g_isMutedByUs     = false;
 static WCHAR  g_mutedDeviceId[512] = {};
+static bool   g_persistentMute = false;  // re-apply mute after device cycles
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Priority device list — up to MAX_DEVICE_SLOTS entries, index 0 = highest priority.
-// Written on main/tray thread under no lock (only touched during reload or init).
+// Protected by g_stateLock (LoadPriorityList acquires it for writes).
 static WCHAR  g_priorityDevIds[MAX_DEVICE_SLOTS][512] = {};
 static int    g_priorityCount = 0;
 
@@ -239,6 +242,7 @@ static VolNotifier*           g_pVolNotifier  = nullptr;  // registered on g_pEn
 // tray thread has been waited for. No concurrent access → no lock needed.
 static HANDLE        g_guiThread  = nullptr;
 static volatile LONG g_guiRunning = 0;  // 1 while dashboard window is open
+static volatile HWND g_dashboardHwnd = nullptr; // dashboard HWND, written/cleared on GUI thread
 
 const CLSID CLSID_CPolicyConfigClient = {
     0x870af99c, 0x171d, 0x4f9e, {0xaf, 0x0d, 0xe6, 0x3d, 0xf4, 0x0c, 0x2b, 0xc9}
@@ -339,6 +343,7 @@ namespace AudioSwapGui {
         HWND hSaveBtn    = nullptr;
         HWND hCancelBtn  = nullptr;
         HWND hKoFiBtn    = nullptr;
+        HWND hPersistMuteBtn = nullptr;
 
         UINT dpi = 96;
         bool advancedMode = false;
@@ -444,8 +449,11 @@ namespace AudioSwapGui {
         SetWindowPos(s->hCancelBtn, nullptr, sx+Sc(168,d), btnY, Sc(88,d),  Sc(28,d), SWP_NOZORDER|SWP_NOACTIVATE);
         SetWindowPos(s->hKoFiBtn,   nullptr, sx+Sc(264,d), btnY, Sc(138,d), Sc(28,d), SWP_NOZORDER|SWP_NOACTIVATE);
 
+        int chkY = btnY + Sc(28,d) + Sc(6,d);
+        SetWindowPos(s->hPersistMuteBtn, nullptr, sx+Sc(12,d), chkY, Sc(180,d), Sc(22,d), SWP_NOZORDER|SWP_NOACTIVATE);
+
         int prioPanelH = Sc(32,d) + MAX_DEVICE_SLOTS * Sc(kPrioRowH,d) + Sc(12,d);
-        int slotsPanelH = btnY + Sc(28,d) + Sc(12,d);
+        int slotsPanelH = chkY + Sc(22,d) + Sc(12,d);
         int clientH = prioPanelH > slotsPanelH ? prioPanelH : slotsPanelH;
 
         RECT rc = {0, 0, Sc(s->advancedMode ? kCW : kSW, d), clientH};
@@ -700,6 +708,20 @@ namespace AudioSwapGui {
                 WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 0, 0, 10, 10,
                 hWnd, (HMENU)IDC_BTN_KOFI, hInst, nullptr);
 
+            s->hPersistMuteBtn = CreateWindowExW(0, L"BUTTON", L"Persistent Mute",
+                WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
+                hWnd, (HMENU)IDC_PERSISTENT_MUTE, hInst, nullptr);
+            {
+                HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+                if (ux) {
+                    using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
+                    auto fn = (Fn)GetProcAddress(ux, "SetWindowTheme");
+                    if (fn) fn(s->hPersistMuteBtn, L"", L"");
+                }
+            }
+            if (g_persistentMute)
+                SendMessageW(s->hPersistMuteBtn, BM_SETCHECK, BST_CHECKED, 0);
+
             EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
             UpdateSlotVisibility(s);  // also calls LayoutControls → positions everything
 
@@ -814,7 +836,7 @@ namespace AudioSwapGui {
         // ── Dark theming for child controls ───────────────────────────────────
         case WM_CTLCOLORSTATIC:
             if (s) {
-                SetTextColor((HDC)wParam, kClrDim);
+                SetTextColor((HDC)wParam, (HWND)lParam == s->hPersistMuteBtn ? kClrText : kClrDim);
                 SetBkColor((HDC)wParam, kClrBg);
                 return (LRESULT)s->hBgBrush;
             }
@@ -828,7 +850,13 @@ namespace AudioSwapGui {
             }
             break;
         case WM_CTLCOLORBTN:
-            if (s) return (LRESULT)s->hBgBrush;
+            if (s) {
+                if ((HWND)lParam == s->hPersistMuteBtn) {
+                    SetTextColor((HDC)wParam, kClrText);
+                    SetBkColor((HDC)wParam, kClrBg);
+                }
+                return (LRESULT)s->hBgBrush;
+            }
             break;
 
         // ── Owner-draw buttons ────────────────────────────────────────────────
@@ -993,6 +1021,9 @@ namespace AudioSwapGui {
                     }
                     Wh_SetStringValue(kPth, s->prioSlots[i].customPath);
                 }
+                BOOL pmChecked = SendMessageW(s->hPersistMuteBtn, BM_GETCHECK, 0, 0);
+                Wh_SetStringValue(L"persistentMute", pmChecked ? L"1" : L"0");
+
                 if (s->hTrayHwnd) PostMessageW(s->hTrayHwnd, WM_RELOAD_ALL, 0, 0);
                 DestroyWindow(hWnd);
 
@@ -1028,8 +1059,89 @@ namespace AudioSwapGui {
             return 0;
         }
 
+        // ── Live device refresh (forwarded from IMMNotificationClient) ─────────
+        case WM_REFRESH_DEVICE_LIST: {
+            if (!s) break;
+            // Save current selections (index into the old device list)
+            std::vector<int> savedSlotSel(6, -1);
+            std::vector<int> savedPrioSel(MAX_DEVICE_SLOTS, -1);
+            for (int i = 0; i < 6; i++)
+                savedSlotSel[i] = (int)SendMessageW(s->slots[i].hDevCombo, CB_GETCURSEL, 0, 0);
+            for (int i = 0; i < MAX_DEVICE_SLOTS; i++)
+                savedPrioSel[i] = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_GETCURSEL, 0, 0);
+            auto oldDevices = std::move(s->activeDevices);
+
+            // Re-enumerate active render devices
+            IMMDeviceEnumerator* pEnum = nullptr;
+            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                           CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                           (void**)&pEnum))) {
+                IMMDeviceCollection* pColl = nullptr;
+                if (SUCCEEDED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pColl))) {
+                    UINT count = 0; pColl->GetCount(&count);
+                    for (UINT i = 0; i < count; i++) {
+                        IMMDevice* pDev = nullptr;
+                        if (SUCCEEDED(pColl->Item(i, &pDev))) {
+                            LPWSTR pId = nullptr;
+                            if (SUCCEEDED(pDev->GetId(&pId))) {
+                                IPropertyStore* pStore = nullptr;
+                                if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pStore))) {
+                                    PROPVARIANT v; PropVariantInit(&v);
+                                    if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal)
+                                        s->activeDevices.push_back({pId, v.pwszVal});
+                                    PropVariantClear(&v); pStore->Release();
+                                }
+                                CoTaskMemFree(pId);
+                            }
+                            pDev->Release();
+                        }
+                    }
+                    pColl->Release();
+                }
+                pEnum->Release();
+            }
+
+            // Helper: translate old-device index to new-device index by ID
+            auto findNewIdx = [&](int oldIdx) -> int {
+                if (oldIdx < 0 || oldIdx >= (int)oldDevices.size()) return -1;
+                for (size_t j = 0; j < s->activeDevices.size(); j++)
+                    if (s->activeDevices[j].id == oldDevices[oldIdx].id) return (int)j;
+                return -1;
+            };
+
+            // Repopulate slot device combos
+            for (int i = 0; i < 6; i++) {
+                SendMessageW(s->slots[i].hDevCombo, CB_RESETCONTENT, 0, 0);
+                int newSel = findNewIdx(savedSlotSel[i]);
+                for (int j = 0; j < (int)s->activeDevices.size(); j++) {
+                    int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING, 0,
+                                                (LPARAM)s->activeDevices[j].name.c_str());
+                    if (s->slots[i].id == s->activeDevices[j].id) newSel = idx;
+                }
+                if (newSel >= 0) SendMessageW(s->slots[i].hDevCombo, CB_SETCURSEL, newSel, 0);
+            }
+
+            // Repopulate priority device combos (index 0 = "None")
+            for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                SendMessageW(s->prioSlots[i].hDevCombo, CB_RESETCONTENT, 0, 0);
+                SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
+                int newSel = 0; // default "None"
+                if (savedPrioSel[i] > 0) {
+                    int ns = findNewIdx(savedPrioSel[i] - 1);
+                    if (ns >= 0) newSel = ns + 1;
+                }
+                for (int j = 0; j < (int)s->activeDevices.size(); j++) {
+                    SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0,
+                                (LPARAM)s->activeDevices[j].name.c_str());
+                }
+                SendMessageW(s->prioSlots[i].hDevCombo, CB_SETCURSEL, newSel, 0);
+            }
+            return 0;
+        }
+
         // ── Cleanup ───────────────────────────────────────────────────────────
         case WM_DESTROY:
+            InterlockedExchangePointer((volatile PVOID*)&g_dashboardHwnd, nullptr);
             if (s) {
                 DeleteObject(s->hFont);     s->hFont     = nullptr;
                 DeleteObject(s->hBgBrush);  s->hBgBrush  = nullptr;
@@ -1051,7 +1163,11 @@ namespace AudioSwapGui {
     // ── GUI thread ────────────────────────────────────────────────────────────
 
     static DWORD WINAPI GuiThreadProc(LPVOID lpParam) {
-        CoInitialize(nullptr);
+        HRESULT hrCo = CoInitialize(nullptr);
+        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+            Wh_Log(L"GuiThreadProc: CoInitialize failed (0x%X)", hrCo);
+            return 1;
+        }
 
         // Set Per-Monitor DPI Awareness V2 so Windows doesn't bitmap-scale the window.
         using SetTDACFn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
@@ -1089,6 +1205,7 @@ namespace AudioSwapGui {
             nullptr, nullptr, hInst, &state);
 
         if (hWnd) {
+            InterlockedExchangePointer((volatile PVOID*)&g_dashboardHwnd, hWnd);
             ShowWindow(hWnd, SW_SHOW);
             UpdateWindow(hWnd);
             MSG msg;
@@ -1109,7 +1226,7 @@ namespace AudioSwapGui {
         }
 
         UnregisterClassW(kClass, hInst);
-        CoUninitialize();
+        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
         InterlockedExchange(&g_guiRunning, 0);
         return 0;
     }
@@ -1397,6 +1514,13 @@ public:
     }
 
     // Callbacks are fired on an OS thread — only PostMessageW is safe here.
+    // Common helper: forward device changes to the dashboard if open.
+    static void ForwardToDashboard() {
+        HWND dash = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_dashboardHwnd, nullptr, nullptr);
+        if (dash) PostMessageW(dash, WM_REFRESH_DEVICE_LIST, 0, 0);
+    }
+
     HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(
         EDataFlow flow, ERole role, LPCWSTR) override
     {
@@ -1410,6 +1534,7 @@ public:
                 PostMessageW(hwnd, WM_REBIND_VOLUME_CALLBACK, 0, 0);
                 PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
             }
+            ForwardToDashboard();
         }
         return S_OK;
     }
@@ -1426,12 +1551,14 @@ public:
                     delete[] idCopy;
             }
         }
+        ForwardToDashboard();
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
         HWND hwnd = (HWND)InterlockedCompareExchangePointer(
             (volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
         if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        ForwardToDashboard();
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD newState) override {
@@ -1447,6 +1574,7 @@ public:
                     delete[] idCopy;
             }
         }
+        ForwardToDashboard();
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(
@@ -1645,9 +1773,16 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
     }
 
     // Slow path: still needed for the device name + ID. Always run this block.
-    IMMDeviceEnumerator* pEnum = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
+    // Reuse g_notifEnum (already exists on the tray thread) instead of creating a
+    // fresh enumerator every call. Fall back to CoCreateInstance if not yet initialized.
+    IMMDeviceEnumerator* pEnum     = g_notifEnum;
+    bool                 enumOwner = false;
+    if (!pEnum) {
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                       __uuidof(IMMDeviceEnumerator), (void**)&pEnum)))
+            enumOwner = true;
+    }
+    if (pEnum) {
         IMMDevice* pDev = nullptr;
         if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDev))) {
             LPWSTR pId = nullptr;
@@ -1679,7 +1814,7 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
             }
             pDev->Release();
         }
-        pEnum->Release();
+        if (enumOwner) pEnum->Release();
     }
 
     HICON currentIcon = g_iconDev[0];
@@ -1825,7 +1960,11 @@ BOOL CycleAudioDevice(int direction) {
     if (!comOk) return FALSE;
 
     // Undo click-mute before switching (COM is now available).
-    RestoreMute();
+    // If persistent mute is active, keep the mute — re-apply to the new device after switch.
+    bool keepMute = false;
+    { EnterCriticalSection(&g_stateLock); keepMute = g_persistentMute && g_isMutedByUs; LeaveCriticalSection(&g_stateLock); }
+    if (!keepMute)
+        RestoreMute();
     HWND hwnd = g_trayHwnd;
     if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
 
@@ -1874,6 +2013,13 @@ BOOL CycleAudioDevice(int direction) {
         pPolicyConfig->SetDefaultEndpoint(localIds[validSlot], eMultimedia);
         pPolicyConfig->SetDefaultEndpoint(localIds[validSlot], eCommunications);
         pPolicyConfig->Release();
+    }
+
+    // If persistent mute was active, re-apply mute to the newly defaulted device.
+    if (keepMute) {
+        ApplyMute(nullptr, TRUE);
+        HWND hw = g_trayHwnd;
+        if (hw) PostMessageW(hw, WM_UPDATE_TRAY_STATE, 0, 0);
     }
 
     pEnum->Release();
@@ -2521,10 +2667,19 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         // Default device changed — re-bind to new endpoint.
         UnbindEndpointVolume();
         BindEndpointVolume();
+        // If persistent mute is on and we were muted, mute the new default device.
+        if (g_persistentMute && g_isMutedByUs) {
+            ApplyMute(nullptr, TRUE);
+            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        }
 
     } else if (msg == WM_RELOAD_ALL) {
         // Full reload triggered by the settings dashboard after Save and Apply.
         // Picks up new device assignments, icon choices, device count, swap mode, and priority list.
+        {
+            WCHAR pmBuf[8] = {};
+            g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+        }
         LoadDeviceSelections();
         LoadPriorityList();
         LoadUserIconsAndSettings();
@@ -2554,7 +2709,11 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 // ─── Tray thread ──────────────────────────────────────────────────────────────
 
 DWORD WINAPI TrayThreadProc(LPVOID) {
-    CoInitialize(nullptr);
+    HRESULT hrCo = CoInitialize(nullptr);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+        Wh_Log(L"TrayThread: CoInitialize failed (0x%X)", hrCo);
+        return 1;
+    }
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
     WNDCLASSW wc = {};
@@ -2576,7 +2735,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         nullptr, nullptr, g_hInstance, nullptr
     );
     if (!g_trayHwnd) {
-        CoUninitialize();
+        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
         return 1;
     }
 
@@ -2614,7 +2773,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
     VolumePopup::UnregisterClass();
-    CoUninitialize();
+    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
     return 0;
 }
 
@@ -2682,6 +2841,12 @@ BOOL WhTool_ModInit() {
         ApplyMute(savedMutedId, FALSE);
         CoUninitialize();
         Wh_SetStringValue(L"MutedDeviceId", L"");
+    }
+
+    // Load persistent mute setting.
+    {
+        WCHAR pmBuf[8] = {};
+        g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
     }
 
     LoadUserIconsAndSettings();   // sets g_deviceSlotCount first
