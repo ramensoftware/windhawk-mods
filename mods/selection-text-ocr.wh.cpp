@@ -2,7 +2,7 @@
 // @id              selection-text-ocr
 // @name            Selection Text OCR
 // @description     Global hotkey to capture a screen region and copy extracted text to the clipboard
-// @version         1.0.4
+// @version         1.0.5
 // @author          adfastltda
 // @github          https://github.com/adfastltda
 // @homepage        https://github.com/adfastltda/selection-text-ocr
@@ -651,7 +651,18 @@ bool WriteOcrScript(const std::wstring& scriptPath, const std::wstring& imagePat
     script += "    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()\n";
     script += "}\n";
     script += "if ($null -eq $engine) {\n";
-    script += "    Write-Error 'No OCR engine available. Install an OCR language pack in Windows Settings.'\n";
+    script += "    foreach ($lang in [Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages) {\n";
+    script += "        $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang)\n";
+    script += "        if ($null -ne $engine) { break }\n";
+    script += "    }\n";
+    script += "}\n";
+    script += "if ($null -eq $engine) {\n";
+    script += "    $availableTags = ([Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages | ForEach-Object { $_.LanguageTag }) -join ', '\n";
+    script += "    if ($availableTags) {\n";
+    script += "        Write-Output \"OCR_ERROR:No OCR engine for '$langTag'. Installed OCR languages: $availableTags\"\n";
+    script += "    } else {\n";
+    script += "        Write-Output 'OCR_ERROR:No OCR engine available. Install an OCR language pack in Windows Settings (Time & language > Language & region > [language] > Options > Optical character recognition).'\n";
+    script += "    }\n";
     script += "    exit 1\n";
     script += "}\n";
     script += "$result = Await ($engine.RecognizeAsync($softwareBitmap)) ([Windows.Media.Ocr.OcrResult])\n";
@@ -670,10 +681,17 @@ bool WriteOcrScript(const std::wstring& scriptPath, const std::wstring& imagePat
     return ok && written == script.size();
 }
 
-std::wstring RunPowerShellOcr(const std::wstring& imagePath, const std::wstring& language) {
+struct OcrRunResult {
+    std::wstring text;
+    DWORD exitCode = STILL_ACTIVE;
+};
+
+OcrRunResult RunPowerShellOcr(const std::wstring& imagePath, const std::wstring& language) {
+    OcrRunResult result;
     const std::wstring scriptPath = GetTempScriptPath();
     if (scriptPath.empty() || !WriteOcrScript(scriptPath, imagePath, language)) {
-        return L"";
+        result.exitCode = 1;
+        return result;
     }
 
     SECURITY_ATTRIBUTES securityAttributes{
@@ -685,7 +703,8 @@ std::wstring RunPowerShellOcr(const std::wstring& imagePath, const std::wstring&
     HANDLE stdoutWrite = nullptr;
     if (!CreatePipe(&stdoutRead, &stdoutWrite, &securityAttributes, 0)) {
         DeleteFileW(scriptPath.c_str());
-        return L"";
+        result.exitCode = 1;
+        return result;
     }
 
     SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0);
@@ -713,17 +732,19 @@ std::wstring RunPowerShellOcr(const std::wstring& imagePath, const std::wstring&
         CloseHandle(stdoutRead);
         DeleteFileW(scriptPath.c_str());
         Wh_Log(L"CreateProcess failed: %lu", GetLastError());
-        return L"";
+        result.exitCode = 1;
+        return result;
     }
 
-    const std::wstring output = ReadProcessOutput(stdoutRead);
+    result.text = ReadProcessOutput(stdoutRead);
     CloseHandle(stdoutRead);
 
     WaitForSingleObject(processInfo.hProcess, INFINITE);
+    GetExitCodeProcess(processInfo.hProcess, &result.exitCode);
     CloseHandle(processInfo.hProcess);
     CloseHandle(processInfo.hThread);
     DeleteFileW(scriptPath.c_str());
-    return output;
+    return result;
 }
 
 //=============================================================================
@@ -1067,29 +1088,46 @@ void ProcessCapturedRegion(const RECT& screenSelection) {
     DeleteObject(cropped);
 
     Wh_Log(L"Running OCR on %s", imagePath.c_str());
-    const std::wstring text = RunPowerShellOcr(imagePath, g_ocrLanguage);
+    const OcrRunResult ocr = RunPowerShellOcr(imagePath, g_ocrLanguage);
     DeleteFileW(imagePath.c_str());
 
-    if (text.empty()) {
+    if (ocr.exitCode != 0) {
+        std::wstring message = ocr.text;
+        constexpr wchar_t kErrorPrefix[] = L"OCR_ERROR:";
+        if (message.rfind(kErrorPrefix, 0) == 0) {
+            message.erase(0, wcslen(kErrorPrefix));
+        }
+        if (message.empty()) {
+            message =
+                L"No OCR engine available. Install an OCR language pack in Windows Settings "
+                L"(Time & language > Language & region > [language] > Options > Optical character "
+                L"recognition).";
+        }
+        Wh_Log(L"OCR failed (exit %lu): %s", ocr.exitCode, message.c_str());
+        MessageBoxW(nullptr, message.c_str(), L"Selection Text OCR", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+        return;
+    }
+
+    if (ocr.text.empty()) {
         Wh_Log(L"OCR returned no text");
         MessageBoxW(nullptr,
-                    L"Nenhum texto foi reconhecido. Verifique se o pacote de idioma OCR esta instalado em "
-                    L"Configuracoes > Hora e idioma > Idioma e regiao.",
+                    L"No text was recognized in the selected region. Try a larger selection or check "
+                    L"that the correct OCR language is configured in the mod settings.",
                     L"Selection Text OCR", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         return;
     }
 
-    if (!SetClipboardText(text)) {
+    if (!SetClipboardText(ocr.text)) {
         Wh_Log(L"Failed to copy text to clipboard");
         return;
     }
 
-    Wh_Log(L"Copied %zu characters to clipboard", text.size());
+    Wh_Log(L"Copied %zu characters to clipboard", ocr.text.size());
 
     if (g_showResultDialog) {
         const size_t maxPreview = 2000;
-        std::wstring preview = text.substr(0, std::min(text.size(), maxPreview));
-        if (text.size() > maxPreview) {
+        std::wstring preview = ocr.text.substr(0, std::min(ocr.text.size(), maxPreview));
+        if (ocr.text.size() > maxPreview) {
             preview += L"\n...";
         }
         MessageBoxW(nullptr, preview.c_str(), L"Selection Text OCR", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
