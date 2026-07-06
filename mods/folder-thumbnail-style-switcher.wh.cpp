@@ -18,25 +18,25 @@ Tested on Windows 10 22H2, Windows 11 22H2, 23H2, 24H2, 25H2 with Windhawk 1.7.1
 It may support Windows 10 older version, try by yourself
 
 ## 📌Preparation
-Please prepare icon gorup 5, 6 in imageres.dll and Bitmap 311 in shell32.dll from the respective Windows to match the folder icons and the shadow.
+Please prepare icon group 5, 6 in imageres.dll and Bitmap 311 in shell32.dll from the respective Windows to match the folder icons and the shadow.
 And you need to clean the thumbnail cache after changing a style!
 
 ## 🎞Gallery
 | Picture | Style |
 |:---:|:---:|
-|![7 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG)|7 style|
-|![10 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG)|10 style|
-|![11 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png)|11 style|
+|![7 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG)|Original 7 style|
+|![10 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG)|Original 10 style|
+|![11 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png)|Original 11 style|
 |![7 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG)|7 style on Windows 10|
-|![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png)|7 style on Windows 11|
-|![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG)|7 style on Windows 11|
+|![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png)|11 style on Windows 10|
+|![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG)|7 style on Windows 11|
 |![10 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png)|10 style on 11|
 
-What's the diffrence🤨? The position and the size of the thumbnails and the shadow are different.
+What's the difference🤨? The position and the size of the thumbnails and the shadow are different.
 
 ## ⚠️Notes
 **Note 1:**
-**This mod only include explorer.exe as it's the main process that handdle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to:**
+**This mod only include explorer.exe as it's the main process that handle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to:**
 **`// @include *`, but it may cause problems.**
 
 Note 2:
