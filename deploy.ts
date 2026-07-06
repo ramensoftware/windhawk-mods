@@ -570,7 +570,7 @@ function generateModsData(cache: GitCache) {
 
     validateModAuthorData(modAuthorData);
 
-    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 4));
+    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
 function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
@@ -631,7 +631,7 @@ async function generateModCatalogs(cache: GitCache) {
 
     const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
     const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, modTimes, cache);
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 4));
+    fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
 
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
@@ -669,7 +669,7 @@ async function generateModCatalogs(cache: GitCache) {
             }
         }
 
-        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 2));
     }
 }
 

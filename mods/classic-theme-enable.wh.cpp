@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.5
+// @version         1.2.6
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -160,31 +160,26 @@ and enable the support for Windows 10 taskbar in the mod's settings.
 35. If you want the classic, 32px icon size in folders, install this mod:
 [*Explorer 32px Icons*](https://windhawk.net/mods/explorer-32px-icons).
 
-36. If you want the color of the Control Panel pages' sidebar to match the color scheme,
-install this mod: [*Control Panel Color Fix*](https://windhawk.net/mods/control-panel-color-fix).
-On Windhawk 1.7 or newer, manually choose the older version 1.0 of the mod during or after installation
-because the later version 1.0.1 broke the compatibility with Classic theme and will have no effect.
-
-37. To make File Explorer to remember positions of the folders' windows the way it was before Vista,
+36. To make File Explorer to remember positions of the folders' windows the way it was before Vista,
 install this mod: [*Remember the folder windows' positions*](https://windhawk.net/mods/remember-folder-positions).
 
-38. To make the Control Panel to look like a regular folder the way it was before Windows 7, install this mod:
+37. To make the Control Panel to look like a regular folder the way it was before Windows 7, install this mod:
 [*Control Panel Classic View Lite*](https://windhawk.net/mods/cpl-classic-view-lite).
 
-39. To male the Windows Tools (Administrative Tools) folder to remember its view mode, install this mod:
-[Fix Windows Tools Folder View](https://windhawk.net/mods/fix-windows-tools-view).
+38. To make the Windows Tools (Administrative Tools) folder to remember its view mode, install this mod:
+[*Fix Windows Tools Folder View*](https://windhawk.net/mods/fix-windows-tools-view).
 
-40. To make the MSHTML content (CHM viewer, Outlook Express, classic Windows Mail, Internet Explorer) to use controls
+39. To make the MSHTML content (CHM viewer, Outlook Express, classic Windows Mail, Internet Explorer) to use controls
 from Classic Theme, install this mod and follow the instructions there:
-[MSHTML Tweaks](https://windhawk.net/mods/mshtml-native-controls)
+[*MSHTML Tweaks*](https://windhawk.net/mods/mshtml-native-controls)
 
-41. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
-[Explorer No Minimum Window Size](https://windhawk.net/mods/explorer-no-min-size)
+40. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
+[*Explorer No Minimum Window Size*](https://windhawk.net/mods/explorer-no-min-size)
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
 it will require the UAC authorization). Alternatively you can use the 
-[New Classic Theme Configurator](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
+[*New Classic Theme Configurator*](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
 
 */
 // ==/WindhawkModReadme==

@@ -2,7 +2,7 @@
 // @id              windows-11-settings-styler
 // @name            Windows 11 Settings Styler
 // @description     Customize the Windows Settings app with themes contributed by others or create your own
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -35,9 +35,21 @@ Styler**, **Windows 11 Notification Center Styler** mods.
 Themes are collections of styles. The following themes are integrated into the
 mod and can be selected in the settings:
 
-[![Densy](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot.png)
+[![Densy](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Densy/screenshot-small.png)
 \
 Densy](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Densy/README.md)
+
+[![ClassicSearchBar](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/ClassicSearchBar/screenshot-small.png)
+\
+ClassicSearchBar](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/ClassicSearchBar/README.md)
+
+[![StoreFrame11](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/StoreFrame11/screenshot-small.png)
+\
+StoreFrame11](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/StoreFrame11/README.md)
+
+[![Blue](https://raw.githubusercontent.com/ramensoftware/windows-11-settings-styling-guide/refs/heads/main/Themes/Blue/screenshot-small.png)
+\
+Blue](https://github.com/ramensoftware/windows-11-settings-styling-guide/blob/main/Themes/Blue/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 Settings
 styling
@@ -71,6 +83,9 @@ from the **TranslucentTB** project.
   $options:
   - "": None
   - Densy: Densy
+  - ClassicSearchBar: ClassicSearchBar
+  - StoreFrame11: StoreFrame11
+  - Blue: Blue
 - styleConstants: [""]
   $name: Style constants
   $description: >-
@@ -372,6 +387,304 @@ const Theme g_themeDensy = {{
     L"ListItem_Hmin=24",
     L"ListItem_H=34",
     L"Icon_Margin=0,0,8,0",
+}};
+
+const Theme g_themeClassicSearchBar = {{
+    ThemeTargetStyles{L"Grid@DisplayModeStates > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid", {
+        L"Margin=0,52,0,0",
+        L"Margin@OpenOverlayLeft=-11,-15,0,0",
+        L"Margin@Closed=-11,-15,0,0"}},
+    ThemeTargetStyles{L"Grid#RootCommandSearchGrid", {
+        L"Margin=15,133,0,0",
+        L"HorizontalAlignment=0",
+        L"Width=282",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsAutoSuggestCommandSearchBox#CommandSearchBox", {
+        L"Width=282",
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox", {
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"StackPanel#SettingsCommandSearchBoxBackground", {
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > ScrollViewer", {
+        L"Margin=-325,0,0,0",
+        L"Width=232"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > TextBlock#PlaceholderTextContentPresenter", {
+        L"Margin=-325,0,0,0",
+        L"Width=232"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > Button#DeleteButton > Grid", {
+        L"Margin=-100,5,5,5",
+        L"Width=25",
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > Button#QueryButton > ContentPresenter", {
+        L"Margin=253,0,0,0"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > Button#QueryButton > ContentPresenter > FontIcon > Grid > TextBlock", {
+        L"FontSize=12",
+        L"Opacity=0.8"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsAutoSuggestCommandSearchBox", {
+        L"Width=282"}},
+    ThemeTargetStyles{L"Button#CommandSearchBoxFlyoutButton", {
+        L"Margin=140,-125,0,0"}},
+}};
+
+const Theme g_themeStoreFrame11 = {{
+    ThemeTargetStyles{L"Border > Frame > ContentPresenter > SystemSettings.View.RootPage > Grid#RootPageGrid > Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid > Grid#ContentRoot > Border > Grid#ContentGrid > ContentPresenter#ContentPresenter", {
+        L"Margin=2"}},
+    ThemeTargetStyles{L"Grid#ContentRoot > Border > Grid#ContentGrid > ContentControl#HeaderContent", {
+        L"Margin=10,-38,0,5"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=-12,8,0,0"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox > Grid > Button#DeleteButton > Grid#ButtonLayoutGrid", {
+        L"CornerRadius=$InRadius",
+        L"MinHeight=32"}},
+    ThemeTargetStyles{L"TextBox#CommandSearchTextBox", {
+        L"CornerRadius=$InRadius",
+        L"MinHeight=32"}},
+    ThemeTargetStyles{L"StackPanel#SettingsCommandSearchBoxBackground", {
+        L"CornerRadius=$InRadius",
+        L"MinHeight=32"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
+        L"Grid.Column=0",
+        L"Visibility=Hidden"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > Grid#ItemsContainerGrid > Microsoft.UI.Xaml.Controls.ItemsRepeaterScrollHost > ScrollViewer#MenuItemsScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Microsoft.UI.Xaml.Controls.ItemsRepeater#MenuItemsHost > SystemSettings.View.SettingsNavigationViewItem", {
+        L"MinHeight=48",
+        L"MinWidth=65",
+        L"ToolTipService.Placement=5",
+        L"MaxWidth=65"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#PaneRoot", {
+        L"MaxWidth@OpenInlineLeft=65",
+        L"Grid.ColumnSpan@OpenInlineLeft=1",
+        L"Grid.ColumnSpan=>Span"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#ContentRoot > Border > Grid#ContentGrid", {
+        L"Background:=$BgOverlay",
+        L"CornerRadius={{Span > 1 ? 0 : $OutRadius}},0,0,0",
+        L"Margin={{Span > 1 ? 0 : 65}},48,0,0",
+        L"BorderBrush:=$BgBorder",
+        L"BorderThickness={{Span > 1 ? 0 : 1}},1,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > SplitView#RootSplitView > Grid@DisplayModeStates > Grid#ContentRoot", {
+        L"Grid.Column@OpenInlineLeft=0",
+        L"Grid.ColumnSpan@OpenInlineLeft=3"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView > Grid#RootGrid > Grid > Grid#ShadowCaster", {
+        L"Grid.ColumnSpan=1",
+        L"MaxWidth=65"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter#ContentPresenter > TextBlock", {
+        L"Padding=3,0,0,0"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"FontFamily=Segoe Fluent Icons",
+        L"Foreground@Normal:=<SolidColorBrush Color=\"{ThemeResource TextFillColorSecondary}\" />",
+        L"Foreground@PointerOver:=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\" />",
+        L"Foreground@Pressed:=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\" />",
+        L"Foreground@Selected:=<SolidColorBrush Color=\"{ThemeResource Accent}\" />",
+        L"Foreground@PointerOverSelected:=<SolidColorBrush Color=\"{ThemeResource Accent}\" />",
+        L"Foreground@PressedSelected:=<SolidColorBrush Color=\"{ThemeResource Accent}\" />",
+        L"FontSize=20",
+        L"Margin=15,0,-2,0"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[Content=Home] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE80F",
+        L"Content@PointerOver:=\uE80F",
+        L"Content@Pressed:=\uE80F",
+        L"Content@Selected:=\uEA8A",
+        L"Content@PointerOverSelected:=\uEA8A",
+        L"Content@PressedSelected:=\uEA8A"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[Content=System] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE75B",
+        L"Content@PointerOver:=\uE75B",
+        L"Content@Pressed:=\uE75B",
+        L"Content@Selected:=$System",
+        L"Content@PointerOverSelected:=$System",
+        L"Content@PressedSelected:=$System"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[3] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uF0C5",
+        L"Content@PointerOver:=\uF0C5",
+        L"Content@Pressed:=\uF0C5",
+        L"Content@Selected:=\uF0C5",
+        L"Content@PointerOverSelected:=\uF0C5",
+        L"Content@PressedSelected:=\uF0C5"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[4] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uEA18",
+        L"Content@PointerOver:=\uEA18",
+        L"Content@Pressed:=\uEA18",
+        L"Content@Selected:=\uE83D",
+        L"Content@PointerOverSelected:=\uE83D",
+        L"Content@PressedSelected:=\uE83D"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[5] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE776",
+        L"Content@PointerOver:=\uE776",
+        L"Content@Pressed:=\uE776",
+        L"Content@Selected:=$EOA",
+        L"Content@PointerOverSelected:=$EOA",
+        L"Content@PressedSelected:=$EOA"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[6] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE7FC",
+        L"Content@PointerOver:=\uE7FC",
+        L"Content@Pressed:=\uE7FC",
+        L"Content@Selected:=$Games",
+        L"Content@PointerOverSelected:=$Games",
+        L"Content@PressedSelected:=$Games"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[7] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE775",
+        L"Content@PointerOver:=\uE775",
+        L"Content@Pressed:=\uE775",
+        L"Content@Selected:=\uE775",
+        L"Content@PointerOverSelected:=\uE775",
+        L"Content@PressedSelected:=\uE775"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[8] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE77B",
+        L"Content@PointerOver:=\uE77B",
+        L"Content@Pressed:=\uE77B",
+        L"Content@Selected:=\uEA8C",
+        L"Content@PointerOverSelected:=\uEA8C",
+        L"Content@PressedSelected:=\uEA8C"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[9] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE74C",
+        L"Content@PointerOver:=\uE74C",
+        L"Content@Pressed:=\uE74C",
+        L"Content@Selected:=$Apps",
+        L"Content@PointerOverSelected:=$Apps",
+        L"Content@PressedSelected:=$Apps"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[10] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE771",
+        L"Content@PointerOver:=\uE771",
+        L"Content@Pressed:=\uE771",
+        L"Content@Selected:=$Personalize",
+        L"Content@PointerOverSelected:=$Personalize",
+        L"Content@PressedSelected:=$Personalize"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[11] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE701",
+        L"Content@PointerOver:=\uE701",
+        L"Content@Pressed:=\uE701",
+        L"Content@Selected:=\uE701",
+        L"Content@PointerOverSelected:=\uE701",
+        L"Content@PressedSelected:=\uE701"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[12] > Grid#NVIRootGrid > Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Grid#LayoutRoot@PointerStates > Grid#PresenterContentRootGrid > Grid#ContentGrid > Border#IconColumn > Viewbox#IconBox > Border > ContentPresenter#Icon", {
+        L"Content@Normal:=\uE702",
+        L"Content@PointerOver:=\uE702",
+        L"Content@Pressed:=\uE702",
+        L"Content@Selected:=\uE702",
+        L"Content@PointerOverSelected:=\uE702",
+        L"Content@PressedSelected:=\uE702"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[1]", {
+        L"Content=>t1",
+        L"ToolTipService.ToolTip={{t1}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[2]", {
+        L"Content=>t2",
+        L"ToolTipService.ToolTip={{t2}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[3]", {
+        L"Content=>t3",
+        L"ToolTipService.ToolTip={{t3}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[4]", {
+        L"Content=>t4",
+        L"ToolTipService.ToolTip={{t4}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[5]", {
+        L"Content=>t5",
+        L"ToolTipService.ToolTip={{t5}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[6]", {
+        L"Content=>t6",
+        L"ToolTipService.ToolTip={{t6}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[7]", {
+        L"Content=>t7",
+        L"ToolTipService.ToolTip={{t7}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[8]", {
+        L"Content=>t8",
+        L"ToolTipService.ToolTip={{t8}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[9]", {
+        L"Content=>t9",
+        L"ToolTipService.ToolTip={{t9}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[10]", {
+        L"Content=>t10",
+        L"ToolTipService.ToolTip={{t10}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[11]", {
+        L"Content=>t11",
+        L"ToolTipService.ToolTip={{t11}}"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem[12]", {
+        L"Content=>t12",
+        L"ToolTipService.ToolTip={{t12}}"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel > SystemSettings.View.UserProfileControl#UserProfileControl > Button#UserProfileButton > ContentPresenter#ContentPresenter > Grid#UserProfileLayout > Grid[2]", {
+        L"Visibility=1",
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel > SystemSettings.View.UserProfileControl#UserProfileControl > Button#UserProfileButton > ContentPresenter#ContentPresenter > Grid#UserProfileLayout > Grid[2] > TextBlock#UserName", {
+        L"Text=>UserName"}},
+    ThemeTargetStyles{L"ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel > SystemSettings.View.UserProfileControl#UserProfileControl > Button#UserProfileButton", {
+        L"ToolTipService.ToolTip={{UserName}}",
+        L"ToolTipService.Placement=10",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel > SystemSettings.View.UserProfileControl#UserProfileControl > Button#UserProfileButton > ContentPresenter#ContentPresenter > Grid#UserProfileLayout > Grid#UserImageGrid > Image", {
+        L"Width=30",
+        L"Height=30"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel", {
+        L"MaxHeight=48",
+        L"MaxWidth=65",
+        L"MinHeight=48",
+        L"MinWidth=65",
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"SplitView#RootSplitView > Grid > Grid#PaneRoot > Border > Grid#PaneContentGrid > ContentControl#PaneCustomContentBorder > ContentPresenter > SystemSettings.View.SpacingStackPanel > SystemSettings.View.UserProfileControl#UserProfileControl > Button#UserProfileButton", {
+        L"MinHeight=48",
+        L"MaxHeight=48",
+        L"Margin=3,3,3,-3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#ProgressBarIndicator", {
+        L"RadiusX=3",
+        L"RadiusY=3",
+        L"Height=6",
+        L"Fill:=<SolidColorBrush Color=\"{ThemeResource Accent}\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#DeterminateRoot", {
+        L"CornerRadius=3",
+        L"Height=6"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ProgressBar", {
+        L"Height=6"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#DeterminateRoot > Windows.UI.Xaml.Shapes.Rectangle#ProgressBarIndicator", {
+        L"Height=16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#DeterminateRoot", {
+        L"Height=16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#TopBreakdownBar > Windows.UI.Xaml.Controls.ProgressBar", {
+        L"Height=16"}},
+}, {
+    L"OutRadius=8",
+    L"InRadius=4",
+    L"BgBorder=<SolidColorBrush Color=\"{ThemeResource Border}\" />",
+    L"BgOverlay=<SolidColorBrush Color=\"{ThemeResource Overlay}\" />",
+    L"Apps=<Viewbox Width=\"20\" Height=\"20\" Stretch=\"Uniform\"><PathIcon Data=\"M17,6.5C17,6.8 16.9,7.1 16.7,7.3L14,10C13.8,10.2 13.6,10.3 13.3,10.3C13,10.3 12.8,10.2 12.6,10L9.9,7.3C9.7,7.1 9.6,6.8 9.6,6.5C9.6,6.2 9.7,5.9 9.9,5.7L12.6,3C12.8,2.8 13,2.7 13.3,2.7C13.6,2.7 13.8,2.8 14,3L16.7,5.7C16.9,5.9 17,6.2 17,6.5Z M8.5,10.5L8.5,4.5C8.5,4.2 8.4,4 8.2,3.9C8,3.8 7.8,3.7 7.5,3.7L3.5,3.7C3.2,3.7 3,3.8 2.9,3.9C2.8,4 2.7,4.2 2.7,4.5L2.7,10.5Z M11.5,10.5L9.7,8.7L9.7,10.5Z M8.5,17.3L8.5,11.5L2.7,11.5L2.7,16.8C2.7,17.1 2.8,17.3 2.9,17.4C3,17.5 3.2,17.6 3.5,17.6Z M16,12.2C16,12 15.9,11.8 15.7,11.7C15.6,11.6 15.4,11.5 15.2,11.5L9.7,11.5L9.7,17.3L15.2,17.3C15.4,17.3 15.6,17.2 15.7,17.1C15.9,17 16,16.8 16,16.6Z\" VerticalAlignment=\"Center\" HorizontalAlignment=\"Center\" /></Viewbox>",
+    L"Games=<Viewbox Width=\"23\" Height=\"20\" Stretch=\"Fill\"><PathIcon Data=\"F1 M7.5 4C4.46243 4 2 6.46243 2 9.5C2 12.5376 4.46243 15 7.5 15H12.5C15.5376 15 18 12.5376 18 9.5C18 6.46243 15.5376 4 12.5 4H7.5ZM6 7.5C6 7.22386 6.22386 7 6.5 7C6.77614 7 7 7.22386 7 7.5V9H8.5C8.77614 9 9 9.22386 9 9.5C9 9.77614 8.77614 10 8.5 10H7V11.5C7 11.7761 6.77614 12 6.5 12C6.22386 12 6 11.7761 6 11.5V10H4.5C4.22386 10 4 9.77614 4 9.5C4 9.22386 4.22386 9 4.5 9H6V7.5ZM15 8C15 8.55228 14.5523 9 14 9C13.4477 9 13 8.55228 13 8C13 7.44772 13.4477 7 14 7C14.5523 7 15 7.44772 15 8ZM12 12C11.4477 12 11 11.5523 11 11C11 10.4477 11.4477 10 12 10C12.5523 10 13 10.4477 13 11C13 11.5523 12.5523 12 12 12Z\" VerticalAlignment=\"Center\" HorizontalAlignment=\"Center\"/></Viewbox>",
+    L"System=<Viewbox Width=\"20\" Height=\"20\" Stretch=\"Uniform\"><PathIcon Data=\"M20,20z M0,0z M19.98,15C19.98,16.38,18.87,17.49,17.49,17.49L2.52,17.49C1.13,17.49,0.02,16.38,0.02,15L0.02,13.74 19.98,13.74 19.98,15z M17.49,2.52C18.87,2.52,19.98,3.63,19.98,5.02L19.98,12.5 0.02,12.5 0.02,5.02C0.02,3.63,1.13,2.52,2.52,2.52L17.49,2.52z\" /> </Viewbox>",
+    L"EOA=<Viewbox Width=\"30\" Height=\"32\" Stretch=\"Fill\"> <PathIcon Data=\"F1 M10 6C11.1046 6 12 5.10457 12 4C12 2.89543 11.1046 2 10 2C8.89543 2 8 2.89543 8 4C8 5.10457 8.89543 6 10 6ZM5.4719 4.15059C4.59026 3.75806 3.55353 4.15168 3.15457 5.03042C2.75442 5.91176 3.1474 6.94681 4.03165 7.3405L6.70334 8.53002C6.88375 8.61034 6.99997 8.78931 6.99997 8.98679V10.8519C6.99997 10.9161 6.98761 10.9797 6.96357 11.0392L5.12327 15.5941C4.76122 16.4902 5.19416 17.5101 6.09028 17.8722C6.9864 18.2342 8.00636 17.8013 8.36842 16.9052L9.76592 13.4462C9.85014 13.2378 10.1453 13.2378 10.2295 13.4462L11.6269 16.905C11.989 17.8011 13.009 18.2341 13.9051 17.872C14.8012 17.51 15.2341 16.49 14.8721 15.5939L13.0364 11.0504C13.0123 10.9908 13 10.9272 13 10.8631V8.98679C13 8.78931 13.1162 8.61034 13.2966 8.53002L15.9683 7.3405C16.8525 6.94681 17.2455 5.91176 16.8454 5.03042C16.4464 4.15168 15.4097 3.75806 14.5281 4.15059L13.2519 4.71874C13.0057 4.82838 12.8303 5.02588 12.7315 5.24269C12.2586 6.28043 11.2128 7.00012 10 7.00012C8.78722 7.00012 7.74147 6.28044 7.2685 5.24271C7.16969 5.0259 6.99432 4.82841 6.74808 4.71878L5.4719 4.15059Z\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" /></Viewbox>",
+    L"Personalize=<Viewbox Width=\"20\" Height=\"20\" Stretch=\"Uniform\"><PathIcon Data=\"M19.99,1.8C19.99,2.2 19.88,2.6 19.58,3.06L17.91,5.49C16.58,7.43 15.16,9.27 13.64,11.02C12.12,12.77 10.49,14.44 8.75,16.03C8.66,17.33 8.1,18.09 7.74,18.41C7.11,18.92 6.37,19.31 5.58,19.61C4.76,19.85 3.92,19.97 3.12,20C2.26,19.96 1.76,19.9 1.02,19.78C0.44,19.62 0.09,19.39 0.09,19.02C0.23,18.67 0.74,18.31 1.27,17.9C1.75,17.47 2.15,17.03 2.36,16.54C2.48,16.01 2.63,15.09 2.76,14.74C2.91,14.39 3.12,14.1 3.36,13.86C3.84,13.45 4.42,13.17 5.05,13C6.36,11.27 7.92,9.42 9.58,7.05C11.24,5.31 13.01,3.67 14.89,2.12L16.81,0.55C17.22,0.26 17.68,0.09 18.17,0.09C18.64,0.09 19.09,0.26 19.45,0.54C19.75,0.89 19.99,1.34 19.99,1.8Z\" /></Viewbox>",
+}, {
+    L"Overlay@Light=#55FFFFFF",
+    L"Overlay@Dark=#09FFFFFF",
+    L"Border@Light=#0F000000",
+    L"Border@Dark=#19000000",
+    L"Accent@Dark={ThemeResource SystemAccentColorLight2}",
+    L"Accent@Light={ThemeResource SystemAccentColorDark1}",
+}};
+
+const Theme g_themeBlue = {{
+    ThemeTargetStyles{L"Frame#PermanentNavRootFrame", {
+        L"Background=#03A5FC"}},
+    ThemeTargetStyles{L"SystemSettings.View.EntityItem", {
+        L"Background=#0373FC",
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.NavigationView#PermanentNavigationView", {
+        L"Background=#03ADFC",
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"ContentPresenter", {
+        L"Foreground=Black"}},
+    ThemeTargetStyles{L"ContentPresenter#SubtitleContent", {
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"StackPanel#BackgroundStackPanel", {
+        L"Background=Blue"}},
+    ThemeTargetStyles{L"TextBlock#TitleContent", {
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"ContentPresenter#TitleContent", {
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"ContentPresenter#IconContentPresenter", {
+        L"Foreground=White"}},
+    ThemeTargetStyles{L"Button#ContainerButton", {
+        L"Background=Blue"}},
+    ThemeTargetStyles{L"SystemSettings.View.ReactNativeExperienceViewControl", {
+        L"Background=Blue"}},
+    ThemeTargetStyles{L"SystemSettings.View.TwoSegmentsHeroUserControl#OneSegmentHeroEntityItemUserControl", {
+        L"Background=DeepSkyBlue"}},
+    ThemeTargetStyles{L"SystemSettings.View.SettingsNavigationViewItem > Grid#NVIRootGrid > NavigationViewItemPresenter > Grid#LayoutRoot > Grid#PresenterContentRootGrid > Grid#ContentGrid > ContentPresenter > TextBlock", {
+        L"Foreground=White"}},
 }};
 
 // clang-format on
@@ -5811,6 +6124,12 @@ void ProcessAllStylesFromSettings() {
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"Densy") == 0) {
         theme = &g_themeDensy;
+    } else if (wcscmp(themeName, L"ClassicSearchBar") == 0) {
+        theme = &g_themeClassicSearchBar;
+    } else if (wcscmp(themeName, L"StoreFrame11") == 0) {
+        theme = &g_themeStoreFrame11;
+    } else if (wcscmp(themeName, L"Blue") == 0) {
+        theme = &g_themeBlue;
     }
     Wh_FreeStringSetting(themeName);
 
