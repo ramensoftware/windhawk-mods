@@ -4723,6 +4723,38 @@
         "version": "1.0.0"
       }
     },
+    "explorer-open-folder-icon": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783324566000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783324566000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "aubymori",
+        "compilerOptions": "-lcomctl32",
+        "description": "Restores the open folder icon in Explorer's icon and tree view",
+        "github": "https://github.com/aubymori",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Explorer Open Folder Icon",
+        "version": "1.0.0"
+      }
+    },
     "explorer-rename-overwrite": {
       "details": {
         "defaultSorting": 850,
@@ -11105,6 +11137,37 @@
       "metadataEnglish": {
         "description": "Animates taskbar icons on mouse hover like in macOS",
         "name": "Taskbar Dock Animation"
+      }
+    },
+    "taskbar-elastic-pill": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783324556000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783324556000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Lockframe",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Injects an animated sliding pill for active taskbar items.",
+        "github": "https://github.com/Lockframe",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Elastic WinUI Pill",
+        "version": "1.0.0"
       }
     },
     "taskbar-empty-space-clicks": {

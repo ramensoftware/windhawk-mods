@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-05T15:35:26.000Z</updated>
+    <updated>2026-07-06T07:56:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Open Folder Icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-open-folder-icon#c65a768144aa08ac88ff893e29c9797e3cf32d77</id>
+        <link href="https://windhawk.net/mods/explorer-open-folder-icon"/>
+        <updated>2026-07-06T07:56:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="exploreropenfoldericon">Explorer Open Folder Icon</h1>
+<p>In Windows XP and before, File Explorer showed an open folder icon in the title bar and
+for selected folders in the Folders tree. This mod restores that behavior to Windows 10.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-elastic-pill#539e1e531d5bdf820354c713e6975552c18cad9d</id>
+        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
+        <updated>2026-07-06T07:55:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarelasticwinuipill">Taskbar Elastic WinUI Pill</h1>
+<p>Replaces the default active app pill in Windows 11's taskbar with an animated and customizable one.</p>
+<p><img src="https://i.imgur.com/PkPhNiH.gif" alt="" /></p>
+<hr />
+<h2 id="contributions">Contributions</h2>
+<p>Stretch animation by <a href="https://github.com/crazyboyybs">Dan</a></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Perform Speed Test Redirect 1.3.0]]></title>
         <id>https://windhawk.net/mods/perform-speedtest-redirect#f837f4d05fbf60c84379db208824c10eca099e2c</id>
@@ -505,42 +538,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Settings Styler 1.0.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-settings-styler#44a6a55652401b83df91d79aa04c6091ddfbe55a</id>
-        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
-        <updated>2026-07-01T22:56:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the following themes: ClassicSearchBar, StoreFrame11, Blue.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#c016d1c9b8d23944d834dd41c1029f0d124ff858</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2026-06-30T22:28:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added new system performance metrics, contributed by <a href="https://github.com/yalov">yalov</a>:</li>
-<li>RAM metrics: <code>%ram_used%</code>, <code>%ram_total%</code>, <code>%ram_committed%</code>, <code>%ram_committed_used%</code>, and <code>%ram_committed_total%</code>.</li>
-<li>VRAM (Video RAM) metrics: <code>%vram%</code>, <code>%vram_used%</code>, <code>%vram_total%</code>, <code>%vram_shared%</code>, <code>%vram_shared_used%</code>, and <code>%vram_shared_total%</code>.</li>
-<li>Improved media information customization: Both the playing format and the idle format of <code>%media_info%</code> can now be configured with custom patterns.</li>
-<li>Added an option to customize the date locale.</li>
-<li>Added an option to customize the disk metrics format independently from the network metrics format.</li>
-<li>Added line height customization, useful when using newlines (<code>%newline%</code>).</li>
-<li>Added a justified text alignment option.</li>
-<li>Changed the behavior for multiple GPUs: instead of showing average metrics, the adapter with the most dedicated VRAM is now selected.</li>
-<li>Fixed system metrics being frozen on startup until the clock is refreshed (for up to a minute).</li>
-<li>Fixed compatibility with some ARM64 Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

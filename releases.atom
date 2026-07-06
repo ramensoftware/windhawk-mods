@@ -2,12 +2,45 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-04T14:38:44.000Z</updated>
+    <updated>2026-07-06T07:56:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Open Folder Icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-open-folder-icon#c65a768144aa08ac88ff893e29c9797e3cf32d77</id>
+        <link href="https://windhawk.net/mods/explorer-open-folder-icon"/>
+        <updated>2026-07-06T07:56:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="exploreropenfoldericon">Explorer Open Folder Icon</h1>
+<p>In Windows XP and before, File Explorer showed an open folder icon in the title bar and
+for selected folders in the Folders tree. This mod restores that behavior to Windows 10.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-elastic-pill#539e1e531d5bdf820354c713e6975552c18cad9d</id>
+        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
+        <updated>2026-07-06T07:55:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarelasticwinuipill">Taskbar Elastic WinUI Pill</h1>
+<p>Replaces the default active app pill in Windows 11's taskbar with an animated and customizable one.</p>
+<p><img src="https://i.imgur.com/PkPhNiH.gif" alt="" /></p>
+<hr />
+<h2 id="contributions">Contributions</h2>
+<p>Stretch animation by <a href="https://github.com/crazyboyybs">Dan</a></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Island Media Controls 0.9.27]]></title>
         <id>https://windhawk.net/mods/island-media-controls#1f7614c178f23c0662bc8f677207cb9998bb9340</id>
@@ -731,64 +764,6 @@ navigation item, that switch just isn't animated.</li>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Menu Height 1.0]]></title>
-        <id>https://windhawk.net/mods/custom-menu-height#478140d5af7f6de99455f59b3bb6e5c55932e298</id>
-        <link href="https://windhawk.net/mods/custom-menu-height"/>
-        <updated>2026-06-22T18:50:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="custommenuheight">Custom Menu Height</h1>
-<p>Control the height of Win32 context menu items and menu bars. Make classic menus
-as spacious as modern WinUI menus.</p>
-<p>By default, non-immersive context menu items are shown with a height of 22
-pixels, and menu bars with a height of 19 pixels. This mod allows increasing
-both menu heights to any custom value.</p>
-<h2 id="contextmenuitems">Context menu items</h2>
-<p>| Height: 22px (Windows default) | Height: 32px |
-| :----------------------------: | :----------: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-22px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_contextMenuItems-32px.png" alt="" /> |</p>
-<h2 id="menubar">Menu bar</h2>
-<p>| Height: 19px (Windows default) | Height: 32px |
-| :----------------------------: | :----------: |
-| <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-19px.png" alt="" /> | <img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/custom-menu-height_menuBar-32px.png" alt="" /> |</p>
-<h2 id="recommendedmods">Recommended mods</h2>
-<p>Enhance the overall context menu experience with these complementary mods:
-| Mod | Author | Note |
-| :-- | :----- | :--- |
-| <a href="https://windhawk.net/mods/explorer-context-menu-classic">Classic context menu on Windows 11</a> | m417z | Requires Windows 11 or later |
-| <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> | m417z | Requires Windows 11 or later |
-| <a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a> | Mgg Sk | Requires Windows 10 version 1809 or later |
-| <a href="https://windhawk.net/mods/remove-context-menu-items">Remove Context Menu Items</a> | Armaninyow | - |</p>
-<h2 id="compatibilitynoteimmersivemenus">Compatibility note: Immersive menus</h2>
-<p>To ensure the custom context menu item height functions properly within File
-Explorer and the taskbar on Windows 10 and later, this mod eradicates immersive
-menus system-wide, falling back to standard context menus.</p>
-<p>The code for this implementation is based on the
-"<a href="https://windhawk.net/mods/eradicate-immersive-menus">Eradicate Immersive Menus</a>"
-mod by <strong>aubymori</strong>.</p>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VS Code Dark Non-client Frame 1.0]]></title>
-        <id>https://windhawk.net/mods/vscode-dark-nonclient-frame#bc3d1c8d2415c4adb2a06b222c6e85883a07342e</id>
-        <link href="https://windhawk.net/mods/vscode-dark-nonclient-frame"/>
-        <updated>2026-06-18T08:13:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="vscodedarknonclientframe">VS Code Dark Non-client Frame</h1>
-<p>Forces Visual Studio Code's Windows non-client frame into immersive dark mode.</p>
-<p>This fixes the 2px light gray bottom edge that can appear when VS Code is maximized with the custom title bar in Windows light mode, especially with a hidden or transparent taskbar.</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/DVrOPag.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/ldT3xJt.png" alt="After" /></p>
-<p>The mod targets only <code>Code.exe</code> by default. Users of VS Code Insiders, VSCodium, or renamed/portable builds can add the relevant executable name to the mod's custom include list.</p>
-<p>When the mod is disabled, it stops overriding VS Code's frame mode. Already affected windows may keep their current frame mode until VS Code applies a new value, for example after a theme or window state change.</p>]]></content>
-        <author>
-            <name>v1b3s0</name>
-            <uri>https://github.com/v1b3s0</uri>
         </author>
     </entry>
 </feed>
