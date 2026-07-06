@@ -19,8 +19,9 @@ EXCLUDED_IMAGE_URLS = {
 # Temporary workaround: fetch a different URL than the one referenced in the
 # readme, keeping the original path for the saved image.
 FETCH_URL_WORKAROUNDS = {
-    "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png",
-    "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG",
+    # https://github.com/ramensoftware/windhawk-mods/pull/4512#discussion_r3531474802
+    # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png",
+    # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG",
 }
 
 session = requests.Session()
