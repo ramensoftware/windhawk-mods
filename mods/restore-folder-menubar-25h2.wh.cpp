@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              restore-folder-menubar-25h2
 // @name            ExplorerFrame and menubar fixes fork
-// @description     Fixes explorer problems: menu bar, listview redraw, classic background color
-// @version         2.0.1
+// @description     Fixes explorer problems: menu bar, listview redraw, classic background color, Control Panel header/sidebar color for dark themes
+// @version         3.0.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -14,11 +14,12 @@
 /*
 
 This is a fork of the mod `Explorerframe fixes for Win11 22H2+` by Waldemar made due to the author's apparent inactivity.
-It addresses several issues with the original mod.
+It addresses several issues with the original mod. Additionally, it incorporates the `Control Panel Color Fix` mod version 1.0 by chip33
+because the version 1.0.1 does not support Classic Theme.
 
 **The original mod description**
 
-This mod fixes a couple of issues with File Explorer windows appearance in Windows 11 releases 22H2, 23H2 and 24H2.
+This mod fixes a couple of issues with File Explorer windows appearance in Windows 11 releases 22H2 and later.
 
 Unpredictable menu bar appearance: On Windows 11 22H2 and 23H2, the menu bar may appear unpredictably. This mod allows the user to disable the menu bar entirely, or have it be shown at all times.
 You can force show/hide the menu bar in the mod settings. Forcing the menu bar to be shown is intended for the Classic theme.
@@ -29,7 +30,7 @@ Black artifacts briefly visible in new file explorer windows under Classic theme
 
 **Changes from the original**
 
-* This mod restores the menubar in recent builds of 24H2 and in 25H2 with which the original mod was not compatible. 
+* This mod restores the menubar in recent builds of 24H2 and in 25H2 with which the original mod was not compatible.
 **!Important!** On newer releases of Windows 11 24H2 and later, you may need to use the [ViVeTool](https://github.com/thebookisclosed/ViVe/releases) utility
 with the following command so to enable the menu:
 
@@ -40,10 +41,15 @@ with the following command so to enable the menu:
 
     On even newer builds, replacing the file Explorerframe.dll with an older one may be required.
 
-* This mod fixes the compatibility with the mod ```Fluid Window Engine Pro```, in cases where the previous mod would 
+* This mod fixes the compatibility with the mod ```Fluid Window Engine Pro```, in cases where the previous mod would
 whiten out the window content on restore after the minimized state if the option `Classic CabinetWClass background color` was enabled.
 
 * The fix for the folders' background in Classic theme is applied authomatically when Classic theme is detected.
+
+**Control Panel Color Fix**
+
+For custom dark themes, fixes white header and sidebar in Control Panel. This is compatible with dark-toned Classic Theme.
+Can be disabled in the mod settings.
 
 */
 // ==/WindhawkModReadme==
@@ -53,6 +59,9 @@ whiten out the window content on restore after the minimized state if the option
 - DisplayMenuBar: true
   $name: Display menu bar
   $description: Show the classic menu bar in Explorer windows.
+- ControlPanelColorFix: true
+  $name: Control Panel color fix
+  $description: Fix white header and sidebar in Control Panel when using dark themes.
 */
 // ==/WindhawkModSettings==
 
@@ -62,8 +71,15 @@ whiten out the window content on restore after the minimized state if the option
 #include <uxtheme.h>
 #include <shdeprecated.h>
 #include <vector>
+#include <vssym32.h>
+#include <windhawk_api.h>
+
+// ---------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------
 
 bool g_settingDisplayMenuBar;
+bool g_settingControlPanelColorFix;
 
 std::vector<HWND> g_subclassedRebars;
 std::vector<HWND> g_subclassedListviews;
@@ -99,9 +115,7 @@ int FindMenuBand(HWND hReBar)
 }
 
 // ---------------------------------------------------------------------------
-// Rebar subclass — handles menu bar show/hide with hackfix for both
-// old (ReBar -> WorkerW -> CabinetWClass) and
-// new (ReBar -> WorkerW -> ShellTabWindowClass -> CabinetWClass) structures
+// Rebar subclass
 // ---------------------------------------------------------------------------
 
 LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
@@ -129,14 +143,11 @@ LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
         HWND target = parent;
         if (!lstrcmpW(cls, L"ShellTabWindowClass"))
         {
-            // New structure (24H2+): ReBar -> WorkerW -> ShellTabWindowClass -> CabinetWClass
             SendMessageW(target, WM_WININICHANGE, 0, 0);
         }
 
         RECT rect;
         GetClientRect(target, &rect);
-        int w = rect.right - rect.left;
-        int h = rect.bottom - rect.top;
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         return 0;
     }
@@ -157,7 +168,7 @@ LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
 }
 
 // ---------------------------------------------------------------------------
-// Listview subclass — prevents WM_SETREDRAW from disabling redraws
+// Listview subclass
 // ---------------------------------------------------------------------------
 
 LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
@@ -171,7 +182,6 @@ LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    // Always keep redraws enabled
     if (uMsg == WM_SETREDRAW)
     {
         wParam = TRUE;
@@ -181,7 +191,7 @@ LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
 }
 
 // ---------------------------------------------------------------------------
-// Hook: CBandSite::_Initialize — subclass rebar for menu bar control
+// Hook: CBandSite::_Initialize
 // ---------------------------------------------------------------------------
 
 typedef long (*__cdecl CBSInitialize_t)(void*, HWND);
@@ -189,7 +199,6 @@ CBSInitialize_t CBSInitializeOriginal;
 
 long __cdecl CBSInitializeHook(void* pThis, HWND hWnd)
 {
-    // Only target the correct ReBarWindow32 (exstyle == 0)
     if (GetWindowLong(hWnd, GWL_EXSTYLE) == 0)
     {
         HWND rb = FindWindowExW(hWnd, NULL, L"ReBarWindow32", NULL);
@@ -204,7 +213,7 @@ long __cdecl CBSInitializeHook(void* pThis, HWND hWnd)
 }
 
 // ---------------------------------------------------------------------------
-// Hook: CListViewHost::CreateControl — subclass listview for redraw fix
+// Hook: CListViewHost::CreateControl
 // ---------------------------------------------------------------------------
 
 typedef long (*__cdecl CLVHCreateControl_t)(void*, HWND, void*, void*);
@@ -230,7 +239,7 @@ long __cdecl CLVHCreateControlHook(void* pThis, HWND hWnd, void* a, void* b)
 }
 
 // ---------------------------------------------------------------------------
-// Hook: CExplorerFrame::v_WndProc — WM_SHOWWINDOW fix + classic background
+// Hook: CExplorerFrame::v_WndProc
 // ---------------------------------------------------------------------------
 
 typedef long (*__cdecl CEFWndProc_t)(void*, HWND, unsigned int, WPARAM, LPARAM);
@@ -240,22 +249,17 @@ long __cdecl CEFWndProcHook(void* pThis, HWND hWnd, unsigned int uMsg, WPARAM wP
 {
     if (uMsg == WM_SHOWWINDOW)
     {
-        // Fixes unpredictable menu bar appearance; companion hook (CSBSetFlags)
-        // prevents the side-effect of blocking layout saving.
         SendMessageW(hWnd, WM_WININICHANGE, 0, 0);
     }
 
     if (uMsg == WM_ERASEBKGND)
     {
-        // Apply classic background only when visual themes are disabled
         if (!IsAppThemed())
         {
-            // Skip when window is layered (e.g. during animation/screenshot capture)
             if ((GetWindowLongW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED) == 0)
             {
                 HDC hdc = (HDC)wParam;
 
-                // Skip memory DCs (PrintWindow / off-screen rendering)
                 if (GetObjectType(hdc) != OBJ_MEMDC)
                 {
                     RECT rc;
@@ -272,7 +276,7 @@ long __cdecl CEFWndProcHook(void* pThis, HWND hWnd, unsigned int uMsg, WPARAM wP
 }
 
 // ---------------------------------------------------------------------------
-// Hook: CShellBrowser::SetFlags — block BSF_UISETBYAUTOMATION side-effect
+// Hook: CShellBrowser::SetFlags
 // ---------------------------------------------------------------------------
 
 typedef long (*__cdecl CSBSetFlags_t)(void*, unsigned long, unsigned long);
@@ -280,11 +284,55 @@ CSBSetFlags_t CSBSetFlagsOriginal;
 
 long __cdecl CSBSetFlagsHook(void* pThis, unsigned long a, unsigned long b)
 {
-    // This deprecated flag prevents the browser from saving its layout
     if (a & BSF_UISETBYAUTOMATION)
         a &= ~BSF_UISETBYAUTOMATION;
 
     return CSBSetFlagsOriginal(pThis, a, b);
+}
+
+// ---------------------------------------------------------------------------
+// Hook: DirectUI::Element::PaintBackground (Control Panel Color Fix)
+// ---------------------------------------------------------------------------
+
+typedef VOID(__cdecl *Element_PaintBgT)(
+    class Element*, HDC, class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
+Element_PaintBgT Element_PaintBg;
+
+VOID __cdecl Element_PaintBgHook(
+    class Element* This, HDC hdc, class Value* value,
+    LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
+{
+    if (!value || !pRect) {
+        Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
+        return;
+    }
+    if (g_settingControlPanelColorFix)
+    {
+        if ((int)(*(DWORD*)value << 26) >> 26 != 9)
+        {
+            auto v44 = *((unsigned __int64*)value + 1);
+            auto v45 = (v44 + 20) & 7;
+            if (v45 == 4)
+            {
+                HWND wnd = WindowFromDC(hdc);
+                HTHEME hTh = OpenThemeData(wnd, L"ControlPanel");
+                if (hTh)
+                {
+                    COLORREF clrBg;
+                    if (SUCCEEDED(GetThemeColor(hTh, 2, 0, TMT_FILLCOLOR, &clrBg)))
+                    {
+                        HBRUSH brush = CreateSolidBrush(clrBg);
+                        FillRect(hdc, pRect, brush);
+                        DeleteObject(brush);
+                    }
+                    CloseThemeData(hTh);
+                }
+                return;
+            }
+        }
+    }
+
+    Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +341,10 @@ long __cdecl CSBSetFlagsHook(void* pThis, unsigned long a, unsigned long b)
 
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"Explorer Frame Fixes (Merged) Init");
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Init");
+
+    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
+    g_settingControlPanelColorFix = Wh_GetIntSetting(L"ControlPanelColorFix");
 
     // --- explorerframe.dll hooks ---
     HMODULE hExplorerFrame = LoadLibraryW(L"explorerframe.dll");
@@ -355,14 +406,37 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
+    // --- dui70.dll hook (Control Panel Color Fix) ---
+    HMODULE hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hDui70)
+    {
+        Wh_Log(L"Failed to load dui70.dll — Control Panel Color Fix will be skipped.");
+    }
+    else
+    {
+        WindhawkUtils::SYMBOL_HOOK dui70_dll_hooks = {
+            { L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)" },
+            (void**)&Element_PaintBg,
+            (void*)Element_PaintBgHook,
+            false
+        };
+
+        if (!WindhawkUtils::HookSymbols(hDui70, &dui70_dll_hooks, 1))
+        {
+            Wh_Log(L"Failed to hook DirectUI::Element::PaintBackground — Control Panel Color Fix will be skipped.");
+        }
+        else
+        {
+            Wh_Log(L"Control Panel Color Fix hook installed.");
+        }
+    }
 
     return TRUE;
 }
 
 void Wh_ModUninit()
 {
-    Wh_Log(L"Explorer Frame Fixes (Merged) Uninit");
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Uninit");
 
     Wh_Log(L"Removing subclasses from %zu rebars.", g_subclassedRebars.size());
     for (HWND h : g_subclassedRebars)
@@ -376,4 +450,5 @@ void Wh_ModUninit()
 void Wh_ModSettingsChanged()
 {
     g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
+    g_settingControlPanelColorFix = Wh_GetIntSetting(L"ControlPanelColorFix");
 }

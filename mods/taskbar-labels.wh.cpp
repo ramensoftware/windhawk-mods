@@ -2,14 +2,14 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.4.2
+// @version         1.4.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -189,6 +189,7 @@ Labels can also be shown or hidden per-program in the settings.
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <limits>
 #include <string>
 #include <unordered_set>
@@ -957,15 +958,18 @@ void UpdateTaskListButtonWithLabelStyle(
         FindChildByName(iconPanelElement, L"LabelControl")
             .as<Controls::TextBlock>();
 
-    if (secondColumnWidthPixels > 0 && labelControlElement) {
-        // In labelsWithCombining mode, pinned items have labels too. Hide them.
-        if (g_settings.mode == Mode::labelsWithCombining &&
-            !TaskListButton_IsRunning(taskListButtonElement)) {
-            secondColumnWidthPixels = 0;
-            labelControlElement.Visibility(Visibility::Collapsed);
-            labelControlElement = nullptr;
-        }
+    // In labelsWithCombining mode, pinned items have labels too. Hide them.
+    if (g_settings.mode == Mode::labelsWithCombining && labelControlElement &&
+        !TaskListButton_IsRunning(taskListButtonElement)) {
+        secondColumnWidthPixels = 0;
+        labelControlElement.Visibility(Visibility::Collapsed);
+        labelControlElement = nullptr;
 
+        columnDefinitions.GetAt(1).Width(GridLength({
+            .Value = 0,
+            .GridUnitType = GridUnitType::Pixel,
+        }));
+    } else if (secondColumnWidthPixels > 0 && labelControlElement) {
         columnDefinitions.GetAt(1).Width(GridLength({
             .Value = secondColumnWidthPixels,
             .GridUnitType = GridUnitType::Pixel,
@@ -988,9 +992,9 @@ void UpdateTaskListButtonWithLabelStyle(
 
         if (g_unloading) {
             labelControlElement.MaxWidth(
-                std::max(0.0, 176 - firstColumnWidthPixels));
+                std::fmax(0.0, 176 - firstColumnWidthPixels));
         } else if (g_settings.taskbarItemWidth == 0) {
-            labelControlElement.MaxWidth(std::max(
+            labelControlElement.MaxWidth(std::fmax(
                 0.0,
                 g_settings.maximumTaskbarItemWidth - firstColumnWidthPixels));
         } else {
@@ -1095,7 +1099,7 @@ void UpdateTaskListButtonWithLabelStyle(
                                       winrt::box_value(2));
         }
 
-        double maxWidth = std::max(taskListButtonWidth - 6, 0.0);
+        double maxWidth = std::fmax(taskListButtonWidth - 6, 0.0);
         indicatorElement.MaxWidth(maxWidth);
 
         double minWidth = 0;
@@ -1242,8 +1246,8 @@ void UpdateTaskListButtonCustomizations(
     bool isRunning = TaskListButton_IsRunning(taskListButtonElement);
     bool showLabels = isRunning;
     double minWidth =
-        std::min(g_initialTaskbarItemWidth,
-                 static_cast<double>(g_settings.taskbarItemWidth));
+        std::fmin(g_initialTaskbarItemWidth,
+                  static_cast<double>(g_settings.taskbarItemWidth));
 
     if (g_unloading) {
         showLabels = false;
@@ -2042,6 +2046,7 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))"},
             &CTaskListThumbnailWnd_DisplayUI_Original,
             CTaskListThumbnailWnd_DisplayUI_Hook,
+            true,  // Classic thumbnails, removed in or near 10.0.26100.8491.
         },
     };
 
@@ -2139,7 +2144,7 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         auto pKernelBaseRegGetValueW = (decltype(&RegGetValueW))GetProcAddress(
             kernelBaseModule, "RegGetValueW");
-        WindhawkUtils::Wh_SetFunctionHookT(
+        WindhawkUtils::SetFunctionHook(
             pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
     }
 
@@ -2163,9 +2168,9 @@ BOOL Wh_ModInit() {
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
-        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                           LoadLibraryExW_Hook,
-                                           &LoadLibraryExW_Original);
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
     }
 
     return TRUE;
