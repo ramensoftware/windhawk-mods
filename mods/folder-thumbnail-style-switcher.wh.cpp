@@ -1,89 +1,76 @@
 // ==WindhawkMod==
 // @id              folder-thumbnail-style-switcher
-// @name            Windows Thumbnails Tweaker
-// @description     Switches Explorer folder thumbnail composition between Windows 7, Windows 10, and Windows 11 styles.
-// @version         1.0
+// @name            Folder Thumbnail Style Switcher
+// @description     Switch Explorer folder thumbnails between Windows 7, Windows 10, and Windows 11 styles.
+// @version         2.0
 // @author          QCQ171-C
-// @github         https://github.com/QCQ171-C
+// @github          https://github.com/QCQ171-C
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -lmsimg32 -luser32 -lshlwapi -lole32 -lcomctl32 -lwindowscodecs -fms-extensions
+// @architecture    x86-64
+// @compilerOptions -lgdi32 -lmsimg32 -luser32 -lshlwapi -lole32 -lcomctl32 -lshell32 -lwindowscodecs -fms-extensions
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows Thumbnails Tweaker
-This mod provides several styles of folder thumbnails tweaks to Windows, feel free to raise an issue.
+# Folder Thumbnail Style Switcher
+Tested on Windows 10 22H2, Windows 11 22H2, 23H2, 24H2, 25H2 with Windhawk 1.7.1
 
-Tested on Windows 10 22H2, Windows 11 22H2, 23H2, 24H2, 25H2
+It may support Windows 10 older version, try by yourself
 
-You need to clean the thumbnail cache after changing a style.
+## 📌Preparation
+Please prepare icon gorup 5, 6 in imageres.dll and Bitmap 311 in shell32.dll from the respective Windows to match the folder icons and the shadow.
+And you need to clean the thumbnail cache after changing a style!
 
-## Gallery
-![Original Win 7 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG)
-Original Win 7 style
+## 🎞Gallery
+| Picture | Style |
+|:---:|:---:|
+|![7 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG)|7 style|
+|![10 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG)|10 style|
+|![11 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png)|11 style|
+|![7 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG)|7 style on Windows 10|
+|![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png)|7 style on Windows 11|
+|![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG)|7 style on Windows 11|
+|![10 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png)|10 style on 11|
 
-------------
-![Original Win 10 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG)
-Original Win 10 style
+What's the diffrence🤨? The position and the size of the thumbnails and the shadow are different.
 
-------------
-![Original Win 11 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png)
-Original Win 11 style
+## ⚠️Notes
+**Note 1:**
+**This mod only include explorer.exe as it's the main process that handdle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to:**
+**`// @include *`, but it may cause problems.**
 
-------------
-![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG)
-11 style on 10
-
-------------
-![7 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG)
-7 style on 10
-
-------------
-![10 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png)
-10 style on 11
-
-------------
-![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png)
-7 style on 11
-
-## Notes
-Note 1:
-Windows 10 has an issue, or rather a bug, when drawing thumbnails.
+Note 2:
+Windows 10 has an issue, or rather a bug, when drawing thumbnails. 
 Folder icons are split into two parts - the front and the back - and stored as icons 5 and 6 in imageres.dll, as well as the "multiple folder icon" at icon number 162.
 Normally, the front half of the folder should have the same logic for whether to draw or not as the back half.
 However, the engineers seem to have taken the shortcut of always drawing the front half, which leads to errors in the thumbnails of such folders after replacing the icons.
-This mod attempts to fix this issue.
+This mod attempts to fix this issue. `s_DrawIcon` hook is for this.
 
-Note 2:
-Windows 10 uses GDI to draw the thumbnails, while Windows 11 uses D2D/WIC. The latter one has higher resolution so thumbnails like pictures in Web folder are more "appealing".
-Because the 2D thumnails are bigger than 3D ones.
+Note 3:
+Windows 10 uses GDI to draw the thumbnails, while Windows 11 uses D2D/WIC. The latter one has higher resolution.
+This mod try to replicate that too.
 
-**Note 3:
-This mod only include explorer.exe as it's the main process that handdle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to *, but it may cause problems.**
+Note 4:
+I try my best to closely replicates the thumbnail drawing logic, including the shadow. Feel free to raise an issue.
 
- Note 4:
-I try my best to closely replicates the thumbnail drawing logic of Windows 10 on Windows 11. It may still have some inaccuracy points, so feel free to raise an issue.
-## Credit
+## 🔵Credit
 *win7-folder-thumbnail-skewing credited to [Leymonaide](https://github.com/Leymonaide "Leymonaide")*
 
-*This code is generated by CodeX*
+*This code is generated by AI*
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- thumbnailStyle: "10"
+- thumbnailStyle: win7
   $name: Folder thumbnail style
+  $description: Selecting the style that you like.
   $options:
-    - "7": Windows 7
-    - "10": Windows 10
-    - "11": Windows 11
-  $description: Select the folder thumbnail preview style. Native style on the current system does nothing.
+  - win7: Windows 7 Skewing Thumbnail
+  - win10: Windows 10 Skewing Thumbnail
+  - win11: Windows 11 Flat Thumbnail
 */
 // ==/WindhawkModSettings==
-
-#include <initguid.h>
-#include <intrin.h>
 
 // Compatible with Windhawk 1.6.1 and before
 #undef WINAPI
@@ -95,18 +82,23 @@ I try my best to closely replicates the thumbnail drawing logic of Windows 10 on
 #include <windows.h>
 #include <commctrl.h>
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
 #include <thumbcache.h>
 #include <wincodec.h>
+#include <initguid.h>
 #include <wrl/client.h>
 #include <wil/resource.h>
 #include <wil/result_macros.h>
+#include <algorithm>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
 DEFINE_GUID(IID_IShellItemImageFactoryPriv,
     0x8A322201, 0x0A87, 0x46C1, 0x9C, 0x77, 0x76, 0x20, 0xE0, 0xCC, 0x5B, 0xBC);
+
+DEFINE_GUID(IID_IImageList,
+    0x46EB5926, 0x582E, 0x4017, 0x9F, 0xDF, 0xE8, 0x99, 0x8D, 0xAA, 0x09, 0x50);
 
 enum WTS_STREAMTYPE { WTSST_UNKNOWN = 0, WTSST_JPEG = 1, WTSST_BMP = 2, WTSST_PNG = 3 };
 enum WTS_THUMBNAILTYPE { WTSTT_IMAGE = 0, WTSTT_ICON = 1 };
@@ -119,112 +111,71 @@ IShellItemImageFactoryPriv : IShellItemImageFactory {
     STDMETHOD(GetImageStreamForRequestedIconSize)(SIZE, SIZE, SIIGBF, UINT64, WTS_STREAMTYPE*, WTS_THUMBNAILTYPE*, WTS_CACHEFLAGS*, SIZE*, REFIID, void**) PURE;
 };
 
-enum class ThumbnailStyle {
+enum FolderThumbnailStyle {
     Win7,
     Win10,
     Win11,
 };
 
-enum class HostVersion {
+enum class BitmapFlagOrder {
+    Win7,
     Win10,
     Win11,
 };
 
-struct ModSettings {
-    ThumbnailStyle targetStyle = ThumbnailStyle::Win11;
+using Extract_t = HRESULT(__fastcall*)(void* pThis, HBITMAP* bitmap);
+using GetThumbnails_t = HRESULT(__fastcall*)(void* pThis, BYTE count, void* dpa);
+using SkewThumbnail_t = HRESULT(__fastcall*)(void* self, UINT index, IShellItem* item, HDC hdc, SIZE target);
+using DrawIcon_t = HRESULT(__fastcall*)(int stockIconId, HDC hdc, SIZE target, int flags);
+
+static Extract_t Extract_orig;
+static GetThumbnails_t _GetThumbnails_orig;
+static SkewThumbnail_t _SkewThumbnail_orig;
+static DrawIcon_t s_DrawIcon_orig;
+// Coordinates the Win10 front-shell suppression between _SkewThumbnail_hook
+// and s_DrawIcon_hook. This assumes Explorer calls both hooks on the same
+// thread while composing one folder thumbnail.
+static thread_local bool g_drawWin10FrontShellForCurrentThumbnail;
+static FolderThumbnailStyle g_hostStyle;
+static FolderThumbnailStyle g_targetStyle;
+
+static constexpr SIZE kCanvasSize = { 256, 256 };
+static constexpr SIZE kSkewCanvasSize = { 512, 512 };
+static constexpr SIZE kWin7PreviewSize = { 256, 256 };
+static constexpr SIZE kWin10PreviewSize = { 254, 254 };
+static constexpr SIZE kWin11ContentSize = { 208, 136 };
+static constexpr SIIGBF kThumbnailFlags = static_cast<SIIGBF>(0x50008);
+static constexpr SIIGBF kIconFlags = static_cast<SIIGBF>(0x50004);
+static constexpr SIIGBF kCompatFlags = static_cast<SIIGBF>(0x20);
+
+struct SkewInfo {
+    SIZE size;
+    POINT primary[3];
+    POINT secondary[3];
 };
 
-using SkewThumbnail_t = HRESULT(__fastcall*)(void*, UINT, IShellItem*, HDC, SIZE);
-using DrawIcon_t = HRESULT(__fastcall*)(int, HDC, SIZE, int);
-using Extract_t = HRESULT(__fastcall*)(void*, HBITMAP*);
-using GetThumbnails_t = HRESULT(__fastcall*)(void*, BYTE, void*);
+static constexpr SkewInfo kWin7SkewInfo = {
+    { 512, 512 },
+    { { 50, 36 }, { 394, 116 }, { 50, 402 } },
+    { { 50, 36 }, { 266, 140 }, { 50, 402 } },
+};
 
-static ModSettings g_settings;
-static HostVersion g_hostVersion = HostVersion::Win10;
-static DWORD g_buildNumber = 0;
-
-static SkewThumbnail_t g_skewThumbnailOrig;
-static DrawIcon_t g_drawIconOrig;
-static Extract_t g_extractOrig;
-static GetThumbnails_t g_getThumbnailsOrig;
-
-static thread_local bool g_win10FlatHasPendingFrontShell;
-
-constexpr SIZE kWin11ContentSize = { 208, 136 };
-constexpr SIIGBF kWin11FolderThumbnailFlags = static_cast<SIIGBF>(0x50008);
-constexpr SIIGBF kCompatibleThumbnailFlags = static_cast<SIIGBF>(0x20);
-
-static const wchar_t* StyleName(ThumbnailStyle style) {
-    switch (style) {
-        case ThumbnailStyle::Win7:
-            return L"Windows 7";
-        case ThumbnailStyle::Win10:
-            return L"Windows 10";
-        case ThumbnailStyle::Win11:
-            return L"Windows 11";
+class ScopedScreenDC {
+public:
+    ScopedScreenDC() : dc_(GetDC(nullptr)) {}
+    ~ScopedScreenDC() {
+        if (dc_) {
+            ReleaseDC(nullptr, dc_);
+        }
     }
+    ScopedScreenDC(const ScopedScreenDC&) = delete;
+    ScopedScreenDC& operator=(const ScopedScreenDC&) = delete;
+    HDC get() const { return dc_; }
+    explicit operator bool() const { return dc_ != nullptr; }
 
-    return L"Unknown";
-}
-
-static ThumbnailStyle NativeStyleForHost() {
-    return g_hostVersion == HostVersion::Win11 ? ThumbnailStyle::Win11 : ThumbnailStyle::Win10;
-}
-
-static bool IsNativeTargetStyle() {
-    return g_settings.targetStyle == NativeStyleForHost();
-}
-
-static void Log(const wchar_t* format, ...) {
-    wchar_t buffer[512];
-
-    va_list args;
-    va_start(args, format);
-    wvsprintfW(buffer, format, args);
-    va_end(args);
-
-    Wh_Log(L"[FolderThumbnailStyleSwitcher] %s", buffer);
-}
-
-static ThumbnailStyle ParseStyleSetting(PCWSTR value) {
-    if (value && wcscmp(value, L"7") == 0) {
-        return ThumbnailStyle::Win7;
-    }
-
-    if (value && wcscmp(value, L"10") == 0) {
-        return ThumbnailStyle::Win10;
-    }
-
-    return ThumbnailStyle::Win11;
-}
-
-static void LoadSettings() {
-    PCWSTR value = Wh_GetStringSetting(L"thumbnailStyle");
-    g_settings.targetStyle = ParseStyleSetting(value);
-    Wh_FreeStringSetting(value);
-}
-
-static DWORD GetWindowsBuildNumber() {
-    using RtlGetVersion_t = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
-
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    if (!ntdll) {
-        return 0;
-    }
-
-    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion"));
-    if (!rtlGetVersion) {
-        return 0;
-    }
-
-    RTL_OSVERSIONINFOW version = {};
-    version.dwOSVersionInfoSize = sizeof(version);
-    if (rtlGetVersion(&version) != 0) {
-        return 0;
-    }
-
-    return version.dwBuildNumber;
-}
+private:
+    HDC dc_;
+};
 
 template <typename T>
 static T LocalMin(T a, T b) {
@@ -235,30 +186,6 @@ template <typename T>
 static T LocalMax(T a, T b) {
     return a > b ? a : b;
 }
-
-class ScopedScreenDC {
-public:
-    ScopedScreenDC() : dc_(GetDC(nullptr)) {}
-    ~ScopedScreenDC() {
-        if (dc_) {
-            ReleaseDC(nullptr, dc_);
-        }
-    }
-
-    ScopedScreenDC(const ScopedScreenDC&) = delete;
-    ScopedScreenDC& operator=(const ScopedScreenDC&) = delete;
-
-    HDC get() const {
-        return dc_;
-    }
-
-    explicit operator bool() const {
-        return dc_ != nullptr;
-    }
-
-private:
-    HDC dc_;
-};
 
 static HRESULT Create32BitHBITMAP(HDC hdc, const SIZE& size, void** bits, HBITMAP* bitmap) {
     *bits = nullptr;
@@ -272,18 +199,50 @@ static HRESULT Create32BitHBITMAP(HDC hdc, const SIZE& size, void** bits, HBITMA
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    HDC actualDc = hdc ? hdc : GetDC(HWND_DESKTOP);
+    HDC actualDc = hdc ? hdc : GetDC(nullptr);
     if (!actualDc) {
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
     *bitmap = CreateDIBSection(actualDc, &bmi, DIB_RGB_COLORS, bits, nullptr, 0);
-
-    if (actualDc != hdc) {
-        ReleaseDC(HWND_DESKTOP, actualDc);
+    DWORD error = GetLastError();
+    if (!hdc) {
+        ReleaseDC(nullptr, actualDc);
     }
 
-    return *bitmap ? S_OK : E_OUTOFMEMORY;
+    if (!*bitmap) {
+        return error ? HRESULT_FROM_WIN32(error) : E_OUTOFMEMORY;
+    }
+
+    return S_OK;
+}
+
+static HRESULT CopyBitmap(HBITMAP source, HBITMAP* copy) {
+    *copy = nullptr;
+
+    BITMAP bm = {};
+    RETURN_LAST_ERROR_IF(!GetObjectW(source, sizeof(bm), &bm));
+
+    ScopedScreenDC screenDc;
+    RETURN_LAST_ERROR_IF_NULL(screenDc.get());
+
+    wil::unique_hdc sourceDc(CreateCompatibleDC(screenDc.get()));
+    wil::unique_hdc copyDc(CreateCompatibleDC(screenDc.get()));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, sourceDc);
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, copyDc);
+
+    SIZE size = { bm.bmWidth, bm.bmHeight };
+    void* bits = nullptr;
+    HBITMAP copyBitmap = nullptr;
+    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), size, &bits, &copyBitmap));
+    wil::unique_hbitmap copyGuard(copyBitmap);
+
+    wil::unique_select_object sourceSel(SelectObject(sourceDc.get(), source));
+    wil::unique_select_object copySel(SelectObject(copyDc.get(), copyBitmap));
+    RETURN_LAST_ERROR_IF(!BitBlt(copyDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, sourceDc.get(), 0, 0, SRCCOPY));
+
+    *copy = copyGuard.release();
+    return S_OK;
 }
 
 static void SetAlpha(RGBQUAD* pixels, int width, int height, BYTE alpha) {
@@ -292,18 +251,45 @@ static void SetAlpha(RGBQUAD* pixels, int width, int height, BYTE alpha) {
     }
 }
 
-static RGBQUAD PremultipliedWhite(BYTE alpha) {
-    RGBQUAD color = {};
-    color.rgbBlue = alpha;
-    color.rgbGreen = alpha;
-    color.rgbRed = alpha;
-    color.rgbReserved = alpha;
-    return color;
+static void ScalePoints(POINT points[3], SIZE base, SIZE target) {
+    for (int i = 0; i < 3; ++i) {
+        points[i].x = MulDiv(points[i].x, target.cx, base.cx);
+        points[i].y = MulDiv(points[i].y, target.cy, base.cy);
+    }
+}
+
+static HRESULT ScaleBitmapUsingWIC(HBITMAP source, const SIZE& targetSize, HBITMAP* scaled) {
+    *scaled = nullptr;
+
+    ScopedScreenDC screenDc;
+    RETURN_LAST_ERROR_IF_NULL(screenDc.get());
+
+    void* bits = nullptr;
+    HBITMAP scaledBitmap = nullptr;
+    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), targetSize, &bits, &scaledBitmap));
+    wil::unique_hbitmap scaledGuard(scaledBitmap);
+
+    ComPtr<IWICImagingFactory> factory;
+    RETURN_IF_FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)));
+
+    ComPtr<IWICBitmap> wicSource;
+    RETURN_IF_FAILED(factory->CreateBitmapFromHBITMAP(source, nullptr, WICBitmapUseAlpha, &wicSource));
+
+    ComPtr<IWICBitmapScaler> scaler;
+    RETURN_IF_FAILED(factory->CreateBitmapScaler(&scaler));
+    RETURN_IF_FAILED(scaler->Initialize(wicSource.Get(), targetSize.cx, targetSize.cy, WICBitmapInterpolationModeFant));
+
+    UINT stride = targetSize.cx * sizeof(RGBQUAD);
+    UINT bufferSize = stride * targetSize.cy;
+    RETURN_IF_FAILED(scaler->CopyPixels(nullptr, stride, bufferSize, static_cast<BYTE*>(bits)));
+
+    *scaled = scaledGuard.release();
+    return S_OK;
 }
 
 static void CompositePBGRAOver(RGBQUAD* dest, const RGBQUAD& src) {
     BYTE srcA = src.rgbReserved;
-    if (srcA == 0) {
+    if (!srcA) {
         return;
     }
 
@@ -314,99 +300,34 @@ static void CompositePBGRAOver(RGBQUAD* dest, const RGBQUAD& src) {
     dest->rgbReserved = static_cast<BYTE>(srcA + (dest->rgbReserved * invA + 127) / 255);
 }
 
-static HRESULT CopyBitmap(HBITMAP source, HBITMAP* copy) {
-    *copy = nullptr;
-
-    BITMAP bm = {};
-    if (!GetObjectW(source, sizeof(bm), &bm)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    ScopedScreenDC screenDc;
-    if (!screenDc) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    wil::unique_hdc sourceDc(CreateCompatibleDC(screenDc.get()));
-    wil::unique_hdc copyDc(CreateCompatibleDC(screenDc.get()));
-    if (!sourceDc || !copyDc) {
-        return E_OUTOFMEMORY;
-    }
-
-    SIZE size = { bm.bmWidth, bm.bmHeight };
-    void* bits = nullptr;
-    HBITMAP copyBitmap = nullptr;
-    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), size, &bits, &copyBitmap));
-    wil::unique_hbitmap copyGuard(copyBitmap);
-
-    wil::unique_select_object sourceSel(SelectObject(sourceDc.get(), source));
-    wil::unique_select_object copySel(SelectObject(copyDc.get(), copyBitmap));
-    if (!BitBlt(copyDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, sourceDc.get(), 0, 0, SRCCOPY)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    *copy = copyGuard.release();
-    return S_OK;
-}
-
-static bool LooksLikePhotoBitmap(HBITMAP bitmap) {
-    BITMAP bm = {};
-    if (!GetObjectW(bitmap, sizeof(bm), &bm)) {
-        return false;
-    }
-
-    int w = static_cast<int>(bm.bmWidth);
-    int h = static_cast<int>(bm.bmHeight);
-    int delta = abs(w - h);
-    return (w >= 128 || h >= 128) && delta > LocalMax(12, LocalMin(w, h) / 12);
-}
-
-static HRESULT DrawBitmapWithWIC(
-    HBITMAP source,
-    RGBQUAD* destBits,
-    const SIZE& destSize,
-    int destX,
-    int destY,
-    int destW,
-    int destH) {
+static HRESULT DrawBitmapWithWIC(HBITMAP source,
+                                 RGBQUAD* destBits,
+                                 const SIZE& destSize,
+                                 int destX,
+                                 int destY,
+                                 int destW,
+                                 int destH) {
     RETURN_HR_IF(E_INVALIDARG, !source || !destBits || destW <= 0 || destH <= 0);
 
     ComPtr<IWICImagingFactory> factory;
-    RETURN_IF_FAILED(CoCreateInstance(
-        CLSID_WICImagingFactory,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&factory)));
+    RETURN_IF_FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)));
 
     ComPtr<IWICBitmap> sourceBitmap;
-    RETURN_IF_FAILED(factory->CreateBitmapFromHBITMAP(
-        source,
-        nullptr,
-        WICBitmapUsePremultipliedAlpha,
-        &sourceBitmap));
+    RETURN_IF_FAILED(factory->CreateBitmapFromHBITMAP(source, nullptr, WICBitmapUsePremultipliedAlpha, &sourceBitmap));
 
     ComPtr<IWICBitmapScaler> scaler;
     RETURN_IF_FAILED(factory->CreateBitmapScaler(&scaler));
-    RETURN_IF_FAILED(scaler->Initialize(
-        sourceBitmap.Get(),
-        static_cast<UINT>(destW),
-        static_cast<UINT>(destH),
-        WICBitmapInterpolationModeCubic));
+    RETURN_IF_FAILED(scaler->Initialize(sourceBitmap.Get(), destW, destH, WICBitmapInterpolationModeCubic));
 
     ComPtr<IWICFormatConverter> converter;
     RETURN_IF_FAILED(factory->CreateFormatConverter(&converter));
     RETURN_IF_FAILED(converter->Initialize(
-        scaler.Get(),
-        GUID_WICPixelFormat32bppPBGRA,
-        WICBitmapDitherTypeNone,
-        nullptr,
-        0.0,
-        WICBitmapPaletteTypeCustom));
+        scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom));
 
-    int visibleLeft = destX > 0 ? destX : 0;
-    int visibleTop = destY > 0 ? destY : 0;
-    int visibleRight = (destX + destW) < destSize.cx ? (destX + destW) : destSize.cx;
-    int visibleBottom = (destY + destH) < destSize.cy ? (destY + destH) : destSize.cy;
+    int visibleLeft = LocalMax(destX, 0);
+    int visibleTop = LocalMax(destY, 0);
+    int visibleRight = LocalMin(destX + destW, static_cast<int>(destSize.cx));
+    int visibleBottom = LocalMin(destY + destH, static_cast<int>(destSize.cy));
     if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
         return S_OK;
     }
@@ -435,47 +356,76 @@ static HRESULT DrawBitmapWithWIC(
     return S_OK;
 }
 
-static void FillWin11GradientBackground(RGBQUAD* pixels, const SIZE& size, const SIZE& canvas, LONG cardX, LONG cardY) {
-    float startX = canvas.cx * 0.5f - 104.0f;
-    float startY = canvas.cy * 0.5f - 62.0f;
-    float endX = canvas.cy * 0.5f + 62.0f;
-    float endY = canvas.cy * 0.5f + 74.0f;
-    float dx = endX - startX;
-    float dy = endY - startY;
-    float denom = dx * dx + dy * dy;
-
-    for (int y = 0; y < size.cy; ++y) {
-        for (int x = 0; x < size.cx; ++x) {
-            float gx = static_cast<float>(cardX + x);
-            float gy = static_cast<float>(cardY + y);
-            float t = denom > 0.0f ? (((gx - startX) * dx + (gy - startY) * dy) / denom) : 0.0f;
-            if (t < 0.0f) {
-                t = 0.0f;
-            } else if (t > 1.0f) {
-                t = 1.0f;
-            }
-
-            BYTE alpha = static_cast<BYTE>(153.0f + (102.0f - 153.0f) * t + 0.5f);
-            pixels[y * size.cx + x] = PremultipliedWhite(alpha);
-        }
-    }
-}
-
-static HRESULT DrawRoundedRectMask(HDC dc, const RECT& rect, int radius) {
-    wil::unique_hrgn rgn(CreateRoundRectRgn(rect.left, rect.top, rect.right, rect.bottom, radius, radius));
-    if (!rgn) {
-        return E_OUTOFMEMORY;
+static bool LooksLikePhotoBitmap(HBITMAP bitmap) {
+    BITMAP bm = {};
+    if (!GetObjectW(bitmap, sizeof(bm), &bm)) {
+        return false;
     }
 
-    SelectClipRgn(dc, rgn.get());
-    return S_OK;
+    int width = static_cast<int>(bm.bmWidth);
+    int height = static_cast<int>(bm.bmHeight);
+    int delta = abs(width - height);
+    return (width >= 128 || height >= 128) && delta > LocalMax(12, LocalMin(width, height) / 12);
 }
 
-static HRESULT GetWin11FlatItemBitmap(IShellItem* item, HBITMAP* bitmap, bool* imageThumbnail) {
+static HRESULT DrawStockIconLayer(HDC destDc, SHSTOCKICONID stockId, const SIZE& canvas, int flags = 0) {
+    if (canvas.cx > kCanvasSize.cx || canvas.cy > kCanvasSize.cy) {
+        ScopedScreenDC screenDc;
+        RETURN_LAST_ERROR_IF_NULL(screenDc.get());
+
+        wil::unique_hdc tempDc(CreateCompatibleDC(screenDc.get()));
+        RETURN_HR_IF_NULL(E_OUTOFMEMORY, tempDc);
+
+        void* tempBits = nullptr;
+        HBITMAP tempBitmap = nullptr;
+        RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), kCanvasSize, &tempBits, &tempBitmap));
+        wil::unique_hbitmap tempGuard(tempBitmap);
+        wil::unique_select_object tempSel(SelectObject(tempDc.get(), tempBitmap));
+        ZeroMemory(tempBits, kCanvasSize.cx * kCanvasSize.cy * sizeof(RGBQUAD));
+
+        RETURN_IF_FAILED(DrawStockIconLayer(tempDc.get(), stockId, kCanvasSize, flags));
+
+        HBITMAP scaledBitmap = nullptr;
+        RETURN_IF_FAILED(ScaleBitmapUsingWIC(tempBitmap, canvas, &scaledBitmap));
+        wil::unique_hbitmap scaledGuard(scaledBitmap);
+
+        wil::unique_hdc scaledDc(CreateCompatibleDC(screenDc.get()));
+        RETURN_HR_IF_NULL(E_OUTOFMEMORY, scaledDc);
+        wil::unique_select_object scaledSel(SelectObject(scaledDc.get(), scaledBitmap));
+
+        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        RETURN_LAST_ERROR_IF(!GdiAlphaBlend(destDc, 0, 0, canvas.cx, canvas.cy, scaledDc.get(), 0, 0, canvas.cx, canvas.cy, blend));
+        return S_OK;
+    }
+
+    SHSTOCKICONINFO sii = {};
+    sii.cbSize = sizeof(sii);
+    RETURN_IF_FAILED(SHGetStockIconInfo(stockId, SHGSI_SYSICONINDEX, &sii));
+
+    void* imageListRaw = nullptr;
+    RETURN_IF_FAILED(SHGetImageList(SHIL_JUMBO, IID_IImageList, &imageListRaw));
+
+    IUnknown* imageListUnknown = static_cast<IUnknown*>(imageListRaw);
+    HIMAGELIST imageList = reinterpret_cast<HIMAGELIST>(imageListRaw);
+    IMAGELISTDRAWPARAMS drawParams = {};
+    drawParams.cbSize = sizeof(drawParams);
+    drawParams.himl = imageList;
+    drawParams.i = sii.iSysImageIndex & 0x00FFFFFF;
+    drawParams.hdcDst = destDc;
+    drawParams.cx = canvas.cx;
+    drawParams.cy = canvas.cy;
+    drawParams.rgbBk = 0xFF000000;
+    drawParams.rgbFg = CLR_NONE;
+    drawParams.fStyle = flags ? ILD_TRANSPARENT : ILD_NORMAL;
+
+    BOOL drawn = ImageList_DrawIndirect(&drawParams);
+    imageListUnknown->Release();
+    return drawn ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+}
+
+static HRESULT GetShellItemBitmap(IShellItem* item, const SIZE& size, SIIGBF thumbnailFlags, SIIGBF iconFlags, SIIGBF fallbackFlags, BitmapFlagOrder flagOrder, bool use128ForIcons, HBITMAP* bitmap, bool* imageThumbnail) {
     *bitmap = nullptr;
     *imageThumbnail = false;
-
-    bool thumbnailTypeKnown = false;
 
     ComPtr<IShellItemImageFactoryPriv> privateFactory;
     if (SUCCEEDED(item->QueryInterface(IID_IShellItemImageFactoryPriv, reinterpret_cast<void**>(privateFactory.GetAddressOf())))) {
@@ -485,29 +435,33 @@ static HRESULT GetWin11FlatItemBitmap(IShellItem* item, HBITMAP* bitmap, bool* i
         WTS_CACHEFLAGS cacheFlags = static_cast<WTS_CACHEFLAGS>(0);
         SIZE actualSize = {};
 
-        if (SUCCEEDED(privateFactory->GetImageStream(
-                kWin11ContentSize,
-                kWin11FolderThumbnailFlags,
-                &streamType,
-                &thumbnailType,
-                &cacheFlags,
-                &actualSize,
-                __uuidof(IStream),
-                reinterpret_cast<void**>(imageStream.GetAddressOf())))) {
-            thumbnailTypeKnown = true;
+        if (SUCCEEDED(privateFactory->GetImageStream(size, thumbnailFlags, &streamType, &thumbnailType, &cacheFlags, &actualSize, __uuidof(IStream), reinterpret_cast<void**>(imageStream.GetAddressOf())))) {
             *imageThumbnail = thumbnailType == WTSTT_IMAGE;
         }
 
-        SIIGBF bitmapFlags[] = { kWin11FolderThumbnailFlags, kCompatibleThumbnailFlags };
-        for (SIIGBF flags : bitmapFlags) {
+        const SIZE bitmapSize = (!*imageThumbnail && use128ForIcons) ? SIZE{ 128, 128 } : size;
+        const SIIGBF preferredFlags = *imageThumbnail ? thumbnailFlags : iconFlags;
+        SIIGBF flags[3] = {};
+        if (flagOrder == BitmapFlagOrder::Win7) {
+            flags[0] = thumbnailFlags;
+            flags[1] = fallbackFlags;
+            flags[2] = iconFlags;
+        } else if (flagOrder == BitmapFlagOrder::Win10) {
+            flags[0] = fallbackFlags;
+            flags[1] = thumbnailFlags;
+            flags[2] = iconFlags;
+        } else {
+            flags[0] = preferredFlags;
+            flags[1] = thumbnailFlags;
+            flags[2] = fallbackFlags;
+        }
+
+        for (int i = 0; i < 3; ++i) {
             ComPtr<ISharedBitmap> sharedBitmap;
-            if (SUCCEEDED(privateFactory->GetSharedBitmap(kWin11ContentSize, flags, &sharedBitmap)) && sharedBitmap) {
+            if (SUCCEEDED(privateFactory->GetSharedBitmap(bitmapSize, flags[i], &sharedBitmap)) && sharedBitmap) {
                 HBITMAP shared = nullptr;
                 RETURN_IF_FAILED(sharedBitmap->GetSharedBitmap(&shared));
                 if (shared && SUCCEEDED(CopyBitmap(shared, bitmap)) && *bitmap) {
-                    if (!thumbnailTypeKnown) {
-                        *imageThumbnail = LooksLikePhotoBitmap(*bitmap);
-                    }
                     return S_OK;
                 }
             }
@@ -517,296 +471,12 @@ static HRESULT GetWin11FlatItemBitmap(IShellItem* item, HBITMAP* bitmap, bool* i
     ComPtr<IShellItemImageFactory> factory;
     RETURN_IF_FAILED(item->QueryInterface(IID_PPV_ARGS(&factory)));
 
-    HRESULT hr = factory->GetImage(kWin11ContentSize, kWin11FolderThumbnailFlags, bitmap);
+    HRESULT hr = factory->GetImage(size, thumbnailFlags, bitmap);
     if (FAILED(hr) || !*bitmap) {
-        hr = factory->GetImage(kWin11ContentSize, kCompatibleThumbnailFlags, bitmap);
-    }
-
-    if (SUCCEEDED(hr) && *bitmap && !thumbnailTypeKnown) {
-        *imageThumbnail = LooksLikePhotoBitmap(*bitmap);
+        hr = factory->GetImage(size, fallbackFlags, bitmap);
     }
 
     return hr;
-}
-
-static HRESULT DrawWin11FlatThumbnailOnWin10(IShellItem* item, HDC destDc, SIZE target) {
-    wil::unique_hbitmap bitmap;
-    HBITMAP raw = nullptr;
-    bool imageThumbnail = false;
-    RETURN_IF_FAILED(GetWin11FlatItemBitmap(item, &raw, &imageThumbnail));
-    bitmap.reset(raw);
-
-    BITMAP bm = {};
-    RETURN_LAST_ERROR_IF(!GetObjectW(bitmap.get(), sizeof(bm), &bm));
-
-    wil::unique_hdc itemDc(CreateCompatibleDC(destDc));
-    wil::unique_hdc cardDc(CreateCompatibleDC(destDc));
-    RETURN_HR_IF_NULL(E_OUTOFMEMORY, itemDc);
-    RETURN_HR_IF_NULL(E_OUTOFMEMORY, cardDc);
-
-    SIZE cardSize = kWin11ContentSize;
-    LONG x = (target.cx - cardSize.cx) / 2;
-    LONG y = 66;
-    RECT cardRect = { x, y, x + cardSize.cx, y + cardSize.cy };
-
-    void* cardBitsRaw = nullptr;
-    HBITMAP cardBitmap = nullptr;
-    RETURN_IF_FAILED(Create32BitHBITMAP(destDc, cardSize, &cardBitsRaw, &cardBitmap));
-    wil::unique_hbitmap cardGuard(cardBitmap);
-    wil::unique_select_object cardSel(SelectObject(cardDc.get(), cardBitmap));
-    ZeroMemory(cardBitsRaw, cardSize.cx * cardSize.cy * sizeof(RGBQUAD));
-
-    RGBQUAD* pixels = static_cast<RGBQUAD*>(cardBitsRaw);
-    FillWin11GradientBackground(pixels, cardSize, target, x, y);
-
-    wil::unique_select_object itemSel(SelectObject(itemDc.get(), bitmap.get()));
-
-    int srcW = static_cast<int>(bm.bmWidth);
-    int srcH = static_cast<int>(bm.bmHeight);
-    int drawX = 0;
-    int drawY = 0;
-    int drawW = cardSize.cx;
-    int drawH = cardSize.cy;
-
-    if (imageThumbnail) {
-        float scale = LocalMax(static_cast<float>(cardSize.cx) / srcW,
-                               static_cast<float>(cardSize.cy) / srcH);
-        drawW = static_cast<int>(srcW * scale + 0.5f);
-        drawH = static_cast<int>(srcH * scale + 0.5f);
-        drawX = (cardSize.cx - drawW) / 2;
-        drawY = (cardSize.cy - drawH) / 2;
-    } else {
-        int iconMax = 128;
-        float scale = LocalMin(static_cast<float>(iconMax) / srcW,
-                               static_cast<float>(iconMax) / srcH);
-        scale = LocalMin(scale, 1.0f);
-        drawW = static_cast<int>(srcW * scale + 0.5f);
-        drawH = static_cast<int>(srcH * scale + 0.5f);
-        drawX = (cardSize.cx - drawW) / 2;
-        drawY = (cardSize.cy - drawH) / 2;
-    }
-
-    HRESULT drawHr = DrawBitmapWithWIC(bitmap.get(), pixels, cardSize, drawX, drawY, drawW, drawH);
-    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    if (FAILED(drawHr)) {
-        GdiAlphaBlend(cardDc.get(), drawX, drawY, drawW, drawH,
-                      itemDc.get(), 0, 0, srcW, srcH, blend);
-    }
-
-    int savedDc = SaveDC(destDc);
-    RETURN_IF_FAILED(DrawRoundedRectMask(destDc, cardRect, 12));
-    GdiAlphaBlend(destDc, cardRect.left, cardRect.top, cardSize.cx, cardSize.cy,
-                  cardDc.get(), 0, 0, cardSize.cx, cardSize.cy, blend);
-    if (savedDc) {
-        RestoreDC(destDc, savedDc);
-    }
-
-    return S_OK;
-}
-
-static HRESULT GetWin7ItemBitmap(IShellItem* item, HBITMAP* bitmap) {
-    *bitmap = nullptr;
-
-    constexpr SIZE kWin7Size = { 256, 256 };
-    constexpr SIIGBF kWin7Flags = SIIGBF_RESIZETOFIT;
-
-    ComPtr<IShellItemImageFactoryPriv> privateFactory;
-    if (SUCCEEDED(item->QueryInterface(IID_IShellItemImageFactoryPriv, reinterpret_cast<void**>(privateFactory.GetAddressOf())))) {
-        ComPtr<ISharedBitmap> sharedBitmap;
-        if (SUCCEEDED(privateFactory->GetSharedBitmap(kWin7Size, kWin7Flags, &sharedBitmap)) && sharedBitmap) {
-            HBITMAP shared = nullptr;
-            RETURN_IF_FAILED(sharedBitmap->GetSharedBitmap(&shared));
-            if (shared && SUCCEEDED(CopyBitmap(shared, bitmap)) && *bitmap) {
-                return S_OK;
-            }
-        }
-    }
-
-    ComPtr<IShellItemImageFactory> factory;
-    RETURN_IF_FAILED(item->QueryInterface(IID_PPV_ARGS(&factory)));
-
-    return factory->GetImage(kWin7Size, kWin7Flags, bitmap);
-}
-
-static HRESULT DrawWin7SkewThumbnailOnWin10(bool secondary, IShellItem* item, HDC hdc, SIZE target) {
-    RETURN_HR_IF_NULL(E_FAIL, item);
-
-    wil::unique_hbitmap bitmap;
-    HBITMAP raw = nullptr;
-    RETURN_IF_FAILED(GetWin7ItemBitmap(item, &raw));
-    bitmap.reset(raw);
-
-    BITMAP bm = {};
-    RETURN_LAST_ERROR_IF(!GetObjectW(bitmap.get(), sizeof(bm), &bm));
-
-    SIZE plateSize = { bm.bmWidth + 8, bm.bmHeight + 8 };
-    void* plateBitsRaw = nullptr;
-    HBITMAP plateBitmap = nullptr;
-    RETURN_IF_FAILED(Create32BitHBITMAP(hdc, plateSize, &plateBitsRaw, &plateBitmap));
-    wil::unique_hbitmap plateGuard(plateBitmap);
-
-    wil::unique_hdc plateDc(CreateCompatibleDC(hdc));
-    RETURN_HR_IF_NULL(E_OUTOFMEMORY, plateDc);
-    wil::unique_select_object plateSel(SelectObject(plateDc.get(), plateBitmap));
-
-    wil::unique_hpen pen(CreatePen(PS_SOLID, 8, RGB(204, 204, 204)));
-    wil::unique_select_object penSel(SelectObject(plateDc.get(), pen.get()));
-    Rectangle(plateDc.get(), 0, 0, plateSize.cx, plateSize.cy);
-    SetAlpha(static_cast<RGBQUAD*>(plateBitsRaw), plateSize.cx, plateSize.cy, 255);
-
-    wil::unique_hdc bitmapDc(CreateCompatibleDC(hdc));
-    RETURN_HR_IF_NULL(E_OUTOFMEMORY, bitmapDc);
-    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    {
-        wil::unique_select_object bitmapSel(SelectObject(bitmapDc.get(), bitmap.get()));
-        GdiAlphaBlend(plateDc.get(), 4, 4, bm.bmWidth, bm.bmHeight,
-                      bitmapDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, blend);
-    }
-
-    POINT points[3] = {
-        { secondary ? 50 : 50, 36 },
-        { secondary ? 266 : 394, secondary ? 140 : 116 },
-        { secondary ? 50 : 50, 402 },
-    };
-
-    for (int i = 0; i < 3; ++i) {
-        points[i].x = MulDiv(points[i].x, target.cx, 512);
-        points[i].y = MulDiv(points[i].y, target.cy, 512);
-    }
-
-    int offsetX = 0;
-    int offsetBase = plateSize.cx + (secondary ? 0 : -50) - plateSize.cy;
-    if (static_cast<float>(plateSize.cx) <= static_cast<float>(plateSize.cy) * 1.1f) {
-        offsetX = MulDiv(offsetBase + 32, target.cx, 512);
-    } else {
-        points[0].y = MulDiv(106, target.cx, 512);
-        points[1].y = MulDiv((secondary ? 140 : 116) + 70, target.cx, 512);
-        offsetX = MulDiv(static_cast<int>(static_cast<float>(offsetBase) * 0.8f), target.cx, 512);
-    }
-
-    if (!PlgBlt(hdc, points, plateDc.get(), offsetX, 0, plateSize.cx - offsetX, plateSize.cy, nullptr, 0, 0)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    if (secondary) {
-        wil::unique_hmodule shell32(LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE));
-        if (shell32) {
-            HBITMAP shadow = LoadBitmapW(shell32.get(), MAKEINTRESOURCEW(0x137));
-            if (shadow && GetObjectW(shadow, sizeof(bm), &bm)) {
-                wil::unique_hbitmap shadowGuard(shadow);
-                wil::unique_select_object shadowSel(SelectObject(bitmapDc.get(), shadow));
-                GdiAlphaBlend(hdc, points[1].x, points[1].y, bm.bmWidth, points[2].y - points[0].y,
-                              bitmapDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, blend);
-            }
-        }
-    }
-
-    return S_OK;
-}
-
-static HRESULT __fastcall SkewThumbnailHook(void* pThis, UINT index, IShellItem* item, HDC hdc, SIZE target) {
-    if (g_hostVersion != HostVersion::Win10 || IsNativeTargetStyle()) {
-        return g_skewThumbnailOrig ? g_skewThumbnailOrig(pThis, index, item, hdc, target) : E_FAIL;
-    }
-
-    if (g_settings.targetStyle == ThumbnailStyle::Win11) {
-        if (index > 0) {
-            return S_OK;
-        }
-
-        HRESULT hr = DrawWin11FlatThumbnailOnWin10(item, hdc, target);
-        if (SUCCEEDED(hr)) {
-            g_win10FlatHasPendingFrontShell = true;
-            return hr;
-        }
-
-        Log(L"Win10 to Win11 flat thumbnail failed, falling back: 0x%08X", hr);
-        return g_skewThumbnailOrig ? g_skewThumbnailOrig(pThis, index, item, hdc, target) : hr;
-    }
-
-    if (g_settings.targetStyle == ThumbnailStyle::Win7) {
-        HRESULT hr = DrawWin7SkewThumbnailOnWin10(index != 0, item, hdc, target);
-        if (SUCCEEDED(hr)) {
-            return hr;
-        }
-
-        Log(L"Win10 to Win7 skew thumbnail failed, falling back: 0x%08X", hr);
-        return g_skewThumbnailOrig ? g_skewThumbnailOrig(pThis, index, item, hdc, target) : hr;
-    }
-
-    return g_skewThumbnailOrig ? g_skewThumbnailOrig(pThis, index, item, hdc, target) : E_FAIL;
-}
-
-static HRESULT __fastcall DrawIconHook(int stockIconId, HDC hdc, SIZE target, int flags) {
-    constexpr int kWin10StuffedFolderFrontShell = 0x4C;
-
-    if (g_hostVersion == HostVersion::Win10 &&
-        g_settings.targetStyle == ThumbnailStyle::Win11 &&
-        stockIconId == kWin10StuffedFolderFrontShell &&
-        !g_win10FlatHasPendingFrontShell) {
-        Log(L"Skipping unconditional Win10 front shell for Win11-style fallback");
-        return S_OK;
-    }
-
-    HRESULT hr = g_drawIconOrig ? g_drawIconOrig(stockIconId, hdc, target, flags) : E_FAIL;
-
-    if (stockIconId == kWin10StuffedFolderFrontShell) {
-        g_win10FlatHasPendingFrontShell = false;
-    }
-
-    return hr;
-}
-
-static HRESULT DrawImageresIconLayer(HDC destDc, int resourceId, const SIZE& canvas) {
-    wil::unique_hmodule imageres(LoadLibraryExW(L"imageres.dll", nullptr, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE));
-    if (!imageres) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    HICON icon = static_cast<HICON>(LoadImageW(imageres.get(),
-                                               MAKEINTRESOURCEW(resourceId),
-                                               IMAGE_ICON,
-                                               canvas.cx,
-                                               canvas.cy,
-                                               LR_DEFAULTCOLOR));
-    if (!icon) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-    wil::unique_hicon iconGuard(icon);
-
-    if (!DrawIconEx(destDc, 0, 0, icon, canvas.cx, canvas.cy, 0, nullptr, DI_NORMAL)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    return S_OK;
-}
-
-static HRESULT GetWin11ChildThumbnailFromShellItem(IShellItem* item, ThumbnailStyle targetStyle, HBITMAP* bitmap) {
-    *bitmap = nullptr;
-
-    SIZE size = { 254, 254 };
-    SIIGBF flags = kCompatibleThumbnailFlags;
-    if (targetStyle == ThumbnailStyle::Win7) {
-        size = { 256, 256 };
-        flags = SIIGBF_RESIZETOFIT;
-    }
-
-    ComPtr<IShellItemImageFactoryPriv> privateFactory;
-    if (SUCCEEDED(item->QueryInterface(IID_IShellItemImageFactoryPriv, reinterpret_cast<void**>(privateFactory.GetAddressOf())))) {
-        ComPtr<ISharedBitmap> sharedBitmap;
-        if (SUCCEEDED(privateFactory->GetSharedBitmap(size, flags, &sharedBitmap)) && sharedBitmap) {
-            HBITMAP shared = nullptr;
-            RETURN_IF_FAILED(sharedBitmap->GetSharedBitmap(&shared));
-            if (shared && SUCCEEDED(CopyBitmap(shared, bitmap)) && *bitmap) {
-                return S_OK;
-            }
-        }
-    }
-
-    ComPtr<IShellItemImageFactory> factory;
-    RETURN_IF_FAILED(item->QueryInterface(IID_PPV_ARGS(&factory)));
-
-    return factory->GetImage(size, flags, bitmap);
 }
 
 struct FakeCDPA {
@@ -817,13 +487,20 @@ static int CALLBACK ReleaseShellItemDpaCallback(void* item, void*) {
     if (item) {
         static_cast<IUnknown*>(item)->Release();
     }
-
     return 1;
 }
 
-static int GetWin11FolderChildThumbnails(void* folderThis, ThumbnailStyle targetStyle, HBITMAP thumbnails[2]) {
-    thumbnails[0] = nullptr;
-    thumbnails[1] = nullptr;
+struct ChildBitmap {
+    HBITMAP bitmap = nullptr;
+    bool imageThumbnail = false;
+    bool photoLike = false;
+    int area = 0;
+    int originalIndex = 0;
+};
+
+static int GetFolderChildBitmaps(void* folderThis, FolderThumbnailStyle style, ChildBitmap outBitmaps[2]) {
+    outBitmaps[0] = {};
+    outBitmaps[1] = {};
 
     HDPA hdpa = DPA_Create(2);
     if (!hdpa) {
@@ -831,23 +508,57 @@ static int GetWin11FolderChildThumbnails(void* folderThis, ThumbnailStyle target
     }
 
     FakeCDPA dpa = { hdpa };
-    HRESULT hr = g_getThumbnailsOrig(folderThis, 2, &dpa);
+    HRESULT hr = _GetThumbnails_orig(folderThis, 2, &dpa);
     if (FAILED(hr)) {
         DPA_DestroyCallback(hdpa, ReleaseShellItemDpaCallback, nullptr);
         return 0;
     }
 
-    int count = 0;
+    std::vector<ChildBitmap> candidates;
     int itemCount = DPA_GetPtrCount(hdpa);
-    for (int i = 0; i < itemCount && count < 2; ++i) {
+    for (int i = 0; i < itemCount; ++i) {
         IShellItem* item = static_cast<IShellItem*>(DPA_GetPtr(hdpa, i));
         if (!item) {
             continue;
         }
 
         HBITMAP bitmap = nullptr;
-        if (SUCCEEDED(GetWin11ChildThumbnailFromShellItem(item, targetStyle, &bitmap)) && bitmap) {
-            thumbnails[count++] = bitmap;
+        bool imageThumbnail = false;
+        SIZE size = style == Win7 ? kWin7PreviewSize : kWin10PreviewSize;
+        BitmapFlagOrder flagOrder = style == Win7 ? BitmapFlagOrder::Win7 : BitmapFlagOrder::Win10;
+
+        if (SUCCEEDED(GetShellItemBitmap(item, size, kThumbnailFlags, kIconFlags, kCompatFlags, flagOrder, false, &bitmap, &imageThumbnail)) &&
+            bitmap) {
+            BITMAP bm = {};
+            if (!GetObjectW(bitmap, sizeof(bm), &bm)) {
+                DeleteObject(bitmap);
+                continue;
+            }
+
+            candidates.push_back({bitmap, imageThumbnail, LooksLikePhotoBitmap(bitmap), bm.bmWidth * bm.bmHeight, i,});
+        }
+    }
+
+    if (style == Win7) {
+        std::sort(candidates.begin(), candidates.end(), [](const ChildBitmap& a, const ChildBitmap& b) {
+            if (a.photoLike != b.photoLike) {
+                return a.photoLike > b.photoLike;
+            }
+            if (a.area != b.area) {
+                return a.area > b.area;
+            }
+            return a.originalIndex < b.originalIndex;
+        });
+    }
+
+    int count = 0;
+    for (ChildBitmap& candidate : candidates) {
+        if (count < 2) {
+            outBitmaps[count++] = candidate;
+            candidate.bitmap = nullptr;
+        }
+        if (candidate.bitmap) {
+            DeleteObject(candidate.bitmap);
         }
     }
 
@@ -855,103 +566,155 @@ static int GetWin11FolderChildThumbnails(void* folderThis, ThumbnailStyle target
     return count;
 }
 
-static HRESULT DrawWin11PreviewOnSkewedPlane(HDC destDc, HBITMAP preview, ThumbnailStyle targetStyle, bool secondary) {
+// ---------------- Windows 7 style code ----------------
+
+static HRESULT DrawWin7PreviewOnSkewedPlane(HDC destDc, HBITMAP preview, bool secondary, SIZE target) {
     BITMAP bm = {};
-    if (!GetObjectW(preview, sizeof(bm), &bm)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
+    RETURN_LAST_ERROR_IF(!GetObjectW(preview, sizeof(bm), &bm));
 
-    wil::unique_hdc srcDc(CreateCompatibleDC(destDc));
     wil::unique_hdc plateDc(CreateCompatibleDC(destDc));
-    if (!srcDc || !plateDc) {
-        return E_OUTOFMEMORY;
-    }
+    wil::unique_hdc overlayDc(CreateCompatibleDC(destDc));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, plateDc);
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, overlayDc);
 
-    SIZE plateSize = {};
-    if (targetStyle == ThumbnailStyle::Win7) {
-        plateSize = { bm.bmWidth + 8, bm.bmHeight + 8 };
-    } else {
-        plateSize = { 256, 256 };
-    }
-
+    const SIZE plateSize = { bm.bmWidth + 8, bm.bmHeight + 8 };
     void* plateBitsRaw = nullptr;
     HBITMAP plateBitmap = nullptr;
     RETURN_IF_FAILED(Create32BitHBITMAP(destDc, plateSize, &plateBitsRaw, &plateBitmap));
     wil::unique_hbitmap plateGuard(plateBitmap);
 
-    wil::unique_select_object srcSel(SelectObject(srcDc.get(), preview));
     wil::unique_select_object plateSel(SelectObject(plateDc.get(), plateBitmap));
+    ZeroMemory(plateBitsRaw, plateSize.cx * plateSize.cy * sizeof(RGBQUAD));
 
-    RGBQUAD* plateBits = static_cast<RGBQUAD*>(plateBitsRaw);
-    ZeroMemory(plateBits, plateSize.cx * plateSize.cy * sizeof(RGBQUAD));
+    wil::unique_hpen borderPen(CreatePen(PS_SOLID, 8, RGB(204, 204, 204)));
+    wil::unique_select_object oldPen(SelectObject(plateDc.get(), borderPen.get()));
+    Rectangle(plateDc.get(), 0, 0, plateSize.cx, plateSize.cy);
+    SetAlpha(static_cast<RGBQUAD*>(plateBitsRaw), plateSize.cx, plateSize.cy, 255);
 
-    if (targetStyle == ThumbnailStyle::Win7) {
-        wil::unique_hpen borderPen(CreatePen(PS_SOLID, 8, RGB(204, 204, 204)));
-        wil::unique_select_object oldPen(SelectObject(plateDc.get(), borderPen.get()));
-        Rectangle(plateDc.get(), 0, 0, plateSize.cx, plateSize.cy);
-        SetAlpha(plateBits, plateSize.cx, plateSize.cy, 255);
-
-        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-        if (!GdiAlphaBlend(plateDc.get(), 4, 4, bm.bmWidth, bm.bmHeight,
-                           srcDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, blend)) {
-            StretchBlt(plateDc.get(), 4, 4, bm.bmWidth, bm.bmHeight,
-                       srcDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
-        }
-    } else {
-        wil::unique_hpen borderPen(CreatePen(PS_SOLID, 2, RGB(0xB7, 0xB7, 0xB7)));
-        wil::unique_select_object oldPen(SelectObject(plateDc.get(), borderPen.get()));
-        Rectangle(plateDc.get(), 0, 0, secondary ? plateSize.cx - 1 : plateSize.cx, plateSize.cy);
-
-        wil::unique_hbrush fillBrush(CreateSolidBrush(RGB(0xF7, 0xF7, 0xF7)));
-        RECT fillRect = { 1, 1, plateSize.cx - (secondary ? 2 : 1), plateSize.cy - 1 };
-        FillRect(plateDc.get(), &fillRect, fillBrush.get());
-        SetAlpha(plateBits, plateSize.cx, plateSize.cy, 255);
-
-        int sourceBitmapW = static_cast<int>(bm.bmWidth);
-        int sourceBitmapH = static_cast<int>(bm.bmHeight);
-        int drawX = LocalMax((254 - sourceBitmapW) / 2, 1);
-        int drawY = LocalMax((254 - sourceBitmapH) / 2, 1);
-        int drawW = LocalMax(sourceBitmapW - (secondary ? 2 : 1), 1);
-        int drawH = sourceBitmapH;
-        int sourceW = LocalMax(sourceBitmapW - 1, 1);
-        int sourceH = sourceBitmapH;
-
-        BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-        int savedPlateDc = SaveDC(plateDc.get());
-        IntersectClipRect(plateDc.get(), 0, 0, plateSize.cx, plateSize.cy);
-        if (!GdiAlphaBlend(plateDc.get(), drawX, drawY, drawW, drawH,
-                           srcDc.get(), 0, 0, sourceW, sourceH, blend)) {
-            StretchBlt(plateDc.get(), drawX, drawY, drawW, drawH,
-                       srcDc.get(), 0, 0, sourceW, sourceH, SRCCOPY);
-        }
-        if (savedPlateDc) {
-            RestoreDC(plateDc.get(), savedPlateDc);
-        }
+    wil::unique_select_object srcSel(SelectObject(overlayDc.get(), preview));
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    if (!GdiAlphaBlend(plateDc.get(), 4, 4, bm.bmWidth, bm.bmHeight, overlayDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, blend)) {
+        StretchBlt(plateDc.get(), 4, 4, bm.bmWidth, bm.bmHeight, overlayDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
     }
 
     POINT points[3] = {};
+    CopyMemory(points, secondary ? kWin7SkewInfo.secondary : kWin7SkewInfo.primary, sizeof(points));
+    ScalePoints(points, kWin7SkewInfo.size, target);
+
     int offsetX = 0;
+    int offsetBase = plateSize.cx + (secondary ? 0 : -50) - plateSize.cy;
+    if (static_cast<float>(plateSize.cx) <= static_cast<float>(plateSize.cy) * 1.1f) {
+        offsetX = MulDiv(offsetBase + 32, target.cx, kWin7SkewInfo.size.cx);
+    } else {
+        points[0].y = MulDiv(106, target.cx, kWin7SkewInfo.size.cx);
+        points[1].y = MulDiv((secondary ? 140 : 116) + 70, target.cx, kWin7SkewInfo.size.cx);
+        offsetX = MulDiv(static_cast<int>(static_cast<float>(offsetBase) * 0.8f), target.cx, kWin7SkewInfo.size.cx);
+    }
 
-    if (targetStyle == ThumbnailStyle::Win7) {
-        if (secondary) {
-            points[0] = { 25, 18 };
-            points[1] = { 133, 70 };
-            points[2] = { 25, 201 };
-        } else {
-            points[0] = { 25, 18 };
-            points[1] = { 197, 58 };
-            points[2] = { 25, 201 };
-        }
+    RETURN_LAST_ERROR_IF(!PlgBlt(destDc, points, plateDc.get(), offsetX, 0, plateSize.cx - offsetX, plateSize.cy, nullptr, 0, 0));
 
-        int offsetBase = plateSize.cx + (secondary ? 0 : -50) - plateSize.cy;
-        if (static_cast<float>(plateSize.cx) <= static_cast<float>(plateSize.cy) * 1.1f) {
-            offsetX = MulDiv(offsetBase + 32, 256, 512);
-        } else {
-            points[0].y = MulDiv(106, 256, 512);
-            points[1].y = MulDiv((secondary ? 140 : 116) + 70, 256, 512);
-            offsetX = MulDiv(static_cast<int>(static_cast<float>(offsetBase) * 0.8f), 256, 512);
+    if (secondary) {
+        wil::unique_hmodule shell32(LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE));
+        if (shell32) {
+            wil::unique_hbitmap shadow(LoadBitmapW(shell32.get(), MAKEINTRESOURCEW(0x137)));
+            if (shadow && GetObjectW(shadow.get(), sizeof(bm), &bm)) {
+                wil::unique_select_object shadowSel(SelectObject(overlayDc.get(), shadow.get()));
+                GdiAlphaBlend(destDc, points[1].x, points[1].y, bm.bmWidth, points[2].y - points[0].y, overlayDc.get(), 0, 0, bm.bmWidth, bm.bmHeight, blend);
+            }
         }
-    } else if (secondary) {
+    }
+
+    return S_OK;
+}
+
+static HRESULT DrawWin7StyleOnWin10(IShellItem* item, HDC hdc, SIZE target, bool secondary) {
+    HBITMAP rawBitmap = nullptr;
+    bool imageThumbnail = false;
+    RETURN_IF_FAILED(GetShellItemBitmap(item, kWin7PreviewSize, SIIGBF_RESIZETOFIT, kIconFlags, kCompatFlags, BitmapFlagOrder::Win7, false, &rawBitmap, &imageThumbnail));
+    wil::unique_hbitmap bitmap(rawBitmap);
+    return DrawWin7PreviewOnSkewedPlane(hdc, bitmap.get(), secondary, target);
+}
+
+static HRESULT ComposeWin7StyleFolderThumbnail(void* extractThis, HBITMAP* outBitmap) {
+    *outBitmap = nullptr;
+    void* folderThis = static_cast<BYTE*>(extractThis) - 0x48;
+
+    ChildBitmap children[2];
+    int previewCount = GetFolderChildBitmaps(folderThis, Win7, children);
+    wil::unique_hbitmap preview0(children[0].bitmap);
+    wil::unique_hbitmap preview1(children[1].bitmap);
+
+    if (previewCount == 0) {
+        return Extract_orig(extractThis, outBitmap);
+    }
+
+    ScopedScreenDC screenDc;
+    RETURN_LAST_ERROR_IF_NULL(screenDc.get());
+
+    wil::unique_hdc fullDc(CreateCompatibleDC(screenDc.get()));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, fullDc);
+
+    void* fullBitsRaw = nullptr;
+    HBITMAP fullBitmap = nullptr;
+    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), kSkewCanvasSize, &fullBitsRaw, &fullBitmap));
+    wil::unique_hbitmap fullGuard(fullBitmap);
+    wil::unique_select_object fullSel(SelectObject(fullDc.get(), fullBitmap));
+    ZeroMemory(fullBitsRaw, kSkewCanvasSize.cx * kSkewCanvasSize.cy * sizeof(RGBQUAD));
+
+    RETURN_IF_FAILED(DrawStockIconLayer(fullDc.get(), SIID_FOLDERBACK, kSkewCanvasSize, 0));
+    RETURN_IF_FAILED(DrawWin7PreviewOnSkewedPlane(fullDc.get(), preview0.get(), false, kSkewCanvasSize));
+    if (previewCount > 1 && preview1) {
+        RETURN_IF_FAILED(DrawWin7PreviewOnSkewedPlane(fullDc.get(), preview1.get(), true, kSkewCanvasSize));
+    }
+    RETURN_IF_FAILED(DrawStockIconLayer(fullDc.get(), SIID_FOLDERFRONT, kSkewCanvasSize, 1));
+
+    HBITMAP finalBitmap = nullptr;
+    RETURN_IF_FAILED(ScaleBitmapUsingWIC(fullBitmap, kCanvasSize, &finalBitmap));
+    *outBitmap = finalBitmap;
+    return S_OK;
+}
+
+// ---------------- Windows 10 style code ----------------
+
+static HRESULT DrawWin10PreviewOnSkewedPlane(HDC destDc, HBITMAP preview, bool secondary) {
+    BITMAP bm = {};
+    RETURN_LAST_ERROR_IF(!GetObjectW(preview, sizeof(bm), &bm));
+
+    wil::unique_hdc srcDc(CreateCompatibleDC(destDc));
+    wil::unique_hdc plateDc(CreateCompatibleDC(destDc));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, srcDc);
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, plateDc);
+
+    const SIZE plateSize = { 256, 256 };
+    void* plateBitsRaw = nullptr;
+    HBITMAP plateBitmap = nullptr;
+    RETURN_IF_FAILED(Create32BitHBITMAP(destDc, plateSize, &plateBitsRaw, &plateBitmap));
+    wil::unique_hbitmap plateGuard(plateBitmap);
+    wil::unique_select_object plateSel(SelectObject(plateDc.get(), plateBitmap));
+    ZeroMemory(plateBitsRaw, plateSize.cx * plateSize.cy * sizeof(RGBQUAD));
+
+    wil::unique_hpen borderPen(CreatePen(PS_SOLID, 2, RGB(0xB7, 0xB7, 0xB7)));
+    wil::unique_select_object oldPen(SelectObject(plateDc.get(), borderPen.get()));
+    Rectangle(plateDc.get(), 0, 0, secondary ? plateSize.cx - 1 : plateSize.cx, plateSize.cy);
+
+    wil::unique_hbrush fillBrush(CreateSolidBrush(RGB(0xF7, 0xF7, 0xF7)));
+    RECT fillRect = { 1, 1, plateSize.cx - (secondary ? 2 : 1), plateSize.cy - 1 };
+    FillRect(plateDc.get(), &fillRect, fillBrush.get());
+    SetAlpha(static_cast<RGBQUAD*>(plateBitsRaw), plateSize.cx, plateSize.cy, 255);
+
+    wil::unique_select_object srcSel(SelectObject(srcDc.get(), preview));
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    int drawX = LocalMax(static_cast<int>((254 - bm.bmWidth) / 2), 1);
+    int drawY = LocalMax(static_cast<int>((254 - bm.bmHeight) / 2), 1);
+    int drawW = LocalMax(static_cast<int>(bm.bmWidth - (secondary ? 2 : 1)), 1);
+    int sourceW = LocalMax(static_cast<int>(bm.bmWidth - 1), 1);
+
+    if (!GdiAlphaBlend(plateDc.get(), drawX, drawY, drawW, bm.bmHeight, srcDc.get(), 0, 0, sourceW, bm.bmHeight, blend)) {
+        StretchBlt(plateDc.get(), drawX, drawY, drawW, bm.bmHeight, srcDc.get(), 0, 0, sourceW, bm.bmHeight, SRCCOPY);
+    }
+
+    POINT points[3] = {};
+    if (secondary) {
         points[0] = { 60, 38 };
         points[1] = { 161, 74 };
         points[2] = { 60, 213 };
@@ -961,36 +724,20 @@ static HRESULT DrawWin11PreviewOnSkewedPlane(HDC destDc, HBITMAP preview, Thumbn
         points[2] = { 76, 216 };
     }
 
-    if (!PlgBlt(destDc, points, plateDc.get(), offsetX, 0,
-                plateSize.cx - offsetX, plateSize.cy, nullptr, 0, 0)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
+    RETURN_LAST_ERROR_IF(!PlgBlt(destDc, points, plateDc.get(), 0, 0, plateSize.cx, plateSize.cy, nullptr, 0, 0));
 
     if (secondary) {
         wil::unique_hmodule shell32(LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE));
         if (shell32) {
-            HBITMAP shadow = LoadBitmapW(shell32.get(), MAKEINTRESOURCEW(0x137));
-            if (shadow) {
-                wil::unique_hbitmap shadowGuard(shadow);
-                BITMAP shadowInfo = {};
-                if (GetObjectW(shadow, sizeof(shadowInfo), &shadowInfo)) {
-                    wil::unique_hdc shadowDc(CreateCompatibleDC(destDc));
-                    if (shadowDc) {
-                        wil::unique_select_object shadowSel(SelectObject(shadowDc.get(), shadow));
-                        BLENDFUNCTION shadowBlend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-                        int shadowHeight = points[2].y - points[0].y;
-                        GdiAlphaBlend(destDc,
-                                      points[1].x,
-                                      points[1].y,
-                                      shadowInfo.bmWidth,
-                                      shadowHeight,
-                                      shadowDc.get(),
-                                      0,
-                                      0,
-                                      shadowInfo.bmWidth,
-                                      shadowInfo.bmHeight,
-                                      shadowBlend);
-                    }
+            wil::unique_hbitmap shadow(LoadBitmapW(shell32.get(), MAKEINTRESOURCEW(0x137)));
+            BITMAP shadowInfo = {};
+            if (shadow && GetObjectW(shadow.get(), sizeof(shadowInfo), &shadowInfo)) {
+                wil::unique_hdc shadowDc(CreateCompatibleDC(destDc));
+                if (shadowDc) {
+                    wil::unique_select_object shadowSel(SelectObject(shadowDc.get(), shadow.get()));
+                    int shadowHeight = points[2].y - points[0].y;
+                    GdiAlphaBlend(destDc, points[1].x, points[1].y, shadowInfo.bmWidth, shadowHeight,
+                                  shadowDc.get(), 0, 0, shadowInfo.bmWidth, shadowInfo.bmHeight, blend);
                 }
             }
         }
@@ -999,154 +746,297 @@ static HRESULT DrawWin11PreviewOnSkewedPlane(HDC destDc, HBITMAP preview, Thumbn
     return S_OK;
 }
 
-static HRESULT ComposeWin11SkewedFolderThumbnail(void* extractThis, ThumbnailStyle targetStyle, HBITMAP* outBitmap) {
+static HRESULT ComposeWin10StyleFolderThumbnail(void* extractThis, HBITMAP* outBitmap) {
     *outBitmap = nullptr;
-
     void* folderThis = static_cast<BYTE*>(extractThis) - 0x48;
 
-    HBITMAP previewsRaw[2] = {};
-    int previewCount = GetWin11FolderChildThumbnails(folderThis, targetStyle, previewsRaw);
-    Log(L"Enumerated Win11 child thumbnails: %d", previewCount);
-    wil::unique_hbitmap preview0(previewsRaw[0]);
-    wil::unique_hbitmap preview1(previewsRaw[1]);
+    ChildBitmap children[2];
+    int previewCount = GetFolderChildBitmaps(folderThis, Win10, children);
+    wil::unique_hbitmap preview0(children[0].bitmap);
+    wil::unique_hbitmap preview1(children[1].bitmap);
 
     if (previewCount == 0) {
-        Log(L"Native thumbnail list is empty; preserving original Win11 Extract");
-        return g_extractOrig(extractThis, outBitmap);
+        return Extract_orig(extractThis, outBitmap);
     }
 
     ScopedScreenDC screenDc;
-    if (!screenDc) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
+    RETURN_LAST_ERROR_IF_NULL(screenDc.get());
 
     wil::unique_hdc destDc(CreateCompatibleDC(screenDc.get()));
-    if (!destDc) {
-        return E_OUTOFMEMORY;
-    }
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, destDc);
 
-    const SIZE canvas = { 256, 256 };
     void* canvasBitsRaw = nullptr;
     HBITMAP canvasBitmap = nullptr;
-    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), canvas, &canvasBitsRaw, &canvasBitmap));
+    RETURN_IF_FAILED(Create32BitHBITMAP(screenDc.get(), kCanvasSize, &canvasBitsRaw, &canvasBitmap));
     wil::unique_hbitmap canvasGuard(canvasBitmap);
     wil::unique_select_object canvasSel(SelectObject(destDc.get(), canvasBitmap));
+    ZeroMemory(canvasBitsRaw, kCanvasSize.cx * kCanvasSize.cy * sizeof(RGBQUAD));
 
-    RETURN_IF_FAILED(DrawImageresIconLayer(destDc.get(), 5, canvas));
-
+    RETURN_IF_FAILED(DrawStockIconLayer(destDc.get(), SIID_FOLDERBACK, kCanvasSize, 1));
+    RETURN_IF_FAILED(DrawWin10PreviewOnSkewedPlane(destDc.get(), preview0.get(), false));
     if (previewCount > 1 && preview1) {
-        RETURN_IF_FAILED(DrawWin11PreviewOnSkewedPlane(destDc.get(), preview1.get(), targetStyle, false));
-        RETURN_IF_FAILED(DrawWin11PreviewOnSkewedPlane(destDc.get(), preview0.get(), targetStyle, true));
-    } else {
-        RETURN_IF_FAILED(DrawWin11PreviewOnSkewedPlane(destDc.get(), preview0.get(), targetStyle, false));
+        RETURN_IF_FAILED(DrawWin10PreviewOnSkewedPlane(destDc.get(), preview1.get(), true));
     }
-
-    RETURN_IF_FAILED(DrawImageresIconLayer(destDc.get(), 6, canvas));
+    RETURN_IF_FAILED(DrawStockIconLayer(destDc.get(), SIID_FOLDERFRONT, kCanvasSize, 1));
 
     *outBitmap = canvasGuard.release();
     return S_OK;
 }
 
-static HRESULT __fastcall ExtractHook(void* pThis, HBITMAP* bitmap) {
-    if (g_hostVersion != HostVersion::Win11 || IsNativeTargetStyle()) {
-        return g_extractOrig ? g_extractOrig(pThis, bitmap) : E_FAIL;
+// ---------------- Windows 11 style code ----------------
+
+static void FillWin11GradientBackground(RGBQUAD* pixels, const SIZE& size, const SIZE& canvas, LONG cardX, LONG cardY) {
+    float startX = canvas.cx * 0.5f - 104.0f;
+    float startY = canvas.cy * 0.5f - 62.0f;
+    float endX = canvas.cx * 0.5f + 62.0f;
+    float endY = canvas.cy * 0.5f + 74.0f;
+    float dx = endX - startX;
+    float dy = endY - startY;
+    float denom = dx * dx + dy * dy;
+
+    for (int y = 0; y < size.cy; ++y) {
+        for (int x = 0; x < size.cx; ++x) {
+            float gx = static_cast<float>(cardX + x);
+            float gy = static_cast<float>(cardY + y);
+            float t = denom > 0.0f ? (((gx - startX) * dx + (gy - startY) * dy) / denom) : 0.0f;
+            t = LocalMax(0.0f, LocalMin(1.0f, t));
+
+            BYTE alpha = static_cast<BYTE>(153.0f + (102.0f - 153.0f) * t + 0.5f);
+            pixels[y * size.cx + x] = { alpha, alpha, alpha, alpha };
+        }
+    }
+}
+
+static HRESULT DrawWin11LikeContentPlane(IShellItem* item, HDC destDc, SIZE target) {
+    HBITMAP rawBitmap = nullptr;
+    bool imageThumbnail = false;
+    RETURN_IF_FAILED(GetShellItemBitmap(item, kWin11ContentSize, kThumbnailFlags, kIconFlags, kCompatFlags, BitmapFlagOrder::Win11, true, &rawBitmap, &imageThumbnail));
+    wil::unique_hbitmap bitmap(rawBitmap);
+
+    BITMAP bm = {};
+    RETURN_LAST_ERROR_IF(!GetObjectW(bitmap.get(), sizeof(bm), &bm));
+
+    wil::unique_hdc itemDc(CreateCompatibleDC(destDc));
+    wil::unique_hdc cardDc(CreateCompatibleDC(destDc));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, itemDc);
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, cardDc);
+
+    SIZE cardSize = kWin11ContentSize;
+    LONG cardX = (target.cx - cardSize.cx) / 2;
+    LONG cardY = 66;
+    RECT cardRect = { cardX, cardY, cardX + cardSize.cx, cardY + cardSize.cy };
+
+    void* cardBitsRaw = nullptr;
+    HBITMAP cardBitmap = nullptr;
+    RETURN_IF_FAILED(Create32BitHBITMAP(destDc, cardSize, &cardBitsRaw, &cardBitmap));
+    wil::unique_hbitmap cardGuard(cardBitmap);
+    wil::unique_select_object cardSel(SelectObject(cardDc.get(), cardBitmap));
+    ZeroMemory(cardBitsRaw, cardSize.cx * cardSize.cy * sizeof(RGBQUAD));
+
+    RGBQUAD* pixels = static_cast<RGBQUAD*>(cardBitsRaw);
+    FillWin11GradientBackground(pixels, cardSize, target, cardX, cardY);
+
+    wil::unique_select_object itemSel(SelectObject(itemDc.get(), bitmap.get()));
+
+    int srcW = bm.bmWidth;
+    int srcH = bm.bmHeight;
+    int drawX = 0;
+    int drawY = 0;
+    int drawW = cardSize.cx;
+    int drawH = cardSize.cy;
+
+    if (imageThumbnail) {
+        float scale = LocalMax(static_cast<float>(cardSize.cx) / srcW, static_cast<float>(cardSize.cy) / srcH);
+        drawW = static_cast<int>(srcW * scale + 0.5f);
+        drawH = static_cast<int>(srcH * scale + 0.5f);
+        drawX = (cardSize.cx - drawW) / 2;
+        drawY = (cardSize.cy - drawH) / 2;
+    } else {
+        int iconMax = 128;
+        float scale = LocalMin(static_cast<float>(iconMax) / srcW, static_cast<float>(iconMax) / srcH);
+        scale = LocalMin(scale, 1.0f);
+        drawW = static_cast<int>(srcW * scale + 0.5f);
+        drawH = static_cast<int>(srcH * scale + 0.5f);
+        drawX = (cardSize.cx - drawW) / 2;
+        drawY = (cardSize.cy - drawH) / 2;
     }
 
-    HRESULT hr = ComposeWin11SkewedFolderThumbnail(pThis, g_settings.targetStyle, bitmap);
+    HRESULT drawHr = DrawBitmapWithWIC(bitmap.get(), pixels, cardSize, drawX, drawY, drawW, drawH);
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+    if (FAILED(drawHr)) {
+        GdiAlphaBlend(cardDc.get(), drawX, drawY, drawW, drawH, itemDc.get(), 0, 0, srcW, srcH, blend);
+    }
+
+    int savedDc = SaveDC(destDc);
+    wil::unique_hrgn roundedClip(CreateRoundRectRgn(cardRect.left, cardRect.top, cardRect.right, cardRect.bottom, 12, 12));
+    RETURN_HR_IF_NULL(E_OUTOFMEMORY, roundedClip);
+    SelectClipRgn(destDc, roundedClip.get());
+    GdiAlphaBlend(destDc, cardRect.left, cardRect.top, cardSize.cx, cardSize.cy, cardDc.get(), 0, 0, cardSize.cx, cardSize.cy, blend);
+    if (savedDc) {
+        RestoreDC(destDc, savedDc);
+    }
+
+    return S_OK;
+}
+
+// ---------------- Hook dispatch code ----------------
+
+static HRESULT __fastcall Extract_hook(void* pThis, HBITMAP* bitmap) {
+    if (g_targetStyle == g_hostStyle) {
+        return Extract_orig(pThis, bitmap);
+    }
+
+    HRESULT hr = E_FAIL;
+    if (g_targetStyle == Win7) {
+        hr = ComposeWin7StyleFolderThumbnail(pThis, bitmap);
+    } else if (g_targetStyle == Win10) {
+        hr = ComposeWin10StyleFolderThumbnail(pThis, bitmap);
+    }
+
     if (SUCCEEDED(hr) && bitmap && *bitmap) {
         return hr;
     }
 
-    Log(L"Win11 to %s thumbnail failed, falling back: 0x%08X", StyleName(g_settings.targetStyle), hr);
-    return g_extractOrig ? g_extractOrig(pThis, bitmap) : hr;
+    return Extract_orig(pThis, bitmap);
 }
 
-static HRESULT __fastcall GetThumbnailsHook(void* pThis, BYTE count, void* dpa) {
-    return g_getThumbnailsOrig(pThis, count, dpa);
-}
-
-// windows.storage.dll
-static const WindhawkUtils::SYMBOL_HOOK storageHooks10[] = {
-    {
-        {
-            L"private: long __cdecl CFolderThumbnail::_SkewThumbnail(unsigned int,struct IShellItem *,struct HDC__ *,struct tagSIZE)"
-        },
-        &g_skewThumbnailOrig,
-        SkewThumbnailHook,
-        false,
-    },
-    {
-        {
-            L"private: static long __cdecl CFolderThumbnail::s_DrawIcon(enum SHSTOCKICONID,struct HDC__ *,struct tagSIZE,int)"
-        },
-        &g_drawIconOrig,
-        DrawIconHook,
-        false,
-    },
-};
-
-// windows.storage.dll
-static const WindhawkUtils::SYMBOL_HOOK storageHooks11[] = {
-    {
-        {
-            L"public: virtual long __cdecl CFolderThumbnail::Extract(struct HBITMAP__ * *)"
-        },
-        &g_extractOrig,
-        ExtractHook,
-        false,
-    },
-    {
-        {
-            L"private: long __cdecl CFolderThumbnail::_GetThumbnails(unsigned char,class CDPA<struct IShellItem,class CTContainer_PolicyUnOwned<struct IShellItem> > &)"
-        },
-        &g_getThumbnailsOrig,
-        GetThumbnailsHook,
-        false,
-    },
-};
-
-BOOL Wh_ModInit() {
-    LoadSettings();
-
-    g_buildNumber = GetWindowsBuildNumber();
-    g_hostVersion = g_buildNumber <= 20348 ? HostVersion::Win10 : HostVersion::Win11;
-
-    Log(L"Init: build=%lu, host=%s, target=%s",
-        g_buildNumber,
-        g_hostVersion == HostVersion::Win11 ? L"Windows 11" : L"Windows 10",
-        StyleName(g_settings.targetStyle));
-
-    if (IsNativeTargetStyle()) {
-        Log(L"Target style matches native host style; no hooks installed");
-        return TRUE;
+static HRESULT __fastcall _SkewThumbnail_hook(void* self, UINT index, IShellItem* item, HDC hdc, SIZE target) {
+    if (g_targetStyle == g_hostStyle) {
+        return _SkewThumbnail_orig ? _SkewThumbnail_orig(self, index, item, hdc, target) : E_FAIL;
     }
 
-    HMODULE storage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!storage) {
-        Log(L"Failed to load windows.storage.dll");
-        return FALSE;
+    if (g_targetStyle == Win7) {
+        return DrawWin7StyleOnWin10(item, hdc, target, index != 0);
     }
 
-    if (g_hostVersion == HostVersion::Win11) {
-        if (!WindhawkUtils::HookSymbols(storage, storageHooks11, ARRAYSIZE(storageHooks11))) {
-            Log(L"Failed to resolve Win11 folder thumbnail symbols");
-            return FALSE;
+    if (g_targetStyle == Win11) {
+        if (index > 0) {
+            return S_OK;
         }
 
-        Log(L"Installed Win11 hooks for target style %s", StyleName(g_settings.targetStyle));
-        return TRUE;
+        g_drawWin10FrontShellForCurrentThumbnail = false;
+        HRESULT hr = DrawWin11LikeContentPlane(item, hdc, target);
+        if (SUCCEEDED(hr)) {
+            g_drawWin10FrontShellForCurrentThumbnail = true;
+            return hr;
+        }
+
+        return _SkewThumbnail_orig ? _SkewThumbnail_orig(self, index, item, hdc, target) : hr;
     }
 
-    if (!WindhawkUtils::HookSymbols(storage, storageHooks10, ARRAYSIZE(storageHooks10))) {
-        Log(L"Failed to resolve Win10 folder thumbnail symbols");
+    return _SkewThumbnail_orig ? _SkewThumbnail_orig(self, index, item, hdc, target) : E_FAIL;
+}
+
+static int AdjustWin7FolderShellFlags(int stockIconId, int flags) {
+    constexpr int kWin7StuffedFolderBackShell = 0x4B;
+    if (g_targetStyle == Win7 && stockIconId == kWin7StuffedFolderBackShell && flags == 1) {
+        return 0;
+    }
+    return flags;
+}
+
+static HRESULT __fastcall s_DrawIcon_hook(int stockIconId, HDC hdc, SIZE target, int flags) {
+    if (g_targetStyle == g_hostStyle) {
+        return s_DrawIcon_orig ? s_DrawIcon_orig(stockIconId, hdc, target, flags) : E_FAIL;
+    }
+
+    constexpr int kWin10StuffedFolderFrontShell = 0x4C;
+
+    if (g_targetStyle == Win11 && stockIconId == kWin10StuffedFolderFrontShell && !g_drawWin10FrontShellForCurrentThumbnail) {
+        return S_OK;
+    }
+
+    HRESULT hr = s_DrawIcon_orig ?
+        s_DrawIcon_orig(stockIconId, hdc, target, AdjustWin7FolderShellFlags(stockIconId, flags)) :
+        E_FAIL;
+
+    if (g_targetStyle == Win11 && stockIconId == kWin10StuffedFolderFrontShell) {
+        g_drawWin10FrontShellForCurrentThumbnail = false;
+    }
+
+    return hr;
+}
+
+// windows.storage.dll
+static const WindhawkUtils::SYMBOL_HOOK storagehook10[] = {
+    {
+        { L"private: long __cdecl CFolderThumbnail::_SkewThumbnail(unsigned int,struct IShellItem *,struct HDC__ *,struct tagSIZE)" },
+        &_SkewThumbnail_orig,
+        _SkewThumbnail_hook,
+        false,
+    },
+    {
+        { L"private: static long __cdecl CFolderThumbnail::s_DrawIcon(enum SHSTOCKICONID,struct HDC__ *,struct tagSIZE,int)" },
+        &s_DrawIcon_orig,
+        s_DrawIcon_hook,
+        false,
+    },
+};
+
+// windows.storage.dll
+static const WindhawkUtils::SYMBOL_HOOK storagehook11[] = {
+    {
+        { L"public: virtual long __cdecl CFolderThumbnail::Extract(struct HBITMAP__ * *)" },
+        &Extract_orig,
+        Extract_hook,
+        false,
+    },
+    {
+        { L"private: long __cdecl CFolderThumbnail::_GetThumbnails(unsigned char,class CDPA<struct IShellItem,class CTContainer_PolicyUnOwned<struct IShellItem> > &)" },
+        &_GetThumbnails_orig,
+        nullptr,
+        false,
+    },
+};
+
+static DWORD GetWinBuild() {
+    DWORD WinBuild;
+    ((void (WINAPI*)(DWORD*, DWORD*, DWORD*))GetProcAddress(GetModuleHandle(L"ntdll.dll"), "RtlGetNtVersionNumbers"))(NULL, NULL, &WinBuild);
+    WinBuild &= ~0xF0000000;
+    return WinBuild;
+}
+
+static void LoadSettings() {
+    PCWSTR setting = Wh_GetStringSetting(L"thumbnailStyle");
+    g_hostStyle = GetWinBuild() > 20348 ? Win11 : Win10;
+
+    if (_wcsicmp(setting, L"win7") == 0) {
+        g_targetStyle = Win7;
+    } else if (_wcsicmp(setting, L"win10") == 0) {
+        g_targetStyle = Win10;
+    } else if (_wcsicmp(setting, L"win11") == 0) {
+        g_targetStyle = Win11;
+    }
+    Wh_Log(L"Target style: %s", setting);
+    Wh_FreeStringSetting(setting);
+}
+
+BOOL Wh_ModInit() {
+    DWORD build = GetWinBuild();
+    Wh_Log(L"Windows build number: %lu", build);
+    LoadSettings();
+
+    HMODULE storage = GetModuleHandleW(L"windows.storage.dll");
+    if (!storage) {
+        Wh_Log(L"Failed to load windows.storage.dll");
         return FALSE;
     }
-
-    Log(L"Installed Win10 hooks for target style %s", StyleName(g_settings.targetStyle));
+    if(build <= 20348){
+        if (!WindhawkUtils::HookSymbols(storage, storagehook10, ARRAYSIZE(storagehook10))){
+            Wh_Log(L"Failed to hook symbols");
+            return FALSE;
+        }
+    } else {
+        if (!WindhawkUtils::HookSymbols(storage, storagehook11, ARRAYSIZE(storagehook11))){
+            Wh_Log(L"Failed to hook symbols");
+            return FALSE;
+        }
+    }
+    Wh_Log(L"Init");
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed. Please clean the thumbnail cache to see the change.");
     LoadSettings();
-    Log(L"Settings changed: target=%s. Restart Explorer to fully re-apply hooks.", StyleName(g_settings.targetStyle));
 }
