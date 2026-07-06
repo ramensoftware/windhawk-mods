@@ -4,7 +4,7 @@
 // @description     Global hotkey to capture a screen region and copy extracted text to the clipboard
 // @version         1.0.4
 // @author          adfastltda
-// @github          https://github.com/adfastltda/selection-text-ocr
+// @github          https://github.com/adfastltda
 // @homepage        https://github.com/adfastltda/selection-text-ocr
 // @include         windhawk.exe
 // @compilerOptions -lgdi32 -lmsimg32 -lole32
