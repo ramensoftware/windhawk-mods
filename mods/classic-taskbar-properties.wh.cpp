@@ -2,7 +2,7 @@
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
 // @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
-// @version 3.1.0
+// @version 3.2.0
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
@@ -17,8 +17,10 @@ This Windhawk mod attempts to recreate the classic Windows 7 "Taskbar and Start 
 for Windows 10 and 11.
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2 and Windows 11 24H2.
 
-## Screenshot
+## Screenshot (with the Aero theme)
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7classictaskbar.png)
+## Screenshot (with the Classic theme)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/classichteme.PNG)
 
 **IMPORTANT**: This mod is a best-effort recreation that works within the limitations of modern Windows.
 Some features may work partially or not at all depending on your system configuration,
@@ -85,6 +87,8 @@ Windows version, and installed modifications.
 #include <atomic>
 #include <algorithm>
 #include <vector>
+#include <mutex>
+#include <utility>
 #define INITGUID
 #include <shlobj.h>
 #include <knownfolders.h>
@@ -298,32 +302,11 @@ struct HookGuard {
     bool IsReentrant() const { return g_hookDepth > 1; }
 };
 
-static wchar_t g_childEnvBlock[32768] = {0};
-
-static void BuildChildEnvironment() {
-    LPWCH curEnv = GetEnvironmentStringsW();
-    size_t pos = 0;
-    if (curEnv) {
-        LPWCH p = curEnv;
-        while (*p && pos < sizeof(g_childEnvBlock)/sizeof(wchar_t) - 100) {
-            size_t len = wcslen(p);
-            if (wcsncmp(p, L"WH_CTP_NOREDIRECT=", 19) != 0) {
-                wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, p);
-                pos += len;
-                g_childEnvBlock[pos++] = L'\0';
-            }
-            p += len + 1;
-        }
-        FreeEnvironmentStringsW(curEnv);
-    }
-    wcscpy_s(g_childEnvBlock + pos, sizeof(g_childEnvBlock)/sizeof(wchar_t) - pos, L"WH_CTP_NOREDIRECT=1\0");
-    g_childEnvBlock[pos + 19] = L'\0';
-    g_childEnvBlock[pos + 20] = L'\0';
-}
-
-static bool IsChildProcess() {
-    return GetEnvironmentVariableW(L"WH_CTP_NOREDIRECT", nullptr, 0) > 0;
-}
+// NOTE: the previous child-process redirect machinery (BuildChildEnvironment /
+// g_childEnvBlock / IsChildProcess) was a leftover from the settings-to-control-panel
+// base. g_childEnvBlock was built but never passed to any CreateProcess call, so
+// IsChildProcess() was always false and the guards at the top of the ShellExecute*
+// hooks were dead code (the hooks now open the dialog in-process). Removed.
 
 static HWND g_hwndMain = NULL;
 static HFONT g_hFontUi = NULL;
@@ -334,6 +317,80 @@ static LONG volatile g_startCustomOpen = 0;
 static HFONT g_hStartFontUi = NULL;
 static HANDLE g_dialogThread = NULL;
 static std::atomic<bool> g_modUnloading{false};
+
+// ---------------------------------------------------------------------------
+// Registro centrale di tutte le SetWindowSubclass installate dal mod.
+//
+// Perché esiste: la pulizia basata su EnumWindows (UnsubclassExistingTaskbars,
+// il controllo sulla toolbar Desktop, ecc.) dipende dal *ritrovare* le finestre
+// allo scarico. Se una finestra è nascosta, su un monitor secondario, su un
+// desktop virtuale diverso, o smette di rispondere ai criteri di ricerca per
+// una qualunque particolarità della configurazione dell'utente, quella pulizia
+// la salta e la subclass resta agganciata a codice ormai scaricato -> crash di
+// explorer.exe (0xc0000005) al primo messaggio ricevuto da quella finestra.
+//
+// Questo registro elimina il problema alla radice: ogni volta che il mod
+// installa una subclass, la annota qui; ogni volta che la rimuove (in modo
+// naturale, es. WM_NCDESTROY, o disattivando una feature) la toglie dal
+// registro. Allo scarico del mod, invece di *cercare* le finestre, si scorre
+// semplicemente questo elenco e si rimuove esattamente e solo ciò che risulta
+// ancora presente, ovunque si trovi. Nessuna finestra può sfuggire alla pulizia
+// indipendentemente da monitor, desktop virtuali, visibilità o versione di
+// Windows.
+static std::mutex g_subclassRegistryMutex;
+static std::vector<std::pair<HWND, void*>> g_subclassRegistry;
+
+// Template: le proc del mod hanno tutte 5 parametri (manca il dwRefData finale
+// di SUBCLASSPROC, che ha 6 parametri), esattamente il motivo per cui il resto
+// del file le forza con (SUBCLASSPROC)NomeProc quando le passa a
+// RemoveWindowSubclass. Usando un template qui, ogni puntatore a funzione viene
+// accettato così com'è e convertito internamente, senza dover mettere un cast
+// esplicito a ogni singola chiamata di Track/Untrack.
+template <typename ProcT>
+static void TrackSubclass(HWND hWnd, ProcT proc) {
+    if (!hWnd) return;
+    void* key = reinterpret_cast<void*>(proc);
+    std::lock_guard<std::mutex> lock(g_subclassRegistryMutex);
+    for (auto& entry : g_subclassRegistry) {
+        if (entry.first == hWnd && entry.second == key) return; // già tracciata
+    }
+    g_subclassRegistry.emplace_back(hWnd, key);
+}
+
+template <typename ProcT>
+static void UntrackSubclass(HWND hWnd, ProcT proc) {
+    void* key = reinterpret_cast<void*>(proc);
+    std::lock_guard<std::mutex> lock(g_subclassRegistryMutex);
+    g_subclassRegistry.erase(
+        std::remove_if(g_subclassRegistry.begin(), g_subclassRegistry.end(),
+                        [&](const std::pair<HWND, void*>& entry) {
+                            return entry.first == hWnd && entry.second == key;
+                        }),
+        g_subclassRegistry.end());
+}
+
+// Rimuove incondizionatamente ogni subclass ancora presente nel registro.
+// Va chiamata come ultimo passo di Wh_ModUninit: è la rete di sicurezza finale,
+// indipendente da qualunque logica di ricerca/enumerazione delle finestre.
+static void RemoveAllTrackedSubclasses() {
+    std::vector<std::pair<HWND, void*>> pending;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassRegistryMutex);
+        pending.swap(g_subclassRegistry);
+    }
+    for (auto& entry : pending) {
+        if (entry.first && IsWindow(entry.first)) {
+            // Wh_ModUninit runs on an arbitrary Windhawk thread, not the
+            // thread that owns the window. Plain RemoveWindowSubclass fails
+            // silently in that case (it only works from the window's own
+            // thread), leaving the subclass pointing at the DLL image that's
+            // about to be unmapped -> crash on the next message. Use the
+            // any-thread-safe variant unconditionally here.
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(entry.first, (WindhawkUtils::WH_SUBCLASSPROC)entry.second);
+        }
+    }
+}
+
 
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
@@ -485,7 +542,10 @@ static void ShowStartCustomDialog(HWND parent);
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static INT_PTR CALLBACK StartCustomDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 static DWORD WINAPI DialogThreadProc(LPVOID);
-
+static HWND FindDesktopToolbarWindow();
+static void ApplyClassicDesktopLayout(HWND hBand);
+static LRESULT CALLBACK DesktopBandSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass);
+static bool IsEdgeVertical(DWORD edge);
 class TaskbarSettingsProvider {
 public:
     static DWORD RegGetDWordSafe(HKEY hRoot, LPCWSTR sub, LPCWSTR name, DWORD def) {
@@ -743,26 +803,124 @@ static bool ShowDesktopToolbarViaSHLoadInProc() {
 }
 
 static bool IsNativeDesktopToolbarShown() {
+    HWND hBand = FindDesktopToolbarWindow();
+    return (hBand != NULL && IsWindow(hBand));
+}
+// Trova la finestra della Desktop Band (approccio ibrido)
+static HWND FindDesktopToolbarWindow() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray || !IsWindow(hTray)) return false;
+    if (!hTray || !IsWindow(hTray)) return NULL;
     
+    // Cerca nel ReBar (approccio Win2003: la band è un figlio del ReBar)
     HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
     if (hReBar && IsWindow(hReBar)) {
-        HWND hDesktopBand = FindWindowExW(hReBar, NULL, L"ToolbarWindow32", L"Desktop");
-        if (hDesktopBand && IsWindow(hDesktopBand)) return true;
+        HWND hBand = FindWindowExW(hReBar, NULL, L"ToolbarWindow32", L"Desktop");
+        if (hBand && IsWindow(hBand)) return hBand;
     }
     
-    HWND hDesktopBand = FindWindowExW(hTray, NULL, L"ToolbarWindow32", L"Desktop");
-    return (hDesktopBand != NULL && IsWindow(hDesktopBand));
+    // Fallback: cerca direttamente (approccio moderno)
+    HWND hBand = FindWindowExW(hTray, NULL, L"ToolbarWindow32", L"Desktop");
+    if (hBand && IsWindow(hBand)) return hBand;
+    
+    return NULL;
 }
 
+// Applica il layout classico (da Win2003)
+static void ApplyClassicDesktopLayout(HWND hBand) {
+    if (!hBand || !IsWindow(hBand)) return;
+    
+    // Forza il ridimensionamento per mostrare il contenuto del desktop
+    RECT rc;
+    GetWindowRect(hBand, &rc);
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    
+    // Se la taskbar è verticale (sinistra/destra), la band deve essere più alta
+    DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
+    if (edge == 0 || edge == 2) { // Sinistra o Destra
+        // Forza layout verticale (come Win2003)
+        SetWindowPos(hBand, NULL, 0, 0, width, std::max(height, 200), 
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    
+    // Aggiorna la finestra
+    InvalidateRect(hBand, NULL, TRUE);
+    UpdateWindow(hBand);
+}
+
+// Subclass per la Desktop Band (comportamento classico)
+static LRESULT CALLBACK DesktopBandSubclassProc(HWND hWnd, UINT uMsg, 
+    WPARAM wParam, LPARAM lParam, DWORD_PTR uIdSubclass) {
+    
+    switch (uMsg) {
+        case WM_SIZE: {
+            // Comportamento Win2003: quando la band viene ridimensionata,
+            // il contenuto del desktop si adatta
+            if (IsEdgeVertical(TaskbarSettingsProvider::GetTaskbarEdge())) {
+                // Layout verticale (taskbar a sinistra/destra)
+                RECT rc;
+                GetClientRect(hWnd, &rc);
+                // Forza il refresh del contenuto
+                InvalidateRect(hWnd, NULL, TRUE);
+            }
+            break;
+        }
+        case WM_CONTEXTMENU: {
+            // Comportamento Win2003: menu contestuale del desktop
+            // Permette di aprire il desktop in Esplora File
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+            
+            HMENU hMenu = CreatePopupMenu();
+            AppendMenuW(hMenu, MF_STRING, 1, L"Apri desktop");
+            AppendMenuW(hMenu, MF_STRING, 2, L"Visualizza come");
+            AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(hMenu, MF_STRING, 3, L"Aggiorna");
+            
+            int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD, pt.x, pt.y, 0, hWnd, NULL);
+            DestroyMenu(hMenu);
+            
+            if (cmd == 1) {
+                // Apri il desktop in Esplora File
+                ShellExecuteW(hWnd, L"open", L"explorer.exe", 
+                              L"shell:Desktop", NULL, SW_SHOWNORMAL);
+            } else if (cmd == 3) {
+                // Aggiorna il desktop
+                InvalidateRect(hWnd, NULL, TRUE);
+                UpdateWindow(hWnd);
+            }
+            return 0;
+        }
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)DesktopBandSubclassProc, uIdSubclass);
+            UntrackSubclass(hWnd, DesktopBandSubclassProc);
+            break;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Helper per verificare se la taskbar è verticale
+static bool IsEdgeVertical(DWORD edge) {
+    return edge == 0 || edge == 2; // Sinistra o Destra
+}
 static bool ShowNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Show requested");
+    
     bool result = ShowDesktopToolbarViaSHLoadInProc();
     
     if (result) {
         TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
         Wh_Log(L"[DesktopToolbar] Show successful via SHLoadInProc");
+        
+        HWND hBand = FindDesktopToolbarWindow();
+        if (hBand && IsWindow(hBand)) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hBand, DesktopBandSubclassProc, 0);
+            TrackSubclass(hBand, DesktopBandSubclassProc);
+            Wh_Log(L"[DesktopToolbar] Desktop band subclassed for classic behavior");
+            
+            ApplyClassicDesktopLayout(hBand);
+        }
         return true;
     }
     
@@ -779,6 +937,15 @@ static bool ShowNativeDesktopToolbar() {
 
 static bool HideNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Hide requested");
+    
+    // Rimuovi il subclassing (approccio moderno)
+    HWND hBand = FindDesktopToolbarWindow();
+    if (hBand && IsWindow(hBand)) {
+        RemoveWindowSubclass(hBand, (SUBCLASSPROC)DesktopBandSubclassProc, 0);
+        UntrackSubclass(hBand, DesktopBandSubclassProc);
+        Wh_Log(L"[DesktopToolbar] Desktop band unsubclassed");
+    }
+    
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", false);
     
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
@@ -1224,8 +1391,15 @@ static void ApplyToolbars(bool addr, bool links, bool tablet, bool desk) {
     NativeDeskBandOp(CLSID_CTP_LinksBand, links ? CTP_BAND_SHOW : CTP_BAND_HIDE, NULL);
     TaskbarSettingsProvider::SetToolbarEnabled(L"Links", links);
     
-    if (desk) ShowNativeDesktopToolbar(); else HideNativeDesktopToolbar();
-    TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk);
+    // Gestione desktop con subclassing
+    if (desk) {
+        ShowNativeDesktopToolbar();
+    } else {
+        HideNativeDesktopToolbar();
+    }
+    // NOTA: non impostare più TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk)
+    // perché lo fanno già Show/HideNativeDesktopToolbar
+    
     TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", tablet);
     
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
@@ -1553,8 +1727,6 @@ static DWORD g_lastEdge = 3;
 
 using TrayUI_GetStuckInfo_t = void(WINAPI*)(void* pThis, RECT* rect, DWORD* taskbarPos);
 static TrayUI_GetStuckInfo_t TrayUI_GetStuckInfo_Original = nullptr;
-using TrayUI__StuckTrayChange_t = void(WINAPI*)(void* pThis);
-static TrayUI__StuckTrayChange_t TrayUI__StuckTrayChange_Original = nullptr;
 using TrayUI__HandleSettingChange_t = void(WINAPI*)(void* pThis, void* p1, void* p2, void* p3, void* p4);
 static TrayUI__HandleSettingChange_t TrayUI__HandleSettingChange_Original = nullptr;
 using TrayUI_GetDockedRect_t = DWORD(WINAPI*)(void* pThis, RECT* rect, BOOL param2);
@@ -1654,7 +1826,6 @@ static bool InstallTaskbarPositionHooks() {
     
     WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
         { {LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))"}, &TrayUI_GetStuckInfo_Original, TrayUI_GetStuckInfo_Hook },
-        { {LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))"}, &TrayUI__StuckTrayChange_Original },
         { {LR"(public: void __cdecl TrayUI::_HandleSettingChange(struct HWND__ *,unsigned int,unsigned __int64,__int64))"}, &TrayUI__HandleSettingChange_Original, TrayUI__HandleSettingChange_Hook },
         { {LR"(public: virtual unsigned int __cdecl TrayUI::GetDockedRect(struct tagRECT *,int))"}, &TrayUI_GetDockedRect_Original, TrayUI_GetDockedRect_Hook },
         { {LR"(public: virtual void __cdecl TrayUI::MakeStuckRect(struct tagRECT *,struct tagRECT const *,struct tagSIZE,unsigned int))"}, &TrayUI_MakeStuckRect_Original, TrayUI_MakeStuckRect_Hook },
@@ -1681,7 +1852,6 @@ static void ClearRotatedIconCache() {
     g_rotatedIconCache.clear();
 }
 
-static bool IsEdgeVertical(DWORD edge) { return edge == 0 || edge == 2; }
 
 static HBITMAP RotateDib90(HBITMAP hbmSrc, int w, int h, bool clockwise) {
     BITMAPINFO bi{};
@@ -1931,6 +2101,7 @@ static LRESULT CALLBACK TaskSwSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
     }
     case WM_NCDESTROY:
         RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, uIdSubclass);
+        UntrackSubclass(hWnd, TaskSwSubclassProc);
         break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1952,6 +2123,7 @@ static LRESULT CALLBACK ReBarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
         }
     } else if (uMsg == WM_NCDESTROY) {
         RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, uIdSubclass);
+        UntrackSubclass(hWnd, ReBarSubclassProc);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -2086,6 +2258,7 @@ static LRESULT CALLBACK TrayNotifySubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
     }
     case WM_NCDESTROY:
         RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, uIdSubclass);
+        UntrackSubclass(hWnd, TrayNotifySubclassProc);
         break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -2169,6 +2342,7 @@ static LRESULT CALLBACK ShellTrayWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
     case WM_NCDESTROY:
         KillTimer(hWnd, kTimerIdMasterLayout);
         RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, uIdSubclass);
+        UntrackSubclass(hWnd, ShellTrayWndSubclassProc);
         break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -2189,12 +2363,16 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LP
     if (hWnd && IsWindow(hWnd) && lpClassName && !IS_INTRESOURCE(lpClassName)) {
         if (_wcsicmp(lpClassName, L"MSTaskSwWClass") == 0) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
+            TrackSubclass(hWnd, TaskSwSubclassProc);
         } else if (_wcsicmp(lpClassName, L"ReBarWindow32") == 0 && hWndParent && IsWindow(hWndParent) && IsTaskbarWindowClass(hWndParent)) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
+            TrackSubclass(hWnd, ReBarSubclassProc);
         } else if (_wcsicmp(lpClassName, L"TrayNotifyWnd") == 0 && hWndParent && IsWindow(hWndParent) && IsTaskbarWindowClass(hWndParent)) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
+            TrackSubclass(hWnd, TrayNotifySubclassProc);
         } else if (IsTaskbarWindowClass(hWnd)) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0);
+            TrackSubclass(hWnd, ShellTrayWndSubclassProc);
         }
     }
     return hWnd;
@@ -2206,10 +2384,13 @@ static BOOL CALLBACK SubclassExistingChildrenProc(HWND hWnd, LPARAM lParam) {
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
         if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskSwSubclassProc, 0);
+            TrackSubclass(hWnd, TaskSwSubclassProc);
         } else if (_wcsicmp(cls, L"ReBarWindow32") == 0) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ReBarSubclassProc, 0);
+            TrackSubclass(hWnd, ReBarSubclassProc);
         } else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TrayNotifySubclassProc, 0);
+            TrackSubclass(hWnd, TrayNotifySubclassProc);
         }
     }
     EnumChildWindows(hWnd, SubclassExistingChildrenProc, 0);
@@ -2220,12 +2401,21 @@ static BOOL CALLBACK UnsubclassExistingChildrenProc(HWND hWnd, LPARAM lParam) {
     if (!IsWindow(hWnd)) return TRUE;
     WCHAR cls[32];
     if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
+        // This runs off the EnumWindows/EnumChildWindows walk started from
+        // Wh_ModUninit, i.e. on the Windhawk uninit thread rather than the
+        // window's own thread. Plain RemoveWindowSubclass would silently fail
+        // here, and untracking it anyway would let the entry escape the
+        // RemoveAllTrackedSubclasses safety net -> use the any-thread-safe
+        // variant so the removal actually happens before we untrack it.
         if (_wcsicmp(cls, L"MSTaskSwWClass") == 0) {
-            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TaskSwSubclassProc, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, (WindhawkUtils::WH_SUBCLASSPROC)TaskSwSubclassProc);
+            UntrackSubclass(hWnd, TaskSwSubclassProc);
         } else if (_wcsicmp(cls, L"ReBarWindow32") == 0) {
-            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ReBarSubclassProc, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, (WindhawkUtils::WH_SUBCLASSPROC)ReBarSubclassProc);
+            UntrackSubclass(hWnd, ReBarSubclassProc);
         } else if (_wcsicmp(cls, L"TrayNotifyWnd") == 0) {
-            RemoveWindowSubclass(hWnd, (SUBCLASSPROC)TrayNotifySubclassProc, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, (WindhawkUtils::WH_SUBCLASSPROC)TrayNotifySubclassProc);
+            UntrackSubclass(hWnd, TrayNotifySubclassProc);
         }
     }
     EnumChildWindows(hWnd, UnsubclassExistingChildrenProc, 0);
@@ -2235,6 +2425,7 @@ static BOOL CALLBACK UnsubclassExistingChildrenProc(HWND hWnd, LPARAM lParam) {
 static BOOL CALLBACK SubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam) {
     if (IsWindow(hWnd) && IsTaskbarWindowClass(hWnd)) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShellTrayWndSubclassProc, 0);
+        TrackSubclass(hWnd, ShellTrayWndSubclassProc);
         EnumChildWindows(hWnd, SubclassExistingChildrenProc, 0);
     }
     return TRUE;
@@ -2246,7 +2437,12 @@ static void SubclassExistingTaskbars() {
 
 static BOOL CALLBACK UnsubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam) {
     if (IsWindow(hWnd) && IsTaskbarWindowClass(hWnd)) {
-        RemoveWindowSubclass(hWnd, (SUBCLASSPROC)ShellTrayWndSubclassProc, 0);
+        // Ferma sempre il timer prima di rimuovere la subclass: se un WM_TIMER
+        // fosse già in coda, verrebbe comunque scartato da RemoveWindowSubclass,
+        // ma questo evita ogni ambiguità in caso di dispatch concorrente.
+        KillTimer(hWnd, kTimerIdMasterLayout);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, (WindhawkUtils::WH_SUBCLASSPROC)ShellTrayWndSubclassProc);
+        UntrackSubclass(hWnd, ShellTrayWndSubclassProc);
         EnumChildWindows(hWnd, UnsubclassExistingChildrenProc, 0);
     }
     return TRUE;
@@ -2292,7 +2488,9 @@ static void RotateTaskbarPosition(DWORD newEdge) {
         Wh_Log(L"RotateTaskbarPosition: Windows 11 vertical positioning may have limited support");
     }
     
-    TaskbarSettingsProvider::RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarSide", newEdge);
+    // NOTE: this used to also write TaskbarSide under ...\Advanced, but the mod
+    // only ever reads the edge back from StuckRects (GetTaskbarEdge), never from
+    // TaskbarSide, so that write had no effect and has been removed.
     UpdateAllStuckRects(newEdge);
     g_lastEdge = newEdge;
     
@@ -2488,16 +2686,16 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SwitchTab(hwnd, 0);
         
         RECT rc; GetWindowRect(hwnd, &rc);
-int wh = rc.bottom - rc.top;  // rimossa la variabile ww
-{
-    MONITORINFO mi = { sizeof(mi) };
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
-    GetMonitorInfo(hMon, &mi);
-    const int kEdgeMargin = 8;
-    int x = mi.rcWork.left + kEdgeMargin;
-    int y = mi.rcWork.bottom - wh - kEdgeMargin;
-    SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-}
+        int wh = rc.bottom - rc.top;
+        {
+            MONITORINFO mi = { sizeof(mi) };
+            HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+            GetMonitorInfo(hMon, &mi);
+            const int kEdgeMargin = 8;
+            int x = mi.rcWork.left + kEdgeMargin;
+            int y = mi.rcWork.bottom - wh - kEdgeMargin;
+            SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        }
         
         LONG style = GetWindowLongW(hwnd, GWL_STYLE);
         style &= ~WS_THICKFRAME; style &= ~WS_MAXIMIZEBOX;
@@ -2700,7 +2898,6 @@ static void ShowTaskbarProperties() {
 }
 
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
-    if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteExW_orig(pei);
     
@@ -2716,7 +2913,6 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
 }
 
 HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShowCmd) {
-    if (IsChildProcess()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
     HookGuard guard;
     if (guard.IsReentrant()) return ShellExecuteW_orig(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShowCmd);
     
@@ -2739,7 +2935,6 @@ BOOL Wh_ModInit() {
     
     InterlockedExchange(&g_dialogOpen, 0);
     InterlockedExchange(&g_startCustomOpen, 0);
-    BuildChildEnvironment();
     LoadLanguageSetting();
     InitLocalization();
     EnsureThemeActCtx();
@@ -2769,7 +2964,6 @@ void Wh_ModUninit() {
     if (g_taskbarPosHooksInstalled && g_lastEdge != 3) {
         TaskbarSettingsProvider::RegSetDWordSafe(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarSide", 3);
         UpdateAllStuckRects(3);
-        UnsubclassExistingTaskbars();
         ClearRotatedIconCache();
         HWND hTray = FindWindowExW(nullptr, nullptr, L"Shell_TrayWnd", nullptr);
         if (hTray && IsWindow(hTray)) {
@@ -2777,6 +2971,36 @@ void Wh_ModUninit() {
             SendMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
         }
     }
+    // Va rimossa SEMPRE e incondizionatamente, non solo quando il bordo va
+    // resettato: la subclass punta a codice dentro la DLL del mod, che sta per
+    // essere scaricata. Se resta agganciata, il prossimo messaggio inviato alla
+    // finestra del taskbar esegue codice non più mappato in memoria e manda in
+    // crash/instabilità explorer.exe, costringendo al riavvio.
+    UnsubclassExistingTaskbars();
+
+    // Stessa identica falla poteva verificarsi sulla toolbar Desktop, se attiva:
+    // la subclass veniva rimossa solo su WM_NCDESTROY o disattivazione manuale,
+    // mai qui. Va tolta sempre, a prescindere dallo stato della toolbar.
+    {
+        HWND hBand = FindDesktopToolbarWindow();
+        if (hBand && IsWindow(hBand)) {
+            // Same thread caveat as above: this executes on the
+            // Wh_ModUninit thread, not the Desktop toolbar's owning thread.
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hBand, (WindhawkUtils::WH_SUBCLASSPROC)DesktopBandSubclassProc);
+            UntrackSubclass(hBand, DesktopBandSubclassProc);
+        }
+    }
+
+    // Rete di sicurezza definitiva: le pulizie sopra si basano sul *ritrovare*
+    // le finestre (EnumWindows/ricerca per classe), e possono saltarne alcune
+    // in configurazioni particolari (monitor secondari, desktop virtuali,
+    // finestre nascoste, versioni di Windows con gerarchie diverse). Questa
+    // sweep finale, invece, scorre il registro di TUTTO ciò che il mod ha
+    // effettivamente subclassato durante la sua vita e lo rimuove comunque,
+    // indipendentemente da dove si trovi. Qualunque cosa sia sfuggita alle
+    // pulizie mirate qui sopra viene comunque tolta.
+    RemoveAllTrackedSubclasses();
+
     g_taskbarPosHooksInstalled = false;
     
     if (g_hwndMain && IsWindow(g_hwndMain)) {
