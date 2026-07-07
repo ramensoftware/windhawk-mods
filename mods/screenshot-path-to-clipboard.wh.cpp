@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          Sondre Myrmel
 // @github          https://github.com/Sondre234
-// @include         %SystemRoot%\\explorer.exe
+// @include         %SystemRoot%\explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
