@@ -2,9 +2,10 @@
 // @id              audioswap
 // @name            AudioSwap
 // @description     Tray icon to cycle between multiple preferred audio outputs. Supports up to 6 devices with click or scroll to swap.
-// @version         2.2.1
+// @version         2.3.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
+// @license         MIT
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32
@@ -63,29 +64,27 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 
 ## Changelog
 
+### v2.3.0
+- **New:** Persistent Mute toggle — mute state now survives device cycles (USB replug, sleep/wake, driver resets).
+- **New:** Live dashboard device list refresh — device events (add/remove/default-change) update the dashboard combo without reopening.
+- **Fixed:** Crash on reload — InterlockedCompareExchangePointer + IsWindow guard + UnregisterClassW for safe tray shutdown.
+- **Fixed:** Crash on unload — same atomic handle read and class cleanup in shutdown path.
+- **Fixed:** GUI thread CoInitialize return value not checked — now logs on unexpected failure.
+
 ### v2.2.0
-- New: Right-click → **Sound Settings...** opens Windows Sound dialog directly on the Playback tab.
-- New: Middle-click tray icon → compact volume slider popup with a custom dark design. Drag to adjust output volume live; click outside or press Escape to close.
-- New: Scroll wheel over the tray icon (Click to Swap mode) adjusts output volume, matching native Windows sound icon behaviour.
-
-### v2.1.0
-- New: Device Priority panel — rank your preferred devices; the highest-priority connected device is assigned to a swap slot automatically.
-- New: Advanced Mode toggle in Windhawk settings — shows the Device Priority panel in Mod Settings.
-- Fixed: GUI sizing on high-DPI monitors.
-- Fixed: Context menu now follows your Windows dark/light theme.
-- Fixed: AudioSwap icon is now independent — no longer linked to the Windhawk tray icon.
-
-### v2.0.0
-- **New:** Native dashboard — right-click → **Mod Settings**.
-- **New:** All configuration (device slots, icons, mode, count) lives in the dashboard; Windhawk's settings panel is no longer used.
-
-### v1.4.0
-- Custom .ico support — selecting "Custom Icon" in settings auto-opens a file picker; also available via right-click → "Custom Icon for Device X..."
-- Custom icon paths stored internally (no separate text setting in the UI).
-- Fixed: Scroll to Swap didn't work after a reboot until the icon was clicked.
-- Fixed: Crash with audio devices that have very long names.
-- Fixed: Adding more devices in settings didn't take effect immediately.
-- Fixed: Cycling devices would sometimes skip the first slot.
+- **New:** Native dashboard — right-click → **Mod Settings** (replaces Windhawk YAML panel).
+- **New:** Device Priority panel — rank preferred devices; highest-priority connected device auto-assigned.
+- **New:** Right-click → **Sound Settings...** opens Windows Sound dialog on Playback tab.
+- **New:** Middle-click → compact VolumePopup slider. Drag to adjust volume; click outside or Escape to close.
+- **New:** Scroll wheel over tray icon adjusts volume (Click to Swap mode).
+- **New:** Custom .ico support per slot; also icons from `ddores.dll`.
+- **New:** Advanced Mode toggle in Windhawk settings — shows Device Priority panel.
+- **Fixed:** GUI sizing on high-DPI monitors.
+- **Fixed:** Context menu follows Windows dark/light theme.
+- **Fixed:** Tray icon independent from Windhawk — no longer grouped in taskbar.
+- **Fixed:** Scroll to Swap works after reboot without clicking icon first.
+- **Fixed:** Crash with very long audio device names.
+- **Fixed:** Cycling devices no longer skips first slot.
 
 ### v1.3.0
 - Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
@@ -125,19 +124,28 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 // separate YAML store — no conflict with dashboard keys.
 
 #define NOMINMAX
-#include <windhawk_utils.h>
+
+// 1. Core Windows
 #include <windows.h>
+
+// 2. Secondary Windows APIs
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <endpointvolume.h>
 #include <commctrl.h>
 #include <dwmapi.h>
-
 #include <propkey.h>
+#include <propsys.h>
+#include <propvarutil.h>
 #include <mmdeviceapi.h>
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <commdlg.h>
+
+// 3. Windhawk Utilities
+#include <windhawk_utils.h>
+
+// 4. Standard C++
 #include <algorithm>
 #include <vector>
 #include <string>
@@ -222,7 +230,7 @@ static WCHAR  g_cachedDevName[MAX_DEVICE_SLOTS][256] = {};
 static int    g_deviceSlotCount = 2;
 static bool   g_isMutedByUs     = false;
 static WCHAR  g_mutedDeviceId[512] = {};
-static bool   g_persistentMute = false;  // re-apply mute after device cycles
+static LONG   g_persistentMute = FALSE;  // re-apply mute after device cycles (use Interlocked ops)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Priority device list — up to MAX_DEVICE_SLOTS entries, index 0 = highest priority.
@@ -723,7 +731,7 @@ namespace AudioSwapGui {
                     if (fn) fn(s->hPersistMuteBtn, L"", L"");
                 }
             }
-            if (g_persistentMute)
+            if (InterlockedOr(&g_persistentMute, 0))
                 SendMessageW(s->hPersistMuteBtn, BM_SETCHECK, BST_CHECKED, 0);
 
             EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
@@ -1230,7 +1238,7 @@ namespace AudioSwapGui {
         }
 
         UnregisterClassW(kClass, hInst);
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (hrCo == S_OK) CoUninitialize();
         InterlockedExchange(&g_guiRunning, 0);
         return 0;
     }
@@ -1406,6 +1414,33 @@ static BOOL ApplyMute(PCWSTR deviceId, BOOL mute) {
     return TRUE;
 }
 
+// Mute/unmute every active render device — used by persistent mute (global toggle).
+static void ApplyMuteAll(BOOL mute) {
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator), (void**)&pEnum)))
+        return;
+    IMMDeviceCollection* pCol = nullptr;
+    if (FAILED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCol))) {
+        pEnum->Release(); return;
+    }
+    UINT count = 0;
+    pCol->GetCount(&count);
+    for (UINT i = 0; i < count; i++) {
+        IMMDevice* pDev = nullptr;
+        if (SUCCEEDED(pCol->Item(i, &pDev))) {
+            IAudioEndpointVolume* pVol = nullptr;
+            if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                nullptr, (void**)&pVol))) {
+                pVol->SetMute(mute, nullptr);
+                pVol->Release();
+            }
+            pDev->Release();
+        }
+    }
+    pCol->Release();
+    pEnum->Release();
+}
 
 // Call from tray thread (COM already initialized) or worker thread (has its own COM).
 static void RestoreMute() {
@@ -1416,7 +1451,10 @@ static void RestoreMute() {
     g_isMutedByUs      = false;
     g_mutedDeviceId[0] = L'\0';
     LeaveCriticalSection(&g_stateLock);
-    ApplyMute(localId, FALSE);
+    if (InterlockedOr(&g_persistentMute, 0))
+        ApplyMuteAll(FALSE);
+    else if (localId[0])
+        ApplyMute(localId, FALSE);
     Wh_SetStringValue(L"MutedDeviceId", L"");
 }
 
@@ -1432,32 +1470,53 @@ static void RestoreMuteExternal() {
     }
     LeaveCriticalSection(&g_stateLock);
     if (wasMuted) {
-        CoInitialize(nullptr);
-        ApplyMute(localId, FALSE);
-        CoUninitialize();
+        HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) return;
+        if (InterlockedOr(&g_persistentMute, 0))
+            ApplyMuteAll(FALSE);
+        else if (localId[0])
+            ApplyMute(localId, FALSE);
+        if (hrCo == S_OK) CoUninitialize();
         Wh_SetStringValue(L"MutedDeviceId", L"");
     }
 }
 
 // Called from TrayWndProc — tray thread has COM initialized by TrayThreadProc.
 static void ToggleMuteCurrentDevice() {
+    if (InterlockedOr(&g_persistentMute, 0)) {
+        // Global mute: toggle ALL active render devices at once.
+        bool already;
+        { EnterCriticalSection(&g_stateLock); already = g_isMutedByUs; LeaveCriticalSection(&g_stateLock); }
+        ApplyMuteAll(already ? FALSE : TRUE);
+        EnterCriticalSection(&g_stateLock);
+        if (already) {
+            g_isMutedByUs = false;
+            g_mutedDeviceId[0] = L'\0';
+        } else {
+            g_isMutedByUs = true;
+        }
+        LeaveCriticalSection(&g_stateLock);
+        Wh_SetStringValue(L"MutedDeviceId", already ? L"" : L"all");
+        return;
+    }
+
+    // Per-device mute: toggle only the current default device.
     EnterCriticalSection(&g_stateLock);
     bool already = g_isMutedByUs;
-    WCHAR localId[512] = {};
+    WCHAR localId[512];
+    lstrcpynW(localId, g_mutedDeviceId, 512);
     if (already) {
-        lstrcpynW(localId, g_mutedDeviceId, 512);
         g_isMutedByUs      = false;
         g_mutedDeviceId[0] = L'\0';
     }
     LeaveCriticalSection(&g_stateLock);
 
     if (already) {
-        ApplyMute(localId, FALSE);
+        ApplyMute(localId[0] ? localId : nullptr, FALSE);
         Wh_SetStringValue(L"MutedDeviceId", L"");
         return;
     }
 
-    // Mute the current default device
     IMMDeviceEnumerator* pEnum = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                 __uuidof(IMMDeviceEnumerator), (void**)&pEnum)))
@@ -1468,10 +1527,8 @@ static void ToggleMuteCurrentDevice() {
         LPWSTR pId = nullptr;
         if (SUCCEEDED(pDefault->GetId(&pId))) {
             if (ApplyMute(pId, TRUE)) {
-                EnterCriticalSection(&g_stateLock);
                 lstrcpynW(g_mutedDeviceId, pId, 512);
                 g_isMutedByUs = true;
-                LeaveCriticalSection(&g_stateLock);
                 Wh_SetStringValue(L"MutedDeviceId", pId);
             }
             CoTaskMemFree(pId);
@@ -1893,8 +1950,8 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 
 static int GetCurrentVolumePct() {
     int result = -1;
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != S_FALSE) return result;
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) return result;
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
@@ -1915,14 +1972,14 @@ static int GetCurrentVolumePct() {
         }
         pEnum->Release();
     }
-    CoUninitialize();
+    if (hrCo == S_OK) CoUninitialize();
     return result;
 }
 
 static void SetCurrentDeviceVolume(float scalar) {
     scalar = std::max(0.0f, std::min(1.0f, scalar));
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != S_FALSE) return;
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) return;
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
@@ -1938,7 +1995,7 @@ static void SetCurrentDeviceVolume(float scalar) {
         }
         pEnum->Release();
     }
-    CoUninitialize();
+    if (hrCo == S_OK) CoUninitialize();
 }
 
 // ─── Audio cycling ────────────────────────────────────────────────────────────
@@ -1960,22 +2017,18 @@ BOOL CycleAudioDevice(int direction) {
     if (configuredCount < 2) return FALSE;
 
     HRESULT comHr = CoInitialize(nullptr);
-    bool comOk = SUCCEEDED(comHr) || comHr == S_FALSE;
-    if (!comOk) return FALSE;
+    if (FAILED(comHr) && comHr != RPC_E_CHANGED_MODE) return FALSE;
 
-    // Undo click-mute before switching (COM is now available).
-    // If persistent mute is active, keep the mute — re-apply to the new device after switch.
-    bool keepMute = false;
-    { EnterCriticalSection(&g_stateLock); keepMute = g_persistentMute && g_isMutedByUs; LeaveCriticalSection(&g_stateLock); }
-    if (!keepMute)
+    // When persistent mute is off, unmute the per-device muted device before swap.
+    if (!InterlockedOr(&g_persistentMute, 0))
         RestoreMute();
-    HWND hwnd = g_trayHwnd;
-    if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+    HWND hwnd = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_trayHwnd, nullptr, nullptr);
+    if (hwnd && IsWindow(hwnd)) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
 
     IMMDeviceEnumerator* pEnum = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                 __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
-        CoUninitialize(); return FALSE;
+        if (comHr == S_OK) CoUninitialize(); return FALSE;
     }
 
     WCHAR currentId[512] = {};
@@ -2007,7 +2060,7 @@ BOOL CycleAudioDevice(int direction) {
     }
 
     if (validSlot == -1) {
-        pEnum->Release(); CoUninitialize(); return FALSE;
+        pEnum->Release(); if (comHr == S_OK) CoUninitialize(); return FALSE;
     }
 
     IPolicyConfig* pPolicyConfig = nullptr;
@@ -2019,15 +2072,8 @@ BOOL CycleAudioDevice(int direction) {
         pPolicyConfig->Release();
     }
 
-    // If persistent mute was active, re-apply mute to the newly defaulted device.
-    if (keepMute) {
-        ApplyMute(nullptr, TRUE);
-        HWND hw = g_trayHwnd;
-        if (hw) PostMessageW(hw, WM_UPDATE_TRAY_STATE, 0, 0);
-    }
-
     pEnum->Release();
-    CoUninitialize();
+    if (comHr == S_OK) CoUninitialize();
     return TRUE;
 }
 
@@ -2429,8 +2475,8 @@ static void Show(HWND hTrayWnd, int volPct) {
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     int direction = static_cast<int>(reinterpret_cast<LONG_PTR>(lpParam));
     if (CycleAudioDevice(direction)) {
-        HWND hwnd = g_trayHwnd;
-        if (hwnd) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
+        HWND hwnd = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_trayHwnd, nullptr, nullptr);
+        if (hwnd && IsWindow(hwnd)) PostMessageW(hwnd, WM_UPDATE_TRAY_STATE, 0, 0);
     }
     InterlockedExchange(&g_isProcessingClick, 0);
     return 0;
@@ -2619,7 +2665,10 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
 
         DWORD pickerSlots = 0;
-        for (int i = 0; i < g_deviceSlotCount; i++) {
+        EnterCriticalSection(&g_stateLock);
+        int slotCount = g_deviceSlotCount;
+        LeaveCriticalSection(&g_stateLock);
+        for (int i = 0; i < slotCount; i++) {
             WCHAR key[16];
             swprintf_s(key, L"icon%d", i + 1);
             WCHAR icoVal[32] = {};
@@ -2669,20 +2718,17 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == WM_REBIND_VOLUME_CALLBACK) {
         // Default device changed — re-bind to new endpoint.
+        // No mute logic needed here: persistent mute already mutes ALL devices globally,
+        // and per-device mute stays on its original device by ID.
         UnbindEndpointVolume();
         BindEndpointVolume();
-        // If persistent mute is on and we were muted, mute the new default device.
-        if (g_persistentMute && g_isMutedByUs) {
-            ApplyMute(nullptr, TRUE);
-            PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
-        }
 
     } else if (msg == WM_RELOAD_ALL) {
         // Full reload triggered by the settings dashboard after Save and Apply.
         // Picks up new device assignments, icon choices, device count, swap mode, and priority list.
         {
             WCHAR pmBuf[8] = {};
-            g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+            InterlockedExchange(&g_persistentMute, (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1') ? TRUE : FALSE);
         }
         LoadDeviceSelections();
         LoadPriorityList();
@@ -2704,7 +2750,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return 0;
 
     } else if (msg == WM_DESTROY) {
-        g_trayHwnd = nullptr;  // prevent IMMNotificationClient callbacks from posting
+        InterlockedExchangePointer((PVOID*)&g_trayHwnd, nullptr);  // prevent IMMNotificationClient callbacks from posting
         PostQuitMessage(0);
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -2731,16 +2777,32 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     // AudioSwap used HWND_MESSAGE originally, but message-only windows can lose their
     // tray icon after reboot because the shell cannot reliably associate the icon with
     // the window across session boundaries.
-    g_trayHwnd = CreateWindowExW(
+    HWND hTrayWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"Audio Switcher",
         WS_POPUP,
         0, 0, 1, 1,
         nullptr, nullptr, g_hInstance, nullptr
     );
-    if (!g_trayHwnd) {
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    InterlockedExchangePointer((PVOID*)&g_trayHwnd, hTrayWnd);
+    if (!hTrayWnd) {
+        if (hrCo == S_OK) CoUninitialize();
         return 1;
+    }
+
+    // Set AUMID for proper taskbar grouping
+    {
+        wchar_t aumid[] = L"BlackPaw.AudioSwap";
+        PROPVARIANT pvAumid = {};
+        pvAumid.vt = VT_LPWSTR;
+        pvAumid.pwszVal = aumid;
+        IPropertyStore* pps = nullptr;
+        if (SUCCEEDED(SHGetPropertyStoreForWindow(g_trayHwnd, IID_PPV_ARGS(&pps)))) {
+            if (SUCCEEDED(pps->SetValue(PKEY_AppUserModel_ID, pvAumid))) {
+                pps->Commit();
+            }
+            pps->Release();
+        }
     }
 
     // Register for instant device-change notifications.
@@ -2777,7 +2839,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
     VolumePopup::UnregisterClass();
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (hrCo == S_OK) CoUninitialize();
     return 0;
 }
 
@@ -2841,16 +2903,22 @@ BOOL WhTool_ModInit() {
     WCHAR savedMutedId[512] = {};
     Wh_GetStringValue(L"MutedDeviceId", savedMutedId, 512);
     if (savedMutedId[0] != L'\0') {
-        CoInitialize(nullptr);
-        ApplyMute(savedMutedId, FALSE);
-        CoUninitialize();
+        HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE)
+            return FALSE;
+        if (wcscmp(savedMutedId, L"all") == 0)
+            ApplyMuteAll(FALSE);
+        else
+            ApplyMute(savedMutedId, FALSE);
+        if (hrCo == S_OK)
+            CoUninitialize();
         Wh_SetStringValue(L"MutedDeviceId", L"");
     }
 
     // Load persistent mute setting.
     {
         WCHAR pmBuf[8] = {};
-        g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+        InterlockedExchange(&g_persistentMute, (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1') ? TRUE : FALSE);
     }
 
     LoadUserIconsAndSettings();   // sets g_deviceSlotCount first
@@ -2864,8 +2932,8 @@ void WhTool_ModSettingsChanged() {
     RestoreMuteExternal();
     LoadDeviceSelections();
     LoadPriorityList();
-    HWND hwnd = g_trayHwnd;
-    if (hwnd) {
+    HWND hwnd = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_trayHwnd, nullptr, nullptr);
+    if (hwnd && IsWindow(hwnd)) {
         PostMessageW(hwnd, WM_RELOAD_ICONS, 0, 0);
         PostMessageW(hwnd, WM_UPDATE_HOOK_STATE, 0, 0);
     }
@@ -2877,8 +2945,8 @@ void WhTool_ModUninit() {
 
     // Send WM_CLOSE so TrayWndProc can delete the tray icon
     // cleanly before DestroyWindow → PostQuitMessage exits the message loop.
-    HWND hwnd = g_trayHwnd;
-    if (hwnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    HWND hwnd = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_trayHwnd, nullptr, nullptr);
+    if (hwnd && IsWindow(hwnd)) PostMessageW(hwnd, WM_CLOSE, 0, 0);
     if (g_trayThread) {
         DWORD wr = WaitForSingleObject(g_trayThread, 3000);
         if (wr == WAIT_TIMEOUT) {
@@ -2923,6 +2991,7 @@ void WhTool_ModUninit() {
     if (g_hWindHawkIcon){ DestroyIcon(g_hWindHawkIcon);  g_hWindHawkIcon = nullptr; }
     if (g_hWindHawkBmp) { DeleteObject(g_hWindHawkBmp);  g_hWindHawkBmp  = nullptr; }
 
+    UnregisterClassW(L"AudioSwitcherWindowClass", GetModuleHandleW(nullptr));
     DeleteCriticalSection(&g_stateLock);
 }
 
