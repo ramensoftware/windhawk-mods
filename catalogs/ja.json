@@ -9725,7 +9725,7 @@
           0
         ],
         "ratingUsers": 1,
-        "updated": 1776103316000,
+        "updated": 1783443138000,
         "users": 74
       },
       "metadata": {
@@ -9738,7 +9738,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Restore Explorer \"Exploring\" Mode",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "restore-folder-menubar-25h2": {

@@ -1,3 +1,8 @@
+## 1.4.0 ([Jul 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7155a29d60629d9a6c8ac94745cf8ba251b7026/mods/restore-explorer-exploring-mode.wh.cpp))
+
+- Introduce Vista tree initial state behavior
+- Fix bug where setting "Explorer icon mode" to the Vista option didn't work
+
 ## 1.3.0 ([Apr 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e5a21258b21c70350de0683d01a375ce1c07914f/mods/restore-explorer-exploring-mode.wh.cpp))
 
 - Add Explorer icon behavior from IE 4.0-5.0
