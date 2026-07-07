@@ -1239,7 +1239,7 @@ namespace AudioSwapGui {
         }
 
         UnregisterClassW(kClass, hInst);
-        if (hrCo == S_OK) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         InterlockedExchange(&g_guiRunning, 0);
         return 0;
     }
@@ -1477,7 +1477,7 @@ static void RestoreMuteExternal() {
             ApplyMuteAll(FALSE);
         else if (localId[0])
             ApplyMute(localId, FALSE);
-        if (hrCo == S_OK) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         Wh_SetStringValue(L"MutedDeviceId", L"");
     }
 }
@@ -1973,7 +1973,7 @@ static int GetCurrentVolumePct() {
         }
         pEnum->Release();
     }
-    if (hrCo == S_OK) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return result;
 }
 
@@ -1996,7 +1996,7 @@ static void SetCurrentDeviceVolume(float scalar) {
         }
         pEnum->Release();
     }
-    if (hrCo == S_OK) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
 }
 
 // ─── Audio cycling ────────────────────────────────────────────────────────────
@@ -2029,7 +2029,7 @@ BOOL CycleAudioDevice(int direction) {
     IMMDeviceEnumerator* pEnum = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                 __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
-        if (comHr == S_OK) CoUninitialize(); return FALSE;
+        if (SUCCEEDED(comHr)) { CoUninitialize(); } return FALSE;
     }
 
     WCHAR currentId[512] = {};
@@ -2061,7 +2061,7 @@ BOOL CycleAudioDevice(int direction) {
     }
 
     if (validSlot == -1) {
-        pEnum->Release(); if (comHr == S_OK) CoUninitialize(); return FALSE;
+        pEnum->Release(); if (SUCCEEDED(comHr)) { CoUninitialize(); } return FALSE;
     }
 
     IPolicyConfig* pPolicyConfig = nullptr;
@@ -2097,7 +2097,7 @@ BOOL CycleAudioDevice(int direction) {
         }
     }
 
-    if (comHr == S_OK) CoUninitialize();
+    if (SUCCEEDED(comHr)) CoUninitialize();
     return TRUE;
 }
 
@@ -2820,7 +2820,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     );
     InterlockedExchangePointer((PVOID*)&g_trayHwnd, hTrayWnd);
     if (!hTrayWnd) {
-        if (hrCo == S_OK) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -2873,7 +2873,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
     VolumePopup::UnregisterClass();
-    if (hrCo == S_OK) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -2945,7 +2945,7 @@ BOOL WhTool_ModInit() {
                 ApplyMuteAll(FALSE);
             else
                 ApplyMute(savedMutedId, FALSE);
-            if (hrCo == S_OK)
+            if (SUCCEEDED(hrCo))
                 CoUninitialize();
             Wh_SetStringValue(L"MutedDeviceId", L"");
         }
