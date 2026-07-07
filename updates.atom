@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-07T11:41:37.000Z</updated>
+    <updated>2026-07-07T16:42:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 3.2.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-properties#2ca19110ad59c57cadefbfbf5f82d5a8c4732299</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-properties"/>
+        <updated>2026-07-07T16:42:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Window should now use native system colors</li>
+<li>Removed hard-coded color values</li>
+<li>Added toolbar warning message when enabling classic toolbars</li>
+<li>Fixed Window colors</li>
+<li>Partially implemented toolbars (Address and Links)</li>
+<li>Added taskbar rotation (only bottom and top)</li>
+<li>Code cleanup</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.20]]></title>
         <id>https://windhawk.net/mods/settings-to-control-panel#f31ffa06985377849e7466a266663e70541c6939</id>
@@ -546,23 +565,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>11581</name>
             <uri>https://github.com/r1file</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Files 2 Folders 2.5]]></title>
-        <id>https://windhawk.net/mods/files-2-folders#04683525522c0a20295ae6cbe1d6360c1ab1e80c</id>
-        <link href="https://windhawk.net/mods/files-2-folders"/>
-        <updated>2026-07-02T14:56:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds an <strong>Operation</strong> segmented control (Move - fast / Move - safe / Copy) to the dialog, above the mode list. Picking one changes the operation for just that run without touching the <strong>Operation</strong> setting.</li>
-<li>Adds two optional aids for building nested subfolder paths in <strong>Fixed name</strong> mode (each with its own settings toggle, on by default):</li>
-<li>A live breadcrumb preview line under the box (e.g. typing <code>archive/incoming</code> shows <code>archive › incoming</code>).</li>
-<li>An <strong>Add level</strong> (<code>+</code>) button that appends a <code>\</code> separator and refocuses the box.</li>
-<li>Two new settings: <code>showNestedPreview</code>, <code>showAddLevelButton</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
         </author>
     </entry>
 </feed>

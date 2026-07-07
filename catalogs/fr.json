@@ -2045,19 +2045,19 @@
           6
         ],
         "ratingUsers": 6,
-        "updated": 1781545189000,
+        "updated": 1783442556000,
         "users": 305
       },
       "metadata": {
         "author": "babamohammed",
-        "compilerOptions": "-lgdi32 -lcomctl32 -luser32 -lole32 -lshlwapi -lshell32",
-        "description": "Restores the classic Windows 7-style \"Taskbar and Start Menu Properties\" dialog with full functionality. Includes all three tabs (Taskbar, Start Menu, Toolbars). Primarily designed for Windows 10. Windows 11 support may be limited.",
+        "compilerOptions": "-lgdi32 -lcomctl32 -luser32 -lole32 -lshlwapi -lshell32 -luxtheme -ldwmapi -luuid -loleaut32 -lmsimg32",
+        "description": "This mod recreates the classic \"Taskbar and Start Menu Properties\" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe"
         ],
         "name": "Classic Taskbar and Start Menu Properties",
-        "version": "2.0.2"
+        "version": "3.2.0"
       }
     },
     "classic-taskdlg-fix": {
