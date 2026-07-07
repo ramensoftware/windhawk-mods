@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-06T18:30:06.000Z</updated>
+    <updated>2026-07-07T11:41:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.20]]></title>
+        <id>https://windhawk.net/mods/settings-to-control-panel#f31ffa06985377849e7466a266663e70541c6939</id>
+        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
+        <updated>2026-07-07T11:41:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>added new mappings</li>
+<li>added redirects to the control panel for the system tray</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Folder Thumbnail Style Switcher 2.0]]></title>
         <id>https://windhawk.net/mods/folder-thumbnail-style-switcher#0033679d580da39a2503353ec651b6c3a4a1ceb6</id>
@@ -549,23 +563,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>tria</name>
             <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Menu Height 1.1]]></title>
-        <id>https://windhawk.net/mods/custom-menu-height#9dc9145d6cb2577c40c716476cc086d3231c9ab1</id>
-        <link href="https://windhawk.net/mods/custom-menu-height"/>
-        <updated>2026-07-02T14:50:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the context menu item height setting to handle specific values for default states:</li>
-<li><code>0</code>: Uses the default system value and keeps immersive menus.</li>
-<li><code>-1</code>: Uses the default system value and eradicates immersive menus system-wide.</li>
-<li>Added support for eradicating the immersive menu from the Windows Update system tray icon on Windows 10.</li>
-<li>Improved OS version detection required to eradicate immersive menus system-wide on Windows 10 and later.</li>
-</ul>]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
         </author>
     </entry>
 </feed>
