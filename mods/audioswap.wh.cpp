@@ -64,14 +64,14 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 
 ## Changelog
 
-### v2.3.0
-- **New:** Persistent Mute toggle — mute state now survives device cycles (USB replug, sleep/wake, driver resets).
-- **New:** Live dashboard device list refresh — device events (add/remove/default-change) update the dashboard combo without reopening.
-- **Fixed:** Crash on reload — InterlockedCompareExchangePointer + IsWindow guard + UnregisterClassW for safe tray shutdown.
-- **Fixed:** Crash on unload — same atomic handle read and class cleanup in shutdown path.
-- **Fixed:** GUI thread CoInitialize return value not checked — now logs on unexpected failure.
+# 2.3.0
+- **New:** Persistent Mute toggle — mute state now survives device cycles.
+- **New:** Live dashboard device list refresh — device changes update the dashboard instantly without needing to reopen it.
+- **Fixed:** Mod no longer crashes on reload or when interacting with the tray icon.
+- **Fixed:** Mod no longer crashes when Windhawk shuts down.
+- **Fixed:** Rare crash when opening the settings dashboard.
 
-### v2.2.0
+# 2.2.0
 - **New:** Native dashboard — right-click → **Mod Settings** (replaces Windhawk YAML panel).
 - **New:** Device Priority panel — rank preferred devices; highest-priority connected device auto-assigned.
 - **New:** Right-click → **Sound Settings...** opens Windows Sound dialog on Playback tab.
@@ -86,26 +86,26 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 - **Fixed:** Crash with very long audio device names.
 - **Fixed:** Cycling devices no longer skips first slot.
 
-### v1.3.0
+# 1.3.0
 - Up to 6 devices; scroll-to-swap mode; dynamic right-click menu.
 - Left-click mutes in scroll mode; red dot overlay on tray icon.
 - Cycling auto-unmutes previous device.
 - Inactive/disconnected devices skipped when cycling.
 - Mute state persisted across mod restarts.
 
-### v1.2.0
+# 1.2.0
 - **New:** Can now open WindHawk directly from the icon using right click
 - **New:** Added new icons to select from
 - **Improved:** added icons in the right click menu
 
-### v1.1.0
+# 1.1.0
 - **New:** Right-click context menu — auto-detects all active audio outputs and lets you assign Device 1 and Device 2 directly from a live list. No more typing device names manually.
 - **New:** Device selections persist across restarts.
 - **Improved:** Toggle now matches devices by their unique system ID instead of a name substring search — works correctly regardless of how Windows names your device.
 - **Improved:** Tray tooltip prompts you to configure on first run instead of showing "Unknown Device".
 - **Removed:** Device name text fields from the Settings tab (replaced by the right-click menu).
 
-### v1.0.0
+# 1.0.0
 - Initial release.
 */
 // ==/WindhawkModReadme==
@@ -220,10 +220,11 @@ static RECT           g_trayIconRect      = {};
 static HICON          g_iconDev[MAX_DEVICE_SLOTS]     = {};
 static HBITMAP        g_hIconDevBmp[MAX_DEVICE_SLOTS] = {};
 
-// ── Shared state — protected by g_stateLock ──────────────────────────────────
+// ── Shared state (protected by g_stateLock unless marked atomic) ─────────────
 // Read by the worker thread (CycleAudioDevice) and tray thread (UpdateTrayTip,
 // BuildAndShowContextMenu). Written by LoadDeviceSelections/LoadUserIconsAndSettings
 // (main thread or tray thread via WM_RELOAD_ALL) and ToggleMuteCurrentDevice (tray thread).
+// g_persistentMute is volatile LONG with Interlocked ops — not under g_stateLock.
 static CRITICAL_SECTION g_stateLock;
 static WCHAR  g_cachedDevId[MAX_DEVICE_SLOTS][512]  = {};
 static WCHAR  g_cachedDevName[MAX_DEVICE_SLOTS][256] = {};
@@ -2073,6 +2074,29 @@ BOOL CycleAudioDevice(int direction) {
     }
 
     pEnum->Release();
+
+    // When persistent mute is on and the user is muted, keep the new device muted
+    // and retrack the device ID so unmute targets the correct device.
+    if (InterlockedOr(&g_persistentMute, 0)) {
+        EnterCriticalSection(&g_stateLock);
+        bool wasMuted = g_isMutedByUs;
+        WCHAR prevId[512];
+        lstrcpynW(prevId, g_mutedDeviceId, 512);
+        LeaveCriticalSection(&g_stateLock);
+        if (wasMuted) {
+            // Unmute the previously tracked device (if different from new one).
+            if (prevId[0] && wcscmp(prevId, localIds[validSlot]) != 0)
+                ApplyMute(prevId, FALSE);
+            // Mute the new device and update tracking.
+            ApplyMute(localIds[validSlot], TRUE);
+            EnterCriticalSection(&g_stateLock);
+            lstrcpynW(g_mutedDeviceId, localIds[validSlot], 512);
+            g_isMutedByUs = true;
+            LeaveCriticalSection(&g_stateLock);
+            Wh_SetStringValue(L"MutedDeviceId", localIds[validSlot]);
+        }
+    }
+
     if (comHr == S_OK) CoUninitialize();
     return TRUE;
 }
@@ -2381,8 +2405,14 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_ACTIVATE:
-        if (LOWORD(wParam) == WA_INACTIVE)
-            DestroyWindow(hWnd);
+        if (LOWORD(wParam) == WA_INACTIVE) {
+            static DWORD lastDeactivateTick = 0;
+            DWORD now = GetTickCount();
+            if (now - lastDeactivateTick > 200) {
+                lastDeactivateTick = now;
+                DestroyWindow(hWnd);
+            }
+        }
         return 0;
 
     case WM_TIMER:
@@ -2484,6 +2514,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 
 static void SpawnCycleThread(int direction) {
     if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, 3000);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
@@ -2652,6 +2683,8 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UpdateTrayTip(hWnd, FALSE);
 
     } else if (msg == WM_UPDATE_HOOK_STATE) {
+        RAWINPUTDEVICE rid_remove = { 1, 2, RIDEV_REMOVE, nullptr };
+        RegisterRawInputDevices(&rid_remove, 1, sizeof(rid_remove));
         RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, hWnd };
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
 
@@ -2739,6 +2772,7 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     } else if (msg == WM_CLOSE) {
         // Orderly shutdown: remove tray icon, then destroy window.
+        KillTimer(hWnd, TRAY_RECT_INIT_TIMER);
         NOTIFYICONDATAW nid = {sizeof(nid)};
         nid.hWnd     = hWnd;
         nid.uID      = TRAY_ICON_ID;
@@ -2904,15 +2938,17 @@ BOOL WhTool_ModInit() {
     Wh_GetStringValue(L"MutedDeviceId", savedMutedId, 512);
     if (savedMutedId[0] != L'\0') {
         HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE)
-            return FALSE;
-        if (wcscmp(savedMutedId, L"all") == 0)
-            ApplyMuteAll(FALSE);
-        else
-            ApplyMute(savedMutedId, FALSE);
-        if (hrCo == S_OK)
-            CoUninitialize();
-        Wh_SetStringValue(L"MutedDeviceId", L"");
+        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+            Wh_Log(L"AudioSwap: Could not init COM for mute cleanup (0x%08X) — stale mute may persist", hrCo);
+        } else {
+            if (wcscmp(savedMutedId, L"all") == 0)
+                ApplyMuteAll(FALSE);
+            else
+                ApplyMute(savedMutedId, FALSE);
+            if (hrCo == S_OK)
+                CoUninitialize();
+            Wh_SetStringValue(L"MutedDeviceId", L"");
+        }
     }
 
     // Load persistent mute setting.
@@ -2993,6 +3029,7 @@ void WhTool_ModUninit() {
 
     UnregisterClassW(L"AudioSwitcherWindowClass", GetModuleHandleW(nullptr));
     DeleteCriticalSection(&g_stateLock);
+    ExitProcess(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
