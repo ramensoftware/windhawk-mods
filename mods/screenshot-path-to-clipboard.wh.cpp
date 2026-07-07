@@ -3,7 +3,7 @@
 // @name            Screenshot Path to Clipboard
 // @description     Monitors %USERPROFILE%\Pictures\Screenshots and copies the full path of each new .png screenshot to the clipboard the moment it appears.
 // @version         1.0.0
-// @author          Sondre234
+// @author          Sondre Myrmel
 // @github          https://github.com/Sondre234
 // @include         %SystemRoot%\\explorer.exe
 // ==/WindhawkMod==
