@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-08T08:07:51.000Z</updated>
+    <updated>2026-07-08T10:03:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore the classic Personalization and other CPLs 1.0]]></title>
+        <id>https://windhawk.net/mods/restore-classic-cpls#ae3325a856437d38b88166cce15e7f271261c65d</id>
+        <link href="https://windhawk.net/mods/restore-classic-cpls"/>
+        <updated>2026-07-08T10:03:15.000Z</updated>
+        <content type="html"><![CDATA[<p>Brings back the classic Control Panel applets:</p>
+<ul>
+<li>Personalization</li>
+<li>Notification area icons (for Win10 taskbar)</li>
+<li>Network Connections</li>
+<li>Printers and Faxes</li>
+<li>Suppresses the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1}, originally called "Company Settings Sync", a non-functional icon that may appear if you are using the Classic view of Control Panel</li>
+</ul>
+<p><img src="https://i.imgur.com/mM2JDGp.png" alt="screenshot" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Screenshot Path to Clipboard 1.0.0]]></title>
         <id>https://windhawk.net/mods/screenshot-path-to-clipboard#a426f3fb81b5984fb74e761c78927965be47aaa6</id>
@@ -720,53 +739,6 @@ and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Keys Notifier 1.0.0]]></title>
-        <id>https://windhawk.net/mods/lock-keys-notifier#0d25f36c6bece76b384de92bf08e6c7bc2e10061</id>
-        <link href="https://windhawk.net/mods/lock-keys-notifier"/>
-        <updated>2026-06-23T17:07:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lockkeysnotifier">Lock Keys Notifier</h1>
-<p>Displays a small, customizable toast whenever a lock key (Caps Lock, Num Lock,
-Scroll Lock, or Insert) is toggled, showing its new ON/OFF state.</p>
-<h2 id="preview">Preview</h2>
-<p>Pill, Tile, and Minimal layouts (following the system theme and accent):</p>
-<p><img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-pill.png" alt="Pill layout" />
-<img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/scroll-lock-on-tile.png" alt="Tile layout" />
-<img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/caps-lock-on-minimal.png" alt="Minimal layout" /></p>
-<p>Insert can show a single fixed label in a neutral color instead of ON/OFF:</p>
-<p><img src="https://raw.githubusercontent.com/havrlisan/lock-keys-notifier/master/images/insert-pressed-tile.png" alt="Insert single-value" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Per-key enable/disable.</li>
-<li>9-point positioning with offsets, on the active, primary, or all monitors.</li>
-<li>Three layouts (Pill, Tile, Minimal), themeable colors, opacity, corner radius,
-padding, font, soft drop shadow, and an optional per-key accent state. Follows
-the system light/dark theme and accent by default.</li>
-<li>Optional fade animation and optional sound (system default or custom WAV).</li>
-<li>Editable ON/OFF labels and per-key display names; optional key icon glyph.</li>
-<li>Insert can show a single fixed label (e.g. "pressed") in neutral color instead
-of ON/OFF.</li>
-<li>Optionally skips the toast while a fullscreen app is in the foreground (games,
-fullscreen video, presentation mode); off by default.</li>
-<li>Per-monitor DPI aware: scales to each monitor, so it stays the same physical
-size on mixed-DPI multi-monitor setups.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Runs as a tool mod in its own windhawk.exe process, so notifications keep
-working even when Explorer is restarting or not running.</li>
-<li>Toggles made while an elevated (administrator) app has focus are not detected.
-The mod process runs at medium integrity and Windows (UIPI) blocks it from
-observing input to higher-integrity windows; this can't be worked around from a
-mod. The next toggle in a normal app shows the correct state.</li>
-<li>Fullscreen exclusive apps may cover the toast (or enable the option above to skip it).</li>
-<li>Insert reports the OS toggle bit, not an app's overtype mode (off by default).</li>
-</ul>]]></content>
-        <author>
-            <name>Havrlisan</name>
-            <uri>https://github.com/havrlisan</uri>
         </author>
     </entry>
 </feed>
