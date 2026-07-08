@@ -39,10 +39,10 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 # 1.1.0
 - **Fixed:** Tooltip now displays correctly when hovering the tray icon.
 - **Fixed:** Ghost window prevention — popup no longer flickers on rapid open/close.
-- **Fixed:** Data delay recovery — processes that take time to report usage are retried with exponential backoff.
+- **Fixed:** Data delays no longer cause missing stats — monitor recovers automatically.
 - **Fixed:** Safe mod reload — icon and window clean up properly without crashing.
 - **Improved:** Tray tooltip updates only when values change, reducing unnecessary CPU work.
-- **Fixed:** Popup window reference cleaned up on destroy.
+- **Fixed:** Popup no longer leaves a ghost window behind.
 
 # 1.0.0
 - Initial release.
