@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.87
+// @version         0.9.88
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -587,6 +587,8 @@ RECT g_lastPopupWindowRect{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 TextBlock g_compactTitleText = nullptr;
 TextBlock g_compactArtistText = nullptr;
 FrameworkElement g_compactTextHost = nullptr;
+Border g_compactTextLeftFade = nullptr;
+Border g_compactTextRightFade = nullptr;
 TextBlock g_compactOutgoingTitleText = nullptr;
 TextBlock g_compactOutgoingArtistText = nullptr;
 TranslateTransform g_compactTitleTranslate = nullptr;
@@ -603,6 +605,7 @@ winrt::event_token g_compactTextRenderingToken{};
 bool g_compactTextRenderingHooked = false;
 double g_compactTextProgress = 1.0;
 std::chrono::steady_clock::time_point g_lastCompactTextFrameTime{};
+bool g_compactTextEdgeFadeActive = false;
 winrt::event_token g_taskbarLayoutRenderingToken{};
 bool g_taskbarLayoutRenderingHooked = false;
 std::chrono::steady_clock::time_point g_lastTaskbarLayoutCheckTime{};
@@ -848,11 +851,11 @@ bool IsDarkModeApprox() {
     return value == 0;
 }
 
-mediax::Brush IslandBackgroundBrush() {
+winrt::Windows::UI::Color IslandBackgroundColor() {
     bool dark = IsDarkModeApprox();
     if (g_settings.material == L"mica_like") {
-        return Brush(dark ? Color(0xC8, 0x2A, 0x2A, 0x2F)
-                          : Color(0xD4, 0xF3, 0xF3, 0xF6));
+        return dark ? Color(0xC8, 0x2A, 0x2A, 0x2F)
+                    : Color(0xD4, 0xF3, 0xF3, 0xF6);
     }
 
     if (g_settings.material == L"acrylic") {
@@ -860,12 +863,16 @@ mediax::Brush IslandBackgroundBrush() {
         // island loses focus, which makes the compact island suddenly look gray
         // and dirty. The expanded acrylic path uses a native overlay instead;
         // keep the compact surface visually stable with a tinted brush.
-        return Brush(dark ? Color(0xD8, 0x20, 0x20, 0x24)
-                          : Color(0xEA, 0xF8, 0xF8, 0xFA));
+        return dark ? Color(0xD8, 0x20, 0x20, 0x24)
+                    : Color(0xEA, 0xF8, 0xF8, 0xFA);
     }
 
-    return Brush(dark ? Color(0xE8, 0x20, 0x20, 0x24)
-                      : Color(0xE8, 0xF4, 0xF4, 0xF6));
+    return dark ? Color(0xE8, 0x20, 0x20, 0x24)
+                : Color(0xE8, 0xF4, 0xF4, 0xF6);
+}
+
+mediax::Brush IslandBackgroundBrush() {
+    return Brush(IslandBackgroundColor());
 }
 
 mediax::Brush IslandBorderBrush() {
@@ -3212,6 +3219,54 @@ void ApplyElementClip(FrameworkElement const& element, double width, double heig
         element.Clip(clip);
     } catch (...) {
     }
+}
+
+void ApplyElementClipWithPadding(FrameworkElement const& element,
+                                 double width,
+                                 double height,
+                                 double horizontalPadding) {
+    if (!element || width <= 0.0 || height <= 0.0) {
+        return;
+    }
+    try {
+        horizontalPadding = std::max(0.0, horizontalPadding);
+        mediax::RectangleGeometry clip;
+        clip.Rect({static_cast<float>(-horizontalPadding), 0.0f,
+                   static_cast<float>(std::max(1.0, width + horizontalPadding * 2.0)),
+                   static_cast<float>(std::max(1.0, height))});
+        element.Clip(clip);
+    } catch (...) {
+    }
+}
+
+mediax::Brush CompactTextEdgeFadeBrush(bool leftEdge) {
+    auto bg = IslandBackgroundColor();
+    auto clear = bg;
+    clear.A = 0x00;
+
+    mediax::LinearGradientBrush brush;
+    brush.StartPoint({0.0, 0.5});
+    brush.EndPoint({1.0, 0.5});
+    mediax::GradientStopCollection stops;
+
+    auto addStop = [&](double offset, winrt::Windows::UI::Color const& color) {
+        mediax::GradientStop stop;
+        stop.Offset(offset);
+        stop.Color(color);
+        stops.Append(stop);
+    };
+
+    if (leftEdge) {
+        addStop(0.00, bg);
+        addStop(0.42, bg);
+        addStop(1.00, clear);
+    } else {
+        addStop(0.00, clear);
+        addStop(0.58, bg);
+        addStop(1.00, bg);
+    }
+    brush.GradientStops(stops);
+    return brush;
 }
 
 // The UWP XAML version used by Windhawk exposes UIElement::Clip as a
@@ -5570,8 +5625,21 @@ void StartCompactProgressRenderLoop() {
     }
     g_lastCompactProgressFrameTime = {};
     g_compactProgressRenderingToken =
-        mediax::CompositionTarget::Rendering(OnCompactProgressRendering);
+    mediax::CompositionTarget::Rendering(OnCompactProgressRendering);
     g_compactProgressRenderingHooked = true;
+}
+
+void SetCompactTextEdgeFadeOpacity(double opacity) {
+    opacity = Clamp(opacity, 0.0, 1.0);
+    try {
+        if (g_compactTextLeftFade) {
+            g_compactTextLeftFade.Opacity(opacity);
+        }
+        if (g_compactTextRightFade) {
+            g_compactTextRightFade.Opacity(opacity);
+        }
+    } catch (...) {
+    }
 }
 
 void ResetCompactTextAnimationVisuals() {
@@ -5607,6 +5675,8 @@ void ResetCompactTextAnimationVisuals() {
             g_compactAlbumArtFade.Opacity(0.0);
             g_compactAlbumArtFade.Source(nullptr);
         }
+        g_compactTextEdgeFadeActive = false;
+        SetCompactTextEdgeFadeOpacity(0.0);
     } catch (...) {
     }
 }
@@ -5622,6 +5692,14 @@ double CompactTextClipWidthFallback() {
 double CompactTextClipHeightFallback() {
     double height = g_layout.compactHeight - g_layout.contentMarginY * 2.0;
     return std::max(1.0, height);
+}
+
+double CompactTextClipPadding() {
+    return Clamp(g_layout.textMarginX * 0.75 + 2.0, 5.0, 9.0);
+}
+
+double CompactTextEdgeFadeWidth() {
+    return Clamp(g_layout.textMarginX + 9.0, 12.0, 18.0);
 }
 
 void RefreshCompactTextHostClip(bool forceLayout = false) {
@@ -5650,7 +5728,23 @@ void RefreshCompactTextHostClip(bool forceLayout = false) {
             clipHeight = fallbackHeight;
         }
 
-        ApplyElementClip(g_compactTextHost, clipWidth, clipHeight);
+        double clipPadding = CompactTextClipPadding();
+        ApplyElementClipWithPadding(g_compactTextHost, clipWidth, clipHeight,
+                                    clipPadding);
+
+        double fadeWidth = CompactTextEdgeFadeWidth() + clipPadding;
+        auto configureFade = [&](Border const& fade, bool leftEdge) {
+            if (!fade) {
+                return;
+            }
+            fade.Width(fadeWidth);
+            fade.Height(clipHeight);
+            fade.Margin(leftEdge ? xaml::Thickness{-clipPadding, 0, 0, 0}
+                                 : xaml::Thickness{0, 0, -clipPadding, 0});
+            fade.Background(CompactTextEdgeFadeBrush(leftEdge));
+        };
+        configureFade(g_compactTextLeftFade, true);
+        configureFade(g_compactTextRightFade, false);
     } catch (...) {
     }
 }
@@ -5699,6 +5793,11 @@ void OnCompactTextRendering(winrt::Windows::Foundation::IInspectable const&,
         double titleOut = SmootherStep(Clamp(g_compactTextProgress / 0.78, 0.0, 1.0));
         double artistOut = SmootherStep(Clamp((g_compactTextProgress - 0.18) / 0.72, 0.0, 1.0));
         double artIn = SmootherStep(Clamp(g_compactTextProgress / 0.96, 0.0, 1.0));
+        if (g_compactTextEdgeFadeActive) {
+            SetCompactTextEdgeFadeOpacity(
+                1.0 - SmootherStep(Clamp((g_compactTextProgress - 0.82) / 0.18,
+                                          0.0, 1.0)));
+        }
 
         // Reversed direction: new compact text now enters from the right.
         g_compactTitleTranslate.X(kTextSlideOffset * (1.0 - titleIn));
@@ -5769,6 +5868,8 @@ void StartCompactTrackTransition(std::wstring const& oldTitle,
         g_compactArtistTranslate.X(kTextSlideOffset);
         g_compactTitleText.Opacity(0.0);
         g_compactArtistText.Opacity(0.0);
+        g_compactTextEdgeFadeActive = true;
+        SetCompactTextEdgeFadeOpacity(1.0);
     } else {
         if (g_compactTitleTranslate) g_compactTitleTranslate.X(0.0);
         if (g_compactArtistTranslate) g_compactArtistTranslate.X(0.0);
@@ -5776,6 +5877,8 @@ void StartCompactTrackTransition(std::wstring const& oldTitle,
         if (g_compactArtistText) g_compactArtistText.Opacity(1.0);
         if (g_compactOutgoingTitleText) g_compactOutgoingTitleText.Opacity(0.0);
         if (g_compactOutgoingArtistText) g_compactOutgoingArtistText.Opacity(0.0);
+        g_compactTextEdgeFadeActive = false;
+        SetCompactTextEdgeFadeOpacity(0.0);
     }
 
     if (animateArt) {
@@ -8820,6 +8923,12 @@ void UpdateThemeVisuals() {
             artist.Foreground(secondaryTextBrush);
         }
     }
+    if (g_compactTextLeftFade) {
+        g_compactTextLeftFade.Background(CompactTextEdgeFadeBrush(true));
+    }
+    if (g_compactTextRightFade) {
+        g_compactTextRightFade.Background(CompactTextEdgeFadeBrush(false));
+    }
 
     UpdateButtonTheme(L"Island_Prev");
     UpdateButtonTheme(L"Island_Play");
@@ -9123,6 +9232,26 @@ Grid BuildIslandGrid() {
     textStack.Children().Append(title);
     textStack.Children().Append(artist);
     textHost.Children().Append(textStack);
+
+    Border leftTextFade;
+    leftTextFade.Name(L"Island_TextLeftFade");
+    leftTextFade.HorizontalAlignment(HorizontalAlignment::Left);
+    leftTextFade.VerticalAlignment(VerticalAlignment::Stretch);
+    leftTextFade.IsHitTestVisible(false);
+    leftTextFade.Opacity(0.0);
+    controls::Canvas::SetZIndex(leftTextFade, 10);
+    Border rightTextFade;
+    rightTextFade.Name(L"Island_TextRightFade");
+    rightTextFade.HorizontalAlignment(HorizontalAlignment::Right);
+    rightTextFade.VerticalAlignment(VerticalAlignment::Stretch);
+    rightTextFade.IsHitTestVisible(false);
+    rightTextFade.Opacity(0.0);
+    controls::Canvas::SetZIndex(rightTextFade, 10);
+    g_compactTextLeftFade = leftTextFade;
+    g_compactTextRightFade = rightTextFade;
+    textHost.Children().Append(leftTextFade);
+    textHost.Children().Append(rightTextFade);
+
     content.Children().Append(textHost);
 
     StackPanel details;
@@ -9738,6 +9867,8 @@ void RemoveIslandGrid() {
         g_compactTitleText = nullptr;
         g_compactArtistText = nullptr;
         g_compactTextHost = nullptr;
+        g_compactTextLeftFade = nullptr;
+        g_compactTextRightFade = nullptr;
         g_compactOutgoingTitleText = nullptr;
         g_compactOutgoingArtistText = nullptr;
         g_compactTitleTranslate = nullptr;
@@ -9747,6 +9878,7 @@ void RemoveIslandGrid() {
         g_compactAlbumArtImage = nullptr;
         g_compactAlbumArtFade = nullptr;
         g_compactProgress = nullptr;
+        g_compactTextEdgeFadeActive = false;
         g_compactTextInitialized = false;
         g_compactLastTitle.clear();
         g_compactLastArtist.clear();
@@ -9803,11 +9935,14 @@ void RemoveIslandGrid() {
     g_compactTitleText = nullptr;
     g_compactArtistText = nullptr;
     g_compactTextHost = nullptr;
+    g_compactTextLeftFade = nullptr;
+    g_compactTextRightFade = nullptr;
     g_compactOutgoingTitleText = nullptr;
     g_compactOutgoingArtistText = nullptr;
     g_compactTitleTranslate = nullptr;
     g_compactArtistTranslate = nullptr;
     g_compactProgress = nullptr;
+    g_compactTextEdgeFadeActive = false;
     g_compactTextInitialized = false;
     g_compactLastTitle.clear();
     g_compactLastArtist.clear();
