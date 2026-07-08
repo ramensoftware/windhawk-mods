@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# MicroManager 
+# MicroManager
 
 ![Screenshot](https://i.imgur.com/V83qvSc.png)
 
