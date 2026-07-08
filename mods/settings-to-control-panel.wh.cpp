@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.21
+// @version        10.0.22
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -104,7 +104,10 @@ using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
-
+static bool g_pniduiHookInstalled = false;
+static std::mutex g_pniduiHookMutex;
+static HANDLE g_pniduiRetryThread = nullptr;
+static volatile bool g_pniduiRetryStop = false;
 
 static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND);
 
@@ -1177,21 +1180,109 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
 
+static volatile bool g_pniduiRetryRunning = false;
+
+
+static bool TryInstallPniduiHook() {
+    std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+    
+    // Se già installato, non fare nulla
+    if (g_pniduiHookInstalled) {
+        return true;
+    }
+    
+    // Prima verifica se la DLL è già caricata nel processo
+    HMODULE hMod = GetModuleHandleW(L"pnidui.dll");
+    if (!hMod) {
+        // Non è caricata, prova a caricarla (potrebbe fallire se non disponibile)
+        hMod = LoadLibraryExW(L"pnidui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!hMod) {
+            Wh_Log(L"[PNIDUI-HOOK] pnidui.dll not loaded yet");
+            return false;
+        }
+    }
+    
+    Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
+
+    WindhawkUtils::SYMBOL_HOOK hook = {{
+        L"bool "
+#ifdef _WIN64
+        L"__cdecl"
+#else
+        L"__stdcall"
+#endif
+        L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+        L"(struct HMENU__ *,struct HWND__ *)"
+    },
+    (void**)&g_icmhOrig_pnidui,
+    (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook};
+
+    bool result = WindhawkUtils::HookSymbols(hMod, &hook, 1);
+    if (result) {
+        Wh_Log(L"[PNIDUI-HOOK] Successfully installed pnidui.dll hook");
+        g_pniduiHookInstalled = true;
+    } else {
+        Wh_Log(L"[PNIDUI-HOOK] Failed to install pnidui.dll hook");
+    }
+    return result;
+}
+
+static DWORD WINAPI PniduiRetryThread(LPVOID) {
+    // Evita che più thread di retry partano contemporaneamente
+    if (g_pniduiRetryRunning) {
+        Wh_Log(L"[PNIDUI-HOOK] Retry thread already running, exiting");
+        return 0;
+    }
+    g_pniduiRetryRunning = true;
+    
+    Wh_Log(L"[PNIDUI-HOOK] Retry thread started - waiting for pnidui.dll to load");
+    
+    // Aspetta che la DLL venga caricata - controlla ogni 500ms per max 30 secondi
+    const int MAX_WAIT_CHECKS = 60; // 30 secondi
+    const DWORD CHECK_INTERVAL = 500;
+    bool dllLoaded = false;
+    
+    for (int i = 0; i < MAX_WAIT_CHECKS && !g_pniduiRetryStop; i++) {
+        if (GetModuleHandleW(L"pnidui.dll") != nullptr) {
+            dllLoaded = true;
+            Wh_Log(L"[PNIDUI-HOOK] pnidui.dll detected after %dms", i * CHECK_INTERVAL);
+            break;
+        }
+        Sleep(CHECK_INTERVAL);
+    }
+    
+    if (!dllLoaded) {
+        Wh_Log(L"[PNIDUI-HOOK] pnidui.dll not loaded after timeout, giving up");
+        g_pniduiRetryRunning = false;
+        return 0;
+    }
+    
+    // Ora prova ad installare l'hook
+    if (TryInstallPniduiHook()) {
+        Wh_Log(L"[PNIDUI-HOOK] Hook installed successfully after waiting for DLL");
+    } else {
+        Wh_Log(L"[PNIDUI-HOOK] Failed to install hook even though DLL is loaded");
+    }
+    
+    g_pniduiRetryRunning = false;
+    Wh_Log(L"[PNIDUI-HOOK] Retry thread exiting");
+    return 0;
+}
+
 static void InstallImmersiveMenuHooks() {
+    // Installa SndVolSSO (sempre)
     struct DllHook {
         const wchar_t*   dll;
         ICMH_CAODTM_t*  orig;
     } targets[] = {
         { L"SndVolSSO.dll", &g_icmhOrig_SndVolSSO },
-        { L"pnidui.dll",    &g_icmhOrig_pnidui    },
     };
 
     for (auto& t : targets) {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // SndVolSSO.dll, pnidui.dll
-        WindhawkUtils::SYMBOL_HOOK sndVolSSO_pnidui_hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {{
                 L"bool "
 #ifdef _WIN64
@@ -1206,13 +1297,29 @@ static void InstallImmersiveMenuHooks() {
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, sndVolSSO_pnidui_hooks, 1);
+        WindhawkUtils::HookSymbols(hMod, hooks, 1);
     }
 
+    // Prova pnidui.dll - se fallisce, avvia il thread di retry
+    if (!TryInstallPniduiHook()) {
+        // Controlla che il thread non sia già in esecuzione
+        if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
+            g_pniduiRetryStop = false;
+            g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
+            if (g_pniduiRetryThread) {
+                Wh_Log(L"[PNIDUI-HOOK] Retry thread created");
+            } else {
+                Wh_Log(L"[PNIDUI-HOOK] Failed to create retry thread");
+            }
+        } else {
+            Wh_Log(L"[PNIDUI-HOOK] Retry thread already running or hook already installed");
+        }
+    }
+
+    // Shell32 per dispositivi (solo Win11)
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // shell32.dll
             WindhawkUtils::SYMBOL_HOOK shell32_hooks[] = {
                 {{
                     L"bool "
@@ -1254,7 +1361,7 @@ HWND WINAPI CreateWindowExW_Hook(
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.21");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.22");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1297,8 +1404,21 @@ BOOL Wh_ModInit() {
 
     return TRUE;
 }
-
 void Wh_ModUninit() {
+    // Ferma il thread di retry se attivo
+    if (g_pniduiRetryThread) {
+        g_pniduiRetryStop = true;
+        Wh_Log(L"[PNIDUI-HOOK] Stopping retry thread...");
+        DWORD waitResult = WaitForSingleObject(g_pniduiRetryThread, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"[PNIDUI-HOOK] Retry thread timeout, terminating");
+            TerminateThread(g_pniduiRetryThread, 0);
+        }
+        CloseHandle(g_pniduiRetryThread);
+        g_pniduiRetryThread = nullptr;
+        g_pniduiRetryRunning = false;
+    }
+    
     RemoveTraySubclass();
 }
 
@@ -1308,9 +1428,18 @@ void Wh_ModSettingsChanged() {
     g_sndVolSSOEnd = nullptr;
     g_pniduiBase = nullptr;
     g_pniduiEnd = nullptr;
+    
+    // Resetta lo stato degli hook per riprovare
+    {
+        std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+        g_pniduiHookInstalled = false;
+    }
+    
     LoadSettings();
     InitMappings();
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
+        // Reinstalla gli hook se necessario
+        InstallImmersiveMenuHooks();
     }
 }
