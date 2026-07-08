@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word via direct Word saves
-// @version         3.7
+// @version         3.8
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -45,7 +45,7 @@ shortcut activations.
 - Keeps pending changes armed after direct save failures so transient file errors can be retried
 - Only saves when the active Word document window is focused
 
-## Shortcut Safety (v3.7)
+## Shortcut Safety (v3.8)
 
 - No `SendInput`
 - No synthetic `Ctrl` state
@@ -3015,12 +3015,125 @@ bool AreSameDispatchComIdentity(IDispatch* left, IDispatch* right) {
     return AreSameComIdentity(leftIdentity.Get(), rightIdentity.Get());
 }
 
+LONG_PTR NormalizeComWindowHandleValue(LONG_PTR hwndValue) {
+    if (hwndValue == 0) {
+        return 0;
+    }
+
+#ifdef _WIN64
+    const ULONG_PTR rawValue = static_cast<ULONG_PTR>(hwndValue);
+    const ULONG_PTR low32Value = static_cast<ULONG_PTR>(static_cast<DWORD>(rawValue));
+    const ULONG_PTR high32Value = rawValue & 0xFFFFFFFF00000000ull;
+    if (low32Value != 0 && high32Value == 0xFFFFFFFF00000000ull) {
+        return static_cast<LONG_PTR>(low32Value);
+    }
+#endif
+
+    return hwndValue;
+}
+
+HWND ResolveCurrentProcessWordRootWindowFromHwnd(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return nullptr;
+    }
+
+    if (IsUsableWordRootWindow(hwnd)) {
+        return hwnd;
+    }
+
+    HWND rootWindow = GetAncestor(hwnd, GA_ROOT);
+    if (!rootWindow) {
+        rootWindow = hwnd;
+    }
+
+    return IsUsableWordRootWindow(rootWindow) ? rootWindow : nullptr;
+}
+
+HWND ResolveCurrentProcessWordRootWindowFromHandle(LONG_PTR hwndValue) {
+    HWND rootWindow =
+        ResolveCurrentProcessWordRootWindowFromHwnd(reinterpret_cast<HWND>(hwndValue));
+    if (rootWindow) {
+        return rootWindow;
+    }
+
+    const LONG_PTR normalizedHwndValue = NormalizeComWindowHandleValue(hwndValue);
+    if (normalizedHwndValue == hwndValue) {
+        return nullptr;
+    }
+
+    return ResolveCurrentProcessWordRootWindowFromHwnd(
+        reinterpret_cast<HWND>(normalizedHwndValue));
+}
+
 bool IsUsableWordApplicationWindowHandle(LONG_PTR hwndValue) {
-    HWND hwnd = reinterpret_cast<HWND>(hwndValue);
-    return hwnd &&
-           IsWindow(hwnd) &&
-           IsWindowInCurrentWordProcess(hwnd) &&
-           HasClassName(hwnd, L"OpusApp");
+    return ResolveCurrentProcessWordRootWindowFromHandle(hwndValue) != nullptr;
+}
+
+HRESULT GetApplicationWindowHandle(IDispatch* application, LONG_PTR* hwndValue);
+
+bool TryResolveCurrentProcessWordWindowFromDispatch(IDispatch* dispatch,
+                                                    LONG_PTR* hwndValue) {
+    if (!dispatch) {
+        return false;
+    }
+
+    LONG_PTR rawHwndValue = 0;
+    if (FAILED(GetApplicationWindowHandle(dispatch, &rawHwndValue))) {
+        return false;
+    }
+
+    HWND rootWindow = ResolveCurrentProcessWordRootWindowFromHandle(rawHwndValue);
+    if (!rootWindow) {
+        return false;
+    }
+
+    if (hwndValue) {
+        *hwndValue = reinterpret_cast<LONG_PTR>(rootWindow);
+    }
+    return true;
+}
+
+bool TryResolveCurrentProcessWordWindowFromApplicationWindows(IDispatch* application,
+                                                             LONG_PTR* hwndValue) {
+    if (!application) {
+        return false;
+    }
+
+    ScopedComPtr<IDispatch> activeWindow;
+    if (SUCCEEDED(GetDispatchProperty(application, L"ActiveWindow", activeWindow.Put())) &&
+        TryResolveCurrentProcessWordWindowFromDispatch(activeWindow.Get(), hwndValue)) {
+        return true;
+    }
+
+    ScopedComPtr<IDispatch> windows;
+    HRESULT hr = GetDispatchProperty(application, L"Windows", windows.Put());
+    if (FAILED(hr) || !windows) {
+        return false;
+    }
+
+    long count = 0;
+    hr = GetIntProperty(windows.Get(), L"Count", &count);
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    for (long index = 1; index <= count; ++index) {
+        ScopedVariant indexArg;
+        indexArg.Get()->vt = VT_I4;
+        indexArg.Get()->lVal = index;
+
+        ScopedComPtr<IDispatch> window;
+        hr = GetDispatchMethodObject(windows.Get(), L"Item", window.Put(), 1, indexArg.Get());
+        if (FAILED(hr) || !window) {
+            continue;
+        }
+
+        if (TryResolveCurrentProcessWordWindowFromDispatch(window.Get(), hwndValue)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 HRESULT GetApplicationWindowHandle(IDispatch* application, LONG_PTR* hwndValue) {
@@ -3060,20 +3173,16 @@ HRESULT GetApplicationWindowHandle(IDispatch* application, LONG_PTR* hwndValue) 
 }
 
 bool DoesApplicationBelongToCurrentProcess(IDispatch* application, LONG_PTR* hwndValue = nullptr) {
-    LONG_PTR localHwndValue = 0;
-    if (FAILED(GetApplicationWindowHandle(application, &localHwndValue))) {
-        return false;
+    LONG_PTR resolvedHwndValue = 0;
+    if (TryResolveCurrentProcessWordWindowFromDispatch(application, &resolvedHwndValue) ||
+        TryResolveCurrentProcessWordWindowFromApplicationWindows(application, &resolvedHwndValue)) {
+        if (hwndValue) {
+            *hwndValue = resolvedHwndValue;
+        }
+        return true;
     }
 
-    if (!IsUsableWordApplicationWindowHandle(localHwndValue)) {
-        return false;
-    }
-
-    if (hwndValue) {
-        *hwndValue = localHwndValue;
-    }
-
-    return true;
+    return false;
 }
 
 bool IsWordEventSessionApplicationCacheValid(const WordEventSession& session,
@@ -3358,9 +3467,12 @@ HRESULT GetWordApplicationFromActiveWindow(IDispatch** application) {
 
     LONG_PTR hwndValue = 0;
     if (!DoesApplicationBelongToCurrentProcess(*application, &hwndValue)) {
-        (*application)->Release();
-        *application = nullptr;
-        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+        HWND rootWindow = FindCurrentProcessWordRootWindow();
+        if (!rootWindow) {
+            (*application)->Release();
+            *application = nullptr;
+            return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+        }
     }
 
     return S_OK;
@@ -6167,6 +6279,20 @@ bool RunTimingAndFallbackSelfTests() {
         ReportSelfTestFailure(&success, L"text keydown character suppression");
     }
 
+    if (NormalizeComWindowHandleValue(0) != 0 ||
+        NormalizeComWindowHandleValue(0x1234) != 0x1234) {
+        ReportSelfTestFailure(&success, L"COM window handle normalization");
+    }
+#ifdef _WIN64
+    const LONG_PTR signExtendedHwnd =
+        static_cast<LONG_PTR>(static_cast<ULONG_PTR>(0xFFFFFFFF87654321ull));
+    const LONG_PTR zeroExtendedHwnd =
+        static_cast<LONG_PTR>(static_cast<ULONG_PTR>(0x87654321ull));
+    if (NormalizeComWindowHandleValue(signExtendedHwnd) != zeroExtendedHwnd) {
+        ReportSelfTestFailure(&success, L"sign-extended COM window handle normalization");
+    }
+#endif
+
     if (!ShouldAttemptOwnerThreadAdoptionForState(WM_KEYDOWN, true, false, false) ||
         !ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, false, true, false) ||
         !ShouldAttemptOwnerThreadAdoptionForState(WM_TIMER, false, false, true) ||
@@ -6792,7 +6918,7 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave v3.7 initializing...");
+    Wh_Log(L"Word Local AutoSave v3.8 initializing...");
 
     g_runtime.wordProcessId = GetCurrentProcessId();
     ResetRuntimeState(RuntimeResetMode::Shutdown);
