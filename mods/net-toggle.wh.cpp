@@ -689,11 +689,10 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         return;
     }
 
-    // Destroy old icon to prevent handle leak
-    if (g_currentIcon) {
-        DestroyIcon(g_currentIcon);
-        g_currentIcon = nullptr;
-    }
+    // Defer old-icon destruction until after the NIM_MODIFY succeeds
+    // so the tray never holds a dangling handle if the update fails.
+    HICON hOldIcon = g_currentIcon;
+    g_currentIcon = nullptr;
 
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd = hWnd;
@@ -730,6 +729,7 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
             LogLastError(L"Shell_NotifyIcon NIM_ADD");
             DestroyIcon(hNewIcon);
+            g_currentIcon = hOldIcon;
             return;
         }
         InterlockedExchange(&g_trayIconInstalled, 1);
@@ -740,12 +740,15 @@ void AddOrUpdateTrayIcon(HWND hWnd, BOOL enabled, BOOL isAdd) {
         nidVer.guidItem = NETTOGGLE_TRAY_GUID;
         nidVer.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+        if (hOldIcon) DestroyIcon(hOldIcon);
     } else {
         if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
             LogLastError(L"Shell_NotifyIcon NIM_MODIFY");
             DestroyIcon(hNewIcon);
+            g_currentIcon = hOldIcon;
             return;
         }
+        if (hOldIcon) DestroyIcon(hOldIcon);
     }
 
     g_currentIcon = hNewIcon;
@@ -789,7 +792,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 0, 0);
         }
     }
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -841,7 +844,7 @@ DWORD WINAPI ResetWorkerThreadProc(LPVOID) {
             PostMessageW(g_trayHwnd, WM_TRIGGER_PING, 1, 0);
         }
     }
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
 
@@ -928,7 +931,8 @@ DWORD WINAPI DnsPingWorkerProc(LPVOID) {
         }
         // Bail out if the network dropped or the mod is unloading mid-pass.
         if (InterlockedOr(&g_networkIsUp, 0) == 0) break;
-        if (g_shutdownEvent && WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0) break;
+        HANDLE hShutdown = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+        if (hShutdown && WaitForSingleObject(hShutdown, 0) == WAIT_OBJECT_0) break;
 
         BOOL up = ProbeDnsServer((DWORD)ip, InterlockedOr(&g_dnsProbe[i], 0));
         InterlockedExchange(&g_dnsUp[i], up ? 1 : 0);
@@ -1179,7 +1183,8 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
             // Skip polls while a toggle/reset is in flight to avoid Yellow→Red flicker.
             bool shutdown = false;
             for (DWORD i = 0; i < NETWATCH_POLL_RETRIES; i++) {
-                DWORD r = WaitForSingleObject(g_shutdownEvent, NETWATCH_POLL_INTERVAL);
+                HANDLE hShutdown = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+                DWORD r = hShutdown ? WaitForSingleObject(hShutdown, NETWATCH_POLL_INTERVAL) : WAIT_TIMEOUT;
                 if (r == WAIT_OBJECT_0) { shutdown = true; break; }
                 if (InterlockedOr(&g_isProcessingClick, 0) != 0) continue;
                 BOOL newState = CheckActualNetworkState();
@@ -1198,7 +1203,8 @@ DWORD WINAPI NetWatchThreadProc(LPVOID) {
             continue;
         }
 
-        HANDLE waits[2] = { hEvent, g_shutdownEvent };
+        HANDLE hSd = (HANDLE)InterlockedCompareExchangePointer((PVOID*)&g_shutdownEvent, nullptr, nullptr);
+        HANDLE waits[2] = { hEvent, hSd };
         DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
 
         if (r == WAIT_OBJECT_0) {
@@ -1256,7 +1262,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     if (!RegisterClassW(&wc)) {
         LogLastError(L"RegisterClassW");
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -1272,7 +1278,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     if (!hWnd) {
         LogLastError(L"CreateWindowExW");
         UnregisterClassW(wc.lpszClassName, g_hInstance);
-        if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+        if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
 
@@ -1320,7 +1326,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     UnregisterClassW(wc.lpszClassName, g_hInstance);
     InterlockedExchange(&g_trayIconInstalled, 0);
     InterlockedExchangePointer((PVOID*)&g_trayHwnd, nullptr);
-    if (hrCo != RPC_E_CHANGED_MODE) CoUninitialize();
+    if (SUCCEEDED(hrCo)) CoUninitialize();
 
     return 0;
 }
