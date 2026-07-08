@@ -1455,7 +1455,7 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // RINOMINATO: shell32Hooks invece di shell32_hooks
+            // RINOMINATO: shell32Hooks invece di shell32Hooks
             WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
                 {{
                     L"bool "
