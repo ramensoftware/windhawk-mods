@@ -133,15 +133,14 @@ std::mutex g_pillsMutex;
 struct PillContext {
     winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Rectangle> pill;
     winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
-    void* gridAbi = nullptr;
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> activeBtn;
     winrt::event_token layoutToken{};
     std::atomic<bool> searchAttached{false};
     winrt::Windows::UI::Xaml::Media::Animation::Storyboard colorAnimBoard{nullptr};
-    uint64_t inactiveStartTime{0};
+    std::chrono::steady_clock::time_point inactiveStartTime{};
     bool forceSnapNext{false};
 };
-std::vector<std::shared_ptr<PillContext>> g_pillContexts;
+std::vector<std::shared_ptr<PillContext>>* g_pillContexts = new std::vector<std::shared_ptr<PillContext>>();
 std::atomic<bool> g_unloading{false};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
@@ -210,6 +209,7 @@ void LoadSettings() {
     if (radiusStr.get()[0]) {
         try {
             g_settings.PillRadius = std::stod(radiusStr.get());
+            if (g_settings.PillRadius < 0.0) g_settings.PillRadius = 0.0;
         } catch (...) { g_settings.PillRadius = 1.5; }
     }
 
@@ -230,6 +230,7 @@ void LoadSettings() {
         try {
             g_settings.SpeedMultiplier = std::stod(speedStr.get());
             if (std::isnan(g_settings.SpeedMultiplier) || g_settings.SpeedMultiplier <= 0.0) g_settings.SpeedMultiplier = 1.0;
+            g_settings.SpeedMultiplier = std::clamp(g_settings.SpeedMultiplier, 0.1, 10.0);
         } catch (...) {}
     }
     g_settings.FadeTransition = Wh_GetIntSetting(L"Animation.FadeTransition") != 0;
@@ -276,16 +277,14 @@ void LoadSettings() {
 struct ExtractedColors {
     winrt::Windows::UI::Color lightMode;
     winrt::Windows::UI::Color darkMode;
-    uint64_t lastAccess = 0;
 };
 
 std::mutex g_iconColorMutex;
-std::map<std::wstring, ExtractedColors> g_iconColorCache;
+std::map<std::wstring, ExtractedColors>* g_iconColorCache = new std::map<std::wstring, ExtractedColors>();
 std::map<std::wstring, bool> g_iconColorExtracting;
-std::atomic<uint64_t> g_colorAccessCounter{0};
-std::atomic<int> g_asyncExtractCount{0};
 
-std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup>> g_attachedGroups;
+
+std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup>>* g_attachedGroups = new std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup>>();
 std::mutex g_attachedGroupsMutex;
 
 struct AttachedEvent {
@@ -293,7 +292,7 @@ struct AttachedEvent {
     winrt::event_token token;
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
 };
-std::vector<AttachedEvent> g_attachedEvents;
+std::vector<AttachedEvent>* g_attachedEvents = new std::vector<AttachedEvent>();
 std::mutex g_attachedEventsMutex;
 
 struct HSL {
@@ -378,9 +377,8 @@ winrt::Windows::UI::Color GetPillColor(const Settings& localSettings, const std:
 
     if (localSettings.ColorMode == 2 && !buttonAbi.empty()) {
         std::lock_guard<std::mutex> lock(g_iconColorMutex);
-        auto it = g_iconColorCache.find(buttonAbi);
-        if (it != g_iconColorCache.end()) {
-            it->second.lastAccess = ++g_colorAccessCounter;
+        auto it = g_iconColorCache->find(buttonAbi);
+        if (it != g_iconColorCache->end()) {
             return isLight ? it->second.lightMode : it->second.darkMode;
         }
     }
@@ -409,23 +407,46 @@ using namespace winrt::Windows::UI::Xaml::Media;
 using namespace winrt::Windows::UI::Xaml::Hosting;
 using namespace winrt::Windows::UI::Composition;
 
-FrameworkElement GetFrameworkElementFromNative(void* pThis) {
+int g_offsetTaskListButton = -1;
+int g_offsetSearchIconButton = -1;
+
+FrameworkElement GetFrameworkElementFromNative(void* pThis, int& cachedOffset) {
     if (!pThis) return nullptr;
     void** ptrs = (void**)pThis;
-    for (int i = 1; i < 16; i++) {
+
+    if (cachedOffset != -1) {
         try {
-            if (IsBadReadPtr(ptrs + i, sizeof(void*))) continue;
-            ::IUnknown* possibleUnk = (::IUnknown*)ptrs[i];
-            if (!possibleUnk || IsBadReadPtr(possibleUnk, sizeof(void*))) continue;
-            
-            void* vtable = *(void**)possibleUnk;
-            if (IsBadReadPtr(vtable, sizeof(void*) * 3)) continue;
-            
-            winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
-            if (SUCCEEDED(possibleUnk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
-                return result;
+            ::IUnknown* possibleUnk = (::IUnknown*)ptrs[cachedOffset];
+            if (possibleUnk) {
+                winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
+                if (SUCCEEDED(possibleUnk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
+                    return result;
+                }
             }
         } catch (...) {}
+        return nullptr;
+    }
+
+    HANDLE hProc = GetCurrentProcess();
+    for (int i = 1; i < 16; i++) {
+        void* possibleUnk = nullptr;
+        SIZE_T read = 0;
+        if (ReadProcessMemory(hProc, ptrs + i, &possibleUnk, sizeof(void*), &read) && read == sizeof(void*) && possibleUnk) {
+            void* vtable = nullptr;
+            if (ReadProcessMemory(hProc, possibleUnk, &vtable, sizeof(void*), &read) && read == sizeof(void*) && vtable) {
+                void* vfuncs[3];
+                if (ReadProcessMemory(hProc, vtable, &vfuncs, sizeof(vfuncs), &read) && read == sizeof(vfuncs)) {
+                    try {
+                        ::IUnknown* unk = (::IUnknown*)possibleUnk;
+                        winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
+                        if (SUCCEEDED(unk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
+                            cachedOffset = i;
+                            return result;
+                        }
+                    } catch (...) {}
+                }
+            }
+        }
     }
     return nullptr;
 }
@@ -444,28 +465,28 @@ FrameworkElement GetFrameworkElementFromInterface(void* pInterface) {
     }
 }
 
-FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_view name) {
-    if (!parent) return nullptr;
+FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_view name, int depth = 0) {
+    if (!parent || depth > 5) return nullptr;
     int count = VisualTreeHelper::GetChildrenCount(parent);
     for (int i = 0; i < count; i++) {
         auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
         if (child) {
             if (child.Name() == name) return child;
-            auto result = FindChildByName(child, name);
+            auto result = FindChildByName(child, name, depth + 1);
             if (result) return result;
         }
     }
     return nullptr;
 }
 
-FrameworkElement FindChildByClassName(FrameworkElement const& parent, std::wstring_view className) {
-    if (!parent) return nullptr;
+FrameworkElement FindChildByClassName(FrameworkElement const& parent, std::wstring_view className, int depth = 0) {
+    if (!parent || depth > 5) return nullptr;
     int count = VisualTreeHelper::GetChildrenCount(parent);
     for (int i = 0; i < count; i++) {
         auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
         if (child) {
             if (winrt::get_class_name(child) == className) return child;
-            auto result = FindChildByClassName(child, className);
+            auto result = FindChildByClassName(child, className, depth + 1);
             if (result) return result;
         }
     }
@@ -501,15 +522,13 @@ using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
 void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::Windows::UI::Xaml::Controls::Image icon, winrt::Windows::UI::Xaml::Shapes::Rectangle pill, std::wstring stableKey) {
-    g_asyncExtractCount++;
-    auto extractToken = std::shared_ptr<void>(nullptr, [](void*){ g_asyncExtractCount--; });
     auto weakButton = winrt::make_weak(button);
     auto weakPill = winrt::make_weak(pill);
 
     try {
         auto rtb = winrt::Windows::UI::Xaml::Media::Imaging::RenderTargetBitmap();
         auto renderOp = rtb.RenderAsync(icon);
-        renderOp.Completed([weakButton, weakPill, rtb, stableKey, extractToken](auto&& op, auto&& status) {
+        renderOp.Completed([weakButton, weakPill, rtb, stableKey](auto&& op, auto&& status) {
             if (g_unloading) return;
             auto button = weakButton.get();
             auto pill = weakPill.get();
@@ -527,7 +546,7 @@ void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::
             
             try {
                 auto pixelOp = rtb.GetPixelsAsync();
-                pixelOp.Completed([weakButton, weakPill, rtb, stableKey, extractToken](auto&& op2, auto&& status2) {
+                pixelOp.Completed([weakButton, weakPill, rtb, stableKey](auto&& op2, auto&& status2) {
                     if (g_unloading) return;
                     auto button = weakButton.get();
                     auto pill = weakPill.get();
@@ -620,16 +639,15 @@ void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::
                                     Wh_Log(L"ExtractIconColor: success base R:%d G:%d B:%d", baseColor.R, baseColor.G, baseColor.B);
                                     {
                                         std::lock_guard<std::mutex> lock(g_iconColorMutex);
-                                        if (g_iconColorCache.size() > 100) {
-                                            g_iconColorCache.clear();
+                                        if (g_iconColorCache->size() > 100) {
+                                            g_iconColorCache->clear();
                                             g_iconColorExtracting.clear();
                                         }
-                                        variants.lastAccess = ++g_colorAccessCounter;
-                                        g_iconColorCache[stableKey] = variants;
+                                        (*g_iconColorCache)[stableKey] = variants;
                                     }
                                     
                                     if (auto dispatcher = button.Dispatcher()) {
-                                        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakPill, weakButton, stableKey, extractToken]() {
+                                        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakPill, weakButton, stableKey]() {
                                             auto button = weakButton.get();
                                             auto pill = weakPill.get();
                                             if (!button || !pill) return;
@@ -690,8 +708,6 @@ bool UpdatePillPosition(
     auto transform = b.TransformToVisual(g);
     auto point = transform.TransformPoint({0, 0});
     
-    if (point.X == 0.0f && point.Y == 0.0f) return false;
-
     double actW = p.ActualWidth();
     double pillW = actW > 0 ? actW : p.Width();
     if (pillW < 1.0) pillW = 1.0;
@@ -700,9 +716,8 @@ bool UpdatePillPosition(
     std::shared_ptr<PillContext> ctx = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_pillsMutex);
-        void* targetAbi = winrt::get_abi(g);
-        for (auto& c : g_pillContexts) {
-            if (c->gridAbi == targetAbi) {
+        for (auto& c : *g_pillContexts) {
+            if (c->grid.get() == g) {
                 ctx = c;
                 break;
             }
@@ -734,11 +749,12 @@ bool UpdatePillPosition(
         } else {
             auto compositor = visual.Compositor();
             DWORD tid = GetCurrentThreadId();
-            EasingCache cache;
+            EasingCache* pCache = nullptr;
             {
                 std::lock_guard<std::mutex> lock(g_easingMutex);
-                cache = (*g_easingCaches)[tid];
+                pCache = &(*g_easingCaches)[tid];
             }
+            EasingCache& cache = *pCache;
 
             if (cache.compositor != compositor) {
                 cache.compositor = compositor;
@@ -749,9 +765,6 @@ bool UpdatePillPosition(
                 cache.easeIn = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {1.0f, 1.0f});
                 cache.easeOut = compositor.CreateCubicBezierEasingFunction({0.0f, 0.0f}, {0.5f, 1.0f});
                 cache.easeInOut = compositor.CreateCubicBezierEasingFunction({0.5f, 0.0f}, {0.5f, 1.0f});
-                
-                std::lock_guard<std::mutex> lock(g_easingMutex);
-                (*g_easingCaches)[tid] = cache;
             }
 
             if (localSettings.FadeTransition) {
@@ -887,16 +900,16 @@ void AttachStateChangedHandler(winrt::Windows::UI::Xaml::VisualStateGroup const&
     {
         std::lock_guard<std::mutex> lock(g_attachedGroupsMutex);
         bool found = false;
-        for (auto it = g_attachedGroups.begin(); it != g_attachedGroups.end(); ) {
+        for (auto it = g_attachedGroups->begin(); it != g_attachedGroups->end(); ) {
             if (auto g = it->get()) {
                 if (winrt::get_abi(g) == pGroup) { found = true; break; }
                 ++it;
             } else {
-                it = g_attachedGroups.erase(it);
+                it = g_attachedGroups->erase(it);
             }
         }
         if (found) return;
-        g_attachedGroups.push_back(winrt::make_weak(group));
+        g_attachedGroups->push_back(winrt::make_weak(group));
     }
 
     auto weakElem = winrt::make_weak(button);
@@ -931,7 +944,7 @@ void AttachStateChangedHandler(winrt::Windows::UI::Xaml::VisualStateGroup const&
     auto dispatcher = button.Dispatcher();
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        g_attachedEvents.push_back({winrt::make_weak(group), token, dispatcher});
+        g_attachedEvents->push_back({winrt::make_weak(group), token, dispatcher});
     }
 }
 
@@ -956,7 +969,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
 
-    auto elem = GetFrameworkElementFromNative(pThis);
+    auto elem = GetFrameworkElementFromNative(pThis, g_offsetTaskListButton);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1077,27 +1090,25 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     std::shared_ptr<PillContext> ctx = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_pillsMutex);
-        if (g_pillContexts.size() > 10) {
-            g_pillContexts.erase(
-                std::remove_if(g_pillContexts.begin(), g_pillContexts.end(),
+        if (g_pillContexts->size() > 10) {
+            g_pillContexts->erase(
+                std::remove_if(g_pillContexts->begin(), g_pillContexts->end(),
                     [](auto& c) { return c->grid.get() == nullptr; }),
-                g_pillContexts.end());
+                g_pillContexts->end());
         }
 
-        void* targetAbi = winrt::get_abi(grid);
-        auto it = std::find_if(g_pillContexts.begin(), g_pillContexts.end(), [&](const std::shared_ptr<PillContext>& c) {
-            return c->gridAbi == targetAbi;
+        auto it = std::find_if(g_pillContexts->begin(), g_pillContexts->end(), [&](const std::shared_ptr<PillContext>& c) {
+            return c->grid.get() == grid;
         });
 
-        if (it != g_pillContexts.end()) {
+        if (it != g_pillContexts->end()) {
             ctx = *it;
             ctx->pill = winrt::make_weak(pill);
         } else {
             ctx = std::make_shared<PillContext>();
             ctx->grid = winrt::make_weak(grid);
-            ctx->gridAbi = targetAbi;
             ctx->pill = winrt::make_weak(pill);
-            g_pillContexts.push_back(ctx);
+            g_pillContexts->push_back(ctx);
 
             auto weakCtx = std::weak_ptr<PillContext>(ctx);
             auto weakGrid = winrt::make_weak(grid);
@@ -1136,59 +1147,9 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     bool anyActive = isActive;
     FrameworkElement targetButton = button;
     if (!isActive && grid) {
-        FrameworkElement systemActiveBtn = nullptr;
-        auto findActiveBtn = [&](auto& self, FrameworkElement const& parent, int depth) -> bool {
-            if (!parent || depth > 3) return false;
-            int count = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(parent);
-            for (int i = 0; i < count; i++) {
-                auto child = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
-                if (child) {
-                    winrt::hstring cName = winrt::get_class_name(child);
-                    if (cName == L"Taskbar.TaskListButton" || 
-                        (localSettings.TrackSystemButtons && (cName == L"Taskbar.ExperienceToggleButton" || cName == L"SearchUx.SearchUI.SearchButtonControl"))) {
-                        
-                        if (child.Visibility() == winrt::Windows::UI::Xaml::Visibility::Visible && 
-                            child.Opacity() > 0.001f && child.ActualWidth() > 0.001f) {
-                            
-                            if (cName == L"Taskbar.TaskListButton") {
-                                auto sIconPanel = FindChildByName(child, L"IconPanel");
-                                auto sGroup = sIconPanel ? GetVisualStateGroup(sIconPanel, L"RunningIndicatorStates") : nullptr;
-                                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                                if (sState && sState.Name() == L"ActiveRunningIndicator") {
-                                    anyActive = true;
-                                    targetButton = child;
-                                    return true;
-                                }
-                            } else if (cName == L"Taskbar.ExperienceToggleButton") {
-                                auto sRootPanel = FindChildByName(child, L"ExperienceToggleButtonRootPanel");
-                                auto sGroup = sRootPanel ? GetVisualStateGroup(sRootPanel, L"CommonStates") : nullptr;
-                                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                                if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
-                                    if (!systemActiveBtn) systemActiveBtn = child;
-                                }
-                            } else if (cName == L"SearchUx.SearchUI.SearchButtonControl") {
-                                if (auto sIconButton = FindChildByClassName(child, L"SearchUx.SearchUI.SearchIconButton")) {
-                                    auto sRootGrid = FindChildByName(sIconButton, L"SearchBoxButtonRootPanel");
-                                    auto sGroup = sRootGrid ? GetVisualStateGroup(sRootGrid, L"CommonStates") : nullptr;
-                                    auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                                    if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
-                                        if (!systemActiveBtn) systemActiveBtn = child;
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        if (self(self, child, depth + 1)) return true;
-                    }
-                }
-            }
-            return false;
-        };
-        findActiveBtn(findActiveBtn, grid, 0);
-
-        if (!anyActive && systemActiveBtn) {
+        if (ctx && ctx->activeBtn.get() && ctx->activeBtn.get() != button) {
             anyActive = true;
-            targetButton = systemActiveBtn;
+            targetButton = ctx->activeBtn.get();
         }
     }
 
@@ -1202,7 +1163,6 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     }
 
     std::wstring stableKey = L"";
-    bool isExtracting = false;
 
     if (anyActive) {
         std::wstring appName = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(targetButton).c_str();
@@ -1220,12 +1180,9 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                 {
                     std::lock_guard<std::mutex> lock(g_iconColorMutex);
                     auto it = g_iconColorExtracting.find(stableKey);
-                    if (!g_iconColorCache.count(stableKey) && (it == g_iconColorExtracting.end() || !it->second)) {
+                    if (!g_iconColorCache->count(stableKey) && (it == g_iconColorExtracting.end() || !it->second)) {
                         needsExtract = true;
                         g_iconColorExtracting[stableKey] = true;
-                        isExtracting = true;
-                    } else {
-                        isExtracting = (it != g_iconColorExtracting.end() && it->second);
                     }
                 }
                 if (needsExtract) {
@@ -1249,16 +1206,7 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         }
     }
 
-    std::shared_ptr<PillContext> currentCtx = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_pillsMutex);
-        for (auto& pCtx : g_pillContexts) {
-            if (pCtx->grid.get() == grid) {
-                currentCtx = pCtx;
-                break;
-            }
-        }
-    }
+    std::shared_ptr<PillContext> currentCtx = ctx;
 
     auto brush = pill.Fill().try_as<winrt::Windows::UI::Xaml::Media::SolidColorBrush>();
     if (!brush) {
@@ -1267,11 +1215,11 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     } else {
         if (anyActive) {
             bool hasColor = true;
-            if (settingsToUse.ColorMode == 2 && isExtracting) {
+            if (settingsToUse.ColorMode == 2) {
                 std::lock_guard<std::mutex> lock(g_iconColorMutex);
-                hasColor = g_iconColorCache.count(stableKey) > 0;
+                hasColor = g_iconColorCache->count(stableKey) > 0;
             }
-            if (settingsToUse.ColorMode != 2 || !isExtracting || hasColor) {
+            if (settingsToUse.ColorMode != 2 || hasColor) {
                 winrt::Windows::UI::Color newColor = GetPillColor(settingsToUse, stableKey);
                 winrt::Windows::UI::Color oldColor = brush.Color();
                 if (oldColor.A != newColor.A || oldColor.R != newColor.R || oldColor.G != newColor.G || oldColor.B != newColor.B) {
@@ -1303,8 +1251,8 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     auto compositor = visual.Compositor();
 
     if (!anyActive) {
-        if (currentCtx && currentCtx->inactiveStartTime == 0) {
-            currentCtx->inactiveStartTime = GetTickCount64();
+        if (currentCtx && currentCtx->inactiveStartTime.time_since_epoch().count() == 0) {
+            currentCtx->inactiveStartTime = std::chrono::steady_clock::now();
         }
         float lastOpacityTarget = -1.0f;
         visual.Properties().TryGetScalar(L"LastShowOpacityTarget", lastOpacityTarget);
@@ -1316,11 +1264,13 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
             visual.Properties().StartAnimation(L"ShowOpacity", fadeAnim);
         }
     } else {
-        if (currentCtx && currentCtx->inactiveStartTime != 0) {
-            if (GetTickCount64() - currentCtx->inactiveStartTime > static_cast<uint64_t>(150 / settingsToUse.SpeedMultiplier)) {
+        if (currentCtx && currentCtx->inactiveStartTime.time_since_epoch().count() != 0) {
+            auto now = std::chrono::steady_clock::now();
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - currentCtx->inactiveStartTime).count();
+            if (diff > static_cast<long long>(150 / settingsToUse.SpeedMultiplier)) {
                 currentCtx->forceSnapNext = true;
             }
-            currentCtx->inactiveStartTime = 0;
+            currentCtx->inactiveStartTime = {};
         }
     }
 }
@@ -1376,7 +1326,7 @@ SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Origin
 
 void SearchIconButton_UpdateVisualStates_Common(void* pThis) {
     if (g_unloading) return;
-    auto elem = GetFrameworkElementFromNative(pThis);
+    auto elem = GetFrameworkElementFromNative(pThis, g_offsetSearchIconButton);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1466,7 +1416,6 @@ bool HookSearchUxDllSymbols(HMODULE module) {
             false
         }
     };
-    // SearchUx.UI.dll
     WindhawkUtils::SYMBOL_HOOK searchUxHook2[] = {
         {
             {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
@@ -1542,23 +1491,23 @@ void Wh_ModBeforeUninit() {
     std::vector<std::shared_ptr<PillContext>> localPills;
     {
         std::lock_guard<std::mutex> lock(g_pillsMutex);
-        localPills = g_pillContexts;
-        g_pillContexts.clear();
+        localPills = *g_pillContexts;
+        g_pillContexts->clear();
     }
 
     std::vector<AttachedEvent> localEvents;
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        localEvents = g_attachedEvents;
-        g_attachedEvents.clear();
+        localEvents = *g_attachedEvents;
+        g_attachedEvents->clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_attachedGroupsMutex);
-        g_attachedGroups.clear();
+        g_attachedGroups->clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_iconColorMutex);
-        g_iconColorCache.clear();
+        g_iconColorCache->clear();
         g_iconColorExtracting.clear();
     }
 
@@ -1660,29 +1609,42 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    std::lock_guard<std::mutex> lock(g_pillsMutex);
+    struct PillUpdateData {
+        winrt::Windows::UI::Xaml::Shapes::Rectangle p{nullptr};
+        winrt::Windows::UI::Xaml::FrameworkElement a{nullptr};
+        winrt::Windows::UI::Xaml::Controls::Grid g{nullptr};
+    };
+    std::vector<PillUpdateData> updates;
+    {
+        std::lock_guard<std::mutex> lock(g_pillsMutex);
+        for (auto& ctx : *g_pillContexts) {
+            auto p = ctx->pill.get();
+            auto a = ctx->activeBtn.get();
+            auto g = ctx->grid.get();
+            if (p && a && g) {
+                updates.push_back({p, a, g});
+            }
+        }
+    }
     std::vector<winrt::Windows::UI::Core::CoreDispatcher> dispatched;
-    for (auto& ctx : g_pillContexts) {
-        auto p = ctx->pill.get();
-        auto a = ctx->activeBtn.get();
-        auto g = ctx->grid.get();
-        if (p && a && g) {
-            if (auto dispatcher = p.Dispatcher()) {
-                bool alreadyDispatched = false;
-                for (auto& d : dispatched) {
-                    if (d == dispatcher) { alreadyDispatched = true; break; }
-                }
-                if (!alreadyDispatched) {
-                    dispatched.push_back(dispatcher);
-                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [p, g, a]() {
-                        Settings localSettings;
-                        { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-                        try { 
-                            UpdatePillPosition(p, g, a, localSettings); 
-                            EnsurePillAndPosition(a, true, localSettings); 
-                        } catch (...) {}
-                    });
-                }
+    for (auto& update : updates) {
+        if (auto dispatcher = update.p.Dispatcher()) {
+            bool alreadyDispatched = false;
+            for (auto& d : dispatched) {
+                if (d == dispatcher) { alreadyDispatched = true; break; }
+            }
+            if (!alreadyDispatched) {
+                dispatched.push_back(dispatcher);
+                auto p = update.p; auto g = update.g; auto a = update.a;
+                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [p, g, a]() {
+                    if (g_unloading) return;
+                    Settings localSettings;
+                    { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+                    try { 
+                        UpdatePillPosition(p, g, a, localSettings); 
+                        EnsurePillAndPosition(a, true, localSettings); 
+                    } catch (...) {}
+                });
             }
         }
     }
