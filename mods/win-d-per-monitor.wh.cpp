@@ -3,7 +3,7 @@
 // @name            Win+D per monitor(show desktop)
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
-// @version         1.3.260330
+// @version         1.5.260416
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
@@ -46,6 +46,24 @@ where the mouse cursor is located.
 按下win+d时,只最小化/还原鼠标所在监视器上的窗口
 
 ## Changelog
+
+### 2026-04-16 (v1.5.260416)
+- Fixed repeated invocation of touchpad gesture by adding debounce logic to ignore redundant calls
+- 修复触摸板手势重复进入问题，添加防抖逻辑忽略连续重复调用
+
+Known issues:
+- Touchpad swipe-down can minimize all windows and show the desktop, but swipe-up does not trigger this function, so windows cannot be restored via gesture — swipe down again to toggle
+- 已知问题：触摸板下滑可最小化窗口显示桌面，但上滑不会进入此函数，无法通过手势还原窗口，需再次下滑切换
+
+Fixes:
+- https://github.com/ramensoftware/windhawk-mods/issues/3794
+
+### 2026-04-15 (v1.4.260415)
+- Switched hook target from `_HandleGlobalHotkey` to `_RaiseDesktop`, enabling per-monitor show desktop for both Win+D hotkey and touchpad gestures
+- 将 Hook 目标从 `_HandleGlobalHotkey` 改为 `_RaiseDesktop`，同时支持 Win+D 快捷键和触摸板手势的按显示器显示桌面功能
+
+Fixes:
+- https://github.com/ramensoftware/windhawk-mods/issues/3794
 
 ### 2026-03-30 (v1.3.260330)
 - Improved window control: try ShowWindowAsync first, then fall back to PostMessage (WM_SYSCOMMAND) if it fails
@@ -123,7 +141,6 @@ struct
     int minWindowSize;
     std::vector<IgnoreRule> ignoreRules;
 } g_settings;
-
 
 #define HOTKEY_ID_WIN_D 0x201
 class WindShowDesktop
@@ -240,11 +257,11 @@ class WindShowDesktop
     // 窗口最小化/还原：优先 ShowWindowAsync，失败后回退到 PostMessage
     static BOOL controlWindow(HWND hwnd, bool restore)
     {
-        if(IsWindowEnabled(hwnd))
+        if (IsWindowEnabled(hwnd))
         {
             return ::PostMessage(hwnd, WM_SYSCOMMAND, restore ? SC_RESTORE : SC_MINIMIZE, 0);
         }
-        
+
         if (::ShowWindowAsync(hwnd, restore ? SW_RESTORE : SW_MINIMIZE))
         {
             return TRUE;
@@ -460,19 +477,27 @@ public:
     }
 };
 
-// 原始的全局热键处理函数指针
-void (*__cdecl HandleGlobalHotkey_Original)(unsigned __int64, __int64);
-
-// 钩子函数：拦截Win+D热键
-void __cdecl HandleGlobalHotkey_Hook(unsigned __int64 param, __int64 hotkey_id)
+// 替换为Hook深层的函数,支持触摸板显示桌面手势,并且在该函数中调用我们自己的实现
+void(__cdecl *RaiseDesktop_Original)(void *pThis, int flags);
+void RaiseDesktop_Hook(void *pThis, int flags)
 {
-    if (hotkey_id == HOTKEY_ID_WIN_D)
+    log("_RaiseDesktop called, flags={},tid={}", flags, ::GetCurrentThreadId());
+
+    if (flags == 2 || flags == 3)
     {
-        WindShowDesktop::showDesktop();
-        return;
+        static auto s_last_tick = 0;
+        //修复触摸手势重复进入问题,添加防抖忽略
+        //已知问题:触摸手势下滑能最小化所有窗口显示桌面,但上滑不会进入此函数不会还原桌面,想还原窗口仍需下滑
+        if (GetTickCount64() - s_last_tick > 200)
+        {
+            WindShowDesktop::showDesktop();
+            s_last_tick = ::GetTickCount64();
+        }
     }
-    log("hotkey id: {:x}", hotkey_id);
-    HandleGlobalHotkey_Original(param, hotkey_id);
+    else
+    {
+        RaiseDesktop_Original(pThis, flags);
+    }
 }
 
 // 加载用户设置
@@ -515,9 +540,9 @@ BOOL Wh_ModInit()
     // explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(protected: void __cdecl CTray::_HandleGlobalHotkey(unsigned __int64,__int64))"},
-            (void **)&HandleGlobalHotkey_Original,
-            (void *)HandleGlobalHotkey_Hook,
+            {LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
+            (void **)&RaiseDesktop_Original,
+            (void *)RaiseDesktop_Hook,
         },
     };
 

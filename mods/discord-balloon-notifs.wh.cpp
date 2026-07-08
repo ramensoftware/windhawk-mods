@@ -2,7 +2,7 @@
 // @id              discord-balloon-notifs
 // @name            Discord Balloon Notifications
 // @description     Converts Discord toast notifications to classic Windows balloon notifications
-// @version         1.0
+// @version         1.0.1
 // @author          repensky
 // @github          https://github.com/repensky
 // @include         Discord.exe
@@ -20,7 +20,7 @@ Converts Discord's modern Windows toast notifications into balloon tips that app
 # WARNING!
 The use of third party Discord clients with this mod is **NOT** supported! This mod is designed for the official Discord app. It may or may not function properly with unofficial Discord clients. Try on your own risk.
 
-Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually. Otherwise, Discord may **crash** if not restarted on next notification.
+Enable this mod before starting Discord. If Discord is already running when you enable the mod, restart Discord manually for the mod to function.
 
 ## Requirement:
 Ensure **EnableLegacyBalloonNotifications** is set to **1** in ``HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications``
@@ -118,8 +118,9 @@ static void LoadSettings() {
 // Global variables
 
 static void** g_pDocIOVtbl = nullptr;
-static void** g_pNotifFactoryVtbl = nullptr;
+static void** g_pNotifierVtbl = nullptr;
 static HANDLE g_hBalloonReady = nullptr;
+static HANDLE g_hEmojiThread = nullptr;
 static volatile bool g_modUnloading = false;
 
 // Discord Process Monitor
@@ -623,7 +624,7 @@ static DWORD WINAPI DiscordMonitorThread(LPVOID) {
                        lastExplorerPid, currentExplorerPid);
                 g_iconAdded = false;
                 lastExplorerPid = currentExplorerPid;
-                
+
                 // Wait a bit for explorer to fully initialize
                 Sleep(2000);
             }
@@ -1328,9 +1329,7 @@ static const WCHAR* LookupEmoji(const WCHAR* str, int* matchLen) {
     if (!str || !*str) return nullptr;
     if (!InterlockedCompareExchange(&g_emojiTableReady, 1, 1)) return nullptr;
     
-    LONG count = InterlockedCompareExchange(&g_emojiCount, 0, 0);
-    // Read actual count without modifying
-    count = g_emojiCount;
+    LONG count = g_emojiCount;
     
     for (LONG i = 0; i < count; i++) {
         const WCHAR* sur = g_dynamicEmojiTable[i].surrogates;
@@ -1787,6 +1786,15 @@ static HRESULT STDMETHODCALLTYPE LoadXml_Hook(void* pThis, HSTRING xml) {
     if (xmlStr && len > 0) {
         if (wcsstr(xmlStr, L"<toast")) {
             ParseTextFromXmlString(xmlStr);
+            
+            // Trigger balloon immediately from the parsed XML
+            if (g_haveXmlText) {
+                ShowBalloonNotification(
+                    g_lastXmlTitle[0] ? g_lastXmlTitle : L"Discord",
+                    g_lastXmlBody[0] ? g_lastXmlBody : L"New message"
+                );
+                g_haveXmlText = false;
+            }
         }
     }
 
@@ -1810,6 +1818,7 @@ static void TryHookLoadXml(void* pXmlDocInstance) {
     ((IUnknown*)pDocIO)->Release();
 }
 
+
 // ToastNotifier_Show hooking
 
 typedef HRESULT (STDMETHODCALLTYPE *ToastNotifier_Show_t)(void* pThis, void* pNotification);
@@ -1817,116 +1826,21 @@ static ToastNotifier_Show_t ToastNotifier_Show_Orig = nullptr;
 static bool g_showHooked = false;
 
 static HRESULT STDMETHODCALLTYPE ToastNotifier_Show_Hook(void* pThis, void* pNotification) {
-    Wh_Log(L"Show: toast suppressed");
+    Wh_Log(L"Show: toast suppressed via vtable");
     return S_OK;
 }
 
-// CreateToastNotification hooking
-
-typedef HRESULT (STDMETHODCALLTYPE *CreateToastNotification_t)(void* pThis, void* pXmlDoc, void** ppNotification);
-static CreateToastNotification_t CreateToastNotification_Orig = nullptr;
-static bool g_notifFactoryHooked = false;
-
-static HRESULT STDMETHODCALLTYPE CreateToastNotification_Hook(void* pThis, void* pXmlDoc, void** ppNotification) {
-    if (g_haveXmlText) {
-        ShowBalloonNotification(
-            g_lastXmlTitle[0] ? g_lastXmlTitle : L"Discord",
-            g_lastXmlBody[0] ? g_lastXmlBody : L"New message"
-        );
-        g_haveXmlText = false;
-    } else {
-        ShowBalloonNotification(L"Discord", L"New message");
-    }
-
-    return CreateToastNotification_Orig(pThis, pXmlDoc, ppNotification);
-}
-
-static void TryHookNotificationFactory(void* pFactory) {
-    if (g_notifFactoryHooked || !pFactory) return;
-
-    void** vtbl = *(void***)pFactory;
+static void TryHookToastNotifierShow(void* pNotifier) {
+    if (g_showHooked || !pNotifier) return;
+    
+    void** vtbl = *(void***)pNotifier;
     if (!vtbl) return;
-
-    if (PatchVtableEntry(vtbl, 6, (void*)CreateToastNotification_Hook, (void**)&CreateToastNotification_Orig)) {
-        g_pNotifFactoryVtbl = vtbl;
-        g_notifFactoryHooked = true;
-        Wh_Log(L"Hooked CreateToastNotification via vtable patch");
-    }
-}
-
-// Proactive Show hooking
-
-static bool g_inProactiveHook = false;
-
-static void ProactivelyHookShow() {
-    if (g_showHooked || g_inProactiveHook) return;
-    g_inProactiveHook = true;
-
-    static const GUID IID_IToastNotificationManagerStatics =
-        {0x50AC103F, 0xD235, 0x4598, {0xBB,0xEF,0x98,0xFE,0x4D,0x1A,0x3A,0xD4}};
-
-    HSTRING hClassName = nullptr;
-    WindowsCreateString(
-        L"Windows.UI.Notifications.ToastNotificationManager",
-        (UINT32)wcslen(L"Windows.UI.Notifications.ToastNotificationManager"),
-        &hClassName);
-
-    void* pManagerStatics = nullptr;
-    HRESULT hr = RoGetActivationFactory(hClassName, IID_IToastNotificationManagerStatics, &pManagerStatics);
-    WindowsDeleteString(hClassName);
-
-    if (FAILED(hr) || !pManagerStatics) {
-        g_inProactiveHook = false;
-        return;
-    }
-
-    void** managerVtbl = *(void***)pManagerStatics;
-    typedef HRESULT (STDMETHODCALLTYPE *CreateToastNotifierWithId_t)(void* pThis, HSTRING appId, void** ppNotifier);
-    CreateToastNotifierWithId_t createWithId = (CreateToastNotifierWithId_t)managerVtbl[7];
-
-    void* pNotifier = nullptr;
-    HSTRING hAppId = nullptr;
-    WindowsCreateString(L"Discord", 7, &hAppId);
-    hr = createWithId(pManagerStatics, hAppId, &pNotifier);
-    WindowsDeleteString(hAppId);
-
-    if (SUCCEEDED(hr) && pNotifier) {
-        void** notifierVtbl = *(void***)pNotifier;
-        void* showAddr = notifierVtbl[6];
-        Wh_SetFunctionHook(showAddr, (void*)ToastNotifier_Show_Hook, (void**)&ToastNotifier_Show_Orig);
-        Wh_ApplyHookOperations();
+    
+    if (PatchVtableEntry(vtbl, 6, (void*)ToastNotifier_Show_Hook, (void**)&ToastNotifier_Show_Orig)) {
+        g_pNotifierVtbl = vtbl;
         g_showHooked = true;
-        Wh_Log(L"Hooked IToastNotifier::Show at %p", showAddr);
-        ((IUnknown*)pNotifier)->Release();
+        Wh_Log(L"Hooked IToastNotifier::Show via vtable patch");
     }
-
-    ((IUnknown*)pManagerStatics)->Release();
-    g_inProactiveHook = false;
-}
-
-// RoGetActivationFactory hooking
-
-typedef HRESULT (WINAPI *RoGetActivationFactory_t)(HSTRING classId, REFIID iid, void** factory);
-static RoGetActivationFactory_t RoGetActivationFactory_Orig = nullptr;
-
-HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING classId, REFIID iid, void** factory) {
-    HRESULT hr = RoGetActivationFactory_Orig(classId, iid, factory);
-
-    if (SUCCEEDED(hr) && factory && *factory) {
-        UINT32 len = 0;
-        const WCHAR* name = WindowsGetStringRawBuffer(classId, &len);
-        if (!name) return hr;
-
-        if (wcscmp(name, L"Windows.UI.Notifications.ToastNotification") == 0) {
-            TryHookNotificationFactory(*factory);
-            if (!g_showHooked) ProactivelyHookShow();
-        }
-        else if (!g_showHooked && !g_inProactiveHook && wcsstr(name, L"ToastNotificationManager")) {
-            ProactivelyHookShow();
-        }
-    }
-
-    return hr;
 }
 
 // RoActivateInstance hooking
@@ -1942,6 +1856,39 @@ HRESULT WINAPI RoActivateInstance_Hook(HSTRING classId, void** instance) {
         const WCHAR* name = WindowsGetStringRawBuffer(classId, &len);
         if (name && wcscmp(name, L"Windows.Data.Xml.Dom.XmlDocument") == 0) {
             TryHookLoadXml(*instance);
+        }
+    }
+
+    return hr;
+}
+
+// RoGetActivationFactory hooking
+
+typedef HRESULT (WINAPI *RoGetActivationFactory_t)(HSTRING classId, REFIID iid, void** factory);
+static RoGetActivationFactory_t RoGetActivationFactory_Orig = nullptr;
+
+HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING classId, REFIID iid, void** factory) {
+    HRESULT hr = RoGetActivationFactory_Orig(classId, iid, factory);
+
+    if (SUCCEEDED(hr) && factory && *factory && !g_showHooked) {
+        UINT32 len = 0;
+        const WCHAR* name = WindowsGetStringRawBuffer(classId, &len);
+        if (name && wcsstr(name, L"ToastNotificationManager")) {
+            // Create a temporary notifier to get the vtable for Show
+            void** managerVtbl = *(void***)(*factory);
+            typedef HRESULT (STDMETHODCALLTYPE *CreateToastNotifierWithId_t)(void*, HSTRING, void**);
+            CreateToastNotifierWithId_t createWithId = (CreateToastNotifierWithId_t)managerVtbl[7];
+            
+            void* pNotifier = nullptr;
+            HSTRING hAppId = nullptr;
+            WindowsCreateString(L"Discord", 7, &hAppId);
+            HRESULT hr2 = createWithId(*factory, hAppId, &pNotifier);
+            WindowsDeleteString(hAppId);
+            
+            if (SUCCEEDED(hr2) && pNotifier) {
+                TryHookToastNotifierShow(pNotifier);
+                ((IUnknown*)pNotifier)->Release();
+            }
         }
     }
 
@@ -1964,25 +1911,35 @@ static void RestoreVtableHooks() {
         }
         g_loadXmlHooked = false;
     }
-
-    if (g_notifFactoryHooked && g_pNotifFactoryVtbl && CreateToastNotification_Orig) {
+    if (g_showHooked && g_pNotifierVtbl && ToastNotifier_Show_Orig) {
         DWORD oldProtect;
-        if (VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-            g_pNotifFactoryVtbl[6] = (void*)CreateToastNotification_Orig;
-            VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), oldProtect, &oldProtect);
-            Wh_Log(L"Restored CreateToastNotification vtable entry");
-        } else if (VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-            g_pNotifFactoryVtbl[6] = (void*)CreateToastNotification_Orig;
-            VirtualProtect(&g_pNotifFactoryVtbl[6], sizeof(void*), oldProtect, &oldProtect);
-            Wh_Log(L"Restored CreateToastNotification vtable entry");
+        if (VirtualProtect(&g_pNotifierVtbl[6], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+            g_pNotifierVtbl[6] = (void*)ToastNotifier_Show_Orig;
+            VirtualProtect(&g_pNotifierVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored IToastNotifier::Show vtable entry");
+        } else if (VirtualProtect(&g_pNotifierVtbl[6], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            g_pNotifierVtbl[6] = (void*)ToastNotifier_Show_Orig;
+            VirtualProtect(&g_pNotifierVtbl[6], sizeof(void*), oldProtect, &oldProtect);
+            Wh_Log(L"Restored IToastNotifier::Show vtable entry");
         }
-        g_notifFactoryHooked = false;
+        g_showHooked = false;
     }
+}
+
+static bool IsMainDiscordProcess() {
+    LPCWSTR cmdLine = GetCommandLineW();
+    if (!cmdLine) return true; // assume main if we can't check
+    return (wcsstr(cmdLine, L"--type=") == nullptr);
 }
 
 // Windhawk functions
 
 BOOL Wh_ModInit(void) {
+    if (!IsMainDiscordProcess()) {
+        Wh_Log(L"Skipping non-main Discord process (PID %lu)", GetCurrentProcessId());
+        return FALSE;  // Don't initialize in child processes
+    }
+    
     Wh_Log(L"Discord Balloon Notifications mod started (PID %lu)", GetCurrentProcessId());
 
     LoadSettings();
@@ -2000,9 +1957,8 @@ BOOL Wh_ModInit(void) {
         HEAP_ZERO_MEMORY, sizeof(DynamicEmojiEntry) * MAX_EMOJI_ENTRIES);
     
     // Start emoji loading in background
-    HANDLE hEmojiThread = CreateThread(nullptr, 0, EmojiLoadThread, nullptr, 0, nullptr);
-    if (hEmojiThread) CloseHandle(hEmojiThread);
-    
+    g_hEmojiThread = CreateThread(nullptr, 0, EmojiLoadThread, nullptr, 0, nullptr);
+
     g_hBalloonReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(nullptr, 0, BalloonThread, nullptr, 0, nullptr);
     if (g_hBalloonReady) {
@@ -2020,7 +1976,6 @@ BOOL Wh_ModInit(void) {
     if (combase) {
         void* p1 = (void*)GetProcAddress(combase, "RoGetActivationFactory");
         void* p2 = (void*)GetProcAddress(combase, "RoActivateInstance");
-
         if (p1) Wh_SetFunctionHook(p1, (void*)RoGetActivationFactory_Hook, (void**)&RoGetActivationFactory_Orig);
         if (p2) Wh_SetFunctionHook(p2, (void*)RoActivateInstance_Hook, (void**)&RoActivateInstance_Orig);
     }
@@ -2049,6 +2004,12 @@ void Wh_ModUninit(void) {
     if (g_lastNotifIcon) {
         DestroyIcon(g_lastNotifIcon);
         g_lastNotifIcon = nullptr;
+    }
+
+    if (g_hEmojiThread) {
+        WaitForSingleObject(g_hEmojiThread, 3000);
+        CloseHandle(g_hEmojiThread);
+        g_hEmojiThread = nullptr;
     }
 
     if (g_hBalloonWnd)
