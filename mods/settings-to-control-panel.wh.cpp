@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.22
+// @version        10.0.23
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -129,6 +129,9 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCW
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
+// NtUserTrackPopupMenuEx fallback (syscall level)
+using NtUserTrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
+static NtUserTrackPopupMenuEx_t g_origNtUserTrackPopupMenuEx = nullptr;
 
 struct ResolveResult {
     std::wstring target;
@@ -673,7 +676,138 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 
     return result;
 }
-
+// Hook a livello syscall per catturare menu che bypassano TrackPopupMenuEx
+BOOL WINAPI NtUserTrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
+    // Se non è un menu della system tray, passa all'originale
+    if (!g_settings.redirectSystemTray || !g_settings.enableRedirects) {
+        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+    
+    HookGuard guard;
+    if (guard.IsReentrant()) {
+        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+    
+    // --- Rilevamento menu usando la stessa logica di TrackPopupMenuEx_Hook ---
+    int contextType;
+    {
+        std::lock_guard<std::mutex> lk(g_trayContextMutex);
+        contextType = g_trayContextType;
+        DWORD tick = g_trayContextTick;
+        g_trayContextType = 0;
+        g_trayContextTick = 0;
+        if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS) {
+            contextType = 0;
+        }
+    }
+    
+    bool isAudioMenu   = (contextType == 1);
+    bool isNetworkMenu = (contextType == 2);
+    bool isDeviceMenu  = false;
+    
+    // Fallback: DLL return-address detection
+    if (!isAudioMenu && !isNetworkMenu) {
+        void* retAddr = GetReturnAddress();
+        int itemCount = GetMenuItemCount(hMenu);
+        if (itemCount > 0) {
+            if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
+                if (itemCount <= 6) isAudioMenu = true;
+            }
+            else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
+                if (itemCount <= 6) isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
+            }
+            else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
+                if (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109) {
+                    isNetworkMenu = true;
+                }
+                else if (GetMenuItemID(hMenu, 0) == 215) {
+                    isDeviceMenu = true;
+                }
+            }
+            else if (IsAddressInModule(retAddr, L"shell32.dll")) {
+                for (int i = 0; i < itemCount; i++) {
+                    if (GetMenuItemID(hMenu, i) == 215) {
+                        isDeviceMenu = true;
+                        break;
+                    }
+                }
+            }
+            else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
+                isDeviceMenu = true;
+            }
+        }
+    }
+    
+    if (!isAudioMenu && !isNetworkMenu && !isDeviceMenu) {
+        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+    
+    // Trova l'item target
+    int itemCount = GetMenuItemCount(hMenu);
+    int targetIndex = -1;
+    
+    if (isAudioMenu) {
+        targetIndex = 0;
+    }
+    else if (isNetworkMenu) {
+        for (int i = itemCount - 1; i >= 0; i--) {
+            MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
+            miiCheck.fMask = MIIM_FTYPE;
+            if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
+                if (!(miiCheck.fType & MFT_SEPARATOR)) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+    else if (isDeviceMenu) {
+        for (int i = 0; i < itemCount; i++) {
+            if (GetMenuItemID(hMenu, i) == 215) {
+                targetIndex = i;
+                break;
+            }
+        }
+        if (targetIndex == -1) {
+            for (int i = 0; i < itemCount; i++) {
+                MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
+                miiCheck.fMask = MIIM_FTYPE;
+                if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
+                    if (!(miiCheck.fType & MFT_SEPARATOR)) {
+                        targetIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (targetIndex == -1) {
+        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+    
+    UINT originalId = GetMenuItemID(hMenu, targetIndex);
+    bool callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
+    uFlags |= TPM_RETURNCMD;
+    
+    BOOL result = g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    int selectedId = (int)result;
+    
+    if (selectedId == (int)originalId) {
+        Wh_Log(L"[SYSCALL-HOOK] User selected target item, redirecting");
+        if (isAudioMenu)        OpenClassicSoundPanel();
+        else if (isNetworkMenu) OpenClassicNetworkConnections();
+        else                    OpenClassicDevicesAndPrinters();
+        return 0;
+    }
+    
+    if (selectedId != 0 && !callerWantedReturnCmd) {
+        PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)selectedId, 0), 0);
+        return TRUE;
+    }
+    
+    return result;
+}
 static std::unordered_map<std::wstring, std::wstring> g_mappings;
 
 static void InitMappings() {
@@ -1204,7 +1338,7 @@ static bool TryInstallPniduiHook() {
     
     Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
-    WindhawkUtils::SYMBOL_HOOK hook = {{
+    WindhawkUtils::SYMBOL_HOOK pniduiHook = {{
         L"bool "
 #ifdef _WIN64
         L"__cdecl"
@@ -1217,7 +1351,7 @@ static bool TryInstallPniduiHook() {
     (void**)&g_icmhOrig_pnidui,
     (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook};
 
-    bool result = WindhawkUtils::HookSymbols(hMod, &hook, 1);
+    bool result = WindhawkUtils::HookSymbols(hMod, &pniduiHook, 1);
     if (result) {
         Wh_Log(L"[PNIDUI-HOOK] Successfully installed pnidui.dll hook");
         g_pniduiHookInstalled = true;
@@ -1282,7 +1416,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        // RINOMINATO: sndVolSsoHooks invece di hooks
+        WindhawkUtils::SYMBOL_HOOK sndVolSsoHooks[] = {
             {{
                 L"bool "
 #ifdef _WIN64
@@ -1297,7 +1432,7 @@ static void InstallImmersiveMenuHooks() {
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, hooks, 1);
+        WindhawkUtils::HookSymbols(hMod, sndVolSsoHooks, 1);
     }
 
     // Prova pnidui.dll - se fallisce, avvia il thread di retry
@@ -1320,7 +1455,8 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            WindhawkUtils::SYMBOL_HOOK shell32_hooks[] = {
+            // RINOMINATO: shell32Hooks invece di shell32_hooks
+            WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
                 {{
                     L"bool "
 #ifdef _WIN64
@@ -1335,8 +1471,33 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
             };
             
-            WindhawkUtils::HookSymbols(hShell32, shell32_hooks, 1);
+            WindhawkUtils::HookSymbols(hShell32, shell32Hooks, 1);
         }
+    }
+}
+static void InstallSyscallFallback() {
+    HMODULE hWin32u = GetModuleHandleW(L"win32u.dll");
+    if (!hWin32u) {
+        hWin32u = LoadLibraryW(L"win32u.dll");
+        if (!hWin32u) {
+            Wh_Log(L"[SYSCALL-HOOK] win32u.dll not found");
+            return;
+        }
+    }
+    
+    // Prova prima con NtUserTrackPopupMenuEx (nome esatto)
+    FARPROC pNtUserTrackPopupMenuEx = GetProcAddress(hWin32u, "NtUserTrackPopupMenuEx");
+    if (!pNtUserTrackPopupMenuEx) {
+        Wh_Log(L"[SYSCALL-HOOK] NtUserTrackPopupMenuEx not found by name");
+        return;
+    }
+    
+    if (Wh_SetFunctionHook((void*)pNtUserTrackPopupMenuEx, 
+                          (void*)NtUserTrackPopupMenuEx_Hook, 
+                          (void**)&g_origNtUserTrackPopupMenuEx)) {
+        Wh_Log(L"[SYSCALL-HOOK] NtUserTrackPopupMenuEx hooked successfully");
+    } else {
+        Wh_Log(L"[SYSCALL-HOOK] Failed to hook NtUserTrackPopupMenuEx");
     }
 }
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -1360,8 +1521,9 @@ HWND WINAPI CreateWindowExW_Hook(
     return hwnd;
 }
 
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.22");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.23");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1391,8 +1553,8 @@ BOOL Wh_ModInit() {
         SetupTraySubclass();
     }
 
-    InstallImmersiveMenuHooks();
-
+    InstallImmersiveMenuHooks();    
+    InstallSyscallFallback(); 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
     if (hUser32) {
