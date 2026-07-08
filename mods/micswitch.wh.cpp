@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              micswitch
+// @id              microswap
 // @name            MicSwitch
 // @description     Tray icon to cycle between multiple preferred microphones. Supports up to 6 devices with click or scroll to swap.
 // @version         2.0.1
