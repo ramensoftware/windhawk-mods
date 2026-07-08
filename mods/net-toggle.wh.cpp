@@ -109,10 +109,9 @@ One click drops your connection. Click it again, and you're back online.
 ## Changelog
 
 # 2.1.1
-- **Fixed:** Changelog formatting and metadata standardized across all mods.
-- **Fixed:** Removed unnecessary `volatile` qualifiers from `g_isProcessingClick`, `g_trayIconInstalled`, and `g_networkIsUp`.
-- **Added:** `@license MIT` and `@architecture x86 x86-64` metadata.
-- **Added:** `$description` to the secondary DNS server check method setting.
+- **Fixed:** Mod no longer crashes on reload.
+- **Fixed:** Unstable state on rapid clicks resolved.
+- **Added:** Description for the secondary DNS server check method setting.
 
 # 2.1.0
 - **New:** Secondary DNS server — monitor a primary and fallback pair (Google, Cloudflare, NextDNS all publish two IPs). New orange icon state when only the fallback is answering.
