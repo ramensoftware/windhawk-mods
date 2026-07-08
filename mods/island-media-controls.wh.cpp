@@ -2,13 +2,13 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.39
+// @version         0.9.87
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -106,12 +106,30 @@ it fits naturally alongside your taskbar and system tray items.
     $name: Hover scale (%)
   - HoverLerpSpeed: 28
     $name: Hover smoothing
-  - Material: "mica_like"
+  - Material: "acrylic"
     $name: Background material
     $options:
     - "mica_like": "Mica-like content layer"
     - "solid": "Solid"
     - "acrylic": "Acrylic / glass"
+  - BackdropHandoffDelayMs: 0
+    $name: Backdrop handoff delay (ms)
+    $description: Wait after the popup reaches its final shape before switching from fallback blur to live WGC blur.
+  - BackdropHandoffFadeMs: 100
+    $name: Backdrop handoff fade (ms)
+    $description: Crossfade duration from the final fallback blur frame to live WGC blur.
+  - BackdropInitialFrameSkip: 2
+    $name: Backdrop initial frame skip
+    $description: Number of WGC frames to skip before replacing the fallback frame.
+  - BackdropFallbackBlurPasses: 5
+    $name: Backdrop fallback blur passes
+    $description: Blur strength for the animation-period fallback frame.
+  - BackdropFallbackCaptureScale: 2
+    $name: Backdrop fallback capture scale
+    $description: Lower values sample more pixels; higher values are faster but softer.
+  - BackdropWgcBlurStdDev: 18
+    $name: Backdrop WGC blur strength
+    $description: Gaussian blur standard deviation for live WGC blur.
 */
 // ==/WindhawkModSettings==
 
@@ -123,6 +141,59 @@ it fits naturally alongside your taskbar and system tray items.
 #include <shlwapi.h>
 #include <wincodec.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
+
+#if __has_include(<winrt/Windows.Graphics.Capture.h>) && \
+    __has_include(<winrt/Windows.Graphics.DirectX.Direct3D11.h>)
+#define IMC_WGC_OVERLAY_AVAILABLE 1
+#include <inspectable.h>
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <d2d1_1.h>
+#include <d2d1_1helper.h>
+#include <d2d1effects.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+
+// Windhawk's bundled SDK may miss the two small WinRT interop headers even
+// though the WinRT projection and D3D/D2D headers are present. Define the
+// minimal COM interfaces locally so the WGC path is actually compiled instead
+// of silently falling back to the stub branch.
+//
+// Do not use __declspec(uuid) here: Windhawk's Clang/MinGW configuration ignores
+// that attribute, which breaks winrt::guid_of<T>. Use explicit GUID constants
+// and raw QueryInterface instead.
+static constexpr GUID kIID_IGraphicsCaptureItemInterop{
+    0x3628E81B, 0x3CAC, 0x4C60,
+    {0xB7, 0xF4, 0x23, 0xCE, 0x0E, 0x0C, 0x33, 0x56}};
+static constexpr GUID kIID_IDirect3DDxgiInterfaceAccess{
+    0xA9B3D012, 0x3DF2, 0x4EE3,
+    {0xB8, 0xD1, 0x86, 0x95, 0xF4, 0x57, 0xD3, 0xC1}};
+static constexpr GUID kIID_IGraphicsCaptureItem{
+    0x79C3F95B, 0x31F7, 0x4EC2,
+    {0xA4, 0x64, 0x63, 0x2E, 0xF5, 0xD3, 0x07, 0x60}};
+
+struct IGraphicsCaptureItemInterop : ::IUnknown {
+    virtual HRESULT __stdcall CreateForWindow(HWND window,
+                                              REFIID riid,
+                                              void** result) = 0;
+    virtual HRESULT __stdcall CreateForMonitor(HMONITOR monitor,
+                                               REFIID riid,
+                                               void** result) = 0;
+};
+
+struct IDirect3DDxgiInterfaceAccess : ::IUnknown {
+    virtual HRESULT __stdcall GetInterface(REFIID iid,
+                                           void** p) = 0;
+};
+
+extern "C" HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice(
+    IDXGIDevice* dxgiDevice,
+    IInspectable** graphicsDevice);
+#else
+#define IMC_WGC_OVERLAY_AVAILABLE 0
+#endif
+
 #include <windhawk_utils.h>
 
 #ifdef GetCurrentTime
@@ -135,6 +206,7 @@ it fits naturally alongside your taskbar and system tray items.
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Input.h>
@@ -153,6 +225,7 @@ it fits naturally alongside your taskbar and system tray items.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <climits>
 #include <condition_variable>
@@ -167,6 +240,10 @@ it fits naturally alongside your taskbar and system tray items.
 #define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
 #endif
 
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
 namespace xaml = winrt::Windows::UI::Xaml;
 namespace composition = winrt::Windows::UI::Composition;
 namespace controls = winrt::Windows::UI::Xaml::Controls;
@@ -176,6 +253,11 @@ namespace imaging = winrt::Windows::UI::Xaml::Media::Imaging;
 namespace hosting = winrt::Windows::UI::Xaml::Hosting;
 namespace streams = winrt::Windows::Storage::Streams;
 namespace gsm = winrt::Windows::Media::Control;
+#if IMC_WGC_OVERLAY_AVAILABLE
+namespace capture = winrt::Windows::Graphics::Capture;
+namespace directx = winrt::Windows::Graphics::DirectX;
+namespace direct3d11 = winrt::Windows::Graphics::DirectX::Direct3D11;
+#endif
 
 using xaml::FrameworkElement;
 using xaml::GridLength;
@@ -220,7 +302,13 @@ struct Settings {
     bool hideWhenNoMedia = false;
     double hoverScale = 1.06;
     double hoverLerpSpeed = 28.0;
-    std::wstring material = L"mica_like";
+    std::wstring material = L"acrylic";
+    int backdropHandoffDelayMs = 0;
+    int backdropHandoffFadeMs = 100;
+    int backdropInitialFrameSkip = 2;
+    int backdropFallbackBlurPasses = 5;
+    int backdropFallbackCaptureScale = 2;
+    int backdropWgcBlurStdDev = 18;
 };
 
 struct RuntimeLayout {
@@ -284,12 +372,17 @@ int64_t g_popupSeekCommitTargetTicks = 0;
 std::chrono::steady_clock::time_point g_popupSeekCommitUntil;
 
 std::atomic_bool g_unloading = false;
+std::atomic_bool g_modActive = false;
 std::atomic_bool g_mediaThreadRunning = false;
 std::thread* g_mediaThread = nullptr;
 std::mutex g_mediaCommandMutex;
 std::condition_variable g_mediaCommandCv;
 std::deque<MediaCommand> g_mediaCommands;
 std::atomic_bool g_mediaRefreshRequested = true;
+
+bool IsModActive() {
+    return g_modActive.load() && !g_unloading.load();
+}
 
 HWND g_taskbarWnd = nullptr;
 Grid g_playerGrid = nullptr;
@@ -313,6 +406,87 @@ int g_popupXamlThemeShadowDepth = -1;
 int g_popupXamlThemeShadowOpacity = -1;
 HWND g_expandedPopup = nullptr;
 bool g_popupClassRegistered = false;
+HWND g_popupBackdropOverlay = nullptr;
+bool g_popupBackdropOverlayClassRegistered = false;
+std::chrono::steady_clock::time_point g_popupBackdropOverlayLastPaintTime{};
+int g_popupBackdropOverlayLastWidth = 0;
+int g_popupBackdropOverlayLastHeight = 0;
+int g_popupBackdropOverlayLastRadius = 0;
+bool g_popupOverlayWgcReadbackHadVisibleFrame = false;
+std::chrono::steady_clock::time_point g_popupOverlayWgcReadbackDiagnosticTime{};
+enum class PopupOverlayWgcDiagnosticState {
+    NotStarted,
+    StartSkipped,
+    StartedNoFrame,
+    FrameArrived,
+    RenderFailed,
+    MapFailed,
+    UpdateFailed,
+    VisibleFrame,
+};
+PopupOverlayWgcDiagnosticState g_popupOverlayWgcDiagnosticState =
+    PopupOverlayWgcDiagnosticState::NotStarted;
+HRESULT g_popupOverlayWgcDiagnosticHr = S_OK;
+uint64_t g_popupOverlayWgcFrameCount = 0;
+uint64_t g_popupOverlayWgcRenderFailCount = 0;
+std::chrono::steady_clock::time_point g_popupOverlayWgcLastStartAttemptTime{};
+std::chrono::steady_clock::time_point g_popupOverlayWgcLastDiagnosticPaintTime{};
+HRESULT g_popupOverlayWgcCreateItemHr = S_OK;
+bool g_popupOverlayWgcCreateItemFailed = false;
+bool g_popupOverlayWgcFallbackPainted = false;
+std::chrono::steady_clock::time_point g_popupOverlayWgcStartTime{};
+int g_popupOverlayWgcFramesToSkip = 0;
+std::chrono::steady_clock::time_point g_popupOverlayWgcHandoffStartTime{};
+std::chrono::steady_clock::time_point g_popupOverlayWgcFinalReadyTime{};
+std::mutex g_popupBackdropOverlayHandoffMutex;
+std::vector<BYTE> g_popupBackdropOverlayFallbackPixels;
+RECT g_popupBackdropOverlayFallbackRect{};
+int g_popupBackdropOverlayFallbackWidth = 0;
+int g_popupBackdropOverlayFallbackHeight = 0;
+int g_popupBackdropOverlayFallbackRadius = 0;
+bool g_popupBackdropOverlayFallbackPixelsValid = false;
+
+void ClearPopupBackdropOverlayHandoffCache() {
+    std::lock_guard cacheLock(g_popupBackdropOverlayHandoffMutex);
+    g_popupBackdropOverlayFallbackPixels.clear();
+    g_popupBackdropOverlayFallbackRect = {};
+    g_popupBackdropOverlayFallbackWidth = 0;
+    g_popupBackdropOverlayFallbackHeight = 0;
+    g_popupBackdropOverlayFallbackRadius = 0;
+    g_popupBackdropOverlayFallbackPixelsValid = false;
+    g_popupOverlayWgcHandoffStartTime = {};
+    g_popupOverlayWgcFinalReadyTime = {};
+}
+
+
+#if IMC_WGC_OVERLAY_AVAILABLE
+std::mutex g_popupOverlayWgcMutex;
+bool g_popupOverlayWgcRunning = false;
+bool g_popupOverlayWgcFrameCallbackHooked = false;
+RECT g_popupOverlayWgcCaptureRectPx{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
+RECT g_popupOverlayWgcMonitorRectPx{};
+int g_popupOverlayWgcTargetWidthPx = 0;
+int g_popupOverlayWgcTargetHeightPx = 0;
+HMONITOR g_popupOverlayWgcMonitor = nullptr;
+HRESULT g_popupOverlayWgcLastHr = S_OK;
+
+winrt::com_ptr<ID3D11Device> g_popupOverlayWgcD3dDevice;
+winrt::com_ptr<ID3D11DeviceContext> g_popupOverlayWgcD3dContext;
+winrt::com_ptr<IDXGIDevice> g_popupOverlayWgcDxgiDevice;
+winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcRenderTexture;
+winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcStagingTexture;
+winrt::com_ptr<ID2D1Factory1> g_popupOverlayWgcD2dFactory;
+winrt::com_ptr<ID2D1Device> g_popupOverlayWgcD2dDevice;
+winrt::com_ptr<ID2D1DeviceContext> g_popupOverlayWgcD2dContext;
+
+direct3d11::IDirect3DDevice g_popupOverlayWgcGraphicsDevice{nullptr};
+capture::GraphicsCaptureItem g_popupOverlayWgcItem{nullptr};
+capture::Direct3D11CaptureFramePool g_popupOverlayWgcFramePool{nullptr};
+capture::GraphicsCaptureSession g_popupOverlayWgcSession{nullptr};
+winrt::event_token g_popupOverlayWgcFrameArrivedToken{};
+bool g_popupOverlayWgcHadFrame = false;
+std::chrono::steady_clock::time_point g_popupOverlayWgcDiagnosticStartTime{};
+#endif
 hosting::DesktopWindowXamlSource g_popupXamlSource = nullptr;
 HWND g_popupXamlChild = nullptr;
 Grid g_popupXamlRoot = nullptr;
@@ -339,6 +513,10 @@ ScaleTransform g_popupXamlArtScale = nullptr;
 TranslateTransform g_popupXamlArtTranslate = nullptr;
 Image g_popupXamlArtFade = nullptr;
 Image g_popupXamlArt = nullptr;
+FrameworkElement g_popupXamlTitleHost = nullptr;
+FrameworkElement g_popupXamlArtistHost = nullptr;
+FrameworkElement g_popupXamlOutgoingTitleHost = nullptr;
+FrameworkElement g_popupXamlOutgoingArtistHost = nullptr;
 TextBlock g_popupXamlTitle = nullptr;
 TextBlock g_popupXamlArtist = nullptr;
 TextBlock g_popupXamlOutgoingTitle = nullptr;
@@ -678,17 +856,12 @@ mediax::Brush IslandBackgroundBrush() {
     }
 
     if (g_settings.material == L"acrylic") {
-        try {
-            mediax::AcrylicBrush brush;
-            brush.BackgroundSource(mediax::AcrylicBackgroundSource::HostBackdrop);
-            brush.TintColor(dark ? Color(0xFF, 0x20, 0x20, 0x24)
-                                 : Color(0xFF, 0xF3, 0xF3, 0xF6));
-            brush.TintOpacity(0.62);
-            brush.FallbackColor(dark ? Color(0xE8, 0x20, 0x20, 0x24)
-                                     : Color(0xE8, 0xF3, 0xF3, 0xF6));
-            return brush;
-        } catch (...) {
-        }
+        // XAML AcrylicBrush can switch to its fallback when the taskbar/XAML
+        // island loses focus, which makes the compact island suddenly look gray
+        // and dirty. The expanded acrylic path uses a native overlay instead;
+        // keep the compact surface visually stable with a tinted brush.
+        return Brush(dark ? Color(0xD8, 0x20, 0x20, 0x24)
+                          : Color(0xEA, 0xF8, 0xF8, 0xFA));
     }
 
     return Brush(dark ? Color(0xE8, 0x20, 0x20, 0x24)
@@ -736,6 +909,28 @@ std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
     return value && *value ? value : fallback;
 }
 
+constexpr int kSettingsMigrationVersion = 1;
+constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
+    L"MigrateMicaLikeMaterialToAcrylic";
+
+void ApplySettingsMigrations(Settings* settings) {
+    int migratedVersion = Wh_GetIntValue(L"SettingsMigrationVersion", 0);
+    if (migratedVersion < 1) {
+        if (settings->material == L"mica_like") {
+            Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
+        }
+        Wh_SetIntValue(L"SettingsMigrationVersion", 1);
+    }
+
+    if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0)) {
+        if (settings->material == L"mica_like") {
+            settings->material = L"acrylic";
+        } else {
+            Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 0);
+        }
+    }
+}
+
 Settings ReadSettings() {
     Settings settings;
     settings.position = GetStringSetting(L"Main.Position", L"tray_left");
@@ -777,12 +972,25 @@ Settings ReadSettings() {
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.HoverScale"), 100, 125)) / 100.0;
     settings.hoverLerpSpeed =
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.HoverLerpSpeed"), 1, 80));
-    settings.material = GetStringSetting(L"Main.Material", L"mica_like");
+    settings.material = GetStringSetting(L"Main.Material", L"acrylic");
     if (settings.material != L"mica_like" &&
         settings.material != L"solid" &&
         settings.material != L"acrylic") {
-        settings.material = L"mica_like";
+        settings.material = L"acrylic";
     }
+    ApplySettingsMigrations(&settings);
+    settings.backdropHandoffDelayMs =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropHandoffDelayMs"), 0, 200);
+    settings.backdropHandoffFadeMs =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropHandoffFadeMs"), 60, 160);
+    settings.backdropInitialFrameSkip =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropInitialFrameSkip"), 1, 3);
+    settings.backdropFallbackBlurPasses =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropFallbackBlurPasses"), 4, 6);
+    settings.backdropFallbackCaptureScale =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropFallbackCaptureScale"), 2, 3);
+    settings.backdropWgcBlurStdDev =
+        Clamp(Wh_GetIntSetting(L"Main.BackdropWgcBlurStdDev"), 14, 22);
     return settings;
 }
 
@@ -1114,8 +1322,34 @@ void SetMedia(MediaState&& state) {
 }
 
 void RequestMediaRefresh() {
+    if (!IsModActive() || !g_mediaThreadRunning.load()) {
+        return;
+    }
     g_mediaRefreshRequested = true;
     g_mediaCommandCv.notify_one();
+}
+
+gsm::GlobalSystemMediaTransportControlsSessionManager
+RequestMediaManagerWithTimeout(std::chrono::milliseconds timeout) {
+    if (g_unloading) {
+        return nullptr;
+    }
+
+    try {
+        auto operation =
+            gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync();
+        if (operation.wait_for(timeout) !=
+            winrt::Windows::Foundation::AsyncStatus::Completed) {
+            try {
+                operation.Cancel();
+            } catch (...) {
+            }
+            return nullptr;
+        }
+        return operation.GetResults();
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 gsm::GlobalSystemMediaTransportControlsSession SelectBestSession(
@@ -1164,8 +1398,7 @@ gsm::GlobalSystemMediaTransportControlsSession SelectBestSession(
 
 gsm::GlobalSystemMediaTransportControlsSession CurrentSession() {
     try {
-        auto manager =
-            gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        auto manager = RequestMediaManagerWithTimeout(std::chrono::seconds(2));
         return SelectBestSession(manager);
     } catch (...) {
         return nullptr;
@@ -1231,7 +1464,7 @@ void RefreshMediaState(
 }
 
 void RunMediaCommand(MediaCommand command) {
-    if (!command || g_unloading || !g_mediaThreadRunning) {
+    if (!command || !IsModActive() || !g_mediaThreadRunning.load()) {
         return;
     }
 
@@ -1634,6 +1867,166 @@ std::vector<uint8_t> EncodePbgraPngBytes(UINT width, UINT height, std::vector<BY
     if (encoder) encoder->Release();
     if (outStream) outStream->Release();
     if (factory) factory->Release();
+    return output;
+}
+
+bool PopupCoverG2MaskContains(double px, double py, UINT size, double radius) {
+    if (size == 0 || radius <= 0.0) {
+        return true;
+    }
+
+    const double maxCoord = static_cast<double>(size);
+    double dx = 0.0;
+    double dy = 0.0;
+
+    if (px < radius) {
+        dx = radius - px;
+    } else if (px > maxCoord - radius) {
+        dx = px - (maxCoord - radius);
+    }
+
+    if (py < radius) {
+        dy = radius - py;
+    } else if (py > maxCoord - radius) {
+        dy = py - (maxCoord - radius);
+    }
+
+    if (dx <= 0.0 || dy <= 0.0) {
+        return true;
+    }
+
+    const double nx = dx / radius;
+    const double ny = dy / radius;
+    const double superellipse = nx * nx * nx * nx + ny * ny * ny * ny;
+    return superellipse <= 1.0;
+}
+
+double PopupCoverG2MaskScale(UINT x, UINT y, UINT size, double radius) {
+    constexpr int kSamplesPerAxis = 4;
+    int coveredSamples = 0;
+    for (int sampleY = 0; sampleY < kSamplesPerAxis; ++sampleY) {
+        double py = static_cast<double>(y) +
+                    (static_cast<double>(sampleY) + 0.5) /
+                        static_cast<double>(kSamplesPerAxis);
+        for (int sampleX = 0; sampleX < kSamplesPerAxis; ++sampleX) {
+            double px = static_cast<double>(x) +
+                        (static_cast<double>(sampleX) + 0.5) /
+                            static_cast<double>(kSamplesPerAxis);
+            if (PopupCoverG2MaskContains(px, py, size, radius)) {
+                ++coveredSamples;
+            }
+        }
+    }
+
+    return static_cast<double>(coveredSamples) /
+           static_cast<double>(kSamplesPerAxis * kSamplesPerAxis);
+}
+
+void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels, UINT size) {
+    if (size == 0 || pixels.size() < static_cast<size_t>(size) * size * 4) {
+        return;
+    }
+
+    constexpr double kPopupCoverG2RadiusRatio = 0.118;
+    const double radius = std::max(1.0, static_cast<double>(size) * kPopupCoverG2RadiusRatio);
+    for (UINT y = 0; y < size; ++y) {
+        for (UINT x = 0; x < size; ++x) {
+            double alphaScale = PopupCoverG2MaskScale(x, y, size, radius);
+            if (alphaScale >= 1.0) {
+                continue;
+            }
+
+            BYTE* pixel = pixels.data() + (static_cast<size_t>(y) * size + x) * 4;
+            pixel[0] = static_cast<BYTE>(std::lround(pixel[0] * alphaScale));
+            pixel[1] = static_cast<BYTE>(std::lround(pixel[1] * alphaScale));
+            pixel[2] = static_cast<BYTE>(std::lround(pixel[2] * alphaScale));
+            pixel[3] = static_cast<BYTE>(std::lround(pixel[3] * alphaScale));
+        }
+    }
+}
+
+std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(std::vector<uint8_t> const& bytes, UINT size = 512) {
+    std::vector<uint8_t> output;
+    if (bytes.empty() || size == 0) {
+        return output;
+    }
+
+    IStream* stream = SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size()));
+    IWICImagingFactory* factory = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICBitmapScaler* scaler = nullptr;
+    IWICFormatConverter* converter = nullptr;
+
+    UINT sourceWidth = 0;
+    UINT sourceHeight = 0;
+    HRESULT hr = stream ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) {
+        hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                              IID_PPV_ARGS(&factory));
+    }
+    if (SUCCEEDED(hr)) {
+        hr = factory->CreateDecoderFromStream(stream, nullptr,
+                                              WICDecodeMetadataCacheOnLoad, &decoder);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = decoder->GetFrame(0, &frame);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = frame->GetSize(&sourceWidth, &sourceHeight);
+    }
+
+    UINT scaledWidth = size;
+    UINT scaledHeight = size;
+    if (SUCCEEDED(hr) && sourceWidth > 0 && sourceHeight > 0) {
+        double scale = static_cast<double>(size) /
+                       static_cast<double>(std::min(sourceWidth, sourceHeight));
+        scaledWidth = std::max(size, static_cast<UINT>(std::ceil(sourceWidth * scale)));
+        scaledHeight = std::max(size, static_cast<UINT>(std::ceil(sourceHeight * scale)));
+    }
+    if (SUCCEEDED(hr)) {
+        hr = factory->CreateBitmapScaler(&scaler);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = scaler->Initialize(frame, scaledWidth, scaledHeight,
+                                WICBitmapInterpolationModeFant);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = factory->CreateFormatConverter(&converter);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = converter->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA,
+                                   WICBitmapDitherTypeNone, nullptr, 0,
+                                   WICBitmapPaletteTypeCustom);
+    }
+
+    std::vector<BYTE> scaledPixels(static_cast<size_t>(scaledWidth) * scaledHeight * 4);
+    if (SUCCEEDED(hr)) {
+        hr = converter->CopyPixels(nullptr, scaledWidth * 4,
+                                   static_cast<UINT>(scaledPixels.size()),
+                                   scaledPixels.data());
+    }
+    if (SUCCEEDED(hr)) {
+        std::vector<BYTE> pixels(static_cast<size_t>(size) * size * 4);
+        UINT offsetX = (scaledWidth > size) ? (scaledWidth - size) / 2 : 0;
+        UINT offsetY = (scaledHeight > size) ? (scaledHeight - size) / 2 : 0;
+        for (UINT y = 0; y < size; ++y) {
+            BYTE* source = scaledPixels.data() +
+                (static_cast<size_t>(y + offsetY) * scaledWidth + offsetX) * 4;
+            BYTE* target = pixels.data() + static_cast<size_t>(y) * size * 4;
+            std::memcpy(target, source, static_cast<size_t>(size) * 4);
+        }
+
+        ApplyPopupCoverG2Mask(pixels, size);
+        output = EncodePbgraPngBytes(size, size, pixels);
+    }
+
+    if (converter) converter->Release();
+    if (scaler) scaler->Release();
+    if (frame) frame->Release();
+    if (decoder) decoder->Release();
+    if (factory) factory->Release();
+    if (stream) stream->Release();
     return output;
 }
 
@@ -2789,7 +3182,11 @@ void UpdatePopupAlbumBitmap(MediaState const& state) {
 }
 
 constexpr wchar_t kPopupClassName[] = L"WindhawkIslandMediaPopup";
+constexpr wchar_t kPopupBackdropOverlayClassName[] = L"WindhawkIslandMediaBackdropOverlay";
 constexpr UINT_PTR kPopupTimerId = 0x494D;
+constexpr UINT_PTR kPopupBackdropOverlayTimerId = 0x494E;
+constexpr int kPopupBackdropOverlayRefreshMs = 90;
+constexpr int kPopupBackdropOverlayMaxCaptureSize = 320;
 
 double SmoothStep(double value) {
     value = Clamp(value, 0.0, 1.0);
@@ -2804,6 +3201,27 @@ double SmootherStep(double value) {
 // Clip animated text to its own text lane. Without this, render transforms can
 // let the incoming/outgoing title briefly draw outside the compact/popup card.
 void ApplyElementClip(FrameworkElement const& element, double width, double height) {
+    if (!element || width <= 0.0 || height <= 0.0) {
+        return;
+    }
+    try {
+        mediax::RectangleGeometry clip;
+        clip.Rect({0.0f, 0.0f,
+                   static_cast<float>(std::max(1.0, width)),
+                   static_cast<float>(std::max(1.0, height))});
+        element.Clip(clip);
+    } catch (...) {
+    }
+}
+
+// The UWP XAML version used by Windhawk exposes UIElement::Clip as a
+// RectangleGeometry-only property, so this helper remains a rectangular
+// fallback for shell surfaces. The album cover uses a premultiplied alpha
+// superellipse mask in the bitmap itself.
+void ApplyContinuousRoundedRectClip(FrameworkElement const& element,
+                                    double width,
+                                    double height,
+                                    double radius) {
     if (!element || width <= 0.0 || height <= 0.0) {
         return;
     }
@@ -2843,6 +3261,24 @@ int PopupShadowDepth() {
 int PopupShadowOpacityPercent() {
     return Clamp(g_settings.popupShadowOpacity, 0, 100);
 }
+int PopupBackdropHandoffDelayMs() {
+    return Clamp(g_settings.backdropHandoffDelayMs, 0, 200);
+}
+int PopupBackdropHandoffFadeMs() {
+    return Clamp(g_settings.backdropHandoffFadeMs, 60, 160);
+}
+int PopupBackdropInitialFrameSkip() {
+    return Clamp(g_settings.backdropInitialFrameSkip, 1, 3);
+}
+int PopupBackdropFallbackBlurPasses() {
+    return Clamp(g_settings.backdropFallbackBlurPasses, 4, 6);
+}
+int PopupBackdropFallbackCaptureScale() {
+    return Clamp(g_settings.backdropFallbackCaptureScale, 2, 3);
+}
+float PopupBackdropWgcBlurStdDev() {
+    return static_cast<float>(Clamp(g_settings.backdropWgcBlurStdDev, 14, 22));
+}
 int PopupBackdropPadding() {
     return PopupSurfaceGap();
 }
@@ -2851,7 +3287,12 @@ constexpr int kPopupCardInnerPadding = 18;
 constexpr int kPopupTextTopPadding = 13;
 constexpr int kPopupTextLineGap = 24;
 constexpr int kPopupTimeTextHeight = 16;
+// G2-style popup radius family. Windhawk's UWP XAML surface does not expose
+// a true squircle clip here, so keep the visual language consistent by routing
+// every expanded popup corner through these shared radii.
 constexpr double kPopupUnifiedCornerRadius = 24.0;
+constexpr double kPopupG2ButtonCornerRadius = 14.0;
+constexpr double kPopupG2ProgressCornerRadius = 3.0;
 // Transparent host margin used only so the rounded XAML shadow can fit without
 // falling back to the rectangular HWND shadow.
 constexpr int kPopupHostShadowMargin = 18;
@@ -2859,6 +3300,30 @@ constexpr int kPopupHostShadowMargin = 18;
 // material is exactly the compact island material, so compact/expanded states
 // share one color, one stroke model, and one predictable XAML clipping path.
 constexpr double kPopupBackdropOpacity = 1.0;
+constexpr double kPopupOverlayInsetDip = 0.0;
+constexpr double kPopupOverlayRadiusAdjustDip = 0.0;
+
+bool UseOverlayPopupBackdropMaterial() {
+    //          0.9.50 diagnostic: Acrylic uses a separate native overlay window behind
+    // the XAML popup, clipped to the animated rounded popup shell instead of
+    // the full transparent host rectangle. This keeps the visibility test from
+    // leaking outside the actual visual surface.
+    return g_settings.material == L"acrylic";
+}
+
+double PopupBackdropOverlayOpacity() {
+    if (!UseOverlayPopupBackdropMaterial() || g_popupClosing) {
+        return 1.0;
+    }
+    double progress = PopupProgress();
+    return SmootherStep(Clamp((progress - 0.10) / 0.28, 0.0, 1.0));
+}
+
+BYTE PopupBackdropOverlayMaxAlpha() {
+    return static_cast<BYTE>(
+        Clamp(static_cast<int>(std::lround(255.0 * PopupBackdropOverlayOpacity())),
+              0, 255));
+}
 
 bool PopupBackdropCoverEffectEnabled() {
     if (g_settings.popupBackdropCoverEffect == L"on") {
@@ -2911,11 +3376,18 @@ mediax::Brush PopupControlCardBrush() {
     if (dark) {
         return Brush(Color(0x70, 0x20, 0x20, 0x26));
     }
-    return Brush(Color(0xB8, 0xFF, 0xFF, 0xFF));
+    return Brush(Color(0xD8, 0xFF, 0xFF, 0xFF));
 }
 
 mediax::Brush PopupBackdropCardTintBrush() {
     bool dark = IsDarkModeApprox();
+    if (UseOverlayPopupBackdropMaterial()) {
+        // Native blur comes from the overlay window itself. Add only a clean
+        // light-mode white veil here so acrylic keeps enough tint without the
+        // compact island inheriting AcrylicBrush's inactive fallback behavior.
+        return Brush(dark ? Color(0x00, 0x00, 0x00, 0x00)
+                          : Color(0x8C, 0xFF, 0xFF, 0xFF));
+    }
     // Backdrop and control tints are tuned separately so light mode can stay
     // brighter without making dark mode look washed out. In dark mode this
     // matches the previous version, where the backdrop card tint reused the
@@ -2923,7 +3395,7 @@ mediax::Brush PopupBackdropCardTintBrush() {
     if (dark) {
         return Brush(Color(0x70, 0x20, 0x20, 0x26));
     }
-    return Brush(Color(0xD0, 0xFF, 0xFF, 0xFF));
+    return Brush(Color(0xE8, 0xFF, 0xFF, 0xFF));
 }
 
 double PopupPanelCoverOpacityFactor() {
@@ -2933,6 +3405,12 @@ double PopupPanelCoverOpacityFactor() {
 }
 
 mediax::Brush PopupSurfaceBrush() {
+    if (UseOverlayPopupBackdropMaterial()) {
+        // Let the native overlay window provide the real-time blurred material.
+        // The XAML shell itself stays transparent so the clipped overlay can
+        // show through cleanly beneath the controls and artwork.
+        return Brush(Color(0x00, 0x00, 0x00, 0x00));
+    }
     // C version: extend the compact island material to the expanded surface.
     // This keeps compact->expanded transitions visually consistent and avoids
     // mixing DWM backdrop, XAML Acrylic, and extra tint layers.
@@ -2940,6 +3418,11 @@ mediax::Brush PopupSurfaceBrush() {
 }
 
 mediax::Brush PopupSurfaceStrokeBrush() {
+    if (UseOverlayPopupBackdropMaterial()) {
+        bool dark = IsDarkModeApprox();
+        return Brush(dark ? Color(0x10, 0xFF, 0xFF, 0xFF)
+                          : Color(0x00, 0x00, 0x00, 0x00));
+    }
     // Match the compact island outline exactly: the expanded popup surface
     // should use the same subtle theme-aware stroke and no extra DWM border.
     return IslandBorderBrush();
@@ -3346,7 +3829,7 @@ void ApplyPopupButtonVisual(Border const& surface, bool hovered = false) {
 
     double width = PopupButtonWidth();
     double height = PopupButtonHeight();
-    double corner = height * 0.5;
+    double corner = std::min(height * 0.5, kPopupG2ButtonCornerRadius);
     double fontSize = primary ? 21.0 : 20.0;
     mediax::Brush background = hovered ? PopupButtonHoverBrush(dark)
                                        : Brush(Color(0x00, 0x00, 0x00, 0x00));
@@ -3496,8 +3979,8 @@ void ApplyPopupXamlTheme(bool force = false) {
         g_popupXamlPanelCoverFrame.BorderBrush(Brush(Color(0x00, 0x00, 0x00, 0x00)));
     }
     if (g_popupXamlArtFrame) {
-        g_popupXamlArtFrame.BorderThickness({1, 1, 1, 1});
-        g_popupXamlArtFrame.BorderBrush(PopupSurfaceStrokeBrush());
+        g_popupXamlArtFrame.BorderThickness({0, 0, 0, 0});
+        g_popupXamlArtFrame.BorderBrush(Brush(Color(0x00, 0x00, 0x00, 0x00)));
     }
     g_popupXamlPanel.Background(PopupControlCardBrush());
     // Playback control card uses the same subtle outline as the compact island
@@ -3788,6 +4271,10 @@ void ResetPopupXamlElementState() {
     g_popupXamlArtTranslate = nullptr;
     g_popupXamlArtFade = nullptr;
     g_popupXamlArt = nullptr;
+    g_popupXamlTitleHost = nullptr;
+    g_popupXamlArtistHost = nullptr;
+    g_popupXamlOutgoingTitleHost = nullptr;
+    g_popupXamlOutgoingArtistHost = nullptr;
     g_popupXamlTitle = nullptr;
     g_popupXamlArtist = nullptr;
     g_popupXamlOutgoingTitle = nullptr;
@@ -3901,11 +4388,9 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border artFrame;
         artFrame.CornerRadius({kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius,
                                kPopupUnifiedCornerRadius, kPopupUnifiedCornerRadius});
-        // Match the compact no-media placeholder: when there is no thumbnail,
-        // the expanded cover still shows a proper placeholder instead of a blank frame.
-        artFrame.Background(Brush(DefaultPopupAccentColor()));
-        artFrame.BorderThickness({1, 1, 1, 1});
-        artFrame.BorderBrush(PopupSurfaceStrokeBrush());
+        artFrame.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        artFrame.BorderThickness({0, 0, 0, 0});
+        artFrame.BorderBrush(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         AttachGpuFriendlyTransform(artFrame, g_popupXamlArtScale, g_popupXamlArtTranslate);
         Grid artHost;
         Image artFade;
@@ -3919,6 +4404,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         artFrame.Child(artHost);
         canvas.Children().Append(artFrame);
 
+        Grid outgoingTitleHost;
+        outgoingTitleHost.IsHitTestVisible(false);
         TextBlock outgoingTitle;
         outgoingTitle.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         outgoingTitle.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
@@ -3927,8 +4414,11 @@ bool InitializePopupXamlHost(HWND hwnd) {
         outgoingTitle.Opacity(0.0);
         TranslateTransform outgoingTitleTranslate;
         outgoingTitle.RenderTransform(outgoingTitleTranslate);
-        canvas.Children().Append(outgoingTitle);
+        outgoingTitleHost.Children().Append(outgoingTitle);
+        canvas.Children().Append(outgoingTitleHost);
 
+        Grid outgoingArtistHost;
+        outgoingArtistHost.IsHitTestVisible(false);
         TextBlock outgoingArtist;
         outgoingArtist.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         outgoingArtist.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
@@ -3936,8 +4426,11 @@ bool InitializePopupXamlHost(HWND hwnd) {
         outgoingArtist.Opacity(0.0);
         TranslateTransform outgoingArtistTranslate;
         outgoingArtist.RenderTransform(outgoingArtistTranslate);
-        canvas.Children().Append(outgoingArtist);
+        outgoingArtistHost.Children().Append(outgoingArtist);
+        canvas.Children().Append(outgoingArtistHost);
 
+        Grid titleHost;
+        titleHost.IsHitTestVisible(false);
         TextBlock title;
         title.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         title.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
@@ -3945,15 +4438,19 @@ bool InitializePopupXamlHost(HWND hwnd) {
         title.VerticalAlignment(VerticalAlignment::Center);
         TranslateTransform titleTranslate;
         title.RenderTransform(titleTranslate);
-        canvas.Children().Append(title);
+        titleHost.Children().Append(title);
+        canvas.Children().Append(titleHost);
 
+        Grid artistHost;
+        artistHost.IsHitTestVisible(false);
         TextBlock artist;
         artist.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
         artist.TextTrimming(xaml::TextTrimming::CharacterEllipsis);
         artist.VerticalAlignment(VerticalAlignment::Center);
         TranslateTransform artistTranslate;
         artist.RenderTransform(artistTranslate);
-        canvas.Children().Append(artist);
+        artistHost.Children().Append(artist);
+        canvas.Children().Append(artistHost);
 
         TextBlock elapsed;
         elapsed.FontFamily(mediax::FontFamily(L"Segoe UI Variable Text"));
@@ -3972,13 +4469,19 @@ bool InitializePopupXamlHost(HWND hwnd) {
 
         Border progressTrack;
         progressTrack.Height(6);
-        progressTrack.CornerRadius({3, 3, 3, 3});
+        progressTrack.CornerRadius({kPopupG2ProgressCornerRadius,
+                                    kPopupG2ProgressCornerRadius,
+                                    kPopupG2ProgressCornerRadius,
+                                    kPopupG2ProgressCornerRadius});
         progressTrack.IsHitTestVisible(false);
         canvas.Children().Append(progressTrack);
 
         Border progressFill;
         progressFill.Height(6);
-        progressFill.CornerRadius({3, 3, 3, 3});
+        progressFill.CornerRadius({kPopupG2ProgressCornerRadius,
+                                   kPopupG2ProgressCornerRadius,
+                                   kPopupG2ProgressCornerRadius,
+                                   kPopupG2ProgressCornerRadius});
         progressFill.IsHitTestVisible(false);
         canvas.Children().Append(progressFill);
 
@@ -4022,7 +4525,10 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border progressGlowCore;
         progressGlowCore.Width(6);
         progressGlowCore.Height(6);
-        progressGlowCore.CornerRadius({3, 3, 3, 3});
+        progressGlowCore.CornerRadius({kPopupG2ProgressCornerRadius,
+                                       kPopupG2ProgressCornerRadius,
+                                       kPopupG2ProgressCornerRadius,
+                                       kPopupG2ProgressCornerRadius});
         progressGlowCore.IsHitTestVisible(false);
         progressGlowCore.Opacity(0.0);
         canvas.Children().Append(progressGlowCore);
@@ -4186,6 +4692,10 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_popupXamlArtFrame = artFrame;
         g_popupXamlArtFade = artFade;
         g_popupXamlArt = art;
+        g_popupXamlTitleHost = titleHost;
+        g_popupXamlArtistHost = artistHost;
+        g_popupXamlOutgoingTitleHost = outgoingTitleHost;
+        g_popupXamlOutgoingArtistHost = outgoingArtistHost;
         g_popupXamlTitle = title;
         g_popupXamlArtist = artist;
         g_popupXamlOutgoingTitle = outgoingTitle;
@@ -4350,8 +4860,8 @@ void UpdatePopupXamlVisuals() {
         LerpInt(sourceArtRect.right, targetArtScreen.right, progress),
         LerpInt(sourceArtRect.bottom, targetArtScreen.bottom, progress),
     };
-    double artRadius = kPopupUnifiedCornerRadius;
-    g_popupXamlArtFrame.CornerRadius({artRadius, artRadius, artRadius, artRadius});
+    g_popupXamlArtFrame.CornerRadius({0, 0, 0, 0});
+    g_popupXamlArtFrame.Clip(nullptr);
     ApplyCompositorRect(g_popupXamlArtFrame,
                         g_popupXamlArtScale,
                         g_popupXamlArtTranslate,
@@ -4389,25 +4899,36 @@ void UpdatePopupXamlVisuals() {
                         targetCard,
                         popupScreen);
 
-    auto placeText = [&](TextBlock const& text, RECT const& source, RECT const& target,
+    auto placeText = [&](FrameworkElement const& host, TextBlock const& text,
+                         RECT const& source, RECT const& target,
                          double compactSize, double expandedSize) {
+        if (!host || !text) {
+            return;
+        }
+
         RECT screen{LerpInt(source.left, target.left, progress),
                     LerpInt(source.top, target.top, progress),
                     LerpInt(source.right, target.right, progress),
                     LerpInt(source.bottom, target.bottom, progress)};
         double textWidth = std::max(1L, screen.right - screen.left);
         double textHeight = std::max(1L, screen.bottom - screen.top);
+        host.Width(textWidth);
+        host.Height(textHeight);
+        ApplyElementClip(host, textWidth, textHeight);
         text.Width(textWidth);
         text.Height(textHeight);
-        ApplyElementClip(text, textWidth, textHeight);
         text.FontSize(expandedSize);
-        controls::Canvas::SetLeft(text, screen.left - popupScreen.left);
-        controls::Canvas::SetTop(text, screen.top - popupScreen.top);
+        controls::Canvas::SetLeft(host, screen.left - popupScreen.left);
+        controls::Canvas::SetTop(host, screen.top - popupScreen.top);
     };
-    placeText(g_popupXamlOutgoingTitle, sourceTitleRect, targetTitle, 12, 16);
-    placeText(g_popupXamlOutgoingArtist, sourceArtistRect, targetArtist, 10, 13);
-    placeText(g_popupXamlTitle, sourceTitleRect, targetTitle, 12, 16);
-    placeText(g_popupXamlArtist, sourceArtistRect, targetArtist, 10, 13);
+    placeText(g_popupXamlOutgoingTitleHost, g_popupXamlOutgoingTitle,
+              sourceTitleRect, targetTitle, 12, 16);
+    placeText(g_popupXamlOutgoingArtistHost, g_popupXamlOutgoingArtist,
+              sourceArtistRect, targetArtist, 10, 13);
+    placeText(g_popupXamlTitleHost, g_popupXamlTitle,
+              sourceTitleRect, targetTitle, 12, 16);
+    placeText(g_popupXamlArtistHost, g_popupXamlArtist,
+              sourceArtistRect, targetArtist, 10, 13);
 
     double textOpacity = SmoothStep(Clamp(progress, 0.0, 1.0));
     g_popupTextBaseOpacity = textOpacity;
@@ -4473,7 +4994,7 @@ void UpdatePopupXamlVisuals() {
         g_popupXamlProgressTrack.Opacity(controlsOpacity);
         g_popupXamlProgressTrack.Width(progressWidth);
         g_popupXamlProgressTrack.Height(std::max(4.0, progressHeight));
-        double radius = std::max(2.0, g_popupXamlProgressTrack.Height() * 0.5);
+        double radius = kPopupG2ProgressCornerRadius;
         g_popupXamlProgressTrack.CornerRadius({radius, radius, radius, radius});
         controls::Canvas::SetLeft(g_popupXamlProgressTrack, progressLeft);
         controls::Canvas::SetTop(g_popupXamlProgressTrack, progressTop);
@@ -4498,7 +5019,7 @@ void UpdatePopupXamlVisuals() {
         g_popupXamlProgressFill.Opacity(controlsOpacity);
         g_popupXamlProgressFill.Width(fillWidth);
         g_popupXamlProgressFill.Height(progressThickness);
-        double fillRadius = std::max(2.0, progressThickness * 0.5);
+        double fillRadius = kPopupG2ProgressCornerRadius;
         g_popupXamlProgressFill.CornerRadius({fillRadius, fillRadius, fillRadius, fillRadius});
         controls::Canvas::SetLeft(g_popupXamlProgressFill, progressLeft);
         controls::Canvas::SetTop(g_popupXamlProgressFill, progressTop);
@@ -4899,6 +5420,15 @@ void CapturePopupSourceGeometry() {
     }
 }
 
+void UpdatePopupBackdropOverlayWindow();
+void HidePopupBackdropOverlayWindow();
+void StopPopupOverlayWgcBackdrop();
+bool StartPopupOverlayWgcBackdrop(RECT const& captureRect, int widthPx, int heightPx);
+void UpdatePopupOverlayWgcCaptureRect(RECT const& captureRect);
+void SetPopupWindowCaptureExclusion(HWND hwnd, bool exclude);
+void ClearPopupBackdropOverlayHandoffCache();
+bool ClearPopupBackdropOverlayLayeredSurface(HWND hwnd);
+
 void PositionExpandedPopup() {
     if (!g_expandedPopup || !g_taskbarWnd) {
         return;
@@ -4928,6 +5458,7 @@ void PositionExpandedPopup() {
                 MoveWindow(g_popupXamlChild, 0, 0, width, height, FALSE);
             }
         }
+        UpdatePopupBackdropOverlayWindow();
         return;
     }
 
@@ -4952,6 +5483,7 @@ void PositionExpandedPopup() {
     if (g_popupXamlChild) {
         MoveWindow(g_popupXamlChild, 0, 0, width, height, FALSE);
     }
+    UpdatePopupBackdropOverlayWindow();
 }
 void SetCompactIslandSuppressed(bool suppressed);
 void StartPopupXamlRenderLoop();
@@ -5524,6 +6056,7 @@ void StopPopupXamlRenderLoop() {
 
 void FinishCloseExpandedPopup(HWND hwnd) {
     StopPopupXamlRenderLoop();
+    HidePopupBackdropOverlayWindow();
     if (hwnd) {
         ShowWindow(hwnd, SW_HIDE);
         KillTimer(hwnd, kPopupTimerId);
@@ -5768,6 +6301,1786 @@ HINSTANCE ModInstance() {
     return instance;
 }
 
+void SetPopupBackdropOverlayNativeBlur(HWND hwnd, bool enable) {
+    // 0.9.56: native Accent Acrylic is intentionally disabled for the overlay.
+    // It adds an unavoidable light-mode gray veil and does not reliably follow
+    // Win32/DWM rounded regions. The overlay now paints its own blurred pixels
+    // with a per-pixel alpha mask via UpdateLayeredWindow.
+    if (!hwnd) {
+        return;
+    }
+
+    struct AccentPolicy {
+        int state;
+        int flags;
+        DWORD gradientColor;
+        int animationId;
+    };
+    struct CompositionAttributeData {
+        int attribute;
+        void* data;
+        SIZE_T size;
+    };
+    using SetWindowCompositionAttribute_t = BOOL(WINAPI*)(
+        HWND, CompositionAttributeData*);
+
+    static auto setWindowCompositionAttribute =
+        reinterpret_cast<SetWindowCompositionAttribute_t>(
+            GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                           "SetWindowCompositionAttribute"));
+    if (setWindowCompositionAttribute) {
+        AccentPolicy policy{0, 0, 0x00000000, 0};
+        CompositionAttributeData data{19, &policy, sizeof(policy)};
+        setWindowCompositionAttribute(hwnd, &data);
+    }
+}
+
+
+
+BYTE PopupRoundedRectAlpha(int x, int y, int width, int height, int radius);
+bool UpdatePopupBackdropOverlayLayeredDiagnostic(HWND hwnd,
+                                                RECT const& screenRect,
+                                                int width,
+                                                int height,
+                                                int cornerRadiusPx) {
+    if (!hwnd || width <= 2 || height <= 2) {
+        return false;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (g_popupOverlayWgcLastDiagnosticPaintTime.time_since_epoch().count() != 0 &&
+        now - g_popupOverlayWgcLastDiagnosticPaintTime <
+            std::chrono::milliseconds(180)) {
+        return true;
+    }
+    g_popupOverlayWgcLastDiagnosticPaintTime = now;
+
+    std::vector<BYTE> out(static_cast<size_t>(width) * height * 4, 0);
+    if (g_popupOverlayWgcReadbackDiagnosticTime.time_since_epoch().count() == 0) {
+        g_popupOverlayWgcReadbackDiagnosticTime = now;
+    }
+    double seconds = std::chrono::duration<double>(
+                         now - g_popupOverlayWgcReadbackDiagnosticTime)
+                         .count();
+    int phase = static_cast<int>(std::fmod(seconds * 120.0, 96.0));
+    bool dark = IsDarkModeApprox();
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int cell = 32;
+            int shiftedX = x + phase;
+            bool checker = ((shiftedX / cell) + (y / cell)) & 1;
+
+            // Visual diagnostic palette:
+            // blue/pink  = not started
+            // yellow     = start skipped / failed before session
+            // orange     = session started, no frame callback yet
+            // green      = frame arrived
+            // red        = render/map/update failure
+            // cyan       = at least one visible WGC frame was produced
+            int r = checker ? 70 : 235;
+            int g = checker ? 130 : 80;
+            int b = checker ? 245 : 190;
+            switch (g_popupOverlayWgcDiagnosticState) {
+                case PopupOverlayWgcDiagnosticState::StartSkipped:
+                    r = checker ? 255 : 180;
+                    g = checker ? 220 : 120;
+                    b = checker ? 40 : 20;
+                    break;
+                case PopupOverlayWgcDiagnosticState::StartedNoFrame:
+                    r = checker ? 255 : 230;
+                    g = checker ? 130 : 80;
+                    b = checker ? 30 : 10;
+                    break;
+                case PopupOverlayWgcDiagnosticState::FrameArrived:
+                    r = checker ? 60 : 30;
+                    g = checker ? 220 : 150;
+                    b = checker ? 90 : 40;
+                    break;
+                case PopupOverlayWgcDiagnosticState::RenderFailed:
+                case PopupOverlayWgcDiagnosticState::MapFailed:
+                case PopupOverlayWgcDiagnosticState::UpdateFailed:
+                    r = checker ? 255 : 150;
+                    g = checker ? 45 : 20;
+                    b = checker ? 45 : 20;
+                    break;
+                case PopupOverlayWgcDiagnosticState::VisibleFrame:
+                    r = checker ? 30 : 20;
+                    g = checker ? 220 : 160;
+                    b = checker ? 240 : 180;
+                    break;
+                case PopupOverlayWgcDiagnosticState::NotStarted:
+                default:
+                    if (!dark) {
+                        r = checker ? 70 : 245;
+                        g = checker ? 120 : 140;
+                        b = checker ? 220 : 210;
+                    }
+                    break;
+            }
+
+            BYTE edgeAlpha = PopupRoundedRectAlpha(x, y, width, height, cornerRadiusPx);
+            BYTE a = static_cast<BYTE>((static_cast<int>(edgeAlpha) * 230) / 255);
+            BYTE* dst = out.data() + (static_cast<size_t>(y) * width + x) * 4;
+            dst[0] = static_cast<BYTE>((b * a) / 255);
+            dst[1] = static_cast<BYTE>((g * a) / 255);
+            dst[2] = static_cast<BYTE>((r * a) / 255);
+            dst[3] = a;
+        }
+    }
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+    HDC memDc = CreateCompatibleDC(screenDc);
+    if (!memDc) {
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS,
+                                      &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap) DeleteObject(bitmap);
+        DeleteDC(memDc);
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+    std::memcpy(bits, out.data(), out.size());
+
+    HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
+    POINT srcPoint{0, 0};
+    SIZE size{width, height};
+    POINT dstPoint{screenRect.left, screenRect.top};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+
+    BOOL ok = UpdateLayeredWindow(hwnd, screenDc, &dstPoint, &size,
+                                  memDc, &srcPoint, 0, &blend, ULW_ALPHA);
+
+    SelectObject(memDc, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(memDc);
+    ReleaseDC(nullptr, screenDc);
+    return !!ok;
+}
+
+BYTE PopupRoundedRectAlpha(int x, int y, int width, int height, int radius);
+#if IMC_WGC_OVERLAY_AVAILABLE
+bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
+                                                capture::GraphicsCaptureItem& item) {
+    item = nullptr;
+    g_popupOverlayWgcCreateItemHr = S_OK;
+    if (!monitor) {
+        g_popupOverlayWgcCreateItemHr = E_INVALIDARG;
+        Wh_Log(L"Island: overlay WGC CreateForMonitor skipped: null monitor");
+        return false;
+    }
+
+    try {
+        auto activationFactory =
+            winrt::get_activation_factory<capture::GraphicsCaptureItem>();
+
+        winrt::com_ptr<IGraphicsCaptureItemInterop> interopFactory;
+        HRESULT hr = reinterpret_cast<IUnknown*>(
+                         winrt::get_abi(activationFactory))
+                         ->QueryInterface(
+                             kIID_IGraphicsCaptureItemInterop,
+                             interopFactory.put_void());
+        if (FAILED(hr) || !interopFactory) {
+            g_popupOverlayWgcCreateItemHr = hr;
+            Wh_Log(L"Island: overlay WGC QI IGraphicsCaptureItemInterop failed hr=0x%08X",
+                   static_cast<unsigned>(hr));
+            return false;
+        }
+
+        void* rawItem = nullptr;
+        hr = interopFactory->CreateForMonitor(
+            monitor,
+            kIID_IGraphicsCaptureItem,
+            &rawItem);
+        g_popupOverlayWgcCreateItemHr = hr;
+        if (FAILED(hr)) {
+            Wh_Log(L"Island: overlay WGC CreateForMonitor failed hr=0x%08X monitor=%p",
+                   static_cast<unsigned>(hr),
+                   monitor);
+            return false;
+        }
+        if (!rawItem) {
+            g_popupOverlayWgcCreateItemHr = E_POINTER;
+            Wh_Log(L"Island: overlay WGC CreateForMonitor returned null item hr=0x%08X monitor=%p",
+                   static_cast<unsigned>(hr),
+                   monitor);
+            return false;
+        }
+
+        item = capture::GraphicsCaptureItem{
+            rawItem,
+            winrt::take_ownership_from_abi};
+        Wh_Log(L"Island: overlay WGC CreateForMonitor succeeded monitor=%p", monitor);
+        g_popupOverlayWgcCreateItemFailed = false;
+        return true;
+    } catch (winrt::hresult_error const& error) {
+        g_popupOverlayWgcCreateItemHr = error.code().value;
+        Wh_Log(L"Island: overlay WGC CreateForMonitor exception hr=0x%08X",
+               static_cast<unsigned>(g_popupOverlayWgcCreateItemHr));
+        return false;
+    } catch (...) {
+        g_popupOverlayWgcCreateItemHr = E_FAIL;
+        Wh_Log(L"Island: overlay WGC CreateForMonitor unknown exception");
+        return false;
+    }
+}
+
+bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
+    if (!g_popupOverlayWgcD3dDevice || widthPx <= 0 || heightPx <= 0) {
+        return false;
+    }
+
+    if (g_popupOverlayWgcRenderTexture &&
+        g_popupOverlayWgcStagingTexture &&
+        g_popupOverlayWgcTargetWidthPx == widthPx &&
+        g_popupOverlayWgcTargetHeightPx == heightPx) {
+        return true;
+    }
+
+    winrt::com_ptr<ID3D11Texture2D> renderTexture;
+    winrt::com_ptr<ID3D11Texture2D> stagingTexture;
+
+    D3D11_TEXTURE2D_DESC renderDesc{};
+    renderDesc.Width = static_cast<UINT>(widthPx);
+    renderDesc.Height = static_cast<UINT>(heightPx);
+    renderDesc.MipLevels = 1;
+    renderDesc.ArraySize = 1;
+    renderDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    renderDesc.SampleDesc.Count = 1;
+    renderDesc.SampleDesc.Quality = 0;
+    renderDesc.Usage = D3D11_USAGE_DEFAULT;
+    renderDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    renderDesc.CPUAccessFlags = 0;
+    renderDesc.MiscFlags = 0;
+
+    HRESULT hr = g_popupOverlayWgcD3dDevice->CreateTexture2D(
+        &renderDesc,
+        nullptr,
+        renderTexture.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC render texture failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    D3D11_TEXTURE2D_DESC stagingDesc = renderDesc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    hr = g_popupOverlayWgcD3dDevice->CreateTexture2D(
+        &stagingDesc,
+        nullptr,
+        stagingTexture.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC staging texture failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    g_popupOverlayWgcRenderTexture = std::move(renderTexture);
+    g_popupOverlayWgcStagingTexture = std::move(stagingTexture);
+    g_popupOverlayWgcTargetWidthPx = widthPx;
+    g_popupOverlayWgcTargetHeightPx = heightPx;
+    return true;
+}
+
+bool EnsurePopupOverlayWgcDeviceResources(HWND hwnd, int widthPx, int heightPx) {
+    if (!UseOverlayPopupBackdropMaterial() || !hwnd ||
+        widthPx <= 0 || heightPx <= 0) {
+        return false;
+    }
+
+    if (g_popupOverlayWgcD3dDevice &&
+        g_popupOverlayWgcRenderTexture &&
+        g_popupOverlayWgcStagingTexture &&
+        g_popupOverlayWgcTargetWidthPx == widthPx &&
+        g_popupOverlayWgcTargetHeightPx == heightPx) {
+        return true;
+    }
+
+    g_popupOverlayWgcSession = nullptr;
+    if (g_popupOverlayWgcFramePool && g_popupOverlayWgcFrameCallbackHooked) {
+        try {
+            g_popupOverlayWgcFramePool.FrameArrived(g_popupOverlayWgcFrameArrivedToken);
+        } catch (...) {
+        }
+        g_popupOverlayWgcFrameCallbackHooked = false;
+    }
+    g_popupOverlayWgcFramePool = nullptr;
+    g_popupOverlayWgcItem = nullptr;
+    g_popupOverlayWgcGraphicsDevice = nullptr;
+    g_popupOverlayWgcRenderTexture = nullptr;
+    g_popupOverlayWgcStagingTexture = nullptr;
+    g_popupOverlayWgcD2dContext = nullptr;
+    g_popupOverlayWgcD2dDevice = nullptr;
+    g_popupOverlayWgcD2dFactory = nullptr;
+    g_popupOverlayWgcDxgiDevice = nullptr;
+    g_popupOverlayWgcD3dContext = nullptr;
+    g_popupOverlayWgcD3dDevice = nullptr;
+
+    UINT deviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
+    D3D_FEATURE_LEVEL selectedFeatureLevel{};
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
+        nullptr,
+        deviceFlags,
+        featureLevels,
+        ARRAYSIZE(featureLevels),
+        D3D11_SDK_VERSION,
+        g_popupOverlayWgcD3dDevice.put(),
+        &selectedFeatureLevel,
+        g_popupOverlayWgcD3dContext.put());
+    if (FAILED(hr)) {
+        hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_WARP,
+            nullptr,
+            deviceFlags,
+            featureLevels,
+            ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            g_popupOverlayWgcD3dDevice.put(),
+            &selectedFeatureLevel,
+            g_popupOverlayWgcD3dContext.put());
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC D3D11CreateDevice failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    g_popupOverlayWgcDxgiDevice = g_popupOverlayWgcD3dDevice.as<IDXGIDevice>();
+
+    D2D1_FACTORY_OPTIONS factoryOptions{};
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                           __uuidof(ID2D1Factory1),
+                           &factoryOptions,
+                           reinterpret_cast<void**>(g_popupOverlayWgcD2dFactory.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC D2D factory failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+    hr = g_popupOverlayWgcD2dFactory->CreateDevice(g_popupOverlayWgcDxgiDevice.get(),
+                                                   g_popupOverlayWgcD2dDevice.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC D2D device failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+    hr = g_popupOverlayWgcD2dDevice->CreateDeviceContext(
+        D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+        g_popupOverlayWgcD2dContext.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC D2D context failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    winrt::com_ptr<IInspectable> graphicsDeviceInspectable;
+    hr = CreateDirect3D11DeviceFromDXGIDevice(
+        g_popupOverlayWgcDxgiDevice.get(),
+        graphicsDeviceInspectable.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"Island: overlay WGC CreateDirect3D11DeviceFromDXGIDevice failed hr=0x%08X",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+    g_popupOverlayWgcGraphicsDevice =
+        graphicsDeviceInspectable.as<direct3d11::IDirect3DDevice>();
+
+    winrt::com_ptr<IDXGIAdapter> adapter;
+    hr = g_popupOverlayWgcDxgiDevice->GetAdapter(adapter.put());
+    if (FAILED(hr)) {
+        return false;
+    }
+    winrt::com_ptr<IDXGIFactory2> factory;
+    hr = adapter->GetParent(__uuidof(IDXGIFactory2), factory.put_void());
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    return RecreatePopupOverlayWgcReadbackTextures(widthPx, heightPx);
+}
+
+void RenderPopupOverlayWgcDiagnosticFrame() {}
+
+void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
+    g_popupOverlayWgcHadFrame = true;
+    ++g_popupOverlayWgcFrameCount;
+    g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::FrameArrived;
+    if (!g_popupOverlayWgcRunning || !frame ||
+        !g_popupOverlayWgcD2dContext ||
+        !g_popupOverlayWgcRenderTexture ||
+        !g_popupOverlayWgcStagingTexture ||
+        !g_popupBackdropOverlay) {
+        return;
+    }
+
+    RECT captureRect = g_popupOverlayWgcCaptureRectPx;
+    RECT monitorRect = g_popupOverlayWgcMonitorRectPx;
+    int targetWidth = g_popupOverlayWgcTargetWidthPx;
+    int targetHeight = g_popupOverlayWgcTargetHeightPx;
+    if (targetWidth <= 0 || targetHeight <= 0 ||
+        captureRect.right <= captureRect.left ||
+        captureRect.bottom <= captureRect.top) {
+        return;
+    }
+
+    if (g_popupOverlayWgcFramesToSkip > 0) {
+        --g_popupOverlayWgcFramesToSkip;
+        return;
+    }
+
+    try {
+        auto surface = frame.Surface();
+        winrt::com_ptr<IDirect3DDxgiInterfaceAccess> access;
+        winrt::check_hresult(reinterpret_cast<IUnknown*>(winrt::get_abi(surface))
+                                 ->QueryInterface(
+                                     kIID_IDirect3DDxgiInterfaceAccess,
+                                     access.put_void()));
+        winrt::com_ptr<ID3D11Texture2D> frameTexture;
+        winrt::check_hresult(access->GetInterface(
+            __uuidof(ID3D11Texture2D),
+            frameTexture.put_void()));
+        winrt::com_ptr<IDXGISurface> frameSurface;
+        frameTexture.as(frameSurface);
+
+        winrt::com_ptr<IDXGISurface> renderSurface;
+        g_popupOverlayWgcRenderTexture.as(renderSurface);
+
+        D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_IGNORE));
+        winrt::com_ptr<ID2D1Bitmap1> targetBitmap;
+        winrt::check_hresult(g_popupOverlayWgcD2dContext->CreateBitmapFromDxgiSurface(
+            renderSurface.get(),
+            &targetProps,
+            targetBitmap.put()));
+
+        D2D1_BITMAP_PROPERTIES1 sourceProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_IGNORE));
+        winrt::com_ptr<ID2D1Bitmap1> sourceBitmap;
+        winrt::check_hresult(g_popupOverlayWgcD2dContext->CreateBitmapFromDxgiSurface(
+            frameSurface.get(),
+            &sourceProps,
+            sourceBitmap.put()));
+
+        float srcLeft = static_cast<float>(captureRect.left - monitorRect.left);
+        float srcTop = static_cast<float>(captureRect.top - monitorRect.top);
+        float srcRight = static_cast<float>(captureRect.right - monitorRect.left);
+        float srcBottom = static_cast<float>(captureRect.bottom - monitorRect.top);
+        D2D1_RECT_F sourceRect = D2D1::RectF(srcLeft, srcTop, srcRight, srcBottom);
+        D2D1_RECT_F targetRect = D2D1::RectF(
+            0.0f, 0.0f,
+            static_cast<float>(targetWidth),
+            static_cast<float>(targetHeight));
+
+        D2D1_BITMAP_PROPERTIES1 intermediateProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_IGNORE));
+        winrt::com_ptr<ID2D1Bitmap1> intermediateBitmap;
+        winrt::check_hresult(g_popupOverlayWgcD2dContext->CreateBitmap(
+            D2D1::SizeU(static_cast<UINT32>(targetWidth),
+                        static_cast<UINT32>(targetHeight)),
+            nullptr,
+            0,
+            &intermediateProps,
+            intermediateBitmap.put()));
+
+        // Step 1: crop/scale the monitor capture into an offscreen target-sized
+        // bitmap. This keeps the later Gaussian blur independent of monitor
+        // resolution and avoids trying to draw the full monitor-sized effect.
+        g_popupOverlayWgcD2dContext->SetTarget(intermediateBitmap.get());
+        g_popupOverlayWgcD2dContext->BeginDraw();
+        g_popupOverlayWgcD2dContext->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f));
+        g_popupOverlayWgcD2dContext->DrawBitmap(
+            sourceBitmap.get(),
+            targetRect,
+            1.0f,
+            D2D1_INTERPOLATION_MODE_LINEAR,
+            sourceRect);
+        HRESULT hr = g_popupOverlayWgcD2dContext->EndDraw();
+        if (FAILED(hr)) {
+            g_popupOverlayWgcLastHr = hr;
+            g_popupOverlayWgcDiagnosticHr = hr;
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
+            ++g_popupOverlayWgcRenderFailCount;
+            Wh_Log(L"Island: overlay WGC state intermediate EndDraw failed hr=0x%08X frames=%llu fails=%llu",
+                   static_cast<unsigned>(hr),
+                   static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+                   static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+            return;
+        }
+
+        winrt::com_ptr<ID2D1Effect> blurEffect;
+        winrt::check_hresult(g_popupOverlayWgcD2dContext->CreateEffect(
+            CLSID_D2D1GaussianBlur,
+            blurEffect.put()));
+        blurEffect->SetInput(0, intermediateBitmap.get());
+        blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                             PopupBackdropWgcBlurStdDev());
+        blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+                             D2D1_BORDER_MODE_HARD);
+
+        // Step 2: render the blurred target-sized image to the GPU texture that
+        // will be read back into the layered window.
+        g_popupOverlayWgcD2dContext->SetTarget(targetBitmap.get());
+        g_popupOverlayWgcD2dContext->BeginDraw();
+        g_popupOverlayWgcD2dContext->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f));
+        D2D1_POINT_2F blurTargetOffset = D2D1::Point2F(0.0f, 0.0f);
+        g_popupOverlayWgcD2dContext->DrawImage(
+            blurEffect.get(),
+            &blurTargetOffset,
+            nullptr,
+            D2D1_INTERPOLATION_MODE_LINEAR,
+            D2D1_COMPOSITE_MODE_SOURCE_COPY);
+        hr = g_popupOverlayWgcD2dContext->EndDraw();
+        if (FAILED(hr)) {
+            g_popupOverlayWgcLastHr = hr;
+            g_popupOverlayWgcDiagnosticHr = hr;
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
+            ++g_popupOverlayWgcRenderFailCount;
+            Wh_Log(L"Island: overlay WGC state EndDraw failed hr=0x%08X frames=%llu fails=%llu",
+                   static_cast<unsigned>(hr),
+                   static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+                   static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+            return;
+        }
+
+        g_popupOverlayWgcD3dContext->CopyResource(
+            g_popupOverlayWgcStagingTexture.get(),
+            g_popupOverlayWgcRenderTexture.get());
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        hr = g_popupOverlayWgcD3dContext->Map(
+            g_popupOverlayWgcStagingTexture.get(),
+            0,
+            D3D11_MAP_READ,
+            0,
+            &mapped);
+        if (FAILED(hr)) {
+            g_popupOverlayWgcLastHr = hr;
+            g_popupOverlayWgcDiagnosticHr = hr;
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::MapFailed;
+            ++g_popupOverlayWgcRenderFailCount;
+            Wh_Log(L"Island: overlay WGC state Map failed hr=0x%08X frames=%llu fails=%llu",
+                   static_cast<unsigned>(hr),
+                   static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+                   static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+            return;
+        }
+
+        std::vector<BYTE> layeredPixels(static_cast<size_t>(targetWidth) *
+                                        targetHeight * 4);
+        bool dark = IsDarkModeApprox();
+        double dim = dark ? 0.94 : 1.0;
+        BYTE maxAlpha = PopupBackdropOverlayMaxAlpha();
+        int cornerRadiusPx = g_popupBackdropOverlayLastRadius > 0
+                                  ? g_popupBackdropOverlayLastRadius
+                                  : static_cast<int>(std::lround(kPopupUnifiedCornerRadius *
+                                                                 PopupDpiScale(g_expandedPopup)));
+
+        BYTE const* srcBase = static_cast<BYTE const*>(mapped.pData);
+        for (int y = 0; y < targetHeight; ++y) {
+            BYTE const* srcRow = srcBase + static_cast<size_t>(y) * mapped.RowPitch;
+            for (int x = 0; x < targetWidth; ++x) {
+                BYTE const* src = srcRow + static_cast<size_t>(x) * 4;
+                BYTE edgeAlpha = PopupRoundedRectAlpha(x, y,
+                                                       targetWidth,
+                                                       targetHeight,
+                                                       cornerRadiusPx);
+                BYTE a = static_cast<BYTE>((static_cast<int>(edgeAlpha) *
+                                            maxAlpha) / 255);
+                int b = Clamp(static_cast<int>(std::lround(src[0] * dim)), 0, 255);
+                int g = Clamp(static_cast<int>(std::lround(src[1] * dim)), 0, 255);
+                int r = Clamp(static_cast<int>(std::lround(src[2] * dim)), 0, 255);
+
+                BYTE* dst = layeredPixels.data() +
+                             (static_cast<size_t>(y) * targetWidth + x) * 4;
+                dst[0] = static_cast<BYTE>((b * a) / 255);
+                dst[1] = static_cast<BYTE>((g * a) / 255);
+                dst[2] = static_cast<BYTE>((r * a) / 255);
+                dst[3] = a;
+            }
+        }
+
+        {
+            auto nowForHandoff = std::chrono::steady_clock::now();
+            if (g_popupOverlayWgcHandoffStartTime.time_since_epoch().count() == 0) {
+                g_popupOverlayWgcHandoffStartTime = nowForHandoff;
+            }
+            double elapsedMs =
+                std::chrono::duration<double, std::milli>(
+                    nowForHandoff - g_popupOverlayWgcHandoffStartTime)
+                    .count();
+            double wgcWeight =
+                Clamp(elapsedMs / static_cast<double>(PopupBackdropHandoffFadeMs()),
+                      0.0, 1.0);
+
+            if (wgcWeight < 1.0) {
+                std::lock_guard cacheLock(g_popupBackdropOverlayHandoffMutex);
+                if (g_popupBackdropOverlayFallbackPixelsValid &&
+                    g_popupBackdropOverlayFallbackWidth == targetWidth &&
+                    g_popupBackdropOverlayFallbackHeight == targetHeight &&
+                    g_popupBackdropOverlayFallbackPixels.size() == layeredPixels.size()) {
+                    double fallbackWeight = 1.0 - wgcWeight;
+                    for (size_t i = 0; i < layeredPixels.size(); ++i) {
+                        int blended = static_cast<int>(std::lround(
+                            g_popupBackdropOverlayFallbackPixels[i] * fallbackWeight +
+                            layeredPixels[i] * wgcWeight));
+                        layeredPixels[i] = static_cast<BYTE>(Clamp(blended, 0, 255));
+                    }
+                }
+            }
+        }
+
+        g_popupOverlayWgcD3dContext->Unmap(g_popupOverlayWgcStagingTexture.get(), 0);
+
+        HDC screenDc = GetDC(nullptr);
+        if (!screenDc) {
+            return;
+        }
+        HDC memDc = CreateCompatibleDC(screenDc);
+        if (!memDc) {
+            ReleaseDC(nullptr, screenDc);
+            return;
+        }
+
+        BITMAPINFO info{};
+        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth = targetWidth;
+        info.bmiHeader.biHeight = -targetHeight;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+
+        void* bits = nullptr;
+        HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS,
+                                          &bits, nullptr, 0);
+        if (!bitmap || !bits) {
+            if (bitmap) DeleteObject(bitmap);
+            DeleteDC(memDc);
+            ReleaseDC(nullptr, screenDc);
+            return;
+        }
+        std::memcpy(bits, layeredPixels.data(), layeredPixels.size());
+
+        HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
+        POINT srcPoint{0, 0};
+        SIZE size{targetWidth, targetHeight};
+        POINT dstPoint{captureRect.left, captureRect.top};
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+
+        BOOL updateOk = UpdateLayeredWindow(g_popupBackdropOverlay,
+                                            screenDc,
+                                            &dstPoint,
+                                            &size,
+                                            memDc,
+                                            &srcPoint,
+                                            0,
+                                            &blend,
+                                            ULW_ALPHA);
+        if (updateOk) {
+            static bool loggedFirstVisibleFrame = false;
+            if (!loggedFirstVisibleFrame) {
+                Wh_Log(L"Island: overlay WGC state first visible frame frames=%llu",
+                       static_cast<unsigned long long>(g_popupOverlayWgcFrameCount));
+                loggedFirstVisibleFrame = true;
+            }
+            SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, true);
+            ShowWindow(g_popupBackdropOverlay, SW_SHOWNOACTIVATE);
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::VisibleFrame;
+            g_popupOverlayWgcReadbackHadVisibleFrame = true;
+            g_popupOverlayWgcFallbackPainted = true;
+        } else {
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::UpdateFailed;
+            ++g_popupOverlayWgcRenderFailCount;
+            Wh_Log(L"Island: overlay WGC state UpdateLayeredWindow failed err=%lu frames=%llu fails=%llu",
+                   GetLastError(),
+                   static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+                   static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+        }
+
+        SelectObject(memDc, oldBitmap);
+        DeleteObject(bitmap);
+        DeleteDC(memDc);
+        ReleaseDC(nullptr, screenDc);
+    } catch (winrt::hresult_error const& error) {
+        g_popupOverlayWgcLastHr = error.code().value;
+        g_popupOverlayWgcDiagnosticHr = error.code().value;
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
+        ++g_popupOverlayWgcRenderFailCount;
+        Wh_Log(L"Island: overlay WGC state hresult_error=0x%08X frames=%llu fails=%llu",
+               static_cast<unsigned>(g_popupOverlayWgcLastHr),
+               static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+               static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+    } catch (...) {
+        g_popupOverlayWgcLastHr = E_FAIL;
+        g_popupOverlayWgcDiagnosticHr = E_FAIL;
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
+        ++g_popupOverlayWgcRenderFailCount;
+        Wh_Log(L"Island: overlay WGC state unknown failure frames=%llu fails=%llu",
+               static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
+               static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
+    }
+}
+
+void StopPopupOverlayWgcBackdrop() {
+    capture::GraphicsCaptureSession sessionToClose{nullptr};
+    capture::Direct3D11CaptureFramePool framePoolToClose{nullptr};
+    winrt::event_token frameArrivedToken{};
+    bool frameCallbackHooked = false;
+
+    {
+        std::lock_guard lock(g_popupOverlayWgcMutex);
+        g_popupOverlayWgcRunning = false;
+        sessionToClose = g_popupOverlayWgcSession;
+        framePoolToClose = g_popupOverlayWgcFramePool;
+        frameArrivedToken = g_popupOverlayWgcFrameArrivedToken;
+        frameCallbackHooked = g_popupOverlayWgcFrameCallbackHooked;
+        g_popupOverlayWgcFrameCallbackHooked = false;
+        g_popupOverlayWgcSession = nullptr;
+        g_popupOverlayWgcFramePool = nullptr;
+        g_popupOverlayWgcItem = nullptr;
+        g_popupOverlayWgcHadFrame = false;
+        g_popupOverlayWgcDiagnosticStartTime = {};
+        g_popupOverlayWgcReadbackHadVisibleFrame = false;
+        g_popupOverlayWgcReadbackDiagnosticTime = {};
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::NotStarted;
+        g_popupOverlayWgcDiagnosticHr = S_OK;
+        g_popupOverlayWgcFrameCount = 0;
+        g_popupOverlayWgcRenderFailCount = 0;
+        // Keep retry throttle fields intact here. This function is called before
+        // rebuilding WGC resources, so clearing them here would re-enable rapid
+        // CreateForMonitor retries after a failure.
+        g_popupOverlayWgcStartTime = {};
+        g_popupOverlayWgcHandoffStartTime = {};
+        g_popupOverlayWgcFinalReadyTime = {};
+        g_popupOverlayWgcFramesToSkip = 0;
+    }
+
+    if (g_expandedPopup) {
+        SetWindowDisplayAffinity(g_expandedPopup, WDA_NONE);
+    }
+    if (g_popupBackdropOverlay) {
+        SetWindowDisplayAffinity(g_popupBackdropOverlay, WDA_NONE);
+    }
+    try {
+        if (framePoolToClose && frameCallbackHooked) {
+            framePoolToClose.FrameArrived(frameArrivedToken);
+        }
+    } catch (...) {
+    }
+    try {
+        if (sessionToClose) {
+            sessionToClose.Close();
+        }
+        if (framePoolToClose) {
+            framePoolToClose.Close();
+        }
+    } catch (...) {
+    }
+}
+
+bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
+                                  int widthPx,
+                                  int heightPx) {
+    auto now = std::chrono::steady_clock::now();
+    if (g_popupOverlayWgcCreateItemFailed &&
+        g_popupOverlayWgcLastStartAttemptTime.time_since_epoch().count() != 0 &&
+        now - g_popupOverlayWgcLastStartAttemptTime <
+            std::chrono::seconds(3)) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        return false;
+    }
+    g_popupOverlayWgcLastStartAttemptTime = now;
+
+    if (g_unloading || widthPx <= 0 || heightPx <= 0) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        return false;
+    }
+
+    if (!UseOverlayPopupBackdropMaterial() || !g_popupBackdropOverlay ||
+        !g_expandedPopup) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        Wh_Log(L"Island: overlay WGC state start skipped material=%d overlay=%p popup=%p unloading=%d size=%dx%d",
+               UseOverlayPopupBackdropMaterial(),
+               g_popupBackdropOverlay,
+               g_expandedPopup,
+               g_unloading.load(),
+               widthPx,
+               heightPx);
+        return false;
+    }
+
+    HMONITOR monitor = MonitorFromRect(&captureRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo)) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        Wh_Log(L"Island: overlay WGC state no monitor");
+        return false;
+    }
+
+    if (g_popupOverlayWgcRunning &&
+        g_popupOverlayWgcRenderTexture &&
+        g_popupOverlayWgcStagingTexture &&
+        g_popupOverlayWgcMonitor == monitor) {
+        // Keep the monitor capture session alive during the morph. Only the
+        // crop rectangle and layered-output size change frame to frame.
+        std::lock_guard lock(g_popupOverlayWgcMutex);
+        g_popupOverlayWgcCreateItemFailed = false;
+        if (!RecreatePopupOverlayWgcReadbackTextures(widthPx, heightPx)) {
+            g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
+            ++g_popupOverlayWgcRenderFailCount;
+            return false;
+        }
+        g_popupOverlayWgcCaptureRectPx = captureRect;
+        g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
+        return true;
+    }
+
+    StopPopupOverlayWgcBackdrop();
+
+    if (!capture::GraphicsCaptureSession::IsSupported()) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        Wh_Log(L"Island: overlay WGC state not supported");
+        return false;
+    }
+
+    if (!EnsurePopupOverlayWgcDeviceResources(g_popupBackdropOverlay,
+                                              widthPx,
+                                              heightPx)) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        Wh_Log(L"Island: overlay WGC state Ensure resources failed hr=0x%08X",
+               static_cast<unsigned>(g_popupOverlayWgcLastHr));
+        return false;
+    }
+
+    if (!CreatePopupOverlayWgcCaptureItemForMonitor(monitor,
+                                                    g_popupOverlayWgcItem)) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        g_popupOverlayWgcDiagnosticHr = g_popupOverlayWgcCreateItemHr;
+        g_popupOverlayWgcCreateItemFailed = true;
+        Wh_Log(L"Island: overlay WGC state Create capture item failed hr=0x%08X; throttling retries",
+               static_cast<unsigned>(g_popupOverlayWgcCreateItemHr));
+        return false;
+    }
+    g_popupOverlayWgcCreateItemFailed = false;
+
+    // Keep the existing blurred fallback visible until the first WGC frame is
+    // ready. Exclude the popup/overlay from capture first; then skip a few WGC
+    // frames to let DWM apply the exclusion before we replace the fallback.
+    SetWindowDisplayAffinity(g_expandedPopup, WDA_EXCLUDEFROMCAPTURE);
+    SetWindowDisplayAffinity(g_popupBackdropOverlay, WDA_EXCLUDEFROMCAPTURE);
+    DwmFlush();
+
+    std::lock_guard lock(g_popupOverlayWgcMutex);
+    g_popupOverlayWgcCaptureRectPx = captureRect;
+    g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
+    g_popupOverlayWgcMonitor = monitor;
+    g_popupOverlayWgcRunning = true;
+    g_popupOverlayWgcLastHr = S_OK;
+    g_popupOverlayWgcDiagnosticHr = S_OK;
+    g_popupOverlayWgcHadFrame = false;
+    g_popupOverlayWgcFrameCount = 0;
+    g_popupOverlayWgcRenderFailCount = 0;
+    g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartedNoFrame;
+    g_popupOverlayWgcDiagnosticStartTime = std::chrono::steady_clock::now();
+    g_popupOverlayWgcStartTime = g_popupOverlayWgcDiagnosticStartTime;
+    g_popupOverlayWgcHandoffStartTime = {};
+    g_popupOverlayWgcFramesToSkip = PopupBackdropInitialFrameSkip();
+
+    try {
+        g_popupOverlayWgcFramePool = capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
+            g_popupOverlayWgcGraphicsDevice,
+            directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+            2,
+            g_popupOverlayWgcItem.Size());
+        g_popupOverlayWgcFrameArrivedToken = g_popupOverlayWgcFramePool.FrameArrived(
+            [](capture::Direct3D11CaptureFramePool const& sender,
+               winrt::Windows::Foundation::IInspectable const&) {
+                std::lock_guard callbackLock(g_popupOverlayWgcMutex);
+                if (!g_popupOverlayWgcRunning) {
+                    return;
+                }
+                auto frame = sender.TryGetNextFrame();
+                RenderPopupOverlayWgcFrame(frame);
+            });
+        g_popupOverlayWgcFrameCallbackHooked = true;
+        g_popupOverlayWgcSession =
+            g_popupOverlayWgcFramePool.CreateCaptureSession(g_popupOverlayWgcItem);
+        try {
+            // Windows Graphics Capture shows a yellow border around monitor
+            // captures by default. On systems that support borderless capture
+            // and have permission, this disables it; otherwise Windows may
+            // ignore the request and still show the border.
+            g_popupOverlayWgcSession.IsBorderRequired(false);
+        } catch (...) {
+        }
+        try {
+            g_popupOverlayWgcSession.IsCursorCaptureEnabled(false);
+        } catch (...) {
+        }
+        g_popupOverlayWgcSession.StartCapture();
+        Wh_Log(L"Island: overlay WGC state backdrop started %dx%d monitor=(%ld,%ld,%ld,%ld)",
+               widthPx,
+               heightPx,
+               monitorInfo.rcMonitor.left,
+               monitorInfo.rcMonitor.top,
+               monitorInfo.rcMonitor.right,
+               monitorInfo.rcMonitor.bottom);
+        return true;
+    } catch (winrt::hresult_error const& error) {
+        g_popupOverlayWgcLastHr = error.code().value;
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        g_popupOverlayWgcDiagnosticHr = g_popupOverlayWgcLastHr;
+        Wh_Log(L"Island: overlay WGC state start failed hr=0x%08X",
+               static_cast<unsigned>(g_popupOverlayWgcLastHr));
+        g_popupOverlayWgcRunning = false;
+        return false;
+    } catch (...) {
+        g_popupOverlayWgcLastHr = E_FAIL;
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+        g_popupOverlayWgcDiagnosticHr = E_FAIL;
+        Wh_Log(L"Island: overlay WGC state start failed unknown");
+        g_popupOverlayWgcRunning = false;
+        return false;
+    }
+}
+
+void UpdatePopupOverlayWgcCaptureRect(RECT const& captureRect) {
+    std::lock_guard lock(g_popupOverlayWgcMutex);
+    if (!g_popupOverlayWgcRunning) {
+        return;
+    }
+
+    int width = captureRect.right - captureRect.left;
+    int height = captureRect.bottom - captureRect.top;
+    if (width == g_popupOverlayWgcTargetWidthPx &&
+        height == g_popupOverlayWgcTargetHeightPx) {
+        g_popupOverlayWgcCaptureRectPx = captureRect;
+    }
+}
+#else
+void StopPopupOverlayWgcBackdrop() {}
+bool StartPopupOverlayWgcBackdrop(RECT const&, int, int) {
+    g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+    g_popupOverlayWgcDiagnosticHr = E_NOTIMPL;
+    return false;
+}
+void UpdatePopupOverlayWgcCaptureRect(RECT const&) {}
+#endif
+
+BYTE PopupRoundedRectAlpha(int x, int y, int width, int height, int radius) {
+    if (width <= 0 || height <= 0) {
+        return 0;
+    }
+
+    radius = Clamp(radius, 1, std::max(1, std::min(width, height) / 2));
+    double px = static_cast<double>(x) + 0.5;
+    double py = static_cast<double>(y) + 0.5;
+    double left = 0.0;
+    double top = 0.0;
+    double right = static_cast<double>(width);
+    double bottom = static_cast<double>(height);
+    double r = static_cast<double>(radius);
+
+    double cx = Clamp(px, left + r, right - r);
+    double cy = Clamp(py, top + r, bottom - r);
+    double dx = px - cx;
+    double dy = py - cy;
+    double distance = std::sqrt(dx * dx + dy * dy);
+    double coverage = r - distance + 0.75;
+    coverage = Clamp(coverage, 0.0, 1.0);
+    return static_cast<BYTE>(std::lround(coverage * 255.0));
+}
+
+void BoxBlurPbgraPixels(std::vector<BYTE>& pixels, int width, int height, int passes) {
+    if (width <= 1 || height <= 1 || pixels.size() < static_cast<size_t>(width) * height * 4) {
+        return;
+    }
+
+    std::vector<BYTE> temp(pixels.size());
+    for (int pass = 0; pass < passes; ++pass) {
+        temp = pixels;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                int sumB = 0, sumG = 0, sumR = 0, sumA = 0, count = 0;
+                for (int yy = std::max(0, y - 1); yy <= std::min(height - 1, y + 1); ++yy) {
+                    for (int xx = std::max(0, x - 1); xx <= std::min(width - 1, x + 1); ++xx) {
+                        BYTE* p = temp.data() + (static_cast<size_t>(yy) * width + xx) * 4;
+                        sumB += p[0];
+                        sumG += p[1];
+                        sumR += p[2];
+                        sumA += p[3];
+                        ++count;
+                    }
+                }
+                BYTE* out = pixels.data() + (static_cast<size_t>(y) * width + x) * 4;
+                out[0] = static_cast<BYTE>(sumB / count);
+                out[1] = static_cast<BYTE>(sumG / count);
+                out[2] = static_cast<BYTE>(sumR / count);
+                out[3] = static_cast<BYTE>(sumA / count);
+            }
+        }
+    }
+}
+
+void SetPopupWindowCaptureExclusion(HWND hwnd, bool exclude) {
+    if (!hwnd) {
+        return;
+    }
+
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+#ifndef WDA_NONE
+#define WDA_NONE 0x00000000
+#endif
+
+    SetWindowDisplayAffinity(hwnd, exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+}
+
+
+bool ClearPopupBackdropOverlayLayeredSurface(HWND hwnd) {
+    if (!hwnd) {
+        return false;
+    }
+
+    RECT rect{};
+    GetWindowRect(hwnd, &rect);
+    int width = std::max(1L, rect.right - rect.left);
+    int height = std::max(1L, rect.bottom - rect.top);
+
+    // Guard against invalid stale geometry during Explorer unload/reload.
+    width = Clamp(width, 1, 2048);
+    height = Clamp(height, 1, 2048);
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+    HDC memDc = CreateCompatibleDC(screenDc);
+    if (!memDc) {
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS,
+                                      &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap) {
+            DeleteObject(bitmap);
+        }
+        DeleteDC(memDc);
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    std::memset(bits, 0, static_cast<size_t>(width) * height * 4);
+
+    HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
+    POINT srcPoint{0, 0};
+    SIZE size{width, height};
+    POINT dstPoint{rect.left, rect.top};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+
+    BOOL ok = UpdateLayeredWindow(hwnd, screenDc, &dstPoint, &size,
+                                  memDc, &srcPoint, 0, &blend, ULW_ALPHA);
+
+    SelectObject(memDc, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(memDc);
+    ReleaseDC(nullptr, screenDc);
+    return !!ok;
+}
+
+bool CaptureLowResScreenPixels(RECT const& screenRect,
+                               int lowWidth,
+                               int lowHeight,
+                               std::vector<BYTE>& pixels,
+                               HWND excludeOverlay = nullptr) {
+    if (lowWidth <= 0 || lowHeight <= 0 ||
+        screenRect.right <= screenRect.left ||
+        screenRect.bottom <= screenRect.top) {
+        return false;
+    }
+
+    pixels.assign(static_cast<size_t>(lowWidth) * lowHeight * 4, 0);
+
+    // Keep the overlay visible while sampling. Hiding/restoring the layered
+    // window here caused an obvious flash during the popup morph. Capture
+    // exclusion is still requested; if a build ignores it for GetDC(nullptr),
+    // WGC will take over after the final geometry is ready.
+    if (excludeOverlay) {
+        SetPopupWindowCaptureExclusion(excludeOverlay, true);
+    }
+    auto restoreExcludedOverlay = [&] {
+        if (excludeOverlay) {
+            // Keep the overlay excluded while a WGC session is active; otherwise
+            // restore normal visibility for plain GDI fallback mode.
+            SetPopupWindowCaptureExclusion(excludeOverlay,
+                                           g_popupOverlayWgcRunning);
+        }
+    };
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        restoreExcludedOverlay();
+        return false;
+    }
+
+    HDC memDc = CreateCompatibleDC(screenDc);
+    if (!memDc) {
+        ReleaseDC(nullptr, screenDc);
+        restoreExcludedOverlay();
+        return false;
+    }
+
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = lowWidth;
+    info.bmiHeader.biHeight = -lowHeight;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap) DeleteObject(bitmap);
+        DeleteDC(memDc);
+        ReleaseDC(nullptr, screenDc);
+        restoreExcludedOverlay();
+        return false;
+    }
+
+    HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
+    SetStretchBltMode(memDc, HALFTONE);
+    SetBrushOrgEx(memDc, 0, 0, nullptr);
+
+    int sourceWidth = screenRect.right - screenRect.left;
+    int sourceHeight = screenRect.bottom - screenRect.top;
+    BOOL ok = StretchBlt(memDc, 0, 0, lowWidth, lowHeight,
+                         screenDc, screenRect.left, screenRect.top,
+                         sourceWidth, sourceHeight, SRCCOPY);
+
+    if (ok) {
+        std::memcpy(pixels.data(), bits, pixels.size());
+    }
+
+    SelectObject(memDc, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(memDc);
+    ReleaseDC(nullptr, screenDc);
+    restoreExcludedOverlay();
+    return !!ok;
+}
+
+void SampleBilinearPbgra(std::vector<BYTE> const& pixels,
+                       int width,
+                       int height,
+                       double x,
+                       double y,
+                       int& b,
+                       int& g,
+                       int& r) {
+    if (width <= 0 || height <= 0 || pixels.empty()) {
+        b = g = r = 0;
+        return;
+    }
+
+    x = Clamp(x, 0.0, static_cast<double>(width - 1));
+    y = Clamp(y, 0.0, static_cast<double>(height - 1));
+    int x0 = Clamp(static_cast<int>(std::floor(x)), 0, width - 1);
+    int y0 = Clamp(static_cast<int>(std::floor(y)), 0, height - 1);
+    int x1 = Clamp(x0 + 1, 0, width - 1);
+    int y1 = Clamp(y0 + 1, 0, height - 1);
+    double fx = x - x0;
+    double fy = y - y0;
+
+    auto pixel = [&](int px, int py) -> BYTE const* {
+        return pixels.data() + (static_cast<size_t>(py) * width + px) * 4;
+    };
+
+    BYTE const* p00 = pixel(x0, y0);
+    BYTE const* p10 = pixel(x1, y0);
+    BYTE const* p01 = pixel(x0, y1);
+    BYTE const* p11 = pixel(x1, y1);
+
+    auto blend = [&](int channel) -> int {
+        double top = p00[channel] * (1.0 - fx) + p10[channel] * fx;
+        double bottom = p01[channel] * (1.0 - fx) + p11[channel] * fx;
+        return Clamp(static_cast<int>(std::lround(top * (1.0 - fy) + bottom * fy)), 0, 255);
+    };
+
+    b = blend(0);
+    g = blend(1);
+    r = blend(2);
+}
+
+bool UpdatePopupBackdropOverlayLayeredBlur(HWND hwnd,
+                                           RECT const& screenRect,
+                                           int width,
+                                           int height,
+                                           int cornerRadiusPx,
+                                           bool force) {
+    if (!hwnd || width <= 2 || height <= 2) {
+        return false;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    bool sizeChanged =
+        width != g_popupBackdropOverlayLastWidth ||
+        height != g_popupBackdropOverlayLastHeight ||
+        cornerRadiusPx != g_popupBackdropOverlayLastRadius;
+    if (!force && !sizeChanged &&
+        g_popupBackdropOverlayLastPaintTime.time_since_epoch().count() != 0) {
+        auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now - g_popupBackdropOverlayLastPaintTime)
+                       .count();
+        if (age < kPopupBackdropOverlayRefreshMs) {
+            return true;
+        }
+    }
+
+    int captureScale = PopupBackdropFallbackCaptureScale();
+    int lowWidth = Clamp(width / captureScale,
+                         40, kPopupBackdropOverlayMaxCaptureSize);
+    int lowHeight = Clamp(height / captureScale,
+                          40, kPopupBackdropOverlayMaxCaptureSize);
+    std::vector<BYTE> lowPixels;
+    if (!CaptureLowResScreenPixels(screenRect, lowWidth, lowHeight, lowPixels, hwnd)) {
+        return false;
+    }
+
+    BoxBlurPbgraPixels(lowPixels, lowWidth, lowHeight,
+                       PopupBackdropFallbackBlurPasses());
+
+    std::vector<BYTE> out(static_cast<size_t>(width) * height * 4);
+    bool dark = IsDarkModeApprox();
+    constexpr double kDarkDim = 0.94;
+    constexpr double kLightDim = 1.00;
+    double dim = dark ? kDarkDim : kLightDim;
+    BYTE maxAlpha = PopupBackdropOverlayMaxAlpha();
+
+    for (int y = 0; y < height; ++y) {
+        double sampleY = ((static_cast<double>(y) + 0.5) * lowHeight / height) - 0.5;
+        for (int x = 0; x < width; ++x) {
+            double sampleX = ((static_cast<double>(x) + 0.5) * lowWidth / width) - 0.5;
+            BYTE edgeAlpha = PopupRoundedRectAlpha(x, y, width, height, cornerRadiusPx);
+            BYTE a = static_cast<BYTE>((static_cast<int>(edgeAlpha) * maxAlpha) / 255);
+
+            int sb = 0;
+            int sg = 0;
+            int sr = 0;
+            SampleBilinearPbgra(lowPixels, lowWidth, lowHeight, sampleX, sampleY, sb, sg, sr);
+
+            int b = Clamp(static_cast<int>(std::lround(sb * dim)), 0, 255);
+            int g = Clamp(static_cast<int>(std::lround(sg * dim)), 0, 255);
+            int r = Clamp(static_cast<int>(std::lround(sr * dim)), 0, 255);
+
+            BYTE* dst = out.data() + (static_cast<size_t>(y) * width + x) * 4;
+            // UpdateLayeredWindow expects premultiplied BGRA for AC_SRC_ALPHA.
+            dst[0] = static_cast<BYTE>((b * a) / 255);
+            dst[1] = static_cast<BYTE>((g * a) / 255);
+            dst[2] = static_cast<BYTE>((r * a) / 255);
+            dst[3] = a;
+        }
+    }
+
+    {
+        std::lock_guard cacheLock(g_popupBackdropOverlayHandoffMutex);
+        g_popupBackdropOverlayFallbackPixels = out;
+        g_popupBackdropOverlayFallbackRect = screenRect;
+        g_popupBackdropOverlayFallbackWidth = width;
+        g_popupBackdropOverlayFallbackHeight = height;
+        g_popupBackdropOverlayFallbackRadius = cornerRadiusPx;
+        g_popupBackdropOverlayFallbackPixelsValid = true;
+    }
+
+    HDC screenDc = GetDC(nullptr);
+    if (!screenDc) {
+        return false;
+    }
+    HDC memDc = CreateCompatibleDC(screenDc);
+    if (!memDc) {
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(screenDc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap) DeleteObject(bitmap);
+        DeleteDC(memDc);
+        ReleaseDC(nullptr, screenDc);
+        return false;
+    }
+    std::memcpy(bits, out.data(), out.size());
+
+    HGDIOBJ oldBitmap = SelectObject(memDc, bitmap);
+    POINT srcPoint{0, 0};
+    SIZE size{width, height};
+    POINT dstPoint{screenRect.left, screenRect.top};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+
+    BOOL ok = UpdateLayeredWindow(hwnd, screenDc, &dstPoint, &size,
+                                  memDc, &srcPoint, 0, &blend, ULW_ALPHA);
+
+    SelectObject(memDc, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(memDc);
+    ReleaseDC(nullptr, screenDc);
+
+    if (ok) {
+        g_popupBackdropOverlayLastPaintTime = now;
+        g_popupBackdropOverlayLastWidth = width;
+        g_popupBackdropOverlayLastHeight = height;
+        g_popupBackdropOverlayLastRadius = cornerRadiusPx;
+    }
+    return !!ok;
+}
+
+void PaintPopupBackdropOverlay(HWND hwnd) {
+    PAINTSTRUCT paint{};
+    HDC dc = BeginPaint(hwnd, &paint);
+    if (dc) {
+        EndPaint(hwnd, &paint);
+    }
+}
+
+LRESULT CALLBACK PopupBackdropOverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_TIMER:
+            if (wParam == kPopupBackdropOverlayTimerId) {
+                UpdatePopupBackdropOverlayWindow();
+                return 0;
+            }
+            break;
+        case WM_PAINT:
+            PaintPopupBackdropOverlay(hwnd);
+            return 0;
+        case WM_DESTROY:
+            KillTimer(hwnd, kPopupBackdropOverlayTimerId);
+            SetPopupWindowCaptureExclusion(hwnd, false);
+            if (g_popupBackdropOverlay == hwnd) {
+                g_popupBackdropOverlay = nullptr;
+            }
+            return 0;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+bool RegisterPopupBackdropOverlayClass() {
+    if (g_popupBackdropOverlayClassRegistered) {
+        return true;
+    }
+    HINSTANCE moduleInstance = ModInstance();
+    if (!moduleInstance) {
+        return false;
+    }
+    WNDCLASSEXW windowClass{sizeof(windowClass)};
+    windowClass.lpfnWndProc = PopupBackdropOverlayWndProc;
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.hInstance = moduleInstance;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.lpszClassName = kPopupBackdropOverlayClassName;
+    if (!RegisterClassExW(&windowClass)) {
+        Wh_Log(L"Island: failed to register popup backdrop overlay window class");
+        return false;
+    }
+    g_popupBackdropOverlayClassRegistered = true;
+    return true;
+}
+
+void UnregisterPopupBackdropOverlayClass() {
+    if (!g_popupBackdropOverlayClassRegistered) {
+        return;
+    }
+    HINSTANCE moduleInstance = ModInstance();
+    if (moduleInstance && UnregisterClassW(kPopupBackdropOverlayClassName, moduleInstance)) {
+        g_popupBackdropOverlayClassRegistered = false;
+    }
+}
+
+bool EnsurePopupBackdropOverlayWindow() {
+    if (!UseOverlayPopupBackdropMaterial()) {
+        return false;
+    }
+    if (g_popupBackdropOverlay) {
+        return true;
+    }
+    if (!RegisterPopupBackdropOverlayClass()) {
+        return false;
+    }
+    g_popupBackdropOverlay = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+        kPopupBackdropOverlayClassName, L"",
+        WS_POPUP, 0, 0, 1, 1,
+        g_taskbarWnd, nullptr, ModInstance(), nullptr);
+    if (!g_popupBackdropOverlay) {
+        Wh_Log(L"Island: failed to create popup backdrop overlay window");
+        return false;
+    }
+    // Do not enable acrylic before the overlay has its final size and region.
+    // Some Windows builds cache the composition effect against the current
+    // rectangular window bounds, which can make later SetWindowRgn clipping
+    // ineffective for the blur material.
+    return true;
+}
+
+void ClearPopupBackdropOverlayDwmBlurRegion();
+
+void HidePopupBackdropOverlayWindow() {
+    if (g_popupBackdropOverlay) {
+        StopPopupOverlayWgcBackdrop();
+        SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, false);
+        SetPopupBackdropOverlayNativeBlur(g_popupBackdropOverlay, false);
+        ClearPopupBackdropOverlayDwmBlurRegion();
+        ClearPopupBackdropOverlayLayeredSurface(g_popupBackdropOverlay);
+        SetWindowRgn(g_popupBackdropOverlay, nullptr, FALSE);
+        ShowWindow(g_popupBackdropOverlay, SW_HIDE);
+        g_popupBackdropOverlayLastPaintTime = {};
+        g_popupBackdropOverlayLastWidth = 0;
+        g_popupBackdropOverlayLastHeight = 0;
+        g_popupBackdropOverlayLastRadius = 0;
+        g_popupOverlayWgcFallbackPainted = false;
+        ClearPopupBackdropOverlayHandoffCache();
+        if (g_expandedPopup) {
+            SetPopupWindowCaptureExclusion(g_expandedPopup, false);
+        }
+    }
+}
+
+void DestroyPopupBackdropOverlayWindow() {
+    if (g_popupBackdropOverlay) {
+        StopPopupOverlayWgcBackdrop();
+        SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, false);
+        SetPopupBackdropOverlayNativeBlur(g_popupBackdropOverlay, false);
+        ClearPopupBackdropOverlayDwmBlurRegion();
+        ClearPopupBackdropOverlayLayeredSurface(g_popupBackdropOverlay);
+        ClearPopupBackdropOverlayHandoffCache();
+        SetWindowRgn(g_popupBackdropOverlay, nullptr, FALSE);
+        DestroyWindow(g_popupBackdropOverlay);
+        g_popupBackdropOverlay = nullptr;
+    }
+}
+
+bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
+    if (!g_expandedPopup) {
+        return false;
+    }
+
+    RECT popupScreenPx{};
+    GetWindowRect(g_expandedPopup, &popupScreenPx);
+    if (popupScreenPx.right <= popupScreenPx.left ||
+        popupScreenPx.bottom <= popupScreenPx.top) {
+        return false;
+    }
+
+    double dpiScale = PopupDpiScale(g_expandedPopup);
+    RECT sourceRect = PopupScreenRectToLocalDip(g_popupSourceRect,
+                                                popupScreenPx,
+                                                dpiScale);
+    RECT finalRect = PopupScreenRectToLocalDip(g_popupFinalRect,
+                                               popupScreenPx,
+                                               dpiScale);
+
+    RECT targetArt{};
+    RECT targetCard{};
+    RECT targetTitle{};
+    RECT targetArtist{};
+    RECT targetProgress{};
+    RECT targetElapsed{};
+    RECT targetDuration{};
+    RECT targetControls{};
+    CalculatePopupFinalLayout(finalRect, targetArt, targetCard,
+                              targetTitle, targetArtist,
+                              targetProgress, targetElapsed,
+                              targetDuration, targetControls);
+    RECT targetBackdrop = PopupBackdropRectFromParts(targetArt, targetCard);
+
+    double progress = PopupProgress();
+    // Once the popup is visually at the end of the morph, snap the native
+    // backdrop to the exact final XAML shell. This avoids a late 1-3 px WGC
+    // handoff offset caused by starting capture at progress≈0.985.
+    if (!g_popupClosing && progress >= 0.995) {
+        progress = 1.0;
+    }
+    RECT currentDip{
+        LerpInt(sourceRect.left, targetBackdrop.left, progress),
+        LerpInt(sourceRect.top, targetBackdrop.top, progress),
+        LerpInt(sourceRect.right, targetBackdrop.right, progress),
+        LerpInt(sourceRect.bottom, targetBackdrop.bottom, progress),
+    };
+
+    // Keep the overlay geometry exactly aligned to the XAML backdrop shell.
+    // The previous inset experiment helped hide hard native edges in some
+    // cases, but it made the blur layer visibly disagree with the component
+    // shape. For this test, prefer exact shape matching and remove all extra
+    // XAML tint/gray layers instead.
+    overlayRect = {
+        popupScreenPx.left + static_cast<LONG>(std::lround(currentDip.left * dpiScale)),
+        popupScreenPx.top + static_cast<LONG>(std::lround(currentDip.top * dpiScale)),
+        popupScreenPx.left + static_cast<LONG>(std::lround(currentDip.right * dpiScale)),
+        popupScreenPx.top + static_cast<LONG>(std::lround(currentDip.bottom * dpiScale)),
+    };
+
+    int width = overlayRect.right - overlayRect.left;
+    int height = overlayRect.bottom - overlayRect.top;
+    if (width <= 2 || height <= 2) {
+        return false;
+    }
+
+    double radiusDip = std::max(1.0, kPopupUnifiedCornerRadius + kPopupOverlayRadiusAdjustDip);
+    int desiredRadius = static_cast<int>(std::lround(radiusDip * dpiScale));
+    cornerRadiusPx = Clamp(desiredRadius, 1, std::max(1, std::min(width, height) / 2));
+    return true;
+}
+
+void ApplyPopupBackdropOverlayRegion(int width, int height, int cornerRadiusPx) {
+    if (!g_popupBackdropOverlay || width <= 0 || height <= 0) {
+        return;
+    }
+
+    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                     cornerRadiusPx * 2, cornerRadiusPx * 2);
+    if (!region) {
+        return;
+    }
+
+    // SetWindowRgn takes ownership on success. If it fails, we must release it.
+    if (!SetWindowRgn(g_popupBackdropOverlay, region, FALSE)) {
+        DeleteObject(region);
+    }
+}
+
+void ApplyPopupBackdropOverlayDwmBlurRegion(int width, int height, int cornerRadiusPx) {
+    if (!g_popupBackdropOverlay || width <= 0 || height <= 0) {
+        return;
+    }
+
+    // Accent acrylic can ignore the HWND region on some builds unless DWM also
+    // receives an explicit blur-region hint. Use a separate region handle here:
+    // SetWindowRgn owns its region on success, while DwmEnableBlurBehindWindow
+    // does not document ownership transfer for hRgnBlur.
+    HRGN blurRegion = CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                         cornerRadiusPx * 2, cornerRadiusPx * 2);
+    if (!blurRegion) {
+        return;
+    }
+
+    DWM_BLURBEHIND blurBehind{};
+    blurBehind.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
+    blurBehind.fEnable = TRUE;
+    blurBehind.hRgnBlur = blurRegion;
+    DwmEnableBlurBehindWindow(g_popupBackdropOverlay, &blurBehind);
+    DeleteObject(blurRegion);
+}
+
+void ClearPopupBackdropOverlayDwmBlurRegion() {
+    if (!g_popupBackdropOverlay) {
+        return;
+    }
+
+    DWM_BLURBEHIND blurBehind{};
+    blurBehind.dwFlags = DWM_BB_ENABLE;
+    blurBehind.fEnable = FALSE;
+    DwmEnableBlurBehindWindow(g_popupBackdropOverlay, &blurBehind);
+}
+
+void UpdatePopupBackdropOverlayWindow() {
+    if (!UseOverlayPopupBackdropMaterial() || !g_expandedPopup || !g_expanded) {
+        HidePopupBackdropOverlayWindow();
+        return;
+    }
+    if (!EnsurePopupBackdropOverlayWindow()) {
+        return;
+    }
+
+    RECT overlayRect{};
+    int cornerRadiusPx = 1;
+    if (!CalculatePopupBackdropOverlayRect(overlayRect, cornerRadiusPx)) {
+        HidePopupBackdropOverlayWindow();
+        return;
+    }
+
+    int width = std::max(1L, overlayRect.right - overlayRect.left);
+    int height = std::max(1L, overlayRect.bottom - overlayRect.top);
+
+    // 0.9.58: real-time WGC/D3D producer. The overlay HWND is already known
+    // to be visible and clippable, so render a DXGI swap chain directly into it
+    // instead of using GDI screenshots + UpdateLayeredWindow.
+    SetWindowPos(g_popupBackdropOverlay, g_expandedPopup,
+                 overlayRect.left, overlayRect.top, width, height,
+                 SWP_NOACTIVATE | SWP_NOCOPYBITS |
+                     SWP_NOOWNERZORDER | SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
+    ApplyPopupBackdropOverlayRegion(width, height, cornerRadiusPx);
+    g_popupBackdropOverlayLastWidth = width;
+    g_popupBackdropOverlayLastHeight = height;
+    g_popupBackdropOverlayLastRadius = cornerRadiusPx;
+    ShowWindow(g_popupBackdropOverlay, SW_SHOWNOACTIVATE);
+
+    double progress = PopupProgress();
+    bool finalGeometryReady = !g_popupClosing && progress >= 0.995;
+
+    if (!finalGeometryReady && g_popupClosing) {
+        // Closing still favors the stable fallback path; it avoids extra WGC
+        // churn while the popup is being torn down.
+        if (g_popupOverlayWgcRunning) {
+            StopPopupOverlayWgcBackdrop();
+        }
+        g_popupOverlayWgcFinalReadyTime = {};
+        UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                              overlayRect,
+                                              width,
+                                              height,
+                                              cornerRadiusPx,
+                                              false);
+        g_popupOverlayWgcFallbackPainted = true;
+        return;
+    }
+
+    if (!finalGeometryReady) {
+        // While expanding, start WGC immediately and keep its crop/target size
+        // synced to the animated backdrop. A fallback frame stays underneath
+        // until the first live WGC readback arrives.
+        if (!g_popupOverlayWgcReadbackHadVisibleFrame) {
+            UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                                  overlayRect,
+                                                  width,
+                                                  height,
+                                                  cornerRadiusPx,
+                                                  !g_popupOverlayWgcFallbackPainted);
+            g_popupOverlayWgcFallbackPainted = true;
+        }
+
+        bool startedWgc = StartPopupOverlayWgcBackdrop(overlayRect, width, height);
+        if (!startedWgc && !g_popupOverlayWgcFallbackPainted) {
+            UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                                  overlayRect,
+                                                  width,
+                                                  height,
+                                                  cornerRadiusPx,
+                                                  true);
+            g_popupOverlayWgcFallbackPainted = true;
+        }
+        g_popupOverlayWgcFinalReadyTime = {};
+        return;
+    }
+
+    if (g_popupOverlayWgcDiagnosticState == PopupOverlayWgcDiagnosticState::NotStarted) {
+        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
+    }
+
+    auto nowForFinalGeometry = std::chrono::steady_clock::now();
+    if (g_popupOverlayWgcFinalReadyTime.time_since_epoch().count() == 0) {
+        g_popupOverlayWgcFinalReadyTime = nowForFinalGeometry;
+    }
+
+    int handoffDelayMs = PopupBackdropHandoffDelayMs();
+    if (handoffDelayMs > 0 &&
+        !g_popupOverlayWgcRunning &&
+        !g_popupOverlayWgcReadbackHadVisibleFrame) {
+        double finalGeometryAgeMs =
+            std::chrono::duration<double, std::milli>(
+                nowForFinalGeometry - g_popupOverlayWgcFinalReadyTime)
+                .count();
+        if (finalGeometryAgeMs < handoffDelayMs) {
+            UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                                  overlayRect,
+                                                  width,
+                                                  height,
+                                                  cornerRadiusPx,
+                                                  !g_popupOverlayWgcFallbackPainted);
+            g_popupOverlayWgcFallbackPainted = true;
+            return;
+        }
+    }
+
+    // Force one final-geometry fallback frame before WGC starts so the cached
+    // handoff frame has the same size/position as the WGC output. After that,
+    // start WGC immediately; otherwise the static fallback can remain visible
+    // and make the material look non-realtime.
+    bool needFinalFallback =
+        !g_popupOverlayWgcRunning &&
+        !g_popupOverlayWgcReadbackHadVisibleFrame &&
+        (!g_popupOverlayWgcFallbackPainted ||
+         g_popupBackdropOverlayFallbackWidth != width ||
+         g_popupBackdropOverlayFallbackHeight != height);
+    if (needFinalFallback) {
+        UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                              overlayRect,
+                                              width,
+                                              height,
+                                              cornerRadiusPx,
+                                              true);
+        g_popupOverlayWgcFallbackPainted = true;
+    }
+
+    bool startedWgc = StartPopupOverlayWgcBackdrop(overlayRect, width, height);
+    if (!startedWgc && !g_popupOverlayWgcFallbackPainted) {
+        UpdatePopupBackdropOverlayLayeredBlur(g_popupBackdropOverlay,
+                                              overlayRect,
+                                              width,
+                                              height,
+                                              cornerRadiusPx,
+                                              true);
+        g_popupOverlayWgcFallbackPainted = true;
+    }
+}
+
 bool RegisterPopupWindowClass() {
     if (g_popupClassRegistered) {
         return true;
@@ -5795,6 +8108,7 @@ bool RegisterPopupWindowClass() {
 }
 
 void UnregisterPopupWindowClass() {
+    UnregisterPopupBackdropOverlayClass();
     if (!g_popupClassRegistered) {
         return;
     }
@@ -5864,10 +8178,14 @@ void ShowExpandedPopup() {
     }
     ApplyPopupBackdrop(g_expandedPopup);
     PositionExpandedPopup();
+    UpdatePopupBackdropOverlayWindow();
     RenderExpandedPopupLayer();
     SetCompactIslandSuppressed(true);
     ShowWindow(g_expandedPopup, SW_SHOW);
-    SetTimer(g_expandedPopup, kPopupTimerId, g_popupXamlRoot ? 80 : 15, nullptr);
+    // Re-apply after the popup becomes visible so the overlay is placed directly
+    // under the popup in the active top-level z-order.
+    UpdatePopupBackdropOverlayWindow();
+    SetTimer(g_expandedPopup, kPopupTimerId, g_popupXamlRoot ? 30 : 15, nullptr);
     if (g_popupXamlRoot) {
         StartPopupXamlRenderLoop();
     }
@@ -5875,6 +8193,7 @@ void ShowExpandedPopup() {
 
 void DestroyExpandedPopup() {
     StopPopupXamlRenderLoop();
+    DestroyPopupBackdropOverlayWindow();
     SetCompactIslandSuppressed(false);
     if (g_popupXamlSource) {
         try {
@@ -5909,6 +8228,10 @@ void DestroyExpandedPopup() {
     g_popupXamlArtTranslate = nullptr;
     g_popupXamlArtFade = nullptr;
     g_popupXamlArt = nullptr;
+    g_popupXamlTitleHost = nullptr;
+    g_popupXamlArtistHost = nullptr;
+    g_popupXamlOutgoingTitleHost = nullptr;
+    g_popupXamlOutgoingArtistHost = nullptr;
     g_popupXamlTitle = nullptr;
     g_popupXamlArtist = nullptr;
     g_popupXamlOutgoingTitle = nullptr;
@@ -6160,7 +8483,15 @@ void StartExpandRenderLoop(bool expanded) {
 bool InjectIslandGrid();
 
 void MediaThreadProc() {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+    } catch (...) {
+        Wh_Log(L"Island: failed to initialize media thread apartment");
+        g_mediaThreadRunning = false;
+        return;
+    }
 
     struct SessionEventSubscription {
         gsm::GlobalSystemMediaTransportControlsSession session{nullptr};
@@ -6250,8 +8581,7 @@ void MediaThreadProc() {
     };
 
     try {
-        manager =
-            gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        manager = RequestMediaManagerWithTimeout(std::chrono::seconds(3));
         if (manager) {
             sessionsChangedToken = manager.SessionsChanged(
                 [&](auto const&, auto const&) {
@@ -6311,10 +8641,13 @@ void MediaThreadProc() {
             if (!hwnd || !IsWindow(hwnd)) {
                 hwnd = FindCurrentProcessTaskbarWnd();
             }
-            if (hwnd) {
+            if (IsModActive() && hwnd) {
                 RunFromWindowThread(
                     hwnd,
                     [](void* param) {
+                        if (!IsModActive()) {
+                            return;
+                        }
                         HWND taskbarWnd = reinterpret_cast<HWND>(param);
                         if (!g_playerGrid) {
                             g_taskbarWnd = taskbarWnd;
@@ -6344,23 +8677,41 @@ void MediaThreadProc() {
     } catch (...) {
     }
 
-    winrt::uninit_apartment();
+    // Release the GSMTC manager before tearing down the WinRT apartment. Keeping
+    // the WinRT/COM object alive across winrt::uninit_apartment() can leave its
+    // final Release() running after the COM apartment has already been torn down,
+    // which is risky when the mod is unloaded inside explorer.exe.
+    manager = nullptr;
+
+    if (apartmentInitialized) {
+        winrt::uninit_apartment();
+    }
 }
 
 void StartMediaThread() {
-    if (g_mediaThreadRunning) {
+    if (g_mediaThreadRunning.exchange(true)) {
         return;
     }
-    g_mediaThreadRunning = true;
-    g_mediaThread = new std::thread(MediaThreadProc);
+    try {
+        g_mediaThread = new std::thread(MediaThreadProc);
+    } catch (...) {
+        g_mediaThreadRunning = false;
+        g_mediaThread = nullptr;
+        Wh_Log(L"Island: failed to start media thread");
+    }
 }
 
 void StopMediaThread() {
     g_mediaThreadRunning = false;
+    g_mediaRefreshRequested = false;
     g_mediaCommandCv.notify_all();
     if (g_mediaThread) {
         if (g_mediaThread->joinable()) {
-            g_mediaThread->join();
+            if (g_mediaThread->get_id() != std::this_thread::get_id()) {
+                g_mediaThread->join();
+            } else {
+                g_mediaThread->detach();
+            }
         }
         delete g_mediaThread;
         g_mediaThread = nullptr;
@@ -6393,7 +8744,10 @@ Button MakeMediaButton(const wchar_t* name, const wchar_t* glyph, void (*onClick
     button.Background(Brush(Color(0x18, 0xFF, 0xFF, 0xFF)));
     button.BorderBrush(Brush(Color(0x20, 0xFF, 0xFF, 0xFF)));
     button.BorderThickness({1, 1, 1, 1});
-    button.CornerRadius({14, 14, 14, 14});
+    button.CornerRadius({kPopupG2ButtonCornerRadius,
+                         kPopupG2ButtonCornerRadius,
+                         kPopupG2ButtonCornerRadius,
+                         kPopupG2ButtonCornerRadius});
 
     TextBlock icon = MakeTextBlock(L"", 13, true);
     icon.FontFamily(mediax::FontFamily(L"Segoe Fluent Icons"));
@@ -7250,10 +9604,14 @@ void UpdatePlayerContents() {
 
                     if (visualThumbnailBytes.empty()) {
                         auto placeholderArtBytes = CreatePlaceholderAlbumCoverBytes(128);
+                        auto placeholderG2ArtBytes = CreatePopupG2AlbumCoverBytes(placeholderArtBytes);
                         auto placeholderPanelBytes = CreatePlaceholderAlbumCoverBytes(20);
                         auto placeholderBackdropBytes = CreatePlaceholderAlbumCoverBytes(20, true);
-                        if (!placeholderArtBytes.empty()) {
-                            g_popupXamlArt.Source(makeBitmap(placeholderArtBytes));
+                        auto const& popupArtBytes = placeholderG2ArtBytes.empty()
+                                                        ? placeholderArtBytes
+                                                        : placeholderG2ArtBytes;
+                        if (!popupArtBytes.empty()) {
+                            g_popupXamlArt.Source(makeBitmap(popupArtBytes));
                         } else {
                             g_popupXamlArt.Source(nullptr);
                         }
@@ -7272,7 +9630,9 @@ void UpdatePlayerContents() {
                             }
                         }
                     } else {
-                        g_popupXamlArt.Source(makeBitmap(displayThumbnailBytes));
+                        auto popupArtBytes = CreatePopupG2AlbumCoverBytes(displayThumbnailBytes);
+                        g_popupXamlArt.Source(makeBitmap(
+                            popupArtBytes.empty() ? displayThumbnailBytes : popupArtBytes));
                         if (g_popupXamlBackdropCover) {
                             if (useBackdropCover) {
                                 auto lowDetailBackdropBytes =
@@ -7564,24 +9924,32 @@ void ApplyPendingSettings() {
     g_popupXamlThemeButtonStyle.clear();
 }
 
+void ApplyPendingSettingsAndInject() {
+    if (!IsModActive()) {
+        return;
+    }
+    ApplyPendingSettings();
+    InjectIslandGrid();
+}
+
 void ApplySettingsOnTaskbarThread() {
+    if (!IsModActive()) {
+        return;
+    }
     if (!g_taskbarWnd || !IsWindow(g_taskbarWnd)) {
         g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     }
     if (g_taskbarWnd) {
         RunFromWindowThread(
             g_taskbarWnd,
-            [](void*) {
-                ApplyPendingSettings();
-                InjectIslandGrid();
-            },
+            [](void*) { ApplyPendingSettingsAndInject(); },
             nullptr);
     }
 }
 
 void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
-    if (g_unloading) {
+    if (!IsModActive()) {
         return;
     }
 
@@ -7589,10 +9957,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     if (g_taskbarWnd) {
         RunFromWindowThread(
             g_taskbarWnd,
-            [](void*) {
-                ApplyPendingSettings();
-                InjectIslandGrid();
-            },
+            [](void*) { ApplyPendingSettingsAndInject(); },
             nullptr);
     }
 }
@@ -7626,6 +9991,8 @@ bool HookTaskbarSymbols() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Island: init");
     g_unloading = false;
+    g_modActive = false;
+    g_mediaRefreshRequested = false;
     g_settings = ReadSettings();
 
     if (!HookTaskbarSymbols()) {
@@ -7637,14 +10004,21 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (g_unloading) {
+        return;
+    }
+    g_modActive = true;
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
-    StartMediaThread();
     ApplySettingsOnTaskbarThread();
+    StartMediaThread();
     RequestMediaRefresh();
 }
 
 void Wh_ModUninit() {
-    g_unloading = true;
+    if (g_unloading.exchange(true)) {
+        return;
+    }
+    g_modActive = false;
     StopMediaThread();
 
     HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
@@ -7660,6 +10034,9 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
+    if (!IsModActive()) {
+        return;
+    }
     Settings settings = ReadSettings();
     {
         std::lock_guard lock(g_pendingSettingsMutex);
