@@ -2,7 +2,7 @@
 // @id              taskbar-elastic-pill
 // @name            Taskbar Elastic WinUI Pill
 // @description     Injects an animated sliding pill for active taskbar items.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -50,11 +50,18 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
     $name: Animation style
     $options:
     - stretch: Stretch (WinUI accurate)
+    - stretch-bounce: Elastic
     - bounce: Bounce
     - linear: Linear
     - easein: Ease-In
     - easeout: Ease-Out
     - easeinout: Ease-In-Out
+  - UseSpringPhysics: false
+    $name: Use spring physics
+    $description: Switch stretch animation from simple Bezier curves to Spring physics.
+  - SpeedMultiplier: '1.0'
+    $name: Speed multiplier
+    $description: Multiplier for animation speed (e.g., 2.0 is twice as fast).
   - FadeTransition: false
     $name: Fade transition
     $description: Fade out and in during movement.
@@ -84,6 +91,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
@@ -108,6 +116,8 @@ struct Settings {
     int PillHeight = 3;
     double PillRadius = 1.5;
     int AnimationStyle = 0;
+    bool UseSpringPhysics = false;
+    double SpeedMultiplier = 1.0;
     bool FadeTransition = false;
     bool SquishTransition = false;
     bool HideInactiveDots = false;
@@ -127,6 +137,9 @@ struct PillContext {
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> activeBtn;
     winrt::event_token layoutToken{};
     std::atomic<bool> searchAttached{false};
+    winrt::Windows::UI::Xaml::Media::Animation::Storyboard colorAnimBoard{nullptr};
+    uint64_t inactiveStartTime{0};
+    bool forceSnapNext{false};
 };
 std::vector<std::shared_ptr<PillContext>> g_pillContexts;
 std::atomic<bool> g_unloading{false};
@@ -204,10 +217,20 @@ void LoadSettings() {
     g_settings.AnimationStyle = 0;
     if (animStr.get()[0]) {
         if (wcscmp(animStr.get(), L"bounce") == 0) g_settings.AnimationStyle = 1;
+        else if (wcscmp(animStr.get(), L"stretch-bounce") == 0) g_settings.AnimationStyle = 7;
         else if (wcscmp(animStr.get(), L"linear") == 0) g_settings.AnimationStyle = 2;
         else if (wcscmp(animStr.get(), L"easein") == 0) g_settings.AnimationStyle = 4;
         else if (wcscmp(animStr.get(), L"easeout") == 0) g_settings.AnimationStyle = 5;
         else if (wcscmp(animStr.get(), L"easeinout") == 0) g_settings.AnimationStyle = 6;
+    }
+    g_settings.UseSpringPhysics = Wh_GetIntSetting(L"Animation.UseSpringPhysics") != 0;
+    WindhawkUtils::StringSetting speedStr(Wh_GetStringSetting(L"Animation.SpeedMultiplier"));
+    g_settings.SpeedMultiplier = 1.0;
+    if (speedStr.get()[0]) {
+        try {
+            g_settings.SpeedMultiplier = std::stod(speedStr.get());
+            if (std::isnan(g_settings.SpeedMultiplier) || g_settings.SpeedMultiplier <= 0.0) g_settings.SpeedMultiplier = 1.0;
+        } catch (...) {}
     }
     g_settings.FadeTransition = Wh_GetIntSetting(L"Animation.FadeTransition") != 0;
     g_settings.SquishTransition = Wh_GetIntSetting(L"Animation.SquishTransition") != 0;
@@ -270,7 +293,7 @@ struct AttachedEvent {
     winrt::event_token token;
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
 };
-std::vector<AttachedEvent>* g_attachedEvents = new std::vector<AttachedEvent>();
+std::vector<AttachedEvent> g_attachedEvents;
 std::mutex g_attachedEventsMutex;
 
 struct HSL {
@@ -388,14 +411,23 @@ using namespace winrt::Windows::UI::Composition;
 
 FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     if (!pThis) return nullptr;
-    try {
-        void* iunknownPtr = (void**)pThis + 3;
-        winrt::Windows::Foundation::IUnknown iunknown;
-        winrt::copy_from_abi(iunknown, iunknownPtr);
-        return iunknown.as<winrt::Windows::UI::Xaml::FrameworkElement>();
-    } catch (...) {
-        return nullptr;
+    void** ptrs = (void**)pThis;
+    for (int i = 1; i < 16; i++) {
+        try {
+            if (IsBadReadPtr(ptrs + i, sizeof(void*))) continue;
+            ::IUnknown* possibleUnk = (::IUnknown*)ptrs[i];
+            if (!possibleUnk || IsBadReadPtr(possibleUnk, sizeof(void*))) continue;
+            
+            void* vtable = *(void**)possibleUnk;
+            if (IsBadReadPtr(vtable, sizeof(void*) * 3)) continue;
+            
+            winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
+            if (SUCCEEDED(possibleUnk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
+                return result;
+            }
+        } catch (...) {}
     }
+    return nullptr;
 }
 
 FrameworkElement GetFrameworkElementFromInterface(void* pInterface) {
@@ -415,18 +447,13 @@ FrameworkElement GetFrameworkElementFromInterface(void* pInterface) {
 FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_view name) {
     if (!parent) return nullptr;
     int count = VisualTreeHelper::GetChildrenCount(parent);
-    std::vector<FrameworkElement> children;
-    children.reserve(count);
     for (int i = 0; i < count; i++) {
         auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
         if (child) {
             if (child.Name() == name) return child;
-            children.push_back(child);
+            auto result = FindChildByName(child, name);
+            if (result) return result;
         }
-    }
-    for (auto const& child : children) {
-        auto result = FindChildByName(child, name);
-        if (result) return result;
     }
     return nullptr;
 }
@@ -434,18 +461,13 @@ FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_vi
 FrameworkElement FindChildByClassName(FrameworkElement const& parent, std::wstring_view className) {
     if (!parent) return nullptr;
     int count = VisualTreeHelper::GetChildrenCount(parent);
-    std::vector<FrameworkElement> children;
-    children.reserve(count);
     for (int i = 0; i < count; i++) {
         auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
         if (child) {
             if (winrt::get_class_name(child) == className) return child;
-            children.push_back(child);
+            auto result = FindChildByClassName(child, className);
+            if (result) return result;
         }
-    }
-    for (auto const& child : children) {
-        auto result = FindChildByClassName(child, className);
-        if (result) return result;
     }
     return nullptr;
 }
@@ -529,11 +551,8 @@ void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::
                             return;
                         }
 
-                        IUnknown* pUnk = (IUnknown*)winrt::get_abi(pixels);
                         winrt::com_ptr<IBufferByteAccess_Local> buffer;
-                        if (pUnk) {
-                            pUnk->QueryInterface(IID_IBufferByteAccess_Local, buffer.put_void());
-                        }
+                        winrt::get_unknown(pixels)->QueryInterface(IID_IBufferByteAccess_Local, buffer.put_void());
                         if (buffer) {
                             uint8_t* data = nullptr;
                             HRESULT hrBuf = buffer->Buffer(&data);
@@ -602,14 +621,8 @@ void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::
                                     {
                                         std::lock_guard<std::mutex> lock(g_iconColorMutex);
                                         if (g_iconColorCache.size() > 100) {
-                                            std::vector<std::pair<std::wstring, uint64_t>> entries;
-                                            for (auto& kv : g_iconColorCache) entries.push_back({kv.first, kv.second.lastAccess});
-                                            size_t evictCount = std::min<size_t>(10, entries.size());
-                                            std::nth_element(entries.begin(), entries.begin() + evictCount, entries.end(), [](auto& a, auto& b) { return a.second < b.second; });
-                                            for (size_t i = 0; i < evictCount; i++) {
-                                                g_iconColorCache.erase(entries[i].first);
-                                                g_iconColorExtracting.erase(entries[i].first);
-                                            }
+                                            g_iconColorCache.clear();
+                                            g_iconColorExtracting.clear();
                                         }
                                         variants.lastAccess = ++g_colorAccessCounter;
                                         g_iconColorCache[stableKey] = variants;
@@ -676,21 +689,44 @@ bool UpdatePillPosition(
 
     auto transform = b.TransformToVisual(g);
     auto point = transform.TransformPoint({0, 0});
+    
+    if (point.X == 0.0f && point.Y == 0.0f) return false;
 
     double actW = p.ActualWidth();
     double pillW = actW > 0 ? actW : p.Width();
     if (pillW < 1.0) pillW = 1.0;
     float targetX = std::round((float)(point.X + (b.ActualWidth() / 2.0) - (pillW / 2.0)));
     
+    std::shared_ptr<PillContext> ctx = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pillsMutex);
+        void* targetAbi = winrt::get_abi(g);
+        for (auto& c : g_pillContexts) {
+            if (c->gridAbi == targetAbi) {
+                ctx = c;
+                break;
+            }
+        }
+    }
+
     auto visual = winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::GetElementVisual(p);
     float lastTargetX = std::numeric_limits<float>::quiet_NaN();
-    visual.Properties().TryGetScalar(L"LastTargetX", lastTargetX);
+    if (visual.Properties().TryGetScalar(L"LastTargetX", lastTargetX) != winrt::Windows::UI::Composition::CompositionGetValueStatus::Succeeded) {
+        lastTargetX = std::numeric_limits<float>::quiet_NaN();
+    }
 
-    if (std::isnan(lastTargetX) || std::abs(lastTargetX - targetX) > 0.1f) {
+    bool shouldSnap = std::isnan(lastTargetX);
+    if (ctx && ctx->forceSnapNext) {
+        shouldSnap = true;
+        ctx->forceSnapNext = false;
+    }
+
+    if (shouldSnap || std::abs(lastTargetX - targetX) > 0.1f) {
         visual.Properties().InsertScalar(L"LastTargetX", targetX);
+        visual.Properties().InsertScalar(L"LayoutW", (float)pillW);
 
-        if (std::isnan(lastTargetX)) {
-            visual.Offset(winrt::Windows::Foundation::Numerics::float3(targetX, visual.Offset().y, 0));
+        if (shouldSnap) {
+            visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, 0.0f, 0.0f));
             visual.Properties().InsertScalar(L"LeftX", targetX);
             visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
             visual.StopAnimation(L"Scale");
@@ -723,7 +759,7 @@ bool UpdatePillPosition(
                 opacityAnim.InsertKeyFrame(0.0f, 1.0f);
                 opacityAnim.InsertKeyFrame(0.5f, 0.0f);
                 opacityAnim.InsertKeyFrame(1.0f, 1.0f);
-                opacityAnim.Duration(std::chrono::milliseconds(300));
+                opacityAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
                 visual.Properties().StartAnimation(L"FadeOpacity", opacityAnim);
             } else {
                 visual.Properties().InsertScalar(L"FadeOpacity", 1.0f);
@@ -735,11 +771,11 @@ bool UpdatePillPosition(
             // 1. Handle Horizontal Movement
             if (animStyle == 1) { // Bounce
                 auto anim = compositor.CreateSpringScalarAnimation();
-                anim.Target(L"Offset.X");
+                anim.Target(L"Translation.X");
                 anim.FinalValue(targetX);
                 anim.DampingRatio(0.6f);
-                anim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(50)));
-                visual.StartAnimation(L"Offset.X", anim);
+                anim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(static_cast<long long>(50 / localSettings.SpeedMultiplier))));
+                visual.Properties().StartAnimation(L"Translation.X", anim);
             } else if (animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) { // KeyFrame Easing
                 auto anim = compositor.CreateScalarKeyFrameAnimation();
                 CompositionEasingFunction easing = nullptr;
@@ -749,9 +785,9 @@ bool UpdatePillPosition(
                 else if (animStyle == 6) easing = cache.easeInOut;
 
                 anim.InsertKeyFrame(1.0f, targetX, easing);
-                anim.Duration(std::chrono::milliseconds(200));
-                visual.StartAnimation(L"Offset.X", anim);
-            } else { // Stretch (animStyle == 0)
+                anim.Duration(std::chrono::milliseconds(static_cast<long long>(200 / localSettings.SpeedMultiplier)));
+                visual.Properties().StartAnimation(L"Translation.X", anim);
+            } else { // Stretch (animStyle == 0 or 7)
                 float targetLeft = targetX;
                 float targetRight = targetX + (float)pillW;
                 float currentLeft = lastTargetX;
@@ -759,31 +795,46 @@ bool UpdatePillPosition(
 
                 auto propSet = visual.Properties();
 
-                auto leftAnim = compositor.CreateScalarKeyFrameAnimation();
-                leftAnim.InsertKeyFrame(1.0f, targetLeft, movingRight ? cache.stretchTrailEase : cache.stretchLeadEase);
-                leftAnim.Duration(std::chrono::milliseconds(300));
+                if (localSettings.UseSpringPhysics || animStyle == 7) {
+                    auto leftAnim = compositor.CreateSpringScalarAnimation();
+                    leftAnim.FinalValue(targetLeft);
+                    leftAnim.DampingRatio(animStyle == 7 ? 0.70f : 1.0f);
+                    leftAnim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(static_cast<long long>((movingRight ? 60 : 45) / localSettings.SpeedMultiplier))));
 
-                auto rightAnim = compositor.CreateScalarKeyFrameAnimation();
-                rightAnim.InsertKeyFrame(1.0f, targetRight, movingRight ? cache.stretchLeadEase : cache.stretchTrailEase);
-                rightAnim.Duration(std::chrono::milliseconds(300));
+                    auto rightAnim = compositor.CreateSpringScalarAnimation();
+                    rightAnim.FinalValue(targetRight);
+                    rightAnim.DampingRatio(animStyle == 7 ? 0.70f : 1.0f);
+                    rightAnim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(static_cast<long long>((movingRight ? 45 : 60) / localSettings.SpeedMultiplier))));
 
-                propSet.StartAnimation(L"LeftX", leftAnim);
-                propSet.StartAnimation(L"RightX", rightAnim);
+                    propSet.StartAnimation(L"LeftX", leftAnim);
+                    propSet.StartAnimation(L"RightX", rightAnim);
+                } else {
+                    auto leftAnim = compositor.CreateScalarKeyFrameAnimation();
+                    leftAnim.InsertKeyFrame(1.0f, targetLeft, movingRight ? cache.stretchTrailEase : cache.stretchLeadEase);
+                    leftAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
+
+                    auto rightAnim = compositor.CreateScalarKeyFrameAnimation();
+                    rightAnim.InsertKeyFrame(1.0f, targetRight, movingRight ? cache.stretchLeadEase : cache.stretchTrailEase);
+                    rightAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
+
+                    propSet.StartAnimation(L"LeftX", leftAnim);
+                    propSet.StartAnimation(L"RightX", rightAnim);
+                }
 
                 auto offsetExp = compositor.CreateExpressionAnimation(L"props.LeftX");
                 offsetExp.SetReferenceParameter(L"props", propSet);
-                visual.StartAnimation(L"Offset.X", offsetExp);
+                visual.Properties().StartAnimation(L"Translation.X", offsetExp);
             }
 
             // 2. Handle Scaling & Squish
-            if (animStyle == 0) { // Stretch uses expression scaling
+            if (animStyle == 0 || animStyle == 7) { // Stretch uses expression scaling
                 auto propSet = visual.Properties();
                 if (useSquish) {
                     auto squishAnim = compositor.CreateScalarKeyFrameAnimation();
                     squishAnim.InsertKeyFrame(0.0f, 1.0f);
                     squishAnim.InsertKeyFrame(0.5f, 0.5f, cache.squishEase);
                     squishAnim.InsertKeyFrame(1.0f, 1.0f, cache.squishEase);
-                    squishAnim.Duration(std::chrono::milliseconds(300));
+                    squishAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
                     propSet.InsertScalar(L"SquishY", 1.0f);
                     propSet.StartAnimation(L"SquishY", squishAnim);
                     
@@ -803,7 +854,7 @@ bool UpdatePillPosition(
                     scaleAnim.InsertKeyFrame(0.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
                     scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.5f, 0.5f, 1.0f), cache.squishEase);
                     scaleAnim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f), cache.squishEase);
-                    scaleAnim.Duration(std::chrono::milliseconds(300));
+                    scaleAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
                     visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)localSettings.PillHeight / 2.0f, 0));
                     visual.StartAnimation(L"Scale", scaleAnim);
                 } else {
@@ -820,7 +871,7 @@ bool UpdatePillPosition(
         visual.Properties().InsertScalar(L"LastShowOpacityTarget", 1.0f);
         auto fadeAnim = visual.Compositor().CreateScalarKeyFrameAnimation();
         fadeAnim.InsertKeyFrame(1.0f, 1.0f);
-        fadeAnim.Duration(std::chrono::milliseconds(150));
+        fadeAnim.Duration(std::chrono::milliseconds(static_cast<long long>(150 / localSettings.SpeedMultiplier)));
         visual.Properties().StartAnimation(L"ShowOpacity", fadeAnim);
     }
 
@@ -880,7 +931,7 @@ void AttachStateChangedHandler(winrt::Windows::UI::Xaml::VisualStateGroup const&
     auto dispatcher = button.Dispatcher();
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        g_attachedEvents->push_back({winrt::make_weak(group), token, dispatcher});
+        g_attachedEvents.push_back({winrt::make_weak(group), token, dispatcher});
     }
 }
 
@@ -974,6 +1025,7 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
             pill.VerticalAlignment(VerticalAlignment::Bottom);
             Canvas::SetZIndex(pill, 999);
             grid.Children().Append(pill);
+            ElementCompositionPreview::SetIsTranslationEnabled(pill, true);
             visual = ElementCompositionPreview::GetElementVisual(pill);
         }
         if (!visual) return;
@@ -1084,9 +1136,9 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     bool anyActive = isActive;
     FrameworkElement targetButton = button;
     if (!isActive && grid) {
-        std::vector<FrameworkElement> candidateBtns;
-        auto gatherBtns = [&](auto& self, FrameworkElement const& parent, int depth) -> void {
-            if (!parent || depth > 3) return;
+        FrameworkElement systemActiveBtn = nullptr;
+        auto findActiveBtn = [&](auto& self, FrameworkElement const& parent, int depth) -> bool {
+            if (!parent || depth > 3) return false;
             int count = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(parent);
             for (int i = 0; i < count; i++) {
                 auto child = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
@@ -1094,51 +1146,45 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                     winrt::hstring cName = winrt::get_class_name(child);
                     if (cName == L"Taskbar.TaskListButton" || 
                         (localSettings.TrackSystemButtons && (cName == L"Taskbar.ExperienceToggleButton" || cName == L"SearchUx.SearchUI.SearchButtonControl"))) {
-                        candidateBtns.push_back(child);
+                        
+                        if (child.Visibility() == winrt::Windows::UI::Xaml::Visibility::Visible && 
+                            child.Opacity() > 0.001f && child.ActualWidth() > 0.001f) {
+                            
+                            if (cName == L"Taskbar.TaskListButton") {
+                                auto sIconPanel = FindChildByName(child, L"IconPanel");
+                                auto sGroup = sIconPanel ? GetVisualStateGroup(sIconPanel, L"RunningIndicatorStates") : nullptr;
+                                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
+                                if (sState && sState.Name() == L"ActiveRunningIndicator") {
+                                    anyActive = true;
+                                    targetButton = child;
+                                    return true;
+                                }
+                            } else if (cName == L"Taskbar.ExperienceToggleButton") {
+                                auto sRootPanel = FindChildByName(child, L"ExperienceToggleButtonRootPanel");
+                                auto sGroup = sRootPanel ? GetVisualStateGroup(sRootPanel, L"CommonStates") : nullptr;
+                                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
+                                if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
+                                    if (!systemActiveBtn) systemActiveBtn = child;
+                                }
+                            } else if (cName == L"SearchUx.SearchUI.SearchButtonControl") {
+                                if (auto sIconButton = FindChildByClassName(child, L"SearchUx.SearchUI.SearchIconButton")) {
+                                    auto sRootGrid = FindChildByName(sIconButton, L"SearchBoxButtonRootPanel");
+                                    auto sGroup = sRootGrid ? GetVisualStateGroup(sRootGrid, L"CommonStates") : nullptr;
+                                    auto sState = sGroup ? sGroup.CurrentState() : nullptr;
+                                    if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
+                                        if (!systemActiveBtn) systemActiveBtn = child;
+                                    }
+                                }
+                            }
+                        }
                     } else {
-                        self(self, child, depth + 1);
+                        if (self(self, child, depth + 1)) return true;
                     }
                 }
             }
+            return false;
         };
-        gatherBtns(gatherBtns, grid, 0);
-
-        FrameworkElement systemActiveBtn = nullptr;
-
-        for (auto& candidate : candidateBtns) {
-            if (candidate.Visibility() != winrt::Windows::UI::Xaml::Visibility::Visible) continue;
-            if (candidate.Opacity() <= 0.001f) continue;
-            if (candidate.ActualWidth() <= 0.001f) continue;
-
-            winrt::hstring cName = winrt::get_class_name(candidate);
-
-            if (cName == L"Taskbar.TaskListButton") {
-                auto sIconPanel = FindChildByName(candidate, L"IconPanel");
-                auto sGroup = sIconPanel ? GetVisualStateGroup(sIconPanel, L"RunningIndicatorStates") : nullptr;
-                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                if (sState && sState.Name() == L"ActiveRunningIndicator") {
-                    anyActive = true;
-                    targetButton = candidate;
-                    break;
-                }
-            } else if (cName == L"Taskbar.ExperienceToggleButton") {
-                auto sRootPanel = FindChildByName(candidate, L"ExperienceToggleButtonRootPanel");
-                auto sGroup = sRootPanel ? GetVisualStateGroup(sRootPanel, L"CommonStates") : nullptr;
-                auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
-                    if (!systemActiveBtn) systemActiveBtn = candidate;
-                }
-            } else if (cName == L"SearchUx.SearchUI.SearchButtonControl") {
-                if (auto sIconButton = FindChildByClassName(candidate, L"SearchUx.SearchUI.SearchIconButton")) {
-                    auto sRootGrid = FindChildByName(sIconButton, L"SearchBoxButtonRootPanel");
-                    auto sGroup = sRootGrid ? GetVisualStateGroup(sRootGrid, L"CommonStates") : nullptr;
-                    auto sState = sGroup ? sGroup.CurrentState() : nullptr;
-                    if (sState && (sState.Name() == L"ActiveNormal" || sState.Name() == L"ActivePointerOver" || sState.Name() == L"ActivePressed")) {
-                        if (!systemActiveBtn) systemActiveBtn = candidate;
-                    }
-                }
-            }
-        }
+        findActiveBtn(findActiveBtn, grid, 0);
 
         if (!anyActive && systemActiveBtn) {
             anyActive = true;
@@ -1173,11 +1219,14 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                 bool needsExtract = false;
                 {
                     std::lock_guard<std::mutex> lock(g_iconColorMutex);
-                    if (!g_iconColorCache.count(stableKey) && !g_iconColorExtracting[stableKey]) {
+                    auto it = g_iconColorExtracting.find(stableKey);
+                    if (!g_iconColorCache.count(stableKey) && (it == g_iconColorExtracting.end() || !it->second)) {
                         needsExtract = true;
                         g_iconColorExtracting[stableKey] = true;
+                        isExtracting = true;
+                    } else {
+                        isExtracting = (it != g_iconColorExtracting.end() && it->second);
                     }
-                    isExtracting = g_iconColorExtracting[stableKey];
                 }
                 if (needsExtract) {
                     if (auto iconPanel = FindChildByName(targetButton, L"IconPanel")) {
@@ -1200,6 +1249,17 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         }
     }
 
+    std::shared_ptr<PillContext> currentCtx = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pillsMutex);
+        for (auto& pCtx : g_pillContexts) {
+            if (pCtx->grid.get() == grid) {
+                currentCtx = pCtx;
+                break;
+            }
+        }
+    }
+
     auto brush = pill.Fill().try_as<winrt::Windows::UI::Xaml::Media::SolidColorBrush>();
     if (!brush) {
         brush = winrt::Windows::UI::Xaml::Media::SolidColorBrush(anyActive ? GetPillColor(settingsToUse, stableKey) : GetPillColor(settingsToUse, L""));
@@ -1212,7 +1272,30 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                 hasColor = g_iconColorCache.count(stableKey) > 0;
             }
             if (settingsToUse.ColorMode != 2 || !isExtracting || hasColor) {
-                brush.Color(GetPillColor(settingsToUse, stableKey));
+                winrt::Windows::UI::Color newColor = GetPillColor(settingsToUse, stableKey);
+                winrt::Windows::UI::Color oldColor = brush.Color();
+                if (oldColor.A != newColor.A || oldColor.R != newColor.R || oldColor.G != newColor.G || oldColor.B != newColor.B) {
+                    if (currentCtx && currentCtx->colorAnimBoard) {
+                        try {
+                            currentCtx->colorAnimBoard.Stop();
+                            currentCtx->colorAnimBoard.Children().Clear();
+                        } catch (...) {}
+                    }
+                    winrt::Windows::UI::Xaml::Media::Animation::ColorAnimation colorAnim;
+                    colorAnim.To(newColor);
+                    winrt::Windows::UI::Xaml::Duration dur;
+                    dur.TimeSpan = winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(static_cast<long long>(150 / settingsToUse.SpeedMultiplier)));
+                    dur.Type = winrt::Windows::UI::Xaml::DurationType::TimeSpan;
+                    colorAnim.Duration(dur);
+                    winrt::Windows::UI::Xaml::Media::Animation::Storyboard storyboard;
+                    storyboard.Children().Append(colorAnim);
+                    winrt::Windows::UI::Xaml::Media::Animation::Storyboard::SetTarget(colorAnim, brush);
+                    winrt::Windows::UI::Xaml::Media::Animation::Storyboard::SetTargetProperty(colorAnim, L"Color");
+                    storyboard.Begin();
+                    if (currentCtx) {
+                        currentCtx->colorAnimBoard = storyboard;
+                    }
+                }
             }
         }
     }
@@ -1220,14 +1303,24 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     auto compositor = visual.Compositor();
 
     if (!anyActive) {
+        if (currentCtx && currentCtx->inactiveStartTime == 0) {
+            currentCtx->inactiveStartTime = GetTickCount64();
+        }
         float lastOpacityTarget = -1.0f;
         visual.Properties().TryGetScalar(L"LastShowOpacityTarget", lastOpacityTarget);
         if (lastOpacityTarget != 0.0f) {
             visual.Properties().InsertScalar(L"LastShowOpacityTarget", 0.0f);
             auto fadeAnim = compositor.CreateScalarKeyFrameAnimation();
             fadeAnim.InsertKeyFrame(1.0f, 0.0f);
-            fadeAnim.Duration(std::chrono::milliseconds(150));
+            fadeAnim.Duration(std::chrono::milliseconds(static_cast<long long>(150 / settingsToUse.SpeedMultiplier)));
             visual.Properties().StartAnimation(L"ShowOpacity", fadeAnim);
+        }
+    } else {
+        if (currentCtx && currentCtx->inactiveStartTime != 0) {
+            if (GetTickCount64() - currentCtx->inactiveStartTime > static_cast<uint64_t>(150 / settingsToUse.SpeedMultiplier)) {
+                currentCtx->forceSnapNext = true;
+            }
+            currentCtx->inactiveStartTime = 0;
         }
     }
 }
@@ -1241,7 +1334,6 @@ void WINAPI OnExperienceToggleButtonVisualStateChanged_Hook(void* pThis, void** 
 
     if (!pSenderRef || !*pSenderRef) return;
     void* pSender = *pSenderRef;
-    if (!pSender) return;
 
     auto elem = GetFrameworkElementFromInterface(pSender);
     if (!elem) return;
@@ -1279,12 +1371,11 @@ void WINAPI OnExperienceToggleButtonVisualStateChanged_Hook(void* pThis, void** 
 }
 
 using SearchIconButton_UpdateVisualStates_t = void(WINAPI*)(void*);
-SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original;
+SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original1;
+SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original2;
 
-void WINAPI SearchIconButton_UpdateVisualStates_Hook(void* pThis) {
-    SearchIconButton_UpdateVisualStates_Original(pThis);
+void SearchIconButton_UpdateVisualStates_Common(void* pThis) {
     if (g_unloading) return;
-
     auto elem = GetFrameworkElementFromNative(pThis);
     if (!elem) return;
 
@@ -1318,6 +1409,16 @@ void WINAPI SearchIconButton_UpdateVisualStates_Hook(void* pThis) {
             Wh_Log(L"Exception in SearchIconButton_UpdateVisualStates hook");
         }
     });
+}
+
+void WINAPI SearchIconButton_UpdateVisualStates_Hook1(void* pThis) {
+    SearchIconButton_UpdateVisualStates_Original1(pThis);
+    SearchIconButton_UpdateVisualStates_Common(pThis);
+}
+
+void WINAPI SearchIconButton_UpdateVisualStates_Hook2(void* pThis) {
+    SearchIconButton_UpdateVisualStates_Original2(pThis);
+    SearchIconButton_UpdateVisualStates_Common(pThis);
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -1357,25 +1458,28 @@ HMODULE GetSearchUxModuleHandle() {
 
 bool HookSearchUxDllSymbols(HMODULE module) {
     // SearchUx.UI.dll
-    WindhawkUtils::SYMBOL_HOOK searchUxHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK searchUxHook1[] = {
         {
             {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
-            &SearchIconButton_UpdateVisualStates_Original,
-            SearchIconButton_UpdateVisualStates_Hook,
-            true
-        },
+            &SearchIconButton_UpdateVisualStates_Original1,
+            SearchIconButton_UpdateVisualStates_Hook1,
+            false
+        }
+    };
+    WindhawkUtils::SYMBOL_HOOK searchUxHook2[] = {
         {
             {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
-            &SearchIconButton_UpdateVisualStates_Original,
-            SearchIconButton_UpdateVisualStates_Hook,
-            true
+            &SearchIconButton_UpdateVisualStates_Original2,
+            SearchIconButton_UpdateVisualStates_Hook2,
+            false
         }
     };
 
-    WindhawkUtils::HookSymbols(module, searchUxHooks, ARRAYSIZE(searchUxHooks));
-    if (!SearchIconButton_UpdateVisualStates_Original) {
-        Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
-        return false;
+    if (!WindhawkUtils::HookSymbols(module, searchUxHook1, 1)) {
+        if (!WindhawkUtils::HookSymbols(module, searchUxHook2, 1)) {
+            Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
+            return false;
+        }
     }
     return true;
 }
@@ -1444,8 +1548,8 @@ void Wh_ModBeforeUninit() {
     std::vector<AttachedEvent> localEvents;
     {
         std::lock_guard<std::mutex> lock(g_attachedEventsMutex);
-        localEvents = *g_attachedEvents;
-        g_attachedEvents->clear();
+        localEvents = g_attachedEvents;
+        g_attachedEvents.clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_attachedGroupsMutex);
@@ -1536,7 +1640,11 @@ void Wh_ModBeforeUninit() {
     }
 
     if (pending->load() > 0 && eventLifetime.get()) {
-        WaitForSingleObject(eventLifetime.get(), INFINITE);
+        if (WaitForSingleObject(eventLifetime.get(), 2000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Cleanup timed out. Pinning module to prevent crash.");
+            HMODULE hMod;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)&Wh_ModBeforeUninit, &hMod);
+        }
     }
     Sleep(50); // Let layout settle
 }
