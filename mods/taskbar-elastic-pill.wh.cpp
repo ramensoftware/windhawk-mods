@@ -1163,6 +1163,7 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     }
 
     std::wstring stableKey = L"";
+    bool isExtracting = false;
 
     if (anyActive) {
         std::wstring appName = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(targetButton).c_str();
@@ -1183,6 +1184,9 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                     if (!g_iconColorCache->count(stableKey) && (it == g_iconColorExtracting.end() || !it->second)) {
                         needsExtract = true;
                         g_iconColorExtracting[stableKey] = true;
+                        isExtracting = true;
+                    } else {
+                        isExtracting = (it != g_iconColorExtracting.end() && it->second);
                     }
                 }
                 if (needsExtract) {
@@ -1196,10 +1200,12 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                         } else {
                             std::lock_guard<std::mutex> lock(g_iconColorMutex);
                             g_iconColorExtracting[stableKey] = false;
+                            isExtracting = false;
                         }
                     } else {
                         std::lock_guard<std::mutex> lock(g_iconColorMutex);
                         g_iconColorExtracting[stableKey] = false;
+                        isExtracting = false;
                     }
                 }
             }
@@ -1219,7 +1225,7 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
                 std::lock_guard<std::mutex> lock(g_iconColorMutex);
                 hasColor = g_iconColorCache->count(stableKey) > 0;
             }
-            if (settingsToUse.ColorMode != 2 || hasColor) {
+            if (settingsToUse.ColorMode != 2 || !isExtracting || hasColor) {
                 winrt::Windows::UI::Color newColor = GetPillColor(settingsToUse, stableKey);
                 winrt::Windows::UI::Color oldColor = brush.Color();
                 if (oldColor.A != newColor.A || oldColor.R != newColor.R || oldColor.G != newColor.G || oldColor.B != newColor.B) {
