@@ -7,7 +7,6 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @license         MIT
-// @architecture    x86 x86-64
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -lgdi32 -luser32 -lole32 -luuid -liphlpapi -lws2_32 -ladvapi32 -DWIN32_LEAN_AND_MEAN
 // ==/WindhawkMod==
