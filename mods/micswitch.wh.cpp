@@ -1420,8 +1420,10 @@ static void RestoreMuteExternal() {
     LeaveCriticalSection(&g_stateLock);
     if (wasMuted) {
         HRESULT hrCo = CoInitialize(nullptr);
-        ApplyMute(localId, FALSE);
-        if (SUCCEEDED(hrCo)) CoUninitialize();
+        if (SUCCEEDED(hrCo) || hrCo == RPC_E_CHANGED_MODE) {
+            ApplyMute(localId, FALSE);
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+        }
         Wh_SetStringValue(L"MutedDeviceId", L"");
     }
 }
@@ -1886,7 +1888,8 @@ void UpdateTrayTip(HWND hWnd, BOOL isAdd) {
 static int GetCurrentVolumePct() {
     int result = -1;
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != S_FALSE) return result;
+    bool needsUninit = SUCCEEDED(hr);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return result;
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
@@ -1907,14 +1910,15 @@ static int GetCurrentVolumePct() {
         }
         pEnum->Release();
     }
-    CoUninitialize();
+    if (needsUninit) CoUninitialize();
     return result;
 }
 
 static void SetCurrentDeviceVolume(float scalar) {
     scalar = std::max(0.0f, std::min(1.0f, scalar));
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != S_FALSE) return;
+    bool needsUninit = SUCCEEDED(hr);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return;
     IMMDeviceEnumerator* pEnum = nullptr;
     if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
@@ -1930,7 +1934,7 @@ static void SetCurrentDeviceVolume(float scalar) {
         }
         pEnum->Release();
     }
-    CoUninitialize();
+    if (needsUninit) CoUninitialize();
 }
 
 // ─── Audio cycling ────────────────────────────────────────────────────────────
@@ -1952,7 +1956,8 @@ BOOL CycleAudioDevice(int direction) {
     if (configuredCount < 2) return FALSE;
 
     HRESULT comHr = CoInitialize(nullptr);
-    bool comOk = SUCCEEDED(comHr) || comHr == S_FALSE;
+    bool comOk = SUCCEEDED(comHr) || comHr == RPC_E_CHANGED_MODE;
+    bool needsUninit = SUCCEEDED(comHr);
     if (!comOk) return FALSE;
 
     // Undo click-mute before switching (COM is now available).
@@ -1967,7 +1972,7 @@ BOOL CycleAudioDevice(int direction) {
     IMMDeviceEnumerator* pEnum = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
                                 __uuidof(IMMDeviceEnumerator), (void**)&pEnum))) {
-        CoUninitialize(); return FALSE;
+        if (needsUninit) CoUninitialize(); return FALSE;
     }
 
     WCHAR currentId[512] = {};
@@ -1999,7 +2004,7 @@ BOOL CycleAudioDevice(int direction) {
     }
 
     if (validSlot == -1) {
-        pEnum->Release(); CoUninitialize(); return FALSE;
+        pEnum->Release(); if (needsUninit) CoUninitialize(); return FALSE;
     }
 
     IPolicyConfig* pPolicyConfig = nullptr;
@@ -2019,7 +2024,7 @@ BOOL CycleAudioDevice(int direction) {
     }
 
     pEnum->Release();
-    CoUninitialize();
+    if (needsUninit) CoUninitialize();
     return TRUE;
 }
 
@@ -2860,8 +2865,10 @@ BOOL WhTool_ModInit() {
     Wh_GetStringValue(L"MutedDeviceId", savedMutedId, 512);
     if (savedMutedId[0] != L'\0') {
         HRESULT hrCo = CoInitialize(nullptr);
-        ApplyMute(savedMutedId, FALSE);
-        if (SUCCEEDED(hrCo)) CoUninitialize();
+        if (SUCCEEDED(hrCo) || hrCo == RPC_E_CHANGED_MODE) {
+            ApplyMute(savedMutedId, FALSE);
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+        }
         Wh_SetStringValue(L"MutedDeviceId", L"");
     }
 
