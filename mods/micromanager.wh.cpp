@@ -6,7 +6,6 @@
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
-// @license         MIT
 // @include         windhawk.exe
 // @compilerOptions -lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi
 // ==/WindhawkMod==
