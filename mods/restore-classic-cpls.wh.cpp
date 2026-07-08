@@ -18,13 +18,15 @@ Brings back the classic Control Panel applets:
 * Printers and Faxes
 * Suppresses the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1}, originally called "Company Settings Sync", a non-functional icon that may appear if you are using the Classic view of Control Panel
 
+![screenshot](https://i.imgur.com/mM2JDGp.png)
+
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - enablePersonalization: true
-  $name: Personalizattion
+  $name: Personalization
   $description: Adds "Personalization" icon to the Control Panel
 - enableNotificationIcons: true
   $name: Notification area icons
@@ -46,20 +48,27 @@ Brings back the classic Control Panel applets:
 #include <unordered_set>
 #include <mutex>
 #include <vector>
+#include <atomic>
 
 struct Settings {
-    bool enablePersonalization;
-    bool enableNotificationIcons;
-    bool enableNetworkConnections;
-    bool enablePrintersAndFaxes;
-    bool suppressCompanySync;
+    std::atomic<bool> enablePersonalization;
+    std::atomic<bool> enableNotificationIcons;
+    std::atomic<bool> enableNetworkConnections;
+    std::atomic<bool> enablePrintersAndFaxes;
+    std::atomic<bool> suppressCompanySync;
 } g_settings;
 
 std::wstring g_personalizationName;
 std::unordered_map<HKEY, std::wstring> g_keyPaths;
 std::unordered_set<HKEY> g_fakeHandles;
-std::unordered_map<HKEY, DWORD> g_namespaceEnumIndex;
 std::mutex g_keyPathsMutex;
+
+// Pre-computed lowercase GUID strings for fast comparison
+std::wstring g_personalizationGuidLower;
+std::wstring g_notificationIconsGuidLower;
+std::wstring g_networkConnectionsGuidLower;
+std::wstring g_printersAndFaxesGuidLower;
+std::wstring g_suppressedGuidLower;
 
 static const std::wstring kPersonalizationGuid    = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
 static const std::wstring kNotificationIconsGuid  = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
@@ -82,17 +91,23 @@ bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+bool ContainsRelevantKeyword(const std::wstring& lowerPath) {
+    return lowerPath.find(L"clsid") != std::wstring::npos ||
+           lowerPath.find(L"controlpanel") != std::wstring::npos;
+}
+
 void LoadSettings() {
-    g_settings.enablePersonalization   = Wh_GetIntSetting(L"enablePersonalization");
-    g_settings.enableNotificationIcons = Wh_GetIntSetting(L"enableNotificationIcons");
-    g_settings.enableNetworkConnections= Wh_GetIntSetting(L"enableNetworkConnections");
-    g_settings.enablePrintersAndFaxes  = Wh_GetIntSetting(L"enablePrintersAndFaxes");
-    g_settings.suppressCompanySync   = Wh_GetIntSetting(L"suppressCompanySync");
+    g_settings.enablePersonalization.store(Wh_GetIntSetting(L"enablePersonalization"));
+    g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
+    g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
+    g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
+    g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
 }
 
 void InitDisplayNames() {
     wchar_t buffer[256] = { 0 };
-    HMODULE hTheme = LoadLibraryEx(L"themecpl.dll", nullptr, LOAD_LIBRARY_AS_DATAFILE);
+    HMODULE hTheme = LoadLibraryEx(L"themecpl.dll", nullptr, 
+                                   LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hTheme) {
         if (LoadStringW(hTheme, 1, buffer, 256) && buffer[0])
             g_personalizationName = buffer;
@@ -102,6 +117,13 @@ void InitDisplayNames() {
     } else {
         g_personalizationName = L"Personalization";
     }
+    
+    // Pre-compute lowercase GUIDs
+    g_personalizationGuidLower    = ToLower(kPersonalizationGuid);
+    g_notificationIconsGuidLower  = ToLower(kNotificationIconsGuid);
+    g_networkConnectionsGuidLower = ToLower(kNetworkConnectionsGuid);
+    g_printersAndFaxesGuidLower   = ToLower(kPrintersAndFaxesGuid);
+    g_suppressedGuidLower         = ToLower(kSuppressedGuid);
 }
 
 std::wstring GetTrackedPath(HKEY hKey) {
@@ -120,6 +142,11 @@ std::wstring GetTrackedPath(HKEY hKey) {
 
 void TrackKey(HKEY hKey, const std::wstring& path) {
     if (!hKey || ((uintptr_t)hKey >= 0x80000000 && (uintptr_t)hKey <= 0x80000004)) return;
+    
+    // Only track keys for paths we care about
+    std::wstring lower = ToLower(path);
+    if (!ContainsRelevantKeyword(lower)) return;
+    
     std::lock_guard<std::mutex> lock(g_keyPathsMutex);
     g_keyPaths[hKey] = path;
 }
@@ -164,51 +191,53 @@ struct ClassifyResult {
 };
 
 bool IsSuppressedNamespaceKey(const std::wstring& lower) {
-    if (!g_settings.suppressCompanySync) return false;
-    return EndsWith(lower, L"controlpanel\\namespace\\" + ToLower(kSuppressedGuid));
+    if (!g_settings.suppressCompanySync.load()) return false;
+    return EndsWith(lower, L"controlpanel\\namespace\\" + g_suppressedGuidLower);
 }
 
 bool IsSuppressedNamespaceEntry(LPCWSTR name) {
-    if (!g_settings.suppressCompanySync || !name) return false;
-    return ToLower(name) == ToLower(kSuppressedGuid);
+    if (!g_settings.suppressCompanySync.load() || !name) return false;
+    return ToLower(name) == g_suppressedGuidLower;
 }
 
 ClassifyResult ClassifyFullVirtual(const std::wstring& lower,
-                                   const std::wstring& guid,
+                                   const std::wstring& guidLower,
                                    ItemKind kind) {
-    std::wstring g = ToLower(guid);
-    if (EndsWith(lower, L"clsid\\" + g))                             return { VNode::ClsidRoot,     kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + g + L"\\defaulticon"))          return { VNode::DefaultIcon,   kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + g + L"\\shell"))                return { VNode::Shell,          kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + g + L"\\shell\\open"))          return { VNode::ShellOpen,      kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + g + L"\\shell\\open\\command")) return { VNode::OpenCommand,    kind, 0 };
-    if (EndsWith(lower, L"controlpanel\\namespace\\" + g))           return { VNode::NameSpaceEntry, kind, 0 };
+    if (EndsWith(lower, L"clsid\\" + guidLower))                             return { VNode::ClsidRoot,     kind, 0 };
+    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\defaulticon"))          return { VNode::DefaultIcon,   kind, 0 };
+    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell"))                return { VNode::Shell,          kind, 0 };
+    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open"))          return { VNode::ShellOpen,      kind, 0 };
+    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open\\command")) return { VNode::OpenCommand,    kind, 0 };
+    if (EndsWith(lower, L"controlpanel\\namespace\\" + guidLower))           return { VNode::NameSpaceEntry, kind, 0 };
     return { VNode::None, ItemKind::None, 0 };
 }
 
 ClassifyResult ClassifyPath(const std::wstring& path) {
     std::wstring lower = ToLower(path);
+    
+    // Early out if path doesn't contain relevant keywords
+    if (!ContainsRelevantKeyword(lower))
+        return { VNode::None, ItemKind::None, 0 };
 
-    if (g_settings.suppressCompanySync) {
-        std::wstring g = ToLower(kSuppressedGuid);
-        if (EndsWith(lower, L"clsid\\" + g) ||
-            EndsWith(lower, L"controlpanel\\namespace\\" + g))
+    if (g_settings.suppressCompanySync.load()) {
+        if (EndsWith(lower, L"clsid\\" + g_suppressedGuidLower) ||
+            EndsWith(lower, L"controlpanel\\namespace\\" + g_suppressedGuidLower))
             return { VNode::Suppressed, ItemKind::Suppressed, 0 };
     }
 
-    if (g_settings.enablePersonalization) {
-        auto cr = ClassifyFullVirtual(lower, kPersonalizationGuid, ItemKind::Personalization);
+    if (g_settings.enablePersonalization.load()) {
+        auto cr = ClassifyFullVirtual(lower, g_personalizationGuidLower, ItemKind::Personalization);
         if (cr.node != VNode::None) return cr;
     }
 
-    struct { bool* enabled; const std::wstring* guid; DWORD cat; } categoryItems[] = {
-        { &g_settings.enableNotificationIcons,  &kNotificationIconsGuid,  kCategoryAppearance },
-        { &g_settings.enableNetworkConnections, &kNetworkConnectionsGuid, kCategoryNetwork    },
-        { &g_settings.enablePrintersAndFaxes,   &kPrintersAndFaxesGuid,   kCategoryHardware   },
+    struct { std::atomic<bool>* enabled; const std::wstring* guidLower; DWORD cat; } categoryItems[] = {
+        { &g_settings.enableNotificationIcons,  &g_notificationIconsGuidLower,  kCategoryAppearance },
+        { &g_settings.enableNetworkConnections, &g_networkConnectionsGuidLower, kCategoryNetwork    },
+        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesGuidLower,   kCategoryHardware   },
     };
     for (auto& item : categoryItems) {
-        if (!*item.enabled) continue;
-        if (EndsWith(lower, L"clsid\\" + ToLower(*item.guid)))
+        if (!item.enabled->load()) continue;
+        if (EndsWith(lower, L"clsid\\" + *item.guidLower))
             return { VNode::ClsidRootCategoryOnly, ItemKind::CategoryOnly, item.cat };
     }
 
@@ -314,10 +343,10 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    if (g_settings.enablePersonalization)    result.push_back(kPersonalizationGuid);
-    if (g_settings.enableNotificationIcons)  result.push_back(kNotificationIconsGuid);
-    if (g_settings.enableNetworkConnections) result.push_back(kNetworkConnectionsGuid);
-    if (g_settings.enablePrintersAndFaxes)   result.push_back(kPrintersAndFaxesGuid);
+    if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
+    if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
+    if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
+    if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
     return result;
 }
 
@@ -336,58 +365,6 @@ bool GetVirtualSubKeyName(VNode node, DWORD index, std::wstring& outName) {
         default:
             return false;
     }
-}
-
-LSTATUS TryInjectNamespaceEx(HKEY hKey, LPWSTR lpName, LPDWORD lpcchName,
-                              PFILETIME lpftLastWriteTime) {
-    std::vector<std::wstring> clsids = GetNamespaceClsids();
-    if (clsids.empty()) return ERROR_NO_MORE_ITEMS;
-
-    DWORD injectedIndex = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        auto it = g_namespaceEnumIndex.find(hKey);
-        if (it != g_namespaceEnumIndex.end()) injectedIndex = it->second;
-    }
-    if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-
-    const wchar_t* clsid = clsids[injectedIndex].c_str();
-    size_t len = wcslen(clsid);
-    if (lpcchName && *lpcchName < len + 1) {
-        *lpcchName = (DWORD)(len + 1);
-        return ERROR_MORE_DATA;
-    }
-    if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
-    if (lpcchName) *lpcchName = (DWORD)len;
-    if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
-    {
-        std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        g_namespaceEnumIndex[hKey] = injectedIndex + 1;
-    }
-    return ERROR_SUCCESS;
-}
-
-LSTATUS TryInjectNamespace(HKEY hKey, LPWSTR lpName, DWORD cchName) {
-    std::vector<std::wstring> clsids = GetNamespaceClsids();
-    if (clsids.empty()) return ERROR_NO_MORE_ITEMS;
-
-    DWORD injectedIndex = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        auto it = g_namespaceEnumIndex.find(hKey);
-        if (it != g_namespaceEnumIndex.end()) injectedIndex = it->second;
-    }
-    if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-
-    const wchar_t* clsid = clsids[injectedIndex].c_str();
-    size_t len = wcslen(clsid);
-    if (cchName <= len) return ERROR_MORE_DATA;
-    if (lpName) wcscpy_s(lpName, cchName, clsid);
-    {
-        std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        g_namespaceEnumIndex[hKey] = injectedIndex + 1;
-    }
-    return ERROR_SUCCESS;
 }
 
 using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
@@ -419,7 +396,7 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
         return ERROR_FILE_NOT_FOUND;
     }
 
-    if (g_settings.suppressCompanySync && lpSubKey) {
+    if (g_settings.suppressCompanySync.load() && lpSubKey) {
         std::wstring basePath = GetTrackedPath(hKey);
         std::wstring fullPath = basePath;
         if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
@@ -453,7 +430,6 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
     if (isFake) { FreeFakeHandle(hKey); return ERROR_SUCCESS; }
     LSTATUS status = RegCloseKeyOriginal(hKey);
     UntrackKey(hKey);
-    { std::lock_guard<std::mutex> lock(g_keyPathsMutex); g_namespaceEnumIndex.erase(hKey); }
     return status;
 }
 
@@ -462,9 +438,11 @@ RegQueryValueExW_t RegQueryValueExWOriginal;
 LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                     LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
     std::wstring path = GetTrackedPath(hKey);
-    std::wstring valueName = lpValueName ? lpValueName : L"";
-    LSTATUS outStatus;
-    if (TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
+    if (!path.empty()) {
+        std::wstring valueName = lpValueName ? lpValueName : L"";
+        LSTATUS outStatus;
+        if (TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
+    }
 
     bool isFake = false;
     { std::lock_guard<std::mutex> lock(g_keyPathsMutex); isFake = g_fakeHandles.count(hKey) > 0; }
@@ -479,9 +457,11 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     std::wstring path = GetTrackedPath(hkey);
     if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
-    std::wstring valueName = lpValue ? lpValue : L"";
-    LSTATUS outStatus;
-    if (TryProvideValue(path, valueName, pdwType, (LPBYTE)pvData, pcbData, outStatus)) return outStatus;
+    if (!path.empty()) {
+        std::wstring valueName = lpValue ? lpValue : L"";
+        LSTATUS outStatus;
+        if (TryProvideValue(path, valueName, pdwType, (LPBYTE)pvData, pcbData, outStatus)) return outStatus;
+    }
     return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
 }
 
@@ -509,30 +489,89 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
     std::wstring path = GetTrackedPath(hKey);
     bool isNamespace = IsNameSpaceParentKey(path);
 
-    if (isNamespace && g_settings.suppressCompanySync) {
-        DWORD realIndex = dwIndex;
+    if (isNamespace && g_settings.suppressCompanySync.load()) {
+        // Map dwIndex (caller's virtual index) to real index by counting non-suppressed entries
+        DWORD targetVirtualIndex = dwIndex;
+        DWORD realIndex = 0;
+        DWORD foundCount = 0;
         LSTATUS status;
         wchar_t nameBuf[256];
-        DWORD cch;
+        DWORD origCap = lpcchName ? *lpcchName : 256;
+        
         while (true) {
-            cch = lpcchName ? *lpcchName : 256;
             LPWSTR namePtr = lpName ? lpName : nameBuf;
-            LPDWORD cchPtr = lpcchName ? lpcchName : &cch;
-            status = RegEnumKeyExWOriginal(hKey, realIndex, namePtr, cchPtr,
+            LPDWORD cchPtr = lpcchName ? lpcchName : nullptr;
+            DWORD cch = origCap;
+            
+            // Restore original capacity before each call
+            if (lpcchName) *lpcchName = origCap;
+            
+            status = RegEnumKeyExWOriginal(hKey, realIndex, namePtr, cchPtr ? cchPtr : &cch,
                                           lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
             if (status != ERROR_SUCCESS) break;
-            if (!IsSuppressedNamespaceEntry(namePtr)) break;
+            
+            if (!IsSuppressedNamespaceEntry(namePtr)) {
+                if (foundCount == targetVirtualIndex) {
+                    // This is the entry the caller wants
+                    return ERROR_SUCCESS;
+                }
+                foundCount++;
+            }
             realIndex++;
         }
-        if (status == ERROR_NO_MORE_ITEMS)
-            return TryInjectNamespaceEx(hKey, lpName, lpcchName, lpftLastWriteTime);
+        
+        if (status == ERROR_NO_MORE_ITEMS) {
+            // Try inject virtual items
+            std::vector<std::wstring> clsids = GetNamespaceClsids();
+            DWORD injectedIndex = dwIndex - foundCount;
+            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+            
+            const wchar_t* clsid = clsids[injectedIndex].c_str();
+            size_t len = wcslen(clsid);
+            if (lpcchName && *lpcchName < len + 1) {
+                *lpcchName = (DWORD)(len + 1);
+                return ERROR_MORE_DATA;
+            }
+            if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
+            if (lpcchName) *lpcchName = (DWORD)len;
+            if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
+            return ERROR_SUCCESS;
+        }
         return status;
     }
 
     LSTATUS status = RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName,
                                           lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
-    if (isNamespace && status == ERROR_NO_MORE_ITEMS)
-        return TryInjectNamespaceEx(hKey, lpName, lpcchName, lpftLastWriteTime);
+    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
+        // Inject virtual items
+        std::vector<std::wstring> clsids = GetNamespaceClsids();
+        DWORD injectedIndex = dwIndex;
+        
+        // Count real entries
+        DWORD realCount = 0;
+        wchar_t tmpBuf[256];
+        DWORD tmpCch;
+        while (true) {
+            tmpCch = 256;
+            if (RegEnumKeyExWOriginal(hKey, realCount, tmpBuf, &tmpCch, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
+                break;
+            realCount++;
+        }
+        
+        injectedIndex = dwIndex - realCount;
+        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+        
+        const wchar_t* clsid = clsids[injectedIndex].c_str();
+        size_t len = wcslen(clsid);
+        if (lpcchName && *lpcchName < len + 1) {
+            *lpcchName = (DWORD)(len + 1);
+            return ERROR_MORE_DATA;
+        }
+        if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
+        if (lpcchName) *lpcchName = (DWORD)len;
+        if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
+        return ERROR_SUCCESS;
+    }
     return status;
 }
 
@@ -554,23 +593,56 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
     std::wstring path = GetTrackedPath(hKey);
     bool isNamespace = IsNameSpaceParentKey(path);
 
-    if (isNamespace && g_settings.suppressCompanySync) {
-        DWORD realIndex = dwIndex;
+    if (isNamespace && g_settings.suppressCompanySync.load()) {
+        DWORD targetVirtualIndex = dwIndex;
+        DWORD realIndex = 0;
+        DWORD foundCount = 0;
         LSTATUS status;
+        wchar_t nameBuf[256];
+        
         while (true) {
-            status = RegEnumKeyWOriginal(hKey, realIndex, lpName, cchName);
+            status = RegEnumKeyWOriginal(hKey, realIndex, lpName ? lpName : nameBuf, cchName ? cchName : 256);
             if (status != ERROR_SUCCESS) break;
-            if (!IsSuppressedNamespaceEntry(lpName)) break;
+            
+            if (!IsSuppressedNamespaceEntry(lpName ? lpName : nameBuf)) {
+                if (foundCount == targetVirtualIndex) return ERROR_SUCCESS;
+                foundCount++;
+            }
             realIndex++;
         }
-        if (status == ERROR_NO_MORE_ITEMS)
-            return TryInjectNamespace(hKey, lpName, cchName);
+        
+        if (status == ERROR_NO_MORE_ITEMS) {
+            std::vector<std::wstring> clsids = GetNamespaceClsids();
+            DWORD injectedIndex = dwIndex - foundCount;
+            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+            
+            const wchar_t* clsid = clsids[injectedIndex].c_str();
+            size_t len = wcslen(clsid);
+            if (cchName <= len) return ERROR_MORE_DATA;
+            if (lpName) wcscpy_s(lpName, cchName, clsid);
+            return ERROR_SUCCESS;
+        }
         return status;
     }
 
     LSTATUS status = RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
-    if (isNamespace && status == ERROR_NO_MORE_ITEMS)
-        return TryInjectNamespace(hKey, lpName, cchName);
+    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
+        std::vector<std::wstring> clsids = GetNamespaceClsids();
+        
+        DWORD realCount = 0;
+        wchar_t tmpBuf[256];
+        while (RegEnumKeyWOriginal(hKey, realCount, tmpBuf, 256) == ERROR_SUCCESS)
+            realCount++;
+        
+        DWORD injectedIndex = dwIndex - realCount;
+        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+        
+        const wchar_t* clsid = clsids[injectedIndex].c_str();
+        size_t len = wcslen(clsid);
+        if (cchName <= len) return ERROR_MORE_DATA;
+        if (lpName) wcscpy_s(lpName, cchName, clsid);
+        return ERROR_SUCCESS;
+    }
     return status;
 }
 
@@ -588,12 +660,12 @@ void Wh_ModSettingsChanged() { LoadSettings(); }
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    void* pRegOpenKeyExW   = GetRegFunc("RegOpenKeyExW");
-    void* pRegCloseKey     = GetRegFunc("RegCloseKey");
-    void* pRegQueryValueExW= GetRegFunc("RegQueryValueExW");
-    void* pRegGetValueW    = GetRegFunc("RegGetValueW");
-    void* pRegEnumKeyExW   = GetRegFunc("RegEnumKeyExW");
-    void* pRegEnumKeyW     = GetRegFunc("RegEnumKeyW");
+    void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
+    void* pRegCloseKey        = GetRegFunc("RegCloseKey");
+    void* pRegQueryValueExW   = GetRegFunc("RegQueryValueExW");
+    void* pRegGetValueW       = GetRegFunc("RegGetValueW");
+    void* pRegEnumKeyExW      = GetRegFunc("RegEnumKeyExW");
+    void* pRegEnumKeyW        = GetRegFunc("RegEnumKeyW");
 
     if (!pRegOpenKeyExW || !pRegCloseKey || !pRegQueryValueExW ||
         !pRegGetValueW  || !pRegEnumKeyExW || !pRegEnumKeyW) {
@@ -612,4 +684,18 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"Hooks set successfully");
     return TRUE;
+}
+
+void Wh_ModUninit() {
+    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
+    
+    // Free all fake handles
+    for (HKEY fake : g_fakeHandles) {
+        delete (int*)fake;
+    }
+    
+    g_fakeHandles.clear();
+    g_keyPaths.clear();
+    
+    Wh_Log(L"Cleanup completed");
 }
