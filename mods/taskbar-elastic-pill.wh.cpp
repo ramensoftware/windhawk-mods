@@ -1378,7 +1378,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -1395,7 +1395,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
     
-    if (!WindhawkUtils::HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
     }
@@ -1408,7 +1408,7 @@ HMODULE GetSearchUxModuleHandle() {
 
 bool HookSearchUxDllSymbols(HMODULE module) {
     // SearchUx.UI.dll
-    WindhawkUtils::SYMBOL_HOOK searchUxHook1[] = {
+    WindhawkUtils::SYMBOL_HOOK searchUxUiDllHooks1[] = {
         {
             {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
             &SearchIconButton_UpdateVisualStates_Original1,
@@ -1416,7 +1416,7 @@ bool HookSearchUxDllSymbols(HMODULE module) {
             false
         }
     };
-    WindhawkUtils::SYMBOL_HOOK searchUxHook2[] = {
+    WindhawkUtils::SYMBOL_HOOK searchUxUiDllHooks2[] = {
         {
             {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
             &SearchIconButton_UpdateVisualStates_Original2,
@@ -1425,8 +1425,8 @@ bool HookSearchUxDllSymbols(HMODULE module) {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(module, searchUxHook1, 1)) {
-        if (!WindhawkUtils::HookSymbols(module, searchUxHook2, 1)) {
+    if (!WindhawkUtils::HookSymbols(module, searchUxUiDllHooks1, 1)) {
+        if (!WindhawkUtils::HookSymbols(module, searchUxUiDllHooks2, 1)) {
             Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
             return false;
         }
