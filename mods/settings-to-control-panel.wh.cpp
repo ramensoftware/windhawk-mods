@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.20
+// @version        10.0.21
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -357,6 +357,16 @@ static bool InitTrayDllInfo() {
 static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     if (buttonIndex < 0) return 0;
 
+    // Retry capturing the DLL base addresses here too: SetupTraySubclass()
+    // only calls InitTrayDllInfo() once (guarded by g_hTrayToolbar), so if
+    // pnidui.dll (network) wasn't loaded yet at that point (e.g. right after
+    // an Explorer restart, while SndVolSSO.dll for audio was already
+    // resident), g_pniduiBase would stay null forever and network tray
+    // detection would silently break until the mod was reloaded. Re-checking
+    // here is cheap (InitTrayDllInfo short-circuits once both are set) and
+    // lets it self-heal as soon as pnidui.dll actually loads.
+    InitTrayDllInfo();
+
     TBBUTTON tb{};
     if (!SendMessageW(hToolbar, TB_GETBUTTON, buttonIndex, (LPARAM)&tb)) return 0;
     if (!tb.dwData) return 0;
@@ -631,26 +641,21 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 
     Wh_Log(L"[TRAY-HOOK] %s menu target index=%d, ID=%u", menuKind, targetIndex, GetMenuItemID(hMenu, targetIndex));
 
-    UINT customId   = isAudioMenu ? TRAY_CUSTOM_ID_AUDIO
-                     : isNetworkMenu ? TRAY_CUSTOM_ID_NETWORK
-                     : TRAY_CUSTOM_ID_DEVICES;
     UINT originalId = GetMenuItemID(hMenu, targetIndex);
 
-    MENUITEMINFOW mii = { sizeof(MENUITEMINFOW) };
-    mii.fMask = MIIM_ID;
-    mii.wID   = customId;
-    SetMenuItemInfoW(hMenu, targetIndex, TRUE, &mii);
-
+    // NOTE: we intentionally do NOT swap the item's ID (via SetMenuItemInfoW)
+    // anymore. This menu item still gets its text/icon painted by pnidui.dll
+    // through WM_DRAWITEM, which is keyed off the item's real ID — replacing
+    // it with our own custom ID left pnidui.dll unable to look up what to
+    // draw for it, so the item rendered with no text (it still worked,
+    // since selection is ID-driven, but visually looked broken). Comparing
+    // directly against the original ID avoids touching the item at all.
     bool callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
     uFlags |= TPM_RETURNCMD;
     BOOL result     = g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
     int selectedId  = (int)result;
 
-    // Restore original ID
-    mii.wID = originalId;
-    SetMenuItemInfoW(hMenu, targetIndex, TRUE, &mii);
-
-    if (selectedId == (int)customId) {
+    if (selectedId == (int)originalId) {
         Wh_Log(L"[TRAY-HOOK] User selected target item, redirecting");
         if (isAudioMenu)        OpenClassicSoundPanel();
         else if (isNetworkMenu) OpenClassicNetworkConnections();
@@ -1249,7 +1254,7 @@ HWND WINAPI CreateWindowExW_Hook(
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.20");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.21");
 
     DetectWindowsVersion();
     LoadSettings();
