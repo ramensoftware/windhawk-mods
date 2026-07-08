@@ -1378,7 +1378,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -1395,7 +1395,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
     
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
     }
@@ -1407,31 +1407,34 @@ HMODULE GetSearchUxModuleHandle() {
 }
 
 bool HookSearchUxDllSymbols(HMODULE module) {
-    // SearchUx.UI.dll
-    WindhawkUtils::SYMBOL_HOOK searchUxUiDllHooks1[] = {
-        {
-            {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
-            &SearchIconButton_UpdateVisualStates_Original1,
-            SearchIconButton_UpdateVisualStates_Hook1,
-            false
-        }
-    };
-    WindhawkUtils::SYMBOL_HOOK searchUxUiDllHooks2[] = {
-        {
-            {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
-            &SearchIconButton_UpdateVisualStates_Original2,
-            SearchIconButton_UpdateVisualStates_Hook2,
-            false
-        }
-    };
-
-    if (!WindhawkUtils::HookSymbols(module, searchUxUiDllHooks1, 1)) {
-        if (!WindhawkUtils::HookSymbols(module, searchUxUiDllHooks2, 1)) {
-            Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
-            return false;
-        }
+    {
+        // SearchUx.UI.dll
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+            {
+                {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
+                &SearchIconButton_UpdateVisualStates_Original1,
+                SearchIconButton_UpdateVisualStates_Hook1,
+                false
+            }
+        };
+        if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
     }
-    return true;
+    
+    {
+        // SearchUx.UI.dll
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+            {
+                {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
+                &SearchIconButton_UpdateVisualStates_Original2,
+                SearchIconButton_UpdateVisualStates_Hook2,
+                false
+            }
+        };
+        if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
+    }
+
+    Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
+    return false;
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
