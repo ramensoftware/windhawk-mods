@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-06T18:30:06.000Z</updated>
+    <updated>2026-07-08T08:07:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Screenshot Path to Clipboard 1.0.0]]></title>
+        <id>https://windhawk.net/mods/screenshot-path-to-clipboard#a426f3fb81b5984fb74e761c78927965be47aaa6</id>
+        <link href="https://windhawk.net/mods/screenshot-path-to-clipboard"/>
+        <updated>2026-07-08T08:07:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="screenshotpathtoclipboard">Screenshot Path to Clipboard</h1>
+<p>Watches the Windows Screenshots folder and copies the full path of every new
+screenshot to the clipboard, so you can paste it straight into any app
+without digging through File Explorer.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Take a screenshot (Win+PrintScreen, Snipping Tool, etc.).</li>
+<li>The full path to the new <code>.png</code> is copied to the clipboard automatically.</li>
+<li>Paste (Ctrl+V) anywhere the path is needed.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Runs as a dedicated background process (see the
+<a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">mods-as-tools</a>
+pattern) and watches the Screenshots known folder (<code>FOLDERID_Screenshots</code>)
+with <code>ReadDirectoryChangesW</code> — no polling.</li>
+<li>Only <code>.png</code> files trigger a clipboard update.</li>
+<li>No configuration is needed; the folder is resolved via the shell so it
+still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
+</ul>]]></content>
+        <author>
+            <name>Sondre Myrmel</name>
+            <uri>https://github.com/Sondre234</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Cursor Motion Blur 2.0]]></title>
+        <id>https://windhawk.net/mods/cursor-motion-blur#ccbe825f20d99d69a5b13419498c19c65fbd7d38</id>
+        <link href="https://windhawk.net/mods/cursor-motion-blur"/>
+        <updated>2026-07-08T08:07:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursorsmearframes">Cursor Smear Frames</h1>
+<p>Replaces your standard Windows cursor with a smooth, tapered motion blur trail when moving at high speeds. Hardware accelerated via Direct2D.</p>
+<p><img src="https://i.imgur.com/XJWuSS3.gif" alt="Demonstration" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Dynamic 2D Mesh:</strong> Procedurally generates a continuous, overlapping-free polygon ribbon.</li>
+<li><strong>Direct2D Rendering:</strong> Buttery smooth sub-pixel anti-aliasing calculated directly on your GPU.</li>
+<li><strong>Zero Input Lag:</strong> Draws directly off the hardware cursor coordinates.</li>
+<li><strong>Game Detection:</strong> Automatically disables itself when playing fullscreen or borderless DirectX games.</li>
+<li><strong>Taskbar Friendly:</strong> Retains native edge-detection for auto-hiding taskbars.</li>
+<li><strong>Dynamic Rendering:</strong> Idles at 0% CPU usage when the mouse is stationary.</li>
+</ul>]]></content>
+        <author>
+            <name>TheatriChris</name>
+            <uri>https://github.com/chrisc44890</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Folder Thumbnail Style Switcher 2.0]]></title>
         <id>https://windhawk.net/mods/folder-thumbnail-style-switcher#0033679d580da39a2503353ec651b6c3a4a1ceb6</id>
@@ -715,56 +767,6 @@ mod. The next toggle in a normal app shows the correct state.</li>
         <author>
             <name>Havrlisan</name>
             <uri>https://github.com/havrlisan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 File Open/Save Toggle Bar Icon 1.0]]></title>
-        <id>https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon#ed51a0b3f375eca20654ec5b64e14cf0be627b0d</id>
-        <link href="https://windhawk.net/mods/win7-file-open-save-toggle-bar-icon"/>
-        <updated>2026-06-23T07:45:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7fileopensavetogglebaricon">Windows 7 File Open/Save Toggle Bar Icon</h1>
-<p>Restores the bitmap arrow glyph on the "Toggle Folders" button in open/save dialogs.</p>
-<p>This glyph was changed to an icon in later versions of Windows. The icon scaling differs, so it wasn't possible to just
-make the icon look like the Windows 7 glyph.</p>
-<p><img src="https://raw.githubusercontent.com/Leymonaide/images/refs/heads/main/win7-file-open-save-toggle-bar-icon.png" alt="Preview image" /></p>]]></content>
-        <author>
-            <name>Leymonaide</name>
-            <uri>https://github.com/Leymonaide</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Center & Resize 1.0]]></title>
-        <id>https://windhawk.net/mods/window-center-resize#7afa3ec648b18d390288723053a4e49f96ff13e1</id>
-        <link href="https://windhawk.net/mods/window-center-resize"/>
-        <updated>2026-06-22T20:13:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowcenterresize">Window Center &amp; Resize</h1>
-<p>Centers and resizes the foreground window using global hotkeys.</p>
-<h2 id="defaulthotkeys">Default Hotkeys</h2>
-<p>| Action                | Hotkey      | 
-|-----------------------|-------------|
-| Center window         | <code>Shift+F10</code> |
-| Cycle size (1→2→…→1)  | <code>Shift+F9</code> |</p>
-<p>Each press of the <strong>cycle hotkey</strong> applies the next size in the list, wrapping
-back to the first after the last one.</p>
-<h2 id="autorestoremaximizedwindows">Auto-restore maximized windows</h2>
-<p>Enable <strong>RestoreMaximized</strong> so that when you press the cycle hotkey on a
-maximized window, the mod automatically un-maximizes it and applies the target
-size. If disabled, the hotkey is ignored for maximized windows.</p>
-<h2 id="customsizes">Custom sizes</h2>
-<p>Add as many sizes as you want in the <strong>Sizes</strong> list. Each entry has:</p>
-<ul>
-<li><strong>Width</strong> — % of monitor work area width</li>
-<li><strong>Height</strong> — % of monitor work area height</li>
-</ul>
-<p>The cycle hotkey steps through all entries in order on each press.</p>
-<h2 id="hotkeyformat">Hotkey format</h2>
-<p><code>Modifier+Key</code> — modifiers: <code>Win</code>, <code>Alt</code>, <code>Ctrl</code>, <code>Shift</code>.
-Keys: <code>F1</code>-<code>F24</code>, <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>Space</code>, <code>Enter</code>, <code>Tab</code>, <code>Insert</code>,
-<code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Left</code>, <code>Right</code>, <code>Up</code>, <code>Down</code>.</p>
-<p>Examples: <code>Shift+F9</code>, <code>Win+Alt+C</code>, <code>Ctrl+F1</code></p>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

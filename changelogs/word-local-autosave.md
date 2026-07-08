@@ -1,3 +1,24 @@
+## 3.8 ([Jul 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d6ae7753bb4fba7be3bc2784d1e0fc4287d35fcc/mods/word-local-autosave.wh.cpp))
+
+**Fixed**
+
+- Fixed Word Application resolution failures that could stop autosave with `0x80070490`.
+- Relaxed overly strict validation of Word `Application.Hwnd`.
+- Added support for Word COM HWND values that can arrive as sign-extended 32-bit handles on x64.
+- Added fallback validation through `Application.ActiveWindow.Hwnd`.
+- Added fallback validation through the `Application.Windows` collection.
+- Prevented valid Word Application instances from being rejected when the direct application HWND does not map cleanly to the current `WINWORD.EXE` root window.
+
+**Improved**
+
+- Made COM binding to the current Word instance more tolerant of different Word window/handle layouts.
+- Improved startup/runtime reliability after settings reloads when Word automation is available but direct HWND validation is inconsistent.
+- Added internal self-test coverage for COM HWND normalization.
+
+**Notes**
+
+- No new user-facing settings or features.
+
 ## 3.7 ([May 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/78ca8b502a30cf518a14cfe95a228e1580a18c09/mods/word-local-autosave.wh.cpp))
 
 **Fixed**

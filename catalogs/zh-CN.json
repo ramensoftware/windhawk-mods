@@ -476,7 +476,7 @@
           40
         ],
         "ratingUsers": 48,
-        "updated": 1780168839000,
+        "updated": 1783498055000,
         "users": 487
       },
       "metadata": {
@@ -488,8 +488,9 @@
         "include": [
           "windhawk.exe"
         ],
+        "license": "MIT",
         "name": "AudioSwap",
-        "version": "2.2.0"
+        "version": "2.3.0"
       }
     },
     "auto-custom-titlebar-colors": {
@@ -2821,6 +2822,35 @@
         ],
         "name": "Ctrl+Backspace Fix for Win32 Text Boxes",
         "version": "1.0.1"
+      }
+    },
+    "cursor-motion-blur": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783498064000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783498064000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "TheatriChris",
+        "compilerOptions": "-ld2d1 -lole32 -lgdi32 -lshell32",
+        "description": "Adds high-speed cartoon motion blur to your mouse pointer.",
+        "github": "https://github.com/chrisc44890",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Cursor Motion Blur",
+        "version": "2.0"
       }
     },
     "custom-cmd-startup-text": {
@@ -9907,6 +9937,34 @@
         "version": "1.1.0"
       }
     },
+    "screenshot-path-to-clipboard": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783498071000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783498071000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sondre Myrmel",
+        "compilerOptions": "-lshell32 -lole32",
+        "description": "Monitors the Screenshots folder and copies the full path of each new .png screenshot to the clipboard the moment it appears.",
+        "github": "https://github.com/Sondre234",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Screenshot Path to Clipboard",
+        "version": "1.0.0"
+      }
+    },
     "scroll-window-opacity": {
       "details": {
         "defaultSorting": 1386,
@@ -14960,7 +15018,7 @@
           5
         ],
         "ratingUsers": 6,
-        "updated": 1778935072000,
+        "updated": 1783498092000,
         "users": 150
       },
       "metadata": {
@@ -14975,7 +15033,7 @@
           "WINWORD.EXE"
         ],
         "name": "Word Local AutoSave",
-        "version": "3.7"
+        "version": "3.8"
       }
     },
     "word-mathtype-dark-fix": {

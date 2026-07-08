@@ -2,12 +2,106 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-07T16:52:18.000Z</updated>
+    <updated>2026-07-08T08:08:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 3.8]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#d6ae7753bb4fba7be3bc2784d1e0fc4287d35fcc</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-07-08T08:08:12.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Fixed</strong></p>
+<ul>
+<li>Fixed Word Application resolution failures that could stop autosave with <code>0x80070490</code>.</li>
+<li>Relaxed overly strict validation of Word <code>Application.Hwnd</code>.</li>
+<li>Added support for Word COM HWND values that can arrive as sign-extended 32-bit handles on x64.</li>
+<li>Added fallback validation through <code>Application.ActiveWindow.Hwnd</code>.</li>
+<li>Added fallback validation through the <code>Application.Windows</code> collection.</li>
+<li>Prevented valid Word Application instances from being rejected when the direct application HWND does not map cleanly to the current <code>WINWORD.EXE</code> root window.</li>
+</ul>
+<p><strong>Improved</strong></p>
+<ul>
+<li>Made COM binding to the current Word instance more tolerant of different Word window/handle layouts.</li>
+<li>Improved startup/runtime reliability after settings reloads when Word automation is available but direct HWND validation is inconsistent.</li>
+<li>Added internal self-test coverage for COM HWND normalization.</li>
+</ul>
+<p><strong>Notes</strong></p>
+<ul>
+<li>No new user-facing settings or features.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Screenshot Path to Clipboard 1.0.0]]></title>
+        <id>https://windhawk.net/mods/screenshot-path-to-clipboard#a426f3fb81b5984fb74e761c78927965be47aaa6</id>
+        <link href="https://windhawk.net/mods/screenshot-path-to-clipboard"/>
+        <updated>2026-07-08T08:07:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="screenshotpathtoclipboard">Screenshot Path to Clipboard</h1>
+<p>Watches the Windows Screenshots folder and copies the full path of every new
+screenshot to the clipboard, so you can paste it straight into any app
+without digging through File Explorer.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Take a screenshot (Win+PrintScreen, Snipping Tool, etc.).</li>
+<li>The full path to the new <code>.png</code> is copied to the clipboard automatically.</li>
+<li>Paste (Ctrl+V) anywhere the path is needed.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Runs as a dedicated background process (see the
+<a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">mods-as-tools</a>
+pattern) and watches the Screenshots known folder (<code>FOLDERID_Screenshots</code>)
+with <code>ReadDirectoryChangesW</code> — no polling.</li>
+<li>Only <code>.png</code> files trigger a clipboard update.</li>
+<li>No configuration is needed; the folder is resolved via the shell so it
+still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
+</ul>]]></content>
+        <author>
+            <name>Sondre Myrmel</name>
+            <uri>https://github.com/Sondre234</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Cursor Motion Blur 2.0]]></title>
+        <id>https://windhawk.net/mods/cursor-motion-blur#ccbe825f20d99d69a5b13419498c19c65fbd7d38</id>
+        <link href="https://windhawk.net/mods/cursor-motion-blur"/>
+        <updated>2026-07-08T08:07:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursorsmearframes">Cursor Smear Frames</h1>
+<p>Replaces your standard Windows cursor with a smooth, tapered motion blur trail when moving at high speeds. Hardware accelerated via Direct2D.</p>
+<p><img src="https://i.imgur.com/XJWuSS3.gif" alt="Demonstration" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Dynamic 2D Mesh:</strong> Procedurally generates a continuous, overlapping-free polygon ribbon.</li>
+<li><strong>Direct2D Rendering:</strong> Buttery smooth sub-pixel anti-aliasing calculated directly on your GPU.</li>
+<li><strong>Zero Input Lag:</strong> Draws directly off the hardware cursor coordinates.</li>
+<li><strong>Game Detection:</strong> Automatically disables itself when playing fullscreen or borderless DirectX games.</li>
+<li><strong>Taskbar Friendly:</strong> Retains native edge-detection for auto-hiding taskbars.</li>
+<li><strong>Dynamic Rendering:</strong> Idles at 0% CPU usage when the mouse is stationary.</li>
+</ul>]]></content>
+        <author>
+            <name>TheatriChris</name>
+            <uri>https://github.com/chrisc44890</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 2.3.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#e350c1e0948c12e73f5b4f68fd7f1cf1b3880376</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-07-08T08:07:35.000Z</updated>
+        <content type="html"><![CDATA[<p>added Persistent Mute option 
+general patches
+added screenshots to readme</p>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.4.0]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#b7155a29d60629d9a6c8ac94745cf8ba251b7026</id>
@@ -462,88 +556,6 @@ dinamico de forma inesperada.</p>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Companions 1.4.0]]></title>
-        <id>https://windhawk.net/mods/neko-cat#5b733b3fa2ccf48f105212d1495530276c87fb51</id>
-        <link href="https://windhawk.net/mods/neko-cat"/>
-        <updated>2026-07-02T17:51:38.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>feat:</strong> Added Neko Dog, context menus, and multi‑monitor improvements.</p>
-<h3 id="added">Added</h3>
-<ul>
-<li><strong>Neko Dog:</strong> New desktop companion, selectable in settings or mixed with existing litters.  </li>
-<li><strong>Right‑Click Menu:</strong> Quickly change behaviors (Chase Mouse, Pace, Play With Window).  </li>
-<li><strong>Save Last Behavior:</strong> Companions now remember their active behavior after restart.  </li>
-</ul>
-<h3 id="improved">Improved</h3>
-<ul>
-<li><strong>Multi‑Monitor Bounds:</strong> Behaviors now align correctly to the monitor edges.  </li>
-<li><strong>Run Around Physics:</strong> Natural rest cycles (~45s play, ~15s nap) and realistic ball physics with angles/reflections.  </li>
-<li><strong>Leg Animations:</strong> Walking/running animations scale to actual distance traveled (improved overall animation).</li>
-<li><strong>Drag & Drop:</strong> Dropping a companion resumes their previous behavior (except Play With Window mode).  </li>
-<li><strong>Behavior Logic:</strong> Smoother movement and state transitions.  </li>
-<li><strong>Assets:</strong> Downloads now point to latest commit including Neko Dog assets.  </li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li><strong>Multi‑Monitor Bugs:</strong> Companions no longer go off‑screen or get stuck.  </li>
-<li><strong>Window Maximizing:</strong> Double‑clicking companions no longer maximizes underlying windows.  </li>
-<li><strong>Theme Switcher Leak:</strong> Cleaned up dynamic theme loading to prevent memory leaks.</li>
-</ul>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.2]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#c3cfb1e122539801e373fb76a7c6c228ff6eaf30</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-07-02T17:37:10.000Z</updated>
-        <content type="html"><![CDATA[<p>Improve the icon appearance and fix a bug when the icons were confused when two UWP apps were opened at the same time.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Restart Explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-restart-explorer#4a3c818d05d01eb973e6dc8242ac8d5edc084066</id>
-        <link href="https://windhawk.net/mods/taskbar-restart-explorer"/>
-        <updated>2026-07-02T16:27:10.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds a Restart Explorer shortcut to the native rounded Windows 11 empty-taskbar
-context menu.</p>
-<p>This version hooks the taskbar settings context-menu build path in the actually
-loaded Taskbar.View.dll/ExplorerExtensions.dll module. It doesn't replace the
-classic popup menu, install global mouse hooks, or show a separate flyout.</p>
-<p>Demo:
-<img src="https://i.imgur.com/JrLPgxo.gif" alt="Taskbar Restart Explorer demo" /></p>
-<p>If the required symbols aren't available, the mod logs why and fails closed.</p>]]></content>
-        <author>
-            <name>Mgrmjp</name>
-            <uri>https://github.com/Mgrmjp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
-        <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
-        <link href="https://windhawk.net/mods/gather-windows-to-monitor"/>
-        <updated>2026-07-02T15:27:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="gatherwindowstomonitor">Gather Windows To Monitor</h1>
-<p>Global hotkeys gather visible application windows to a selected monitor work area.</p>
-<p>Configure hotkeys in Windhawk settings. Use strings such as <code>Ctrl+Alt+Shift+1</code>,
-<code>Ctrl+Win+M</code>, <code>F9</code>, or <code>None</code>.</p>
-<p>Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
-tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
-and untitled windows.</p>
-<p>Enable debug logging to see per-window skip reasons in the Windhawk log.</p>
-<p>Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
-the Windows Settings display number. Moving minimized windows without restoring is
-not attempted because it is not reliable for all apps.</p>]]></content>
-        <author>
-            <name>Fred</name>
-            <uri>https://github.com/fjdiazt</uri>
         </author>
     </entry>
 </feed>

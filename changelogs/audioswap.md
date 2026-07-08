@@ -1,3 +1,9 @@
+## 2.3.0 ([Jul 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e350c1e0948c12e73f5b4f68fd7f1cf1b3880376/mods/audioswap.wh.cpp))
+
+added Persistent Mute option 
+general patches
+added screenshots to readme
+
 ## 2.2.0 ([May 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f265d52a641c9f32788bd2d34dda07a02428882/mods/audioswap.wh.cpp))
 
 - New: Right-click → **Sound Settings...** opens Windows Sound dialog directly on the Playback tab.
