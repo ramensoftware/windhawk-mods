@@ -1466,6 +1466,7 @@ bool HookSearchUxDllSymbols(HMODULE module) {
             false
         }
     };
+    // SearchUx.UI.dll
     WindhawkUtils::SYMBOL_HOOK searchUxHook2[] = {
         {
             {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
