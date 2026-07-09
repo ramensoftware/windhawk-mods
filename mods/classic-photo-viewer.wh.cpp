@@ -1,13 +1,14 @@
 // ==WindhawkMod==
-// @id              classic-photo-viewer-redirect
+// @id              classic-photo-viewer
 // @name            Classic Windows Photo Viewer Redirect
 // @description     Redirects image opening at runtime to the classic Photo Viewer (shimgvw.dll), without modifying the Registry
 // @version         1.1.4
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @compilerOptions -lshell32 -lshlwapi -lwintrust -lcrypt32
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Classic Windows Photo Viewer Redirect
@@ -69,7 +70,7 @@ When you open an image from File Explorer (via double-click, Enter, or the conte
 #include <algorithm>
 
 // ---------------------------------------------------------------------------
-// Runtime function pointers 
+// Runtime function pointers
 // ---------------------------------------------------------------------------
 typedef BOOL (WINAPI *PFN_CryptCATAdminAcquireContext2)(
     HCATADMIN*, const GUID*, PCWSTR,
@@ -78,8 +79,8 @@ typedef BOOL (WINAPI *PFN_CryptCATAdminAcquireContext2)(
 typedef BOOL (WINAPI *PFN_CryptCATAdminCalcHashFromFileHandle2)(
     HCATADMIN, HANDLE, DWORD*, BYTE*, DWORD);
 
-static PFN_CryptCATAdminAcquireContext2        pfnAcquireContext2        = nullptr;
-static PFN_CryptCATAdminCalcHashFromFileHandle2 pfnCalcHashFromHandle2   = nullptr;
+static PFN_CryptCATAdminAcquireContext2         pfnAcquireContext2   = nullptr;
+static PFN_CryptCATAdminCalcHashFromFileHandle2 pfnCalcHashFromHandle2 = nullptr;
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -163,15 +164,15 @@ bool VerifyCatalogSignature(const std::wstring& filePath) {
         return false;
     }
 
-    HCATADMIN hCatAdmin = nullptr;
-    bool usedModernApi  = false;
+    HCATADMIN hCatAdmin  = nullptr;
+    bool usedModernApi   = false;
 
     // Try SHA-256 context first (loaded dynamically)
     if (pfnAcquireContext2 &&
         pfnAcquireContext2(&hCatAdmin, nullptr, L"SHA256", nullptr, 0)) {
         usedModernApi = true;
     } else {
-        // Fallback
+        // Fallback: legacy SHA-1 context
         if (!CryptCATAdminAcquireContext(&hCatAdmin, nullptr, 0)) {
             Wh_Log(L"CryptCATAdminAcquireContext failed: %lu", GetLastError());
             CloseHandle(hFile);
@@ -248,29 +249,29 @@ bool VerifyCatalogSignature(const std::wstring& filePath) {
     Wh_Log(L"File is member of catalog: %s", catInfo.wszCatalogFile);
 
     // Build WINTRUST_CATALOG_INFO ---------------------------------------------
-    WINTRUST_CATALOG_INFO wtCatInfo  = {};
-    wtCatInfo.cbStruct               = sizeof(wtCatInfo);
-    wtCatInfo.pcwszCatalogFilePath   = catInfo.wszCatalogFile;
-    wtCatInfo.pcwszMemberTag         = hashStr.c_str();
-    wtCatInfo.pcwszMemberFilePath    = filePath.c_str();
-    wtCatInfo.hMemberFile            = nullptr;
-    wtCatInfo.pbCalculatedFileHash   = hash.data();
-    wtCatInfo.cbCalculatedFileHash   = hashSize;
+    WINTRUST_CATALOG_INFO wtCatInfo = {};
+    wtCatInfo.cbStruct              = sizeof(wtCatInfo);
+    wtCatInfo.pcwszCatalogFilePath  = catInfo.wszCatalogFile;
+    wtCatInfo.pcwszMemberTag        = hashStr.c_str();
+    wtCatInfo.pcwszMemberFilePath   = filePath.c_str();
+    wtCatInfo.hMemberFile           = nullptr;
+    wtCatInfo.pbCalculatedFileHash  = hash.data();
+    wtCatInfo.cbCalculatedFileHash  = hashSize;
 #if _WIN32_WINNT >= 0x0602
-    wtCatInfo.hCatAdmin              = hCatAdmin;
+    wtCatInfo.hCatAdmin             = hCatAdmin;
 #endif
 
-    WINTRUST_DATA wtData        = {};
-    wtData.cbStruct             = sizeof(wtData);
-    wtData.dwUnionChoice        = WTD_CHOICE_CATALOG;
-    wtData.pCatalog             = &wtCatInfo;
-    wtData.dwUIChoice           = WTD_UI_NONE;
-    wtData.fdwRevocationChecks  = WTD_REVOKE_NONE;
-    wtData.dwStateAction        = WTD_STATEACTION_VERIFY;
-    wtData.dwProvFlags          = WTD_CACHE_ONLY_URL_RETRIEVAL;
+    WINTRUST_DATA wtData       = {};
+    wtData.cbStruct            = sizeof(wtData);
+    wtData.dwUnionChoice       = WTD_CHOICE_CATALOG;
+    wtData.pCatalog            = &wtCatInfo;
+    wtData.dwUIChoice          = WTD_UI_NONE;
+    wtData.fdwRevocationChecks = WTD_REVOKE_NONE;
+    wtData.dwStateAction       = WTD_STATEACTION_VERIFY;
+    wtData.dwProvFlags         = WTD_CACHE_ONLY_URL_RETRIEVAL;
 
-    GUID  policyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-    LONG  status     = WinVerifyTrust(nullptr, &policyGUID, &wtData);
+    GUID policyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    LONG status     = WinVerifyTrust(nullptr, &policyGUID, &wtData);
 
     bool valid = (status == ERROR_SUCCESS);
     if (valid) {
@@ -300,14 +301,14 @@ bool VerifyMicrosoftSignature(const std::wstring& filePath) {
     fileInfo.cbStruct           = sizeof(WINTRUST_FILE_INFO);
     fileInfo.pcwszFilePath      = filePath.c_str();
 
-    WINTRUST_DATA wtData        = {};
-    wtData.cbStruct             = sizeof(WINTRUST_DATA);
-    wtData.dwUIChoice           = WTD_UI_NONE;
-    wtData.fdwRevocationChecks  = WTD_REVOKE_NONE;
-    wtData.dwUnionChoice        = WTD_CHOICE_FILE;
-    wtData.pFile                = &fileInfo;
-    wtData.dwStateAction        = WTD_STATEACTION_VERIFY;
-    wtData.dwProvFlags          = WTD_CACHE_ONLY_URL_RETRIEVAL;
+    WINTRUST_DATA wtData       = {};
+    wtData.cbStruct            = sizeof(WINTRUST_DATA);
+    wtData.dwUIChoice          = WTD_UI_NONE;
+    wtData.fdwRevocationChecks = WTD_REVOKE_NONE;
+    wtData.dwUnionChoice       = WTD_CHOICE_FILE;
+    wtData.pFile               = &fileInfo;
+    wtData.dwStateAction       = WTD_STATEACTION_VERIFY;
+    wtData.dwProvFlags         = WTD_CACHE_ONLY_URL_RETRIEVAL;
 
     GUID policyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
     LONG status     = WinVerifyTrust(nullptr, &policyGUID, &wtData);
@@ -424,22 +425,22 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
     std::wstring params = L"\"" + g_shimgvwPath +
                           L"\",ImageView_Fullscreen \"" + filePath + L"\"";
 
-    SHELLEXECUTEINFOW sei  = {sizeof(sei)};
-    sei.fMask              = SEE_MASK_NOCLOSEPROCESS;
-    sei.hwnd               = pExecInfo->hwnd;
-    sei.lpVerb             = L"open";
-    sei.lpFile             = L"rundll32.exe";
-    sei.lpParameters       = params.c_str();
-    sei.lpDirectory        = pExecInfo->lpDirectory;
-    sei.nShow              = pExecInfo->nShow ? pExecInfo->nShow : SW_SHOWNORMAL;
+    SHELLEXECUTEINFOW sei = {sizeof(sei)};
+    sei.fMask             = SEE_MASK_NOCLOSEPROCESS;
+    sei.hwnd              = pExecInfo->hwnd;
+    sei.lpVerb            = L"open";
+    sei.lpFile            = L"rundll32.exe";
+    sei.lpParameters      = params.c_str();
+    sei.lpDirectory       = pExecInfo->lpDirectory;
+    sei.nShow             = pExecInfo->nShow ? pExecInfo->nShow : SW_SHOWNORMAL;
 
-    g_inRedirect   = true;
-    BOOL result    = ShellExecuteExW_Original(&sei);
-    g_inRedirect   = false;
+    g_inRedirect = true;
+    BOOL result  = ShellExecuteExW_Original(&sei);
+    g_inRedirect = false;
 
     if (result) {
-        pExecInfo->hProcess  = sei.hProcess;
-        pExecInfo->hInstApp  = reinterpret_cast<HINSTANCE>(33);
+        pExecInfo->hProcess = sei.hProcess;
+        pExecInfo->hInstApp = reinterpret_cast<HINSTANCE>(33);
         if (sei.hProcess)
             CloseHandle(sei.hProcess);
         return TRUE;
@@ -455,7 +456,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Classic Photo Viewer Redirect - Initializing");
 
-    // Dynamically resolve Win8+ catalog APIs
+    // Dynamically resolve Win8+ catalog APIs (safe on Win7 - returns nullptr)
     HMODULE hWintrust = GetModuleHandleW(L"wintrust.dll");
     if (!hWintrust) hWintrust = LoadLibraryW(L"wintrust.dll");
     if (hWintrust) {
