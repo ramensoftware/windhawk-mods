@@ -1338,7 +1338,6 @@ static bool TryInstallPniduiHook() {
     
     Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
-    // pnidui.dll
     WindhawkUtils::SYMBOL_HOOK pniduiDllHook = {{
         L"bool "
 #ifdef _WIN64
@@ -1417,7 +1416,6 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // SndVolSSO.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSsoDllHooks[] = {
             {{
                 L"bool "
@@ -1456,7 +1454,6 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // shell32.dll
             WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
                 {{
                     L"bool "
@@ -1592,6 +1589,7 @@ void Wh_ModSettingsChanged() {
     g_pniduiBase = nullptr;
     g_pniduiEnd = nullptr;
     
+    // Resetta lo stato degli hook per riprovare
     {
         std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
         g_pniduiHookInstalled = false;
@@ -1601,6 +1599,7 @@ void Wh_ModSettingsChanged() {
     InitMappings();
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
+        // Reinstalla gli hook se necessario
         InstallImmersiveMenuHooks();
     }
 }
