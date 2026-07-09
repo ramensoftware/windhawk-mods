@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.23
+// @version        10.0.24
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -1338,7 +1338,8 @@ static bool TryInstallPniduiHook() {
     
     Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
-    WindhawkUtils::SYMBOL_HOOK pniduiHook = {{
+    // pnidui.dll
+    WindhawkUtils::SYMBOL_HOOK pniduiDllHook = {{
         L"bool "
 #ifdef _WIN64
         L"__cdecl"
@@ -1351,7 +1352,7 @@ static bool TryInstallPniduiHook() {
     (void**)&g_icmhOrig_pnidui,
     (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook};
 
-    bool result = WindhawkUtils::HookSymbols(hMod, &pniduiHook, 1);
+    bool result = WindhawkUtils::HookSymbols(hMod, &pniduiDllHook, 1);
     if (result) {
         Wh_Log(L"[PNIDUI-HOOK] Successfully installed pnidui.dll hook");
         g_pniduiHookInstalled = true;
@@ -1416,8 +1417,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // RINOMINATO: sndVolSsoHooks invece di hooks
-        WindhawkUtils::SYMBOL_HOOK sndVolSsoHooks[] = {
+        // SndVolSSO.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSsoDllHooks[] = {
             {{
                 L"bool "
 #ifdef _WIN64
@@ -1432,7 +1433,7 @@ static void InstallImmersiveMenuHooks() {
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, sndVolSsoHooks, 1);
+        WindhawkUtils::HookSymbols(hMod, sndVolSsoDllHooks, 1);
     }
 
     // Prova pnidui.dll - se fallisce, avvia il thread di retry
@@ -1455,8 +1456,8 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // RINOMINATO: shell32Hooks invece di shell32Hooks
-            WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+            // shell32.dll
+            WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
                 {{
                     L"bool "
 #ifdef _WIN64
@@ -1471,7 +1472,7 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
             };
             
-            WindhawkUtils::HookSymbols(hShell32, shell32Hooks, 1);
+            WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, 1);
         }
     }
 }
@@ -1523,7 +1524,7 @@ HWND WINAPI CreateWindowExW_Hook(
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.23");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.24");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1591,7 +1592,6 @@ void Wh_ModSettingsChanged() {
     g_pniduiBase = nullptr;
     g_pniduiEnd = nullptr;
     
-    // Resetta lo stato degli hook per riprovare
     {
         std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
         g_pniduiHookInstalled = false;
@@ -1601,7 +1601,6 @@ void Wh_ModSettingsChanged() {
     InitMappings();
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
-        // Reinstalla gli hook se necessario
         InstallImmersiveMenuHooks();
     }
 }
