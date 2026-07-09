@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id             pivotlink-browser-router
 // @name           PivotLink: Browser Router
-// @description    Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout and automatic game detection.
+// @description    Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout.
 // @version        1.0
-// @author         You
+// @author         gauthumj
 // @github         https://github.com/gauthumj
 // @include        *
 // @compilerOptions -lshell32
@@ -28,12 +28,10 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 ## Configuration
 
 - **Priority 1–5 Browsers**: Rank up to five browsers by executable name (e.g. `brave.exe`, `firefox.exe`). The first one found running wins.
-- **Gaming Override Allow List**: The mod auto-disables in any process that loads DirectX or Vulkan graphics DLLs (i.e. games). Add process names here to keep the mod active in specific games anyway (e.g. games with in-game browsers).
 
 ## Notes
 
 - The mod skips Session 0 processes (system services) automatically.
-- Game detection works by checking for loaded `d3d9.dll`, `d3d11.dll`, `d3d12.dll`, and `vulkan-1.dll`. Configured browsers are excluded from this check since they load D3D for hardware acceleration.
 - A thread-local guard prevents recursive hook calls during redirection.
 */
 // ==/WindhawkModReadme==
@@ -42,7 +40,7 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 /*
 - browser1: "brave.exe"
   $name: Priority 1 Browser (Highest)
-  $description: Your primary choice for link redirection (e.g., brave.exe). Leave blank to skip.
+  $description: Ideally your default browser — but any browser works. Links route to the highest-priority one that's running.
 - browser2: "firefox.exe"
   $name: Priority 2 Browser
   $description: Second choice browser if Priority 1 is not running. Leave blank to skip.
@@ -55,21 +53,19 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 - browser5: ""
   $name: Priority 5 Browser (Lowest)
   $description: Fifth choice browser fallback. Leave blank to skip.
-- allowGameProcesses: ""
-  $name: Gaming Override Allow List
-  $description: The mod auto-disables in processes that load DirectX/Vulkan. Add process names here (semicolon-separated) to keep the mod active in specific games (e.g., games with in-game browsers).
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
+#include <windhawk_utils.h>
+#include <mutex>
 #include <vector>
 #include <string>
-#include <sstream>
 
+std::mutex g_settingsMutex;
 std::vector<std::wstring> g_priorityBrowsers;
-std::vector<std::wstring> g_allowedGameProcesses;
 thread_local bool t_inHook = false; 
 
 std::wstring TrimString(const std::wstring& str) {
@@ -89,14 +85,20 @@ static BOOL CALLBACK CheckVisibleWindowProc(HWND hwnd, LPARAM lParam) {
     VisibleWindowCheck* check = reinterpret_cast<VisibleWindowCheck*>(lParam);
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == check->processId && IsWindowVisible(hwnd)) {
-        RECT rect;
-        if (GetWindowRect(hwnd, &rect) && (rect.right - rect.left) > 1 && (rect.bottom - rect.top) > 1) {
-            check->found = true;
-            return FALSE;
-        }
-    }
-    return TRUE;
+    if (pid != check->processId) return TRUE;
+
+    if (!IsWindowVisible(hwnd)) return TRUE;
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW) return TRUE;
+    if (GetWindowTextLengthW(hwnd) == 0) return TRUE;
+
+    RECT rect = {};
+    GetWindowRect(hwnd, &rect);
+    if ((rect.right - rect.left) <= 1 || (rect.bottom - rect.top) <= 1) return TRUE;
+
+    check->found = true;
+    return FALSE;
 }
 
 static bool HasVisibleWindow(DWORD processId) {
@@ -108,18 +110,24 @@ static bool HasVisibleWindow(DWORD processId) {
 // Finds the highest-priority browser that is actively open (has a visible window).
 // Background-only processes (e.g., Edge service workers) are ignored.
 std::wstring GetHighestPriorityRunningBrowser() {
+    std::vector<std::wstring> browsers;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        browsers = g_priorityBrowsers;
+    }
+
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap == INVALID_HANDLE_VALUE) return L"";
 
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
     
-    std::vector<std::vector<DWORD>> browserPids(g_priorityBrowsers.size());
+    std::vector<std::vector<DWORD>> browserPids(browsers.size());
 
     if (Process32FirstW(hSnap, &pe)) {
         do {
-            for (size_t i = 0; i < g_priorityBrowsers.size(); ++i) {
-                if (_wcsicmp(pe.szExeFile, g_priorityBrowsers[i].c_str()) == 0) {
+            for (size_t i = 0; i < browsers.size(); ++i) {
+                if (_wcsicmp(pe.szExeFile, browsers[i].c_str()) == 0) {
                     browserPids[i].push_back(pe.th32ProcessID);
                     break;
                 }
@@ -128,14 +136,12 @@ std::wstring GetHighestPriorityRunningBrowser() {
     }
     CloseHandle(hSnap);
 
-    for (size_t i = 0; i < g_priorityBrowsers.size(); ++i) {
+    for (size_t i = 0; i < browsers.size(); ++i) {
         for (DWORD pid : browserPids[i]) {
-            if (HasVisibleWindow(pid)) {
-                return g_priorityBrowsers[i];
-            }
+            if (HasVisibleWindow(pid)) return browsers[i];
         }
     }
-    
+
     return L"";
 }
 
@@ -150,90 +156,38 @@ std::wstring GetCurrentProcessName() {
     return L"UNKNOWN";
 }
 
-// Detects if the current process is a game by checking for loaded graphics DLLs.
-// Returns false for configured browsers (which load D3D for HW acceleration)
-// and for processes explicitly allowed by the user.
-bool IsCurrentProcessGame() {
-    const WCHAR* graphicsDlls[] = {
-        L"d3d9.dll",
-        L"d3d11.dll",
-        L"d3d12.dll",
-        L"vulkan-1.dll",
-    };
-
-    bool hasGraphics = false;
-    for (const auto& dll : graphicsDlls) {
-        if (GetModuleHandleW(dll)) {
-            hasGraphics = true;
-            break;
-        }
-    }
-    if (!hasGraphics) return false;
-
-    // Browsers load D3D for hardware acceleration — don't flag them as games
-    std::wstring currentProc = GetCurrentProcessName();
-    for (const auto& browser : g_priorityBrowsers) {
-        if (_wcsicmp(currentProc.c_str(), browser.c_str()) == 0) {
-            return false;
-        }
-    }
-
-    for (const auto& allowed : g_allowedGameProcesses) {
-        if (_wcsicmp(currentProc.c_str(), allowed.c_str()) == 0) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void ParseSemicolonList(PCWSTR settingName, std::vector<std::wstring>& targetVector) {
-    targetVector.clear();
-    PCWSTR rawSetting = Wh_GetStringSetting(settingName);
-    
-    if (rawSetting && wcslen(rawSetting) > 0) {
-        std::wstring s(rawSetting);
-        std::wstringstream ss(s);
-        std::wstring item;
-        while (std::getline(ss, item, L';')) {
-            std::wstring trimmed = TrimString(item);
-            if (!trimmed.empty()) targetVector.push_back(trimmed);
-        }
-        Wh_FreeStringSetting(rawSetting);
-    }
-}
-
 void LoadSettings() {
-    g_priorityBrowsers.clear();
-
     const WCHAR* browserKeys[] = { L"browser1", L"browser2", L"browser3", L"browser4", L"browser5" };
-    const std::wstring hardcodedDefaults[] = { L"brave.exe", L"firefox.exe", L"chrome.exe", L"msedge.exe", L"" };
 
+    std::vector<std::wstring> browsers;
     for (int i = 0; i < 5; ++i) {
-        PCWSTR rawBrowser = Wh_GetStringSetting(browserKeys[i]);
-        if (rawBrowser) {
-            std::wstring trimmed = TrimString(rawBrowser);
-            if (!trimmed.empty()) {
-                g_priorityBrowsers.push_back(trimmed);
-            }
-            Wh_FreeStringSetting(rawBrowser);
-        } else if (!hardcodedDefaults[i].empty()) {
-            g_priorityBrowsers.push_back(hardcodedDefaults[i]);
+        auto setting = WindhawkUtils::StringSetting::make(browserKeys[i]);
+        std::wstring trimmed = TrimString(setting.get());
+        if (!trimmed.empty()) {
+            browsers.push_back(trimmed);
         }
     }
 
-    if (g_priorityBrowsers.empty()) {
-        g_priorityBrowsers = { L"brave.exe", L"firefox.exe", L"chrome.exe", L"msedge.exe" };
-    }
-
-    ParseSemicolonList(L"allowGameProcesses", g_allowedGameProcesses);
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_priorityBrowsers = std::move(browsers);
 }
 
-bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpParameters, int nShow) {
-    if (!lpFile || t_inHook) return false;
-    if (IsCurrentProcessGame()) return false;
+using ShellExecuteExW_t = decltype(&ShellExecuteExW);
+ShellExecuteExW_t ShellExecuteExW_Original;
 
-    bool isLink = (_wcsnicmp(lpFile, L"http://", 7) == 0 || _wcsnicmp(lpFile, L"https://", 8) == 0);
+bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, const WCHAR* lpParameters, int nShow) {
+    if (!lpFile || t_inHook) return false;
+
+    // Only redirect default (NULL) or "open" verbs
+    if (lpVerb && _wcsicmp(lpVerb, L"open") != 0) return false;
+
+    // Strip surrounding quotes — some apps (Discord, VSCodium) pass quoted URLs
+    std::wstring cleanUrl = lpFile;
+    if (cleanUrl.length() >= 2 && cleanUrl.front() == L'"' && cleanUrl.back() == L'"') {
+        cleanUrl = cleanUrl.substr(1, cleanUrl.length() - 2);
+    }
+
+    bool isLink = (_wcsnicmp(cleanUrl.c_str(), L"http://", 7) == 0 || _wcsnicmp(cleanUrl.c_str(), L"https://", 8) == 0);
     if (!isLink) return false;
 
     std::wstring currentProc = GetCurrentProcessName();
@@ -245,12 +199,7 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpParameters, int nS
             return false;
         }
 
-        std::wstring cleanUrl = lpFile;
-        if (cleanUrl.length() >= 2 && cleanUrl.front() == L'"' && cleanUrl.back() == L'"') {
-            cleanUrl = cleanUrl.substr(1, cleanUrl.length() - 2);
-        }
-
-        Wh_Log(L"[PivotLink] Routing link to: %s", targetBrowser.c_str());
+        Wh_Log(L"Routing link to: %s", targetBrowser.c_str());
 
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
         sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -259,7 +208,7 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpParameters, int nS
         sei.nShow = nShow;
         
         t_inHook = true;
-        BOOL success = ShellExecuteExW(&sei);
+        BOOL success = ShellExecuteExW_Original(&sei);
         t_inHook = false;
 
         if (success) return true;
@@ -267,13 +216,10 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpParameters, int nS
     return false;
 }
 
-using ShellExecuteExW_t = decltype(&ShellExecuteExW);
-ShellExecuteExW_t ShellExecuteExW_Original;
-
 BOOL WINAPI ShellExecuteExW_Hook(LPSHELLEXECUTEINFOW pExecInfo) {
     if (pExecInfo && pExecInfo->lpFile) {
-        if (RouteLinkIfNecessary(pExecInfo->lpFile, pExecInfo->lpParameters, pExecInfo->nShow)) {
-            pExecInfo->hInstApp = (HINSTANCE)32; 
+        if (RouteLinkIfNecessary(pExecInfo->lpFile, pExecInfo->lpVerb, pExecInfo->lpParameters, pExecInfo->nShow)) {
+            pExecInfo->hInstApp = (HINSTANCE)33; 
             return TRUE;
         }
     }
@@ -283,74 +229,129 @@ BOOL WINAPI ShellExecuteExW_Hook(LPSHELLEXECUTEINFOW pExecInfo) {
 using ShellExecuteW_t = decltype(&ShellExecuteW);
 ShellExecuteW_t ShellExecuteW_Original;
 
+using CreateProcessW_t = decltype(&CreateProcessW);
+CreateProcessW_t CreateProcessW_Original;
+
+// Resolve full path of a browser via Windows App Paths registry
+std::wstring GetBrowserFullPath(const std::wstring& exeName) {
+    std::wstring keyPath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + exeName;
+    WCHAR path[MAX_PATH] = {};
+    DWORD size = sizeof(path);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
+        return path;
+    size = sizeof(path);
+    if (RegGetValueW(HKEY_CURRENT_USER, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
+        return path;
+    return L"";
+}
+
 HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShow) {
-    if (RouteLinkIfNecessary(lpFile, lpParameters, nShow)) {
-        return (HINSTANCE)32;
+    if (RouteLinkIfNecessary(lpFile, lpOperation, lpParameters, nShow)) {
+        return (HINSTANCE)33;
     }
     return ShellExecuteW_Original(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShow);
 }
 
-using CreateProcessW_t = decltype(&CreateProcessW);
-CreateProcessW_t CreateProcessW_Original;
+BOOL WINAPI CreateProcessW_Hook(
+    LPCWSTR lpApplicationName,
+    LPWSTR lpCommandLine,
+    LPSECURITY_ATTRIBUTES lpProcessAttributes,
+    LPSECURITY_ATTRIBUTES lpThreadAttributes,
+    BOOL bInheritHandles,
+    DWORD dwCreationFlags,
+    LPVOID lpEnvironment,
+    LPCWSTR lpCurrentDirectory,
+    LPSTARTUPINFOW lpStartupInfo,
+    LPPROCESS_INFORMATION lpProcessInformation)
+{
+    if (lpCommandLine && !t_inHook) {
+        // Skip if the calling process is itself a configured browser —
+        // prevents catching internal browser URLs (cr.brave.com, telemetry)
+        // and cascading redirects when the default browser starts up.
+        std::wstring currentProc = GetCurrentProcessName();
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            for (const auto& b : g_priorityBrowsers) {
+                if (_wcsicmp(currentProc.c_str(), b.c_str()) == 0) {
+                    goto passthrough;
+                }
+            }
+        }
 
-BOOL WINAPI CreateProcessW_Hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes,
-                                LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags,
-                                LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
-                                LPPROCESS_INFORMATION lpProcessInformation) {
-    if (t_inHook || IsCurrentProcessGame()) {
-        return CreateProcessW_Original(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                                       bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
-    }
+        {
+            // Determine the target executable name being launched
+            std::wstring targetExe;
+            if (lpApplicationName) {
+                std::wstring appPath(lpApplicationName);
+                size_t pos = appPath.find_last_of(L"\\/");
+                targetExe = (pos != std::wstring::npos) ? appPath.substr(pos + 1) : appPath;
+            } else if (lpCommandLine) {
+                std::wstring cl(lpCommandLine);
+                size_t start = (cl[0] == L'"') ? 1 : 0;
+                size_t end = (cl[0] == L'"') ? cl.find(L'"', 1) : cl.find_first_of(L" \t");
+                std::wstring appPath = (end != std::wstring::npos) ? cl.substr(start, end - start) : cl.substr(start);
+                size_t pos = appPath.find_last_of(L"\\/");
+                targetExe = (pos != std::wstring::npos) ? appPath.substr(pos + 1) : appPath;
+            }
 
-    bool targetMatched = false;
-    if (lpCommandLine && wcsstr(lpCommandLine, L"zen.exe")) targetMatched = true;
-    else if (lpApplicationName && wcsstr(lpApplicationName, L"zen.exe")) targetMatched = true;
-
-    if (targetMatched && lpCommandLine && (wcsstr(lpCommandLine, L"http://") || wcsstr(lpCommandLine, L"https://"))) {
-        
-        std::wstring cmdLine(lpCommandLine);
-        size_t urlPos = cmdLine.find(L"https://");
-        if (urlPos == std::wstring::npos) urlPos = cmdLine.find(L"http://");
-
-        if (urlPos != std::wstring::npos) {
-            std::wstring extractedUrl = cmdLine.substr(urlPos);
-            
-            size_t cleanupQuote = extractedUrl.find(L'"');
-            if (cleanupQuote != std::wstring::npos) extractedUrl = extractedUrl.substr(0, cleanupQuote);
-            size_t cleanupSpace = extractedUrl.find(L' ');
-            if (cleanupSpace != std::wstring::npos) extractedUrl = extractedUrl.substr(0, cleanupSpace);
-
-            std::wstring targetBrowser = GetHighestPriorityRunningBrowser();
-
-            if (!targetBrowser.empty() && _wcsicmp(targetBrowser.c_str(), L"zen.exe") != 0) {
-                
-                Wh_Log(L"[PivotLink] CreateProcessW intercept, routing to: %s", targetBrowser.c_str());
-
-                SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
-                sei.lpFile = targetBrowser.c_str();         
-                sei.lpParameters = extractedUrl.c_str(); 
-                sei.nShow = SW_SHOWNORMAL;
-                
-                t_inHook = true;
-                BOOL ok = ShellExecuteExW(&sei);
-                t_inHook = false;
-
-                if (ok) {
-                    if (lpProcessInformation) {
-                        lpProcessInformation->hProcess = sei.hProcess;
-                        lpProcessInformation->hThread = NULL; 
-                        lpProcessInformation->dwProcessId = GetProcessId(sei.hProcess);
-                        lpProcessInformation->dwThreadId = 0;
+            // Only intercept if the target process is a browser in our priority list.
+            // This prevents false positives from git, curl, etc. that have URLs in args.
+            bool targetIsBrowser = false;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                for (const auto& b : g_priorityBrowsers) {
+                    if (_wcsicmp(targetExe.c_str(), b.c_str()) == 0) {
+                        targetIsBrowser = true;
+                        break;
                     }
-                    return TRUE;
+                }
+            }
+            if (!targetIsBrowser) goto passthrough;
+
+            std::wstring cmdLine(lpCommandLine);
+
+            // Quick scan for URL in command line
+            std::wstring::size_type urlPos = cmdLine.find(L"https://");
+            if (urlPos == std::wstring::npos)
+                urlPos = cmdLine.find(L"http://");
+
+            if (urlPos != std::wstring::npos) {
+                // Extract URL (may be quoted or unquoted)
+                std::wstring url;
+                size_t end = cmdLine.find_first_of(L" \t\"", urlPos);
+                url = (end != std::wstring::npos)
+                    ? cmdLine.substr(urlPos, end - urlPos)
+                    : cmdLine.substr(urlPos);
+
+                std::wstring targetBrowser = GetHighestPriorityRunningBrowser();
+                if (!targetBrowser.empty() &&
+                    _wcsicmp(currentProc.c_str(), targetBrowser.c_str()) != 0) {
+
+                    std::wstring targetPath = GetBrowserFullPath(targetBrowser);
+                    if (!targetPath.empty()) {
+                        Wh_Log(L"Rewriting CreateProcessW to %s", targetBrowser.c_str());
+
+                        // Replace the browser in the command line
+                        std::wstring newCmdLine = L"\"" + targetPath + L"\" " + url;
+                        std::vector<wchar_t> cmdBuf(newCmdLine.begin(), newCmdLine.end());
+                        cmdBuf.push_back(L'\0');
+
+                        return CreateProcessW_Original(
+                            targetPath.c_str(), cmdBuf.data(),
+                            lpProcessAttributes, lpThreadAttributes,
+                            bInheritHandles, dwCreationFlags, lpEnvironment,
+                            lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+                    }
                 }
             }
         }
     }
 
-    return CreateProcessW_Original(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
-                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+passthrough:
+    return CreateProcessW_Original(lpApplicationName, lpCommandLine,
+        lpProcessAttributes, lpThreadAttributes, bInheritHandles,
+        dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+        lpStartupInfo, lpProcessInformation);
 }
 
 BOOL Wh_ModInit() {
@@ -362,15 +363,9 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (IsCurrentProcessGame()) {
-        Wh_Log(L"[PivotLink] Graphics DLLs detected, disabling in game process.");
-        return FALSE;
-    }
-
-    Wh_SetFunctionHook((void*)ShellExecuteExW, (void*)ShellExecuteExW_Hook, (void**)&ShellExecuteExW_Original);
-    Wh_SetFunctionHook((void*)ShellExecuteW, (void*)ShellExecuteW_Hook, (void**)&ShellExecuteW_Original);
-    Wh_SetFunctionHook((void*)CreateProcessW, (void*)CreateProcessW_Hook, (void**)&CreateProcessW_Original);
-
+    WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
+    WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
+    WindhawkUtils::SetFunctionHook(CreateProcessW, CreateProcessW_Hook, &CreateProcessW_Original);
     return TRUE;
 }
 
