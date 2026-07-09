@@ -6,14 +6,14 @@
 // @description     Adds customizable one-click Shut down, Restart, Sign out, Sleep, Hibernate, and Lock buttons to the Windows 11 Start menu, replacing the default power flyout.
 // @description:zh-CN 添加可配置的一键关机/重启/注销/睡眠/休眠/锁定按钮到 Windows 11 开始菜单，替换默认的电源按钮二级菜单。
 // @description:ja-JP Windows 11 のスタート メニュー上にある既定の電源メニューを置き換えます。カスタマイズ可能な「シャットダウン」「再起動」「サインアウト」「スリープ」「休止状態」「ロック」をワンクリックで行うボタンを追加します。
-// @version         1.0.2
+// @version         1.0.2+
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
-// @github          https://github.com/ahzvenol
+// @github          https://github.com/reindex-ot
 // @include         StartMenuExperienceHost.exe
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols -luser32 -lwtsapi32 -lpowrprof
+// @‌compilerOptions require manual verification: -Wl,--export-all-symbols
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
