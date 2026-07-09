@@ -9,6 +9,7 @@
 // @version         1.0.2+
 // @author          Hakuuyosei
 // @author:zh-CN    灵弦
+// @author:ja-JP    Hakuuyosei
 // @github          https://github.com/reindex-ot
 // @include         StartMenuExperienceHost.exe
 // @include         explorer.exe
