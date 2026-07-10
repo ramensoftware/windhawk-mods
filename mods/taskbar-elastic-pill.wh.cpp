@@ -1564,9 +1564,7 @@ void Wh_ModBeforeUninit() {
 
     if (pending->load() > 0 && eventLifetime.get()) {
         if (WaitForSingleObject(eventLifetime.get(), 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Cleanup timed out. Pinning module to prevent crash.");
-            HMODULE hMod;
-            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)&Wh_ModBeforeUninit, &hMod);
+            Wh_Log(L"Cleanup timed out. Mod may crash if pending callbacks execute.");
         }
     }
     Sleep(50); // Let layout settle
