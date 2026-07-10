@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-08T10:03:15.000Z</updated>
+    <updated>2026-07-10T08:24:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix File Conflict Dialog Checkbox Background 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53e4ca975340265bc150fbbaa72fe79059af857b</id>
+        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
+        <updated>2026-07-10T08:24:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixfileconflictdialogcheckboxbackground">Fix File Conflict Dialog Checkbox Background</h1>
+<p>Fixes the black background of the "Apply to all conflicts" checkbox
+in the Explorer file copy/move conflict dialog when Windows Classic theme is active.</p>
+<p>This bug has appeared in recent cumulative updates.</p>
+<p>Before:</p>
+<p><img src="https://i.imgur.com/jMGJOHd.png" alt="before" /></p>
+<p>After:</p>
+<p><img src="https://i.imgur.com/pK0Z0u8.png" alt="after" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore the classic Personalization and other CPLs 1.0]]></title>
         <id>https://windhawk.net/mods/restore-classic-cpls#ae3325a856437d38b88166cce15e7f271261c65d</id>
@@ -724,21 +742,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[One Key Keyboard Layout Switcher 1.0]]></title>
-        <id>https://windhawk.net/mods/one-key-layout-switcher#f689a0f9e31c38ef4df585bcc6a730539a9e335b</id>
-        <link href="https://windhawk.net/mods/one-key-layout-switcher"/>
-        <updated>2026-06-24T21:18:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Switches keyboard layout with a single key press instead of a two-key combination.
-Intercepts keyboard events at the lowest possible user-mode level (WH<em>KEYBOARD</em>LL).</p>
-<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

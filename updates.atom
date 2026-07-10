@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T07:59:14.000Z</updated>
+    <updated>2026-07-10T08:24:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix File Conflict Dialog Checkbox Background 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53e4ca975340265bc150fbbaa72fe79059af857b</id>
+        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
+        <updated>2026-07-10T08:24:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixfileconflictdialogcheckboxbackground">Fix File Conflict Dialog Checkbox Background</h1>
+<p>Fixes the black background of the "Apply to all conflicts" checkbox
+in the Explorer file copy/move conflict dialog when Windows Classic theme is active.</p>
+<p>This bug has appeared in recent cumulative updates.</p>
+<p>Before:</p>
+<p><img src="https://i.imgur.com/jMGJOHd.png" alt="before" /></p>
+<p>After:</p>
+<p><img src="https://i.imgur.com/pK0Z0u8.png" alt="after" /></p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Pre-Vista File Operation Dialogs 2.2.0]]></title>
         <id>https://windhawk.net/mods/prevista-file-copy#4d18ef42fa0065944ef110f214dfa8782fcb9571</id>
@@ -529,40 +547,6 @@ dinamico de forma inesperada.</p>]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact Start Menu 1.0.0]]></title>
-        <id>https://windhawk.net/mods/compact-start-menu#5b32bb24425ef9af3e7769665f667b8144352a20</id>
-        <link href="https://windhawk.net/mods/compact-start-menu"/>
-        <updated>2026-07-02T19:52:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="compactstartmenu">Compact Start Menu</h1>
-<p>This mod simplifies the Start Menu by directly adjusting All apps XAML sections.</p>
-<p>| All apps without header (default) | Pinned without header + Separator + All apps in List view |
-| :---: | :---: |
-| <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/1.png" alt="Default" /> | <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/2.png" alt="Pinned section and separator" /> |</p>
-<h3 id="features">Features:</h3>
-<ul>
-<li><strong>Shows "All apps":</strong> Keeps the app list visible.</li>
-<li><strong>Optional pinned section hiding:</strong> Can hide or show the section with pinned apps.</li>
-<li><strong>Optional recommended section hiding:</strong> Can hide or show the section with recent files.</li>
-<li><strong>Optional section separators:</strong> Can add thin separator lines between sections.</li>
-<li><strong>Optional section headers:</strong> Can hide pinned and recommended headers independently.</li>
-<li><strong>Hides group headers:</strong> Removes the visible All apps group headers in grid and list views.</li>
-<li><strong>Compacts grid view:</strong> Reduces group-header spacing in the All apps grid.</li>
-<li><strong>Optional top header:</strong> Can hide the All apps title/view row.</li>
-<li><strong>Optional category view hiding:</strong> Can hide the Category option from the view selector.</li>
-<li><strong>Hidden header icon gap:</strong> Can adjust the first icon row spacing when the top header is hidden.</li>
-<li><strong>Scrollbar modes:</strong> Can show, hide, or reveal the visual All apps scroll bar only while scrolling.</li>
-</ul>
-<h3 id="instructions">Instructions:</h3>
-<ul>
-<li>Enable the mod in Windhawk.</li>
-<li><strong>Restart StartMenuExperienceHost.exe</strong>, sign out/in, or restart your computer to apply changes.</li>
-</ul>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
         </author>
     </entry>
 </feed>

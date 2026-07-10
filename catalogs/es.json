@@ -5586,6 +5586,34 @@
         "version": "1.1.1"
       }
     },
+    "fix-conflict-dialog-checkbox-bg": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783671867000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783671867000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anixx",
+        "compilerOptions": "-lgdi32 -lcomctl32 -luxtheme",
+        "description": "Fixes black background on the checkbox in the file conflict dialog (Classic Theme)",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "*"
+        ],
+        "name": "Fix File Conflict Dialog Checkbox Background",
+        "version": "1.0"
+      }
+    },
     "fix-darkmode-listviews": {
       "details": {
         "defaultSorting": 48546,
