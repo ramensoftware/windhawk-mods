@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.136
+// @version         0.9.137
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -131,6 +131,9 @@ it fits naturally alongside your taskbar and system tray items.
   - BackdropWgcBlurStdDev: 18
     $name: Backdrop WGC blur strength
     $description: Gaussian blur standard deviation for live WGC blur.
+  - AllowScreenCapture: false
+    $name: Allow screen capture of expanded popup
+    $description: Makes the expanded popup visible to screen recorders. This is useful for recording Liquid glass, but may let the live backdrop capture the popup itself on some systems.
 */
 // ==/WindhawkModSettings==
 
@@ -306,6 +309,7 @@ struct Settings {
     int backdropFallbackBlurPasses = 5;
     int backdropFallbackCaptureScale = 2;
     int backdropWgcBlurStdDev = 18;
+    bool allowScreenCapture = false;
 };
 
 struct RuntimeLayout {
@@ -1176,6 +1180,8 @@ Settings ReadSettings() {
         Clamp(Wh_GetIntSetting(L"Main.BackdropFallbackCaptureScale"), 2, 3);
     settings.backdropWgcBlurStdDev =
         Clamp(Wh_GetIntSetting(L"Main.BackdropWgcBlurStdDev"), 14, 22);
+    settings.allowScreenCapture =
+        Wh_GetIntSetting(L"Main.AllowScreenCapture") != 0;
     return settings;
 }
 
@@ -8343,10 +8349,11 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
     g_popupOverlayWgcCreateItemFailed = false;
 
     // Keep the existing blurred fallback visible until the first WGC frame is
-    // ready. Exclude the popup/overlay from capture first; then skip a few WGC
-    // frames to let DWM apply the exclusion before we replace the fallback.
-    SetWindowDisplayAffinity(g_expandedPopup, WDA_EXCLUDEFROMCAPTURE);
-    SetWindowDisplayAffinity(g_popupBackdropOverlay, WDA_EXCLUDEFROMCAPTURE);
+    // ready. Exclude the overlay from capture first; optionally keep the popup
+    // capturable so users can record the expanded material effect.
+    SetPopupWindowCaptureExclusion(g_expandedPopup,
+                                   !g_settings.allowScreenCapture);
+    SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, true);
     DwmFlush();
 
     std::lock_guard lock(g_popupOverlayWgcMutex);
