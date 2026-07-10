@@ -7897,7 +7897,7 @@
           4
         ],
         "ratingUsers": 6,
-        "updated": 1781342832000,
+        "updated": 1783670065000,
         "users": 116
       },
       "metadata": {
@@ -7909,8 +7909,9 @@
         "include": [
           "windhawk.exe"
         ],
+        "license": "MIT",
         "name": "Net-Toggle",
-        "version": "2.1.0"
+        "version": "2.1.1"
       }
     },
     "never-auto-expand-explorer-tree-items": {

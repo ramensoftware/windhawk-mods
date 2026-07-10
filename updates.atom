@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-08T10:03:15.000Z</updated>
+    <updated>2026-07-10T07:54:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Net-Toggle 2.1.1]]></title>
+        <id>https://windhawk.net/mods/net-toggle#63faedb153a6b090cd1fe59bf31bb86a734766f7</id>
+        <link href="https://windhawk.net/mods/net-toggle"/>
+        <updated>2026-07-10T07:54:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Fixed:</strong> Mod no longer crashes on reload.</li>
+<li><strong>Fixed:</strong> Unstable state on rapid clicks resolved.</li>
+<li><strong>Added:</strong> Description for the secondary DNS server check method setting.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore the classic Personalization and other CPLs 1.0]]></title>
         <id>https://windhawk.net/mods/restore-classic-cpls#ae3325a856437d38b88166cce15e7f271261c65d</id>
@@ -547,17 +562,6 @@ dinamico de forma inesperada.</p>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.2.1]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a6331a0a1240ac02de1b2e73e2109755bf8c816d</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-07-02T19:09:08.000Z</updated>
-        <content type="html"><![CDATA[<p>Updated version number and screenshot in the mod description.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

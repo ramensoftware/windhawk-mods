@@ -1,3 +1,9 @@
+## 2.1.1 ([Jul 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/63faedb153a6b090cd1fe59bf31bb86a734766f7/mods/net-toggle.wh.cpp))
+
+- **Fixed:** Mod no longer crashes on reload.
+- **Fixed:** Unstable state on rapid clicks resolved.
+- **Added:** Description for the secondary DNS server check method setting.
+
 ## 2.1.0 ([Jun 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/962908f1a96bfd70d2e01f45873eaef3117aeef4/mods/net-toggle.wh.cpp))
 
 - Add secondary (fallback) DNS server support
