@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T08:24:27.000Z</updated>
+    <updated>2026-07-10T10:33:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-elastic-pill#e845e641c7d0d1590296685d367841b91087f93a</id>
+        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
+        <updated>2026-07-10T10:33:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added 'Elastic' animation mode, which is a hybrid of stretch and bounce, inspired by Apple's Dynamic Island animations.</li>
+<li>Added spring physics toggle for smoother animations, which is especially noticeable paired with bounce or elastic animation modes.</li>
+<li>Added a speed multiplier setting.</li>
+<li>Added a simple color-crossfade animation when using app icon color mode.</li>
+<li>Fixed initialization bug where the pill renders at the far left of the taskbar.</li>
+<li>Fixed an issue where the pill retains a closed app's position before animating to the currently focused app's.</li>
+</ul>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix File Conflict Dialog Checkbox Background 1.0]]></title>
         <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53e4ca975340265bc150fbbaa72fe79059af857b</id>
@@ -408,145 +426,6 @@ a mesh gradient, or an energy-flame visual.</li>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Monitor Rounded Edges 1.0]]></title>
-        <id>https://windhawk.net/mods/monitor-rounded-edges#9abd14f057189eb058eab8901042511d5cfef0d2</id>
-        <link href="https://windhawk.net/mods/monitor-rounded-edges"/>
-        <updated>2026-07-03T13:35:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="monitorroundededges">Monitor Rounded Edges</h1>
-<p>Applies smooth, anti-aliased rounded corners to all connected monitors using Direct2D.</p>
-<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Monitor%20Rounded%20Edges%201.png" alt="Monitor Rounded Edges" />
-<img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Monitor%20Rounded%20Edges%202.png" alt="Monitor Rounded Edges" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Two corner styles -- Circle (classic arc) and Squircle (smooth superellipse).</li>
-<li>Inner accent border -- optional outline with configurable thickness and alpha color (#AARRGGBB).</li>
-<li>Fullscreen awareness -- uses SHQueryUserNotificationState to reliably detect fullscreen games.</li>
-<li>Minimal CPU overhead -- a continuous polling timer (750 ms) is only active when "Hide in
-Fullscreen" is enabled. "Dynamic Inner Border" uses a brief transition timer (5 checks over
-1.5 s) after each foreground change to catch delayed fullscreen detection, then stops
-automatically. With neither feature active, only a lightweight WinEvent hook runs.</li>
-<li>Multi-monitor support -- each monitor gets its own independent set of corner overlays.</li>
-<li>Single tool process -- the rendering process is only created once; reopening Windhawk from the
-system tray does not spawn additional instances.</li>
-</ul>
-<h2 id="squirclestyle">Squircle style</h2>
-<p>The squircle uses a cubic Bezier with separate control points interpolated toward the inner arc
-center (k=0.70). This produces:</p>
-<ul>
-<li>Tangents parallel to the screen edges at both endpoints (no kink, smooth transition)</li>
-<li>Slightly more diagonal coverage than a circular arc at the same radius</li>
-<li>A softer, more organic corner appearance compared to a circle</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Description |
-|---|---|
-| Corner Radius | Rounding radius in pixels (1-500). |
-| Corner Style | circle = standard arc; squircle = smooth superellipse. |
-| Background Color | Hex fill color of the corners (#RRGGBB). |
-| Inner Border Thickness | Width of the inner accent line in pixels (0 = disabled). |
-| Inner Border Color | Hex color of the inner line, with alpha support (#AARRGGBB). |
-| Dynamic Inner Border | Hides only the inner border in fullscreen; keeps the rounding. |
-| Hide in Fullscreen | Hides everything in fullscreen apps and games. |</p>
-<h2 id="notes">Notes</h2>
-<p>The taskbar and Start menu may briefly appear above the corner overlays when they receive focus
-(e.g. opening Start, the Action Center, or right-clicking the desktop). The corners return to the
-top of the Z-order as soon as those elements lose focus.</p>
-<p>Fullscreen detection via <code>SHQueryUserNotificationState</code> is <strong>system-wide</strong>, not per-monitor: a
-fullscreen app on one monitor will affect the corners on all monitors. Additionally, <code>QUNS_BUSY</code>
-and <code>QUNS_PRESENTATION_MODE</code> can be set by non-game apps (e.g. Windows Presentation Mode or apps
-that request it), which may trigger hide/dynamic-border behavior unexpectedly.</p>
-<hr />
-<h1 id="bordasarredondadasdomonitor">Bordas Arredondadas do Monitor</h1>
-<p>Aplica cantos arredondados suaves em todos os monitores conectados via Direct2D.</p>
-<h2 id="recursos">Recursos</h2>
-<ul>
-<li>Dois estilos de canto -- Circulo (arco classico) e Squircle (superelipse suave).</li>
-<li>Borda interna de destaque -- contorno opcional com espessura e cor com alpha (#AARRGGBB).</li>
-<li>Deteccao de tela cheia -- usa SHQueryUserNotificationState para detectar jogos em fullscreen.</li>
-<li>Overhead minimo de CPU -- o timer de polling continuo (750 ms) so e ativado quando "Ocultar em
-Tela Cheia" esta ligado. "Borda Interna Dinamica" usa um timer de transicao curto (5 checks em
-1,5 s) apos cada troca de foco para capturar deteccoes atrasadas, e para automaticamente. Com
-nenhum recurso ativo, apenas o WinEvent hook leve permanece em execucao.</li>
-<li>Suporte a multiplos monitores -- cada monitor tem seu proprio conjunto independente de overlays.</li>
-<li>Processo unico -- o processo de renderizacao e criado uma unica vez; reabrir o Windhawk pela
-bandeja do sistema nao cria instancias adicionais.</li>
-</ul>
-<h2 id="estilosquircle">Estilo Squircle</h2>
-<p>O squircle usa uma curva de Bezier cubica com pontos de controle interpolados em direcao ao centro
-interno do arco (k=0,70). Isso produz:</p>
-<ul>
-<li>Tangentes paralelas as bordas da tela em ambos os extremos (sem kink, transicao suave)</li>
-<li>Cobertura diagonal ligeiramente maior do que um arco circular no mesmo raio</li>
-<li>Uma aparencia de canto mais suave e organica em comparacao ao circulo</li>
-</ul>
-<h2 id="configuracoes">Configuracoes</h2>
-<p>| Configuracao | Descricao |
-|---|---|
-| Raio do Arredondamento | Raio do arredondamento em pixels (1-500). |
-| Estilo do Canto | circle = arco padrao; squircle = superelipse suave. |
-| Cor do Fundo | Cor de preenchimento dos cantos em hex (#RRGGBB). |
-| Espessura da Linha Interna | Espessura da borda interna em pixels (0 para desativar). |
-| Cor da Linha Interna | Cor da linha interna em hex, com suporte a alpha (#AARRGGBB). |
-| Borda Interna Dinamica | Oculta apenas a borda interna em tela cheia, mantém o arredondamento. |
-| Ocultar em Tela Cheia | Oculta tudo em jogos e aplicativos em tela cheia. |</p>
-<h2 id="observacoes">Observacoes</h2>
-<p>A barra de tarefas e o menu Iniciar podem aparecer sobre as bordas arredondadas enquanto estao
-em foco (ex: ao abrir o Iniciar, a Central de Acoes ou ao clicar com o botao direito na area de
-trabalho). As bordas voltam ao topo da ordem Z assim que esses elementos perdem o foco.</p>
-<p>A deteccao de tela cheia via <code>SHQueryUserNotificationState</code> e <strong>global</strong> (nao por monitor): um
-app em fullscreen em um monitor afeta as bordas de todos os monitores. Alem disso, <code>QUNS_BUSY</code> e
-<code>QUNS_PRESENTATION_MODE</code> podem ser ativados por apps que nao sao jogos (ex: Modo de Apresentacao
-do Windows), o que pode disparar o comportamento de ocultar/borda dinamica inesperadamente.</p>
-<hr />
-<h1 id="bordesredondeadosdelmonitor">Bordes Redondeados del Monitor</h1>
-<p>Aplica esquinas redondeadas suaves en todos los monitores conectados via Direct2D.</p>
-<h2 id="caracteristicas">Caracteristicas</h2>
-<ul>
-<li>Dos estilos de esquina -- Circulo (arco clasico) y Squircle (superelipse suave).</li>
-<li>Borde interior de acento -- contorno opcional con grosor y color con alpha (#AARRGGBB).</li>
-<li>Deteccion de pantalla completa -- usa SHQueryUserNotificationState para detectar juegos en fullscreen.</li>
-<li>Overhead minimo de CPU -- el temporizador de polling continuo (750 ms) solo esta activo cuando
-"Ocultar en Pantalla Completa" esta habilitado. "Borde Interior Dinamico" usa un temporizador de
-transicion breve (5 verificaciones en 1,5 s) tras cada cambio de foco para detectar cambios
-tardios, y se detiene automaticamente. Sin ninguna funcion activa, solo el WinEvent hook ligero
-permanece en ejecucion.</li>
-<li>Soporte multi-monitor -- cada monitor tiene su propio conjunto independiente de overlays.</li>
-<li>Proceso unico -- el proceso de renderizado se crea una sola vez; reabrir Windhawk desde la
-bandeja del sistema no crea instancias adicionales.</li>
-</ul>
-<h2 id="estilosquircle-1">Estilo Squircle</h2>
-<p>El squircle usa una curva de Bezier cubica con puntos de control interpolados hacia el centro
-interno del arco (k=0,70). Esto produce:</p>
-<ul>
-<li>Tangentes paralelas a los bordes de la pantalla en ambos extremos (sin kink, transicion suave)</li>
-<li>Cobertura diagonal ligeramente mayor que un arco circular al mismo radio</li>
-<li>Una apariencia de esquina mas suave y organica comparada con el circulo</li>
-</ul>
-<h2 id="configuracion">Configuracion</h2>
-<p>| Configuracion | Descripcion |
-|---|---|
-| Radio de las Esquinas | Radio de redondeo en pixeles (1-500). |
-| Estilo de Esquina | circle = arco estandar; squircle = superelipse suave. |
-| Color de Fondo | Color de relleno de las esquinas en hex (#RRGGBB). |
-| Grosor del Borde Interior | Grosor del borde interior en pixeles (0 para desactivar). |
-| Color del Borde Interior | Color del borde interior en hex, con soporte de alpha (#AARRGGBB). |
-| Borde Interior Dinamico | Oculta solo el borde interior en pantalla completa, mantiene el redondeo. |
-| Ocultar en Pantalla Completa | Oculta todo en juegos y aplicaciones a pantalla completa. |</p>
-<h2 id="notas">Notas</h2>
-<p>La barra de tareas y el menu Inicio pueden aparecer sobre las esquinas redondeadas mientras
-reciben foco (ej: al abrir Inicio, el Centro de Notificaciones o al hacer clic derecho en el
-escritorio). Las esquinas vuelven al frente del orden Z en cuanto esos elementos pierden el foco.</p>
-<p>La deteccion de pantalla completa via <code>SHQueryUserNotificationState</code> es <strong>global</strong> (no por
-monitor): una app en pantalla completa en un monitor afecta las esquinas de todos los monitores.
-Ademas, <code>QUNS_BUSY</code> y <code>QUNS_PRESENTATION_MODE</code> pueden ser activados por apps que no son juegos
-(ej: Modo de Presentacion de Windows), lo que puede disparar el comportamiento de ocultar/borde
-dinamico de forma inesperada.</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
