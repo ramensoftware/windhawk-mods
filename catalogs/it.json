@@ -9171,7 +9171,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1775173824000,
+        "updated": 1783670354000,
         "users": 107
       },
       "metadata": {
@@ -9180,13 +9180,13 @@
         ],
         "author": "arceus413",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldbghelp -luxtheme -lcomctl32 -lshlwapi -lgdi32 -luuid",
-        "description": "Replaces the file copy dialog with a pre-Vista style progress dialog",
+        "description": "Replaces file transfer progress and confirmation dialogs with pre-Vista versions",
         "github": "https://github.com/arceuss",
         "include": [
           "explorer.exe"
         ],
-        "name": "Pre-Vista File Copy Dialog",
-        "version": "2.1.0"
+        "name": "Pre-Vista File Operation Dialogs",
+        "version": "2.2.0"
       }
     },
     "quicklaunch-3dbuttons": {

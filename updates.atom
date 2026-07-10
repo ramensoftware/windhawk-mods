@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T07:54:25.000Z</updated>
+    <updated>2026-07-10T07:59:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Pre-Vista File Operation Dialogs 2.2.0]]></title>
+        <id>https://windhawk.net/mods/prevista-file-copy#4d18ef42fa0065944ef110f214dfa8782fcb9571</id>
+        <link href="https://windhawk.net/mods/prevista-file-copy"/>
+        <updated>2026-07-10T07:59:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed copying single files using the same name for source and destination (This should only be for folders)</li>
+<li>Added classic delete and replace/overwrite confirmation dialogs (file, folder,
+multiple, permanent delete, and the shortcut/program delete warnings)</li>
+<li>Added settings to toggle classic confirmations and the shortcut/program
+delete dialogs</li>
+</ul>]]></content>
+        <author>
+            <name>arceus413</name>
+            <uri>https://github.com/arceuss</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Net-Toggle 2.1.1]]></title>
         <id>https://windhawk.net/mods/net-toggle#63faedb153a6b090cd1fe59bf31bb86a734766f7</id>
@@ -546,22 +563,6 @@ dinamico de forma inesperada.</p>]]></content>
         <author>
             <name>Asteski</name>
             <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 2.1.1]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#51bb09f1a2f997764267bc016299b00c3bda12cc</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-02T19:17:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Follow-up to #4659 (merged while this final commit was being pushed) - two user-visible timing fixes, found by testing under CPU throttling (battery saver), where both artifacts become clearly visible:</p>
-<ul>
-<li><strong>Restores are hidden via <code>DWMWA_CLOAK</code> instead of <code>WS_EX_LAYERED</code> + alpha 0.</strong> Freshly adding the layered style makes DWM rebuild the window's redirection surface, and until that lands the bare window frame is composed for a few frames - a flash on every restore (previously masked by the very style leak #4659 fixed, since windows stayed layered forever). A cloaked window is not rendered at all (frame included), has no rebuild lag, and the restore path no longer touches window styles - structurally removing the layered-leak class there. The launch path keeps the layered mechanism (cloaking would collide with its wait-for-uncloak handling for Store apps), with the true pre-hide style threaded through as per #4659.</li>
-<li><strong>The real minimize is gated on the genie's first frame being composed.</strong> Previously the hook let the actual minimize run while the animation thread was still starting up, so the window vanished a few frames before the ghost appeared - a background flash in the gap. The hook now waits (capped at 200 ms; duplicated event handles so neither thread can touch a freed handle) until the animation thread has composed its first frame via <code>DwmFlush</code>, then performs the minimize invisibly underneath the ghost. Applies to every minimize entry point; on timeout the behavior is simply the previous one.</li>
-</ul>
-<p>Verified on a throttled machine: no frame flash on restore, no gap flash on minimize, and the rollback/unload guarantees from #4659 are preserved (all bail paths route through a single undo helper that matches the reveal to the hide).</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
