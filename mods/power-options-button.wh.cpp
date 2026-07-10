@@ -2,12 +2,12 @@
 // @id              power-options-button
 // @name            Power Options Button
 // @description     Tray icon to switch between Windows power plans with the mouse wheel.
-// @version         1.0.0
+// @version         1.0.13
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lshell32 -lgdi32 -lpowrprof
+// @compilerOptions -luser32 -lshell32 -lgdi32 -lpowrprof -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -91,10 +91,14 @@ Adds a tray icon for switching between Windows power plans.
 #define HIDDEN_WINDOW_CLASS L"PowerOptionsButtonHiddenWindow"
 
 #define TIMER_TRAY_RECT_REFRESH 4001
+#define TIMER_POST_START_ICON_SYNC 4002
+#define TIMER_ACTIVE_POWER_PLAN_REFRESH 4003
+#define ACTIVE_POWER_PLAN_REFRESH_INTERVAL_MS 2000
 #define TRAY_RECT_REFRESH_INTERVAL_MS 500
 #define TRAY_RECT_REFRESH_MAX_ATTEMPTS 20
-#define TIMER_POST_START_ICON_SYNC 4002
 #define POST_START_ICON_SYNC_DELAY_MS 1000
+#define WM_APP_POWERCFG_FALLBACK_DONE  (WM_APP + 3)
+#define WM_APP_CREATE_ULTIMATE_DONE    (WM_APP + 4)
 
 static HWND g_hwnd = nullptr;
 static HICON g_hIcon = nullptr;
@@ -104,14 +108,11 @@ static UINT g_taskbarCreatedMessage = 0;
 static HHOOK g_mouseHook = nullptr;
 static RECT g_trayIconRect = {};
 static DWORD g_lastScrollTime = 0;
-static DWORD g_mouseHookInstalledAt = 0;
-static DWORD g_lastMouseHookRefresh = 0;
 static bool g_mouseHookRefreshedAfterFirstHover = false;
-#define DEBUG_MOUSE_WHEEL 0
 
-static DWORD g_lastWheelDebugLog = 0;
-static DWORD g_lastTrayMouseMoveLog = 0;
 static DWORD g_lastTrayMouseMoveTime = 0;
+static GUID g_lastSeenPowerSchemeGuid = {};
+static bool g_hasLastSeenPowerSchemeGuid = false;
 
 static HANDLE g_uiThread = nullptr;
 static DWORD g_uiThreadId = 0;
@@ -180,8 +181,24 @@ static bool g_ultimateAvailable = false;
 static GUID g_ultimateRuntimeGuid =
     {0xe9a42b02, 0xd5df, 0x448d, {0xaa, 0x00, 0x03, 0xf1, 0x47, 0x49, 0xeb, 0x61}};
 static WCHAR g_ultimateRuntimeName[128] = L"Ultimate Performance";
-
+static WCHAR g_customPowerPlanName[128] = L"Unknown/custom power plan";
 static int g_trayRectRefreshAttempts = 0;
+
+static bool g_powercfgFallbackRunning = false;
+static bool g_createUltimateRunning = false;
+
+#define MAX_POWER_SCHEME_SNAPSHOT 128
+
+struct PowerSchemeSnapshot {
+    GUID guids[MAX_POWER_SCHEME_SNAPSHOT];
+    int count;
+};
+
+struct CreateUltimateResult {
+    bool success;
+    bool hasNewGuid;
+    GUID newGuid;
+};
 
 // ------------------------------------------------------------
 // Helpers
@@ -189,6 +206,136 @@ static int g_trayRectRefreshAttempts = 0;
 
 bool GuidEquals(const GUID& a, const GUID& b) {
     return IsEqualGUID(a, b) != FALSE;
+}
+
+bool IsValidPlanIndex(int index) {
+    return index >= 0 && index < g_planCount;
+}
+
+PCWSTR GetPlanDisplayName(int index) {
+    if (IsValidPlanIndex(index)) {
+        return g_plans[index].name;
+    }
+
+    return g_customPowerPlanName;
+}
+
+bool GetActivePowerSchemeGuid(GUID* guid) {
+    if (!guid) {
+        return false;
+    }
+
+    GUID* activeGuid = nullptr;
+
+    DWORD result = PowerGetActiveScheme(nullptr, &activeGuid);
+    if (result != ERROR_SUCCESS || !activeGuid) {
+        Wh_Log(L"PowerGetActiveScheme failed. Error: %u", result);
+        return false;
+    }
+
+    *guid = *activeGuid;
+    LocalFree(activeGuid);
+
+    return true;
+}
+
+void RememberActivePowerSchemeGuid() {
+    GUID activeGuid = {};
+
+    if (GetActivePowerSchemeGuid(&activeGuid)) {
+        g_lastSeenPowerSchemeGuid = activeGuid;
+        g_hasLastSeenPowerSchemeGuid = true;
+    }
+}
+
+void CapturePowerSchemeSnapshot(PowerSchemeSnapshot* snapshot) {
+    if (!snapshot) {
+        return;
+    }
+
+    snapshot->count = 0;
+
+    for (ULONG index = 0;; index++) {
+        GUID schemeGuid = {};
+        DWORD size = sizeof(schemeGuid);
+
+        DWORD result = PowerEnumerate(
+            nullptr,
+            nullptr,
+            nullptr,
+            ACCESS_SCHEME,
+            index,
+            reinterpret_cast<UCHAR*>(&schemeGuid),
+            &size
+        );
+
+        if (result == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+
+        if (result != ERROR_SUCCESS) {
+            Wh_Log(L"PowerEnumerate failed while capturing scheme snapshot. Error: %u", result);
+            break;
+        }
+
+        if (snapshot->count >= MAX_POWER_SCHEME_SNAPSHOT) {
+            Wh_Log(L"Power scheme snapshot limit reached.");
+            break;
+        }
+
+        snapshot->guids[snapshot->count++] = schemeGuid;
+    }
+}
+
+bool IsGuidInSnapshot(const PowerSchemeSnapshot* snapshot, const GUID& guid) {
+    if (!snapshot) {
+        return false;
+    }
+
+    for (int i = 0; i < snapshot->count; i++) {
+        if (GuidEquals(snapshot->guids[i], guid)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool FindNewPowerSchemeAfterSnapshot(const PowerSchemeSnapshot* before, GUID* newGuid) {
+    if (!before || !newGuid) {
+        return false;
+    }
+
+    for (ULONG index = 0;; index++) {
+        GUID schemeGuid = {};
+        DWORD size = sizeof(schemeGuid);
+
+        DWORD result = PowerEnumerate(
+            nullptr,
+            nullptr,
+            nullptr,
+            ACCESS_SCHEME,
+            index,
+            reinterpret_cast<UCHAR*>(&schemeGuid),
+            &size
+        );
+
+        if (result == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+
+        if (result != ERROR_SUCCESS) {
+            Wh_Log(L"PowerEnumerate failed while searching for new scheme. Error: %u", result);
+            break;
+        }
+
+        if (!IsGuidInSnapshot(before, schemeGuid)) {
+            *newGuid = schemeGuid;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ContainsTextInsensitive(PCWSTR text, PCWSTR search) {
@@ -226,6 +373,54 @@ void GuidToStringNoBraces(const GUID& guid, WCHAR* buffer, size_t bufferCount) {
     );
 }
 
+bool IsRunningUnderWow64() {
+    BOOL isWow64 = FALSE;
+
+    if (!IsWow64Process(GetCurrentProcess(), &isWow64)) {
+        return false;
+    }
+
+    return isWow64 != FALSE;
+}
+
+bool BuildSystemExecutablePath(PCWSTR exeName, WCHAR* buffer, size_t bufferCount) {
+    if (!exeName || !buffer || bufferCount == 0) {
+        return false;
+    }
+
+    buffer[0] = L'\0';
+
+    WCHAR systemPath[MAX_PATH] = {};
+
+    if (IsRunningUnderWow64()) {
+        UINT len = GetWindowsDirectoryW(systemPath, ARRAYSIZE(systemPath));
+        if (len == 0 || len >= ARRAYSIZE(systemPath)) {
+            return false;
+        }
+
+        return SUCCEEDED(StringCchPrintfW(
+            buffer,
+            bufferCount,
+            L"%s\\Sysnative\\%s",
+            systemPath,
+            exeName
+        ));
+    }
+
+    UINT len = GetSystemDirectoryW(systemPath, ARRAYSIZE(systemPath));
+    if (len == 0 || len >= ARRAYSIZE(systemPath)) {
+        return false;
+    }
+
+    return SUCCEEDED(StringCchPrintfW(
+        buffer,
+        bufferCount,
+        L"%s\\%s",
+        systemPath,
+        exeName
+    ));
+}
+
 bool ReadPowerSchemeFriendlyName(const GUID& guid, WCHAR* name, DWORD nameCount) {
     if (!name || nameCount == 0) {
         return false;
@@ -245,6 +440,154 @@ bool ReadPowerSchemeFriendlyName(const GUID& guid, WCHAR* name, DWORD nameCount)
     );
 
     return result == ERROR_SUCCESS && name[0];
+}
+
+bool ReadPowerSchemeFriendlyNameFromRegistry(
+    const GUID& guid,
+    WCHAR* name,
+    DWORD nameCount
+) {
+    if (!name || nameCount == 0) {
+        return false;
+    }
+
+    name[0] = L'\0';
+
+    WCHAR guidText[64] = {};
+    GuidToStringNoBraces(guid, guidText, ARRAYSIZE(guidText));
+
+    WCHAR keyPath[256] = {};
+    HRESULT hr = StringCchPrintfW(
+        keyPath,
+        ARRAYSIZE(keyPath),
+        L"SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\%s",
+        guidText
+    );
+
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    DWORD type = 0;
+    DWORD sizeBytes = 0;
+
+    LONG result = RegGetValueW(
+        HKEY_LOCAL_MACHINE,
+        keyPath,
+        L"FriendlyName",
+        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_SUBKEY_WOW6464KEY,
+        &type,
+        nullptr,
+        &sizeBytes
+    );
+
+    if (result != ERROR_SUCCESS) {
+        sizeBytes = 0;
+
+        result = RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            keyPath,
+            L"FriendlyName",
+            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+            &type,
+            nullptr,
+            &sizeBytes
+        );
+    }
+
+    if (result != ERROR_SUCCESS || sizeBytes == 0) {
+        Wh_Log(
+            L"Failed to query custom power plan name size from registry. GUID: %s, Error: %ld",
+            guidText,
+            result
+        );
+        return false;
+    }
+
+    WCHAR* buffer = static_cast<WCHAR*>(
+        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeBytes + sizeof(WCHAR))
+    );
+
+    if (!buffer) {
+        Wh_Log(L"Failed to allocate buffer for custom power plan name.");
+        return false;
+    }
+
+    DWORD readSizeBytes = sizeBytes;
+
+    result = RegGetValueW(
+        HKEY_LOCAL_MACHINE,
+        keyPath,
+        L"FriendlyName",
+        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_SUBKEY_WOW6464KEY,
+        &type,
+        buffer,
+        &readSizeBytes
+    );
+
+    if (result != ERROR_SUCCESS) {
+        readSizeBytes = sizeBytes;
+
+        result = RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            keyPath,
+            L"FriendlyName",
+            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+            &type,
+            buffer,
+            &readSizeBytes
+        );
+    }
+
+    if (result != ERROR_SUCCESS || !buffer[0]) {
+        Wh_Log(
+            L"Failed to read custom power plan name from registry. GUID: %s, Error: %ld, RequiredSize: %lu",
+            guidText,
+            result,
+            sizeBytes
+        );
+
+        HeapFree(GetProcessHeap(), 0, buffer);
+        return false;
+    }
+
+    StringCchCopyW(name, nameCount, buffer);
+
+    Wh_Log(
+        L"Custom power plan name read from registry. GUID: %s, Name: %s",
+        guidText,
+        name
+    );
+
+    HeapFree(GetProcessHeap(), 0, buffer);
+    return true;
+}
+
+void UpdateCustomPowerPlanNameFromGuid(const GUID& guid) {
+    WCHAR friendlyName[128] = {};
+
+    if ((ReadPowerSchemeFriendlyName(
+             guid,
+             friendlyName,
+             ARRAYSIZE(friendlyName)) &&
+         friendlyName[0]) ||
+        (ReadPowerSchemeFriendlyNameFromRegistry(
+             guid,
+             friendlyName,
+             ARRAYSIZE(friendlyName)) &&
+         friendlyName[0])) {
+        StringCchCopyW(
+            g_customPowerPlanName,
+            ARRAYSIZE(g_customPowerPlanName),
+            friendlyName
+        );
+    } else {
+        StringCchCopyW(
+            g_customPowerPlanName,
+            ARRAYSIZE(g_customPowerPlanName),
+            L"Unknown/custom power plan"
+        );
+    }
 }
 
 bool IsEnumeratedPowerSchemePresent(const GUID& wantedGuid) {
@@ -364,7 +707,7 @@ bool IsPowerPlanAvailable(const GUID& guid) {
     return IsEnumeratedPowerSchemePresent(g_plans[index].guid);
 }
 
-bool SetPowerPlanWithPowercfg(int index) {
+bool SetPowerPlanWithPowercfgWorker(int index) {
     if (index < 0 || index >= g_planCount) {
         return false;
     }
@@ -373,12 +716,18 @@ bool SetPowerPlanWithPowercfg(int index) {
 
     WCHAR guidText[64] = {};
     GuidToStringNoBraces(runtimeGuid, guidText, ARRAYSIZE(guidText));
+    WCHAR powercfgPath[MAX_PATH] = {};
+    if (!BuildSystemExecutablePath(L"powercfg.exe", powercfgPath, ARRAYSIZE(powercfgPath))) {
+        Wh_Log(L"Failed to build full path for powercfg.exe.");
+        return false;
+    }
 
     WCHAR cmdLine[512] = {};
     StringCchPrintfW(
         cmdLine,
         ARRAYSIZE(cmdLine),
-        L"powercfg.exe /setactive %s",
+        L"\"%s\" /setactive %s",
+        powercfgPath,
         guidText
     );
 
@@ -390,7 +739,7 @@ bool SetPowerPlanWithPowercfg(int index) {
     PROCESS_INFORMATION pi = {};
 
     BOOL created = CreateProcessW(
-        nullptr,
+        powercfgPath,
         cmdLine,
         nullptr,
         nullptr,
@@ -436,6 +785,48 @@ bool SetPowerPlanWithPowercfg(int index) {
     return false;
 }
 
+DWORD WINAPI PowercfgFallbackThreadProc(LPVOID param) {
+    int index = static_cast<int>(reinterpret_cast<INT_PTR>(param));
+
+    bool success = SetPowerPlanWithPowercfgWorker(index);
+
+    PostMessageW(
+        g_hwnd,
+        WM_APP_POWERCFG_FALLBACK_DONE,
+        success ? TRUE : FALSE,
+        index
+    );
+
+    return 0;
+}
+
+bool StartPowercfgFallbackWorker(int index) {
+    if (g_powercfgFallbackRunning) {
+        Wh_Log(L"powercfg fallback already running.");
+        return false;
+    }
+
+    g_powercfgFallbackRunning = true;
+
+    HANDLE thread = CreateThread(
+        nullptr,
+        0,
+        PowercfgFallbackThreadProc,
+        reinterpret_cast<LPVOID>(static_cast<INT_PTR>(index)),
+        0,
+        nullptr
+    );
+
+    if (!thread) {
+        g_powercfgFallbackRunning = false;
+        Wh_Log(L"Failed to start powercfg fallback worker. Error: %u", GetLastError());
+        return false;
+    }
+
+    CloseHandle(thread);
+    return true;
+}
+
 int FindPlanIndexByGuid(const GUID& guid) {
     for (int i = 0; i < g_planCount; i++) {
         if (GuidEquals(guid, g_plans[i].guid)) {
@@ -461,12 +852,20 @@ int GetCurrentPowerPlanIndex() {
 
     int index = FindPlanIndexByGuid(*activeGuid);
 
-    LocalFree(activeGuid);
-
     if (index < 0) {
-        Wh_Log(L"Active power plan is not one of the configured plans.");
-        return g_currentPlanIndex;
+        UpdateCustomPowerPlanNameFromGuid(*activeGuid);
+
+        LocalFree(activeGuid);
+
+        Wh_Log(
+            L"Active power plan is not one of the configured plans. Name: %s",
+            g_customPowerPlanName
+        );
+
+        return -1;
     }
+
+    LocalFree(activeGuid);
 
     return index;
 }
@@ -494,6 +893,8 @@ bool SetPowerPlanByIndex(int index) {
 
     if (result == ERROR_SUCCESS) {
         g_currentPlanIndex = index;
+        g_lastSeenPowerSchemeGuid = runtimeGuid;
+        g_hasLastSeenPowerSchemeGuid = true;
 
         Wh_Log(L"Active power plan changed to: %s", g_plans[index].name);
 
@@ -506,22 +907,34 @@ bool SetPowerPlanByIndex(int index) {
         result
     );
 
-    if (SetPowerPlanWithPowercfg(index)) {
-        g_currentPlanIndex = GetCurrentPowerPlanIndex();
-        return true;
-    }
+        StartPowercfgFallbackWorker(index);
+        return false;
 
     return false;
 }
 
-bool CreateUltimatePerformancePlan() {
+bool CreateUltimatePerformancePlanWorker(
+    const PowerSchemeSnapshot* before,
+    GUID* newGuid,
+    bool* hasNewGuid
+) {
+    if (hasNewGuid) {
+        *hasNewGuid = false;
+    }
+
     Wh_Log(L"Creating Ultimate Performance power scheme via powercfg -duplicatescheme...");
+
+    WCHAR powercfgPath[MAX_PATH] = {};
+    if (!BuildSystemExecutablePath(L"powercfg.exe", powercfgPath, ARRAYSIZE(powercfgPath))) {
+        Wh_Log(L"Failed to build full path for powercfg.exe.");
+        return false;
+    }
 
     SHELLEXECUTEINFOW sei = {};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS;
     sei.lpVerb = L"runas";
-    sei.lpFile = L"powercfg.exe";
+    sei.lpFile = powercfgPath;
     sei.lpParameters = L"-duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61";
     sei.nShow = SW_HIDE;
 
@@ -552,15 +965,76 @@ bool CreateUltimatePerformancePlan() {
 
     Sleep(500);
 
-    RefreshUltimatePerformanceAvailability();
+    if (before && newGuid && hasNewGuid &&
+        FindNewPowerSchemeAfterSnapshot(before, newGuid)) {
+        *hasNewGuid = true;
 
-    if (g_ultimateAvailable) {
-        Wh_Log(L"Ultimate Performance was created and detected successfully.");
-        return true;
+        WCHAR guidText[64] = {};
+        GuidToStringNoBraces(*newGuid, guidText, ARRAYSIZE(guidText));
+
+        Wh_Log(L"New Ultimate Performance scheme detected by GUID: %s", guidText);
+    } else {
+        Wh_Log(L"Ultimate Performance creation command finished, but no new GUID was detected.");
     }
 
-    Wh_Log(L"Ultimate Performance creation finished, but the plan was not detected.");
-    return false;
+    return true;
+}
+
+DWORD WINAPI CreateUltimateThreadProc(LPVOID param) {
+    PowerSchemeSnapshot* before = reinterpret_cast<PowerSchemeSnapshot*>(param);
+
+    CreateUltimateResult* result = new CreateUltimateResult{};
+    result->success = false;
+    result->hasNewGuid = false;
+    result->newGuid = {};
+
+    result->success = CreateUltimatePerformancePlanWorker(
+        before,
+        &result->newGuid,
+        &result->hasNewGuid
+    );
+
+    delete before;
+
+    if (!PostMessageW(
+            g_hwnd,
+            WM_APP_CREATE_ULTIMATE_DONE,
+            0,
+            reinterpret_cast<LPARAM>(result))) {
+        delete result;
+    }
+
+    return 0;
+}
+
+bool StartCreateUltimateWorker() {
+    if (g_createUltimateRunning) {
+        Wh_Log(L"Create Ultimate Performance worker already running.");
+        return false;
+    }
+
+    g_createUltimateRunning = true;
+    PowerSchemeSnapshot* before = new PowerSchemeSnapshot{};
+    CapturePowerSchemeSnapshot(before);
+
+    HANDLE thread = CreateThread(
+        nullptr,
+        0,
+        CreateUltimateThreadProc,
+        before,
+        0,
+        nullptr
+    );
+
+    if (!thread) {
+        delete before;
+        g_createUltimateRunning = false;
+        Wh_Log(L"Failed to start Create Ultimate Performance worker. Error: %u", GetLastError());
+        return false;
+    }
+
+    CloseHandle(thread);
+    return true;
 }
 
 void OpenWindhawk() {
@@ -580,10 +1054,17 @@ void OpenWindhawk() {
 }
 
 void OpenClassicPowerOptions() {
+    WCHAR controlPath[MAX_PATH] = {};
+
+    if (!BuildSystemExecutablePath(L"control.exe", controlPath, ARRAYSIZE(controlPath))) {
+        Wh_Log(L"Failed to build full path for control.exe.");
+        return;
+    }
+
     ShellExecuteW(
         nullptr,
         L"open",
-        L"control.exe",
+        controlPath,
         L"powercfg.cpl",
         nullptr,
         SW_SHOWNORMAL
@@ -605,15 +1086,29 @@ void OpenModernPowerSettings() {
 // Tray icon drawing
 // ------------------------------------------------------------
 
+HICON CreateFallbackTrayIcon() {
+    HICON sharedIcon = LoadIconW(nullptr, IDI_APPLICATION);
+
+    if (!sharedIcon) {
+        return nullptr;
+    }
+
+    // LoadIconW with IDI_APPLICATION returns a shared icon.
+    // Copy it so the returned HICON is owned by this mod and can be safely
+    // destroyed with DestroyIcon later.
+    return CopyIcon(sharedIcon);
+}
+
 HICON CreatePowerTrayIcon(int planIndex) {
     const int size = 32;
 
-    if (planIndex < 0 || planIndex >= g_planCount) {
-        planIndex = 1;
-    }
+    COLORREF color = RGB(160, 160, 160);
+    const WCHAR* text = L"?";
 
-    COLORREF color = g_plans[planIndex].color;
-    const WCHAR* text = g_plans[planIndex].shortName;
+    if (IsValidPlanIndex(planIndex)) {
+        color = g_plans[planIndex].color;
+        text = g_plans[planIndex].shortName;
+    }
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -637,7 +1132,7 @@ HICON CreatePowerTrayIcon(int planIndex) {
     ReleaseDC(nullptr, hdc);
 
     if (!hbmColor || !pixels) {
-        return LoadIconW(nullptr, IDI_APPLICATION);
+        return CreateFallbackTrayIcon();
     }
 
     for (int i = 0; i < size * size; i++) {
@@ -647,7 +1142,7 @@ HICON CreatePowerTrayIcon(int planIndex) {
     HDC iconHdc = CreateCompatibleDC(nullptr);
     if (!iconHdc) {
         DeleteObject(hbmColor);
-        return LoadIconW(nullptr, IDI_APPLICATION);
+        return CreateFallbackTrayIcon();
     }
 
     HBITMAP oldBitmap = (HBITMAP)SelectObject(iconHdc, hbmColor);
@@ -725,7 +1220,7 @@ HICON CreatePowerTrayIcon(int planIndex) {
     HBITMAP hbmMask = CreateBitmap(size, size, 1, 1, nullptr);
     if (!hbmMask) {
         DeleteObject(hbmColor);
-        return LoadIconW(nullptr, IDI_APPLICATION);
+        return CreateFallbackTrayIcon();
     }
 
     ICONINFO iconInfo = {};
@@ -739,7 +1234,7 @@ HICON CreatePowerTrayIcon(int planIndex) {
     DeleteObject(hbmMask);
 
     if (!hIcon) {
-        return LoadIconW(nullptr, IDI_APPLICATION);
+        return CreateFallbackTrayIcon();
     }
 
     return hIcon;
@@ -789,14 +1284,12 @@ void UpdateTrayTooltip() {
         return;
     }
 
-    g_currentPlanIndex = GetCurrentPowerPlanIndex();
-
     WCHAR tip[128] = {};
     StringCchPrintfW(
         tip,
         ARRAYSIZE(tip),
         L"Power Options Button\nActive: %s\nMouse wheel: switch\nRight-click: menu",
-        g_plans[g_currentPlanIndex].name
+        GetPlanDisplayName(g_currentPlanIndex)
     );
 
     StringCchCopyW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), tip);
@@ -805,12 +1298,15 @@ void UpdateTrayTooltip() {
     Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
-void UpdateTrayIcon() {
+void UpdateTrayIcon(bool refreshCurrentPlan = true) {
     if (!g_hwnd) {
         return;
     }
 
-    g_currentPlanIndex = GetCurrentPowerPlanIndex();
+    if (refreshCurrentPlan) {
+        g_currentPlanIndex = GetCurrentPowerPlanIndex();
+        RememberActivePowerSchemeGuid();
+    }
 
     HICON newIcon = CreatePowerTrayIcon(g_currentPlanIndex);
     if (!newIcon) {
@@ -832,6 +1328,46 @@ void UpdateTrayIcon() {
     }
 }
 
+void RefreshActivePowerPlanStatusIfChanged() {
+    GUID activeGuid = {};
+
+    if (!GetActivePowerSchemeGuid(&activeGuid)) {
+        return;
+    }
+
+    if (g_hasLastSeenPowerSchemeGuid &&
+        GuidEquals(activeGuid, g_lastSeenPowerSchemeGuid)) {
+        return;
+    }
+
+    g_lastSeenPowerSchemeGuid = activeGuid;
+    g_hasLastSeenPowerSchemeGuid = true;
+
+    int newIndex = FindPlanIndexByGuid(activeGuid);
+
+    if (newIndex == g_currentPlanIndex) {
+        return;
+    }
+
+    g_currentPlanIndex = newIndex;
+
+    if (IsValidPlanIndex(g_currentPlanIndex)) {
+        Wh_Log(
+            L"Active power plan changed externally to: %s",
+            g_plans[g_currentPlanIndex].name
+        );
+    } else {
+        UpdateCustomPowerPlanNameFromGuid(activeGuid);
+
+        Wh_Log(
+            L"Active power plan changed externally to custom power plan: %s",
+            g_customPowerPlanName
+        );
+    }
+
+    UpdateTrayIcon(false);
+}
+
 bool AddTrayIcon() {
     if (!g_hwnd) {
         return false;
@@ -841,6 +1377,11 @@ bool AddTrayIcon() {
 
     if (!g_hIcon) {
         g_hIcon = CreatePowerTrayIcon(g_currentPlanIndex);
+    }
+
+    if (!g_hIcon) {
+        Wh_Log(L"Failed to create tray icon.");
+        return false;
     }
 
     ZeroMemory(&g_nid, sizeof(g_nid));
@@ -856,7 +1397,7 @@ bool AddTrayIcon() {
         g_nid.szTip,
         ARRAYSIZE(g_nid.szTip),
         L"Power Options Button\nActive: %s\nMouse wheel: switch\nRight-click: menu",
-        g_plans[g_currentPlanIndex].name
+        GetPlanDisplayName(g_currentPlanIndex)
     );
 
     BOOL result = Shell_NotifyIconW(NIM_ADD, &g_nid);
@@ -882,6 +1423,18 @@ bool AddTrayIcon() {
         );
 
         Wh_Log(L"Post-start tray icon sync timer started.");
+
+        RememberActivePowerSchemeGuid();
+
+        SetTimer(
+            g_hwnd,
+            TIMER_ACTIVE_POWER_PLAN_REFRESH,
+            ACTIVE_POWER_PLAN_REFRESH_INTERVAL_MS,
+            nullptr
+        );
+
+        Wh_Log(L"Active power plan refresh timer started.");
+
     } else {
         Wh_Log(L"Failed to add tray icon. Error: %u", GetLastError());
     }
@@ -914,10 +1467,9 @@ void RemoveTrayIcon() {
 // ------------------------------------------------------------
 
 bool IsPointNearTrayIcon(POINT pt) {
-    // The tray can be rearranged after Windows/Explorer startup.
-    // Always refresh the icon rect before testing mouse wheel position.
-    RefreshTrayIconRect();
-
+    // Use the cached tray rect in the low-level mouse hook.
+    // The rect is refreshed by the startup timer, tray WM_MOUSEMOVE,
+    // UpdateTrayIcon, and Explorer/taskbar recovery handling.
     RECT rect = g_trayIconRect;
 
     if (IsRectEmpty(&rect)) {
@@ -940,56 +1492,17 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         DWORD now = GetTickCount();
 
-        RECT rectBefore = g_trayIconRect;
-
         BOOL inside = IsPointNearTrayIcon(ms->pt);
 
-        RECT rectAfter = g_trayIconRect;
-
-        bool acceptedByMouseMoveFallback = false;
-
         // Fallback:
-        // If the tray icon sent WM_MOUSEMOVE recently, we know the cursor was
-        // over our tray icon even if Shell_NotifyIconGetRect is stale/wrong.
+        // If the tray icon sent WM_MOUSEMOVE recently and the tray rect is not
+        // available yet, treat the wheel event as belonging to this tray icon.
         if (!inside &&
-            IsRectEmpty(&rectAfter) &&
+            IsRectEmpty(&g_trayIconRect) &&
             g_lastTrayMouseMoveTime != 0 &&
             now - g_lastTrayMouseMoveTime < 500) {
             inside = TRUE;
-            acceptedByMouseMoveFallback = true;
         }
-
-#if DEBUG_MOUSE_WHEEL
-        if (inside || now - g_lastWheelDebugLog > 250) {
-            g_lastWheelDebugLog = now;
-
-            Wh_Log(
-                L"MouseWheel hook: pt=(%ld,%ld), delta=%d, direction=%d, "
-                L"inside=%d, fallback=%d, hwnd=0x%p, "
-                L"rectBefore empty=%d [%ld,%ld,%ld,%ld], "
-                L"rectAfter empty=%d [%ld,%ld,%ld,%ld], "
-                L"lastTrayMouseMoveAge=%lu",
-                ms->pt.x,
-                ms->pt.y,
-                delta,
-                direction,
-                inside,
-                acceptedByMouseMoveFallback,
-                g_hwnd,
-                IsRectEmpty(&rectBefore),
-                rectBefore.left,
-                rectBefore.top,
-                rectBefore.right,
-                rectBefore.bottom,
-                IsRectEmpty(&rectAfter),
-                rectAfter.left,
-                rectAfter.top,
-                rectAfter.right,
-                rectAfter.bottom,
-                g_lastTrayMouseMoveTime ? now - g_lastTrayMouseMoveTime : 999999
-            );
-        }
-#endif
 
         if (inside && g_hwnd) {
             PostMessageW(
@@ -1023,8 +1536,6 @@ bool InstallMouseWheelHook() {
         return false;
     }
 
-    g_mouseHookInstalledAt = GetTickCount();
-
     Wh_Log(
         L"Mouse wheel hook installed. HHOOK=0x%p, thread=%lu, hwnd=0x%p",
         g_mouseHook,
@@ -1044,21 +1555,6 @@ void UninstallMouseWheelHook() {
 }
 
 bool RefreshMouseWheelHook(PCWSTR reason) {
-    DWORD now = GetTickCount();
-
-    // Avoid repeated hook reinstall spam.
-    if (g_lastMouseHookRefresh && now - g_lastMouseHookRefresh < 1000) {
-        Wh_Log(
-            L"Mouse wheel hook refresh skipped. Reason: %s, last refresh age=%lu ms",
-            reason,
-            now - g_lastMouseHookRefresh
-        );
-
-        return g_mouseHook != nullptr;
-    }
-
-    g_lastMouseHookRefresh = now;
-
     Wh_Log(
         L"Refreshing mouse wheel hook. Reason: %s, old HHOOK=0x%p",
         reason,
@@ -1131,17 +1627,11 @@ void ShowContextMenu() {
             flags |= MF_CHECKED;
         }
 
-        PCWSTR menuText = g_plans[i].name;
-
-        if (i == 3) {
-            menuText = L"Ultimate Performance";
-        }
-
         AppendMenuW(
             menu,
             flags,
             g_plans[i].menuId,
-            menuText
+            g_plans[i].name
         );
     }
 
@@ -1187,6 +1677,67 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
     }
 
     switch (msg) {
+    case WM_APP_CREATE_ULTIMATE_DONE: {
+        g_createUltimateRunning = false;
+
+        CreateUltimateResult* result =
+            reinterpret_cast<CreateUltimateResult*>(lParam);
+
+        bool success = false;
+
+        if (result) {
+            success = result->success;
+
+            if (result->success && result->hasNewGuid) {
+                g_ultimateAvailable = true;
+                g_ultimateRuntimeGuid = result->newGuid;
+
+                WCHAR friendlyName[128] = {};
+                if (ReadPowerSchemeFriendlyName(
+                        g_ultimateRuntimeGuid,
+                        friendlyName,
+                        ARRAYSIZE(friendlyName)) &&
+                    friendlyName[0]) {
+                    StringCchCopyW(
+                        g_ultimateRuntimeName,
+                        ARRAYSIZE(g_ultimateRuntimeName),
+                        friendlyName
+                    );
+                } else {
+                    StringCchCopyW(
+                        g_ultimateRuntimeName,
+                        ARRAYSIZE(g_ultimateRuntimeName),
+                        L"Ultimate Performance"
+                    );
+                }
+
+                WCHAR guidText[64] = {};
+                GuidToStringNoBraces(g_ultimateRuntimeGuid, guidText, ARRAYSIZE(guidText));
+
+                Wh_Log(
+                    L"Create Ultimate Performance worker captured new GUID. Name: %s, GUID: %s",
+                    g_ultimateRuntimeName,
+                    guidText
+                );
+            } else {
+                RefreshUltimatePerformanceAvailability();
+            }
+
+            delete result;
+        } else {
+            RefreshUltimatePerformanceAvailability();
+        }
+
+        UpdateTrayIcon();
+
+        Wh_Log(
+            L"Create Ultimate Performance worker completed. Success=%d",
+            success
+        );
+
+        return 0;
+    }
+
     case WM_TIMER:
         if (wParam == TIMER_TRAY_RECT_REFRESH) {
             RefreshTrayIconRect();
@@ -1226,14 +1777,43 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
                 UpdateTrayIcon();
                 RefreshTrayIconRect();
-                RefreshMouseWheelHook(L"post-start tray icon sync");
 
                 Wh_Log(L"Post-start tray icon sync completed.");
 
                 return 0;
             }
 
+            if (wParam == TIMER_ACTIVE_POWER_PLAN_REFRESH) {
+                RefreshActivePowerPlanStatusIfChanged();
+                return 0;
+            }
+
         break;
+
+    case WM_APP_POWERCFG_FALLBACK_DONE: {
+        g_powercfgFallbackRunning = false;
+
+        bool success = wParam != FALSE;
+        int index = static_cast<int>(lParam);
+        PCWSTR planName = IsValidPlanIndex(index) ? g_plans[index].name : L"(unknown)";
+
+        if (success) {
+            g_currentPlanIndex = GetCurrentPowerPlanIndex();
+            UpdateTrayIcon();
+
+            Wh_Log(
+                L"powercfg fallback worker completed successfully for: %s",
+                planName
+            );
+        } else {
+            Wh_Log(
+                L"powercfg fallback worker failed for: %s",
+                planName
+            );
+        }
+
+        return 0;
+    }
 
     case WM_CREATE:
         g_hwnd = hwnd;
@@ -1243,6 +1823,7 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
     case WM_DESTROY:
         KillTimer(hwnd, TIMER_TRAY_RECT_REFRESH);
         KillTimer(hwnd, TIMER_POST_START_ICON_SYNC);
+        KillTimer(hwnd, TIMER_ACTIVE_POWER_PLAN_REFRESH);
         RemoveTrayIcon();
         UninstallMouseWheelHook();
         PostQuitMessage(0);
@@ -1268,21 +1849,6 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
             RefreshTrayIconRect();
 
-        #if DEBUG_MOUSE_WHEEL
-            if (now - g_lastTrayMouseMoveLog > 500) {
-                g_lastTrayMouseMoveLog = now;
-
-                Wh_Log(
-                    L"Tray icon WM_MOUSEMOVE: rect empty=%d [%ld,%ld,%ld,%ld]",
-                    IsRectEmpty(&g_trayIconRect),
-                    g_trayIconRect.left,
-                    g_trayIconRect.top,
-                    g_trayIconRect.right,
-                    g_trayIconRect.bottom
-                );
-            }
-        #endif
-
             if (!g_mouseHookRefreshedAfterFirstHover) {
                 g_mouseHookRefreshedAfterFirstHover = true;
                 RefreshMouseWheelHook(L"first tray icon hover");
@@ -1300,25 +1866,13 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
         int direction = static_cast<int>(wParam);
 
-        #if DEBUG_MOUSE_WHEEL
-            Wh_Log(
-                L"WM_TRAY_SCROLL received: direction=%d, diff=%lu ms",
-                direction,
-                diff
-            );
-        #endif
-
-            if (diff > 150) {
-                g_lastScrollTime = now;
-                CyclePowerPlan(direction);
-            } else {
-        #if DEBUG_MOUSE_WHEEL
-                Wh_Log(L"WM_TRAY_SCROLL ignored by debounce.");
-        #endif
-            }
-
-            return 0;
+        if (diff > 150) {
+            g_lastScrollTime = now;
+            CyclePowerPlan(direction);
         }
+
+        return 0;
+    }
 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
@@ -1334,9 +1888,7 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
         switch (id) {
         case ID_MENU_CREATE_ULTIMATE:
-            if (CreateUltimatePerformancePlan()) {
-                UpdateTrayIcon();
-            }
+            StartCreateUltimateWorker();
             return 0;
 
         case ID_MENU_REFRESH:
@@ -1345,11 +1897,7 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             UpdateTrayIcon();
 
             {
-                PCWSTR currentName = L"Unknown";
-
-                if (g_currentPlanIndex >= 0 && g_currentPlanIndex < g_planCount) {
-                    currentName = g_plans[g_currentPlanIndex].name;
-                }
+                PCWSTR currentName = GetPlanDisplayName(g_currentPlanIndex);
 
                 Wh_Log(
                     L"Manual refresh completed. Current plan: %s",
@@ -1395,7 +1943,15 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = HIDDEN_WINDOW_CLASS;
 
-    RegisterClassW(&wc);
+    ATOM classAtom = RegisterClassW(&wc);
+    if (!classAtom) {
+        DWORD error = GetLastError();
+
+        if (error != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"RegisterClassW failed. Error: %u", error);
+            return 0;
+        }
+    }
 
     HINSTANCE hInstance = GetModuleHandleW(nullptr);
 
@@ -1479,7 +2035,14 @@ void WhTool_ModUninit() {
     }
 
     if (g_uiThread) {
-        WaitForSingleObject(g_uiThread, 3000);
+        DWORD waitResult = WaitForSingleObject(g_uiThread, 3000);
+
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"UI thread did not exit within timeout.");
+        } else if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"WaitForSingleObject for UI thread failed. Error: %u", GetLastError());
+        }
+
         CloseHandle(g_uiThread);
         g_uiThread = nullptr;
     }
@@ -1623,8 +2186,9 @@ void Wh_ModAfterInit() {
         (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1
     ];
 
-    wsprintfW(
+    swprintf_s(
         commandLine,
+        ARRAYSIZE(commandLine),
         L"\"%s\" -tool-mod \"%s\"",
         currentProcessPath,
         WH_MOD_ID
