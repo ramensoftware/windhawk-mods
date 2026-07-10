@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T13:43:19.000Z</updated>
+    <updated>2026-07-10T14:07:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Windows Photo Viewer Redirect 1.4.0]]></title>
+        <id>https://windhawk.net/mods/classic-photo-viewer#361304dca127c7c6ac8ae9e6af9e8cbcf96399f3</id>
+        <link href="https://windhawk.net/mods/classic-photo-viewer"/>
+        <updated>2026-07-10T14:07:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwindowsphotoviewerredirect">Classic Windows Photo Viewer Redirect</h1>
+<p>This mod restores the classic Windows Photo Viewer from Windows 7 without altering system configurations.</p>
+<h3 id="howitworks">How it works</h3>
+<p>This mod hooks <code>ShellExecuteExW</code> and, when it detects a call with the "open" verb
+targeting a file with one of the configured image extensions, redirects the call
+to launch the classic Photo Viewer (<code>shimgvw.dll</code> via <code>rundll32.exe</code>) instead of
+whatever application would normally handle it.</p>
+<h3 id="screenshot">Screenshot</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/photo.png" alt="Screenshot" /></p>
+<h3 id="keyfeatures">Key Features</h3>
+<ul>
+<li>No Registry modifications: The mod does not alter file associations or create any keys in HKLM or HKCU.</li>
+<li>Purely runtime effect: The redirection occurs exclusively in memory. Disabling the mod instantly restores the default Windows behavior.</li>
+<li>Supported formats: Covers major raster formats including JPG, JPEG, JFIF, PNG, BMP, DIB, GIF, TIF, TIFF, ICO, WDP, and JXR.</li>
+</ul>
+<h3 id="knownlimitations">Known Limitations</h3>
+<ul>
+<li>The redirection only applies when the file is opened via <code>ShellExecuteExW</code>, which is
+how the Explorer context menu's "Open" command works. This is the main path this
+mod is able to intercept.</li>
+<li>Double-click and Enter often go through app activation for the UWP Photos app
+instead of <code>ShellExecuteExW</code>, which this mod cannot intercept. In practice, the
+redirect mainly fires for the right-click → Open path.</li>
+<li>Modern formats not natively supported by the legacy viewer (such as HEIC or WebP) are ignored by the hook and will continue to open with the default modern application.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Power Options Button 1.0.13]]></title>
         <id>https://windhawk.net/mods/power-options-button#e755e88374b2d3f0446affb356c0e7c8c214af8b</id>
@@ -420,20 +455,6 @@ a mesh gradient, or an energy-flame visual.</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 2.2.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#01929c0699e86e614c42934ca6aab388e1068647</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-04T11:01:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds an experimental <strong>Multi-monitor support</strong> setting (off by default), as requested by a user on the mod page.</p>
-<p>When enabled, the genie plays on the monitor the window is on and flows into that monitor's taskbar edge, instead of always targeting the primary monitor. Works with negative virtual-screen coordinates (monitors left of / above the primary).</p>
-<p>Also fixes, when the option is enabled, the taskbar-hover detection for icon-position learning: the previous primary-only work-area test matched every cursor position on a secondary monitor, so a plain title-bar minimize there mislearned the cursor X as the taskbar icon position. It now checks the work area of the monitor the cursor is on.</p>
-<p>With the setting off, behavior is unchanged from v2.1.1.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>

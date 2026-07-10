@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-10T13:43:19.000Z</updated>
+    <updated>2026-07-10T14:07:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Windows Photo Viewer Redirect 1.4.0]]></title>
+        <id>https://windhawk.net/mods/classic-photo-viewer#361304dca127c7c6ac8ae9e6af9e8cbcf96399f3</id>
+        <link href="https://windhawk.net/mods/classic-photo-viewer"/>
+        <updated>2026-07-10T14:07:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwindowsphotoviewerredirect">Classic Windows Photo Viewer Redirect</h1>
+<p>This mod restores the classic Windows Photo Viewer from Windows 7 without altering system configurations.</p>
+<h3 id="howitworks">How it works</h3>
+<p>This mod hooks <code>ShellExecuteExW</code> and, when it detects a call with the "open" verb
+targeting a file with one of the configured image extensions, redirects the call
+to launch the classic Photo Viewer (<code>shimgvw.dll</code> via <code>rundll32.exe</code>) instead of
+whatever application would normally handle it.</p>
+<h3 id="screenshot">Screenshot</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/photo.png" alt="Screenshot" /></p>
+<h3 id="keyfeatures">Key Features</h3>
+<ul>
+<li>No Registry modifications: The mod does not alter file associations or create any keys in HKLM or HKCU.</li>
+<li>Purely runtime effect: The redirection occurs exclusively in memory. Disabling the mod instantly restores the default Windows behavior.</li>
+<li>Supported formats: Covers major raster formats including JPG, JPEG, JFIF, PNG, BMP, DIB, GIF, TIF, TIFF, ICO, WDP, and JXR.</li>
+</ul>
+<h3 id="knownlimitations">Known Limitations</h3>
+<ul>
+<li>The redirection only applies when the file is opened via <code>ShellExecuteExW</code>, which is
+how the Explorer context menu's "Open" command works. This is the main path this
+mod is able to intercept.</li>
+<li>Double-click and Enter often go through app activation for the UWP Photos app
+instead of <code>ShellExecuteExW</code>, which this mod cannot intercept. In practice, the
+redirect mainly fires for the right-click → Open path.</li>
+<li>Modern formats not natively supported by the legacy viewer (such as HEIC or WebP) are ignored by the hook and will continue to open with the default modern application.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Power Options Button 1.0.13]]></title>
         <id>https://windhawk.net/mods/power-options-button#e755e88374b2d3f0446affb356c0e7c8c214af8b</id>
@@ -683,54 +718,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <author>
             <name>LiHua81</name>
             <uri>https://github.com/LiHua81</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-customizer#fab14b0a0962e79179ca89a14f9f70481633371b</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
-        <updated>2026-06-27T20:11:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="diskusagebarcustomizer">Disk Usage Bar Customizer</h1>
-<p>Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border and more.</p>
-<p>This is a fork of the original <a href="https://windhawk.net/mods/disk-usage-bar-color">Disk Usage Bar Color</a> mod made by <a href="https://github.com/dirtyrazkl">dirtyrazkl</a>.</p>
-<h2 id="customizationoptions">Customization options</h2>
-<h3 id="general">General</h3>
-<ul>
-<li>Show remaining space as progress instead of used space</li>
-<li>Custom warning percentage threshold</li>
-</ul>
-<h3 id="rendering">Rendering</h3>
-<ul>
-<li>Render using visual styles</li>
-<li>Render using dark mode parts when using visual styles</li>
-</ul>
-<h3 id="customrendering">Custom rendering</h3>
-<ul>
-<li>Use system's accent color for the normal progress color</li>
-<li>Render bar border</li>
-<li>Height factor</li>
-<li>Custom light &amp; dark mode colors</li>
-</ul>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="colorsadaptingtothesystemstheme">Colors adapting to the system's theme</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png" alt="System colors light mode" /></p>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png" alt="System colors dark mode" /></p>
-<h3 id="accentcolorasthenormalprogresscolor">Accent color as the normal progress color</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png" alt="Accent color light mode" /></p>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png" alt="Accent color dark mode" /></p>
-<h3 id="customcolors">Custom colors</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png" alt="Custom colors" /></p>
-<h3 id="noborder">No border</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png" alt="No border" /></p>
-<h3 id="customheight">Custom height</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png" alt="Custom height" /></p>
-<h3 id="customwarningthreshold">Custom warning threshold</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png" alt="Custom warning threshold" /></p>
-<h3 id="showremainingspaceasprogressinsteadofusedspace">Show remaining space as progress instead of used space</h3>
-<p><img src="https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png" alt="Show remaining space as progress instead of used space" /></p>]]></content>
-        <author>
-            <name>Valer100</name>
-            <uri>https://github.com/Valer100</uri>
         </author>
     </entry>
 </feed>

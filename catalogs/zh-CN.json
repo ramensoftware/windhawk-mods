@@ -1814,6 +1814,34 @@
         "version": "1.1"
       }
     },
+    "classic-photo-viewer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783692463000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783692463000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lshlwapi",
+        "description": "Redirects image opening at runtime to the classic Photo Viewer (shimgvw.dll), without modifying the Registry",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Classic Windows Photo Viewer Redirect",
+        "version": "1.4.0"
+      }
+    },
     "classic-progress-bars": {
       "details": {
         "defaultSorting": 2238,
