@@ -1340,7 +1340,7 @@ static bool InstallLegacyNameHook() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK mapLegacyHook = {{
+    WindhawkUtils::SYMBOL_HOOK shell32_maplegacy_hook = {{
         L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
         L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
     },
@@ -1348,7 +1348,7 @@ static bool InstallLegacyNameHook() {
     (void*)COpenControlPanel__MapLegacyName_hook,
     false};
 
-    if (WindhawkUtils::HookSymbols(hShell32, &mapLegacyHook, 1)) {
+    if (WindhawkUtils::HookSymbols(hShell32, &shell32_maplegacy_hook, 1)) {
         Wh_Log(L"[MAP-LEGACY] Hook installed successfully");
         return true;
     } else {
@@ -1543,20 +1543,24 @@ static bool TryInstallPniduiHook() {
     
     Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
-    WindhawkUtils::SYMBOL_HOOK pniduiDllHook = {{
-        L"bool "
+    // pnidui.dll
+    WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
+        {
+            L"bool "
 #ifdef _WIN64
-        L"__cdecl"
+            L"__cdecl"
 #else
-        L"__stdcall"
+            L"__stdcall"
 #endif
-        L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
-        L"(struct HMENU__ *,struct HWND__ *)"
-    },
-    (void**)&g_icmhOrig_pnidui,
-    (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook};
+            L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+            L"(struct HMENU__ *,struct HWND__ *)"
+        },
+        (void**)&g_icmhOrig_pnidui,
+        (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+        false
+    }};
 
-    bool result = WindhawkUtils::HookSymbols(hMod, &pniduiDllHook, 1);
+    bool result = WindhawkUtils::HookSymbols(hMod, pnidui_dll_hooks, 1);
     if (result) {
         Wh_Log(L"[PNIDUI-HOOK] Successfully installed pnidui.dll hook");
         g_pniduiHookInstalled = true;
@@ -1617,8 +1621,9 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSsoDllHooks[] = {
-            {{
+        // SndVolSSO.dll
+        WindhawkUtils::SYMBOL_HOOK sndVolSSO_dll_hooks[] = {{
+            {
                 L"bool "
 #ifdef _WIN64
                 L"__cdecl"
@@ -1629,10 +1634,11 @@ static void InstallImmersiveMenuHooks() {
                 L"(struct HMENU__ *,struct HWND__ *)"
             },
             (void**)t.orig,
-            (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
-        };
+            (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+            false
+        }};
 
-        WindhawkUtils::HookSymbols(hMod, sndVolSsoDllHooks, 1);
+        WindhawkUtils::HookSymbols(hMod, sndVolSSO_dll_hooks, 1);
     }
 
     if (!TryInstallPniduiHook()) {
@@ -1652,8 +1658,9 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-                {{
+            // shell32.dll
+            WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {{
+                {
                     L"bool "
 #ifdef _WIN64
                     L"__cdecl"
@@ -1664,10 +1671,11 @@ static void InstallImmersiveMenuHooks() {
                     L"(struct HMENU__ *,unsigned int)"
                 },
                 (void**)&g_icmhOrig_Shell32Devices,
-                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
-            };
+                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+                false
+            }};
             
-            WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, 1);
+            WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1);
         }
     }
 }
