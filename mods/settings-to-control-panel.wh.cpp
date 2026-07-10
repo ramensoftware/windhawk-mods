@@ -1340,7 +1340,7 @@ static bool InstallLegacyNameHook() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK shell32_maplegacy_hook = {{
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hook = {{
         L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
         L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
     },
@@ -1348,7 +1348,7 @@ static bool InstallLegacyNameHook() {
     (void*)COpenControlPanel__MapLegacyName_hook,
     false};
 
-    if (WindhawkUtils::HookSymbols(hShell32, &shell32_maplegacy_hook, 1)) {
+    if (WindhawkUtils::HookSymbols(hShell32, &shell32_dll_hook, 1)) {
         Wh_Log(L"[MAP-LEGACY] Hook installed successfully");
         return true;
     } else {
@@ -1543,7 +1543,6 @@ static bool TryInstallPniduiHook() {
     
     Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
-    // pnidui.dll
     WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
         {
             L"bool "
@@ -1621,7 +1620,6 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        // SndVolSSO.dll
         WindhawkUtils::SYMBOL_HOOK sndVolSSO_dll_hooks[] = {{
             {
                 L"bool "
@@ -1658,7 +1656,6 @@ static void InstallImmersiveMenuHooks() {
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            // shell32.dll
             WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {{
                 {
                     L"bool "
