@@ -1,4 +1,4 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id                 desktop-audio-visualizer
 // @name               Desktop Audio Visualizer
 // @description        Real-time audio visualizer on your Windows desktop with customizable appearance
