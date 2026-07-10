@@ -27,6 +27,8 @@ After:
 #include <windows.h>
 
 LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode < 0)
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
     CWPSTRUCT* pwp = (CWPSTRUCT*)lParam;
     if (pwp->message == WM_CREATE) {
         LONG_PTR style = GetWindowLongPtrW(pwp->hwnd, GWL_STYLE);
