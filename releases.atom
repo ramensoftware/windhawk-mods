@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-10T08:24:27.000Z</updated>
+    <updated>2026-07-10T13:43:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Power Options Button 1.0.13]]></title>
+        <id>https://windhawk.net/mods/power-options-button#e755e88374b2d3f0446affb356c0e7c8c214af8b</id>
+        <link href="https://windhawk.net/mods/power-options-button"/>
+        <updated>2026-07-10T13:43:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="poweroptionsbutton">Power Options Button</h1>
+<p>Adds a tray icon for switching between Windows power plans.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/26A3Ilv.gif" alt="Power Options Button preview" /></p>
+<p><em>Shows the tray icon, tooltip, right-click menu, and mouse-wheel switching between power plans.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Tray icon shows the currently active Windows power plan.</li>
+<li>Tooltip shows the active plan.</li>
+<li>Mouse wheel over the tray icon cycles between:</li>
+<li>Power Saver</li>
+<li>Balanced</li>
+<li>High Performance</li>
+<li>Ultimate Performance</li>
+<li>Right-click opens a context menu.</li>
+<li>Icon color changes depending on the active plan:</li>
+<li>Green = Power Saver</li>
+<li>Yellow = Balanced</li>
+<li>Red = High Performance</li>
+<li>Violet = Ultimate Performance</li>
+<li>If Ultimate Performance is not available, it is shown as disabled and can be created from the tray menu with administrator approval.</li>
+<li>Automatically restores the tray icon after Explorer/taskbar restart.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Scroll up over the tray icon: next power plan.</li>
+<li>Scroll down over the tray icon: previous power plan.</li>
+<li>Right-click the tray icon: choose a power plan manually.</li>
+<li>Left-click the tray icon: refresh current status.</li>
+<li>Use "Create Ultimate Performance…" from the tray menu to create the Ultimate Performance plan if it is not available yet.</li>
+</ul>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix File Conflict Dialog Checkbox Background 1.0]]></title>
         <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#53e4ca975340265bc150fbbaa72fe79059af857b</id>
@@ -690,58 +731,6 @@ require Windows 11 for tabbed Explorer support.</p>]]></content>
         <author>
             <name>Valer100</name>
             <uri>https://github.com/Valer100</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 2.8.4]]></title>
-        <id>https://windhawk.net/mods/win7-network-flyout-recreation#f7eabd22737735da3efb5507964ecd6832f79aa3</id>
-        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
-        <updated>2026-06-27T10:05:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7networkflyoutrecreation">Windows 7 Network Flyout Recreation</h1>
-<p>This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a familiar, lightweight alternative.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/ms.png" alt="Screenshot" />
-The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Wi-Fi network list</strong>: Shows all available networks with live signal strength</li>
-<li><strong>Connect/Disconnect</strong>: Connect to secured and open networks with password support</li>
-<li><strong>Privacy mode</strong>: Hide real network names (shows as Network 1, Network 2…)</li>
-<li><strong>Windows 7 style tooltips</strong>: Full network info on hover (SSID, signal, security type)</li>
-<li><strong>Right-click context menu</strong>: Quick access to network status and properties</li>
-<li><strong>Keyboard navigation</strong>: Full Arrow keys, Enter, and Escape support</li>
-<li><strong>Auto-refresh</strong>: Periodically refreshes the network list at a configurable interval</li>
-<li><strong>Language support</strong>: English, Italian, Spanish, French, Russian, or auto-detect</li>
-<li><strong>DPI aware</strong>: Scales correctly on high-DPI and mixed-DPI setups</li>
-<li><strong>Rounded corners</strong>: Optional modern look for Windows 11 or Aero theme</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li><strong>Windows 10</strong> with the native taskbar</li>
-<li><strong>Windows 11</strong> with the Windows 10 taskbar (via <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>)</li>
-<li>The network icon must be visible in the main system tray (overflow menu not supported)</li>
-</ul>
-<blockquote>
-  <p><strong>Note:</strong> This mod is unlikely to work with other taskbar mods (e.g. Retrobar) or heavily customized configurations.</p>
-</blockquote>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li><strong>Overflow menu</strong>: The network icon must be in the main system tray, not hidden in the overflow menu.</li>
-<li><strong>Auto-reconnect checkbox</strong>: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.</li>
-</ul>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>| Key | Action |
-|-----|--------|
-| <strong>Ctrl+H</strong> | Toggle network flyout (disabled by default) |</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>m417z</strong> — Code review</li>
-<li><strong>Anixx</strong> — Testing on Windows 11 23H2 and feedback</li>
-<li><strong>sebastian08dm08-cpu</strong> — Testing on Windows 10 1809</li>
-</ul>
-<p>If you encounter issues, please report them on the author of the mod.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

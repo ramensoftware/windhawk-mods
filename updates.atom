@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T10:33:49.000Z</updated>
+    <updated>2026-07-10T13:43:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Power Options Button 1.0.13]]></title>
+        <id>https://windhawk.net/mods/power-options-button#e755e88374b2d3f0446affb356c0e7c8c214af8b</id>
+        <link href="https://windhawk.net/mods/power-options-button"/>
+        <updated>2026-07-10T13:43:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="poweroptionsbutton">Power Options Button</h1>
+<p>Adds a tray icon for switching between Windows power plans.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/26A3Ilv.gif" alt="Power Options Button preview" /></p>
+<p><em>Shows the tray icon, tooltip, right-click menu, and mouse-wheel switching between power plans.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Tray icon shows the currently active Windows power plan.</li>
+<li>Tooltip shows the active plan.</li>
+<li>Mouse wheel over the tray icon cycles between:</li>
+<li>Power Saver</li>
+<li>Balanced</li>
+<li>High Performance</li>
+<li>Ultimate Performance</li>
+<li>Right-click opens a context menu.</li>
+<li>Icon color changes depending on the active plan:</li>
+<li>Green = Power Saver</li>
+<li>Yellow = Balanced</li>
+<li>Red = High Performance</li>
+<li>Violet = Ultimate Performance</li>
+<li>If Ultimate Performance is not available, it is shown as disabled and can be created from the tray menu with administrator approval.</li>
+<li>Automatically restores the tray icon after Explorer/taskbar restart.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Scroll up over the tray icon: next power plan.</li>
+<li>Scroll down over the tray icon: previous power plan.</li>
+<li>Right-click the tray icon: choose a power plan manually.</li>
+<li>Left-click the tray icon: refresh current status.</li>
+<li>Use "Create Ultimate Performance…" from the tray menu to create the Ultimate Performance plan if it is not available yet.</li>
+</ul>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 1.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-elastic-pill#e845e641c7d0d1590296685d367841b91087f93a</id>
@@ -393,39 +434,6 @@ a mesh gradient, or an energy-flame visual.</li>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-fluent-media-player#145b63f3d04a7f9c04353a6ac87a2d9a4314103a</id>
-        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
-        <updated>2026-07-04T11:00:48.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li><strong>Context Menu Settings</strong> section</li>
-<li>Configurable item list — choose which items appear in the context menu and in what order</li>
-<li><strong>Repeat style</strong> — submenu (Repeat off / Repeat all / Repeat one) or a single toggle button that cycles through modes and reflects the current state in its label</li>
-<li><strong>Shuffle style</strong> — submenu (Shuffle off / Shuffle on) or a toggle button with live on/off label</li>
-<li><strong>Context menu icon style</strong> — pick Fluent Icons or MDL2 Assets (Outline/Filled), or inherit from Media Buttons Style</li>
-<li><strong>Context menu icon color and opacity</strong> — independent from player button color settings</li>
-<li><strong>"Show Open Windhawk button"</strong> toggle — the separator above it hides automatically when both it and Restart Player are off</li>
-<li><strong>"Nothing" option</strong> in Media buttons order and Context menu items lists — useful as an empty placeholder slot</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Idle auto-hide timer now ticks independently of media events — timeout values above 1 second now work correctly <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/5">#5</a></li>
-<li>Player no longer disappears when <strong>Hide when no media</strong> is disabled and <strong>Idle auto-hide</strong> is set to 0</li>
-<li>When title or artist placeholder text is empty, the scroll-view container now collapses properly — a single visible line is displayed without the hidden element reserving space</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li><strong>Visualizer idle bar height</strong> is now specified in pixels (0–15 px) instead of percentage — default changed from 15% to 3 px</li>
-<li>Bar width minimum is now 0 (hides bars entirely) instead of 1</li>
-<li><code>ExtractAlbumPalette</code> now uses the internal <code>DecodeImageToBGRA</code> helper instead of the WinRT <code>BitmapDecoder</code> pipeline</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

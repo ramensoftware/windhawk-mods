@@ -9150,6 +9150,35 @@
         "version": "1.0.1"
       }
     },
+    "power-options-button": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783690999000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783690999000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "SilverAmd",
+        "compilerOptions": "-luser32 -lshell32 -lgdi32 -lpowrprof -ladvapi32",
+        "description": "Tray icon to switch between Windows power plans with the mouse wheel.",
+        "github": "https://github.com/SilverAmd",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Power Options Button",
+        "version": "1.0.13"
+      }
+    },
     "prevent-focus-stealing": {
       "details": {
         "defaultSorting": 1392,
