@@ -1296,6 +1296,7 @@ void WINAPI OnExperienceToggleButtonVisualStateChanged_Hook(void* pThis, void** 
 
 using SearchIconButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original1;
+SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original2;
 
 void SearchIconButton_UpdateVisualStates_Common(void* pThis) {
     if (g_unloading) return;
@@ -1339,6 +1340,11 @@ void WINAPI SearchIconButton_UpdateVisualStates_Hook1(void* pThis) {
     SearchIconButton_UpdateVisualStates_Common(pThis);
 }
 
+void WINAPI SearchIconButton_UpdateVisualStates_Hook2(void* pThis) {
+    SearchIconButton_UpdateVisualStates_Original2(pThis);
+    SearchIconButton_UpdateVisualStates_Common(pThis);
+}
+
 HMODULE GetTaskbarViewModuleHandle() {
     HMODULE m = GetModuleHandle(L"Taskbar.View.dll");
     return m ? m : GetModuleHandle(L"ExplorerExtensions.dll");
@@ -1378,17 +1384,24 @@ bool HookSearchUxDllSymbols(HMODULE module) {
     // SearchUx.UI.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
-            {
-                LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))",
-                L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"
-            },
+            {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
             &SearchIconButton_UpdateVisualStates_Original1,
             SearchIconButton_UpdateVisualStates_Hook1,
-            false
+            true
+        },
+        {
+            {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
+            &SearchIconButton_UpdateVisualStates_Original2,
+            SearchIconButton_UpdateVisualStates_Hook2,
+            true
         }
     };
     
-    if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
+    WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+
+    if (SearchIconButton_UpdateVisualStates_Original1 || SearchIconButton_UpdateVisualStates_Original2) {
+        return true;
+    }
 
     Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
     return false;
