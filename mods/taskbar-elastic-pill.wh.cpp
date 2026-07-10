@@ -407,48 +407,16 @@ using namespace winrt::Windows::UI::Xaml::Media;
 using namespace winrt::Windows::UI::Xaml::Hosting;
 using namespace winrt::Windows::UI::Composition;
 
-int g_offsetTaskListButton = -1;
-int g_offsetSearchIconButton = -1;
-
-FrameworkElement GetFrameworkElementFromNative(void* pThis, int& cachedOffset) {
+FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     if (!pThis) return nullptr;
-    void** ptrs = (void**)pThis;
-
-    if (cachedOffset != -1) {
-        try {
-            ::IUnknown* possibleUnk = (::IUnknown*)ptrs[cachedOffset];
-            if (possibleUnk) {
-                winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
-                if (SUCCEEDED(possibleUnk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
-                    return result;
-                }
-            }
-        } catch (...) {}
+    try {
+        void* iUnknownPtr = (void**)pThis + 3;
+        winrt::Windows::Foundation::IUnknown iUnknown;
+        winrt::copy_from_abi(iUnknown, iUnknownPtr);
+        return iUnknown.try_as<winrt::Windows::UI::Xaml::FrameworkElement>();
+    } catch (...) {
         return nullptr;
     }
-
-    HANDLE hProc = GetCurrentProcess();
-    for (int i = 1; i < 16; i++) {
-        void* possibleUnk = nullptr;
-        SIZE_T read = 0;
-        if (ReadProcessMemory(hProc, ptrs + i, &possibleUnk, sizeof(void*), &read) && read == sizeof(void*) && possibleUnk) {
-            void* vtable = nullptr;
-            if (ReadProcessMemory(hProc, possibleUnk, &vtable, sizeof(void*), &read) && read == sizeof(void*) && vtable) {
-                void* vfuncs[3];
-                if (ReadProcessMemory(hProc, vtable, &vfuncs, sizeof(vfuncs), &read) && read == sizeof(vfuncs)) {
-                    try {
-                        ::IUnknown* unk = (::IUnknown*)possibleUnk;
-                        winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
-                        if (SUCCEEDED(unk->QueryInterface(winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), winrt::put_abi(result)))) {
-                            cachedOffset = i;
-                            return result;
-                        }
-                    } catch (...) {}
-                }
-            }
-        }
-    }
-    return nullptr;
 }
 
 FrameworkElement GetFrameworkElementFromInterface(void* pInterface) {
@@ -969,7 +937,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
     if (g_unloading) return;
 
-    auto elem = GetFrameworkElementFromNative(pThis, g_offsetTaskListButton);
+    auto elem = GetFrameworkElementFromNative(pThis);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1328,11 +1296,10 @@ void WINAPI OnExperienceToggleButtonVisualStateChanged_Hook(void* pThis, void** 
 
 using SearchIconButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original1;
-SearchIconButton_UpdateVisualStates_t SearchIconButton_UpdateVisualStates_Original2;
 
 void SearchIconButton_UpdateVisualStates_Common(void* pThis) {
     if (g_unloading) return;
-    auto elem = GetFrameworkElementFromNative(pThis, g_offsetSearchIconButton);
+    auto elem = GetFrameworkElementFromNative(pThis);
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
@@ -1372,11 +1339,6 @@ void WINAPI SearchIconButton_UpdateVisualStates_Hook1(void* pThis) {
     SearchIconButton_UpdateVisualStates_Common(pThis);
 }
 
-void WINAPI SearchIconButton_UpdateVisualStates_Hook2(void* pThis) {
-    SearchIconButton_UpdateVisualStates_Original2(pThis);
-    SearchIconButton_UpdateVisualStates_Common(pThis);
-}
-
 HMODULE GetTaskbarViewModuleHandle() {
     HMODULE m = GetModuleHandle(L"Taskbar.View.dll");
     return m ? m : GetModuleHandle(L"ExplorerExtensions.dll");
@@ -1413,31 +1375,20 @@ HMODULE GetSearchUxModuleHandle() {
 }
 
 bool HookSearchUxDllSymbols(HMODULE module) {
-    {
-        // SearchUx.UI.dll
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SearchUx.UI.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
             {
-                {LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))"},
-                &SearchIconButton_UpdateVisualStates_Original1,
-                SearchIconButton_UpdateVisualStates_Hook1,
-                false
-            }
-        };
-        if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
-    }
+                LR"(private: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::UpdateVisualStates(void))",
+                L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"
+            },
+            &SearchIconButton_UpdateVisualStates_Original1,
+            SearchIconButton_UpdateVisualStates_Hook1,
+            false
+        }
+    };
     
-    {
-        // SearchUx.UI.dll
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
-            {
-                {L"protected: void __cdecl winrt::SearchUx::SearchUI::implementation::SearchIconButton::PlayStateChange(void)"},
-                &SearchIconButton_UpdateVisualStates_Original2,
-                SearchIconButton_UpdateVisualStates_Hook2,
-                false
-            }
-        };
-        if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
-    }
+    if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return true;
 
     Wh_Log(L"Failed to hook SearchUx.UI.dll symbols entirely.");
     return false;
