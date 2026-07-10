@@ -2,7 +2,7 @@
 // @id              classic-photo-viewer
 // @name            Classic Windows Photo Viewer Redirect
 // @description     Redirects image opening at runtime to the classic Photo Viewer (shimgvw.dll), without modifying the Registry
-// @version         1.3.0
+// @version         1.3.1
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -25,7 +25,8 @@ When you open an image from File Explorer (via double-click, Enter, or the conte
 - Supported formats: Covers major raster formats including JPG, JPEG, JFIF, PNG, BMP, DIB, GIF, TIF, TIFF, ICO, WDP, and JXR.
 
 ### Known Limitations
-- The redirection only applies to file openings executed through Windows File Explorer.
+- The redirection only applies to file openings executed through Windows File Explorer (via ShellExecuteEx).
+- Double-click and Enter key may use app activation for UWP Photos app instead of ShellExecuteEx, which this mod cannot intercept.
 - Modern formats not natively supported by the legacy viewer (such as HEIC or WebP) are ignored by the hook and will continue to open with the default modern application.
 */
 // ==/WindhawkModReadme==
@@ -78,9 +79,6 @@ std::unordered_map<std::wstring, std::wstring> g_virtualRegistry;
 // Original API functions
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
 REGQUERYVALUEEXW pOriginalRegQueryValueExW = nullptr;
-
-typedef LONG (WINAPI *REGOPENKEYEXW)(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);
-REGOPENKEYEXW pOriginalRegOpenKeyExW = nullptr;
 
 // ---------------------------------------------------------------------------
 // Virtual Registry Setup
@@ -324,7 +322,6 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
             if (!WaitForFileUnlock(filePath, g_lockTimeoutMs)) {
                 Wh_Log(L"File remains locked after timeout, falling back to default viewer: %s", 
                        filePath.c_str());
-                // With virtual registry, this might now open in Photo Viewer anyway!
                 return ShellExecuteExW_Original(pExecInfo);
             }
         } else {
@@ -348,7 +345,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
     sei.lpVerb            = L"open";
     sei.lpFile            = g_rundll32Path.c_str();
     sei.lpParameters      = params.c_str();
-    sei.lpDirectory       = pExecInfo->lpDirectory;
+    sei.lpDirectory       = NULL;  // Use system directory, not the image's directory
     sei.nShow             = pExecInfo->nShow ? pExecInfo->nShow : SW_SHOWNORMAL;
 
     g_inRedirect = true;
