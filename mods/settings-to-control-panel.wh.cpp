@@ -2,11 +2,11 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.24
+// @version        10.0.25
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @compilerOptions -lcomctl32 -lpsapi
+// @compilerOptions -lcomctl32 -lpsapi -lole32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -31,11 +31,11 @@ Panel pages, using only native Windows components.
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
 - Tray menu detection (experimental)
----
 ## Limitations
 
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10 and previous versions). If using Windows 11, it might function decently but it is still an experimental feature.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
+- The two new experimental features above (`ComActivationRedirect` and `LegacyNameMappingFix`) are based on undocumented/internal Windows behavior and reverse engineering assumptions. They are disabled by default, are not guaranteed to work on every Windows build, and could stop working (harmlessly) after a Windows update. They are written to always fall back to the original, unmodified behavior whenever something doesn't match what's expected, so enabling them should never break normal functionality — worst case, they simply do nothing.
 
 ---
 
@@ -76,6 +76,7 @@ Panel pages, using only native Windows components.
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <commctrl.h>
 #include <psapi.h>
 #include <string>
@@ -84,6 +85,14 @@ Panel pages, using only native Windows components.
 #include <unordered_set>
 #include <vector>
 #include <mutex>
+
+// Manually defined GUIDs to avoid requiring -luuid / static ole32 linkage.
+// {45BA127D-10A8-46EA-8AB7-56EA9078943C} = CLSID_ApplicationActivationManager
+static const CLSID CLSID_ApplicationActivationManager_STC =
+    { 0x45ba127d, 0x10a8, 0x46ea, { 0x8a, 0xb7, 0x56, 0xea, 0x90, 0x78, 0x94, 0x3c } };
+// {2E941141-7F97-4756-BA1D-9DECDE894A3D} = IID_IApplicationActivationManager
+static const IID IID_IApplicationActivationManager_STC =
+    { 0x2e941141, 0x7f97, 0x4756, { 0xba, 0x1d, 0x9d, 0xec, 0xde, 0x89, 0x4a, 0x3d } };
 
 // Custom IDs for tray menu redirection (TrackPopupMenuEx method)
 #define TRAY_CUSTOM_ID_AUDIO    65001
@@ -108,6 +117,9 @@ static bool g_pniduiHookInstalled = false;
 static std::mutex g_pniduiHookMutex;
 static HANDLE g_pniduiRetryThread = nullptr;
 static volatile bool g_pniduiRetryStop = false;
+static HANDLE g_traySubclassWatchdogThread = nullptr;
+static volatile bool g_traySubclassWatchdogStop = false;
+static HWND g_lastShellTrayWnd = nullptr;
 
 static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND);
 
@@ -175,6 +187,8 @@ struct ModSettings {
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
     int maxLaunchesPerUri = 3;
+    bool comActivationRedirect = true;
+    bool legacyNameMappingFix = true;
 };
 
 static ModSettings g_settings;
@@ -202,6 +216,9 @@ static void LoadSettings() {
 
     int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
     g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
+
+    g_settings.comActivationRedirect = Wh_GetIntSetting(L"ComActivationRedirect") != 0;
+    g_settings.legacyNameMappingFix = Wh_GetIntSetting(L"LegacyNameMappingFix") != 0;
 }
 
 static bool g_isWin11 = false;
@@ -362,15 +379,6 @@ static bool InitTrayDllInfo() {
 
 static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     if (buttonIndex < 0) return 0;
-
-    // Retry capturing the DLL base addresses here too: SetupTraySubclass()
-    // only calls InitTrayDllInfo() once (guarded by g_hTrayToolbar), so if
-    // pnidui.dll (network) wasn't loaded yet at that point (e.g. right after
-    // an Explorer restart, while SndVolSSO.dll for audio was already
-    // resident), g_pniduiBase would stay null forever and network tray
-    // detection would silently break until the mod was reloaded. Re-checking
-    // here is cheap (InitTrayDllInfo short-circuits once both are set) and
-    // lets it self-heal as soon as pnidui.dll actually loads.
     InitTrayDllInfo();
 
     TBBUTTON tb{};
@@ -382,10 +390,6 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
 
     wchar_t className[256]{};
     if (!GetClassNameW(hIconWnd, className, 256)) return 0;
-
-    // Language-independent check: Safely Remove Hardware is a plain Shell_NotifyIcon
-    // and doesn't use an ATL class wrapper from a specific DLL. We ignore it here 
-    // and let TrackPopupMenuEx identify it via hotplug.dll return address.
     if (wcsncmp(className, L"ATL:", 4) != 0) {
         return 0;
     }
@@ -489,21 +493,11 @@ static HWND FindTrayToolbar() {
 
 static void SetupTraySubclass() {
     if (g_hTrayToolbar) return;
-    // NOTE: we no longer bail out early if InitTrayDllInfo() fails. Right
-    // after an Explorer restart the tray's ToolbarWindow32 is created well
-    // before pnidui.dll/SndVolSSO.dll get loaded: bailing out here used to
-    // skip installing the subclass entirely, and since CreateWindowExW_Hook
-    // only fires once (at window creation), the subclass would never be
-    // installed for the rest of the process's lifetime. The subclass should
-    // be installed regardless: GetTrayButtonType() already retries
-    // InitTrayDllInfo() on every click, so it self-heals once the DLLs
-    // become available.
-    InitTrayDllInfo();
+    if (!InitTrayDllInfo()) return;
     HWND hToolbar = FindTrayToolbar();
     if (!hToolbar) return;
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
         g_hTrayToolbar = hToolbar;
-        Wh_Log(L"[TRAY-SUBCLASS] Tray toolbar subclass installed (hwnd=0x%p)", hToolbar);
     }
 }
 
@@ -1201,6 +1195,167 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     }
     return {L"", false};
 }
+// ===========================================================================
+// EXPERIMENTAL: IApplicationActivationManager COM interception
+//
+// Some Windows 11 shell components (notably the system tray flyouts for
+// "Open Devices and Printers") may bypass ShellExecute/CreateProcess entirely
+// and instead activate the Settings app through the low-level COM interface
+// IApplicationActivationManager::ActivateApplication().
+//
+// We install a tiny vtable-style hook on the COM object returned by
+// CoCreateInstance(CLSID_ApplicationActivationManager) to inspect every
+// ActivateApplication call.  When the appUserModelId matches
+// "windows.immersivecontrolpanel..." (the Settings app), we:
+//   1) map the ms-settings: URI embedded in the arguments to a classic CPL
+//   2) launch that CPL ourselves
+//   3) return S_OK to the caller (making it believe Settings was launched)
+//
+// This is entirely best-effort and based on reverse engineering assumptions.
+// If anything unexpected happens we fall back to the original vtable entry.
+// ===========================================================================
+
+// Minimal vtable layout for IApplicationActivationManager (3 methods)
+struct IApplicationActivationManagerVtbl {
+    // IUnknown
+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IUnknown*, REFIID, void**);
+    ULONG   (STDMETHODCALLTYPE *AddRef)(IUnknown*);
+    ULONG   (STDMETHODCALLTYPE *Release)(IUnknown*);
+    // IApplicationActivationManager
+    HRESULT (STDMETHODCALLTYPE *ActivateApplication)(
+        IUnknown*,
+        LPCWSTR appUserModelId,
+        LPCWSTR arguments,
+        DWORD options,
+        DWORD* processId);
+    HRESULT (STDMETHODCALLTYPE *ActivateForFile)(IUnknown*, LPCWSTR, LPCWSTR, DWORD, DWORD*);
+    HRESULT (STDMETHODCALLTYPE *ActivateForProtocol)(IUnknown*, LPCWSTR, DWORD*, DWORD);
+};
+
+static IApplicationActivationManagerVtbl g_origAAMVtbl = {};
+static bool g_aamHookInstalled = false;
+static std::mutex g_aamHookMutex;
+
+HRESULT STDMETHODCALLTYPE AAM_ActivateApplication_hook(
+    IUnknown* pThis,
+    LPCWSTR appUserModelId,
+    LPCWSTR arguments,
+    DWORD options,
+    DWORD* processId)
+{
+    Wh_Log(L"[AAM-HOOK] ActivateApplication: appId=%s, args=%s",
+           appUserModelId ? appUserModelId : L"(null)",
+           arguments ? arguments : L"(null)");
+
+    // Is this the Settings app being activated?
+    if (appUserModelId && arguments &&
+        _wcsnicmp(appUserModelId, L"windows.immersivecontrolpanel", 29) == 0)
+    {
+        std::wstring uri = NormalizeUri(arguments);
+        Wh_Log(L"[AAM-HOOK] Settings activation intercepted: %s", uri.c_str());
+
+        auto result = ResolveUri(uri, nullptr);
+        if (result.intercept && !result.target.empty()) {
+            LaunchTarget(result.target);
+            if (processId) *processId = GetCurrentProcessId();
+            Wh_Log(L"[AAM-HOOK] Redirected to: %s", result.target.c_str());
+            return S_OK;
+        }
+        Wh_Log(L"[AAM-HOOK] No mapping found, falling back to original");
+    }
+
+    // Not a Settings activation we can handle — call original
+    if (g_origAAMVtbl.ActivateApplication) {
+        return g_origAAMVtbl.ActivateApplication(pThis, appUserModelId, arguments, options, processId);
+    }
+    return E_FAIL;
+}
+
+static void InstallAAMHook() {
+    std::lock_guard<std::mutex> lk(g_aamHookMutex);
+    if (g_aamHookInstalled) return;
+
+    IUnknown* pAAM = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_ApplicationActivationManager_STC,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_IApplicationActivationManager_STC,
+        (void**)&pAAM);
+
+    if (FAILED(hr) || !pAAM) {
+        Wh_Log(L"[AAM-HOOK] CoCreateInstance(CLSID_ApplicationActivationManager) failed: 0x%08X", hr);
+        return;
+    }
+
+    IApplicationActivationManagerVtbl* vtbl = *(IApplicationActivationManagerVtbl**)pAAM;
+    if (!vtbl || IsBadReadPtr(vtbl, sizeof(*vtbl))) {
+        Wh_Log(L"[AAM-HOOK] Invalid vtable pointer");
+        pAAM->Release();
+        return;
+    }
+
+    // Save original vtable
+    g_origAAMVtbl = *vtbl;
+
+    // Make the vtable page writable
+    DWORD oldProtect;
+    if (!VirtualProtect(vtbl, sizeof(*vtbl), PAGE_READWRITE, &oldProtect)) {
+        Wh_Log(L"[AAM-HOOK] VirtualProtect failed");
+        pAAM->Release();
+        return;
+    }
+
+    // Patch ActivateApplication entry
+    vtbl->ActivateApplication = AAM_ActivateApplication_hook;
+
+    VirtualProtect(vtbl, sizeof(*vtbl), oldProtect, &oldProtect);
+    
+    g_aamHookInstalled = true;
+    Wh_Log(L"[AAM-HOOK] Successfully installed");
+    pAAM->Release();
+}
+
+bool (*COpenControlPanel__MapLegacyName_orig)(void*, LPCWSTR, LPWSTR, UINT, bool*);
+bool COpenControlPanel__MapLegacyName_hook(
+    void    *pThis,
+    LPCWSTR  pszLegacyName,
+    LPWSTR   pszNewName,
+    UINT     uLen,
+    bool    *nameChanged)
+{
+    // Always tell the caller the name was NOT changed — this forces
+    // Explorer to use the original legacy Control Panel path.
+    *nameChanged = false;
+    *pszNewName = L'\0';
+    Wh_Log(L"[MAP-LEGACY] Suppressed mapping for: %s",
+           pszLegacyName ? pszLegacyName : L"(null)");
+    return false;
+}
+
+static bool InstallLegacyNameHook() {
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32) {
+        Wh_Log(L"[MAP-LEGACY] shell32.dll not loaded");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK mapLegacyHook = {{
+        L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
+        L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
+    },
+    (void**)&COpenControlPanel__MapLegacyName_orig,
+    (void*)COpenControlPanel__MapLegacyName_hook,
+    false};
+
+    if (WindhawkUtils::HookSymbols(hShell32, &mapLegacyHook, 1)) {
+        Wh_Log(L"[MAP-LEGACY] Hook installed successfully");
+        return true;
+    } else {
+        Wh_Log(L"[MAP-LEGACY] Failed to install hook (symbol may differ on this build)");
+        return false;
+    }
+}
 
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
@@ -1232,14 +1387,6 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     std::wstring arg = ToLower(tokens[1]);
     return (arg == L"system" || arg == L"microsoft.system");
 }
-
-// Explorer routes some navigations (notably the classic Control Panel's
-// "See also" links) by spawning a brand new "explorer.exe <target>" process
-// via CreateProcessW, rather than calling ShellExecuteW/ShellExecuteExW.
-// This extracts the target URI (ms-settings:... or shell:::{...}) from such
-// a command line, so CreateProcessW_hook can redirect it the same way the
-// ShellExecute hooks already do. Returns an empty string if the command
-// line isn't an "explorer.exe <uri>" launch.
 static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
     size_t i = 0, n = cmdLine.size();
     while (i < n && cmdLine[i] == L' ') i++;
@@ -1270,7 +1417,6 @@ static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
     if (IsShellClsid(rest.c_str())) return ToLower(rest);
     return L"";
 }
-
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
@@ -1376,22 +1522,18 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
     return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, 
         bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
-
 static volatile bool g_pniduiRetryRunning = false;
 
 
 static bool TryInstallPniduiHook() {
     std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
     
-    // Se già installato, non fare nulla
     if (g_pniduiHookInstalled) {
         return true;
     }
     
-    // Prima verifica se la DLL è già caricata nel processo
     HMODULE hMod = GetModuleHandleW(L"pnidui.dll");
     if (!hMod) {
-        // Non è caricata, prova a caricarla (potrebbe fallire se non disponibile)
         hMod = LoadLibraryExW(L"pnidui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) {
             Wh_Log(L"[PNIDUI-HOOK] pnidui.dll not loaded yet");
@@ -1425,7 +1567,6 @@ static bool TryInstallPniduiHook() {
 }
 
 static DWORD WINAPI PniduiRetryThread(LPVOID) {
-    // Evita che più thread di retry partano contemporaneamente
     if (g_pniduiRetryRunning) {
         Wh_Log(L"[PNIDUI-HOOK] Retry thread already running, exiting");
         return 0;
@@ -1434,8 +1575,7 @@ static DWORD WINAPI PniduiRetryThread(LPVOID) {
     
     Wh_Log(L"[PNIDUI-HOOK] Retry thread started - waiting for pnidui.dll to load");
     
-    // Aspetta che la DLL venga caricata - controlla ogni 500ms per max 30 secondi
-    const int MAX_WAIT_CHECKS = 60; // 30 secondi
+    const int MAX_WAIT_CHECKS = 60;
     const DWORD CHECK_INTERVAL = 500;
     bool dllLoaded = false;
     
@@ -1454,7 +1594,6 @@ static DWORD WINAPI PniduiRetryThread(LPVOID) {
         return 0;
     }
     
-    // Ora prova ad installare l'hook
     if (TryInstallPniduiHook()) {
         Wh_Log(L"[PNIDUI-HOOK] Hook installed successfully after waiting for DLL");
     } else {
@@ -1467,7 +1606,6 @@ static DWORD WINAPI PniduiRetryThread(LPVOID) {
 }
 
 static void InstallImmersiveMenuHooks() {
-    // Installa SndVolSSO (sempre)
     struct DllHook {
         const wchar_t*   dll;
         ICMH_CAODTM_t*  orig;
@@ -1497,9 +1635,7 @@ static void InstallImmersiveMenuHooks() {
         WindhawkUtils::HookSymbols(hMod, sndVolSsoDllHooks, 1);
     }
 
-    // Prova pnidui.dll - se fallisce, avvia il thread di retry
     if (!TryInstallPniduiHook()) {
-        // Controlla che il thread non sia già in esecuzione
         if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
             g_pniduiRetryStop = false;
             g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
@@ -1513,7 +1649,6 @@ static void InstallImmersiveMenuHooks() {
         }
     }
 
-    // Shell32 per dispositivi (solo Win11)
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
@@ -1536,6 +1671,7 @@ static void InstallImmersiveMenuHooks() {
         }
     }
 }
+
 static void InstallSyscallFallback() {
     HMODULE hWin32u = GetModuleHandleW(L"win32u.dll");
     if (!hWin32u) {
@@ -1546,7 +1682,6 @@ static void InstallSyscallFallback() {
         }
     }
     
-    // Prova prima con NtUserTrackPopupMenuEx (nome esatto)
     FARPROC pNtUserTrackPopupMenuEx = GetProcAddress(hWin32u, "NtUserTrackPopupMenuEx");
     if (!pNtUserTrackPopupMenuEx) {
         Wh_Log(L"[SYSCALL-HOOK] NtUserTrackPopupMenuEx not found by name");
@@ -1562,38 +1697,15 @@ static void InstallSyscallFallback() {
     }
 }
 
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
 // ---------------------------------------------------------------------------
 // Tray subclass watchdog
-//
-// Covers two scenarios that the CreateWindowExW hook alone doesn't handle:
-//
-// 1) Startup race condition: the tray's ToolbarWindow32 can be created
-//    before pnidui.dll/SndVolSSO.dll are loaded. With the SetupTraySubclass()
-//    fix this no longer blocks subclass installation, but the watchdog is
-//    still a useful second safety net in case FindTrayToolbar() fails on the
-//    first attempt (e.g. window not fully parented yet).
-//
-// 2) Tray "restart" WITHOUT the whole explorer.exe process dying: sometimes
-//    the taskbar/tray gets recreated internally by Explorer (taskbar-only
-//    crash and recovery, some "Restart" actions from Task Manager that only
-//    recreate Shell_TrayWnd, resolution/DPI changes that recreate the tray,
-//    etc). In these cases Wh_ModInit() is never called again (the process
-//    itself hasn't changed), so nothing else would reinstall the subclass or
-//    redo the pnidui.dll hook. That's what the dedicated HasTrayBeenRecreated()
-//    function detects, by tracking changes to the Shell_TrayWnd handle.
 // ---------------------------------------------------------------------------
 
-static HANDLE g_traySubclassWatchdogThread = nullptr;
-static volatile bool g_traySubclassWatchdogStop = false;
-static HWND g_lastShellTrayWnd = nullptr;
-
-// Detects whether the tray (Shell_TrayWnd) has been recreated since we last
-// checked. Returns true ONLY when it detects an actual change (not on the
-// very first call, which simply records the initial state).
 static bool HasTrayBeenRecreated() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTray) {
-        // Tray non ancora presente (avvio molto precoce): niente da rilevare.
         return false;
     }
 
@@ -1602,10 +1714,6 @@ static bool HasTrayBeenRecreated() {
     return recreated;
 }
 
-// Resets all state tied to the system tray redirect and retries installing
-// the required hooks. Called both on first startup (via Wh_ModInit) and
-// whenever the watchdog detects that the tray has been recreated while the
-// mod was already active.
 static void ReinitializeTrayRedirect() {
     Wh_Log(L"[TRAY-WATCHDOG] Reinitializing tray redirect state");
 
@@ -1638,11 +1746,7 @@ static void ReinitializeTrayRedirect() {
 static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
     Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread started");
 
-    // Initial phase: tight polling (every 500ms) for the first 30s, useful
-    // right after an Explorer restart while the tray is still settling.
-    // After that, fall back to a more relaxed periodic check (every 3s) for
-    // the rest of the mod's lifetime, to also catch later tray recreations.
-    const int   FAST_PHASE_CHECKS   = 60;   // 60 * 500ms = 30s
+    const int   FAST_PHASE_CHECKS   = 60;
     const DWORD FAST_INTERVAL_MS    = 500;
     const DWORD SLOW_INTERVAL_MS    = 3000;
 
@@ -1660,8 +1764,6 @@ static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
 
         if (!g_settings.redirectSystemTray) continue;
 
-        // Stale handle (window destroyed without Shell_TrayWnd changing,
-        // an edge case but cheap to check for).
         if (g_hTrayToolbar && !IsWindow(g_hTrayToolbar)) {
             Wh_Log(L"[TRAY-WATCHDOG] Tray toolbar handle no longer valid, resetting");
             g_hTrayToolbar = nullptr;
@@ -1675,9 +1777,6 @@ static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
     Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread exiting");
     return 0;
 }
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-
 HWND WINAPI CreateWindowExW_Hook(
     DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
@@ -1698,7 +1797,7 @@ HWND WINAPI CreateWindowExW_Hook(
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.24");
+    Wh_Log(L"Redirect Settings to Control Panel v10.0.25");
 
     DetectWindowsVersion();
     LoadSettings();
@@ -1729,7 +1828,16 @@ BOOL Wh_ModInit() {
     }
 
     InstallImmersiveMenuHooks();    
-    InstallSyscallFallback(); 
+    InstallSyscallFallback();
+
+    if (g_settings.comActivationRedirect && g_isWin11) {
+        InstallAAMHook();
+    }
+
+    if (g_settings.legacyNameMappingFix) {
+        InstallLegacyNameHook();
+    }
+
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
     if (hUser32) {
@@ -1738,10 +1846,7 @@ BOOL Wh_ModInit() {
             Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
         }
     }
-
-    // Initialize the Shell_TrayWnd reference for the watchdog (can be
-    // nullptr if we're too early in Explorer's boot: that's fine, the first
-    // watchdog tick will populate it without a false "recreation" positive).
+    // Initialize the Shell_TrayWnd reference for the watchdog
     g_lastShellTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
 
     g_traySubclassWatchdogStop = false;
@@ -1751,11 +1856,10 @@ BOOL Wh_ModInit() {
     } else {
         Wh_Log(L"[TRAY-WATCHDOG] Failed to create watchdog thread");
     }
-
     return TRUE;
 }
+
 void Wh_ModUninit() {
-    // Ferma il thread watchdog della tray, se attivo
     if (g_traySubclassWatchdogThread) {
         g_traySubclassWatchdogStop = true;
         Wh_Log(L"[TRAY-WATCHDOG] Stopping watchdog thread...");
@@ -1767,8 +1871,6 @@ void Wh_ModUninit() {
         CloseHandle(g_traySubclassWatchdogThread);
         g_traySubclassWatchdogThread = nullptr;
     }
-
-    // Ferma il thread di retry se attivo
     if (g_pniduiRetryThread) {
         g_pniduiRetryStop = true;
         Wh_Log(L"[PNIDUI-HOOK] Stopping retry thread...");
@@ -1792,7 +1894,6 @@ void Wh_ModSettingsChanged() {
     g_pniduiBase = nullptr;
     g_pniduiEnd = nullptr;
     
-    // Resetta lo stato degli hook per riprovare
     {
         std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
         g_pniduiHookInstalled = false;
@@ -1802,7 +1903,15 @@ void Wh_ModSettingsChanged() {
     InitMappings();
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
-        // Reinstalla gli hook se necessario
         InstallImmersiveMenuHooks();
+    }
+
+    // Re-install experimental hooks if settings changed
+    if (g_settings.comActivationRedirect && g_isWin11) {
+        InstallAAMHook();
+    }
+
+    if (g_settings.legacyNameMappingFix) {
+        InstallLegacyNameHook();
     }
 }
