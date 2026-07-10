@@ -489,11 +489,21 @@ static HWND FindTrayToolbar() {
 
 static void SetupTraySubclass() {
     if (g_hTrayToolbar) return;
-    if (!InitTrayDllInfo()) return;
+    // NOTE: we no longer bail out early if InitTrayDllInfo() fails. Right
+    // after an Explorer restart the tray's ToolbarWindow32 is created well
+    // before pnidui.dll/SndVolSSO.dll get loaded: bailing out here used to
+    // skip installing the subclass entirely, and since CreateWindowExW_Hook
+    // only fires once (at window creation), the subclass would never be
+    // installed for the rest of the process's lifetime. The subclass should
+    // be installed regardless: GetTrayButtonType() already retries
+    // InitTrayDllInfo() on every click, so it self-heals once the DLLs
+    // become available.
+    InitTrayDllInfo();
     HWND hToolbar = FindTrayToolbar();
     if (!hToolbar) return;
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
         g_hTrayToolbar = hToolbar;
+        Wh_Log(L"[TRAY-SUBCLASS] Tray toolbar subclass installed (hwnd=0x%p)", hToolbar);
     }
 }
 
@@ -1223,6 +1233,44 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     return (arg == L"system" || arg == L"microsoft.system");
 }
 
+// Explorer routes some navigations (notably the classic Control Panel's
+// "See also" links) by spawning a brand new "explorer.exe <target>" process
+// via CreateProcessW, rather than calling ShellExecuteW/ShellExecuteExW.
+// This extracts the target URI (ms-settings:... or shell:::{...}) from such
+// a command line, so CreateProcessW_hook can redirect it the same way the
+// ShellExecute hooks already do. Returns an empty string if the command
+// line isn't an "explorer.exe <uri>" launch.
+static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
+    size_t i = 0, n = cmdLine.size();
+    while (i < n && cmdLine[i] == L' ') i++;
+
+    std::wstring exeToken;
+    if (i < n && cmdLine[i] == L'"') {
+        size_t end = cmdLine.find(L'"', i + 1);
+        if (end == std::wstring::npos) return L"";
+        exeToken = cmdLine.substr(i + 1, end - i - 1);
+        i = end + 1;
+    } else {
+        size_t start = i;
+        while (i < n && cmdLine[i] != L' ') i++;
+        exeToken = cmdLine.substr(start, i - start);
+    }
+
+    if (BaseNameLower(exeToken) != L"explorer.exe") return L"";
+
+    while (i < n && cmdLine[i] == L' ') i++;
+    std::wstring rest = cmdLine.substr(i);
+    while (!rest.empty() && rest.back() == L' ') rest.pop_back();
+    if (rest.size() >= 2 && rest.front() == L'"' && rest.back() == L'"') {
+        rest = rest.substr(1, rest.size() - 2);
+    }
+    if (rest.empty()) return L"";
+
+    if (IsMsSettings(rest.c_str())) return NormalizeUri(rest);
+    if (IsShellClsid(rest.c_str())) return ToLower(rest);
+    return L"";
+}
+
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
@@ -1308,6 +1356,21 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
             if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
             SetLastError(ERROR_SUCCESS);
             return TRUE;
+        }
+
+        // Handles cases like the classic Control Panel's "See also" links,
+        // which Explorer launches as a new "explorer.exe ms-settings:..."
+        // (or "explorer.exe shell:::{...}") process via CreateProcessW
+        // instead of going through ShellExecuteW/ShellExecuteExW.
+        std::wstring uri = ExtractExplorerLaunchUri(cmdLine);
+        if (!uri.empty()) {
+            auto result = ResolveUri(uri, nullptr);
+            if (result.intercept) {
+                if (!result.target.empty()) LaunchTarget(result.target);
+                if (lpProcessInformation) ZeroMemory(lpProcessInformation, sizeof(PROCESS_INFORMATION));
+                SetLastError(ERROR_SUCCESS);
+                return TRUE;
+            }
         }
     }
     return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, 
@@ -1498,6 +1561,120 @@ static void InstallSyscallFallback() {
         Wh_Log(L"[SYSCALL-HOOK] Failed to hook NtUserTrackPopupMenuEx");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tray subclass watchdog
+//
+// Covers two scenarios that the CreateWindowExW hook alone doesn't handle:
+//
+// 1) Startup race condition: the tray's ToolbarWindow32 can be created
+//    before pnidui.dll/SndVolSSO.dll are loaded. With the SetupTraySubclass()
+//    fix this no longer blocks subclass installation, but the watchdog is
+//    still a useful second safety net in case FindTrayToolbar() fails on the
+//    first attempt (e.g. window not fully parented yet).
+//
+// 2) Tray "restart" WITHOUT the whole explorer.exe process dying: sometimes
+//    the taskbar/tray gets recreated internally by Explorer (taskbar-only
+//    crash and recovery, some "Restart" actions from Task Manager that only
+//    recreate Shell_TrayWnd, resolution/DPI changes that recreate the tray,
+//    etc). In these cases Wh_ModInit() is never called again (the process
+//    itself hasn't changed), so nothing else would reinstall the subclass or
+//    redo the pnidui.dll hook. That's what the dedicated HasTrayBeenRecreated()
+//    function detects, by tracking changes to the Shell_TrayWnd handle.
+// ---------------------------------------------------------------------------
+
+static HANDLE g_traySubclassWatchdogThread = nullptr;
+static volatile bool g_traySubclassWatchdogStop = false;
+static HWND g_lastShellTrayWnd = nullptr;
+
+// Detects whether the tray (Shell_TrayWnd) has been recreated since we last
+// checked. Returns true ONLY when it detects an actual change (not on the
+// very first call, which simply records the initial state).
+static bool HasTrayBeenRecreated() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!hTray) {
+        // Tray non ancora presente (avvio molto precoce): niente da rilevare.
+        return false;
+    }
+
+    bool recreated = (g_lastShellTrayWnd != nullptr && hTray != g_lastShellTrayWnd);
+    g_lastShellTrayWnd = hTray;
+    return recreated;
+}
+
+// Resets all state tied to the system tray redirect and retries installing
+// the required hooks. Called both on first startup (via Wh_ModInit) and
+// whenever the watchdog detects that the tray has been recreated while the
+// mod was already active.
+static void ReinitializeTrayRedirect() {
+    Wh_Log(L"[TRAY-WATCHDOG] Reinitializing tray redirect state");
+
+    RemoveTraySubclass();
+
+    g_sndVolSSOBase = nullptr;
+    g_sndVolSSOEnd  = nullptr;
+    g_pniduiBase    = nullptr;
+    g_pniduiEnd     = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+        g_pniduiHookInstalled = false;
+    }
+
+    if (g_settings.redirectSystemTray) {
+        SetupTraySubclass();
+    }
+
+    if (!TryInstallPniduiHook()) {
+        if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
+            g_pniduiRetryStop = false;
+            g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
+        }
+    }
+
+    InstallImmersiveMenuHooks();
+}
+
+static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
+    Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread started");
+
+    // Initial phase: tight polling (every 500ms) for the first 30s, useful
+    // right after an Explorer restart while the tray is still settling.
+    // After that, fall back to a more relaxed periodic check (every 3s) for
+    // the rest of the mod's lifetime, to also catch later tray recreations.
+    const int   FAST_PHASE_CHECKS   = 60;   // 60 * 500ms = 30s
+    const DWORD FAST_INTERVAL_MS    = 500;
+    const DWORD SLOW_INTERVAL_MS    = 3000;
+
+    int tick = 0;
+    while (!g_traySubclassWatchdogStop) {
+        Sleep(tick < FAST_PHASE_CHECKS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS);
+        tick++;
+        if (g_traySubclassWatchdogStop) break;
+
+        if (HasTrayBeenRecreated()) {
+            Wh_Log(L"[TRAY-WATCHDOG] Shell_TrayWnd recreation detected, reinitializing");
+            ReinitializeTrayRedirect();
+            continue;
+        }
+
+        if (!g_settings.redirectSystemTray) continue;
+
+        // Stale handle (window destroyed without Shell_TrayWnd changing,
+        // an edge case but cheap to check for).
+        if (g_hTrayToolbar && !IsWindow(g_hTrayToolbar)) {
+            Wh_Log(L"[TRAY-WATCHDOG] Tray toolbar handle no longer valid, resetting");
+            g_hTrayToolbar = nullptr;
+        }
+
+        if (!g_hTrayToolbar) {
+            SetupTraySubclass();
+        }
+    }
+
+    Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread exiting");
+    return 0;
+}
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 
@@ -1562,9 +1739,35 @@ BOOL Wh_ModInit() {
         }
     }
 
+    // Initialize the Shell_TrayWnd reference for the watchdog (can be
+    // nullptr if we're too early in Explorer's boot: that's fine, the first
+    // watchdog tick will populate it without a false "recreation" positive).
+    g_lastShellTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+
+    g_traySubclassWatchdogStop = false;
+    g_traySubclassWatchdogThread = CreateThread(nullptr, 0, TraySubclassWatchdogThread, nullptr, 0, nullptr);
+    if (g_traySubclassWatchdogThread) {
+        Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread created");
+    } else {
+        Wh_Log(L"[TRAY-WATCHDOG] Failed to create watchdog thread");
+    }
+
     return TRUE;
 }
 void Wh_ModUninit() {
+    // Ferma il thread watchdog della tray, se attivo
+    if (g_traySubclassWatchdogThread) {
+        g_traySubclassWatchdogStop = true;
+        Wh_Log(L"[TRAY-WATCHDOG] Stopping watchdog thread...");
+        DWORD waitResult = WaitForSingleObject(g_traySubclassWatchdogThread, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"[TRAY-WATCHDOG] Timeout, terminating thread");
+            TerminateThread(g_traySubclassWatchdogThread, 0);
+        }
+        CloseHandle(g_traySubclassWatchdogThread);
+        g_traySubclassWatchdogThread = nullptr;
+    }
+
     // Ferma il thread di retry se attivo
     if (g_pniduiRetryThread) {
         g_pniduiRetryStop = true;
