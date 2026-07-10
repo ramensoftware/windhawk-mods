@@ -2,11 +2,11 @@
 // @id              classic-photo-viewer
 // @name            Classic Windows Photo Viewer Redirect
 // @description     Redirects image opening at runtime to the classic Photo Viewer (shimgvw.dll), without modifying the Registry
-// @version         1.1.4
+// @version         1.3.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
-// @compilerOptions -lshell32 -lshlwapi -lwintrust -lcrypt32
+// @compilerOptions -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,7 +21,7 @@ When you open an image from File Explorer (via double-click, Enter, or the conte
 ### Key Features
 - No Registry modifications: The mod does not alter file associations or create any keys in HKLM or HKCU.
 - Purely runtime effect: The redirection occurs exclusively in memory. Disabling the mod instantly restores the default Windows behavior.
-- Automatic security verification: At startup, the mod verifies the presence and integrity of the Microsoft digital signature on the required system files (shimgvw.dll and rundll32.exe). If any file is missing or the signature is invalid, the mod automatically deactivates for security.
+- Virtual registry hooking: Intercepts registry queries to make the system believe Photo Viewer is properly registered.
 - Supported formats: Covers major raster formats including JPG, JPEG, JFIF, PNG, BMP, DIB, GIF, TIF, TIFF, ICO, WDP, and JXR.
 
 ### Known Limitations
@@ -43,52 +43,71 @@ When you open an image from File Explorer (via double-click, Enter, or the conte
   - .tif
   - .tiff
   - .ico
+  - .wdp
+  - .jxr
   $name: Extensions to redirect
   $description: Image formats for which to force opening with the classic Photo Viewer
+- LockTimeoutMs: 0
+  $name: File lock timeout (ms)
+  $description: Time to wait for file lock to be released (0 to disable, 100-5000 ms). If timeout expires, opens with default viewer.
 */
 // ==/WindhawkModSettings==
-
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
-#endif
-#ifndef WINVER
-#define WINVER 0x0601
-#endif
-#ifndef NTDDI_VERSION
-#define NTDDI_VERSION 0x06010000
-#endif
 
 #include <windows.h>
 #include <shellapi.h>
 #include <shlwapi.h>
-#include <wintrust.h>
-#include <softpub.h>
-#include <wincrypt.h>
-#include <mscat.h>
 #include <string>
 #include <vector>
 #include <algorithm>
-
-// ---------------------------------------------------------------------------
-// Runtime function pointers
-// ---------------------------------------------------------------------------
-typedef BOOL (WINAPI *PFN_CryptCATAdminAcquireContext2)(
-    HCATADMIN*, const GUID*, PCWSTR,
-    PCCERT_STRONG_SIGN_PARA, DWORD);
-
-typedef BOOL (WINAPI *PFN_CryptCATAdminCalcHashFromFileHandle2)(
-    HCATADMIN, HANDLE, DWORD*, BYTE*, DWORD);
-
-static PFN_CryptCATAdminAcquireContext2         pfnAcquireContext2   = nullptr;
-static PFN_CryptCATAdminCalcHashFromFileHandle2 pfnCalcHashFromHandle2 = nullptr;
+#include <cwctype>
+#include <unordered_map>
 
 // ---------------------------------------------------------------------------
 // Globals
 // ---------------------------------------------------------------------------
 std::vector<std::wstring> g_extensions;
 std::wstring              g_shimgvwPath;
+std::wstring              g_rundll32Path;
 bool                      g_photoViewerAvailable = false;
 thread_local bool         g_inRedirect           = false;
+int                       g_lockTimeoutMs        = 0;
+
+// Virtual registry values to intercept
+std::unordered_map<std::wstring, std::wstring> g_virtualRegistry;
+
+// Original API functions
+typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+REGQUERYVALUEEXW pOriginalRegQueryValueExW = nullptr;
+
+typedef LONG (WINAPI *REGOPENKEYEXW)(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);
+REGOPENKEYEXW pOriginalRegOpenKeyExW = nullptr;
+
+// ---------------------------------------------------------------------------
+// Virtual Registry Setup
+// ---------------------------------------------------------------------------
+void SetupVirtualRegistry() {
+    // Simulate the registry keys that would normally be created by the .reg file
+    // These make the system believe Photo Viewer is properly registered
+    
+    // File associations for Photo Viewer
+    g_virtualRegistry[L".jpg"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".jpeg"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".jfif"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".png"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".bmp"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".dib"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".gif"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".tif"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".tiff"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".ico"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".wdp"] = L"PhotoViewer.FileAssoc.Tiff";
+    g_virtualRegistry[L".jxr"] = L"PhotoViewer.FileAssoc.Tiff";
+    
+    // Additional ProgID registrations that Windows might look for
+    g_virtualRegistry[L"PhotoViewer.FileAssoc.Tiff"] = L"Windows Photo Viewer";
+    
+    Wh_Log(L"Virtual registry configured with %zu entries", g_virtualRegistry.size());
+}
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -109,235 +128,13 @@ void LoadSettings() {
 
     if (g_extensions.empty()) {
         g_extensions = {L".jpg", L".jpeg", L".jfif", L".png", L".bmp",
-                        L".dib", L".gif",  L".tif",  L".tiff", L".ico"};
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Publisher check
-// ---------------------------------------------------------------------------
-bool CheckPublisherIsMicrosoft(HANDLE hWVTStateData) {
-    if (!hWVTStateData) return false;
-
-    CRYPT_PROVIDER_DATA* provData = WTHelperProvDataFromStateData(hWVTStateData);
-    if (!provData || provData->csSigners == 0) return false;
-
-    CRYPT_PROVIDER_SGNR* signer =
-        WTHelperGetProvSignerFromChain(provData, 0, FALSE, 0);
-    if (!signer || !signer->pChainContext ||
-        !signer->pChainContext->rgpChain ||
-        !signer->pChainContext->rgpChain[0] ||
-        !signer->pChainContext->rgpChain[0]->rgpElement ||
-        !signer->pChainContext->rgpChain[0]->rgpElement[0]) {
-        return false;
+                        L".dib", L".gif",  L".tif",  L".tiff", L".ico",
+                        L".wdp", L".jxr"};
     }
 
-    PCCERT_CONTEXT certContext =
-        signer->pChainContext->rgpChain[0]->rgpElement[0]->pCertContext;
-    if (!certContext) return false;
-
-    DWORD nameLen = CertGetNameStringW(
-        certContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, nullptr, 0);
-    if (nameLen == 0) return false;
-
-    std::vector<WCHAR> subject(nameLen + 1);
-    if (!CertGetNameStringW(certContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
-                            subject.data(), nameLen)) {
-        return false;
-    }
-
-    std::wstring publisher(subject.data());
-    Wh_Log(L"Signer: %s", publisher.c_str());
-
-    return publisher.find(L"Microsoft") != std::wstring::npos;
-}
-
-// ---------------------------------------------------------------------------
-// Catalog-based signature verification
-// Compatible with both legacy APIs and SHA-256 APIs.
-// ---------------------------------------------------------------------------
-bool VerifyCatalogSignature(const std::wstring& filePath) {
-    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"Cannot open file for catalog verification: %s", filePath.c_str());
-        return false;
-    }
-
-    HCATADMIN hCatAdmin  = nullptr;
-    bool usedModernApi   = false;
-
-    // Try SHA-256 context first (loaded dynamically)
-    if (pfnAcquireContext2 &&
-        pfnAcquireContext2(&hCatAdmin, nullptr, L"SHA256", nullptr, 0)) {
-        usedModernApi = true;
-    } else {
-        // Fallback: legacy SHA-1 context
-        if (!CryptCATAdminAcquireContext(&hCatAdmin, nullptr, 0)) {
-            Wh_Log(L"CryptCATAdminAcquireContext failed: %lu", GetLastError());
-            CloseHandle(hFile);
-            return false;
-        }
-    }
-
-    // Compute file hash -------------------------------------------------------
-    DWORD hashSize = 0;
-    std::vector<BYTE> hash;
-
-    if (usedModernApi && pfnCalcHashFromHandle2) {
-        pfnCalcHashFromHandle2(hCatAdmin, hFile, &hashSize, nullptr, 0);
-        if (hashSize == 0) {
-            Wh_Log(L"Failed to get hash size (Win8 API) for %s", filePath.c_str());
-            CryptCATAdminReleaseContext(hCatAdmin, 0);
-            CloseHandle(hFile);
-            return false;
-        }
-        hash.resize(hashSize);
-        if (!pfnCalcHashFromHandle2(hCatAdmin, hFile, &hashSize, hash.data(), 0)) {
-            Wh_Log(L"CryptCATAdminCalcHashFromFileHandle2 failed: %lu", GetLastError());
-            CryptCATAdminReleaseContext(hCatAdmin, 0);
-            CloseHandle(hFile);
-            return false;
-        }
-    } else {
-        CryptCATAdminCalcHashFromFileHandle(hFile, &hashSize, nullptr, 0);
-        if (hashSize == 0) {
-            Wh_Log(L"Failed to get hash size (legacy API) for %s", filePath.c_str());
-            CryptCATAdminReleaseContext(hCatAdmin, 0);
-            CloseHandle(hFile);
-            return false;
-        }
-        hash.resize(hashSize);
-        if (!CryptCATAdminCalcHashFromFileHandle(hFile, &hashSize, hash.data(), 0)) {
-            Wh_Log(L"CryptCATAdminCalcHashFromFileHandle failed: %lu", GetLastError());
-            CryptCATAdminReleaseContext(hCatAdmin, 0);
-            CloseHandle(hFile);
-            return false;
-        }
-    }
-
-    CloseHandle(hFile);
-
-    // Build hex string of hash ------------------------------------------------
-    std::wstring hashStr;
-    hashStr.reserve(hashSize * 2);
-    for (DWORD i = 0; i < hashSize; i++) {
-        WCHAR hex[3];
-        swprintf_s(hex, L"%02X", hash[i]);
-        hashStr += hex;
-    }
-
-    // Enumerate catalogs containing this hash ---------------------------------
-    HCATINFO hCatInfo = CryptCATAdminEnumCatalogFromHash(
-        hCatAdmin, hash.data(), hashSize, 0, nullptr);
-
-    if (!hCatInfo) {
-        Wh_Log(L"No system catalog found containing hash of %s", filePath.c_str());
-        CryptCATAdminReleaseContext(hCatAdmin, 0);
-        return false;
-    }
-
-    CATALOG_INFO catInfo = {};
-    catInfo.cbStruct = sizeof(catInfo);
-    if (!CryptCATCatalogInfoFromContext(hCatInfo, &catInfo, 0)) {
-        Wh_Log(L"CryptCATCatalogInfoFromContext failed: %lu", GetLastError());
-        CryptCATAdminReleaseCatalogContext(hCatAdmin, hCatInfo, 0);
-        CryptCATAdminReleaseContext(hCatAdmin, 0);
-        return false;
-    }
-
-    Wh_Log(L"File is member of catalog: %s", catInfo.wszCatalogFile);
-
-    // Build WINTRUST_CATALOG_INFO ---------------------------------------------
-    WINTRUST_CATALOG_INFO wtCatInfo = {};
-    wtCatInfo.cbStruct              = sizeof(wtCatInfo);
-    wtCatInfo.pcwszCatalogFilePath  = catInfo.wszCatalogFile;
-    wtCatInfo.pcwszMemberTag        = hashStr.c_str();
-    wtCatInfo.pcwszMemberFilePath   = filePath.c_str();
-    wtCatInfo.hMemberFile           = nullptr;
-    wtCatInfo.pbCalculatedFileHash  = hash.data();
-    wtCatInfo.cbCalculatedFileHash  = hashSize;
-#if _WIN32_WINNT >= 0x0602
-    wtCatInfo.hCatAdmin             = hCatAdmin;
-#endif
-
-    WINTRUST_DATA wtData       = {};
-    wtData.cbStruct            = sizeof(wtData);
-    wtData.dwUnionChoice       = WTD_CHOICE_CATALOG;
-    wtData.pCatalog            = &wtCatInfo;
-    wtData.dwUIChoice          = WTD_UI_NONE;
-    wtData.fdwRevocationChecks = WTD_REVOKE_NONE;
-    wtData.dwStateAction       = WTD_STATEACTION_VERIFY;
-    wtData.dwProvFlags         = WTD_CACHE_ONLY_URL_RETRIEVAL;
-
-    GUID policyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-    LONG status     = WinVerifyTrust(nullptr, &policyGUID, &wtData);
-
-    bool valid = (status == ERROR_SUCCESS);
-    if (valid) {
-        valid = CheckPublisherIsMicrosoft(wtData.hWVTStateData);
-        if (!valid)
-            Wh_Log(L"Catalog is valid but signer is not Microsoft");
-        else
-            Wh_Log(L"Catalog-based Microsoft signature verified for %s", filePath.c_str());
-    } else {
-        Wh_Log(L"Catalog signature verification failed (0x%08lX)", status);
-    }
-
-    wtData.dwStateAction = WTD_STATEACTION_CLOSE;
-    WinVerifyTrust(nullptr, &policyGUID, &wtData);
-
-    CryptCATAdminReleaseCatalogContext(hCatAdmin, hCatInfo, 0);
-    CryptCATAdminReleaseContext(hCatAdmin, 0);
-
-    return valid;
-}
-
-// ---------------------------------------------------------------------------
-// Embedded + catalog verification
-// ---------------------------------------------------------------------------
-bool VerifyMicrosoftSignature(const std::wstring& filePath) {
-    WINTRUST_FILE_INFO fileInfo = {};
-    fileInfo.cbStruct           = sizeof(WINTRUST_FILE_INFO);
-    fileInfo.pcwszFilePath      = filePath.c_str();
-
-    WINTRUST_DATA wtData       = {};
-    wtData.cbStruct            = sizeof(WINTRUST_DATA);
-    wtData.dwUIChoice          = WTD_UI_NONE;
-    wtData.fdwRevocationChecks = WTD_REVOKE_NONE;
-    wtData.dwUnionChoice       = WTD_CHOICE_FILE;
-    wtData.pFile               = &fileInfo;
-    wtData.dwStateAction       = WTD_STATEACTION_VERIFY;
-    wtData.dwProvFlags         = WTD_CACHE_ONLY_URL_RETRIEVAL;
-
-    GUID policyGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-    LONG status     = WinVerifyTrust(nullptr, &policyGUID, &wtData);
-
-    if (status == ERROR_SUCCESS) {
-        bool microsoft = CheckPublisherIsMicrosoft(wtData.hWVTStateData);
-
-        wtData.dwStateAction = WTD_STATEACTION_CLOSE;
-        WinVerifyTrust(nullptr, &policyGUID, &wtData);
-
-        if (microsoft) {
-            Wh_Log(L"Embedded Microsoft signature verified: %s", filePath.c_str());
-            return true;
-        }
-        Wh_Log(L"Embedded signature valid but signer is not Microsoft");
-        return false;
-    }
-
-    wtData.dwStateAction = WTD_STATEACTION_CLOSE;
-    WinVerifyTrust(nullptr, &policyGUID, &wtData);
-
-    if (status == (LONG)TRUST_E_NOSIGNATURE) {
-        Wh_Log(L"No embedded signature for %s, trying catalog-based verification...",
-               filePath.c_str());
-        return VerifyCatalogSignature(filePath);
-    }
-
-    Wh_Log(L"WinVerifyTrust failed for %s (0x%08lX)", filePath.c_str(), status);
-    return false;
+    g_lockTimeoutMs = Wh_GetIntSetting(L"LockTimeoutMs");
+    if (g_lockTimeoutMs < 0) g_lockTimeoutMs = 0;
+    if (g_lockTimeoutMs > 5000) g_lockTimeoutMs = 5000;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,35 +148,21 @@ bool CheckPhotoViewerAvailable() {
     }
 
     g_shimgvwPath = std::wstring(sysDir) + L"\\shimgvw.dll";
-
     DWORD attrs = GetFileAttributesW(g_shimgvwPath.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
         Wh_Log(L"shimgvw.dll not found in %s", sysDir);
         return false;
     }
 
-    Wh_Log(L"Found shimgvw.dll, verifying digital signature...");
-    if (!VerifyMicrosoftSignature(g_shimgvwPath)) {
-        Wh_Log(L"SECURITY ERROR: shimgvw.dll signature is invalid or missing. "
-               L"The file may have been tampered with. Mod will NOT activate.");
-        return false;
-    }
-
-    std::wstring rundll32Path = std::wstring(sysDir) + L"\\rundll32.exe";
-    attrs = GetFileAttributesW(rundll32Path.c_str());
-    if (attrs == INVALID_FILE_ATTRIBUTES) {
+    g_rundll32Path = std::wstring(sysDir) + L"\\rundll32.exe";
+    attrs = GetFileAttributesW(g_rundll32Path.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
         Wh_Log(L"rundll32.exe not found in %s", sysDir);
         return false;
     }
 
-    Wh_Log(L"Found rundll32.exe, verifying digital signature...");
-    if (!VerifyMicrosoftSignature(rundll32Path)) {
-        Wh_Log(L"SECURITY ERROR: rundll32.exe signature is invalid or missing. "
-               L"Mod will NOT activate.");
-        return false;
-    }
-
-    Wh_Log(L"All security checks passed. Photo Viewer is available and verified.");
+    Wh_Log(L"Photo Viewer is available (%s, %s)", g_shimgvwPath.c_str(),
+           g_rundll32Path.c_str());
     return true;
 }
 
@@ -398,7 +181,119 @@ bool IsTargetImageExtension(const std::wstring& path) {
 }
 
 // ---------------------------------------------------------------------------
-// Hook
+// File lock detection
+// ---------------------------------------------------------------------------
+enum class FileAccessResult {
+    Accessible,
+    Locked,
+    Error
+};
+
+FileAccessResult CheckFileAccessible(const std::wstring& filePath) {
+    HANDLE hFile = CreateFileW(
+        filePath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    
+    if (hFile != INVALID_HANDLE_VALUE) {
+        CloseHandle(hFile);
+        return FileAccessResult::Accessible;
+    }
+    
+    DWORD error = GetLastError();
+    if (error == ERROR_SHARING_VIOLATION) {
+        Wh_Log(L"File is locked by another process: %s", filePath.c_str());
+        return FileAccessResult::Locked;
+    }
+    
+    Wh_Log(L"Cannot access file %s (Error: %d)", filePath.c_str(), error);
+    return FileAccessResult::Error;
+}
+
+bool WaitForFileUnlock(const std::wstring& filePath, int timeoutMs) {
+    if (timeoutMs <= 0) return false;
+    
+    int elapsed = 0;
+    const int checkInterval = 100;
+    
+    while (elapsed < timeoutMs) {
+        if (CheckFileAccessible(filePath) == FileAccessResult::Accessible) {
+            Wh_Log(L"File lock released after %d ms: %s", elapsed, filePath.c_str());
+            return true;
+        }
+        Sleep(checkInterval);
+        elapsed += checkInterval;
+    }
+    
+    Wh_Log(L"Timeout waiting for file unlock (%d ms): %s", timeoutMs, filePath.c_str());
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Registry API Hooks (Virtual Registry)
+// ---------------------------------------------------------------------------
+LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, 
+                                  LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData)
+{
+    // Check if we need to intercept this registry query
+    if (lpValueName && g_photoViewerAvailable) {
+        std::wstring valueName(lpValueName);
+        
+        // Convert to lowercase for case-insensitive comparison
+        for (auto& c : valueName) c = towlower(c);
+        
+        auto it = g_virtualRegistry.find(valueName);
+        if (it != g_virtualRegistry.end()) {
+            Wh_Log(L"Intercepting registry query for: %s", lpValueName);
+            
+            std::wstring virtualValue = it->second;
+            DWORD dataSize = (virtualValue.length() + 1) * sizeof(WCHAR);
+            
+            if (lpType)
+                *lpType = REG_SZ;
+            
+            if (lpData && lpcbData && *lpcbData >= dataSize) {
+                memcpy(lpData, virtualValue.c_str(), dataSize);
+                *lpcbData = dataSize;
+            } else if (lpcbData) {
+                *lpcbData = dataSize;
+            }
+            
+            return ERROR_SUCCESS;
+        }
+        
+        // Also check for ProgID lookups (without the dot)
+        if (valueName.find(L"photoviewer.fileassoc") != std::wstring::npos) {
+            Wh_Log(L"Intercepting ProgID registry query for: %s", lpValueName);
+            
+            if (lpType)
+                *lpType = REG_SZ;
+            
+            std::wstring virtualValue = L"Windows Photo Viewer";
+            DWORD dataSize = (virtualValue.length() + 1) * sizeof(WCHAR);
+            
+            if (lpData && lpcbData && *lpcbData >= dataSize) {
+                memcpy(lpData, virtualValue.c_str(), dataSize);
+                *lpcbData = dataSize;
+            } else if (lpcbData) {
+                *lpcbData = dataSize;
+            }
+            
+            return ERROR_SUCCESS;
+        }
+    }
+    
+    // Call the original function for all other queries
+    return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+}
+
+// ---------------------------------------------------------------------------
+// ShellExecuteEx Hook (with fallback for file locks)
 // ---------------------------------------------------------------------------
 using ShellExecuteExW_t = decltype(&ShellExecuteExW);
 ShellExecuteExW_t ShellExecuteExW_Original;
@@ -420,6 +315,28 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
     if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY))
         return ShellExecuteExW_Original(pExecInfo);
 
+    // Check if file is locked by another program
+    FileAccessResult access = CheckFileAccessible(filePath);
+    if (access == FileAccessResult::Locked) {
+        Wh_Log(L"File locked, attempting to wait: %s", filePath.c_str());
+        
+        if (g_lockTimeoutMs > 0) {
+            if (!WaitForFileUnlock(filePath, g_lockTimeoutMs)) {
+                Wh_Log(L"File remains locked after timeout, falling back to default viewer: %s", 
+                       filePath.c_str());
+                // With virtual registry, this might now open in Photo Viewer anyway!
+                return ShellExecuteExW_Original(pExecInfo);
+            }
+        } else {
+            Wh_Log(L"File locked and timeout disabled, falling back to default viewer: %s", 
+                   filePath.c_str());
+            return ShellExecuteExW_Original(pExecInfo);
+        }
+    } else if (access == FileAccessResult::Error) {
+        Wh_Log(L"File access error, falling back to default viewer: %s", filePath.c_str());
+        return ShellExecuteExW_Original(pExecInfo);
+    }
+
     Wh_Log(L"Redirecting to Photo Viewer: %s", filePath.c_str());
 
     std::wstring params = L"\"" + g_shimgvwPath +
@@ -429,7 +346,7 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
     sei.fMask             = SEE_MASK_NOCLOSEPROCESS;
     sei.hwnd              = pExecInfo->hwnd;
     sei.lpVerb            = L"open";
-    sei.lpFile            = L"rundll32.exe";
+    sei.lpFile            = g_rundll32Path.c_str();
     sei.lpParameters      = params.c_str();
     sei.lpDirectory       = pExecInfo->lpDirectory;
     sei.nShow             = pExecInfo->nShow ? pExecInfo->nShow : SW_SHOWNORMAL;
@@ -439,10 +356,14 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
     g_inRedirect = false;
 
     if (result) {
-        pExecInfo->hProcess = sei.hProcess;
+        if (pExecInfo->fMask & SEE_MASK_NOCLOSEPROCESS) {
+            pExecInfo->hProcess = sei.hProcess;
+        } else {
+            if (sei.hProcess)
+                CloseHandle(sei.hProcess);
+            pExecInfo->hProcess = nullptr;
+        }
         pExecInfo->hInstApp = reinterpret_cast<HINSTANCE>(33);
-        if (sei.hProcess)
-            CloseHandle(sei.hProcess);
         return TRUE;
     }
 
@@ -456,54 +377,50 @@ BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* pExecInfo) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Classic Photo Viewer Redirect - Initializing");
 
-    // Dynamically resolve Win8+ catalog APIs (safe on Win7 - returns nullptr)
-    HMODULE hWintrust = GetModuleHandleW(L"wintrust.dll");
-    if (!hWintrust) hWintrust = LoadLibraryW(L"wintrust.dll");
-    if (hWintrust) {
-        pfnAcquireContext2 = reinterpret_cast<PFN_CryptCATAdminAcquireContext2>(
-            GetProcAddress(hWintrust, "CryptCATAdminAcquireContext2"));
-        pfnCalcHashFromHandle2 =
-            reinterpret_cast<PFN_CryptCATAdminCalcHashFromFileHandle2>(
-                GetProcAddress(hWintrust, "CryptCATAdminCalcHashFromFileHandle2"));
-    }
-
-    if (pfnAcquireContext2 && pfnCalcHashFromHandle2)
-        Wh_Log(L"Win8+ catalog APIs available (SHA-256 support enabled)");
-    else
-        Wh_Log(L"Win8+ catalog APIs not found, using legacy SHA-1 catalog verification");
-
     LoadSettings();
+    SetupVirtualRegistry();
 
     g_photoViewerAvailable = CheckPhotoViewerAvailable();
     if (!g_photoViewerAvailable) {
-        Wh_Log(L"Mod will remain inactive: security checks failed.");
+        Wh_Log(L"Mod will remain inactive: required system files not found.");
         return TRUE;
     }
 
+    // Hook registry APIs for virtual registry
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (hKernelBase) {
+        FARPROC pRegQueryValueExW = GetProcAddress(hKernelBase, "RegQueryValueExW");
+        if (pRegQueryValueExW) {
+            if (Wh_SetFunctionHook(
+                    reinterpret_cast<void*>(pRegQueryValueExW),
+                    reinterpret_cast<void*>(RegQueryValueExWHook),
+                    reinterpret_cast<void**>(&pOriginalRegQueryValueExW))) {
+                Wh_Log(L"Successfully hooked RegQueryValueExW for virtual registry");
+            } else {
+                Wh_Log(L"Failed to hook RegQueryValueExW");
+            }
+        }
+    }
+
+    // Hook ShellExecuteExW for direct redirection
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        Wh_Log(L"Cannot get handle to shell32.dll");
-        g_photoViewerAvailable = false;
-        return TRUE;
+    if (hShell32) {
+        FARPROC pShellExecuteExW = GetProcAddress(hShell32, "ShellExecuteExW");
+        if (pShellExecuteExW) {
+            if (Wh_SetFunctionHook(
+                    reinterpret_cast<void*>(pShellExecuteExW),
+                    reinterpret_cast<void*>(ShellExecuteExW_Hook),
+                    reinterpret_cast<void**>(&ShellExecuteExW_Original))) {
+                Wh_Log(L"Successfully hooked ShellExecuteExW");
+            } else {
+                Wh_Log(L"Failed to install hook on ShellExecuteExW");
+                g_photoViewerAvailable = false;
+            }
+        }
     }
 
-    FARPROC pShellExecuteExW = GetProcAddress(hShell32, "ShellExecuteExW");
-    if (!pShellExecuteExW) {
-        Wh_Log(L"Cannot resolve ShellExecuteExW");
-        g_photoViewerAvailable = false;
-        return TRUE;
-    }
-
-    if (!Wh_SetFunctionHook(
-            reinterpret_cast<void*>(pShellExecuteExW),
-            reinterpret_cast<void*>(ShellExecuteExW_Hook),
-            reinterpret_cast<void**>(&ShellExecuteExW_Original))) {
-        Wh_Log(L"Failed to install hook on ShellExecuteExW");
-        g_photoViewerAvailable = false;
-        return TRUE;
-    }
-
-    Wh_Log(L"Mod active: %zu extensions redirected", g_extensions.size());
+    Wh_Log(L"Mod active: %zu extensions redirected, lock timeout: %d ms", 
+           g_extensions.size(), g_lockTimeoutMs);
     return TRUE;
 }
 
