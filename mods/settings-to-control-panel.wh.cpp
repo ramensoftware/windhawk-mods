@@ -1,16 +1,17 @@
 // ==WindhawkMod==
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
-// @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
-// @version        10.0.25
+// @description    Forces classic Control Panel to open instead of Windows Settings and restores some classic CPL entries.
+// @version        10.0.26
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @compilerOptions -lcomctl32 -lpsapi -lole32
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
-# Redirect Settings → Control Panel
+# Redirect Settings → Control Panel 
 
 This mod intercepts modern `ms-settings:` links (the ones that open the
 Settings app) and redirects them to their corresponding classic Control
@@ -22,54 +23,78 @@ Panel pages, using only native Windows components.
 
 - **Windows 10** – Mostly complete support
 - **Windows 11** – Partial support
-
+The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2 and Windows 11 24H2.
 ---
 
 ## Features
 
-- Redirects many `ms-settings:` links to the classic Control Panel
+- Redirects many `ms-settings:` links to the classic Control Panel where possible
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
 - Tray menu detection (experimental)
+- Restore Classic Control Panel Entries (credits to Anixx for the original implementation)
+---
 ## Limitations
 
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10 and previous versions). If using Windows 11, it might function decently but it is still an experimental feature.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
-- The two new experimental features above (`ComActivationRedirect` and `LegacyNameMappingFix`) are based on undocumented/internal Windows behavior and reverse engineering assumptions. They are disabled by default, are not guaranteed to work on every Windows build, and could stop working (harmlessly) after a Windows update. They are written to always fall back to the original, unmodified behavior whenever something doesn't match what's expected, so enabling them should never break normal functionality — worst case, they simply do nothing.
-
+- The redirect for the network connection menu in the system tray might not work on very specific taskbar configurations.
 ---
 
 ## Credits
 
 - m417z – Code reviews and feedback
-- Anixx – Testing on Windows 11 23H2 and the original toolbar subclassing approach
+- Anixx – Testing on Windows 11 23H2, the original toolbar subclassing approach and restoring control panel applets
+- sebastian08dm08-cpu - Testing on Windows 10 1809
 - dbilanoski – CLSID documentation
 */
 // ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - EnableRedirects: true
   $name: Enable Redirects
-  $description: "Turns the mod on or off. When disabled, Settings opens normally as usual."
+  $description: "Turns the mod on or off. When disabled, Settings opens normally."
+
 - RedirectSystemTray: false
-  $name: Redirect System Tray Audio/Network/Device & Printers (EXPERIMENTAL)
-  $description: "If enabled, right-clicking the Audio or Network or Device & Printers icon near the clock and choosing 'Open Sound settings' or 'Open Network settings' or 'Open devices and printers' will open the classic panel instead of the Settings app."
+  $name: Redirect System Tray (EXPERIMENTAL)
+  $description: "If enabled, right-clicking the Audio, Network, or Devices & Printers tray icons and selecting their Settings item opens the classic Control Panel instead."
+
 - UIOnlyRedirects: false
   $name: Non-Invasive Mode
-  $description: "Only redirects clicks made in the UI. Doesn't touch programs that open Settings in other ways."
+  $description: "Only redirects clicks made in the user interface. Programs that open Settings programmatically are left untouched."
+
 - FallbackMode: "2"
-  $name: Behavior for Unmapped Links
-  $description: "What to do when a Settings page has no classic equivalent."
+  $name: Fallback for Unmapped Links
+  $description: "What to do when a Settings page has no classic Control Panel equivalent."
   $options:
-  - "0": Ignore (silent fail)
-  - "1": Open the Control Panel (control.exe)
-  - "2": Pass through to the modern Settings application (ms-settings.exe)"
+  - "0": Ignore (do nothing)
+  - "1": Open Control Panel
+  - "2": Pass through to the modern Settings app
+
 - Win11CompatibilityMode: false
   $name: Windows 11 Compatibility Mode
-  $description: "Safer mode for Windows 11. When enabled, only uses proven redirects while everything else opens the standard Control Panel page as a fallback to avoid loops or other issues."
+  $description: "On Windows 11, only uses proven redirects. Everything else opens the Control Panel as a fallback."
+
 - MaxLaunchesPerUri: 3
-  $name: Anti-Loop Limit (per window, every 5 seconds)
-  $description: "Safety measure: if the same window gets opened too many times within a few seconds, the mod stops reopening it. Set to 0 to disable this limit."
+  $name: Anti-Loop Limit
+  $description: "Maximum number of times the same target can be launched within 5 seconds. Set to 0 to disable this safety measure."
+
+- ComActivationRedirect: true
+  $name: COM Activation Redirect (EXPERIMENTAL)
+  $description: "Intercepts IApplicationActivationManager activations of the Settings app on Windows 11."
+
+- LegacyNameMappingFix: true
+  $name: Legacy Name Mapping Fix (EXPERIMENTAL)
+  $description: "Prevents Explorer from remapping classic Control Panel names to the modern Settings app."
+
+- enableClassicCpls: true
+  $name: Restore Classic Control Panel Entries
+  $description: "Restores the classic Personalization, Notification Area Icons, Network Connections, and Printers & Faxes sections to the Control Panel. Implementation by Anixx."
+
+- suppressCompanySync: true
+  $name: Hide Company Sync Entry
+  $description: "Suppresses the Company Sync namespace entry from the Control Panel. Implementation by Anixx."
 */
 // ==/WindhawkModSettings==
 
@@ -85,65 +110,89 @@ Panel pages, using only native Windows components.
 #include <unordered_set>
 #include <vector>
 #include <mutex>
+#include <atomic>
 
-// Manually defined GUIDs to avoid requiring -luuid / static ole32 linkage.
-// {45BA127D-10A8-46EA-8AB7-56EA9078943C} = CLSID_ApplicationActivationManager
+// ---------------------------------------------------------------------------
+// GUIDs and constants
+// ---------------------------------------------------------------------------
+
 static const CLSID CLSID_ApplicationActivationManager_STC =
     { 0x45ba127d, 0x10a8, 0x46ea, { 0x8a, 0xb7, 0x56, 0xea, 0x90, 0x78, 0x94, 0x3c } };
-// {2E941141-7F97-4756-BA1D-9DECDE894A3D} = IID_IApplicationActivationManager
+
 static const IID IID_IApplicationActivationManager_STC =
     { 0x2e941141, 0x7f97, 0x4756, { 0xba, 0x1d, 0x9d, 0xec, 0xde, 0x89, 0x4a, 0x3d } };
 
-// Custom IDs for tray menu redirection (TrackPopupMenuEx method)
 #define TRAY_CUSTOM_ID_AUDIO    65001
 #define TRAY_CUSTOM_ID_NETWORK  65002
 #define TRAY_CUSTOM_ID_DEVICES  65003
 
-// TrackPopupMenuEx hook (DLL-based fallback method)
-using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
-static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
-
-// Set on WM_RBUTTONUP by the subclass proc so TrackPopupMenuEx knows the icon type.
-static int g_trayContextType = 0;
-static DWORD g_trayContextTick = 0;
-static std::mutex g_trayContextMutex;
-static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
-
-using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
-static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
-static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
-static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
-static bool g_pniduiHookInstalled = false;
-static std::mutex g_pniduiHookMutex;
-static HANDLE g_pniduiRetryThread = nullptr;
-static volatile bool g_pniduiRetryStop = false;
-static HANDLE g_traySubclassWatchdogThread = nullptr;
-static volatile bool g_traySubclassWatchdogStop = false;
-static HWND g_lastShellTrayWnd = nullptr;
-
-static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND);
-
-// Constants
 static const HINSTANCE SHELL_EXECUTE_SUCCESS = (HINSTANCE)33;
+
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
 #define PERS_WALLPAPER  L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageWallpaper"
 #define PERS_COLORS     L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921} -Microsoft.Personalization\\pageColorization"
-
 #define SYSTEM_PROPS_CLSID  L"shell:::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"
 #define NOTIF_AREA_CLSID    L"shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
 #define WIN11_PASSTHROUGH   L"__PASSTHROUGH__"
 #define EASE_OF_ACCESS      L"explorer shell:::{D555645E-D4F8-4c29-A827-D93C859C4F2A}"
 
-using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
-static CreateProcessW_t CreateProcessW_orig = nullptr;
+// ---------------------------------------------------------------------------
+// Typedefs and globals
+// ---------------------------------------------------------------------------
 
+using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
 using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
+using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
+using NtUserTrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
+using ICMH_CAODTM_t = bool(__fastcall*)(HMENU, HWND);
+
+static CreateProcessW_t CreateProcessW_orig = nullptr;
 static ShellExecuteExW_t ShellExecuteExW_orig = nullptr;
 static ShellExecuteW_t ShellExecuteW_orig = nullptr;
-// NtUserTrackPopupMenuEx fallback (syscall level)
-using NtUserTrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
+static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
 static NtUserTrackPopupMenuEx_t g_origNtUserTrackPopupMenuEx = nullptr;
+
+static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
+static ICMH_CAODTM_t g_icmhOrig_pnidui = nullptr;
+static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
+
+static int g_trayContextType = 0;
+static DWORD g_trayContextTick = 0;
+static std::mutex g_trayContextMutex;
+static bool g_shellExecHooksInstalled = false;
+static bool g_createProcessHookInstalled = false;
+static bool g_rcplHooksInstalled = false;
+static bool g_taskbarListenerInstalled = false;
+static std::atomic<bool> g_modActive{false};
+static std::mutex g_initMutex;
+static std::atomic<bool> g_reinitPending{false};
+static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
+
+static bool g_pniduiHookInstalled = false;
+static std::mutex g_pniduiHookMutex;
+static HANDLE g_pniduiRetryThread = nullptr;
+static volatile bool g_pniduiRetryStop = false;
+static volatile bool g_pniduiRetryRunning = false;
+static HANDLE g_reinitThread = nullptr;
+static HANDLE g_traySubclassWatchdogThread = nullptr;
+static volatile bool g_traySubclassWatchdogStop = false;
+static HANDLE g_hWatchdogStopEvent = nullptr;
+static HWND g_lastShellTrayWnd = nullptr;
+static HWND g_hTrayToolbar = nullptr;
+
+static BYTE* g_sndVolSSOBase = nullptr;
+static BYTE* g_sndVolSSOEnd = nullptr;
+static BYTE* g_pniduiBase = nullptr;
+static BYTE* g_pniduiEnd = nullptr;
+
+// --- NEW: TaskbarCreated message-only window, used to detect Explorer/tray
+// restarts *immediately* instead of relying only on the polling watchdog.
+// This is the standard, Microsoft-documented mechanism apps use to know when
+// the shell has recreated the taskbar (see RegisterWindowMessage("TaskbarCreated")).
+static UINT g_uTaskbarCreatedMsg = 0;
+static HWND g_hTrayMsgWindow = nullptr;
+static const wchar_t* TRAY_MSG_WNDCLASS = L"STC_TrayRestartListener";
 
 struct ResolveResult {
     std::wstring target;
@@ -160,26 +209,6 @@ struct HookGuard {
 
 static std::wstring g_childEnvBlock;
 
-static void BuildChildEnvironment() {
-    LPWCH curEnv = GetEnvironmentStringsW();
-    if (curEnv) {
-        LPWCH p = curEnv;
-        while (*p) {
-            std::wstring entry(p);
-            if (entry.find(L"WH_STC_NOREDIRECT=") != 0) {
-                g_childEnvBlock += entry + L'\0';
-            }
-            p += entry.length() + 1;
-        }
-        FreeEnvironmentStringsW(curEnv);
-    }
-    g_childEnvBlock += L"WH_STC_NOREDIRECT=1\0\0";
-}
-
-static bool IsChildProcess() {
-    return GetEnvironmentVariableW(L"WH_STC_NOREDIRECT", nullptr, 0) > 0;
-}
-
 struct ModSettings {
     bool enableRedirects = true;
     bool redirectSystemTray = false;
@@ -192,36 +221,42 @@ struct ModSettings {
 };
 
 static ModSettings g_settings;
-
-static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) {
-    if (!g_settings.redirectSystemTray) return true;
-    return false;
-}
-
-static void LoadSettings() {
-    g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
-    g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0;
-    g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
-
-    WindhawkUtils::StringSetting fallbackSetting(Wh_GetStringSetting(L"FallbackMode"));
-    PCWSTR fallbackStr = fallbackSetting;
-    if (fallbackStr[0] != L'\0') {
-        int mode = _wtoi(fallbackStr);
-        g_settings.fallbackMode = (mode >= 0 && mode <= 2) ? mode : 2;
-    } else {
-        g_settings.fallbackMode = 2;
-    }
-
-    g_settings.win11CompatibilityMode = Wh_GetIntSetting(L"Win11CompatibilityMode") != 0;
-
-    int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
-    g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
-
-    g_settings.comActivationRedirect = Wh_GetIntSetting(L"ComActivationRedirect") != 0;
-    g_settings.legacyNameMappingFix = Wh_GetIntSetting(L"LegacyNameMappingFix") != 0;
-}
-
 static bool g_isWin11 = false;
+static std::unordered_map<std::wstring, std::wstring> g_mappings;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static std::wstring ToLower(std::wstring s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::towlower);
+    return s;
+}
+
+static std::wstring BaseNameLower(const std::wstring& path) {
+    size_t pos = path.rfind(L'\\');
+    return ToLower((pos != std::wstring::npos) ? path.substr(pos + 1) : path);
+}
+
+static void BuildChildEnvironment() {
+    g_childEnvBlock.clear();
+    LPWCH curEnv = GetEnvironmentStringsW();
+    if (curEnv) {
+        LPWCH p = curEnv;
+        while (*p) {
+            std::wstring entry(p);
+            if (entry.find(L"WH_STC_NOREDIRECT=") != 0)
+                g_childEnvBlock += entry + L'\0';
+            p += entry.length() + 1;
+        }
+        FreeEnvironmentStringsW(curEnv);
+    }
+    g_childEnvBlock += L"WH_STC_NOREDIRECT=1\0\0";
+}
+
+static bool IsChildProcess() {
+    return GetEnvironmentVariableW(L"WH_STC_NOREDIRECT", nullptr, 0) > 0;
+}
 
 static void DetectWindowsVersion() {
     OSVERSIONINFOEXW osvi = {};
@@ -235,13 +270,40 @@ static void DetectWindowsVersion() {
     g_isWin11 = (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22000);
 }
 
-struct BounceRecord {
-    DWORD lastRedirectTick = 0;
-};
+static void LoadSettings() {
+    g_settings.enableRedirects = Wh_GetIntSetting(L"EnableRedirects") != 0;
+    g_settings.redirectSystemTray = Wh_GetIntSetting(L"RedirectSystemTray") != 0;
+    g_settings.uiOnlyRedirects = Wh_GetIntSetting(L"UIOnlyRedirects") != 0;
 
+    WindhawkUtils::StringSetting fallbackSetting(Wh_GetStringSetting(L"FallbackMode"));
+    PCWSTR fallbackStr = fallbackSetting;
+    if (fallbackStr && fallbackStr[0] != L'\0') {
+        int mode = _wtoi(fallbackStr);
+        g_settings.fallbackMode = (mode >= 0 && mode <= 2) ? mode : 2;
+    } else {
+        g_settings.fallbackMode = 2;
+    }
+
+    g_settings.win11CompatibilityMode = Wh_GetIntSetting(L"Win11CompatibilityMode") != 0;
+    int ml = Wh_GetIntSetting(L"MaxLaunchesPerUri");
+    g_settings.maxLaunchesPerUri = (ml >= 0 && ml <= 20) ? ml : 3;
+    g_settings.comActivationRedirect = Wh_GetIntSetting(L"ComActivationRedirect") != 0;
+    g_settings.legacyNameMappingFix = Wh_GetIntSetting(L"LegacyNameMappingFix") != 0;
+}
+// === NUOVO: Funzione di reinit iperstabile ===
+
+static bool __fastcall ICMH_CAODTM_hook(HMENU, HWND) {
+    if (!g_settings.redirectSystemTray) return true;
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Loop/bounce guards
+// ---------------------------------------------------------------------------
+
+struct BounceRecord { DWORD lastRedirectTick = 0; };
 static std::mutex g_bounceGuardMtx;
 static std::unordered_map<std::wstring, BounceRecord> g_bounceGuard;
-
 static constexpr DWORD BOUNCE_WINDOW_MS = 3000;
 
 static void BounceGuardRecord(const std::wstring& uri) {
@@ -261,36 +323,31 @@ static bool BounceGuardIsBounce(const std::wstring& uri) {
     return false;
 }
 
-struct LaunchRecord {
-    int count = 0;
-    DWORD firstTick = 0;
-};
-
+struct LaunchRecord { int count = 0; DWORD firstTick = 0; };
 static std::mutex g_loopGuardMtx;
 static std::unordered_map<std::wstring, LaunchRecord> g_loopGuard;
-
 static constexpr DWORD LOOP_WINDOW_MS = 5000;
 
 static bool LoopGuardAllow(const std::wstring& target) {
     if (g_settings.maxLaunchesPerUri <= 0) return true;
-
     std::lock_guard<std::mutex> lk(g_loopGuardMtx);
     DWORD now = GetTickCount();
     auto& rec = g_loopGuard[target];
-
     if (rec.count == 0 || (now - rec.firstTick) >= LOOP_WINDOW_MS) {
         rec.count = 1;
         rec.firstTick = now;
         return true;
     }
-
     if (rec.count < g_settings.maxLaunchesPerUri) {
         rec.count++;
         return true;
     }
-
     return false;
 }
+
+// ---------------------------------------------------------------------------
+// Windows 11 CLSID filters
+// ---------------------------------------------------------------------------
 
 static const std::unordered_set<std::wstring> g_win11SafeClsids = {
     L"shell:::{025a5937-a6be-4686-a844-36fe4bec8b6d}",
@@ -342,16 +399,9 @@ static bool IsClsidLoopOnWin11(const std::wstring& lowerTarget) {
     return g_win11LoopClsids.count(base) > 0;
 }
 
-static std::wstring ToLower(std::wstring s) {
-    std::transform(s.begin(), s.end(), s.begin(), ::towlower);
-    return s;
-}
-
-static HWND g_hTrayToolbar = nullptr;
-static BYTE* g_sndVolSSOBase = nullptr;
-static BYTE* g_sndVolSSOEnd = nullptr;
-static BYTE* g_pniduiBase = nullptr;
-static BYTE* g_pniduiEnd = nullptr;
+// ---------------------------------------------------------------------------
+// Tray helpers
+// ---------------------------------------------------------------------------
 
 static bool InitTrayDllInfo() {
     if (g_sndVolSSOBase && g_pniduiBase) return true;
@@ -390,13 +440,10 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
 
     wchar_t className[256]{};
     if (!GetClassNameW(hIconWnd, className, 256)) return 0;
-    if (wcsncmp(className, L"ATL:", 4) != 0) {
-        return 0;
-    }
+    if (wcsncmp(className, L"ATL:", 4) != 0) return 0;
 
     const wchar_t* hexPart = className + 4;
     ULONG_PTR addr = 0;
-
     while (*hexPart) {
         wchar_t c = *hexPart;
         int digit = 0;
@@ -409,9 +456,9 @@ static int GetTrayButtonType(HWND hToolbar, int buttonIndex) {
     }
 
     if (g_sndVolSSOBase && addr >= (ULONG_PTR)g_sndVolSSOBase && addr < (ULONG_PTR)g_sndVolSSOEnd)
-        return 1; // Audio
+        return 1;
     if (g_pniduiBase && addr >= (ULONG_PTR)g_pniduiBase && addr < (ULONG_PTR)g_pniduiEnd)
-        return 2; // Network
+        return 2;
 
     return 0;
 }
@@ -449,56 +496,64 @@ static void OpenClassicDevicesAndPrinters() {
     ShellExecuteExW_orig(&sei);
 }
 
-static LRESULT CALLBACK TrayToolbarSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
-{
+static LRESULT CALLBACK TrayToolbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (msg == WM_RBUTTONUP) {
         POINT pt;
         pt.x = (int)(short)LOWORD(lParam);
         pt.y = (int)(short)HIWORD(lParam);
         int hitIndex = (int)SendMessageW(hwnd, TB_HITTEST, 0, (LPARAM)&pt);
-
         if (hitIndex >= 0) {
             int buttonType = GetTrayButtonType(hwnd, hitIndex);
-            if (buttonType == 1) {
+            if (buttonType == 1 || buttonType == 2) {
                 std::lock_guard<std::mutex> lk(g_trayContextMutex);
-                g_trayContextType = 1;
-                g_trayContextTick = GetTickCount();
-            }
-            else if (buttonType == 2) {
-                std::lock_guard<std::mutex> lk(g_trayContextMutex);
-                g_trayContextType = 2;
+                g_trayContextType = buttonType;
                 g_trayContextTick = GetTickCount();
             }
         }
     }
+
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 static HWND FindTrayToolbar() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTray) return nullptr;
+
     DWORD pid = 0;
     GetWindowThreadProcessId(hTray, &pid);
     if (pid != GetCurrentProcessId()) return nullptr;
+
     HWND hNotify = FindWindowExW(hTray, nullptr, L"TrayNotifyWnd", nullptr);
     if (!hNotify) return nullptr;
+
     HWND hSysPager = FindWindowExW(hNotify, nullptr, L"SysPager", nullptr);
     if (hSysPager) {
         HWND hToolbar = FindWindowExW(hSysPager, nullptr, L"ToolbarWindow32", nullptr);
         if (hToolbar) return hToolbar;
     }
+
     return FindWindowExW(hNotify, nullptr, L"ToolbarWindow32", nullptr);
 }
 
 static void SetupTraySubclass() {
-    if (g_hTrayToolbar) return;
+    if (g_hTrayToolbar) {
+        // Guard against a stale handle that's no longer the actual current
+        // toolbar (e.g. after a tray restart the old handle can, in rare
+        // cases, still test as IsWindow==TRUE for a brief moment while a
+        // brand new toolbar has already been created alongside it).
+        HWND hCurrent = FindTrayToolbar();
+        if (hCurrent == g_hTrayToolbar) return;
+        if (IsWindow(g_hTrayToolbar))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTrayToolbar, TrayToolbarSubclassProc);
+        g_hTrayToolbar = nullptr;
+    }
     if (!InitTrayDllInfo()) return;
+
     HWND hToolbar = FindTrayToolbar();
     if (!hToolbar) return;
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
+
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0))
         g_hTrayToolbar = hToolbar;
-    }
 }
 
 static void RemoveTraySubclass() {
@@ -524,15 +579,17 @@ static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
     }
     return false;
 }
-BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
+
+static BOOL HandleTrayPopupMenu(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm, bool syscallHook) {
+    auto orig = syscallHook ? g_origNtUserTrackPopupMenuEx : g_origTrackPopupMenuEx;
+
     if (!g_settings.redirectSystemTray || !g_settings.enableRedirects)
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+        return orig(hMenu, uFlags, x, y, hWnd, lptpm);
 
     HookGuard guard;
     if (guard.IsReentrant())
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+        return orig(hMenu, uFlags, x, y, hWnd, lptpm);
 
-    // --- Primary: subclass flag set on WM_RBUTTONUP (language-independent) ---
     int contextType;
     {
         std::lock_guard<std::mutex> lk(g_trayContextMutex);
@@ -540,232 +597,58 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         DWORD tick = g_trayContextTick;
         g_trayContextType = 0;
         g_trayContextTick = 0;
-        if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS) {
+        if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS)
             contextType = 0;
-        }
     }
 
-    bool isAudioMenu   = (contextType == 1);
+    bool isAudioMenu = (contextType == 1);
     bool isNetworkMenu = (contextType == 2);
-    bool isDeviceMenu  = false;
+    bool isDeviceMenu = false;
 
-    // --- Fallback: DLL return-address detection (language-independent) ---
     if (!isAudioMenu && !isNetworkMenu) {
         void* retAddr = GetReturnAddress();
         int itemCount = GetMenuItemCount(hMenu);
         if (itemCount > 0) {
             if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
                 if (itemCount <= 6) isAudioMenu = true;
-            }
-            else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
+            } else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
                 if (itemCount <= 6) isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
-            }
-            else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
-                // dxgi.dll handles both Network flyout (IDs 3107/3109) and 
-                // Device/Safely Remove Hardware flyout (ID 215 = "Open Devices and Printers")
-                if (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109) {
+            } else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
+                if (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109)
                     isNetworkMenu = true;
-                }
-                // Check for device menu: item ID 215 is the language-independent
-                // identifier for "Open Devices and Printers"
-                else if (GetMenuItemID(hMenu, 0) == 215) {
+                else if (GetMenuItemID(hMenu, 0) == 215)
                     isDeviceMenu = true;
-                    Wh_Log(L"[TRAY-HOOK] Device menu detected via dxgi.dll + ID 215");
-                }
-            }
-            else if (IsAddressInModule(retAddr, L"shell32.dll")) {
-                // NUOVO: Rilevamento shell32.dll per Win11 23H2
-                // Cerca l'ID 215 in qualsiasi posizione del menu
-                for (int i = 0; i < itemCount; i++) {
-                    UINT itemId = GetMenuItemID(hMenu, i);
-                    if (itemId == 215) {
-                        isDeviceMenu = true;
-                        Wh_Log(L"[TRAY-HOOK] Device menu detected via shell32.dll + ID 215 at index %d", i);
-                        break;
-                    }
-                }
-            }
-            else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
-                // Fallback for older Windows versions where hotplug.dll handles the menu
-                isDeviceMenu = true;
-                Wh_Log(L"[TRAY-HOOK] Device menu detected via hotplug.dll");
-            }
-        }
-    }
-
-    if (!isAudioMenu && !isNetworkMenu && !isDeviceMenu)
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-
-    int itemCount = GetMenuItemCount(hMenu);
-    const wchar_t* menuKind = isAudioMenu ? L"AUDIO" : (isNetworkMenu ? L"NETWORK" : L"DEVICE");
-    Wh_Log(L"[TRAY-HOOK] %s menu, %d items", menuKind, itemCount);
-
-    // Find target item without any text matching.
-    // Audio: first item.
-    // Network: last non-separator item.
-    // Device: item with ID 215 ("Open Devices and Printers") — language-independent.
-    int targetIndex = -1;
-    
-    if (isAudioMenu) {
-        targetIndex = 0;
-    }
-    else if (isNetworkMenu) {
-        for (int i = itemCount - 1; i >= 0; i--) {
-            MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
-            miiCheck.fMask = MIIM_FTYPE;
-            if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
-                if (!(miiCheck.fType & MFT_SEPARATOR)) {
-                    targetIndex = i;
-                    break;
-                }
-            }
-        }
-    }
-    else if (isDeviceMenu) {
-        // Find item with ID 215 — the language-independent ID for "Open Devices and Printers"
-        for (int i = 0; i < itemCount; i++) {
-            if (GetMenuItemID(hMenu, i) == 215) {
-                targetIndex = i;
-                break;
-            }
-        }
-        // Fallback: if ID 215 not found (unlikely), use first non-separator item
-        if (targetIndex == -1) {
-            for (int i = 0; i < itemCount; i++) {
-                MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
-                miiCheck.fMask = MIIM_FTYPE;
-                if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
-                    if (!(miiCheck.fType & MFT_SEPARATOR)) {
-                        targetIndex = i;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    if (targetIndex == -1) {
-        Wh_Log(L"[TRAY-HOOK] No valid menu item found for %s menu", menuKind);
-        return g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-
-    Wh_Log(L"[TRAY-HOOK] %s menu target index=%d, ID=%u", menuKind, targetIndex, GetMenuItemID(hMenu, targetIndex));
-
-    UINT originalId = GetMenuItemID(hMenu, targetIndex);
-
-    // NOTE: we intentionally do NOT swap the item's ID (via SetMenuItemInfoW)
-    // anymore. This menu item still gets its text/icon painted by pnidui.dll
-    // through WM_DRAWITEM, which is keyed off the item's real ID — replacing
-    // it with our own custom ID left pnidui.dll unable to look up what to
-    // draw for it, so the item rendered with no text (it still worked,
-    // since selection is ID-driven, but visually looked broken). Comparing
-    // directly against the original ID avoids touching the item at all.
-    bool callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
-    uFlags |= TPM_RETURNCMD;
-    BOOL result     = g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    int selectedId  = (int)result;
-
-    if (selectedId == (int)originalId) {
-        Wh_Log(L"[TRAY-HOOK] User selected target item, redirecting");
-        if (isAudioMenu)        OpenClassicSoundPanel();
-        else if (isNetworkMenu) OpenClassicNetworkConnections();
-        else                    OpenClassicDevicesAndPrinters();
-        return 0;
-    }
-
-    if (selectedId != 0 && !callerWantedReturnCmd) {
-        PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)selectedId, 0), 0);
-        return TRUE;
-    }
-
-    return result;
-}
-// Hook a livello syscall per catturare menu che bypassano TrackPopupMenuEx
-BOOL WINAPI NtUserTrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
-    // Se non è un menu della system tray, passa all'originale
-    if (!g_settings.redirectSystemTray || !g_settings.enableRedirects) {
-        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-    
-    HookGuard guard;
-    if (guard.IsReentrant()) {
-        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-    
-    // --- Rilevamento menu usando la stessa logica di TrackPopupMenuEx_Hook ---
-    int contextType;
-    {
-        std::lock_guard<std::mutex> lk(g_trayContextMutex);
-        contextType = g_trayContextType;
-        DWORD tick = g_trayContextTick;
-        g_trayContextType = 0;
-        g_trayContextTick = 0;
-        if (contextType != 0 && GetTickCount() - tick > TRAY_CONTEXT_MAX_AGE_MS) {
-            contextType = 0;
-        }
-    }
-    
-    bool isAudioMenu   = (contextType == 1);
-    bool isNetworkMenu = (contextType == 2);
-    bool isDeviceMenu  = false;
-    
-    // Fallback: DLL return-address detection
-    if (!isAudioMenu && !isNetworkMenu) {
-        void* retAddr = GetReturnAddress();
-        int itemCount = GetMenuItemCount(hMenu);
-        if (itemCount > 0) {
-            if (IsAddressInModule(retAddr, L"SndVolSSO.dll")) {
-                if (itemCount <= 6) isAudioMenu = true;
-            }
-            else if (IsAddressInModule(retAddr, L"pnidui.dll")) {
-                if (itemCount <= 6) isNetworkMenu = (itemCount >= 2 && itemCount <= 5);
-            }
-            else if (IsAddressInModule(retAddr, L"dxgi.dll")) {
-                if (itemCount == 2 && GetMenuItemID(hMenu, 0) == 3107 && GetMenuItemID(hMenu, 1) == 3109) {
-                    isNetworkMenu = true;
-                }
-                else if (GetMenuItemID(hMenu, 0) == 215) {
-                    isDeviceMenu = true;
-                }
-            }
-            else if (IsAddressInModule(retAddr, L"shell32.dll")) {
+            } else if (IsAddressInModule(retAddr, L"shell32.dll")) {
                 for (int i = 0; i < itemCount; i++) {
                     if (GetMenuItemID(hMenu, i) == 215) {
                         isDeviceMenu = true;
                         break;
                     }
                 }
-            }
-            else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
+            } else if (IsAddressInModule(retAddr, L"hotplug.dll")) {
                 isDeviceMenu = true;
             }
         }
     }
-    
-    if (!isAudioMenu && !isNetworkMenu && !isDeviceMenu) {
-        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-    
-    // Trova l'item target
+
+    if (!isAudioMenu && !isNetworkMenu && !isDeviceMenu)
+        return orig(hMenu, uFlags, x, y, hWnd, lptpm);
+
     int itemCount = GetMenuItemCount(hMenu);
     int targetIndex = -1;
-    
+
     if (isAudioMenu) {
         targetIndex = 0;
-    }
-    else if (isNetworkMenu) {
+    } else if (isNetworkMenu) {
         for (int i = itemCount - 1; i >= 0; i--) {
             MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
             miiCheck.fMask = MIIM_FTYPE;
-            if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
-                if (!(miiCheck.fType & MFT_SEPARATOR)) {
-                    targetIndex = i;
-                    break;
-                }
+            if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck) && !(miiCheck.fType & MFT_SEPARATOR)) {
+                targetIndex = i;
+                break;
             }
         }
-    }
-    else if (isDeviceMenu) {
+    } else if (isDeviceMenu) {
         for (int i = 0; i < itemCount; i++) {
             if (GetMenuItemID(hMenu, i) == 215) {
                 targetIndex = i;
@@ -776,47 +659,52 @@ BOOL WINAPI NtUserTrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, 
             for (int i = 0; i < itemCount; i++) {
                 MENUITEMINFOW miiCheck = { sizeof(MENUITEMINFOW) };
                 miiCheck.fMask = MIIM_FTYPE;
-                if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck)) {
-                    if (!(miiCheck.fType & MFT_SEPARATOR)) {
-                        targetIndex = i;
-                        break;
-                    }
+                if (GetMenuItemInfoW(hMenu, i, TRUE, &miiCheck) && !(miiCheck.fType & MFT_SEPARATOR)) {
+                    targetIndex = i;
+                    break;
                 }
             }
         }
     }
-    
-    if (targetIndex == -1) {
-        return g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-    
+
+    if (targetIndex == -1)
+        return orig(hMenu, uFlags, x, y, hWnd, lptpm);
+
     UINT originalId = GetMenuItemID(hMenu, targetIndex);
     bool callerWantedReturnCmd = (uFlags & TPM_RETURNCMD) != 0;
     uFlags |= TPM_RETURNCMD;
-    
-    BOOL result = g_origNtUserTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+
+    BOOL result = orig(hMenu, uFlags, x, y, hWnd, lptpm);
     int selectedId = (int)result;
-    
     if (selectedId == (int)originalId) {
-        Wh_Log(L"[SYSCALL-HOOK] User selected target item, redirecting");
-        if (isAudioMenu)        OpenClassicSoundPanel();
+        Wh_Log(L"%s", syscallHook ? L"[SYSCALL-HOOK] User selected target item, redirecting" : L"[TRAY-HOOK] User selected target item, redirecting");
+        if (isAudioMenu) OpenClassicSoundPanel();
         else if (isNetworkMenu) OpenClassicNetworkConnections();
-        else                    OpenClassicDevicesAndPrinters();
+        else OpenClassicDevicesAndPrinters();
         return 0;
     }
-    
     if (selectedId != 0 && !callerWantedReturnCmd) {
         PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM((WORD)selectedId, 0), 0);
         return TRUE;
     }
-    
+
     return result;
 }
-static std::unordered_map<std::wstring, std::wstring> g_mappings;
+
+BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
+    return HandleTrayPopupMenu(hMenu, uFlags, x, y, hWnd, lptpm, false);
+}
+
+BOOL WINAPI NtUserTrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
+    return HandleTrayPopupMenu(hMenu, uFlags, x, y, hWnd, lptpm, true);
+}
+
+// ---------------------------------------------------------------------------
+// Mappings and URI resolving
+// ---------------------------------------------------------------------------
 
 static void InitMappings() {
     const bool w11 = g_isWin11;
-
     g_mappings = {
         {L"ms-settings:personalization", PERS_ROOT},
         {L"ms-settings:personalization-colors", PERS_COLORS},
@@ -933,7 +821,7 @@ static void InitMappings() {
         {L"ms-settings:easeofaccess-mouse", EASE_OF_ACCESS},
         {L"ms-settings:easeofaccess-keyboard", EASE_OF_ACCESS},
         {L"ms-settings:recovery", w11 ? L"control.exe" : L"shell:::{9FE63AFD-59CF-4419-9775-ABCC3849F861}"},
-        {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},        
+        {L"ms-settings:troubleshoot", w11 ? L"msdt.exe -id DeviceDiagnostic" : L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}"},
         {L"ms-settings:deviceencryption", L"shell:::{D9EF8727-CAC2-4e60-809E-86F80A666C91}"},
         {L"ms-settings:gaming-gamebar", L"joy.cpl"},
         {L"ms-settings:folders", L"shell:::{6DFD7C5C-2451-11d3-A299-00C04F8EF6AF}"},
@@ -963,7 +851,6 @@ static void InitMappings() {
 
     g_mappings[L"ms-settings:backup"] = L"control.exe /name Microsoft.BackupAndRestore";
     g_mappings[L"ms-settings:network-advancedsettings"] = L"control.exe /name Microsoft.NetworkAndSharingCenter";
-
     if (g_isWin11) {
         g_mappings[L"ms-settings:recovery"] = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{9FE63AFD-59CF-4419-9775-ABCC3849F861}";
     }
@@ -973,16 +860,13 @@ static std::wstring NormalizeUri(const std::wstring& uri) {
     std::wstring result = ToLower(uri);
     const std::wstring PROTOCOL = L"ms-settings://";
     size_t pos = result.find(PROTOCOL);
-    if (pos != std::wstring::npos) {
+    if (pos != std::wstring::npos)
         result = L"ms-settings:" + result.substr(pos + PROTOCOL.length());
-    }
     pos = result.find(L'?');
-    if (pos != std::wstring::npos) {
+    if (pos != std::wstring::npos)
         result = result.substr(0, pos);
-    }
-    while (!result.empty() && result.back() == L'/') {
+    while (!result.empty() && result.back() == L'/')
         result.pop_back();
-    }
     return result;
 }
 
@@ -1000,10 +884,10 @@ static std::wstring ApplyWin11Filter(const std::wstring& target) {
     if (!g_isWin11) return target;
     std::wstring lower = ToLower(target);
     if (lower.find(L"shell:::") != 0 && lower.find(L"explorer shell:::") != 0) return target;
-    
+
     std::wstring clsPart = lower;
     if (lower.find(L"explorer ") == 0) clsPart = lower.substr(9);
-    
+
     if (IsClsidLoopOnWin11(clsPart)) {
         if (lower.find(L"ed834ed6") != std::wstring::npos) {
             if (lower.find(L"pagewallpaper") != std::wstring::npos) return PERS_WALLPAPER;
@@ -1013,16 +897,19 @@ static std::wstring ApplyWin11Filter(const std::wstring& target) {
         if (lower.find(L"bb06c0e4") != std::wstring::npos) return L"sysdm.cpl";
         return L"control.exe";
     }
-    if (g_settings.win11CompatibilityMode && !IsClsidSafeOnWin11(clsPart)) {
+
+    if (g_settings.win11CompatibilityMode && !IsClsidSafeOnWin11(clsPart))
         return L"control.exe";
-    }
+
     return target;
 }
 
-static bool HandleFallback(const std::wstring& uri) {
+static bool HandleFallback(const std::wstring&) {
     switch (g_settings.fallbackMode) {
-        case 0: return true;
+        case 0:
+            return true;
         case 1: {
+            if (!CreateProcessW_orig) return true;
             std::wstring cmd = L"control.exe";
             STARTUPINFOW si = {};
             si.cb = sizeof(si);
@@ -1035,15 +922,15 @@ static bool HandleFallback(const std::wstring& uri) {
             }
             return true;
         }
-        default: return false;
+        default:
+            return false;
     }
 }
 
 static void LaunchTarget(const std::wstring& command) {
     if (!LoopGuardAllow(command)) return;
-
     std::wstring lower = ToLower(command);
-    
+
     if (lower.find(L"explorer shell:::") != std::wstring::npos) {
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
@@ -1055,14 +942,14 @@ static void LaunchTarget(const std::wstring& command) {
         ShellExecuteExW_orig(&sei);
         return;
     }
-    
+
     if (lower.find(L"rundll32.exe ") == 0) {
         wchar_t rundll32Path[MAX_PATH];
-        if (GetSystemDirectoryW(rundll32Path, MAX_PATH)) {
+        if (GetSystemDirectoryW(rundll32Path, MAX_PATH))
             wcscat_s(rundll32Path, MAX_PATH, L"\\rundll32.exe");
-        } else {
+        else
             wcscpy_s(rundll32Path, MAX_PATH, L"rundll32.exe");
-        }
+
         SHELLEXECUTEINFOW sei = {};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_FLAG_NO_UI;
@@ -1073,20 +960,23 @@ static void LaunchTarget(const std::wstring& command) {
         ShellExecuteExW_orig(&sei);
         return;
     }
-    
+
     bool isFullCmdLine = (lower.find(L"explorer.exe ") != std::wstring::npos) ||
-                         (lower.find(L"control.exe /") != std::wstring::npos);
+                         (lower.find(L"control.exe /") != std::wstring::npos) ||
+                         (lower.find(L"control.exe ") == 0 && lower.find(L".cpl") != std::wstring::npos) ||
+                         (lower.find(L"msdt.exe ") == 0) ||
+                         (lower.find(L"sndvol.exe ") == 0);
+
     if (isFullCmdLine) {
         STARTUPINFOW si = {};
         si.cb = sizeof(si);
         si.dwFlags = STARTF_USESHOWWINDOW;
         si.wShowWindow = SW_SHOWNORMAL;
         PROCESS_INFORMATION pi = {};
-        std::wstring mutable_cmd = command;
-        if (!CreateProcessW_orig(nullptr, mutable_cmd.data(), nullptr, nullptr,
+        std::wstring mutableCmd = command;
+        if (CreateProcessW_orig && CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
                                  (LPVOID)g_childEnvBlock.c_str(), nullptr, &si, &pi)) {
-        } else {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
         }
@@ -1094,7 +984,9 @@ static void LaunchTarget(const std::wstring& command) {
     }
 
     if (command == L"devmgmt.msc" || command == L"compmgmt.msc" ||
-        command == L"slui.exe" || command == L"OptionalFeatures.exe") {
+        command == L"slui.exe" || command == L"OptionalFeatures.exe" ||
+        command == L"msconfig.exe" || command == L"netplwiz" ||
+        command == L"colorcpl.exe") {
         ShellExecuteW_orig(nullptr, L"open", command.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
@@ -1129,7 +1021,7 @@ static void LaunchTarget(const std::wstring& command) {
         cmdLine = L"control.exe " + command;
     }
 
-    if (!cmdLine.empty()) {
+    if (!cmdLine.empty() && CreateProcessW_orig) {
         std::wstring mutableCmd = cmdLine;
         if (!CreateProcessW_orig(nullptr, mutableCmd.data(), nullptr, nullptr,
                                  FALSE, CREATE_UNICODE_ENVIRONMENT,
@@ -1169,105 +1061,708 @@ static bool ShouldApplyBounceGuard(const std::wstring& uri) {
 
 static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
     if (uri == L"ms-settings:personalization-background") {
-        if (BounceGuardIsBounce(uri)) return {L"", true};
+        if (BounceGuardIsBounce(uri)) return { L"", true };
         std::wstring t = ApplyWin11Filter(ResolvePersonalizationBackground(hwnd));
         BounceGuardRecord(uri);
-        return {t, true};
+        return { t, true };
     }
+
     auto it = g_mappings.find(uri);
     if (it != g_mappings.end()) {
         bool useBounceGuard = ShouldApplyBounceGuard(uri);
         if (useBounceGuard && BounceGuardIsBounce(uri)) {
             bool handled = HandleFallback(uri);
-            return {L"", handled};
+            return { L"", handled };
         }
         std::wstring t = ApplyWin11Filter(it->second);
         if (t == WIN11_PASSTHROUGH) {
             bool handled = HandleFallback(uri);
-            return {L"", handled};
+            return { L"", handled };
         }
         if (useBounceGuard) BounceGuardRecord(uri);
-        return {t, true};
+        return { t, true };
     }
+
     if (uri.find(L"ms-settings:") == 0) {
         bool handled = HandleFallback(uri);
-        return {L"", handled};
+        return { L"", handled };
     }
-    return {L"", false};
-}
-// ===========================================================================
-// EXPERIMENTAL: IApplicationActivationManager COM interception
-//
-// Some Windows 11 shell components (notably the system tray flyouts for
-// "Open Devices and Printers") may bypass ShellExecute/CreateProcess entirely
-// and instead activate the Settings app through the low-level COM interface
-// IApplicationActivationManager::ActivateApplication().
-//
-// We install a tiny vtable-style hook on the COM object returned by
-// CoCreateInstance(CLSID_ApplicationActivationManager) to inspect every
-// ActivateApplication call.  When the appUserModelId matches
-// "windows.immersivecontrolpanel..." (the Settings app), we:
-//   1) map the ms-settings: URI embedded in the arguments to a classic CPL
-//   2) launch that CPL ourselves
-//   3) return S_OK to the caller (making it believe Settings was launched)
-//
-// This is entirely best-effort and based on reverse engineering assumptions.
-// If anything unexpected happens we fall back to the original vtable entry.
-// ===========================================================================
 
-// Minimal vtable layout for IApplicationActivationManager (3 methods)
+    return { L"", false };
+}
+
+// ---------------------------------------------------------------------------
+// Integrated Restore Classic CPLs by Anixx, prefixed with RCPL_
+// ---------------------------------------------------------------------------
+
+struct RCPL_Settings {
+    // Consolidated single toggle. Previously this mod exposed 4 separate
+    // switches (Personalization / Notification Icons / Network Connections /
+    // Printers and Faxes). They all did the same kind of thing (restore a
+    // classic CPL entry), so they're now one simple on/off toggle, enabled
+    // by default.
+    std::atomic<bool> enableClassicCpls = true;
+    std::atomic<bool> suppressCompanySync = true;
+} g_rcplSettings;
+
+static std::wstring g_rcplPersonalizationName;
+static std::unordered_map<HKEY, std::wstring> g_rcplKeyPaths;
+static std::unordered_set<HKEY> g_rcplFakeHandles;
+static std::mutex g_rcplKeyPathsMutex;
+
+static std::wstring g_rcplPersonalizationGuidLower;
+static std::wstring g_rcplNotificationIconsGuidLower;
+static std::wstring g_rcplNetworkConnectionsGuidLower;
+static std::wstring g_rcplPrintersAndFaxesGuidLower;
+static std::wstring g_rcplSuppressedGuidLower;
+
+static const std::wstring RCPL_kPersonalizationGuid    = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
+static const std::wstring RCPL_kNotificationIconsGuid  = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
+static const std::wstring RCPL_kNetworkConnectionsGuid = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
+static const std::wstring RCPL_kPrintersAndFaxesGuid   = L"{2227a280-3aea-1069-a2de-08002b30309d}";
+static const std::wstring RCPL_kSuppressedGuid         = L"{98f2ab62-0e29-4e4c-8ee7-b542e66740b1}";
+
+static const DWORD RCPL_kCategoryAppearance = 1;
+static const DWORD RCPL_kCategoryHardware   = 2;
+static const DWORD RCPL_kCategoryNetwork    = 3;
+
+static bool RCPL_IsPredefinedHkey(HKEY hKey) {
+    return hKey == HKEY_CLASSES_ROOT || hKey == HKEY_CURRENT_USER ||
+           hKey == HKEY_LOCAL_MACHINE || hKey == HKEY_USERS ||
+           hKey == HKEY_CURRENT_CONFIG;
+}
+
+static bool RCPL_EndsWith(const std::wstring& str, const std::wstring& suffix) {
+    if (str.size() < suffix.size()) return false;
+    return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static bool RCPL_ContainsRelevantKeyword(const std::wstring& lowerPath) {
+    return lowerPath.find(L"clsid") != std::wstring::npos ||
+           lowerPath.find(L"controlpanel") != std::wstring::npos;
+}
+
+static void RCPL_LoadSettings() {
+    g_rcplSettings.enableClassicCpls.store(Wh_GetIntSetting(L"enableClassicCpls") != 0);
+    g_rcplSettings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync") != 0);
+}
+
+static void RCPL_InitDisplayNames() {
+    wchar_t buffer[256] = { 0 };
+    HMODULE hTheme = LoadLibraryExW(L"themecpl.dll", nullptr,
+                                    LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hTheme) {
+        if (LoadStringW(hTheme, 1, buffer, 256) && buffer[0])
+            g_rcplPersonalizationName = buffer;
+        else
+            g_rcplPersonalizationName = L"Personalization";
+        FreeLibrary(hTheme);
+    } else {
+        g_rcplPersonalizationName = L"Personalization";
+    }
+
+    g_rcplPersonalizationGuidLower    = ToLower(RCPL_kPersonalizationGuid);
+    g_rcplNotificationIconsGuidLower  = ToLower(RCPL_kNotificationIconsGuid);
+    g_rcplNetworkConnectionsGuidLower = ToLower(RCPL_kNetworkConnectionsGuid);
+    g_rcplPrintersAndFaxesGuidLower   = ToLower(RCPL_kPrintersAndFaxesGuid);
+    g_rcplSuppressedGuidLower         = ToLower(RCPL_kSuppressedGuid);
+}
+
+static std::wstring RCPL_GetTrackedPath(HKEY hKey) {
+    if (!hKey) return L"";
+    if (hKey == HKEY_CLASSES_ROOT) return L"HKEY_CLASSES_ROOT";
+    if (hKey == HKEY_CURRENT_USER) return L"HKEY_CURRENT_USER";
+    if (hKey == HKEY_LOCAL_MACHINE) return L"HKEY_LOCAL_MACHINE";
+    if (hKey == HKEY_USERS) return L"HKEY_USERS";
+    if (hKey == HKEY_CURRENT_CONFIG) return L"HKEY_CURRENT_CONFIG";
+
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    auto it = g_rcplKeyPaths.find(hKey);
+    if (it != g_rcplKeyPaths.end()) return it->second;
+    return L"";
+}
+
+static void RCPL_TrackKey(HKEY hKey, const std::wstring& path) {
+    if (!hKey || RCPL_IsPredefinedHkey(hKey)) return;
+    std::wstring lower = ToLower(path);
+    if (!RCPL_ContainsRelevantKeyword(lower)) return;
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    g_rcplKeyPaths[hKey] = path;
+}
+
+static void RCPL_UntrackKey(HKEY hKey) {
+    if (!hKey || RCPL_IsPredefinedHkey(hKey)) return;
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    g_rcplKeyPaths.erase(hKey);
+}
+
+static HKEY RCPL_CreateFakeHandle(const std::wstring& path) {
+    int* dummy = new int(1);
+    HKEY fake = (HKEY)dummy;
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    g_rcplKeyPaths[fake] = path;
+    g_rcplFakeHandles.insert(fake);
+    return fake;
+}
+
+static void RCPL_FreeFakeHandle(HKEY hKey) {
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    if (g_rcplFakeHandles.count(hKey)) {
+        g_rcplFakeHandles.erase(hKey);
+        g_rcplKeyPaths.erase(hKey);
+        delete (int*)hKey;
+    }
+}
+
+enum class RCPL_VNode { None, ClsidRoot, DefaultIcon, Shell, ShellOpen, OpenCommand, NameSpaceEntry, ClsidRootCategoryOnly, Suppressed };
+enum class RCPL_ItemKind { None, Personalization, CategoryOnly, Suppressed };
+
+struct RCPL_ClassifyResult {
+    RCPL_VNode node;
+    RCPL_ItemKind kind;
+    DWORD category;
+};
+
+static bool RCPL_IsSuppressedNamespaceKey(const std::wstring& lower) {
+    if (!g_rcplSettings.suppressCompanySync.load()) return false;
+    return RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + g_rcplSuppressedGuidLower);
+}
+
+static bool RCPL_IsSuppressedNamespaceEntry(LPCWSTR name) {
+    if (!g_rcplSettings.suppressCompanySync.load() || !name) return false;
+    return ToLower(name) == g_rcplSuppressedGuidLower;
+}
+
+static RCPL_ClassifyResult RCPL_ClassifyFullVirtual(const std::wstring& lower, const std::wstring& guidLower, RCPL_ItemKind kind) {
+    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower))                             return { RCPL_VNode::ClsidRoot,     kind, 0 };
+    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\defaulticon"))          return { RCPL_VNode::DefaultIcon,   kind, 0 };
+    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell"))                return { RCPL_VNode::Shell,         kind, 0 };
+    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open"))          return { RCPL_VNode::ShellOpen,     kind, 0 };
+    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open\\command")) return { RCPL_VNode::OpenCommand,   kind, 0 };
+    if (RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + guidLower))           return { RCPL_VNode::NameSpaceEntry, kind, 0 };
+    return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
+}
+
+static RCPL_ClassifyResult RCPL_ClassifyPath(const std::wstring& path) {
+    std::wstring lower = ToLower(path);
+    if (!RCPL_ContainsRelevantKeyword(lower))
+        return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
+
+    if (g_rcplSettings.suppressCompanySync.load()) {
+        if (RCPL_EndsWith(lower, L"clsid\\" + g_rcplSuppressedGuidLower) ||
+            RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + g_rcplSuppressedGuidLower))
+            return { RCPL_VNode::Suppressed, RCPL_ItemKind::Suppressed, 0 };
+    }
+
+    if (g_rcplSettings.enableClassicCpls.load()) {
+        auto cr = RCPL_ClassifyFullVirtual(lower, g_rcplPersonalizationGuidLower, RCPL_ItemKind::Personalization);
+        if (cr.node != RCPL_VNode::None) return cr;
+    }
+
+    if (g_rcplSettings.enableClassicCpls.load()) {
+        struct CatItem { const std::wstring* guidLower; DWORD category; } categoryItems[] = {
+            { &g_rcplNotificationIconsGuidLower,  RCPL_kCategoryAppearance },
+            { &g_rcplNetworkConnectionsGuidLower, RCPL_kCategoryNetwork },
+            { &g_rcplPrintersAndFaxesGuidLower,   RCPL_kCategoryHardware },
+        };
+
+        for (auto& item : categoryItems) {
+            if (RCPL_EndsWith(lower, L"clsid\\" + *item.guidLower))
+                return { RCPL_VNode::ClsidRootCategoryOnly, RCPL_ItemKind::CategoryOnly, item.category };
+        }
+    }
+
+    return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
+}
+
+static bool RCPL_IsTargetKey(const std::wstring& path) {
+    return RCPL_ClassifyPath(path).node != RCPL_VNode::None;
+}
+
+static bool RCPL_IsNameSpaceParentKey(const std::wstring& path) {
+    return RCPL_EndsWith(ToLower(path), L"controlpanel\\namespace");
+}
+
+static LSTATUS RCPL_ProvideStringValue(LPBYTE lpData, LPDWORD lpcbData, const std::wstring& str) {
+    DWORD requiredSize = (DWORD)((str.length() + 1) * sizeof(wchar_t));
+    if (!lpcbData) return ERROR_INVALID_PARAMETER;
+    if (!lpData || *lpcbData < requiredSize) {
+        *lpcbData = requiredSize;
+        return ERROR_MORE_DATA;
+    }
+    *lpcbData = requiredSize;
+    memcpy(lpData, str.c_str(), requiredSize);
+    return ERROR_SUCCESS;
+}
+
+static LSTATUS RCPL_ProvideDwordValue(LPBYTE lpData, LPDWORD lpcbData, DWORD value) {
+    if (!lpcbData) return ERROR_INVALID_PARAMETER;
+    if (!lpData || *lpcbData < sizeof(DWORD)) {
+        *lpcbData = sizeof(DWORD);
+        return ERROR_MORE_DATA;
+    }
+    *lpcbData = sizeof(DWORD);
+    *(DWORD*)lpData = value;
+    return ERROR_SUCCESS;
+}
+
+static bool RCPL_TryProvideValue(const std::wstring& path, const std::wstring& valueName,
+                                 LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData, LSTATUS& outStatus) {
+    RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
+    if (cr.node == RCPL_VNode::None) return false;
+
+    if (cr.kind == RCPL_ItemKind::Suppressed) {
+        outStatus = ERROR_FILE_NOT_FOUND;
+        return true;
+    }
+
+    if (cr.kind == RCPL_ItemKind::CategoryOnly) {
+        if (valueName == L"System.ControlPanel.Category") {
+            if (lpType) *lpType = REG_DWORD;
+            outStatus = RCPL_ProvideDwordValue(lpData, lpcbData, cr.category);
+            return true;
+        }
+        return false;
+    }
+
+    if (cr.kind == RCPL_ItemKind::Personalization) {
+        if (cr.node == RCPL_VNode::NameSpaceEntry) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, g_rcplPersonalizationName);
+                return true;
+            }
+        } else if (cr.node == RCPL_VNode::ClsidRoot) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, g_rcplPersonalizationName);
+                return true;
+            } else if (valueName == L"InfoTip") {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"@%SystemRoot%\\System32\\themecpl.dll,-2#immutable1");
+                return true;
+            } else if (valueName == L"System.ApplicationName") {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"Microsoft.Personalization");
+                return true;
+            } else if (valueName == L"System.ControlPanel.Category") {
+                if (lpType) *lpType = REG_DWORD;
+                outStatus = RCPL_ProvideDwordValue(lpData, lpcbData, RCPL_kCategoryAppearance);
+                return true;
+            } else if (valueName == L"System.Software.TasksFileUrl") {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"Internal");
+                return true;
+            }
+        } else if (cr.node == RCPL_VNode::DefaultIcon) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"%SystemRoot%\\System32\\themecpl.dll,-1");
+                return true;
+            }
+        } else if (cr.node == RCPL_VNode::OpenCommand) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = RCPL_ProvideStringValue(lpData, lpcbData,
+                    L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}");
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static std::vector<std::wstring> RCPL_GetNamespaceClsids() {
+    std::vector<std::wstring> result;
+    if (g_rcplSettings.enableClassicCpls.load()) {
+        result.push_back(RCPL_kPersonalizationGuid);
+        result.push_back(RCPL_kNotificationIconsGuid);
+        result.push_back(RCPL_kNetworkConnectionsGuid);
+        result.push_back(RCPL_kPrintersAndFaxesGuid);
+    }
+    return result;
+}
+
+static bool RCPL_GetVirtualSubKeyName(RCPL_VNode node, DWORD index, std::wstring& outName) {
+    switch (node) {
+        case RCPL_VNode::ClsidRoot:
+            if (index == 0) { outName = L"DefaultIcon"; return true; }
+            if (index == 1) { outName = L"Shell"; return true; }
+            return false;
+        case RCPL_VNode::Shell:
+            if (index == 0) { outName = L"Open"; return true; }
+            return false;
+        case RCPL_VNode::ShellOpen:
+            if (index == 0) { outName = L"command"; return true; }
+            return false;
+        default:
+            return false;
+    }
+}
+
+using RCPL_RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RCPL_RegCloseKey_t = decltype(&RegCloseKey);
+using RCPL_RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RCPL_RegGetValueW_t = decltype(&RegGetValueW);
+using RCPL_RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RCPL_RegEnumKeyW_t = decltype(&RegEnumKeyW);
+
+static RCPL_RegOpenKeyExW_t RCPL_RegOpenKeyExWOriginal = nullptr;
+static RCPL_RegCloseKey_t RCPL_RegCloseKeyOriginal = nullptr;
+static RCPL_RegQueryValueExW_t RCPL_RegQueryValueExWOriginal = nullptr;
+static RCPL_RegGetValueW_t RCPL_RegGetValueWOriginal = nullptr;
+static RCPL_RegEnumKeyExW_t RCPL_RegEnumKeyExWOriginal = nullptr;
+static RCPL_RegEnumKeyW_t RCPL_RegEnumKeyWOriginal = nullptr;
+
+static LSTATUS WINAPI RCPL_RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
+    bool parentIsFake = false;
+    std::wstring parentPath;
+    {
+        std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+        if (g_rcplFakeHandles.count(hKey)) {
+            parentIsFake = true;
+            auto it = g_rcplKeyPaths.find(hKey);
+            if (it != g_rcplKeyPaths.end()) parentPath = it->second;
+        }
+    }
+
+    if (parentIsFake) {
+        std::wstring fullPath = parentPath;
+        if (lpSubKey && *lpSubKey) {
+            if (!fullPath.empty()) fullPath += L"\\";
+            fullPath += lpSubKey;
+        }
+        if (RCPL_IsTargetKey(fullPath)) {
+            HKEY fake = RCPL_CreateFakeHandle(fullPath);
+            if (phkResult) *phkResult = fake;
+            return ERROR_SUCCESS;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    if (g_rcplSettings.suppressCompanySync.load() && lpSubKey) {
+        std::wstring basePath = RCPL_GetTrackedPath(hKey);
+        std::wstring fullPath = basePath;
+        if (*lpSubKey) {
+            if (!fullPath.empty()) fullPath += L"\\";
+            fullPath += lpSubKey;
+        }
+        if (RCPL_IsSuppressedNamespaceKey(ToLower(fullPath))) return ERROR_FILE_NOT_FOUND;
+    }
+
+    LSTATUS status = RCPL_RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    if (status == ERROR_SUCCESS && phkResult && *phkResult) {
+        std::wstring basePath = RCPL_GetTrackedPath(hKey);
+        std::wstring fullPath = basePath;
+        if (lpSubKey && *lpSubKey) {
+            if (!fullPath.empty()) fullPath += L"\\";
+            fullPath += lpSubKey;
+        }
+        RCPL_TrackKey(*phkResult, fullPath);
+    } else if (status == ERROR_FILE_NOT_FOUND && phkResult) {
+        std::wstring basePath = RCPL_GetTrackedPath(hKey);
+        std::wstring fullPath = basePath;
+        if (lpSubKey && *lpSubKey) {
+            if (!fullPath.empty()) fullPath += L"\\";
+            fullPath += lpSubKey;
+        }
+        if (RCPL_IsTargetKey(fullPath)) {
+            HKEY fake = RCPL_CreateFakeHandle(fullPath);
+            *phkResult = fake;
+            return ERROR_SUCCESS;
+        }
+    }
+    return status;
+}
+
+static LSTATUS WINAPI RCPL_RegCloseKeyHook(HKEY hKey) {
+    bool isFake = false;
+    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
+    if (isFake) { RCPL_FreeFakeHandle(hKey); return ERROR_SUCCESS; }
+    LSTATUS status = RCPL_RegCloseKeyOriginal(hKey);
+    RCPL_UntrackKey(hKey);
+    return status;
+}
+
+static LSTATUS WINAPI RCPL_RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
+                                                LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
+    std::wstring path = RCPL_GetTrackedPath(hKey);
+    if (!path.empty()) {
+        std::wstring valueName = lpValueName ? lpValueName : L"";
+        LSTATUS outStatus;
+        if (RCPL_TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
+    }
+    bool isFake = false;
+    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
+    if (isFake) return ERROR_FILE_NOT_FOUND;
+    return RCPL_RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+}
+
+static LSTATUS WINAPI RCPL_RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
+                                            DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    std::wstring path = RCPL_GetTrackedPath(hkey);
+    if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
+    if (!path.empty()) {
+        std::wstring valueName = lpValue ? lpValue : L"";
+        LSTATUS outStatus;
+        if (RCPL_TryProvideValue(path, valueName, pdwType, (LPBYTE)pvData, pcbData, outStatus)) return outStatus;
+    }
+    return RCPL_RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+}
+
+static LSTATUS WINAPI RCPL_RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
+                                             LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
+                                             PFILETIME lpftLastWriteTime) {
+    bool isFake = false;
+    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
+
+    if (isFake) {
+        std::wstring path = RCPL_GetTrackedPath(hKey);
+        RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
+        std::wstring subName;
+        if (!RCPL_GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
+        if (lpcchName && *lpcchName < subName.size() + 1) {
+            *lpcchName = (DWORD)(subName.size() + 1);
+            return ERROR_MORE_DATA;
+        }
+        if (lpName) wcscpy_s(lpName, subName.size() + 1, subName.c_str());
+        if (lpcchName) *lpcchName = (DWORD)subName.size();
+        if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
+        return ERROR_SUCCESS;
+    }
+
+    std::wstring path = RCPL_GetTrackedPath(hKey);
+    bool isNamespace = RCPL_IsNameSpaceParentKey(path);
+
+    if (isNamespace && g_rcplSettings.suppressCompanySync.load()) {
+        DWORD targetVirtualIndex = dwIndex;
+        DWORD realIndex = 0;
+        DWORD foundCount = 0;
+        LSTATUS status;
+        wchar_t nameBuf[256];
+        DWORD origCap = lpcchName ? *lpcchName : 256;
+
+        while (true) {
+            LPWSTR namePtr = lpName ? lpName : nameBuf;
+            DWORD cch = origCap;
+            if (lpcchName) *lpcchName = origCap;
+            status = RCPL_RegEnumKeyExWOriginal(hKey, realIndex, namePtr, lpcchName ? lpcchName : &cch,
+                                                lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
+            if (status != ERROR_SUCCESS) break;
+            if (!RCPL_IsSuppressedNamespaceEntry(namePtr)) {
+                if (foundCount == targetVirtualIndex) return ERROR_SUCCESS;
+                foundCount++;
+            }
+            realIndex++;
+        }
+
+        if (status == ERROR_NO_MORE_ITEMS) {
+            std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
+            DWORD injectedIndex = dwIndex - foundCount;
+            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+            const wchar_t* clsid = clsids[injectedIndex].c_str();
+            size_t len = wcslen(clsid);
+            if (lpcchName && *lpcchName < len + 1) {
+                *lpcchName = (DWORD)(len + 1);
+                return ERROR_MORE_DATA;
+            }
+            if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
+            if (lpcchName) *lpcchName = (DWORD)len;
+            if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
+            return ERROR_SUCCESS;
+        }
+        return status;
+    }
+
+    LSTATUS status = RCPL_RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName,
+                                                lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
+    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
+        std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
+        DWORD realCount = 0;
+        wchar_t tmpBuf[256];
+        DWORD tmpCch;
+        while (true) {
+            tmpCch = 256;
+            if (RCPL_RegEnumKeyExWOriginal(hKey, realCount, tmpBuf, &tmpCch, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
+                break;
+            realCount++;
+        }
+        DWORD injectedIndex = dwIndex - realCount;
+        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+        const wchar_t* clsid = clsids[injectedIndex].c_str();
+        size_t len = wcslen(clsid);
+        if (lpcchName && *lpcchName < len + 1) {
+            *lpcchName = (DWORD)(len + 1);
+            return ERROR_MORE_DATA;
+        }
+        if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
+        if (lpcchName) *lpcchName = (DWORD)len;
+        if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
+        return ERROR_SUCCESS;
+    }
+    return status;
+}
+
+static LSTATUS WINAPI RCPL_RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
+    bool isFake = false;
+    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
+
+    if (isFake) {
+        std::wstring path = RCPL_GetTrackedPath(hKey);
+        RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
+        std::wstring subName;
+        if (!RCPL_GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
+        if (cchName <= subName.size()) return ERROR_MORE_DATA;
+        wcscpy_s(lpName, cchName, subName.c_str());
+        return ERROR_SUCCESS;
+    }
+
+    std::wstring path = RCPL_GetTrackedPath(hKey);
+    bool isNamespace = RCPL_IsNameSpaceParentKey(path);
+
+    if (isNamespace && g_rcplSettings.suppressCompanySync.load()) {
+        DWORD targetVirtualIndex = dwIndex;
+        DWORD realIndex = 0;
+        DWORD foundCount = 0;
+        LSTATUS status;
+        wchar_t nameBuf[256];
+        while (true) {
+            status = RCPL_RegEnumKeyWOriginal(hKey, realIndex, lpName ? lpName : nameBuf, cchName ? cchName : 256);
+            if (status != ERROR_SUCCESS) break;
+            if (!RCPL_IsSuppressedNamespaceEntry(lpName ? lpName : nameBuf)) {
+                if (foundCount == targetVirtualIndex) return ERROR_SUCCESS;
+                foundCount++;
+            }
+            realIndex++;
+        }
+        if (status == ERROR_NO_MORE_ITEMS) {
+            std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
+            DWORD injectedIndex = dwIndex - foundCount;
+            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+            const wchar_t* clsid = clsids[injectedIndex].c_str();
+            size_t len = wcslen(clsid);
+            if (cchName <= len) return ERROR_MORE_DATA;
+            if (lpName) wcscpy_s(lpName, cchName, clsid);
+            return ERROR_SUCCESS;
+        }
+        return status;
+    }
+
+    LSTATUS status = RCPL_RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
+    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
+        std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
+        DWORD realCount = 0;
+        wchar_t tmpBuf[256];
+        while (RCPL_RegEnumKeyWOriginal(hKey, realCount, tmpBuf, 256) == ERROR_SUCCESS)
+            realCount++;
+        DWORD injectedIndex = dwIndex - realCount;
+        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
+        const wchar_t* clsid = clsids[injectedIndex].c_str();
+        size_t len = wcslen(clsid);
+        if (cchName <= len) return ERROR_MORE_DATA;
+        if (lpName) wcscpy_s(lpName, cchName, clsid);
+        return ERROR_SUCCESS;
+    }
+    return status;
+}
+
+static void* RCPL_GetRegFunc(const char* name) {
+    HMODULE hKb = GetModuleHandleW(L"kernelbase.dll");
+    if (hKb) { void* p = (void*)GetProcAddress(hKb, name); if (p) return p; }
+    HMODULE hAdv = GetModuleHandleW(L"advapi32.dll");
+    if (!hAdv) hAdv = LoadLibraryW(L"advapi32.dll");
+    if (hAdv) { void* p = (void*)GetProcAddress(hAdv, name); if (p) return p; }
+    return nullptr;
+}
+
+static bool RCPL_InstallRegistryHooks() {
+    RCPL_LoadSettings();
+    RCPL_InitDisplayNames();
+
+    void* pRegOpenKeyExW    = RCPL_GetRegFunc("RegOpenKeyExW");
+    void* pRegCloseKey      = RCPL_GetRegFunc("RegCloseKey");
+    void* pRegQueryValueExW = RCPL_GetRegFunc("RegQueryValueExW");
+    void* pRegGetValueW     = RCPL_GetRegFunc("RegGetValueW");
+    void* pRegEnumKeyExW    = RCPL_GetRegFunc("RegEnumKeyExW");
+    void* pRegEnumKeyW      = RCPL_GetRegFunc("RegEnumKeyW");
+
+    if (!pRegOpenKeyExW || !pRegCloseKey || !pRegQueryValueExW || !pRegGetValueW || !pRegEnumKeyExW || !pRegEnumKeyW) {
+        Wh_Log(L"[RCPL] Failed to get one or more registry functions");
+        return false;
+    }
+
+    if (!Wh_SetFunctionHook(pRegOpenKeyExW,    (void*)RCPL_RegOpenKeyExWHook,    (void**)&RCPL_RegOpenKeyExWOriginal))    { Wh_Log(L"[RCPL] Failed to hook RegOpenKeyExW");    return false; }
+    if (!Wh_SetFunctionHook(pRegCloseKey,      (void*)RCPL_RegCloseKeyHook,      (void**)&RCPL_RegCloseKeyOriginal))      { Wh_Log(L"[RCPL] Failed to hook RegCloseKey");      return false; }
+    if (!Wh_SetFunctionHook(pRegQueryValueExW, (void*)RCPL_RegQueryValueExWHook, (void**)&RCPL_RegQueryValueExWOriginal)) { Wh_Log(L"[RCPL] Failed to hook RegQueryValueExW"); return false; }
+    if (!Wh_SetFunctionHook(pRegGetValueW,     (void*)RCPL_RegGetValueWHook,     (void**)&RCPL_RegGetValueWOriginal))     { Wh_Log(L"[RCPL] Failed to hook RegGetValueW");     return false; }
+    if (!Wh_SetFunctionHook(pRegEnumKeyExW,    (void*)RCPL_RegEnumKeyExWHook,    (void**)&RCPL_RegEnumKeyExWOriginal))    { Wh_Log(L"[RCPL] Failed to hook RegEnumKeyExW");    return false; }
+    if (!Wh_SetFunctionHook(pRegEnumKeyW,      (void*)RCPL_RegEnumKeyWHook,      (void**)&RCPL_RegEnumKeyWOriginal))      { Wh_Log(L"[RCPL] Failed to hook RegEnumKeyW");      return false; }
+
+    Wh_Log(L"[RCPL] Classic CPL registry virtualization hooks installed");
+    return true;
+}
+
+static void RCPL_Cleanup() {
+    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
+    for (HKEY fake : g_rcplFakeHandles)
+        delete (int*)fake;
+    g_rcplFakeHandles.clear();
+    g_rcplKeyPaths.clear();
+    Wh_Log(L"[RCPL] Cleanup completed");
+}
+
+// ---------------------------------------------------------------------------
+// Experimental COM activation hook
+// ---------------------------------------------------------------------------
+
 struct IApplicationActivationManagerVtbl {
-    // IUnknown
     HRESULT (STDMETHODCALLTYPE *QueryInterface)(IUnknown*, REFIID, void**);
     ULONG   (STDMETHODCALLTYPE *AddRef)(IUnknown*);
     ULONG   (STDMETHODCALLTYPE *Release)(IUnknown*);
-    // IApplicationActivationManager
-    HRESULT (STDMETHODCALLTYPE *ActivateApplication)(
-        IUnknown*,
-        LPCWSTR appUserModelId,
-        LPCWSTR arguments,
-        DWORD options,
-        DWORD* processId);
+    HRESULT (STDMETHODCALLTYPE *ActivateApplication)(IUnknown*, LPCWSTR, LPCWSTR, DWORD, DWORD*);
     HRESULT (STDMETHODCALLTYPE *ActivateForFile)(IUnknown*, LPCWSTR, LPCWSTR, DWORD, DWORD*);
-    HRESULT (STDMETHODCALLTYPE *ActivateForProtocol)(IUnknown*, LPCWSTR, DWORD*, DWORD);
+    // Real ABI: HRESULT ActivateForProtocol(LPCWSTR pszProtocol, IShellItemArray* pItemArray, DWORD* pProcessId)
+    HRESULT (STDMETHODCALLTYPE *ActivateForProtocol)(IUnknown*, LPCWSTR, IShellItemArray*, DWORD*);
 };
 
 static IApplicationActivationManagerVtbl g_origAAMVtbl = {};
 static bool g_aamHookInstalled = false;
 static std::mutex g_aamHookMutex;
 
-HRESULT STDMETHODCALLTYPE AAM_ActivateApplication_hook(
-    IUnknown* pThis,
-    LPCWSTR appUserModelId,
-    LPCWSTR arguments,
-    DWORD options,
-    DWORD* processId)
-{
-    Wh_Log(L"[AAM-HOOK] ActivateApplication: appId=%s, args=%s",
-           appUserModelId ? appUserModelId : L"(null)",
-           arguments ? arguments : L"(null)");
-
-    // Is this the Settings app being activated?
-    if (appUserModelId && arguments &&
-        _wcsnicmp(appUserModelId, L"windows.immersivecontrolpanel", 29) == 0)
-    {
+HRESULT STDMETHODCALLTYPE AAM_ActivateApplication_hook(IUnknown* pThis, LPCWSTR appUserModelId, LPCWSTR arguments, DWORD options, DWORD* processId) {
+    if (appUserModelId && arguments && _wcsnicmp(appUserModelId, L"windows.immersivecontrolpanel", 29) == 0) {
         std::wstring uri = NormalizeUri(arguments);
-        Wh_Log(L"[AAM-HOOK] Settings activation intercepted: %s", uri.c_str());
-
         auto result = ResolveUri(uri, nullptr);
         if (result.intercept && !result.target.empty()) {
             LaunchTarget(result.target);
             if (processId) *processId = GetCurrentProcessId();
-            Wh_Log(L"[AAM-HOOK] Redirected to: %s", result.target.c_str());
             return S_OK;
         }
-        Wh_Log(L"[AAM-HOOK] No mapping found, falling back to original");
     }
 
-    // Not a Settings activation we can handle — call original
-    if (g_origAAMVtbl.ActivateApplication) {
+    if (g_origAAMVtbl.ActivateApplication)
         return g_origAAMVtbl.ActivateApplication(pThis, appUserModelId, arguments, options, processId);
+    return E_FAIL;
+}
+
+// Handles "See also" style links from classic namespace pages (e.g. the
+// Personalization CPL's "Schermo" / "Centro accessibilità" links, and the
+// Power Options "See also" panel) that Windows 11 resolves via protocol
+// activation (ms-settings:...) rather than via ActivateApplication.
+HRESULT STDMETHODCALLTYPE AAM_ActivateForProtocol_hook(IUnknown* pThis, LPCWSTR pszProtocol, IShellItemArray* pItemArray, DWORD* processId) {
+    if (pszProtocol && IsMsSettings(pszProtocol)) {
+        std::wstring uri = NormalizeUri(pszProtocol);
+        auto result = ResolveUri(uri, nullptr);
+        if (result.intercept) {
+            if (!result.target.empty()) LaunchTarget(result.target);
+            if (processId) *processId = GetCurrentProcessId();
+            return S_OK;
+        }
     }
+
+    if (g_origAAMVtbl.ActivateForProtocol)
+        return g_origAAMVtbl.ActivateForProtocol(pThis, pszProtocol, pItemArray, processId);
     return E_FAIL;
 }
 
@@ -1276,15 +1771,10 @@ static void InstallAAMHook() {
     if (g_aamHookInstalled) return;
 
     IUnknown* pAAM = nullptr;
-    HRESULT hr = CoCreateInstance(
-        CLSID_ApplicationActivationManager_STC,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_IApplicationActivationManager_STC,
-        (void**)&pAAM);
-
+    HRESULT hr = CoCreateInstance(CLSID_ApplicationActivationManager_STC, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_IApplicationActivationManager_STC, (void**)&pAAM);
     if (FAILED(hr) || !pAAM) {
-        Wh_Log(L"[AAM-HOOK] CoCreateInstance(CLSID_ApplicationActivationManager) failed: 0x%08X", hr);
+        Wh_Log(L"[AAM-HOOK] CoCreateInstance failed: 0x%08X", hr);
         return;
     }
 
@@ -1295,10 +1785,8 @@ static void InstallAAMHook() {
         return;
     }
 
-    // Save original vtable
     g_origAAMVtbl = *vtbl;
 
-    // Make the vtable page writable
     DWORD oldProtect;
     if (!VirtualProtect(vtbl, sizeof(*vtbl), PAGE_READWRITE, &oldProtect)) {
         Wh_Log(L"[AAM-HOOK] VirtualProtect failed");
@@ -1306,43 +1794,31 @@ static void InstallAAMHook() {
         return;
     }
 
-    // Patch ActivateApplication entry
     vtbl->ActivateApplication = AAM_ActivateApplication_hook;
-
+    vtbl->ActivateForProtocol = AAM_ActivateForProtocol_hook;
     VirtualProtect(vtbl, sizeof(*vtbl), oldProtect, &oldProtect);
-    
+
     g_aamHookInstalled = true;
-    Wh_Log(L"[AAM-HOOK] Successfully installed");
+    Wh_Log(L"[AAM-HOOK] Successfully installed (ActivateApplication + ActivateForProtocol)");
     pAAM->Release();
 }
 
 bool (*COpenControlPanel__MapLegacyName_orig)(void*, LPCWSTR, LPWSTR, UINT, bool*);
-bool COpenControlPanel__MapLegacyName_hook(
-    void    *pThis,
-    LPCWSTR  pszLegacyName,
-    LPWSTR   pszNewName,
-    UINT     uLen,
-    bool    *nameChanged)
-{
-    // Always tell the caller the name was NOT changed — this forces
-    // Explorer to use the original legacy Control Panel path.
-    *nameChanged = false;
-    *pszNewName = L'\0';
-    Wh_Log(L"[MAP-LEGACY] Suppressed mapping for: %s",
-           pszLegacyName ? pszLegacyName : L"(null)");
+
+bool COpenControlPanel__MapLegacyName_hook(void*, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT, bool* nameChanged) {
+    if (nameChanged) *nameChanged = false;
+    if (pszNewName) *pszNewName = L'\0';
+    Wh_Log(L"[MAP-LEGACY] Suppressed mapping for: %s", pszLegacyName ? pszLegacyName : L"(null)");
     return false;
 }
 
 static bool InstallLegacyNameHook() {
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        Wh_Log(L"[MAP-LEGACY] shell32.dll not loaded");
-        return false;
-    }
+    if (!hShell32) return false;
 
     WindhawkUtils::SYMBOL_HOOK shell32_dll_hook = {{
         L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
-        L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
+        L"(unsigned short const *,unsigned short* ,unsigned int,bool *)"
     },
     (void**)&COpenControlPanel__MapLegacyName_orig,
     (void*)COpenControlPanel__MapLegacyName_hook,
@@ -1351,16 +1827,15 @@ static bool InstallLegacyNameHook() {
     if (WindhawkUtils::HookSymbols(hShell32, &shell32_dll_hook, 1)) {
         Wh_Log(L"[MAP-LEGACY] Hook installed successfully");
         return true;
-    } else {
-        Wh_Log(L"[MAP-LEGACY] Failed to install hook (symbol may differ on this build)");
-        return false;
     }
+
+    Wh_Log(L"[MAP-LEGACY] Failed to install hook");
+    return false;
 }
 
-static std::wstring BaseNameLower(const std::wstring& path) {
-    size_t pos = path.rfind(L'\\');
-    return ToLower((pos != std::wstring::npos) ? path.substr(pos + 1) : path);
-}
+// ---------------------------------------------------------------------------
+// ShellExecute/CreateProcess hooks
+// ---------------------------------------------------------------------------
 
 static bool IsControlSystemParams(const wchar_t* file, const wchar_t* params) {
     if (!file || !params) return false;
@@ -1375,10 +1850,12 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     std::wstring current;
     bool inQuotes = false;
     for (wchar_t c : cmdLine) {
-        if (c == L'"') { inQuotes = !inQuotes; }
+        if (c == L'\"') inQuotes = !inQuotes;
         else if (c == L' ' && !inQuotes) {
             if (!current.empty()) { tokens.push_back(current); current.clear(); }
-        } else { current += c; }
+        } else {
+            current += c;
+        }
     }
     if (!current.empty()) tokens.push_back(current);
     if (tokens.size() != 2) return false;
@@ -1387,13 +1864,14 @@ static bool IsControlSystemCommand(const std::wstring& cmdLine) {
     std::wstring arg = ToLower(tokens[1]);
     return (arg == L"system" || arg == L"microsoft.system");
 }
+
 static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
     size_t i = 0, n = cmdLine.size();
     while (i < n && cmdLine[i] == L' ') i++;
 
     std::wstring exeToken;
-    if (i < n && cmdLine[i] == L'"') {
-        size_t end = cmdLine.find(L'"', i + 1);
+    if (i < n && cmdLine[i] == L'\"') {
+        size_t end = cmdLine.find(L'\"', i + 1);
         if (end == std::wstring::npos) return L"";
         exeToken = cmdLine.substr(i + 1, end - i - 1);
         i = end + 1;
@@ -1404,19 +1882,18 @@ static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
     }
 
     if (BaseNameLower(exeToken) != L"explorer.exe") return L"";
-
     while (i < n && cmdLine[i] == L' ') i++;
     std::wstring rest = cmdLine.substr(i);
     while (!rest.empty() && rest.back() == L' ') rest.pop_back();
-    if (rest.size() >= 2 && rest.front() == L'"' && rest.back() == L'"') {
+    if (rest.size() >= 2 && rest.front() == L'\"' && rest.back() == L'\"')
         rest = rest.substr(1, rest.size() - 2);
-    }
     if (rest.empty()) return L"";
 
     if (IsMsSettings(rest.c_str())) return NormalizeUri(rest);
     if (IsShellClsid(rest.c_str())) return ToLower(rest);
     return L"";
 }
+
 BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
     if (IsChildProcess()) return ShellExecuteExW_orig(pei);
     HookGuard guard;
@@ -1428,7 +1905,7 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
         if (pei->fMask & SEE_MASK_NOCLOSEPROCESS) pei->hProcess = nullptr;
         return TRUE;
     }
-    
+
     std::wstring uri;
     if (IsMsSettings(pei->lpFile)) uri = NormalizeUri(pei->lpFile);
     else if (IsMsSettings(pei->lpParameters)) uri = NormalizeUri(pei->lpParameters);
@@ -1446,6 +1923,7 @@ BOOL WINAPI ShellExecuteExW_hook(SHELLEXECUTEINFOW* pei) {
             return TRUE;
         }
     }
+
     return ShellExecuteExW_orig(pei);
 }
 
@@ -1459,7 +1937,7 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
         LaunchTarget(g_isWin11 ? L"sysdm.cpl" : SYSTEM_PROPS_CLSID);
         return SHELL_EXECUTE_SUCCESS;
     }
-    
+
     std::wstring uri;
     if (IsMsSettings(file)) uri = NormalizeUri(file);
     else if (IsMsSettings(params)) uri = NormalizeUri(params);
@@ -1476,24 +1954,30 @@ HINSTANCE WINAPI ShellExecuteW_hook(HWND hwnd, LPCWSTR op, LPCWSTR file, LPCWSTR
             return SHELL_EXECUTE_SUCCESS;
         }
     }
+
     return ShellExecuteW_orig(hwnd, op, file, params, dir, show);
 }
 
 BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-                                 LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
-                                 BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
-                                 LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
-                                 LPPROCESS_INFORMATION lpProcessInformation) {
-    if (IsChildProcess()) return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, 
-        lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, 
-        lpStartupInfo, lpProcessInformation);
+                                LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
+                                BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
+                                LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+                                LPPROCESS_INFORMATION lpProcessInformation) {
+    if (IsChildProcess())
+        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
+                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+                                   lpStartupInfo, lpProcessInformation);
+
     HookGuard guard;
-    if (guard.IsReentrant()) return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, 
-        lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, 
-        lpStartupInfo, lpProcessInformation);
-    if (!g_settings.enableRedirects || g_settings.uiOnlyRedirects) return CreateProcessW_orig(lpApplicationName, 
-        lpCommandLine, lpProcessAttributes, lpThreadAttributes, bInheritHandles, dwCreationFlags, lpEnvironment, 
-        lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+    if (guard.IsReentrant())
+        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
+                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+                                   lpStartupInfo, lpProcessInformation);
+
+    if (!g_settings.enableRedirects || g_settings.uiOnlyRedirects)
+        return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
+                                   bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+                                   lpStartupInfo, lpProcessInformation);
 
     if (lpCommandLine) {
         std::wstring cmdLine(lpCommandLine);
@@ -1504,10 +1988,6 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
             return TRUE;
         }
 
-        // Handles cases like the classic Control Panel's "See also" links,
-        // which Explorer launches as a new "explorer.exe ms-settings:..."
-        // (or "explorer.exe shell:::{...}") process via CreateProcessW
-        // instead of going through ShellExecuteW/ShellExecuteExW.
         std::wstring uri = ExtractExplorerLaunchUri(cmdLine);
         if (!uri.empty()) {
             auto result = ResolveUri(uri, nullptr);
@@ -1519,19 +1999,20 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
             }
         }
     }
-    return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes, 
-        bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
-}
-static volatile bool g_pniduiRetryRunning = false;
 
+    return CreateProcessW_orig(lpApplicationName, lpCommandLine, lpProcessAttributes, lpThreadAttributes,
+                               bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory,
+                               lpStartupInfo, lpProcessInformation);
+}
+
+// ---------------------------------------------------------------------------
+// Symbol hooks and watchdog
+// ---------------------------------------------------------------------------
 
 static bool TryInstallPniduiHook() {
     std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
-    
-    if (g_pniduiHookInstalled) {
-        return true;
-    }
-    
+    if (g_pniduiHookInstalled) return true;
+
     HMODULE hMod = GetModuleHandleW(L"pnidui.dll");
     if (!hMod) {
         hMod = LoadLibraryExW(L"pnidui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -1540,8 +2021,6 @@ static bool TryInstallPniduiHook() {
             return false;
         }
     }
-    
-    Wh_Log(L"[PNIDUI-HOOK] pnidui.dll loaded at 0x%p", hMod);
 
     WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
         {
@@ -1552,7 +2031,7 @@ static bool TryInstallPniduiHook() {
             L"__stdcall"
 #endif
             L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
-            L"(struct HMENU__ *,struct HWND__ *)"
+            L"(struct HMENU__ *,struct HWND__* )"
         },
         (void**)&g_icmhOrig_pnidui,
         (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
@@ -1570,49 +2049,24 @@ static bool TryInstallPniduiHook() {
 }
 
 static DWORD WINAPI PniduiRetryThread(LPVOID) {
-    if (g_pniduiRetryRunning) {
-        Wh_Log(L"[PNIDUI-HOOK] Retry thread already running, exiting");
-        return 0;
-    }
+    if (g_pniduiRetryRunning) return 0;
     g_pniduiRetryRunning = true;
-    
-    Wh_Log(L"[PNIDUI-HOOK] Retry thread started - waiting for pnidui.dll to load");
-    
+
     const int MAX_WAIT_CHECKS = 60;
     const DWORD CHECK_INTERVAL = 500;
     bool dllLoaded = false;
-    
     for (int i = 0; i < MAX_WAIT_CHECKS && !g_pniduiRetryStop; i++) {
-        if (GetModuleHandleW(L"pnidui.dll") != nullptr) {
-            dllLoaded = true;
-            Wh_Log(L"[PNIDUI-HOOK] pnidui.dll detected after %dms", i * CHECK_INTERVAL);
-            break;
-        }
+        if (GetModuleHandleW(L"pnidui.dll") != nullptr) { dllLoaded = true; break; }
         Sleep(CHECK_INTERVAL);
     }
-    
-    if (!dllLoaded) {
-        Wh_Log(L"[PNIDUI-HOOK] pnidui.dll not loaded after timeout, giving up");
-        g_pniduiRetryRunning = false;
-        return 0;
-    }
-    
-    if (TryInstallPniduiHook()) {
-        Wh_Log(L"[PNIDUI-HOOK] Hook installed successfully after waiting for DLL");
-    } else {
-        Wh_Log(L"[PNIDUI-HOOK] Failed to install hook even though DLL is loaded");
-    }
-    
+
+    if (dllLoaded) TryInstallPniduiHook();
     g_pniduiRetryRunning = false;
-    Wh_Log(L"[PNIDUI-HOOK] Retry thread exiting");
     return 0;
 }
 
 static void InstallImmersiveMenuHooks() {
-    struct DllHook {
-        const wchar_t*   dll;
-        ICMH_CAODTM_t*  orig;
-    } targets[] = {
+    struct DllHook { const wchar_t* dll; ICMH_CAODTM_t* orig; } targets[] = {
         { L"SndVolSSO.dll", &g_icmhOrig_SndVolSSO },
     };
 
@@ -1620,7 +2074,7 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSSO_dll_hooks[] = {{
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {{
             {
                 L"bool "
 #ifdef _WIN64
@@ -1629,27 +2083,19 @@ static void InstallImmersiveMenuHooks() {
                 L"__stdcall"
 #endif
                 L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
-                L"(struct HMENU__ *,struct HWND__ *)"
+                L"(struct HMENU__ *,struct HWND__* )"
             },
             (void**)t.orig,
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
             false
         }};
-
-        WindhawkUtils::HookSymbols(hMod, sndVolSSO_dll_hooks, 1);
+        WindhawkUtils::HookSymbols(hMod, hooks, 1);
     }
 
     if (!TryInstallPniduiHook()) {
         if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
             g_pniduiRetryStop = false;
             g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
-            if (g_pniduiRetryThread) {
-                Wh_Log(L"[PNIDUI-HOOK] Retry thread created");
-            } else {
-                Wh_Log(L"[PNIDUI-HOOK] Failed to create retry thread");
-            }
-        } else {
-            Wh_Log(L"[PNIDUI-HOOK] Retry thread already running or hook already installed");
         }
     }
 
@@ -1671,7 +2117,6 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
                 false
             }};
-            
             WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1);
         }
     }
@@ -1679,170 +2124,302 @@ static void InstallImmersiveMenuHooks() {
 
 static void InstallSyscallFallback() {
     HMODULE hWin32u = GetModuleHandleW(L"win32u.dll");
-    if (!hWin32u) {
-        hWin32u = LoadLibraryW(L"win32u.dll");
-        if (!hWin32u) {
-            Wh_Log(L"[SYSCALL-HOOK] win32u.dll not found");
-            return;
-        }
-    }
-    
+    if (!hWin32u) hWin32u = LoadLibraryW(L"win32u.dll");
+    if (!hWin32u) return;
+
     FARPROC pNtUserTrackPopupMenuEx = GetProcAddress(hWin32u, "NtUserTrackPopupMenuEx");
-    if (!pNtUserTrackPopupMenuEx) {
-        Wh_Log(L"[SYSCALL-HOOK] NtUserTrackPopupMenuEx not found by name");
-        return;
-    }
-    
-    if (Wh_SetFunctionHook((void*)pNtUserTrackPopupMenuEx, 
-                          (void*)NtUserTrackPopupMenuEx_Hook, 
-                          (void**)&g_origNtUserTrackPopupMenuEx)) {
+    if (!pNtUserTrackPopupMenuEx) return;
+
+    if (Wh_SetFunctionHook((void*)pNtUserTrackPopupMenuEx, (void*)NtUserTrackPopupMenuEx_Hook, (void**)&g_origNtUserTrackPopupMenuEx))
         Wh_Log(L"[SYSCALL-HOOK] NtUserTrackPopupMenuEx hooked successfully");
-    } else {
-        Wh_Log(L"[SYSCALL-HOOK] Failed to hook NtUserTrackPopupMenuEx");
-    }
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-// ---------------------------------------------------------------------------
-// Tray subclass watchdog
-// ---------------------------------------------------------------------------
+static CreateWindowExW_t CreateWindowExW_Original = nullptr;
 
 static bool HasTrayBeenRecreated() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hTray) {
-        return false;
-    }
-
+    if (!hTray) return false;
     bool recreated = (g_lastShellTrayWnd != nullptr && hTray != g_lastShellTrayWnd);
     g_lastShellTrayWnd = hTray;
     return recreated;
 }
 
 static void ReinitializeTrayRedirect() {
-    Wh_Log(L"[TRAY-WATCHDOG] Reinitializing tray redirect state");
+    Wh_Log(L"[TRAY-RESTART] Reinitializing tray redirect hooks");
 
     RemoveTraySubclass();
-
     g_sndVolSSOBase = nullptr;
-    g_sndVolSSOEnd  = nullptr;
-    g_pniduiBase    = nullptr;
-    g_pniduiEnd     = nullptr;
-
+    g_sndVolSSOEnd = nullptr;
+    g_pniduiBase = nullptr;
+    g_pniduiEnd = nullptr;
     {
         std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
         g_pniduiHookInstalled = false;
     }
-
-    if (g_settings.redirectSystemTray) {
-        SetupTraySubclass();
-    }
-
+    if (g_settings.redirectSystemTray) SetupTraySubclass();
     if (!TryInstallPniduiHook()) {
         if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
             g_pniduiRetryStop = false;
             g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
         }
     }
-
     InstallImmersiveMenuHooks();
 }
 
+// --- NEW: hidden message-only window that listens for the "TaskbarCreated"
+// broadcast message. Explorer (and any shell component that recreates the
+// tray) posts this message the moment the taskbar/tray is rebuilt, which is
+// far more reliable and immediate than polling for a changed Shell_TrayWnd
+// handle - this is what was causing "zero logs" after a restart: the
+// polling watchdog could take up to a few seconds, and in some restart
+// scenarios the Shell_TrayWnd handle compare alone didn't catch that the
+// child SysPager/ToolbarWindow32 had actually been rebuilt.
+static LRESULT CALLBACK TrayMsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (g_uTaskbarCreatedMsg != 0 && msg == g_uTaskbarCreatedMsg) {
+        Wh_Log(L"[TRAY-RESTART] TaskbarCreated message received");
+        g_lastShellTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+        ReinitializeTrayRedirect();
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static void InstallTaskbarCreatedListener() {
+    g_uTaskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+    if (g_uTaskbarCreatedMsg == 0) {
+        Wh_Log(L"[TRAY-RESTART] Failed to register TaskbarCreated message");
+        return;
+    }
+
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = TrayMsgWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = TRAY_MSG_WNDCLASS;
+    RegisterClassExW(&wc);  // OK if this fails because it's already registered.
+
+    g_hTrayMsgWindow = CreateWindowExW(0, TRAY_MSG_WNDCLASS, L"", 0, 0, 0, 0, 0,
+                                        HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+    if (!g_hTrayMsgWindow)
+        Wh_Log(L"[TRAY-RESTART] Failed to create message-only listener window");
+    else
+        Wh_Log(L"[TRAY-RESTART] TaskbarCreated listener installed");
+}
+
+static void RemoveTaskbarCreatedListener() {
+    if (g_hTrayMsgWindow) {
+        DestroyWindow(g_hTrayMsgWindow);
+        g_hTrayMsgWindow = nullptr;
+    }
+    UnregisterClassW(TRAY_MSG_WNDCLASS, GetModuleHandleW(nullptr));
+}
+
 static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
-    Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread started");
-
-    const int   FAST_PHASE_CHECKS   = 60;
-    const DWORD FAST_INTERVAL_MS    = 500;
-    const DWORD SLOW_INTERVAL_MS    = 3000;
-
+    const int FAST_PHASE_CHECKS = 60;
+    const DWORD FAST_INTERVAL_MS = 500;
+    const DWORD SLOW_INTERVAL_MS = 3000;
     int tick = 0;
+    
+    // Aspetta che il sistema si stabilizzi all'avvio
+    Sleep(2000);
+
     while (!g_traySubclassWatchdogStop) {
-        Sleep(tick < FAST_PHASE_CHECKS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS);
+        DWORD waitTime = tick < FAST_PHASE_CHECKS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
+        
+        // Usa l'evento per essere interrompibile immediatamente
+        if (g_hWatchdogStopEvent) {
+            DWORD waitResult = WaitForSingleObject(g_hWatchdogStopEvent, waitTime);
+            if (waitResult == WAIT_OBJECT_0 || g_traySubclassWatchdogStop) break;
+        } else {
+            // Fallback se l'evento non è stato creato (polling ogni 50ms)
+            for (DWORD i = 0; i < waitTime / 50 && !g_traySubclassWatchdogStop; i++) {
+                Sleep(50);
+            }
+            if (g_traySubclassWatchdogStop) break;
+        }
+        
         tick++;
         if (g_traySubclassWatchdogStop) break;
 
-        if (HasTrayBeenRecreated()) {
-            Wh_Log(L"[TRAY-WATCHDOG] Shell_TrayWnd recreation detected, reinitializing");
-            ReinitializeTrayRedirect();
+        // Verifica se siamo ancora nel processo corretto
+        DWORD currentProcessId = GetCurrentProcessId();
+        DWORD explorerPid = 0;
+        
+        // Check se Explorer è ancora in esecuzione
+        HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (!hTray) {
+            if (g_lastShellTrayWnd != nullptr) {
+                Wh_Log(L"[WATCHDOG] Shell_TrayWnd disappeared - possible Explorer crash");
+                g_lastShellTrayWnd = nullptr;
+                g_hTrayToolbar = nullptr;
+                std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+                g_pniduiHookInstalled = false;
+            }
+            continue;
+        }
+        
+        // Verifica che la finestra appartenga al nostro processo
+        GetWindowThreadProcessId(hTray, &explorerPid);
+        if (explorerPid != currentProcessId) {
+            // Non è il nostro Explorer, resetta lo stato
+            if (g_lastShellTrayWnd != nullptr) {
+                Wh_Log(L"[WATCHDOG] Shell_TrayWnd belongs to different process");
+                g_lastShellTrayWnd = nullptr;
+                g_hTrayToolbar = nullptr;
+            }
             continue;
         }
 
+        // Caso 1: Shell_TrayWnd cambiata (nuova istanza Explorer)
+        if (HasTrayBeenRecreated()) {
+            Wh_Log(L"[WATCHDOG] Detected new Shell_TrayWnd instance - reinitializing");
+            ReinitializeTrayRedirect();
+            tick = 0;
+            continue;
+        }
+
+        // Salta controlli toolbar se tray redirect è disabilitato
         if (!g_settings.redirectSystemTray) continue;
 
-        if (g_hTrayToolbar && !IsWindow(g_hTrayToolbar)) {
-            Wh_Log(L"[TRAY-WATCHDOG] Tray toolbar handle no longer valid, resetting");
-            g_hTrayToolbar = nullptr;
+        // Caso 2: Toolbar potrebbe essere stata ricreata internamente
+        HWND hCurrentToolbar = FindTrayToolbar();
+        
+        bool oldToolbarValid = (g_hTrayToolbar && IsWindow(g_hTrayToolbar));
+        bool currentToolbarValid = (hCurrentToolbar && IsWindow(hCurrentToolbar));
+        
+        if (hCurrentToolbar != g_hTrayToolbar) {
+            if (oldToolbarValid) {
+                Wh_Log(L"[WATCHDOG] Toolbar internally recreated - reinitializing");
+            } else if (currentToolbarValid) {
+                Wh_Log(L"[WATCHDOG] Previously lost toolbar now available");
+            }
+            ReinitializeTrayRedirect();
+            tick = 0;
+            continue;
         }
 
-        if (!g_hTrayToolbar) {
+        // Caso 3: Toolbar subclassata non è più valida
+        if (g_hTrayToolbar && !IsWindow(g_hTrayToolbar)) {
+            Wh_Log(L"[WATCHDOG] Subclassed toolbar destroyed - reinstalling subclass");
+            g_hTrayToolbar = nullptr;
             SetupTraySubclass();
+            tick = 0;
+            continue;
+        }
+        
+        // Caso 4: Controllo periodico hook pnidui.dll
+        if (g_settings.redirectSystemTray && GetModuleHandleW(L"pnidui.dll")) {
+            std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+            if (!g_pniduiHookInstalled) {
+                Wh_Log(L"[WATCHDOG] pnidui hook missing - attempting reinstall");
+                TryInstallPniduiHook();
+            }
         }
     }
 
-    Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread exiting");
+    Wh_Log(L"[WATCHDOG] Watchdog thread exiting");
     return 0;
 }
-HWND WINAPI CreateWindowExW_Hook(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
-{
-    HWND hwnd = CreateWindowExW_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    
-    if (g_settings.redirectSystemTray && hwnd && !g_hTrayToolbar && lpClassName && !IS_INTRESOURCE(lpClassName)) {
-        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0) {
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                 DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+
+    if (g_settings.redirectSystemTray && hwnd && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (wcscmp(lpClassName, L"ToolbarWindow32") == 0 &&
+            (!g_hTrayToolbar || !IsWindow(g_hTrayToolbar))) {
             SetupTraySubclass();
         }
     }
-    
+
     return hwnd;
 }
 
+// ---------------------------------------------------------------------------
+// Windhawk entry points
+// ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel v10.0.25");
-
+    Wh_Log(L"Redirect Settings to Control Panel + Restore Classic CPLs v10.0.26-stable");
+    
+    // NUOVO: Verifica se siamo nel processo explorer.exe corretto (quello che possiede la Shell_TrayWnd)
+    // Se non lo siamo, rifiuta l'inizializzazione per evitare conflitti tra processi fantasma
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (hTray) {
+        DWORD shellPid = 0;
+        GetWindowThreadProcessId(hTray, &shellPid);
+        DWORD ourPid = GetCurrentProcessId();
+        
+        if (shellPid != ourPid) {
+            Wh_Log(L"[STABLE] Not the main shell process (PID %lu, shell PID %lu) - refusing to install hooks", 
+                   ourPid, shellPid);
+            return FALSE;
+        }
+    }
+    // Se Shell_TrayWnd non esiste affatto, procediamo comunque (potrebbe non essere ancora creata)
+    
+    std::lock_guard<std::mutex> lock(g_initMutex);
+    
+    // Inizializzazione di base
     DetectWindowsVersion();
     LoadSettings();
     BuildChildEnvironment();
     InitMappings();
-
+    
+    // Shell hooks (fondamentali, vanno installati una volta sola)
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
     if (!hShell32) return FALSE;
-
+    
     FARPROC pExW = GetProcAddress(hShell32, "ShellExecuteExW");
     FARPROC pW = GetProcAddress(hShell32, "ShellExecuteW");
     if (!pExW || !pW) return FALSE;
-
-    Wh_SetFunctionHook((void*)pExW, (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
-    Wh_SetFunctionHook((void*)pW, (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
-
+    
+    if (!g_shellExecHooksInstalled) {
+        Wh_SetFunctionHook((void*)pExW, (void*)ShellExecuteExW_hook, (void**)&ShellExecuteExW_orig);
+        Wh_SetFunctionHook((void*)pW, (void*)ShellExecuteW_hook, (void**)&ShellExecuteW_orig);
+        g_shellExecHooksInstalled = true;
+        Wh_Log(L"[STABLE] Shell execution hooks installed");
+    }
+    
+    // CreateProcess hook
     HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
     if (!hKernel32) hKernel32 = LoadLibraryW(L"kernel32.dll");
-    if (hKernel32) {
+    if (hKernel32 && !g_createProcessHookInstalled) {
         FARPROC pCPW = GetProcAddress(hKernel32, "CreateProcessW");
-        if (pCPW) Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
+        if (pCPW) {
+            Wh_SetFunctionHook((void*)pCPW, (void*)CreateProcessW_hook, (void**)&CreateProcessW_orig);
+            g_createProcessHookInstalled = true;
+            Wh_Log(L"[STABLE] CreateProcess hook installed");
+        }
     }
-
+    
+    // CreateWindowEx hook per tray
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
+    
+    // RCPL hooks
+    if (!g_rcplHooksInstalled) {
+        g_rcplHooksInstalled = RCPL_InstallRegistryHooks();
+    }
+    
+    // Tray subsystem
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
     }
-
-    InstallImmersiveMenuHooks();    
+    InstallImmersiveMenuHooks();
     InstallSyscallFallback();
-
+    
     if (g_settings.comActivationRedirect && g_isWin11) {
         InstallAAMHook();
     }
-
+    
     if (g_settings.legacyNameMappingFix) {
         InstallLegacyNameHook();
     }
-
+    
+    // TrackPopupMenu hooks
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (!hUser32) hUser32 = LoadLibraryW(L"user32.dll");
     if (hUser32) {
@@ -1851,37 +2428,66 @@ BOOL Wh_ModInit() {
             Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
         }
     }
-    // Initialize the Shell_TrayWnd reference for the watchdog
+    
+    // TaskbarCreated listener
     g_lastShellTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-
+    if (!g_taskbarListenerInstalled) {
+        InstallTaskbarCreatedListener();
+        g_taskbarListenerInstalled = true;
+    }
+    
+    if (g_hWatchdogStopEvent) {
+        CloseHandle(g_hWatchdogStopEvent);
+    }
+    g_hWatchdogStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_traySubclassWatchdogStop = false;
     g_traySubclassWatchdogThread = CreateThread(nullptr, 0, TraySubclassWatchdogThread, nullptr, 0, nullptr);
-    if (g_traySubclassWatchdogThread) {
-        Wh_Log(L"[TRAY-WATCHDOG] Watchdog thread created");
-    } else {
-        Wh_Log(L"[TRAY-WATCHDOG] Failed to create watchdog thread");
-    }
+    
+    g_modActive.store(true);
+    Wh_Log(L"[STABLE] Initialization completed");
+    
     return TRUE;
 }
-
 void Wh_ModUninit() {
+    Wh_Log(L"[STABLE] Uninit started");
+    
+    // 1. Disabilita subito il mod per bloccare nuove chiamate
+    g_modActive.store(false);
+    
+    // 2. Ferma il reinit thread se in esecuzione
+    if (g_reinitThread) {
+        g_reinitPending.store(false); // Cancella eventuali reinit pendenti
+        if (WaitForSingleObject(g_reinitThread, 500) == WAIT_TIMEOUT) {
+            Wh_Log(L"[STABLE] Reinit thread timeout, forcing termination");
+            TerminateThread(g_reinitThread, 0);
+        }
+        CloseHandle(g_reinitThread);
+        g_reinitThread = nullptr;
+    }
+    
+    // 3. Ferma il watchdog immediatamente con l'evento
+    g_traySubclassWatchdogStop = true;
+    if (g_hWatchdogStopEvent) {
+        SetEvent(g_hWatchdogStopEvent);  // Sveglia il watchdog immediatamente
+    }
     if (g_traySubclassWatchdogThread) {
-        g_traySubclassWatchdogStop = true;
-        Wh_Log(L"[TRAY-WATCHDOG] Stopping watchdog thread...");
-        DWORD waitResult = WaitForSingleObject(g_traySubclassWatchdogThread, 3000);
-        if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"[TRAY-WATCHDOG] Timeout, terminating thread");
+        if (WaitForSingleObject(g_traySubclassWatchdogThread, 500) == WAIT_TIMEOUT) {
+            Wh_Log(L"[STABLE] Watchdog thread timeout, forcing termination");
             TerminateThread(g_traySubclassWatchdogThread, 0);
         }
         CloseHandle(g_traySubclassWatchdogThread);
         g_traySubclassWatchdogThread = nullptr;
     }
+    if (g_hWatchdogStopEvent) {
+        CloseHandle(g_hWatchdogStopEvent);
+        g_hWatchdogStopEvent = nullptr;
+    }
+    
+    // 4. Ferma il retry thread di pnidui
     if (g_pniduiRetryThread) {
         g_pniduiRetryStop = true;
-        Wh_Log(L"[PNIDUI-HOOK] Stopping retry thread...");
-        DWORD waitResult = WaitForSingleObject(g_pniduiRetryThread, 3000);
-        if (waitResult == WAIT_TIMEOUT) {
-            Wh_Log(L"[PNIDUI-HOOK] Retry thread timeout, terminating");
+        if (WaitForSingleObject(g_pniduiRetryThread, 1000) == WAIT_TIMEOUT) {
+            Wh_Log(L"[STABLE] Pnidui retry thread timeout, forcing termination");
             TerminateThread(g_pniduiRetryThread, 0);
         }
         CloseHandle(g_pniduiRetryThread);
@@ -1889,34 +2495,111 @@ void Wh_ModUninit() {
         g_pniduiRetryRunning = false;
     }
     
+    // 5. Ripristina hook COM
+    {
+        std::lock_guard<std::mutex> lk(g_aamHookMutex);
+        if (g_aamHookInstalled) {
+            IUnknown* pAAM = nullptr;
+            if (SUCCEEDED(CoCreateInstance(CLSID_ApplicationActivationManager_STC, nullptr,
+                    CLSCTX_INPROC_SERVER, IID_IApplicationActivationManager_STC, (void**)&pAAM)) && pAAM) {
+                auto vtbl = *(IApplicationActivationManagerVtbl**)pAAM;
+                DWORD oldProtect;
+                if (VirtualProtect(vtbl, sizeof(*vtbl), PAGE_READWRITE, &oldProtect)) {
+                    vtbl->ActivateApplication = g_origAAMVtbl.ActivateApplication;
+                    vtbl->ActivateForProtocol = g_origAAMVtbl.ActivateForProtocol;
+                    VirtualProtect(vtbl, sizeof(*vtbl), oldProtect, &oldProtect);
+                }
+                pAAM->Release();
+            }
+            g_aamHookInstalled = false;
+        }
+    }
+    
+    // 6. Rimuovi listener TaskbarCreated
+    RemoveTaskbarCreatedListener();
+    g_taskbarListenerInstalled = false;
+    
+    // 7. Rimuovi subclass della tray
     RemoveTraySubclass();
+    
+    // 8. Pulisci RCPL
+    RCPL_Cleanup();
+    g_rcplHooksInstalled = false;
+    
+    Wh_Log(L"[STABLE] Uninit completed");
 }
-
-void Wh_ModSettingsChanged() {
+static void SafeReinitializeAll() {
+    std::lock_guard<std::mutex> lock(g_initMutex);
+    
+    Wh_Log(L"[STABLE] Starting safe reinitialization...");
+    
+    // Spegni il mod attivo durante la transizione
+    g_modActive.store(false);
+    
+    // Piccola pausa per permettere alle chiamate in corso di completare
+    Sleep(100);
+    
+    // Pulisci stato tray senza rimuovere gli hook di sistema
     RemoveTraySubclass();
     g_sndVolSSOBase = nullptr;
     g_sndVolSSOEnd = nullptr;
     g_pniduiBase = nullptr;
     g_pniduiEnd = nullptr;
-    
     {
         std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
         g_pniduiHookInstalled = false;
     }
     
+    // Ricarica tutto lo stato
     LoadSettings();
+    RCPL_LoadSettings();
+    BuildChildEnvironment();
     InitMappings();
+    
+    // Reinstalla solo i sottosistemi che dipendono dalle impostazioni
     if (g_settings.redirectSystemTray) {
         SetupTraySubclass();
         InstallImmersiveMenuHooks();
     }
-
-    // Re-install experimental hooks if settings changed
+    
     if (g_settings.comActivationRedirect && g_isWin11) {
         InstallAAMHook();
     }
-
+    
     if (g_settings.legacyNameMappingFix) {
         InstallLegacyNameHook();
+    }
+    
+    // Aggiorna riferimento tray
+    g_lastShellTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    
+    // Riattiva il mod
+    g_modActive.store(true);
+    
+    Wh_Log(L"[STABLE] Safe reinitialization completed");
+}
+static DWORD WINAPI DeferredReinitThreadProc(LPVOID) {
+    Wh_Log(L"[STABLE] Deferred reinit thread started");
+    
+    // Aspetta 500ms per sicurezza (chiamate pendenti)
+    Sleep(500);
+    
+    // Reinizializza
+    SafeReinitializeAll();
+    
+    g_reinitPending.store(false);
+    Wh_Log(L"[STABLE] Deferred reinit thread completed");
+    
+    return 0;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"[STABLE] Settings changed - scheduling safe reinit");
+    
+    if (!g_reinitPending.exchange(true)) {
+    if (g_reinitThread) CloseHandle(g_reinitThread);
+    g_reinitThread = CreateThread(nullptr, 0, DeferredReinitThreadProc, nullptr, 0, nullptr);
+} else {
+        Wh_Log(L"[STABLE] Reinit already pending, skipping duplicate");
     }
 }
