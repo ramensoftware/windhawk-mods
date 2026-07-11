@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.2.6
+// @version         1.2.7
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -175,6 +175,9 @@ from Classic Theme, install this mod and follow the instructions there:
 
 40. To make the folder windows freely resizable, the way it was before Windows Vista, install this mod:
 [*Explorer No Minimum Window Size*](https://windhawk.net/mods/explorer-no-min-size)
+
+41. To fix the black box in the file copy/move conflict dialogs on Win11, install this mod:
+[*Fix File Conflict Dialog Checkbox Background*](https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg)
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
