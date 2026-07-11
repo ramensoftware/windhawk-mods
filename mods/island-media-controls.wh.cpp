@@ -553,23 +553,23 @@ int g_popupOverlayWgcTargetHeightPx = 0;
 HMONITOR g_popupOverlayWgcMonitor = nullptr;
 HRESULT g_popupOverlayWgcLastHr = S_OK;
 
-winrt::com_ptr<ID3D11Device> g_popupOverlayWgcD3dDevice;
-winrt::com_ptr<ID3D11DeviceContext> g_popupOverlayWgcD3dContext;
-winrt::com_ptr<IDXGIDevice> g_popupOverlayWgcDxgiDevice;
-winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcRenderTexture;
-winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcStagingTexture;
-winrt::com_ptr<ID2D1Factory1> g_popupOverlayWgcD2dFactory;
-winrt::com_ptr<ID2D1Device> g_popupOverlayWgcD2dDevice;
-winrt::com_ptr<ID2D1DeviceContext> g_popupOverlayWgcD2dContext;
-winrt::com_ptr<ID2D1Bitmap1> g_popupOverlayWgcLensDisplacementMap;
+[[clang::no_destroy]] winrt::com_ptr<ID3D11Device> g_popupOverlayWgcD3dDevice;
+[[clang::no_destroy]] winrt::com_ptr<ID3D11DeviceContext> g_popupOverlayWgcD3dContext;
+[[clang::no_destroy]] winrt::com_ptr<IDXGIDevice> g_popupOverlayWgcDxgiDevice;
+[[clang::no_destroy]] winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcRenderTexture;
+[[clang::no_destroy]] winrt::com_ptr<ID3D11Texture2D> g_popupOverlayWgcStagingTexture;
+[[clang::no_destroy]] winrt::com_ptr<ID2D1Factory1> g_popupOverlayWgcD2dFactory;
+[[clang::no_destroy]] winrt::com_ptr<ID2D1Device> g_popupOverlayWgcD2dDevice;
+[[clang::no_destroy]] winrt::com_ptr<ID2D1DeviceContext> g_popupOverlayWgcD2dContext;
+[[clang::no_destroy]] winrt::com_ptr<ID2D1Bitmap1> g_popupOverlayWgcLensDisplacementMap;
 int g_popupOverlayWgcLensMapWidth = 0;
 int g_popupOverlayWgcLensMapHeight = 0;
 int g_popupOverlayWgcLensMapRadius = 0;
 
-direct3d11::IDirect3DDevice g_popupOverlayWgcGraphicsDevice{nullptr};
-capture::GraphicsCaptureItem g_popupOverlayWgcItem{nullptr};
-capture::Direct3D11CaptureFramePool g_popupOverlayWgcFramePool{nullptr};
-capture::GraphicsCaptureSession g_popupOverlayWgcSession{nullptr};
+[[clang::no_destroy]] direct3d11::IDirect3DDevice g_popupOverlayWgcGraphicsDevice{nullptr};
+[[clang::no_destroy]] capture::GraphicsCaptureItem g_popupOverlayWgcItem{nullptr};
+[[clang::no_destroy]] capture::Direct3D11CaptureFramePool g_popupOverlayWgcFramePool{nullptr};
+[[clang::no_destroy]] capture::GraphicsCaptureSession g_popupOverlayWgcSession{nullptr};
 winrt::event_token g_popupOverlayWgcFrameArrivedToken{};
 bool g_popupOverlayWgcHadFrame = false;
 std::chrono::steady_clock::time_point g_popupOverlayWgcDiagnosticStartTime{};
@@ -1139,11 +1139,11 @@ constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
 
 void ApplySettingsMigrations(Settings* settings) {
     int migratedVersion = Wh_GetIntValue(L"SettingsMigrationVersion", 0);
-    if (migratedVersion < 1) {
+    if (migratedVersion < kSettingsMigrationVersion) {
         if (settings->material == L"mica_like") {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
         }
-        Wh_SetIntValue(L"SettingsMigrationVersion", 1);
+        Wh_SetIntValue(L"SettingsMigrationVersion", kSettingsMigrationVersion);
     }
 
     if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0)) {
@@ -7868,8 +7868,6 @@ bool EnsurePopupOverlayWgcDeviceResources(HWND hwnd, int widthPx, int heightPx) 
     return RecreatePopupOverlayWgcReadbackTextures(widthPx, heightPx);
 }
 
-void RenderPopupOverlayWgcDiagnosticFrame() {}
-
 void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
     g_popupOverlayWgcHadFrame = true;
     ++g_popupOverlayWgcFrameCount;
@@ -9153,31 +9151,34 @@ void PaintPopupBackdropOverlay(HWND hwnd) {
 }
 
 LRESULT CALLBACK PopupBackdropOverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    switch (message) {
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_NCHITTEST:
-            return HTTRANSPARENT;
-        case kPopupBackdropOverlayPresentMessage:
-            PresentPopupOverlayWgcFrame(hwnd);
-            return 0;
-        case WM_TIMER:
-            if (wParam == kPopupBackdropOverlayTimerId) {
-                UpdatePopupBackdropOverlayWindow();
+    try {
+        switch (message) {
+            case WM_ERASEBKGND:
+                return 1;
+            case WM_NCHITTEST:
+                return HTTRANSPARENT;
+            case kPopupBackdropOverlayPresentMessage:
+                PresentPopupOverlayWgcFrame(hwnd);
                 return 0;
-            }
-            break;
-        case WM_PAINT:
-            PaintPopupBackdropOverlay(hwnd);
-            return 0;
-        case WM_DESTROY:
-            ClearPendingPopupOverlayWgcFrame();
-            KillTimer(hwnd, kPopupBackdropOverlayTimerId);
-            SetPopupWindowCaptureExclusion(hwnd, false);
-            if (g_popupBackdropOverlay == hwnd) {
-                g_popupBackdropOverlay = nullptr;
-            }
-            return 0;
+            case WM_TIMER:
+                if (wParam == kPopupBackdropOverlayTimerId) {
+                    UpdatePopupBackdropOverlayWindow();
+                    return 0;
+                }
+                break;
+            case WM_PAINT:
+                PaintPopupBackdropOverlay(hwnd);
+                return 0;
+            case WM_DESTROY:
+                ClearPendingPopupOverlayWgcFrame();
+                KillTimer(hwnd, kPopupBackdropOverlayTimerId);
+                SetPopupWindowCaptureExclusion(hwnd, false);
+                if (g_popupBackdropOverlay == hwnd) {
+                    g_popupBackdropOverlay = nullptr;
+                }
+                return 0;
+        }
+    } catch (...) {
     }
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
