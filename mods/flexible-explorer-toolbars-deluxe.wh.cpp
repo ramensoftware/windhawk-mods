@@ -6,7 +6,7 @@
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
-// @compilerOptions -luxtheme -lgdi32 -ladvapi32
+// @compilerOptions -luxtheme -lgdi32 -ladvapi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -60,6 +60,7 @@ The toolbars can be locked and unlocked.
 
 // ==/WindhawkModReadme==
 
+#include <windhawk_utils.h>
 #include <winternl.h>
 #include <commctrl.h>
 #include <unordered_map>
@@ -84,13 +85,8 @@ void LoadSettings() {
 }
 void Wh_ModSettingsChanged() { LoadSettings(); }
 
-// Единый мьютекс на все общие данные мода (CRITICAL_SECTION в Windows
-// реентерабелен для одного потока, так что объединение безопасно —
-// нигде в коде нет вызова одного accessor'а изнутри другого с уже
-// захваченным лочком другого набора данных).
 CRITICAL_SECTION g_mutex;
 
-std::unordered_map<HWND,WNDPROC> g_originalProcs;
 std::unordered_map<HWND,bool>    g_alreadyMoved;
 std::unordered_map<HWND,bool>    g_forceHiddenWorkers;
 std::unordered_set<HWND>         g_neuteredAddressRoots;
@@ -99,27 +95,25 @@ std::unordered_map<HWND,HWND>    g_cabinetToMenuRebar;
 std::unordered_set<HWND>         g_pendingApply;
 std::unordered_map<HWND,int>     g_applyAttempts;
 
-// Классификация перенесённых children (объединяет то, что раньше было
-// тремя отдельными наборами: movedChildren/upButtons/breadcrumbToolbars).
 enum ChildFlag { CF_MOVED=1, CF_UPBUTTON=2, CF_BREADCRUMB=4 };
 std::unordered_map<HWND,int> g_childFlags;
 
 struct ToolbarGuard{int x=0,y=0,cx=0,cy=0;bool hasGood=false;};
-std::unordered_map<HWND,ToolbarGuard> g_toolbarGuards; // guard-состояние перенесённого breadcrumb-toolbar
+std::unordered_map<HWND,ToolbarGuard> g_toolbarGuards;
 
 thread_local bool g_insideApply = false;
 thread_local int  g_rebarLayoutDepth = 0;
 thread_local bool g_insideGripperSync = false;
 bool IsInsideRebarLayout() { return g_rebarLayoutDepth > 0; }
 
-void HookWindow(HWND hwnd, WNDPROC hookProc);
+void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC subclassProc);
 
 int GetDesiredBandHeight() {
     return GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER) * 2 + 2;
 }
 
 // =====================================================================
-// NTDLL registry hooks - блокируем ITBar7Layout и ITBarLayout
+// NTDLL registry hooks
 // =====================================================================
 
 using NtSetValueKey_t = NTSTATUS(NTAPI*)(
@@ -158,14 +152,6 @@ NTSTATUS NTAPI NtSetValueKey_Hook(
 // =====================================================================
 // Accessors
 // =====================================================================
-WNDPROC GetOriginalProc(HWND h) {
-    EnterCriticalSection(&g_mutex);
-    auto it=g_originalProcs.find(h);
-    WNDPROC p=it!=g_originalProcs.end()?it->second:nullptr;
-    LeaveCriticalSection(&g_mutex); return p;
-}
-void SetOriginalProc(HWND h,WNDPROC p){EnterCriticalSection(&g_mutex);g_originalProcs[h]=p;LeaveCriticalSection(&g_mutex);}
-void RemoveOriginalProc(HWND h){EnterCriticalSection(&g_mutex);g_originalProcs.erase(h);LeaveCriticalSection(&g_mutex);}
 bool WasAlreadyMoved(HWND c){EnterCriticalSection(&g_mutex);bool r=g_alreadyMoved.count(c)&&g_alreadyMoved[c];LeaveCriticalSection(&g_mutex);return r;}
 void MarkMoved(HWND c){EnterCriticalSection(&g_mutex);g_alreadyMoved[c]=true;LeaveCriticalSection(&g_mutex);}
 bool IsForceHidden(HWND w){EnterCriticalSection(&g_mutex);bool r=g_forceHiddenWorkers.count(w)&&g_forceHiddenWorkers[w];LeaveCriticalSection(&g_mutex);return r;}
@@ -180,7 +166,6 @@ void MarkPendingApply(HWND r){EnterCriticalSection(&g_mutex);g_pendingApply.inse
 bool IsPendingApply(HWND r){EnterCriticalSection(&g_mutex);bool v=g_pendingApply.count(r)!=0;LeaveCriticalSection(&g_mutex);return v;}
 void ClearPendingApply(HWND r){EnterCriticalSection(&g_mutex);g_pendingApply.erase(r);LeaveCriticalSection(&g_mutex);}
 
-// Флаги перенесённых children: один accessor-набор вместо трёх.
 void SetChildFlag(HWND h,int f){EnterCriticalSection(&g_mutex);g_childFlags[h]|=f;LeaveCriticalSection(&g_mutex);}
 void ClearChildFlag(HWND h,int f){
     EnterCriticalSection(&g_mutex);
@@ -191,8 +176,6 @@ void ClearChildFlag(HWND h,int f){
 bool HasChildFlag(HWND h,int f){EnterCriticalSection(&g_mutex);auto it=g_childFlags.find(h);bool r=it!=g_childFlags.end()&&(it->second&f);LeaveCriticalSection(&g_mutex);return r;}
 void ClearAllChildFlags(HWND h){EnterCriticalSection(&g_mutex);g_childFlags.erase(h);LeaveCriticalSection(&g_mutex);}
 
-// Очистка при уничтожении cabinet — вычитываем перенесённые children
-// прямо из menuRebar, без отдельного списка.
 void CleanupCabinetMovedChildren(HWND cab){
     HWND mr=GetCabinetMenuRebar(cab);
     if(!mr||!IsWindow(mr))return;
@@ -204,12 +187,6 @@ void CleanupCabinetMovedChildren(HWND cab){
     }
 }
 
-// =====================================================================
-// ВАЖНО: и кнопка "Вверх", и внутренний toolbar хлебных крошек имеют
-// реальный класс ToolbarWindow32, который совпадает с классом menu-бар
-// полосы. Поэтому для сохранения/загрузки позиции используем
-// "виртуальные" уникальные имена вместо реального класса окна.
-// =====================================================================
 void GetEffectiveClassName(HWND child, wchar_t* out, size_t outCount) {
     if (child && HasChildFlag(child, CF_UPBUTTON)) {
         wcsncpy_s(out, outCount, L"UpButtonToolbar", _TRUNCATE);
@@ -277,9 +254,6 @@ std::vector<std::wstring> LoadBandOrder(){
     RegCloseKey(k);return order;
 }
 
-// =====================================================================
-// Функция для уменьшения размера кнопки toolbar
-// =====================================================================
 void ResizeUpButtonToolbar(HWND toolbar) {
     if (!toolbar || !IsWindow(toolbar)) return;
     SendMessage(toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(UP_BUTTON_ICON_SIZE, UP_BUTTON_ICON_SIZE));
@@ -445,10 +419,6 @@ void ExpandShellTabToFillCabinet(HWND cab){
     SetWindowPos(s,NULL,0,0,rc.right,rc.bottom,SWP_NOZORDER|SWP_NOACTIVATE);
 }
 
-// =====================================================================
-// Gripper sync — держим стиль гриппера наших band'ов таким же,
-// как у "родного" (не перемещённого) band'а в том же rebar.
-// =====================================================================
 DWORD GetReferenceGripperStyle(HWND rebar){
     int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
     for(int i=0;i<cnt;i++){
@@ -484,34 +454,14 @@ void SyncMovedBandGrippers(HWND rebar){
     g_insideGripperSync=false;
 }
 
-// =====================================================================
-// WndProcs
-// =====================================================================
-
-LRESULT CALLBACK UpButton_WndProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP) {
-    WNDPROC op = GetOriginalProc(hwnd);
-    if (!op) return DefWindowProc(hwnd, msg, wP, lP);
-    
-    if (msg == WM_DESTROY || msg == WM_NCDESTROY) {
-        SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)op);
-        RemoveOriginalProc(hwnd);
-        ClearChildFlag(hwnd, CF_UPBUTTON);
-        return CallWindowProc(op, hwnd, msg, wP, lP);
+LRESULT CALLBACK UpButton_SubclassProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP, DWORD_PTR /*data*/) {
+    if (msg == WM_SIZE) {
+        ResizeUpButtonToolbar(hwnd);
     }
-    
-    if (msg == WM_SIZE) {ResizeUpButtonToolbar(hwnd);}
-    
-    return CallWindowProc(op, hwnd, msg, wP, lP);
+    return DefSubclassProc(hwnd, msg, wP, lP);
 }
 
-LRESULT CALLBACK BreadcrumbToolbar_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        EnterCriticalSection(&g_mutex);g_toolbarGuards.erase(hwnd);LeaveCriticalSection(&g_mutex);
-        ClearChildFlag(hwnd, CF_BREADCRUMB);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK BreadcrumbToolbar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(msg==WM_WINDOWPOSCHANGING){
         auto*pos=(WINDOWPOS*)lP;
         EnterCriticalSection(&g_mutex);
@@ -527,27 +477,15 @@ LRESULT CALLBACK BreadcrumbToolbar_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM l
         LeaveCriticalSection(&g_mutex);
     }
     if(msg==WM_SHOWWINDOW&&!wP&&!IsInsideRebarLayout())return 0;
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
-LRESULT CALLBACK AddressBandRoot_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        EnterCriticalSection(&g_mutex);g_neuteredAddressRoots.erase(hwnd);LeaveCriticalSection(&g_mutex);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK AddressBandRoot_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(IsNeutered(hwnd))return DefWindowProc(hwnd,msg,wP,lP);
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
-LRESULT CALLBACK NavWorkerW_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        EnterCriticalSection(&g_mutex);g_forceHiddenWorkers.erase(hwnd);LeaveCriticalSection(&g_mutex);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK NavWorkerW_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(IsForceHidden(hwnd)){
         if(msg==WM_WINDOWPOSCHANGING){
             auto*p=(WINDOWPOS*)lP;p->x=p->y=p->cx=p->cy=0;
@@ -555,15 +493,10 @@ LRESULT CALLBACK NavWorkerW_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
         }
         if(msg==WM_SHOWWINDOW&&wP)return 0;
     }
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
-LRESULT CALLBACK ShellTab_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK ShellTab_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(msg==WM_WINDOWPOSCHANGING){
         HWND cab=GetParent(hwnd);
         if(cab&&WasAlreadyMoved(cab)){
@@ -572,15 +505,10 @@ LRESULT CALLBACK ShellTab_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
             p->flags=(p->flags&~(SWP_NOMOVE|SWP_NOSIZE|SWP_HIDEWINDOW))|SWP_NOZORDER|SWP_NOACTIVATE;
         }
     }
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
-LRESULT CALLBACK MenuReBarParent_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK MenuReBarParent_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(msg==WM_NOTIFY){
         auto*hdr=(NMHDR*)lP;
         if(hdr->code==RBN_LAYOUTCHANGED||hdr->code==RBN_ENDDRAG){
@@ -591,16 +519,10 @@ LRESULT CALLBACK MenuReBarParent_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP)
                 SaveBandPositions(rebar);
         }
     }
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
-LRESULT CALLBACK ReBar_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        EnterCriticalSection(&g_mutex);g_rebarToCabinet.erase(hwnd);LeaveCriticalSection(&g_mutex);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
+LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(msg==RB_SETBANDINFO){
         auto*inf=(REBARBANDINFO*)lP;
         if(inf&&(inf->fMask&RBBIM_CHILDSIZE)){
@@ -615,7 +537,7 @@ LRESULT CALLBACK ReBar_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
         }
     }
     g_rebarLayoutDepth++;
-    LRESULT r=CallWindowProc(op,hwnd,msg,wP,lP);
+    LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
     g_rebarLayoutDepth--;
     
     if(msg==WM_SIZE&&IsPendingApply(hwnd)&&!g_insideApply){
@@ -658,30 +580,22 @@ LRESULT CALLBACK ReBar_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
 
 bool DoMoveSearchBandToMenuBar(HWND cabinetWnd);
 
-LRESULT CALLBACK Cabinet_WndProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP){
-    WNDPROC op=GetOriginalProc(hwnd);if(!op)return DefWindowProc(hwnd,msg,wP,lP);
+LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(msg==WM_CLOSE){
         if(WasAlreadyMoved(hwnd)){
             HWND mr=GetCabinetMenuRebar(hwnd);
             if(mr&&IsWindow(mr))SaveBandPositions(mr);
         }
-        return CallWindowProc(op,hwnd,msg,wP,lP);
-    }
-    if(msg==WM_DESTROY||msg==WM_NCDESTROY){
-        CleanupCabinetMovedChildren(hwnd);
-        SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)op);RemoveOriginalProc(hwnd);
-        EnterCriticalSection(&g_mutex);g_alreadyMoved.erase(hwnd);g_cabinetToMenuRebar.erase(hwnd);LeaveCriticalSection(&g_mutex);
-        return CallWindowProc(op,hwnd,msg,wP,lP);
     }
     if(msg==WM_APP_DO_MOVE){DoMoveSearchBandToMenuBar(hwnd);return 0;}
     if((msg==WM_SIZE||msg==WM_WINDOWPOSCHANGED)&&WasAlreadyMoved(hwnd)){
-        LRESULT r=CallWindowProc(op,hwnd,msg,wP,lP);
+        LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
         ExpandShellTabToFillCabinet(hwnd);
         return r;
     }
     if((msg==WM_ACTIVATE||msg==WM_SETFOCUS)&&!WasAlreadyMoved(hwnd))
         PostMessage(hwnd,WM_APP_DO_MOVE,0,0);
-    return CallWindowProc(op,hwnd,msg,wP,lP);
+    return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
 bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
@@ -796,10 +710,10 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
                 else if(b.isBreadcrumb)flags|=CF_BREADCRUMB;
                 SetChildFlag(b.child,flags);
                 if(b.isUpButton){
-                    HookWindow(b.child, UpButton_WndProc);
+                    HookWindow(b.child, UpButton_SubclassProc);
                     ResizeUpButtonToolbar(b.child);
                 }else if(b.isBreadcrumb){
-                    HookWindow(b.child, BreadcrumbToolbar_WndProc);
+                    HookWindow(b.child, BreadcrumbToolbar_SubclassProc);
                 }
                 ShowWindow(b.child,SW_SHOW);
             }else{
@@ -809,10 +723,8 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
         
         {
             HWND mrParent=GetParent(menuRebar);
-            if(mrParent&&GetOriginalProc(mrParent)==nullptr){
-                WNDPROC cur=(WNDPROC)GetWindowLongPtr(mrParent,GWLP_WNDPROC);
-                SetOriginalProc(mrParent,cur);
-                SetWindowLongPtr(mrParent,GWLP_WNDPROC,(LONG_PTR)MenuReBarParent_WndProc);
+            if(mrParent){
+                HookWindow(mrParent, MenuReBarParent_SubclassProc);
             }
         }
         RegisterRebarCabinet(menuRebar,cabinetWnd);
@@ -833,33 +745,31 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
     return true;
 }
 
-void HookWindow(HWND hwnd,WNDPROC hookProc){
+void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC subclassProc){
     if(!hwnd||!IsWindow(hwnd))return;
-    WNDPROC cur=(WNDPROC)GetWindowLongPtr(hwnd,GWLP_WNDPROC);
-    if(cur==hookProc||GetOriginalProc(hwnd)!=nullptr)return;
-    SetOriginalProc(hwnd,cur);
-    SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)hookProc);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, subclassProc, 0);
 }
+
 void ProcessWindow(HWND hwnd){
     if(!hwnd||!IsWindow(hwnd))return;
     WCHAR cls[256];if(!GetClassName(hwnd,cls,ARRAYSIZE(cls)))return;
-    if(!wcscmp(cls,L"CabinetWClass")){HookWindow(hwnd,Cabinet_WndProc);return;}
+    if(!wcscmp(cls,L"CabinetWClass")){HookWindow(hwnd,Cabinet_SubclassProc);return;}
     if(!wcscmp(cls,L"ShellTabWindowClass")){
         HWND p=GetParent(hwnd);WCHAR pc[64];
         if(p&&GetClassName(p,pc,ARRAYSIZE(pc))&&wcscmp(pc,L"CabinetWClass")==0)
-            HookWindow(hwnd,ShellTab_WndProc);
+            HookWindow(hwnd,ShellTab_SubclassProc);
         return;
     }
     if(!wcscmp(cls,L"WorkerW")){
         if(IsNavbarWorkerW(hwnd)){
-            HookWindow(hwnd,NavWorkerW_WndProc);
-            SetWindowPos(hwnd,NULL,0,0,0,0,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|SWP_HIDEWINDOW); // скрываем
-            MarkForceHidden(hwnd);      // <-- сразу помечаем "принудительно скрыт"
+            HookWindow(hwnd,NavWorkerW_SubclassProc);
+            SetWindowPos(hwnd,NULL,0,0,0,0,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|SWP_HIDEWINDOW);
+            MarkForceHidden(hwnd);
             return;
         }
     }
-    if(!wcscmp(cls,L"ReBarWindow32")){HookWindow(hwnd,ReBar_WndProc);return;}
-    if(!wcscmp(cls,L"Address Band Root")){HookWindow(hwnd,AddressBandRoot_WndProc);return;}
+    if(!wcscmp(cls,L"ReBarWindow32")){HookWindow(hwnd,ReBar_SubclassProc);return;}
+    if(!wcscmp(cls,L"Address Band Root")){HookWindow(hwnd,AddressBandRoot_SubclassProc);return;}
 }
 BOOL CALLBACK EnumChildHook(HWND hwnd,LPARAM){ProcessWindow(hwnd);return TRUE;}
 
@@ -878,7 +788,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD s,LPCWSTR c,LPCWSTR wn,DWORD st,int X,int
 }
 
 BOOL Wh_ModInit(){
-    Wh_Log(L"FlexibleExplorer 2.7 init");LoadSettings();
+    Wh_Log(L"FlexibleExplorer 1.1 init (with Windhawk subclass)");
+    LoadSettings();
     InitializeCriticalSection(&g_mutex);
 
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
@@ -899,10 +810,6 @@ BOOL Wh_ModInit(){
 }
 
 void Wh_ModUninit(){
-    EnterCriticalSection(&g_mutex);
-    for(auto&[hwnd,proc]:g_originalProcs)
-        if(IsWindow(hwnd))SetWindowLongPtr(hwnd,GWLP_WNDPROC,(LONG_PTR)proc);
-    g_originalProcs.clear();
-    LeaveCriticalSection(&g_mutex);
+    Wh_Log(L"FlexibleExplorer uninit");
     DeleteCriticalSection(&g_mutex);
 }
