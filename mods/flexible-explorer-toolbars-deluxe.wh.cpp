@@ -101,6 +101,9 @@ std::unordered_map<HWND,int> g_childFlags;
 struct ToolbarGuard{int x=0,y=0,cx=0,cy=0;bool hasGood=false;};
 std::unordered_map<HWND,ToolbarGuard> g_toolbarGuards;
 
+// Храним пары HWND → subclass proc для удаления
+std::unordered_map<HWND, WindhawkUtils::WH_SUBCLASSPROC> g_subclassedWindows;
+
 thread_local bool g_insideApply = false;
 thread_local int  g_rebarLayoutDepth = 0;
 thread_local bool g_insideGripperSync = false;
@@ -454,6 +457,10 @@ void SyncMovedBandGrippers(HWND rebar){
     g_insideGripperSync=false;
 }
 
+// =====================================================================
+// Subclass Procs
+// =====================================================================
+
 LRESULT CALLBACK UpButton_SubclassProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP, DWORD_PTR /*data*/) {
     if (msg == WM_SIZE) {
         ResizeUpButtonToolbar(hwnd);
@@ -748,6 +755,11 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
 void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC subclassProc){
     if(!hwnd||!IsWindow(hwnd))return;
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, subclassProc, 0);
+    
+    // Регистрируем окно и его subclass proc
+    EnterCriticalSection(&g_mutex);
+    g_subclassedWindows[hwnd] = subclassProc;
+    LeaveCriticalSection(&g_mutex);
 }
 
 void ProcessWindow(HWND hwnd){
@@ -810,6 +822,22 @@ BOOL Wh_ModInit(){
 }
 
 void Wh_ModUninit(){
-    Wh_Log(L"FlexibleExplorer uninit");
+    Wh_Log(L"FlexibleExplorer uninit - removing subclasses");
+    
+    // Копируем список окон и их subclass proc
+    EnterCriticalSection(&g_mutex);
+    std::vector<std::pair<HWND, WindhawkUtils::WH_SUBCLASSPROC>> windowsToClean(
+        g_subclassedWindows.begin(), g_subclassedWindows.end());
+    g_subclassedWindows.clear();
+    LeaveCriticalSection(&g_mutex);
+    
+    // Удаляем все subclass'ы
+    for(auto& pair : windowsToClean) {
+        if(IsWindow(pair.first)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(pair.first, pair.second);
+        }
+    }
+    
     DeleteCriticalSection(&g_mutex);
+    Wh_Log(L"FlexibleExplorer uninit complete");
 }
