@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id                 desktop-audio-visualizer1
+// @id                 desktop-audio-visualizer
 // @name               Desktop Audio Visualizer
 // @description        Real-time audio visualizer on your Windows desktop with customizable appearance
 // @description:ru-RU  Аудиовизуализатор в реальном времени на рабочем столе Windows с настраиваемым внешним видом
