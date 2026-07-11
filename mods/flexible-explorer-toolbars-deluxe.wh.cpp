@@ -788,7 +788,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD s,LPCWSTR c,LPCWSTR wn,DWORD st,int X,int
 }
 
 BOOL Wh_ModInit(){
-    Wh_Log(L"FlexibleExplorer 1.1 init (with Windhawk subclass)");
+    Wh_Log(L"FlexibleExplorer init");
     LoadSettings();
     InitializeCriticalSection(&g_mutex);
 
