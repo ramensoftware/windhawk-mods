@@ -22,42 +22,49 @@ A real-time audio spectrum visualizer that displays on your Windows desktop. Cap
 
 ## Features
 
-### Customization
-* **Bar Configuration**: Count (1-1000), width, gap, max size, idle size, corner radius
-* **Position Control**: Freely position on any monitor with horizontal/vertical coordinates
-* **Background Effects**: 
-  - Optional background with padding, corner radius, and border
-  - Wallpaper blur effect (radius 0-100)
-  - Custom background and border colors (ARGB hex)
-
 ### Visual Styles
 * **6 Bar Shapes**:
   - **Stereo** — classic frequency spectrum bars
-  - **Mountain** — center-peak mountain shape
-  - **Mirror** — bars mirror from edges to center
-  - **Wave** — bars modulated by sine wave over time
-  - **Breathe** — slow breathing pulse effect
-  - **Dots** — bar columns made of stacked circles, supports all Vertical Anchor modes
-* **5 Color Modes**: Solid color, Static gradient, Reactive gradient, Windows accent color, Album art dominant color
-* **Orientations**: Horizontal (bars grow vertically) or Vertical (bars grow horizontally)
-* **Vertical Anchor**: Control bar growth direction — Bottom, Top, or Middle (grows from center in both directions)
+  - **Mountain** — center-peak, bars taper toward the edges
+  - **Mirror** — bars grow from edges toward center
+  - **Wave** — bars modulated by a sine wave over time
+  - **Breathe** — slow breathing pulse synchronized with audio
+  - **Dots** — bar columns made of stacked shapes
+* **7 Color Modes**:
+  - **Solid** — single flat color
+  - **Static gradient** — fixed color gradient across bars
+  - **Reactive gradient** — gradient shifts toward second color with audio level
+  - **Windows accent color** — automatically matches your Windows accent color, updates instantly on change
+  - **Album art** — flat dominant color extracted from the currently playing track's cover art
+  - **Dynamic album** — gradient from primary to secondary album art color; shifts with bar position and audio level
+  - **Acrylic** — fixed RGB color with amplitude-driven alpha (nearly transparent at silence, semi-opaque at full volume)
+* **2 Orientations**: Horizontal (bars grow vertically) or Vertical (bars grow horizontally)
+* **Vertical Anchor**: Control bar growth direction — Bottom, Top, or Middle
+
+### Customization
+* **Bar Configuration**: Count (1-1000), thickness, gap, max size, idle size, per-corner radius (`"10"` or `"10 10 0 0"`)
+* **Position Control**: Freely position on any monitor with horizontal/vertical percentage coordinates
+* **Background Effects**:
+  - Optional background panel with padding, per-corner radius and border
+  - Wallpaper blur effect behind the background
+  - Custom ARGB hex colors for background and border
 
 ### Audio Processing
-* **WASAPI Loopback Capture**: Captures all system audio output
-* **Real-time FFT Analysis**: 7-band frequency spectrum
+* **WASAPI Loopback Capture**: Captures all system audio output in real time
+* **Real-time FFT**: 7-band frequency spectrum with Hann windowing
 * **6 EQ Presets**: Balanced, Bass, Rock, Pop, Jazz, Electronic
-* **Adjustable Sensitivity**: 0-300 range for different audio levels
+* **Adjustable Sensitivity**: 0–300 range
 
 ### Performance
-* **Adjustable Frame Rate**: Set any FPS value for maximum smoothness or power-saving rendering
-* **Fullscreen Pause**: Automatically pauses when fullscreen apps/games are running
-* **Silence Detection**: Reduces refresh rate after configurable silence period
+* **Adjustable Frame Rate**: Higher = smoother. 60 is good for most displays, 120 for high refresh rate monitors.
+* **Fullscreen Pause**: Detects both exclusive fullscreen (DX9/11) and borderless fullscreen windows; pauses automatically and resumes when the app closes
+* **Silence Detection**: Reduces refresh rate after a configurable idle period to save CPU/GPU
 
 ---
 
 ### Credits
-* **[Salyts](https://github.com/Salyts) —** Author of Desktop Audio Visualizer.
-* Borrowed the audio visualizer code from **[GR0UD](https://github.com/GR0UD)**.
+* **[Salyts](https://github.com/Salyts)** — Author of Desktop Audio Visualizer
+* **[GR0UD](https://github.com/GR0UD)** — Audio capture and FFT engine
 
 */
 // ==/WindhawkModReadme==
@@ -154,22 +161,26 @@ A real-time audio spectrum visualizer that displays on your Windows desktop. Cap
     $options:
     - solid: Solid color
     - gradient: Static gradient
-    - reactive_gradient: Reactive gradient (shifts with level)
+    - reactive_gradient: Reactive gradient
     - accent: Windows accent color
-    - album_art: Album art dominant color
+    - album_art: Album art color
+    - dynamic_album: Dynamic album art color
+    - acrylic: Acrylic
     $options:ru-RU:
     - solid: Сплошной цвет
     - gradient: Статичный градиент
-    - reactive_gradient: Реактивный градиент (зависит от уровня)
+    - reactive_gradient: Реактивный градиент
     - accent: Системный акцентный цвет Windows
-    - album_art: Доминирующий цвет обложки альбома
+    - album_art: Цвет обложки альбома
+    - dynamic_album: Динамический цвет обложки
+    - acrylic: Акрил
   - color: "#FFFFFFFF"
     $name: Bar color (ARGB hex)
     $name:ru-RU: Цвет столбиков (ARGB hex)
-  - gradientColor1: "#00FFFFFF"
+  - gradientColor1: "#FFFFFFFF"
     $name: Gradient color 1 (ARGB hex)
     $name:ru-RU: Цвет градиента 1 (ARGB hex)
-  - gradientColor2: "#FFFFFFFF"
+  - gradientColor2: "#FF1ED760"
     $name: Gradient color 2 (ARGB hex)
     $name:ru-RU: Цвет градиента 2 (ARGB hex)
   - sensitivity: 150
@@ -285,7 +296,7 @@ using Microsoft::WRL::ComPtr;
 #define MESSAGE_WINDOW_CLASS (L"DesktopAudioVisMessage_" WH_MOD_ID)
 
 enum class VizShape { Stereo, Mountain, Mirror, Wave, Breathe, Dots };
-enum class VizColorMode { Solid, Gradient, ReactiveGradient, Accent, AlbumArt };
+enum class VizColorMode { Solid, Gradient, ReactiveGradient, Accent, AlbumArt, DynamicAlbum, Acrylic };
 enum class VizEQ { Default, Bass, Rock, Pop, Jazz, Electronic };
 enum class VizOrientation { Horizontal, Vertical };
 enum class VizAnchor { Top, Middle, Bottom };
@@ -393,9 +404,14 @@ std::atomic<ULONGLONG> g_lastAudibleTickMs{0};
 bool g_slowMode = false;
 
 static std::atomic<DWORD> g_albumArtColor{0xFFFFFFFF};
+static std::atomic<DWORD> g_albumArtColorSecondary{0xFFAAAAAA};
 static std::atomic<bool>  g_albumArtColorReady{false};
 static std::atomic<bool>  g_albumArtFetchPending{false};
 static std::atomic<DWORD> g_accentColorCache{0xFF0078D4};
+
+static HANDLE g_gsmtcStopEvent = nullptr;
+static std::thread g_gsmtcThread;
+static HANDLE g_albumArtDoneEvent = nullptr;
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
@@ -765,22 +781,47 @@ void FetchAlbumArtColorAsync() {
                         bk.r += pr; bk.g += pg; bk.b += pb; bk.n++;
                     }
                 }
-                float bestW = -1.f; BYTE bestR = 255, bestG = 255, bestB = 255;
+
+                struct Cand { float w; BYTE r,g,b; };
+                std::vector<Cand> cands;
+                cands.reserve(64);
                 for (int R = 0; R < 16; R++) for (int G = 0; G < 16; G++) for (int B = 0; B < 16; B++) {
                     auto& bk = buckets[R][G][B];
                     if (bk.n < 8) continue;
                     float fr = bk.r/(float)bk.n/255.f, fg = bk.g/(float)bk.n/255.f, fb = bk.b/(float)bk.n/255.f;
                     float mx = std::max({fr,fg,fb}), mn = std::min({fr,fg,fb});
                     float sat = mx > 0 ? (mx - mn) / mx : 0;
-                    float w = bk.n * (0.3f + sat);
-                    if (w > bestW) { bestW = w; bestR = (BYTE)(fr*255); bestG = (BYTE)(fg*255); bestB = (BYTE)(fb*255); }
+                    cands.push_back({ bk.n * (0.3f + sat),
+                                     (BYTE)(fr*255), (BYTE)(fg*255), (BYTE)(fb*255) });
                 }
-                DWORD col = 0xFF000000 | ((DWORD)bestR << 16) | ((DWORD)bestG << 8) | bestB;
-                g_albumArtColor.store(col, std::memory_order_relaxed);
-                g_albumArtColorReady.store(true, std::memory_order_relaxed);
+
+                if (!cands.empty()) {
+                    std::sort(cands.begin(), cands.end(),
+                              [](const Cand& a, const Cand& b){ return a.w > b.w; });
+
+                    BYTE pR = cands[0].r, pG = cands[0].g, pB = cands[0].b;
+
+                    BYTE sR = pR, sG = pG, sB = pB;
+                    for (auto& c : cands) {
+                        int dr = (int)c.r - (int)pR;
+                        int dg = (int)c.g - (int)pG;
+                        int db = (int)c.b - (int)pB;
+                        if (dr*dr + dg*dg + db*db > 3264) {
+                            sR = c.r; sG = c.g; sB = c.b;
+                            break;
+                        }
+                    }
+
+                    DWORD col  = 0xFF000000 | ((DWORD)pR << 16) | ((DWORD)pG << 8) | pB;
+                    DWORD col2 = 0xFF000000 | ((DWORD)sR << 16) | ((DWORD)sG << 8) | sB;
+                    g_albumArtColor.store(col,  std::memory_order_relaxed);
+                    g_albumArtColorSecondary.store(col2, std::memory_order_relaxed);
+                    g_albumArtColorReady.store(true, std::memory_order_relaxed);
+                }
             }
         } catch (...) {}
         g_albumArtFetchPending.store(false);
+        if (g_albumArtDoneEvent) SetEvent(g_albumArtDoneEvent);
         try { winrt::uninit_apartment(); } catch (...) {}
     }).detach();
 }
@@ -801,14 +842,19 @@ void SetupGsmtcSessionListener() {
         if (!g_gsmtcSession) return;
         g_gsmtcMediaPropsToken = g_gsmtcSession.MediaPropertiesChanged(
             [](auto const&, auto const&) {
-                if (g_settings.colorMode == VizColorMode::AlbumArt)
+                if (g_settings.colorMode == VizColorMode::AlbumArt ||
+                    g_settings.colorMode == VizColorMode::DynamicAlbum)
                     FetchAlbumArtColorAsync();
             });
     } catch (...) {}
 }
 
 void InitGsmtcListener() {
-    std::thread([]() {
+    if (g_gsmtcStopEvent) return;
+    g_gsmtcStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_gsmtcStopEvent) return;
+
+    g_gsmtcThread = std::thread([]() {
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
             g_gsmtcMgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
@@ -817,23 +863,32 @@ void InitGsmtcListener() {
             g_gsmtcSessionToken = g_gsmtcMgr.CurrentSessionChanged(
                 [](auto const&, auto const&) {
                     SetupGsmtcSessionListener();
-                    if (g_settings.colorMode == VizColorMode::AlbumArt)
+                    if (g_settings.colorMode == VizColorMode::AlbumArt ||
+                        g_settings.colorMode == VizColorMode::DynamicAlbum)
                         FetchAlbumArtColorAsync();
                 });
 
             SetupGsmtcSessionListener();
-            if (g_settings.colorMode == VizColorMode::AlbumArt)
+            if (g_settings.colorMode == VizColorMode::AlbumArt ||
+                g_settings.colorMode == VizColorMode::DynamicAlbum)
                 FetchAlbumArtColorAsync();
         } catch (...) {}
-        while (!g_unloading.load()) Sleep(200);
+
+        if (g_gsmtcStopEvent)
+            WaitForSingleObject(g_gsmtcStopEvent, INFINITE);
+
         try {
-            if (g_gsmtcMgr)     { g_gsmtcMgr.CurrentSessionChanged(g_gsmtcSessionToken); }
-            if (g_gsmtcSession) { g_gsmtcSession.MediaPropertiesChanged(g_gsmtcMediaPropsToken); }
+            if (g_gsmtcSession) {
+                g_gsmtcSession.MediaPropertiesChanged(g_gsmtcMediaPropsToken);
+            }
+            if (g_gsmtcMgr) {
+                g_gsmtcMgr.CurrentSessionChanged(g_gsmtcSessionToken);
+            }
             g_gsmtcSession = nullptr;
             g_gsmtcMgr     = nullptr;
             winrt::uninit_apartment();
         } catch (...) {}
-    }).detach();
+    });
 }
 
 static bool g_gsmtcStarted = false;
@@ -1747,10 +1802,18 @@ void RenderVisualizer() {
             } else if (g_settings.colorMode == VizColorMode::AlbumArt) {
                 DWORD dw = g_albumArtColor.load(std::memory_order_relaxed);
                 c1 = {0xFF, (BYTE)((dw>>16)&0xFF), (BYTE)((dw>>8)&0xFF), (BYTE)(dw&0xFF)};
+            } else if (g_settings.colorMode == VizColorMode::DynamicAlbum) {
+                DWORD dw = g_albumArtColor.load(std::memory_order_relaxed);
+                c1 = {0xFF, (BYTE)((dw>>16)&0xFF), (BYTE)((dw>>8)&0xFF), (BYTE)(dw&0xFF)};
             }
         }
         RGBA c2{g_settings.grad2A, g_settings.grad2R, g_settings.grad2G, g_settings.grad2B};
         RGBA cGrad1{g_settings.grad1A, g_settings.grad1R, g_settings.grad1G, g_settings.grad1B};
+        if (g_settings.colorMode == VizColorMode::DynamicAlbum) {
+            DWORD dw = g_albumArtColorSecondary.load(std::memory_order_relaxed);
+            c2    = {0xFF, (BYTE)((dw>>16)&0xFF), (BYTE)((dw>>8)&0xFF), (BYTE)(dw&0xFF)};
+            cGrad1 = c1;
+        }
 
         if (g_settings.shape == VizShape::Dots) {
             float dotR  = barW * 0.5f;
@@ -1774,6 +1837,15 @@ void RenderVisualizer() {
                     col = LerpColor(cGrad1, c2, (barCount > 1) ? (float)i/(barCount-1) : 0.f);
                 else if (g_settings.colorMode == VizColorMode::ReactiveGradient)
                     col = LerpColor(cGrad1, c2, fac);
+                else if (g_settings.colorMode == VizColorMode::DynamicAlbum) {
+                    float t = (barCount > 1) ? (float)i / (barCount - 1) : 0.f;
+                    float freqT = std::min(1.f, t * 0.6f + fac * 0.4f);
+                    col = LerpColor(cGrad1, c2, freqT);
+                }
+                if (g_settings.colorMode == VizColorMode::Acrylic) {
+                    BYTE aa = (BYTE)std::max(30, std::min(180, (int)(150.f * fac + 30.f)));
+                    col = {aa, c1.r, c1.g, c1.b};
+                }
                 g_barBrush->SetColor(D2D1::ColorF(col.r/255.f, col.g/255.f, col.b/255.f, col.a/255.f));
 
                 int numDots = (step > 0.5f) ? (int)(colSize / step) : 1;
@@ -1871,6 +1943,14 @@ void RenderVisualizer() {
                     col = LerpColor(cGrad1, c2, t);
                 } else if (g_settings.colorMode == VizColorMode::ReactiveGradient) {
                     col = LerpColor(cGrad1, c2, fac);
+                } else if (g_settings.colorMode == VizColorMode::DynamicAlbum) {
+                    float t = (barCount > 1) ? (float)i / (barCount - 1) : 0.f;
+                    float freqT = std::min(1.f, t * 0.6f + fac * 0.4f);
+                    col = LerpColor(cGrad1, c2, freqT);
+                }
+                if (g_settings.colorMode == VizColorMode::Acrylic) {
+                    BYTE aa = (BYTE)std::max(30, std::min(180, (int)(150.f * fac + 30.f)));
+                    col = {aa, c1.r, c1.g, c1.b};
                 }
 
                 D2D1_COLOR_F d2dCol = D2D1::ColorF(col.r / 255.0f, col.g / 255.0f, col.b / 255.0f,
@@ -1940,12 +2020,10 @@ void ScheduleNextUpdate() {
     if (g_settings.pauseWhenSilentSeconds > 0) {
         ULONGLONG lastAudible = g_lastAudibleTickMs.load(std::memory_order_relaxed);
         ULONGLONG idleMs = GetTickCount64() - lastAudible;
-        bool wasSlow = g_slowMode;
         g_slowMode = idleMs > (ULONGLONG)g_settings.pauseWhenSilentSeconds * 1000ULL;
         if (g_slowMode) {
             interval = 200;
         }
-        (void)wasSlow;
     } else {
         g_slowMode = false;
     }
@@ -2171,6 +2249,11 @@ void CreateOverlayWindow() {
         nullptr);
     if (!g_overlayWnd) return;
 
+    if (!g_gsmtcStarted) {
+        InitGsmtcListener();
+        g_gsmtcStarted = true;
+    }
+
     if (CreateSwapChainResources(width, height)) {
         if (!g_fullscreenPaused.load()) {
             RenderVisualizer();
@@ -2271,6 +2354,8 @@ void LoadSettings() {
                            : (wcscmp(colorMode, L"reactive_gradient") == 0) ? VizColorMode::ReactiveGradient
                            : (wcscmp(colorMode, L"accent") == 0)            ? VizColorMode::Accent
                            : (wcscmp(colorMode, L"album_art") == 0)         ? VizColorMode::AlbumArt
+                           : (wcscmp(colorMode, L"dynamic_album") == 0)     ? VizColorMode::DynamicAlbum
+                           : (wcscmp(colorMode, L"acrylic") == 0)           ? VizColorMode::Acrylic
                                                                              : VizColorMode::Solid;
     Wh_FreeStringSetting(colorMode);
 
@@ -2360,8 +2445,8 @@ BOOL Wh_ModInit() {
 
     RefreshAccentColorCache();
 
-    InitGsmtcListener();
-    g_gsmtcStarted = true;
+    if (!g_albumArtDoneEvent)
+        g_albumArtDoneEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
@@ -2397,6 +2482,27 @@ void Wh_ModUninit() {
 
     StopVizCaptureThread();
     UninitDirectX();
+
+    if (g_gsmtcStopEvent) {
+        SetEvent(g_gsmtcStopEvent);
+    }
+    if (g_gsmtcThread.joinable()) {
+        g_gsmtcThread.join();
+    }
+    if (g_gsmtcStopEvent) {
+        CloseHandle(g_gsmtcStopEvent);
+        g_gsmtcStopEvent = nullptr;
+    }
+
+    if (g_albumArtFetchPending.load()) {
+        if (g_albumArtDoneEvent)
+            WaitForSingleObject(g_albumArtDoneEvent, 3000);
+    }
+    if (g_albumArtDoneEvent) {
+        CloseHandle(g_albumArtDoneEvent);
+        g_albumArtDoneEvent = nullptr;
+    }
+    g_gsmtcStarted = false;
 }
 
 void ApplySettingsChanged() {
@@ -2407,8 +2513,10 @@ void ApplySettingsChanged() {
 
     LoadSettings();
 
-    if (g_settings.colorMode == VizColorMode::AlbumArt &&
-        (oldColorMode != VizColorMode::AlbumArt || !g_albumArtColorReady.load()))
+    if ((g_settings.colorMode == VizColorMode::AlbumArt ||
+         g_settings.colorMode == VizColorMode::DynamicAlbum) &&
+        (oldColorMode != VizColorMode::AlbumArt &&
+         oldColorMode != VizColorMode::DynamicAlbum || !g_albumArtColorReady.load()))
         FetchAlbumArtColorAsync();
 
     if (!g_lazyInitialized || !g_initSucceeded) return;
