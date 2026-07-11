@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
-// @description     Makes Search Bar, Broeadcrumb Bar and others into movable toolbars
-// @version         1.0
+// @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
-// @compilerOptions -luxtheme -lgdi32 -ladvapi32 -lcomctl32
+// @compilerOptions -luxtheme -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -70,7 +70,6 @@ The toolbars can be locked and unlocked.
 
 constexpr int UP_BUTTON_ICON_SIZE  = 16;
 constexpr UINT WM_APP_DO_MOVE      = WM_APP + 0x501;
-constexpr LPCWSTR REG_KEY          = L"Software\\WindhawkMods\\FlexibleExplorer";
 
 struct Settings {
     bool moveSearchBand    = true;
@@ -101,7 +100,6 @@ std::unordered_map<HWND,int> g_childFlags;
 struct ToolbarGuard{int x=0,y=0,cx=0,cy=0;bool hasGood=false;};
 std::unordered_map<HWND,ToolbarGuard> g_toolbarGuards;
 
-// Храним пары HWND → subclass proc для удаления
 std::unordered_map<HWND, WindhawkUtils::WH_SUBCLASSPROC> g_subclassedWindows;
 
 thread_local bool g_insideApply = false;
@@ -203,58 +201,60 @@ void GetEffectiveClassName(HWND child, wchar_t* out, size_t outCount) {
 }
 
 // =====================================================================
-// Registry
+// Storage via Windhawk API
 // =====================================================================
 struct BandState{UINT cx;bool brk;};
 
 void SaveBandPositions(HWND rebar){
     if(!rebar||!IsWindow(rebar))return;
-    HKEY k;
-    if(RegCreateKeyExW(HKEY_CURRENT_USER,REG_KEY,0,NULL,0,KEY_WRITE,NULL,&k,NULL)!=ERROR_SUCCESS)return;
     int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
-    DWORD dc=(DWORD)cnt;
-    RegSetValueExW(k,L"BandCount",0,REG_DWORD,(BYTE*)&dc,sizeof(dc));
+    
+    Wh_SetIntValue(L"BandCount", cnt);
+    
     for(int i=0;i<cnt;i++){
         REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_SIZE|RBBIM_STYLE|RBBIM_CHILD;
         if(!SendMessage(rebar,RB_GETBANDINFO,i,(LPARAM)&rbi))continue;
+        
         WCHAR cls[256]=L"";
-        if(rbi.hwndChild&&IsWindow(rbi.hwndChild))GetEffectiveClassName(rbi.hwndChild,cls,ARRAYSIZE(cls));
+        if(rbi.hwndChild&&IsWindow(rbi.hwndChild))
+            GetEffectiveClassName(rbi.hwndChild,cls,ARRAYSIZE(cls));
+        
         WCHAR ok[64];wsprintf(ok,L"Order_%d",i);
-        RegSetValueExW(k,ok,0,REG_SZ,(BYTE*)cls,(DWORD)((wcslen(cls)+1)*sizeof(WCHAR)));
+        Wh_SetStringValue(ok, cls);
+        
         WCHAR ck[128];wsprintf(ck,L"Cx_%s",cls);
-        DWORD cx=rbi.cx;RegSetValueExW(k,ck,0,REG_DWORD,(BYTE*)&cx,sizeof(cx));
+        Wh_SetIntValue(ck, (int)rbi.cx);
+        
         WCHAR bk[128];wsprintf(bk,L"Break_%s",cls);
-        DWORD brk=(rbi.fStyle&RBBS_BREAK)?1u:0u;
-        RegSetValueExW(k,bk,0,REG_DWORD,(BYTE*)&brk,sizeof(brk));
+        Wh_SetIntValue(bk, (rbi.fStyle&RBBS_BREAK)?1:0);
     }
-    RegCloseKey(k);
 }
 
 bool LoadBandState(const wchar_t* cls,BandState& out){
-    HKEY k;
-    if(RegOpenKeyExW(HKEY_CURRENT_USER,REG_KEY,0,KEY_READ,&k)!=ERROR_SUCCESS)return false;
     WCHAR ck[128];wsprintf(ck,L"Cx_%s",cls);
     WCHAR bk[128];wsprintf(bk,L"Break_%s",cls);
-    DWORD cx=0,brk=0,sz=sizeof(DWORD),t;
-    bool ok=RegQueryValueExW(k,ck,NULL,&t,(BYTE*)&cx,&sz)==ERROR_SUCCESS;
-    sz=sizeof(DWORD);RegQueryValueExW(k,bk,NULL,&t,(BYTE*)&brk,&sz);
-    RegCloseKey(k);
-    if(ok&&cx>=20&&cx<=8000){out.cx=cx;out.brk=brk!=0;return true;}
-    return false;
+    
+    int cx = Wh_GetIntValue(ck, -1);
+    if(cx < 20 || cx > 8000) return false;
+    
+    int brk = Wh_GetIntValue(bk, 0);
+    
+    out.cx = (UINT)cx;
+    out.brk = brk != 0;
+    return true;
 }
 
 std::vector<std::wstring> LoadBandOrder(){
     std::vector<std::wstring> order;
-    HKEY k;
-    if(RegOpenKeyExW(HKEY_CURRENT_USER,REG_KEY,0,KEY_READ,&k)!=ERROR_SUCCESS)return order;
-    DWORD cnt=0,sz=sizeof(cnt),t;
-    if(RegQueryValueExW(k,L"BandCount",NULL,&t,(BYTE*)&cnt,&sz)!=ERROR_SUCCESS){RegCloseKey(k);return order;}
-    for(DWORD i=0;i<cnt;i++){
-        WCHAR ok[64];wsprintf(ok,L"Order_%u",i);
-        WCHAR val[256]=L"";DWORD vsz=sizeof(val);
-        if(RegQueryValueExW(k,ok,NULL,&t,(BYTE*)val,&vsz)==ERROR_SUCCESS)order.push_back(val);
+    int cnt = Wh_GetIntValue(L"BandCount", 0);
+    
+    for(int i=0; i<cnt; i++){
+        WCHAR ok[64];wsprintf(ok,L"Order_%d",i);
+        WCHAR val[256]=L"";
+        if(Wh_GetStringValue(ok, val, ARRAYSIZE(val)) > 0)
+            order.push_back(val);
     }
-    RegCloseKey(k);return order;
+    return order;
 }
 
 void ResizeUpButtonToolbar(HWND toolbar) {
@@ -756,7 +756,6 @@ void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC subclassProc){
     if(!hwnd||!IsWindow(hwnd))return;
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, subclassProc, 0);
     
-    // Регистрируем окно и его subclass proc
     EnterCriticalSection(&g_mutex);
     g_subclassedWindows[hwnd] = subclassProc;
     LeaveCriticalSection(&g_mutex);
@@ -824,14 +823,12 @@ BOOL Wh_ModInit(){
 void Wh_ModUninit(){
     Wh_Log(L"FlexibleExplorer uninit - removing subclasses");
     
-    // Копируем список окон и их subclass proc
     EnterCriticalSection(&g_mutex);
     std::vector<std::pair<HWND, WindhawkUtils::WH_SUBCLASSPROC>> windowsToClean(
         g_subclassedWindows.begin(), g_subclassedWindows.end());
     g_subclassedWindows.clear();
     LeaveCriticalSection(&g_mutex);
     
-    // Удаляем все subclass'ы
     for(auto& pair : windowsToClean) {
         if(IsWindow(pair.first)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(pair.first, pair.second);
