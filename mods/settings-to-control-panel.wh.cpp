@@ -26,6 +26,8 @@ Panel pages, using only native Windows components.
 - **Windows 10** – Mostly complete support
 - **Windows 11** – Partial support
 
+**Note**: The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2 and Windows 11 24H2 and the tests confirm that the mod is more functional on Windows 10 but both should not cause issues.
+
 ---
 
 ## Features
@@ -34,18 +36,19 @@ Panel pages, using only native Windows components.
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
 - Tray menu detection (experimental)
+---
+
 ## Limitations
 
-- The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10 and previous versions). If using Windows 11, it might function decently but it is still an experimental feature.
+- The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some configurations if explorer is restarted the redirects might not work (especially on Windows 11).
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
-- The two new experimental features above (`ComActivationRedirect` and `LegacyNameMappingFix`) are based on undocumented/internal Windows behavior and reverse engineering assumptions. They are disabled by default, are not guaranteed to work on every Windows build, and could stop working (harmlessly) after a Windows update. They are written to always fall back to the original, unmodified behavior whenever something doesn't match what's expected, so enabling them should never break normal functionality — worst case, they simply do nothing.
-
 ---
 
 ## Credits
 
 - m417z – Code reviews and feedback
 - Anixx – Testing on Windows 11 23H2 and the original toolbar subclassing approach
+- sebastian08dm08-cpu - Testing on Windows 10 1809
 - dbilanoski – CLSID documentation
 */
 // ==/WindhawkModReadme==
