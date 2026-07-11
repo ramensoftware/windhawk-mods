@@ -212,18 +212,6 @@ static void WINAPI ConfirmatorHostControl_ShowText_Hook(void* pThis,
 
 // ==== Hook installation ====
 
-template <typename Orig, typename Hook>
-static bool TryHookSymbol(HMODULE module, const wchar_t* symbol, Orig* orig, Hook hook)
-{
-    WindhawkUtils::SYMBOL_HOOK entry{
-        {symbol},
-        reinterpret_cast<void**>(orig),
-        reinterpret_cast<void*>(hook),
-        true,  // optional: report per-symbol success via *orig instead
-    };
-    return WindhawkUtils::HookSymbols(module, &entry, 1) && *orig;
-}
-
 static bool InstallSwitchHooks()
 {
     std::lock_guard<std::mutex> lock(g_installMutex);
@@ -232,53 +220,56 @@ static bool InstallSwitchHooks()
         return true;
     }
 
-    HMODULE twinui = LoadLibraryW(L"twinui.pcshell.dll");
-    if (!twinui)
+    HMODULE twinuiPcshellDll = LoadLibraryW(L"twinui.pcshell.dll");
+    if (!twinuiPcshellDll)
     {
         Wh_Log(L"LoadLibrary twinui.pcshell.dll failed: %u", GetLastError());
         return false;
     }
 
-    int hooked = 0;
+    // All optional: a single resolved entry point is enough to arm the window,
+    // and a rename in a future build should degrade gracefully, not fail init.
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+        {
+            {LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *))"},
+            reinterpret_cast<void**>(&CVirtualDesktopManager_SwitchDesktopWithAnimation_Original),
+            reinterpret_cast<void*>(CVirtualDesktopManager_SwitchDesktopWithAnimation_Hook),
+            true,
+        },
+        {
+            {LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktop(struct IVirtualDesktop *))"},
+            reinterpret_cast<void**>(&CVirtualDesktopManager_SwitchDesktop_Original),
+            reinterpret_cast<void*>(CVirtualDesktopManager_SwitchDesktop_Hook),
+            true,
+        },
+        {
+            {LR"(private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection))"},
+            reinterpret_cast<void**>(&CVirtualDesktopHotkeyHandler_CycleInDirection_Original),
+            reinterpret_cast<void*>(CVirtualDesktopHotkeyHandler_CycleInDirection_Hook),
+            true,
+        },
+    };
 
-    if (TryHookSymbol(
-            twinui,
-            LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *))",
-            &CVirtualDesktopManager_SwitchDesktopWithAnimation_Original,
-            CVirtualDesktopManager_SwitchDesktopWithAnimation_Hook))
+    if (!WindhawkUtils::HookSymbols(twinuiPcshellDll, twinuiPcshellDllHooks,
+                                    ARRAYSIZE(twinuiPcshellDllHooks)))
     {
-        Wh_Log(L"Hooked SwitchDesktopWithAnimation");
-        ++hooked;
+        Wh_Log(L"HookSymbols(twinui.pcshell.dll) failed");
+        return false;
     }
 
-    if (TryHookSymbol(
-            twinui,
-            LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktop(struct IVirtualDesktop *))",
-            &CVirtualDesktopManager_SwitchDesktop_Original,
-            CVirtualDesktopManager_SwitchDesktop_Hook))
-    {
-        Wh_Log(L"Hooked SwitchDesktop");
-        ++hooked;
-    }
-
-    if (TryHookSymbol(
-            twinui,
-            LR"(private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection))",
-            &CVirtualDesktopHotkeyHandler_CycleInDirection_Original,
-            CVirtualDesktopHotkeyHandler_CycleInDirection_Hook))
-    {
-        Wh_Log(L"Hooked CycleInDirection");
-        ++hooked;
-    }
-
+    const int hooked =
+        (CVirtualDesktopManager_SwitchDesktopWithAnimation_Original ? 1 : 0) +
+        (CVirtualDesktopManager_SwitchDesktop_Original ? 1 : 0) +
+        (CVirtualDesktopHotkeyHandler_CycleInDirection_Original ? 1 : 0);
     if (hooked == 0)
     {
-        Wh_Log(L"No desktop switch hooks installed");
+        Wh_Log(L"No desktop switch symbols resolved");
         return false;
     }
 
     Wh_ApplyHookOperations();
     g_switchHooksInstalled.store(true, std::memory_order_relaxed);
+    Wh_Log(L"Desktop switch hooks installed (%d/3)", hooked);
     return true;
 }
 
@@ -290,39 +281,43 @@ static bool InstallOsdHooks()
         return true;
     }
 
-    HMODULE module = LoadLibraryW(L"Windows.Internal.HardwareConfirmator.dll");
-    if (!module)
+    HMODULE hardwareConfirmatorDll =
+        LoadLibraryW(L"Windows.Internal.HardwareConfirmator.dll");
+    if (!hardwareConfirmatorDll)
     {
         Wh_Log(L"LoadLibrary Windows.Internal.HardwareConfirmator.dll failed: %u",
                GetLastError());
         return false;
     }
 
-    int hooked = 0;
+    WindhawkUtils::SYMBOL_HOOK hardwareConfirmatorDllHooks[] = {
+        {
+            {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowTextAsync(struct winrt::hstring,bool))"},
+            reinterpret_cast<void**>(&HardwareConfirmatorHost_ShowTextAsync_Original),
+            reinterpret_cast<void*>(HardwareConfirmatorHost_ShowTextAsync_Hook),
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::ShowText(struct winrt::hstring const &,bool))"},
+            reinterpret_cast<void**>(&ConfirmatorHostControl_ShowText_Original),
+            reinterpret_cast<void*>(ConfirmatorHostControl_ShowText_Hook),
+            true,
+        },
+    };
 
-    if (TryHookSymbol(
-            module,
-            LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowTextAsync(struct winrt::hstring,bool))",
-            &HardwareConfirmatorHost_ShowTextAsync_Original,
-            HardwareConfirmatorHost_ShowTextAsync_Hook))
+    if (!WindhawkUtils::HookSymbols(hardwareConfirmatorDll, hardwareConfirmatorDllHooks,
+                                    ARRAYSIZE(hardwareConfirmatorDllHooks)))
     {
-        Wh_Log(L"Hooked HardwareConfirmatorHost::ShowTextAsync");
-        ++hooked;
+        Wh_Log(L"HookSymbols(Windows.Internal.HardwareConfirmator.dll) failed");
+        return false;
     }
 
-    if (TryHookSymbol(
-            module,
-            LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::ShowText(struct winrt::hstring const &,bool))",
-            &ConfirmatorHostControl_ShowText_Original,
-            ConfirmatorHostControl_ShowText_Hook))
-    {
-        Wh_Log(L"Hooked ConfirmatorHostControl::ShowText");
-        ++hooked;
-    }
-
+    const int hooked =
+        (HardwareConfirmatorHost_ShowTextAsync_Original ? 1 : 0) +
+        (ConfirmatorHostControl_ShowText_Original ? 1 : 0);
     if (hooked == 0)
     {
-        Wh_Log(L"Confirmator ShowText hooks unavailable — OSD will stay visible");
+        Wh_Log(L"Confirmator ShowText symbols unavailable — OSD will stay visible");
         return false;
     }
 
