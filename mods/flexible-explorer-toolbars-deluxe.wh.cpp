@@ -2,7 +2,7 @@
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
-// @version         1.1
+// @version         1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
