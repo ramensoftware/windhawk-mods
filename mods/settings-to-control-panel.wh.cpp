@@ -35,10 +35,8 @@ Panel pages, using only native Windows components.
 
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10 and previous versions). If using Windows 11, it might function decently but it is still an experimental feature.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
-- On some systems, Windhawk's "system instability" warning may briefly appear on the
-  first tray redirect after an Explorer restart. This does not affect functionality
-  and the redirect completes normally; it appears to be related to the burst of
-  window creation during Explorer's startup rather than an actual crash or hang.
+- The two new experimental features above (`ComActivationRedirect` and `LegacyNameMappingFix`) are based on undocumented/internal Windows behavior and reverse engineering assumptions. They are disabled by default, are not guaranteed to work on every Windows build, and could stop working (harmlessly) after a Windows update. They are written to always fall back to the original, unmodified behavior whenever something doesn't match what's expected, so enabling them should never break normal functionality — worst case, they simply do nothing.
+
 ---
 
 ## Credits
@@ -1265,7 +1263,8 @@ static void InstallImmersiveMenuHooks() {
         HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hMod) continue;
 
-        WindhawkUtils::SYMBOL_HOOK sndVolSSO_pnidui_hooks[] = {
+        // SndVolSSO.dll, pnidui.dll
+        WindhawkUtils::SYMBOL_HOOK immersiveMenuHooks[] = {
             {{
                 L"bool "
 #ifdef _WIN64
@@ -1280,13 +1279,13 @@ static void InstallImmersiveMenuHooks() {
             (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
         };
 
-        WindhawkUtils::HookSymbols(hMod, sndVolSSO_pnidui_hooks, 1);
+        WindhawkUtils::HookSymbols(hMod, immersiveMenuHooks, 1);
     }
 
     if (g_isWin11) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
-            WindhawkUtils::SYMBOL_HOOK shell32_hooks[] = {
+            WindhawkUtils::SYMBOL_HOOK shell32dll_hooks[] = {
                 {{
                     L"bool "
 #ifdef _WIN64
@@ -1301,7 +1300,7 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook}
             };
             
-            WindhawkUtils::HookSymbols(hShell32, shell32_hooks, 1);
+            WindhawkUtils::HookSymbols(hShell32, shell32dll_hooks, 1);
         }
     }
 }
