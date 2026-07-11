@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    Forces classic Control Panel to open instead of Windows Settings and restores some classic CPL entries.
-// @version        10.0.26
+// @version        10.0.27
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -32,7 +32,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2 and
 - Anti-loop protection (stops windows from reopening endlessly)
 - Configurable fallback behavior for unmapped links
 - Tray menu detection (experimental)
-- Restore Classic Control Panel Entries (credits to Anixx for the original implementation)
 ---
 ## Limitations
 
@@ -44,7 +43,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2 and
 ## Credits
 
 - m417z – Code reviews and feedback
-- Anixx – Testing on Windows 11 23H2, the original toolbar subclassing approach and restoring control panel applets
+- Anixx – Testing on Windows 11 23H2, the original toolbar subclassing approach
 - sebastian08dm08-cpu - Testing on Windows 10 1809
 - dbilanoski – CLSID documentation
 */
@@ -87,14 +86,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2 and
 - LegacyNameMappingFix: true
   $name: Legacy Name Mapping Fix (EXPERIMENTAL)
   $description: "Prevents Explorer from remapping classic Control Panel names to the modern Settings app."
-
-- enableClassicCpls: true
-  $name: Restore Classic Control Panel Entries
-  $description: "Restores the classic Personalization, Notification Area Icons, Network Connections, and Printers & Faxes sections to the Control Panel. Implementation by Anixx."
-
-- suppressCompanySync: true
-  $name: Hide Company Sync Entry
-  $description: "Suppresses the Company Sync namespace entry from the Control Panel. Implementation by Anixx."
 */
 // ==/WindhawkModSettings==
 
@@ -167,10 +158,13 @@ static bool g_taskbarListenerInstalled = false;
 static std::atomic<bool> g_modActive{false};
 static std::mutex g_initMutex;
 static std::atomic<bool> g_reinitPending{false};
+static std::atomic<bool> g_unloading{false};
 static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 
 static bool g_pniduiHookInstalled = false;
 static std::mutex g_pniduiHookMutex;
+static bool g_sndVolSSOHookInstalled = false;
+static bool g_shell32DevicesHookInstalled = false;
 static HANDLE g_pniduiRetryThread = nullptr;
 static volatile bool g_pniduiRetryStop = false;
 static volatile bool g_pniduiRetryRunning = false;
@@ -1092,627 +1086,6 @@ static ResolveResult ResolveUri(const std::wstring& uri, HWND hwnd) {
 }
 
 // ---------------------------------------------------------------------------
-// Integrated Restore Classic CPLs by Anixx, prefixed with RCPL_
-// ---------------------------------------------------------------------------
-
-struct RCPL_Settings {
-    // Consolidated single toggle. Previously this mod exposed 4 separate
-    // switches (Personalization / Notification Icons / Network Connections /
-    // Printers and Faxes). They all did the same kind of thing (restore a
-    // classic CPL entry), so they're now one simple on/off toggle, enabled
-    // by default.
-    std::atomic<bool> enableClassicCpls = true;
-    std::atomic<bool> suppressCompanySync = true;
-} g_rcplSettings;
-
-static std::wstring g_rcplPersonalizationName;
-static std::unordered_map<HKEY, std::wstring> g_rcplKeyPaths;
-static std::unordered_set<HKEY> g_rcplFakeHandles;
-static std::mutex g_rcplKeyPathsMutex;
-
-static std::wstring g_rcplPersonalizationGuidLower;
-static std::wstring g_rcplNotificationIconsGuidLower;
-static std::wstring g_rcplNetworkConnectionsGuidLower;
-static std::wstring g_rcplPrintersAndFaxesGuidLower;
-static std::wstring g_rcplSuppressedGuidLower;
-
-static const std::wstring RCPL_kPersonalizationGuid    = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
-static const std::wstring RCPL_kNotificationIconsGuid  = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
-static const std::wstring RCPL_kNetworkConnectionsGuid = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
-static const std::wstring RCPL_kPrintersAndFaxesGuid   = L"{2227a280-3aea-1069-a2de-08002b30309d}";
-static const std::wstring RCPL_kSuppressedGuid         = L"{98f2ab62-0e29-4e4c-8ee7-b542e66740b1}";
-
-static const DWORD RCPL_kCategoryAppearance = 1;
-static const DWORD RCPL_kCategoryHardware   = 2;
-static const DWORD RCPL_kCategoryNetwork    = 3;
-
-static bool RCPL_IsPredefinedHkey(HKEY hKey) {
-    return hKey == HKEY_CLASSES_ROOT || hKey == HKEY_CURRENT_USER ||
-           hKey == HKEY_LOCAL_MACHINE || hKey == HKEY_USERS ||
-           hKey == HKEY_CURRENT_CONFIG;
-}
-
-static bool RCPL_EndsWith(const std::wstring& str, const std::wstring& suffix) {
-    if (str.size() < suffix.size()) return false;
-    return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
-static bool RCPL_ContainsRelevantKeyword(const std::wstring& lowerPath) {
-    return lowerPath.find(L"clsid") != std::wstring::npos ||
-           lowerPath.find(L"controlpanel") != std::wstring::npos;
-}
-
-static void RCPL_LoadSettings() {
-    g_rcplSettings.enableClassicCpls.store(Wh_GetIntSetting(L"enableClassicCpls") != 0);
-    g_rcplSettings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync") != 0);
-}
-
-static void RCPL_InitDisplayNames() {
-    wchar_t buffer[256] = { 0 };
-    HMODULE hTheme = LoadLibraryExW(L"themecpl.dll", nullptr,
-                                    LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hTheme) {
-        if (LoadStringW(hTheme, 1, buffer, 256) && buffer[0])
-            g_rcplPersonalizationName = buffer;
-        else
-            g_rcplPersonalizationName = L"Personalization";
-        FreeLibrary(hTheme);
-    } else {
-        g_rcplPersonalizationName = L"Personalization";
-    }
-
-    g_rcplPersonalizationGuidLower    = ToLower(RCPL_kPersonalizationGuid);
-    g_rcplNotificationIconsGuidLower  = ToLower(RCPL_kNotificationIconsGuid);
-    g_rcplNetworkConnectionsGuidLower = ToLower(RCPL_kNetworkConnectionsGuid);
-    g_rcplPrintersAndFaxesGuidLower   = ToLower(RCPL_kPrintersAndFaxesGuid);
-    g_rcplSuppressedGuidLower         = ToLower(RCPL_kSuppressedGuid);
-}
-
-static std::wstring RCPL_GetTrackedPath(HKEY hKey) {
-    if (!hKey) return L"";
-    if (hKey == HKEY_CLASSES_ROOT) return L"HKEY_CLASSES_ROOT";
-    if (hKey == HKEY_CURRENT_USER) return L"HKEY_CURRENT_USER";
-    if (hKey == HKEY_LOCAL_MACHINE) return L"HKEY_LOCAL_MACHINE";
-    if (hKey == HKEY_USERS) return L"HKEY_USERS";
-    if (hKey == HKEY_CURRENT_CONFIG) return L"HKEY_CURRENT_CONFIG";
-
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    auto it = g_rcplKeyPaths.find(hKey);
-    if (it != g_rcplKeyPaths.end()) return it->second;
-    return L"";
-}
-
-static void RCPL_TrackKey(HKEY hKey, const std::wstring& path) {
-    if (!hKey || RCPL_IsPredefinedHkey(hKey)) return;
-    std::wstring lower = ToLower(path);
-    if (!RCPL_ContainsRelevantKeyword(lower)) return;
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    g_rcplKeyPaths[hKey] = path;
-}
-
-static void RCPL_UntrackKey(HKEY hKey) {
-    if (!hKey || RCPL_IsPredefinedHkey(hKey)) return;
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    g_rcplKeyPaths.erase(hKey);
-}
-
-static HKEY RCPL_CreateFakeHandle(const std::wstring& path) {
-    int* dummy = new int(1);
-    HKEY fake = (HKEY)dummy;
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    g_rcplKeyPaths[fake] = path;
-    g_rcplFakeHandles.insert(fake);
-    return fake;
-}
-
-static void RCPL_FreeFakeHandle(HKEY hKey) {
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    if (g_rcplFakeHandles.count(hKey)) {
-        g_rcplFakeHandles.erase(hKey);
-        g_rcplKeyPaths.erase(hKey);
-        delete (int*)hKey;
-    }
-}
-
-enum class RCPL_VNode { None, ClsidRoot, DefaultIcon, Shell, ShellOpen, OpenCommand, NameSpaceEntry, ClsidRootCategoryOnly, Suppressed };
-enum class RCPL_ItemKind { None, Personalization, CategoryOnly, Suppressed };
-
-struct RCPL_ClassifyResult {
-    RCPL_VNode node;
-    RCPL_ItemKind kind;
-    DWORD category;
-};
-
-static bool RCPL_IsSuppressedNamespaceKey(const std::wstring& lower) {
-    if (!g_rcplSettings.suppressCompanySync.load()) return false;
-    return RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + g_rcplSuppressedGuidLower);
-}
-
-static bool RCPL_IsSuppressedNamespaceEntry(LPCWSTR name) {
-    if (!g_rcplSettings.suppressCompanySync.load() || !name) return false;
-    return ToLower(name) == g_rcplSuppressedGuidLower;
-}
-
-static RCPL_ClassifyResult RCPL_ClassifyFullVirtual(const std::wstring& lower, const std::wstring& guidLower, RCPL_ItemKind kind) {
-    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower))                             return { RCPL_VNode::ClsidRoot,     kind, 0 };
-    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\defaulticon"))          return { RCPL_VNode::DefaultIcon,   kind, 0 };
-    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell"))                return { RCPL_VNode::Shell,         kind, 0 };
-    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open"))          return { RCPL_VNode::ShellOpen,     kind, 0 };
-    if (RCPL_EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open\\command")) return { RCPL_VNode::OpenCommand,   kind, 0 };
-    if (RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + guidLower))           return { RCPL_VNode::NameSpaceEntry, kind, 0 };
-    return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
-}
-
-static RCPL_ClassifyResult RCPL_ClassifyPath(const std::wstring& path) {
-    std::wstring lower = ToLower(path);
-    if (!RCPL_ContainsRelevantKeyword(lower))
-        return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
-
-    if (g_rcplSettings.suppressCompanySync.load()) {
-        if (RCPL_EndsWith(lower, L"clsid\\" + g_rcplSuppressedGuidLower) ||
-            RCPL_EndsWith(lower, L"controlpanel\\namespace\\" + g_rcplSuppressedGuidLower))
-            return { RCPL_VNode::Suppressed, RCPL_ItemKind::Suppressed, 0 };
-    }
-
-    if (g_rcplSettings.enableClassicCpls.load()) {
-        auto cr = RCPL_ClassifyFullVirtual(lower, g_rcplPersonalizationGuidLower, RCPL_ItemKind::Personalization);
-        if (cr.node != RCPL_VNode::None) return cr;
-    }
-
-    if (g_rcplSettings.enableClassicCpls.load()) {
-        struct CatItem { const std::wstring* guidLower; DWORD category; } categoryItems[] = {
-            { &g_rcplNotificationIconsGuidLower,  RCPL_kCategoryAppearance },
-            { &g_rcplNetworkConnectionsGuidLower, RCPL_kCategoryNetwork },
-            { &g_rcplPrintersAndFaxesGuidLower,   RCPL_kCategoryHardware },
-        };
-
-        for (auto& item : categoryItems) {
-            if (RCPL_EndsWith(lower, L"clsid\\" + *item.guidLower))
-                return { RCPL_VNode::ClsidRootCategoryOnly, RCPL_ItemKind::CategoryOnly, item.category };
-        }
-    }
-
-    return { RCPL_VNode::None, RCPL_ItemKind::None, 0 };
-}
-
-static bool RCPL_IsTargetKey(const std::wstring& path) {
-    return RCPL_ClassifyPath(path).node != RCPL_VNode::None;
-}
-
-static bool RCPL_IsNameSpaceParentKey(const std::wstring& path) {
-    return RCPL_EndsWith(ToLower(path), L"controlpanel\\namespace");
-}
-
-static LSTATUS RCPL_ProvideStringValue(LPBYTE lpData, LPDWORD lpcbData, const std::wstring& str) {
-    DWORD requiredSize = (DWORD)((str.length() + 1) * sizeof(wchar_t));
-    if (!lpcbData) return ERROR_INVALID_PARAMETER;
-    if (!lpData || *lpcbData < requiredSize) {
-        *lpcbData = requiredSize;
-        return ERROR_MORE_DATA;
-    }
-    *lpcbData = requiredSize;
-    memcpy(lpData, str.c_str(), requiredSize);
-    return ERROR_SUCCESS;
-}
-
-static LSTATUS RCPL_ProvideDwordValue(LPBYTE lpData, LPDWORD lpcbData, DWORD value) {
-    if (!lpcbData) return ERROR_INVALID_PARAMETER;
-    if (!lpData || *lpcbData < sizeof(DWORD)) {
-        *lpcbData = sizeof(DWORD);
-        return ERROR_MORE_DATA;
-    }
-    *lpcbData = sizeof(DWORD);
-    *(DWORD*)lpData = value;
-    return ERROR_SUCCESS;
-}
-
-static bool RCPL_TryProvideValue(const std::wstring& path, const std::wstring& valueName,
-                                 LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData, LSTATUS& outStatus) {
-    RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
-    if (cr.node == RCPL_VNode::None) return false;
-
-    if (cr.kind == RCPL_ItemKind::Suppressed) {
-        outStatus = ERROR_FILE_NOT_FOUND;
-        return true;
-    }
-
-    if (cr.kind == RCPL_ItemKind::CategoryOnly) {
-        if (valueName == L"System.ControlPanel.Category") {
-            if (lpType) *lpType = REG_DWORD;
-            outStatus = RCPL_ProvideDwordValue(lpData, lpcbData, cr.category);
-            return true;
-        }
-        return false;
-    }
-
-    if (cr.kind == RCPL_ItemKind::Personalization) {
-        if (cr.node == RCPL_VNode::NameSpaceEntry) {
-            if (valueName.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, g_rcplPersonalizationName);
-                return true;
-            }
-        } else if (cr.node == RCPL_VNode::ClsidRoot) {
-            if (valueName.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, g_rcplPersonalizationName);
-                return true;
-            } else if (valueName == L"InfoTip") {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"@%SystemRoot%\\System32\\themecpl.dll,-2#immutable1");
-                return true;
-            } else if (valueName == L"System.ApplicationName") {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"Microsoft.Personalization");
-                return true;
-            } else if (valueName == L"System.ControlPanel.Category") {
-                if (lpType) *lpType = REG_DWORD;
-                outStatus = RCPL_ProvideDwordValue(lpData, lpcbData, RCPL_kCategoryAppearance);
-                return true;
-            } else if (valueName == L"System.Software.TasksFileUrl") {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"Internal");
-                return true;
-            }
-        } else if (cr.node == RCPL_VNode::DefaultIcon) {
-            if (valueName.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData, L"%SystemRoot%\\System32\\themecpl.dll,-1");
-                return true;
-            }
-        } else if (cr.node == RCPL_VNode::OpenCommand) {
-            if (valueName.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = RCPL_ProvideStringValue(lpData, lpcbData,
-                    L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}");
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-static std::vector<std::wstring> RCPL_GetNamespaceClsids() {
-    std::vector<std::wstring> result;
-    if (g_rcplSettings.enableClassicCpls.load()) {
-        result.push_back(RCPL_kPersonalizationGuid);
-        result.push_back(RCPL_kNotificationIconsGuid);
-        result.push_back(RCPL_kNetworkConnectionsGuid);
-        result.push_back(RCPL_kPrintersAndFaxesGuid);
-    }
-    return result;
-}
-
-static bool RCPL_GetVirtualSubKeyName(RCPL_VNode node, DWORD index, std::wstring& outName) {
-    switch (node) {
-        case RCPL_VNode::ClsidRoot:
-            if (index == 0) { outName = L"DefaultIcon"; return true; }
-            if (index == 1) { outName = L"Shell"; return true; }
-            return false;
-        case RCPL_VNode::Shell:
-            if (index == 0) { outName = L"Open"; return true; }
-            return false;
-        case RCPL_VNode::ShellOpen:
-            if (index == 0) { outName = L"command"; return true; }
-            return false;
-        default:
-            return false;
-    }
-}
-
-using RCPL_RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-using RCPL_RegCloseKey_t = decltype(&RegCloseKey);
-using RCPL_RegQueryValueExW_t = decltype(&RegQueryValueExW);
-using RCPL_RegGetValueW_t = decltype(&RegGetValueW);
-using RCPL_RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
-using RCPL_RegEnumKeyW_t = decltype(&RegEnumKeyW);
-
-static RCPL_RegOpenKeyExW_t RCPL_RegOpenKeyExWOriginal = nullptr;
-static RCPL_RegCloseKey_t RCPL_RegCloseKeyOriginal = nullptr;
-static RCPL_RegQueryValueExW_t RCPL_RegQueryValueExWOriginal = nullptr;
-static RCPL_RegGetValueW_t RCPL_RegGetValueWOriginal = nullptr;
-static RCPL_RegEnumKeyExW_t RCPL_RegEnumKeyExWOriginal = nullptr;
-static RCPL_RegEnumKeyW_t RCPL_RegEnumKeyWOriginal = nullptr;
-
-static LSTATUS WINAPI RCPL_RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
-    bool parentIsFake = false;
-    std::wstring parentPath;
-    {
-        std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-        if (g_rcplFakeHandles.count(hKey)) {
-            parentIsFake = true;
-            auto it = g_rcplKeyPaths.find(hKey);
-            if (it != g_rcplKeyPaths.end()) parentPath = it->second;
-        }
-    }
-
-    if (parentIsFake) {
-        std::wstring fullPath = parentPath;
-        if (lpSubKey && *lpSubKey) {
-            if (!fullPath.empty()) fullPath += L"\\";
-            fullPath += lpSubKey;
-        }
-        if (RCPL_IsTargetKey(fullPath)) {
-            HKEY fake = RCPL_CreateFakeHandle(fullPath);
-            if (phkResult) *phkResult = fake;
-            return ERROR_SUCCESS;
-        }
-        return ERROR_FILE_NOT_FOUND;
-    }
-
-    if (g_rcplSettings.suppressCompanySync.load() && lpSubKey) {
-        std::wstring basePath = RCPL_GetTrackedPath(hKey);
-        std::wstring fullPath = basePath;
-        if (*lpSubKey) {
-            if (!fullPath.empty()) fullPath += L"\\";
-            fullPath += lpSubKey;
-        }
-        if (RCPL_IsSuppressedNamespaceKey(ToLower(fullPath))) return ERROR_FILE_NOT_FOUND;
-    }
-
-    LSTATUS status = RCPL_RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    if (status == ERROR_SUCCESS && phkResult && *phkResult) {
-        std::wstring basePath = RCPL_GetTrackedPath(hKey);
-        std::wstring fullPath = basePath;
-        if (lpSubKey && *lpSubKey) {
-            if (!fullPath.empty()) fullPath += L"\\";
-            fullPath += lpSubKey;
-        }
-        RCPL_TrackKey(*phkResult, fullPath);
-    } else if (status == ERROR_FILE_NOT_FOUND && phkResult) {
-        std::wstring basePath = RCPL_GetTrackedPath(hKey);
-        std::wstring fullPath = basePath;
-        if (lpSubKey && *lpSubKey) {
-            if (!fullPath.empty()) fullPath += L"\\";
-            fullPath += lpSubKey;
-        }
-        if (RCPL_IsTargetKey(fullPath)) {
-            HKEY fake = RCPL_CreateFakeHandle(fullPath);
-            *phkResult = fake;
-            return ERROR_SUCCESS;
-        }
-    }
-    return status;
-}
-
-static LSTATUS WINAPI RCPL_RegCloseKeyHook(HKEY hKey) {
-    bool isFake = false;
-    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
-    if (isFake) { RCPL_FreeFakeHandle(hKey); return ERROR_SUCCESS; }
-    LSTATUS status = RCPL_RegCloseKeyOriginal(hKey);
-    RCPL_UntrackKey(hKey);
-    return status;
-}
-
-static LSTATUS WINAPI RCPL_RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
-                                                LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    std::wstring path = RCPL_GetTrackedPath(hKey);
-    if (!path.empty()) {
-        std::wstring valueName = lpValueName ? lpValueName : L"";
-        LSTATUS outStatus;
-        if (RCPL_TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
-    }
-    bool isFake = false;
-    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
-    if (isFake) return ERROR_FILE_NOT_FOUND;
-    return RCPL_RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-}
-
-static LSTATUS WINAPI RCPL_RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
-                                            DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
-    std::wstring path = RCPL_GetTrackedPath(hkey);
-    if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
-    if (!path.empty()) {
-        std::wstring valueName = lpValue ? lpValue : L"";
-        LSTATUS outStatus;
-        if (RCPL_TryProvideValue(path, valueName, pdwType, (LPBYTE)pvData, pcbData, outStatus)) return outStatus;
-    }
-    return RCPL_RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-}
-
-static LSTATUS WINAPI RCPL_RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
-                                             LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
-                                             PFILETIME lpftLastWriteTime) {
-    bool isFake = false;
-    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
-
-    if (isFake) {
-        std::wstring path = RCPL_GetTrackedPath(hKey);
-        RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
-        std::wstring subName;
-        if (!RCPL_GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
-        if (lpcchName && *lpcchName < subName.size() + 1) {
-            *lpcchName = (DWORD)(subName.size() + 1);
-            return ERROR_MORE_DATA;
-        }
-        if (lpName) wcscpy_s(lpName, subName.size() + 1, subName.c_str());
-        if (lpcchName) *lpcchName = (DWORD)subName.size();
-        if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
-        return ERROR_SUCCESS;
-    }
-
-    std::wstring path = RCPL_GetTrackedPath(hKey);
-    bool isNamespace = RCPL_IsNameSpaceParentKey(path);
-
-    if (isNamespace && g_rcplSettings.suppressCompanySync.load()) {
-        DWORD targetVirtualIndex = dwIndex;
-        DWORD realIndex = 0;
-        DWORD foundCount = 0;
-        LSTATUS status;
-        wchar_t nameBuf[256];
-        DWORD origCap = lpcchName ? *lpcchName : 256;
-
-        while (true) {
-            LPWSTR namePtr = lpName ? lpName : nameBuf;
-            DWORD cch = origCap;
-            if (lpcchName) *lpcchName = origCap;
-            status = RCPL_RegEnumKeyExWOriginal(hKey, realIndex, namePtr, lpcchName ? lpcchName : &cch,
-                                                lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
-            if (status != ERROR_SUCCESS) break;
-            if (!RCPL_IsSuppressedNamespaceEntry(namePtr)) {
-                if (foundCount == targetVirtualIndex) return ERROR_SUCCESS;
-                foundCount++;
-            }
-            realIndex++;
-        }
-
-        if (status == ERROR_NO_MORE_ITEMS) {
-            std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
-            DWORD injectedIndex = dwIndex - foundCount;
-            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-            const wchar_t* clsid = clsids[injectedIndex].c_str();
-            size_t len = wcslen(clsid);
-            if (lpcchName && *lpcchName < len + 1) {
-                *lpcchName = (DWORD)(len + 1);
-                return ERROR_MORE_DATA;
-            }
-            if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
-            if (lpcchName) *lpcchName = (DWORD)len;
-            if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
-            return ERROR_SUCCESS;
-        }
-        return status;
-    }
-
-    LSTATUS status = RCPL_RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName,
-                                                lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
-    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
-        std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
-        DWORD realCount = 0;
-        wchar_t tmpBuf[256];
-        DWORD tmpCch;
-        while (true) {
-            tmpCch = 256;
-            if (RCPL_RegEnumKeyExWOriginal(hKey, realCount, tmpBuf, &tmpCch, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
-                break;
-            realCount++;
-        }
-        DWORD injectedIndex = dwIndex - realCount;
-        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-        const wchar_t* clsid = clsids[injectedIndex].c_str();
-        size_t len = wcslen(clsid);
-        if (lpcchName && *lpcchName < len + 1) {
-            *lpcchName = (DWORD)(len + 1);
-            return ERROR_MORE_DATA;
-        }
-        if (lpName && lpcchName) wcscpy_s(lpName, *lpcchName, clsid);
-        if (lpcchName) *lpcchName = (DWORD)len;
-        if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
-        return ERROR_SUCCESS;
-    }
-    return status;
-}
-
-static LSTATUS WINAPI RCPL_RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
-    bool isFake = false;
-    { std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex); isFake = g_rcplFakeHandles.count(hKey) > 0; }
-
-    if (isFake) {
-        std::wstring path = RCPL_GetTrackedPath(hKey);
-        RCPL_ClassifyResult cr = RCPL_ClassifyPath(path);
-        std::wstring subName;
-        if (!RCPL_GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
-        if (cchName <= subName.size()) return ERROR_MORE_DATA;
-        wcscpy_s(lpName, cchName, subName.c_str());
-        return ERROR_SUCCESS;
-    }
-
-    std::wstring path = RCPL_GetTrackedPath(hKey);
-    bool isNamespace = RCPL_IsNameSpaceParentKey(path);
-
-    if (isNamespace && g_rcplSettings.suppressCompanySync.load()) {
-        DWORD targetVirtualIndex = dwIndex;
-        DWORD realIndex = 0;
-        DWORD foundCount = 0;
-        LSTATUS status;
-        wchar_t nameBuf[256];
-        while (true) {
-            status = RCPL_RegEnumKeyWOriginal(hKey, realIndex, lpName ? lpName : nameBuf, cchName ? cchName : 256);
-            if (status != ERROR_SUCCESS) break;
-            if (!RCPL_IsSuppressedNamespaceEntry(lpName ? lpName : nameBuf)) {
-                if (foundCount == targetVirtualIndex) return ERROR_SUCCESS;
-                foundCount++;
-            }
-            realIndex++;
-        }
-        if (status == ERROR_NO_MORE_ITEMS) {
-            std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
-            DWORD injectedIndex = dwIndex - foundCount;
-            if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-            const wchar_t* clsid = clsids[injectedIndex].c_str();
-            size_t len = wcslen(clsid);
-            if (cchName <= len) return ERROR_MORE_DATA;
-            if (lpName) wcscpy_s(lpName, cchName, clsid);
-            return ERROR_SUCCESS;
-        }
-        return status;
-    }
-
-    LSTATUS status = RCPL_RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
-    if (isNamespace && status == ERROR_NO_MORE_ITEMS) {
-        std::vector<std::wstring> clsids = RCPL_GetNamespaceClsids();
-        DWORD realCount = 0;
-        wchar_t tmpBuf[256];
-        while (RCPL_RegEnumKeyWOriginal(hKey, realCount, tmpBuf, 256) == ERROR_SUCCESS)
-            realCount++;
-        DWORD injectedIndex = dwIndex - realCount;
-        if (injectedIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
-        const wchar_t* clsid = clsids[injectedIndex].c_str();
-        size_t len = wcslen(clsid);
-        if (cchName <= len) return ERROR_MORE_DATA;
-        if (lpName) wcscpy_s(lpName, cchName, clsid);
-        return ERROR_SUCCESS;
-    }
-    return status;
-}
-
-static void* RCPL_GetRegFunc(const char* name) {
-    HMODULE hKb = GetModuleHandleW(L"kernelbase.dll");
-    if (hKb) { void* p = (void*)GetProcAddress(hKb, name); if (p) return p; }
-    HMODULE hAdv = GetModuleHandleW(L"advapi32.dll");
-    if (!hAdv) hAdv = LoadLibraryW(L"advapi32.dll");
-    if (hAdv) { void* p = (void*)GetProcAddress(hAdv, name); if (p) return p; }
-    return nullptr;
-}
-
-static bool RCPL_InstallRegistryHooks() {
-    RCPL_LoadSettings();
-    RCPL_InitDisplayNames();
-
-    void* pRegOpenKeyExW    = RCPL_GetRegFunc("RegOpenKeyExW");
-    void* pRegCloseKey      = RCPL_GetRegFunc("RegCloseKey");
-    void* pRegQueryValueExW = RCPL_GetRegFunc("RegQueryValueExW");
-    void* pRegGetValueW     = RCPL_GetRegFunc("RegGetValueW");
-    void* pRegEnumKeyExW    = RCPL_GetRegFunc("RegEnumKeyExW");
-    void* pRegEnumKeyW      = RCPL_GetRegFunc("RegEnumKeyW");
-
-    if (!pRegOpenKeyExW || !pRegCloseKey || !pRegQueryValueExW || !pRegGetValueW || !pRegEnumKeyExW || !pRegEnumKeyW) {
-        Wh_Log(L"[RCPL] Failed to get one or more registry functions");
-        return false;
-    }
-
-    if (!Wh_SetFunctionHook(pRegOpenKeyExW,    (void*)RCPL_RegOpenKeyExWHook,    (void**)&RCPL_RegOpenKeyExWOriginal))    { Wh_Log(L"[RCPL] Failed to hook RegOpenKeyExW");    return false; }
-    if (!Wh_SetFunctionHook(pRegCloseKey,      (void*)RCPL_RegCloseKeyHook,      (void**)&RCPL_RegCloseKeyOriginal))      { Wh_Log(L"[RCPL] Failed to hook RegCloseKey");      return false; }
-    if (!Wh_SetFunctionHook(pRegQueryValueExW, (void*)RCPL_RegQueryValueExWHook, (void**)&RCPL_RegQueryValueExWOriginal)) { Wh_Log(L"[RCPL] Failed to hook RegQueryValueExW"); return false; }
-    if (!Wh_SetFunctionHook(pRegGetValueW,     (void*)RCPL_RegGetValueWHook,     (void**)&RCPL_RegGetValueWOriginal))     { Wh_Log(L"[RCPL] Failed to hook RegGetValueW");     return false; }
-    if (!Wh_SetFunctionHook(pRegEnumKeyExW,    (void*)RCPL_RegEnumKeyExWHook,    (void**)&RCPL_RegEnumKeyExWOriginal))    { Wh_Log(L"[RCPL] Failed to hook RegEnumKeyExW");    return false; }
-    if (!Wh_SetFunctionHook(pRegEnumKeyW,      (void*)RCPL_RegEnumKeyWHook,      (void**)&RCPL_RegEnumKeyWOriginal))      { Wh_Log(L"[RCPL] Failed to hook RegEnumKeyW");      return false; }
-
-    Wh_Log(L"[RCPL] Classic CPL registry virtualization hooks installed");
-    return true;
-}
-
-static void RCPL_Cleanup() {
-    std::lock_guard<std::mutex> lock(g_rcplKeyPathsMutex);
-    for (HKEY fake : g_rcplFakeHandles)
-        delete (int*)fake;
-    g_rcplFakeHandles.clear();
-    g_rcplKeyPaths.clear();
-    Wh_Log(L"[RCPL] Cleanup completed");
-}
-
-// ---------------------------------------------------------------------------
 // Experimental COM activation hook
 // ---------------------------------------------------------------------------
 
@@ -2022,6 +1395,7 @@ static bool TryInstallPniduiHook() {
         }
     }
 
+    // pnidui.dll
     WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
         {
             L"bool "
@@ -2052,44 +1426,52 @@ static DWORD WINAPI PniduiRetryThread(LPVOID) {
     if (g_pniduiRetryRunning) return 0;
     g_pniduiRetryRunning = true;
 
-    const int MAX_WAIT_CHECKS = 60;
-    const DWORD CHECK_INTERVAL = 500;
+    // Attesa in step da 50ms invece di 500ms: rende il thread reattivo
+    // allo stop quasi istantaneamente, evitando che Wh_ModUninit debba
+    // ricorrere a TerminateThread() (causa nota di instabilità di explorer.exe).
+    const int MAX_WAIT_MS = 30000;
+    const DWORD STEP_MS = 50;
     bool dllLoaded = false;
-    for (int i = 0; i < MAX_WAIT_CHECKS && !g_pniduiRetryStop; i++) {
+    for (int waited = 0; waited < MAX_WAIT_MS && !g_pniduiRetryStop && !g_unloading.load(); waited += STEP_MS) {
         if (GetModuleHandleW(L"pnidui.dll") != nullptr) { dllLoaded = true; break; }
-        Sleep(CHECK_INTERVAL);
+        Sleep(STEP_MS);
     }
 
-    if (dllLoaded) TryInstallPniduiHook();
+    if (dllLoaded && !g_pniduiRetryStop && !g_unloading.load()) TryInstallPniduiHook();
     g_pniduiRetryRunning = false;
     return 0;
 }
 
 static void InstallImmersiveMenuHooks() {
-    struct DllHook { const wchar_t* dll; ICMH_CAODTM_t* orig; } targets[] = {
-        { L"SndVolSSO.dll", &g_icmhOrig_SndVolSSO },
-    };
-
-    for (auto& t : targets) {
-        HMODULE hMod = LoadLibraryExW(t.dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!hMod) continue;
-
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-            {
-                L"bool "
+    // NOTA IMPORTANTE: WindhawkUtils::HookSymbols() non va richiamato una seconda
+    // volta sullo stesso modulo già hookato: pnidui.dll/SndVolSSO.dll/shell32.dll
+    // restano residenti per tutta la vita del processo explorer.exe anche quando
+    // il tray/toolbar viene ricreato (solo le finestre vengono ricreate, non i
+    // moduli). Ri-tentare l'hook in quei casi non solo è inutile, ma può
+    // fallire o corrompere il puntatore alla funzione originale già salvato,
+    // rompendo un redirect che fino a quel momento funzionava. Per questo ogni
+    // hook qui è protetto da un proprio flag "già installato".
+    if (!g_sndVolSSOHookInstalled) {
+        HMODULE hMod = LoadLibraryExW(L"SndVolSSO.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (hMod) {
+            WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+                {
+                    L"bool "
 #ifdef _WIN64
-                L"__cdecl"
+                    L"__cdecl"
 #else
-                L"__stdcall"
+                    L"__stdcall"
 #endif
-                L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
-                L"(struct HMENU__ *,struct HWND__* )"
-            },
-            (void**)t.orig,
-            (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
-            false
-        }};
-        WindhawkUtils::HookSymbols(hMod, hooks, 1);
+                    L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+                    L"(struct HMENU__ *,struct HWND__* )"
+                },
+                (void**)&g_icmhOrig_SndVolSSO,
+                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+                false
+            }};
+            if (WindhawkUtils::HookSymbols(hMod, hooks, 1))
+                g_sndVolSSOHookInstalled = true;
+        }
     }
 
     if (!TryInstallPniduiHook()) {
@@ -2099,7 +1481,7 @@ static void InstallImmersiveMenuHooks() {
         }
     }
 
-    if (g_isWin11) {
+    if (g_isWin11 && !g_shell32DevicesHookInstalled) {
         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
         if (hShell32) {
             WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {{
@@ -2117,7 +1499,8 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
                 false
             }};
-            WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1);
+            if (WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1))
+                g_shell32DevicesHookInstalled = true;
         }
     }
 }
@@ -2149,21 +1532,50 @@ static void ReinitializeTrayRedirect() {
     Wh_Log(L"[TRAY-RESTART] Reinitializing tray redirect hooks");
 
     RemoveTraySubclass();
-    g_sndVolSSOBase = nullptr;
-    g_sndVolSSOEnd = nullptr;
-    g_pniduiBase = nullptr;
-    g_pniduiEnd = nullptr;
-    {
-        std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
-        g_pniduiHookInstalled = false;
+
+    // pnidui.dll/SndVolSSO.dll/shell32.dll restano residenti per tutta la vita
+    // del processo explorer.exe: un riavvio del tray/toolbar ricrea solo le
+    // finestre (Shell_TrayWnd/SysPager/ToolbarWindow32), non le DLL. Prima si
+    // azzerava incondizionatamente lo stato dell'hook pnidui a ogni riavvio,
+    // forzando un secondo WindhawkUtils::HookSymbols() sullo stesso modulo
+    // già hookato — cosa che Windhawk non supporta e che rompeva il redirect
+    // che fino a quel momento funzionava (da qui la dipendenza "goffa" dal
+    // momento di attivazione del mod). Ora l'hook viene reinstallato solo se
+    // il modulo è sparito o è stato ricaricato a un indirizzo diverso.
+    bool pniduiModuleChanged = false;
+    HMODULE hPniduiNow = GetModuleHandleW(L"pnidui.dll");
+    if (hPniduiNow) {
+        MODULEINFO mi{};
+        if (GetModuleInformation(GetCurrentProcess(), hPniduiNow, &mi, sizeof(mi))) {
+            if ((BYTE*)mi.lpBaseOfDll != g_pniduiBase) pniduiModuleChanged = true;
+        }
+    } else if (g_pniduiBase != nullptr) {
+        pniduiModuleChanged = true;
     }
-    if (g_settings.redirectSystemTray) SetupTraySubclass();
-    if (!TryInstallPniduiHook()) {
-        if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
-            g_pniduiRetryStop = false;
-            g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
+
+    if (pniduiModuleChanged) {
+        g_pniduiBase = nullptr;
+        g_pniduiEnd = nullptr;
+        {
+            std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+            g_pniduiHookInstalled = false;
         }
     }
+
+    if (g_settings.redirectSystemTray) SetupTraySubclass();
+
+    if (!g_pniduiHookInstalled) {
+        if (!TryInstallPniduiHook()) {
+            if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
+                g_pniduiRetryStop = false;
+                g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
+            }
+        }
+    }
+
+    // SndVolSSO/shell32 sono già protetti dai rispettivi flag "già installato"
+    // dentro InstallImmersiveMenuHooks(), quindi è sicuro richiamarla sempre:
+    // farà solo lavoro utile se manca ancora qualcosa da hookare.
     InstallImmersiveMenuHooks();
 }
 
@@ -2219,9 +1631,16 @@ static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
     const DWORD FAST_INTERVAL_MS = 500;
     const DWORD SLOW_INTERVAL_MS = 3000;
     int tick = 0;
-    
-    // Aspetta che il sistema si stabilizzi all'avvio
-    Sleep(2000);
+
+    // Aspetta che il sistema si stabilizzi all'avvio, ma in modo interrompibile:
+    // uno Sleep() bloccante qui impedirebbe a Wh_ModUninit di terminare questo
+    // thread in tempo, forzando una TerminateThread() che può destabilizzare
+    // explorer.exe (causa del riavvio della shell durante la ricompilazione).
+    if (g_hWatchdogStopEvent) {
+        WaitForSingleObject(g_hWatchdogStopEvent, 2000);
+    } else {
+        for (int i = 0; i < 40 && !g_traySubclassWatchdogStop; i++) Sleep(50);
+    }
 
     while (!g_traySubclassWatchdogStop) {
         DWORD waitTime = tick < FAST_PHASE_CHECKS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
@@ -2342,7 +1761,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Redirect Settings to Control Panel + Restore Classic CPLs v10.0.26-stable");
+    Wh_Log(L"Redirect Settings to Control Panel initialized");
     
     // NUOVO: Verifica se siamo nel processo explorer.exe corretto (quello che possiede la Shell_TrayWnd)
     // Se non lo siamo, rifiuta l'inizializzazione per evitare conflitti tra processi fantasma
@@ -2361,7 +1780,9 @@ BOOL Wh_ModInit() {
     // Se Shell_TrayWnd non esiste affatto, procediamo comunque (potrebbe non essere ancora creata)
     
     std::lock_guard<std::mutex> lock(g_initMutex);
-    
+
+    g_unloading.store(false);
+
     // Inizializzazione di base
     DetectWindowsVersion();
     LoadSettings();
@@ -2399,10 +1820,7 @@ BOOL Wh_ModInit() {
     // CreateWindowEx hook per tray
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     
-    // RCPL hooks
-    if (!g_rcplHooksInstalled) {
-        g_rcplHooksInstalled = RCPL_InstallRegistryHooks();
-    }
+
     
     // Tray subsystem
     if (g_settings.redirectSystemTray) {
@@ -2450,7 +1868,12 @@ BOOL Wh_ModInit() {
 }
 void Wh_ModUninit() {
     Wh_Log(L"[STABLE] Uninit started");
-    
+
+    // 0. Segnala a tutti i thread in background che il mod sta per scaricarsi,
+    // così le loro attese cooperative terminano subito invece di forzare
+    // TerminateThread() più avanti (causa nota di instabilità di explorer.exe).
+    g_unloading.store(true);
+
     // 1. Disabilita subito il mod per bloccare nuove chiamate
     g_modActive.store(false);
     
@@ -2522,8 +1945,7 @@ void Wh_ModUninit() {
     // 7. Rimuovi subclass della tray
     RemoveTraySubclass();
     
-    // 8. Pulisci RCPL
-    RCPL_Cleanup();
+
     g_rcplHooksInstalled = false;
     
     Wh_Log(L"[STABLE] Uninit completed");
@@ -2541,18 +1963,34 @@ static void SafeReinitializeAll() {
     
     // Pulisci stato tray senza rimuovere gli hook di sistema
     RemoveTraySubclass();
-    g_sndVolSSOBase = nullptr;
-    g_sndVolSSOEnd = nullptr;
-    g_pniduiBase = nullptr;
-    g_pniduiEnd = nullptr;
-    {
-        std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
-        g_pniduiHookInstalled = false;
+
+    // Vedi il commento in ReinitializeTrayRedirect(): pnidui.dll resta
+    // residente tra un cambio di impostazioni e l'altro, quindi non va
+    // ri-hookato incondizionatamente (Windhawk non supporta un secondo
+    // HookSymbols sullo stesso modulo). Invalidiamo solo se è realmente
+    // sparito o è stato ricaricato a un indirizzo diverso.
+    bool pniduiModuleChanged = false;
+    HMODULE hPniduiNow = GetModuleHandleW(L"pnidui.dll");
+    if (hPniduiNow) {
+        MODULEINFO mi{};
+        if (GetModuleInformation(GetCurrentProcess(), hPniduiNow, &mi, sizeof(mi))) {
+            if ((BYTE*)mi.lpBaseOfDll != g_pniduiBase) pniduiModuleChanged = true;
+        }
+    } else if (g_pniduiBase != nullptr) {
+        pniduiModuleChanged = true;
+    }
+
+    if (pniduiModuleChanged) {
+        g_pniduiBase = nullptr;
+        g_pniduiEnd = nullptr;
+        {
+            std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
+            g_pniduiHookInstalled = false;
+        }
     }
     
     // Ricarica tutto lo stato
     LoadSettings();
-    RCPL_LoadSettings();
     BuildChildEnvironment();
     InitMappings();
     
@@ -2580,10 +2018,13 @@ static void SafeReinitializeAll() {
 }
 static DWORD WINAPI DeferredReinitThreadProc(LPVOID) {
     Wh_Log(L"[STABLE] Deferred reinit thread started");
-    
-    // Aspetta 500ms per sicurezza (chiamate pendenti)
-    Sleep(500);
-    
+    for (int i = 0; i < 10 && !g_unloading.load(); i++) Sleep(50);
+
+    if (g_unloading.load()) {
+        g_reinitPending.store(false);
+        return 0;
+    }
+
     // Reinizializza
     SafeReinitializeAll();
     
@@ -2597,9 +2038,9 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"[STABLE] Settings changed - scheduling safe reinit");
     
     if (!g_reinitPending.exchange(true)) {
-    if (g_reinitThread) CloseHandle(g_reinitThread);
-    g_reinitThread = CreateThread(nullptr, 0, DeferredReinitThreadProc, nullptr, 0, nullptr);
-} else {
+        if (g_reinitThread) CloseHandle(g_reinitThread);
+        g_reinitThread = CreateThread(nullptr, 0, DeferredReinitThreadProc, nullptr, 0, nullptr);
+    } else {
         Wh_Log(L"[STABLE] Reinit already pending, skipping duplicate");
     }
 }
