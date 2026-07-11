@@ -1395,7 +1395,6 @@ static bool TryInstallPniduiHook() {
         }
     }
 
-    // pnidui.dll
     WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
         {
             L"bool "
@@ -1454,7 +1453,7 @@ static void InstallImmersiveMenuHooks() {
     if (!g_sndVolSSOHookInstalled) {
         HMODULE hMod = LoadLibraryExW(L"SndVolSSO.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hMod) {
-            WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+            WindhawkUtils::SYMBOL_HOOK sndVolSSODllHooks[] = {{
                 {
                     L"bool "
 #ifdef _WIN64
@@ -1469,7 +1468,7 @@ static void InstallImmersiveMenuHooks() {
                 (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
                 false
             }};
-            if (WindhawkUtils::HookSymbols(hMod, hooks, 1))
+            if (WindhawkUtils::HookSymbols(hMod, sndVolSSODllHooks, 1))
                 g_sndVolSSOHookInstalled = true;
         }
     }
