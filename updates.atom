@@ -2,12 +2,74 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-10T14:07:43.000Z</updated>
+    <updated>2026-07-11T18:07:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Audio Visualizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-audio-visualizer#529a6018c34b778035bfe79a96650579439c0ca2</id>
+        <link href="https://windhawk.net/mods/desktop-audio-visualizer"/>
+        <updated>2026-07-11T18:07:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizer100">Desktop Audio Visualizer 1.0.0</h1>
+<p>A real-time audio spectrum visualizer that displays on your Windows desktop. Captures system audio output and renders animated frequency bars directly on the desktop background.</p>
+<p><img src="https://i.imgur.com/N2QScsV.gif" alt="video" /></p>
+<h2 id="features">Features</h2>
+<h3 id="visualstyles">Visual Styles</h3>
+<ul>
+<li><strong>6 Bar Shapes</strong>:</li>
+<li><strong>Stereo</strong> — classic frequency spectrum bars</li>
+<li><strong>Mountain</strong> — center-peak, bars taper toward the edges</li>
+<li><strong>Mirror</strong> — bars grow from edges toward center</li>
+<li><strong>Wave</strong> — bars modulated by a sine wave over time</li>
+<li><strong>Breathe</strong> — slow breathing pulse synchronized with audio</li>
+<li><strong>Dots</strong> — bar columns made of stacked shapes</li>
+<li><strong>7 Color Modes</strong>:</li>
+<li><strong>Solid</strong> — single flat color</li>
+<li><strong>Static gradient</strong> — fixed color gradient across bars</li>
+<li><strong>Reactive gradient</strong> — gradient shifts toward second color with audio level</li>
+<li><strong>Windows accent color</strong> — automatically matches your Windows accent color, updates instantly on change</li>
+<li><strong>Album art</strong> — flat dominant color extracted from the currently playing track's cover art</li>
+<li><strong>Dynamic album</strong> — gradient from primary to secondary album art color; shifts with bar position and audio level</li>
+<li><strong>Acrylic</strong> — fixed RGB color with amplitude-driven alpha (nearly transparent at silence, semi-opaque at full volume)</li>
+<li><strong>2 Orientations</strong>: Horizontal (bars grow vertically) or Vertical (bars grow horizontally)</li>
+<li><strong>Vertical Anchor</strong>: Control bar growth direction — Bottom, Top, or Middle</li>
+</ul>
+<h3 id="customization">Customization</h3>
+<ul>
+<li><strong>Bar Configuration</strong>: Count (1-1000), thickness, gap, max size, idle size, per-corner radius (<code>"10"</code> or <code>"10 10 0 0"</code>)</li>
+<li><strong>Position Control</strong>: Freely position on any monitor with horizontal/vertical percentage coordinates</li>
+<li><strong>Background Effects</strong>:</li>
+<li>Optional background panel with padding, per-corner radius and border</li>
+<li>Wallpaper blur effect behind the background</li>
+<li>Custom ARGB hex colors for background and border</li>
+</ul>
+<h3 id="audioprocessing">Audio Processing</h3>
+<ul>
+<li><strong>WASAPI Loopback Capture</strong>: Captures all system audio output in real time</li>
+<li><strong>Real-time FFT</strong>: 7-band frequency spectrum with Hann windowing</li>
+<li><strong>6 EQ Presets</strong>: Balanced, Bass, Rock, Pop, Jazz, Electronic</li>
+<li><strong>Adjustable Sensitivity</strong>: 0–300 range</li>
+</ul>
+<h3 id="performance">Performance</h3>
+<ul>
+<li><strong>Adjustable Frame Rate</strong>: Set any FPS value for maximum smoothness or power-saving rendering</li>
+<li><strong>Fullscreen Pause</strong>: Detects both exclusive fullscreen (DX9/11) and borderless fullscreen windows; pauses automatically and resumes when the app closes</li>
+<li><strong>Silence Detection</strong>: Reduces refresh rate after a configurable idle period to save CPU/GPU</li>
+</ul>
+<hr />
+<h3 id="credits">Credits</h3>
+<ul>
+<li><strong><a href="https://github.com/Salyts">Salyts</a></strong> — Author of Desktop Audio Visualizer</li>
+<li>Borrowed the audio visualizer code from <strong><a href="https://github.com/GR0UD">GR0UD</a></strong>.</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Windows Photo Viewer Redirect 1.4.0]]></title>
         <id>https://windhawk.net/mods/classic-photo-viewer#361304dca127c7c6ac8ae9e6af9e8cbcf96399f3</id>
@@ -444,17 +506,6 @@ a mesh gradient, or an energy-flame visual.</li>
         <author>
             <name>usho</name>
             <uri>https://github.com/usho-lear</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Inactive Menubar Greying 1.2]]></title>
-        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#c31d06a195bfa0cf47cb700c22d23b5c68f78709</id>
-        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
-        <updated>2026-07-04T11:02:59.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove unwanted effects, simplify code, remove a memory leak</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

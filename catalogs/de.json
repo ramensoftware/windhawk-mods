@@ -3091,6 +3091,37 @@
         "version": "1.0"
       }
     },
+    "desktop-audio-visualizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783793263000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783793263000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Salyts",
+        "compilerOptions": "-ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -lgdi32 -lshcore -lshlwapi -lole32 -lshell32 -lksuser -lwindowscodecs -lruntimeobject -lwindowsapp -luuid -luser32 -ladvapi32",
+        "description": "Real-time audio visualizer on your Windows desktop with customizable appearance",
+        "github": "https://github.com/Salyts",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Desktop Audio Visualizer",
+        "version": "1.0.0"
+      }
+    },
     "desktop-icons-view": {
       "details": {
         "defaultSorting": 1099,
