@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id                 desktop-audio-visualizer
+// @id                 desktop-audio-visualizer1
 // @name               Desktop Audio Visualizer
 // @description        Real-time audio visualizer on your Windows desktop with customizable appearance
 // @description:ru-RU  Аудиовизуализатор в реальном времени на рабочем столе Windows с настраиваемым внешним видом
@@ -56,7 +56,7 @@ A real-time audio spectrum visualizer that displays on your Windows desktop. Cap
 * **Adjustable Sensitivity**: 0–300 range
 
 ### Performance
-* **Adjustable Frame Rate**: Higher = smoother. 60 is good for most displays, 120 for high refresh rate monitors.
+* **Adjustable Frame Rate**: Set any FPS value for maximum smoothness or power-saving rendering
 * **Fullscreen Pause**: Detects both exclusive fullscreen (DX9/11) and borderless fullscreen windows; pauses automatically and resumes when the app closes
 * **Silence Detection**: Reduces refresh rate after a configurable idle period to save CPU/GPU
 
@@ -64,7 +64,7 @@ A real-time audio spectrum visualizer that displays on your Windows desktop. Cap
 
 ### Credits
 * **[Salyts](https://github.com/Salyts)** — Author of Desktop Audio Visualizer
-* **[GR0UD](https://github.com/GR0UD)** — Audio capture and FFT engine
+* Borrowed the audio visualizer code from **[GR0UD](https://github.com/GR0UD)**.
 
 */
 // ==/WindhawkModReadme==
@@ -266,7 +266,6 @@ A real-time audio spectrum visualizer that displays on your Windows desktop. Cap
 #include <audioclient.h>
 #include <wrl/client.h>
 #include <wincodec.h>
-#include <mutex>
 
 #include <algorithm>
 #include <atomic>
@@ -283,8 +282,6 @@ using namespace winrt::Windows::Storage::Streams;
 
 using Microsoft::WRL::ComPtr;
 
-#define TIMER_ID_OVERLAY_REFRESH 1
-
 #define TIMER_ID_MSG_DISPLAY_CHANGE 1
 #define TIMER_ID_MSG_RECREATE_OVERLAY 2
 #define TIMER_ID_MSG_WALLPAPER_REFRESH 3
@@ -292,6 +289,7 @@ using Microsoft::WRL::ComPtr;
 
 #define WM_APP_CLEANUP (WM_APP + 1)
 #define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
+#define WM_APP_RENDER_TICK (WM_APP + 3)
 #define OVERLAY_WINDOW_CLASS (L"DesktopAudioVisOverlay_" WH_MOD_ID)
 #define MESSAGE_WINDOW_CLASS (L"DesktopAudioVisMessage_" WH_MOD_ID)
 
@@ -354,7 +352,7 @@ ComPtr<ID2D1Device> g_d2dDevice;
 
 HWND g_messageWnd;
 
-HWND g_overlayWnd;
+std::atomic<HWND> g_overlayWnd{nullptr};
 ComPtr<IDXGISwapChain1> g_swapChain;
 ComPtr<ID2D1DeviceContext> g_dc;
 ComPtr<IDCompositionDevice> g_compositionDevice;
@@ -378,6 +376,10 @@ std::thread* g_captureThread = nullptr;
 HANDLE g_captureEvent = nullptr;
 std::atomic<bool> g_deviceChanged{false};
 std::atomic<float> g_bands[VIZ_NUM_BANDS] = {};
+
+std::thread* g_renderThread = nullptr;
+std::atomic<bool> g_renderThreadRunning{false};
+std::atomic<bool> g_renderTickPending{false};
 
 float g_hannWindow[VIZ_FFT_SIZE] = {};
 float g_twiddleRe[VIZ_FFT_SIZE / 2] = {};
@@ -410,8 +412,8 @@ static std::atomic<bool>  g_albumArtFetchPending{false};
 static std::atomic<DWORD> g_accentColorCache{0xFF0078D4};
 
 static HANDLE g_gsmtcStopEvent = nullptr;
-static std::thread g_gsmtcThread;
-static HANDLE g_albumArtDoneEvent = nullptr;
+[[clang::no_destroy]] static std::thread g_gsmtcThread;
+static std::thread* g_albumArtThread = nullptr;
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
@@ -620,16 +622,18 @@ HWND GetWorkerW() {
     return hWorkerW;
 }
 
-bool IsWindowFullscreen(HWND hwnd) {
+bool IsWindowFullscreen(HWND hwnd, HMONITOR targetMonitor = nullptr) {
     if (!hwnd || !IsWindowVisible(hwnd)) return false;
-    
+
     RECT windowRect;
     if (!GetWindowRect(hwnd, &windowRect)) return false;
-    
+
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (targetMonitor && monitor != targetMonitor) return false;
+
     MONITORINFO monitorInfo = {sizeof(MONITORINFO)};
     if (!GetMonitorInfo(monitor, &monitorInfo)) return false;
-    
+
     return windowRect.left <= monitorInfo.rcMonitor.left &&
            windowRect.top <= monitorInfo.rcMonitor.top &&
            windowRect.right >= monitorInfo.rcMonitor.right &&
@@ -637,6 +641,23 @@ bool IsWindowFullscreen(HWND hwnd) {
 }
 
 bool IsFullscreenOrGameActive() {
+    HMONITOR targetMonitor = GetMonitorById(g_settings.monitor - 1);
+    if (!targetMonitor) targetMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
+
+    HWND hwndForeground = GetForegroundWindow();
+    if (!hwndForeground) return false;
+
+    WCHAR className[256];
+    if (GetClassName(hwndForeground, className, ARRAYSIZE(className))) {
+        if (_wcsicmp(className, L"Progman") == 0 ||
+            _wcsicmp(className, L"WorkerW") == 0 ||
+            _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+            return false;
+        }
+    }
+
+    HMONITOR foregroundMonitor = MonitorFromWindow(hwndForeground, MONITOR_DEFAULTTONEAREST);
+    if (foregroundMonitor != targetMonitor) return false;
 
     QUERY_USER_NOTIFICATION_STATE state;
     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
@@ -644,19 +665,8 @@ bool IsFullscreenOrGameActive() {
             return true;
     }
 
-    HWND hwndForeground = GetForegroundWindow();
-    if (hwndForeground) {
-        WCHAR className[256];
-        if (GetClassName(hwndForeground, className, ARRAYSIZE(className))) {
-            if (_wcsicmp(className, L"Progman") == 0 ||
-                _wcsicmp(className, L"WorkerW") == 0 ||
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                return false;
-            }
-        }
-        if (IsWindowFullscreen(hwndForeground))
-            return true;
-    }
+    if (IsWindowFullscreen(hwndForeground, targetMonitor))
+        return true;
 
     return false;
 }
@@ -704,25 +714,32 @@ void FetchAlbumArtColorAsync() {
     if (!g_albumArtFetchPending.compare_exchange_strong(expected, true))
         return;
 
-    std::thread([]() {
+    if (g_albumArtThread) {
+        if (g_albumArtThread->joinable())
+            g_albumArtThread->join();
+        delete g_albumArtThread;
+        g_albumArtThread = nullptr;
+    }
+
+    g_albumArtThread = new std::thread([]() {
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
             auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-            if (!mgr) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!mgr) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
             auto session = mgr.GetCurrentSession();
-            if (!session) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!session) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             auto props = session.TryGetMediaPropertiesAsync().get();
-            if (!props) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!props) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             auto thumbRef = props.Thumbnail();
-            if (!thumbRef) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!thumbRef) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             auto stream = thumbRef.OpenReadAsync().get();
-            if (!stream) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!stream) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             UINT64 sz = stream.Size();
-            if (sz == 0 || sz > 4 * 1024 * 1024) { g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (sz == 0 || sz > 4 * 1024 * 1024) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             DataReader reader(stream);
             reader.LoadAsync((UINT32)sz).get();
@@ -733,10 +750,10 @@ void FetchAlbumArtColorAsync() {
             IWICImagingFactory* pFactory = nullptr;
             if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                         IID_PPV_ARGS(&pFactory))) || !pFactory) {
-                g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return;
+                winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return;
             }
             IStream* pStream = SHCreateMemStream(thumbBytes.data(), (UINT)thumbBytes.size());
-            if (!pStream) { pFactory->Release(); g_albumArtFetchPending.store(false); winrt::uninit_apartment(); return; }
+            if (!pStream) { pFactory->Release(); winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
 
             IWICBitmapDecoder* pDecoder = nullptr;
             IWICBitmapFrameDecode* pFrame = nullptr;
@@ -820,16 +837,15 @@ void FetchAlbumArtColorAsync() {
                 }
             }
         } catch (...) {}
-        g_albumArtFetchPending.store(false);
-        if (g_albumArtDoneEvent) SetEvent(g_albumArtDoneEvent);
         try { winrt::uninit_apartment(); } catch (...) {}
-    }).detach();
+        g_albumArtFetchPending.store(false);
+    });
 }
 
 static winrt::event_token g_gsmtcMediaPropsToken{};
 static winrt::event_token g_gsmtcSessionToken{};
-static GlobalSystemMediaTransportControlsSessionManager g_gsmtcMgr{ nullptr };
-static GlobalSystemMediaTransportControlsSession        g_gsmtcSession{ nullptr };
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSessionManager g_gsmtcMgr{ nullptr };
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSession        g_gsmtcSession{ nullptr };
 
 void SetupGsmtcSessionListener() {
     if (!g_gsmtcMgr) return;
@@ -2009,32 +2025,68 @@ void RenderVisualizer() {
     g_swapChain->Present(1, 0);
 }
 
-void ScheduleNextUpdate() {
-    if (!g_overlayWnd) return;
-    if (g_fullscreenPaused.load()) return;
+void RenderThreadProc() {
+    ULONGLONG lastRenderTick = 0;
 
-    int fps = std::max(1, g_settings.targetFps);
-    UINT normalInterval = 1000 / (UINT)fps;
-
-    UINT interval = normalInterval;
-    if (g_settings.pauseWhenSilentSeconds > 0) {
-        ULONGLONG lastAudible = g_lastAudibleTickMs.load(std::memory_order_relaxed);
-        ULONGLONG idleMs = GetTickCount64() - lastAudible;
-        g_slowMode = idleMs > (ULONGLONG)g_settings.pauseWhenSilentSeconds * 1000ULL;
-        if (g_slowMode) {
-            interval = 200;
+    while (g_renderThreadRunning.load(std::memory_order_relaxed)) {
+        HRESULT hr = DwmFlush();
+        if (FAILED(hr)) {
+            Sleep(8);
         }
-    } else {
-        g_slowMode = false;
-    }
 
-    SetTimer(g_overlayWnd, TIMER_ID_OVERLAY_REFRESH, interval, nullptr);
+        if (!g_renderThreadRunning.load(std::memory_order_relaxed) || g_unloading.load())
+            break;
+
+        HWND overlayWnd = g_overlayWnd.load(std::memory_order_relaxed);
+        if (!overlayWnd || g_fullscreenPaused.load(std::memory_order_relaxed)) {
+            lastRenderTick = 0;
+            continue;
+        }
+
+        int fps = std::max(1, g_settings.targetFps);
+        UINT interval = 1000 / (UINT)fps;
+        if (g_settings.pauseWhenSilentSeconds > 0) {
+            ULONGLONG lastAudible = g_lastAudibleTickMs.load(std::memory_order_relaxed);
+            ULONGLONG idleMs = GetTickCount64() - lastAudible;
+            g_slowMode = idleMs > (ULONGLONG)g_settings.pauseWhenSilentSeconds * 1000ULL;
+            if (g_slowMode) {
+                interval = 200;
+            }
+        } else {
+            g_slowMode = false;
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (lastRenderTick != 0 && (now - lastRenderTick) < interval)
+            continue;
+        lastRenderTick = now;
+
+        bool expected = false;
+        if (g_renderTickPending.compare_exchange_strong(expected, true)) {
+            PostMessage(overlayWnd, WM_APP_RENDER_TICK, 0, 0);
+        }
+    }
+}
+
+void StartRenderThread() {
+    if (g_renderThread) return;
+    g_renderThreadRunning.store(true, std::memory_order_relaxed);
+    g_renderThread = new std::thread(RenderThreadProc);
+}
+
+void StopRenderThread() {
+    g_renderThreadRunning.store(false, std::memory_order_relaxed);
+    if (g_renderThread) {
+        if (g_renderThread->joinable()) g_renderThread->join();
+        delete g_renderThread;
+        g_renderThread = nullptr;
+    }
+    g_renderTickPending.store(false, std::memory_order_relaxed);
 }
 
 void PauseForFullscreen() {
     if (g_fullscreenPaused.exchange(true)) return;
     Wh_Log(L"Pausing visualizer: fullscreen detected");
-    if (g_overlayWnd) KillTimer(g_overlayWnd, TIMER_ID_OVERLAY_REFRESH);
     StopVizCaptureThread();
     if (g_dc && g_swapChain) {
         g_dc->BeginDraw();
@@ -2050,7 +2102,6 @@ void ResumeFromFullscreen() {
     StartVizCaptureThread();
     if (g_overlayWnd) {
         RenderVisualizer();
-        ScheduleNextUpdate();
     }
 }
 
@@ -2085,13 +2136,12 @@ void ApplySettingsChanged();
 
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-        case WM_TIMER:
-            if (!g_unloading && wParam == TIMER_ID_OVERLAY_REFRESH && !g_fullscreenPaused.load()) {
+        case WM_APP_RENDER_TICK:
+            g_renderTickPending.store(false, std::memory_order_relaxed);
+            if (!g_unloading && !g_fullscreenPaused.load()) {
                 RenderVisualizer();
-                ScheduleNextUpdate();
-                return 0;
             }
-            break;
+            return 0;
 
         case WM_WINDOWPOSCHANGED: {
             const WINDOWPOS* wp = (const WINDOWPOS*)lParam;
@@ -2220,6 +2270,8 @@ bool EnsureLazyInitialized() {
         g_fullscreenPaused.store(true);
     }
 
+    StartRenderThread();
+
     g_initSucceeded = true;
     return true;
 }
@@ -2257,7 +2309,6 @@ void CreateOverlayWindow() {
     if (CreateSwapChainResources(width, height)) {
         if (!g_fullscreenPaused.load()) {
             RenderVisualizer();
-            ScheduleNextUpdate();
         }
     }
 }
@@ -2445,9 +2496,6 @@ BOOL Wh_ModInit() {
 
     RefreshAccentColorCache();
 
-    if (!g_albumArtDoneEvent)
-        g_albumArtDoneEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
 
@@ -2474,6 +2522,8 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
+    StopRenderThread();
+
     if (g_overlayWnd) SendMessage(g_overlayWnd, WM_APP_CLEANUP, 0, 0);
     if (g_messageWnd) SendMessage(g_messageWnd, WM_APP_CLEANUP, 0, 0);
 
@@ -2494,13 +2544,17 @@ void Wh_ModUninit() {
         g_gsmtcStopEvent = nullptr;
     }
 
-    if (g_albumArtFetchPending.load()) {
-        if (g_albumArtDoneEvent)
-            WaitForSingleObject(g_albumArtDoneEvent, 3000);
-    }
-    if (g_albumArtDoneEvent) {
-        CloseHandle(g_albumArtDoneEvent);
-        g_albumArtDoneEvent = nullptr;
+    if (g_albumArtThread) {
+        if (g_albumArtThread->joinable()) {
+            HANDLE hThread = g_albumArtThread->native_handle();
+            if (WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
+                g_albumArtThread->join();
+            } else {
+                g_albumArtThread->detach();
+            }
+        }
+        delete g_albumArtThread;
+        g_albumArtThread = nullptr;
     }
     g_gsmtcStarted = false;
 }
@@ -2515,8 +2569,8 @@ void ApplySettingsChanged() {
 
     if ((g_settings.colorMode == VizColorMode::AlbumArt ||
          g_settings.colorMode == VizColorMode::DynamicAlbum) &&
-        (oldColorMode != VizColorMode::AlbumArt &&
-         oldColorMode != VizColorMode::DynamicAlbum || !g_albumArtColorReady.load()))
+        ((oldColorMode != VizColorMode::AlbumArt &&
+          oldColorMode != VizColorMode::DynamicAlbum) || !g_albumArtColorReady.load()))
         FetchAlbumArtColorAsync();
 
     if (!g_lazyInitialized || !g_initSucceeded) return;
@@ -2538,7 +2592,6 @@ void ApplySettingsChanged() {
 
     if (!g_fullscreenPaused.load()) {
         RenderVisualizer();
-        ScheduleNextUpdate();
     }
 }
 
