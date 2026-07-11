@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
-// @description    Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.
+// @description    This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components.
 // @version        10.0.30
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
@@ -40,8 +40,11 @@ Panel pages, using only native Windows components.
 
 ## Limitations
 
-- The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some configurations if explorer is restarted the redirects might not work (especially on Windows 11).
+- The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some Windows 11 configurations if explorer is restarted the network system tray redirect might not work.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
+
+**Note**: For a better experience on Windows 11, it is recommended to pair this mod with Anixx's **[Restore the classic Personalization and other CPLs](https://windhawk.net/mods/restore-classic-cpls)** that re-enables some of the classic applets from older Windows versions.
+
 ---
 
 ## Credits
