@@ -2016,9 +2016,31 @@ BOOL CycleAudioDevice(int direction) {
         pPolicyConfig->Release();
     }
 
-    // If persistent mute was active, re-apply mute to the newly defaulted device.
+    // Unmute the previously-tracked device before muting the new one.
+    EnterCriticalSection(&g_stateLock);
+    WCHAR oldMutedId[512] = {};
+    lstrcpynW(oldMutedId, g_mutedDeviceId, 512);
+    LeaveCriticalSection(&g_stateLock);
+    if (oldMutedId[0]) {
+        ApplyMute(oldMutedId, FALSE);
+    }
+
+    // If persistent mute was active, re-apply mute to the newly defaulted device
+    // and update the tracked device ID so unmute-on-disable finds the right device.
     if (keepMute) {
-        ApplyMute(nullptr, TRUE);
+        IMMDevice* pNewDefault = nullptr;
+        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewDefault))) {
+            LPWSTR newDevId = nullptr;
+            if (SUCCEEDED(pNewDefault->GetId(&newDevId))) {
+                ApplyMute(newDevId, TRUE);
+                EnterCriticalSection(&g_stateLock);
+                lstrcpynW(g_mutedDeviceId, newDevId, 512);
+                LeaveCriticalSection(&g_stateLock);
+                Wh_SetStringValue(L"MutedDeviceId", newDevId);
+                CoTaskMemFree(newDevId);
+            }
+            pNewDefault->Release();
+        }
         HWND hw = (HWND)InterlockedCompareExchangePointer((volatile PVOID*)&g_trayHwnd, nullptr, nullptr);
         if (hw && IsWindow(hw)) PostMessageW(hw, WM_UPDATE_TRAY_STATE, 0, 0);
     }
@@ -2672,9 +2694,32 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         // Default device changed — re-bind to new endpoint.
         UnbindEndpointVolume();
         BindEndpointVolume();
-        // If persistent mute is on and we were muted, mute the new default device.
+
+        // Unmute the previously-tracked device before muting the new one.
+        EnterCriticalSection(&g_stateLock);
+        WCHAR oldMutedId[512] = {};
+        lstrcpynW(oldMutedId, g_mutedDeviceId, 512);
+        LeaveCriticalSection(&g_stateLock);
+        if (oldMutedId[0]) {
+            ApplyMute(oldMutedId, FALSE);
+        }
+
+        // If persistent mute is on and we were muted, mute the new default device
+        // and update the tracked device ID.
         if (g_persistentMute && g_isMutedByUs) {
-            ApplyMute(nullptr, TRUE);
+            IMMDevice* pNewDefault = nullptr;
+            if (g_notifEnum && SUCCEEDED(g_notifEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewDefault))) {
+                LPWSTR newDevId = nullptr;
+                if (SUCCEEDED(pNewDefault->GetId(&newDevId))) {
+                    ApplyMute(newDevId, TRUE);
+                    EnterCriticalSection(&g_stateLock);
+                    lstrcpynW(g_mutedDeviceId, newDevId, 512);
+                    LeaveCriticalSection(&g_stateLock);
+                    Wh_SetStringValue(L"MutedDeviceId", newDevId);
+                    CoTaskMemFree(newDevId);
+                }
+                pNewDefault->Release();
+            }
             PostMessageW(hWnd, WM_UPDATE_TRAY_STATE, 0, 0);
         }
 
