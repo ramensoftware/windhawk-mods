@@ -2,7 +2,7 @@
 // @id              taskbar-elastic-pill
 // @name            Taskbar Elastic WinUI Pill
 // @description     Injects an animated sliding pill for active taskbar items.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -56,6 +56,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
     - easein: Ease-In
     - easeout: Ease-Out
     - easeinout: Ease-In-Out
+    - none: None
   - UseSpringPhysics: false
     $name: Use spring physics
     $description: Switch stretch animation from simple Bezier curves to Spring physics.
@@ -139,6 +140,7 @@ struct PillContext {
     winrt::Windows::UI::Xaml::Media::Animation::Storyboard colorAnimBoard{nullptr};
     std::chrono::steady_clock::time_point inactiveStartTime{};
     bool forceSnapNext{false};
+    winrt::Windows::UI::Color currentTargetColor{0,0,0,0};
 };
 std::vector<std::shared_ptr<PillContext>>* g_pillContexts = new std::vector<std::shared_ptr<PillContext>>();
 std::atomic<bool> g_unloading{false};
@@ -222,6 +224,7 @@ void LoadSettings() {
         else if (wcscmp(animStr.get(), L"easein") == 0) g_settings.AnimationStyle = 4;
         else if (wcscmp(animStr.get(), L"easeout") == 0) g_settings.AnimationStyle = 5;
         else if (wcscmp(animStr.get(), L"easeinout") == 0) g_settings.AnimationStyle = 6;
+        else if (wcscmp(animStr.get(), L"none") == 0) g_settings.AnimationStyle = 8;
     }
     g_settings.UseSpringPhysics = Wh_GetIntSetting(L"Animation.UseSpringPhysics") != 0;
     WindhawkUtils::StringSetting speedStr(Wh_GetStringSetting(L"Animation.SpeedMultiplier"));
@@ -489,6 +492,8 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
+void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings);
+
 void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::Windows::UI::Xaml::Controls::Image icon, winrt::Windows::UI::Xaml::Shapes::Rectangle pill, std::wstring stableKey) {
     auto weakButton = winrt::make_weak(button);
     auto weakPill = winrt::make_weak(pill);
@@ -626,8 +631,7 @@ void ExtractIconColor(winrt::Windows::UI::Xaml::FrameworkElement button, winrt::
                                                 if (state && state.Name() == L"ActiveRunningIndicator") {
                                                     Settings currentSettings;
                                                     { std::lock_guard<std::mutex> sLock(g_settingsMutex); currentSettings = g_settings; }
-                                                    auto brush = winrt::Windows::UI::Xaml::Media::SolidColorBrush(GetPillColor(currentSettings, stableKey));
-                                                    pill.Fill(brush);
+                                                    EnsurePillAndPosition(button, true, currentSettings);
                                                 }
                                             } catch(...) {}
                                         });
@@ -768,6 +772,10 @@ bool UpdatePillPosition(
                 anim.InsertKeyFrame(1.0f, targetX, easing);
                 anim.Duration(std::chrono::milliseconds(static_cast<long long>(200 / localSettings.SpeedMultiplier)));
                 visual.Properties().StartAnimation(L"Translation.X", anim);
+            } else if (animStyle == 8) { // None
+                visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, 0.0f, 0.0f));
+                visual.Properties().InsertScalar(L"LeftX", targetX);
+                visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
             } else { // Stretch (animStyle == 0 or 7)
                 float targetLeft = targetX;
                 float targetRight = targetX + (float)pillW;
@@ -833,7 +841,11 @@ bool UpdatePillPosition(
                 if (useSquish) {
                     auto scaleAnim = compositor.CreateVector3KeyFrameAnimation();
                     scaleAnim.InsertKeyFrame(0.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f));
-                    scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.5f, 0.5f, 1.0f), cache.squishEase);
+                    if (animStyle == 8) {
+                        scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.2f, 0.5f, 1.0f), cache.squishEase);
+                    } else {
+                        scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(1.5f, 0.5f, 1.0f), cache.squishEase);
+                    }
                     scaleAnim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f), cache.squishEase);
                     scaleAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
                     visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)localSettings.PillHeight / 2.0f, 0));
@@ -858,8 +870,6 @@ bool UpdatePillPosition(
 
     return true;
 }
-
-void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings);
 
 void AttachStateChangedHandler(winrt::Windows::UI::Xaml::VisualStateGroup const& group, winrt::Windows::UI::Xaml::FrameworkElement const& button) {
     if (!group) return;
@@ -1184,8 +1194,10 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
 
     auto brush = pill.Fill().try_as<winrt::Windows::UI::Xaml::Media::SolidColorBrush>();
     if (!brush) {
-        brush = winrt::Windows::UI::Xaml::Media::SolidColorBrush(anyActive ? GetPillColor(settingsToUse, stableKey) : GetPillColor(settingsToUse, L""));
+        winrt::Windows::UI::Color initialColor = anyActive ? GetPillColor(settingsToUse, stableKey) : GetPillColor(settingsToUse, L"");
+        brush = winrt::Windows::UI::Xaml::Media::SolidColorBrush(initialColor);
         pill.Fill(brush);
+        if (currentCtx) currentCtx->currentTargetColor = initialColor;
     } else {
         if (anyActive) {
             bool hasColor = true;
@@ -1195,14 +1207,20 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
             }
             if (settingsToUse.ColorMode != 2 || !isExtracting || hasColor) {
                 winrt::Windows::UI::Color newColor = GetPillColor(settingsToUse, stableKey);
-                winrt::Windows::UI::Color oldColor = brush.Color();
-                if (oldColor.A != newColor.A || oldColor.R != newColor.R || oldColor.G != newColor.G || oldColor.B != newColor.B) {
-                    if (currentCtx && currentCtx->colorAnimBoard) {
-                        try {
-                            currentCtx->colorAnimBoard.Stop();
-                            currentCtx->colorAnimBoard.Children().Clear();
-                        } catch (...) {}
+                bool shouldAnimate = false;
+                if (currentCtx) {
+                    if (currentCtx->currentTargetColor.A != newColor.A || currentCtx->currentTargetColor.R != newColor.R || currentCtx->currentTargetColor.G != newColor.G || currentCtx->currentTargetColor.B != newColor.B) {
+                        shouldAnimate = true;
+                        currentCtx->currentTargetColor = newColor;
                     }
+                } else {
+                    winrt::Windows::UI::Color oldColor = brush.Color();
+                    if (oldColor.A != newColor.A || oldColor.R != newColor.R || oldColor.G != newColor.G || oldColor.B != newColor.B) {
+                        shouldAnimate = true;
+                    }
+                }
+
+                if (shouldAnimate) {
                     winrt::Windows::UI::Xaml::Media::Animation::ColorAnimation colorAnim;
                     colorAnim.To(newColor);
                     winrt::Windows::UI::Xaml::Duration dur;
