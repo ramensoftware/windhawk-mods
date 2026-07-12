@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id             win7-action-center-recreation
-// @name           Windows 7/8.1 Action Center Recreation
+// @name           Windows 7 Action Center Recreation
 // @description    Recreation of the Windows 7/8.1 Action Center Tray Icon and Flyout UI
 // @version        1.1.6
 // @author         babamohammed
