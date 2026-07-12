@@ -6,9 +6,8 @@
 // @author          communism420
 // @github          https://github.com/communism420
 // @homepage        https://github.com/communism420
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lwinmm -lole32 -luuid -lcomdlg32 -lgdi32 -ladvapi32
+// @include         windhawk.exe
+// @compilerOptions -lwinmm -lole32 -luuid -ladvapi32 -lshell32 -lgdi32 -lcomdlg32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -30,18 +29,16 @@ stopped immediately instead of waiting for the next polling interval.
 
 ## Custom sound and fallback
 
-Enable **Configure sound source** and save the settings to open the sound-source
-window. Choose a method with its radio button. In **Windows file picker** mode,
-use **Browse...** to select a WAV file. In **Manual full path** mode, type or paste
-the complete path into the editable field. Both paths remain visible, but the
-controls belonging to the inactive method are disabled. The paths are independent,
-and only the selected method supplies the alarm sound path.
-
-The same window contains **Alarm output device**. Choose **Windows default
-output** to follow the normal Windows route, or choose a specific active output
-such as the laptop speakers to route the alarm directly to that device. If the
-saved device is temporarily unavailable, the mod logs the condition and uses the
-Windows default output for that alert so that the alarm is not silently lost.
+Enter the complete WAV path manually in **WAV file path**, or use **Browse...**
+in the custom configuration window to select it with Windows Explorer. A manual
+path change saved in Windhawk replaces a path previously selected in the custom
+window. To open the window, enable **Open alarm configuration** and save the
+settings. The topmost window also lists the Windows default output roles and
+every active Core Audio output device. It stores the selected device by its
+stable endpoint ID. To reopen the window, disable the option and save, then
+enable it and save again. An enabled request is handled only once, so saving
+unrelated settings does not reopen the window. It also opens automatically on
+the first run, before an output selection has been stored.
 
 WAV is the guaranteed supported custom format. If no file has been selected, or
 if the selected file is later removed, becomes inaccessible, is not a WAV file,
@@ -51,7 +48,7 @@ audible, and recognizable WAV file is recommended.
 
 ## Volume and testing
 
-The mod can temporarily change the default output device's master volume and can
+The mod can temporarily change the selected output device's master volume and can
 temporarily unmute it while an alert is playing. The previous volume and mute
 state are normally restored afterward. If the user changes the volume during
 playback, the new value is preserved when the change can be detected by comparing
@@ -62,10 +59,9 @@ test alert. The test uses the current sound and volume settings without changing
 the battery state machine. The option is evaluated only when settings are saved;
 it does not run during normal polling.
 
-Desktop computers without a system battery are ignored. Except for the requested
-sound-source window and the standard Windows file picker, the mod creates no
-persistent UI, console, tray icon, child process, or external player. The alarm
-runs inside Explorer and uses low-overhead battery-monitoring, power-notification,
+Desktop computers without a system battery are ignored. The mod creates no
+persistent UI, console, tray icon, or external player. It runs in a dedicated
+Windhawk tool process and uses low-overhead battery-monitoring, power-notification,
 and controlled sound-playback threads.
 */
 // ==/WindhawkModReadme==
@@ -87,9 +83,12 @@ and controlled sound-playback threads.
 - CriticalRepeatIntervalSeconds: 30
   $name: Critical-battery repeat interval (seconds)
   $description: Delay between repeated alerts in the critical-battery state, in seconds.
-- ConfigureSoundSource: false
-  $name: Configure sound source
-  $description: To open the window with two audio-file selection methods and an alarm output-device list, first turn this option off and save the settings, then turn it on and save the settings again. Repeat these steps whenever you need to reopen the window.
+- SoundFilePath: ""
+  $name: WAV file path
+  $description: Full path to the WAV audio file. Saving a manual change replaces a file selected in the custom configuration window. Leave empty to use the Windows fallback sound.
+- ConfigureAudioOutput: false
+  $name: Open alarm configuration
+  $description: Enable and save to open a topmost window for selecting a WAV file and an active Windows output device. The request is handled only once; to reopen the window, disable and save, then enable and save again.
 - RepetitionsPerAlert: 3
   $name: Repetitions per alert
   $description: Number of times the sound is played for each alert.
@@ -104,13 +103,13 @@ and controlled sound-playback threads.
   $description: Play one test alert after settings are saved.
 - TemporarilyIncreaseVolume: true
   $name: Temporarily increase volume
-  $description: Temporarily increase the default output-device volume while the alarm is playing.
+  $description: Temporarily increase the selected output-device volume while the alarm is playing.
 - AlarmVolumePercent: 100
   $name: Alarm volume
   $description: Temporary volume level used for the alarm.
 - TemporarilyUnmute: true
   $name: Temporarily unmute
-  $description: Temporarily unmute the default output device while the alarm is playing.
+  $description: Temporarily unmute the selected output device while the alarm is playing.
 - RestorePreviousVolume: true
   $name: Restore previous audio state
   $description: Restore the previous volume and mute state after the alarm finishes.
@@ -118,14 +117,15 @@ and controlled sound-playback threads.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <audioclient.h>
 #include <commdlg.h>
 #include <endpointvolume.h>
 #include <functiondiscoverykeys_devpkey.h>
-#include <mmddk.h>
 #include <mmdeviceapi.h>
 #include <mmsystem.h>
 #include <objbase.h>
 #include <propsys.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -146,17 +146,13 @@ constexpr DWORD kMaximumWaveFileBytes = 64 * 1024 * 1024;
 constexpr ULONGLONG kActivePlaybackPowerCheckMilliseconds = 500;
 constexpr float kVolumeComparisonTolerance = 0.005f;
 constexpr ULONGLONG kNoDeadline = std::numeric_limits<ULONGLONG>::max();
-constexpr wchar_t kSoundSelectionMethodStorageName[] =
-    L"SoundFileSelectionMethod";
-constexpr wchar_t kSelectedSoundPathStorageName[] = L"SelectedSoundFilePath";
-constexpr wchar_t kManualSoundPathStorageName[] = L"ManualSoundFilePath";
-constexpr wchar_t kAudioOutputDeviceIdStorageName[] = L"AudioOutputDeviceId";
-constexpr wchar_t kAudioOutputDeviceNameStorageName[] =
-    L"AudioOutputDeviceName";
-constexpr wchar_t kSoundConfigurationWindowClass[] =
-    L"WindhawkLowBatteryAlarmSoundConfiguration";
 constexpr wchar_t kPowerNotificationWindowClass[] =
     L"WindhawkLowBatteryAlarmPowerNotification";
+constexpr wchar_t kStoredAudioOutputMode[] = L"SelectedAudioOutputMode";
+constexpr wchar_t kStoredAudioEndpointId[] = L"SelectedAudioEndpointId";
+constexpr wchar_t kStoredSoundFilePath[] = L"SelectedSoundFilePath";
+constexpr wchar_t kStoredConfigurationTriggerState[] =
+    L"ConfigurationTriggerState";
 
 enum class BatteryAlertState {
     Normal,
@@ -170,9 +166,11 @@ enum class PlaybackKind {
     Test
 };
 
-enum class SoundFileSelectionMethod {
-    WindowsFilePicker,
-    ManualPath
+enum class AudioOutputMode {
+    WindowsDefault = 0,
+    Multimedia = 1,
+    Communications = 2,
+    EndpointId = 3
 };
 
 struct Settings {
@@ -181,12 +179,13 @@ struct Settings {
     int pollingIntervalSeconds = 15;
     int lowRepeatIntervalSeconds = 120;
     int criticalRepeatIntervalSeconds = 30;
-    SoundFileSelectionMethod soundFileSelectionMethod =
-        SoundFileSelectionMethod::WindowsFilePicker;
+    std::wstring configuredSoundFilePath;
+    std::wstring pickerSoundFilePath;
     std::wstring soundFilePath;
-    std::wstring audioOutputDeviceId;
-    std::wstring audioOutputDeviceName;
-    bool configureSoundSource = false;
+    bool configureAudioOutput = false;
+    bool hasStoredAudioOutputSelection = false;
+    AudioOutputMode audioOutputMode = AudioOutputMode::WindowsDefault;
+    std::wstring audioOutputDevice;
     int repetitionsPerAlert = 3;
     int pauseBetweenRepetitionsMilliseconds = 500;
     bool useSystemSoundIfFileInvalid = true;
@@ -211,12 +210,6 @@ SRWLOCK g_playbackControlLock = SRWLOCK_INIT;
 PlaybackRequest g_pendingPlayback;
 bool g_hasPendingPlayback = false;
 bool g_playbackActive = false;
-HWAVEOUT g_activeWaveOut = nullptr;
-
-SRWLOCK g_soundConfigurationLock = SRWLOCK_INIT;
-HANDLE g_soundConfigurationThread = nullptr;
-std::atomic<HWND> g_soundConfigurationWindow{nullptr};
-std::atomic<HWND> g_filePickerWindow{nullptr};
 
 HANDLE g_powerNotificationThread = nullptr;
 HANDLE g_powerNotificationReadyEvent = nullptr;
@@ -237,13 +230,21 @@ HANDLE g_playbackFinishedEvent = nullptr;
 HANDLE g_initialEvaluationEvent = nullptr;
 HANDLE g_monitorThread = nullptr;
 HANDLE g_playbackThread = nullptr;
-HANDLE g_instanceMutex = nullptr;
-
-
 std::atomic<bool> g_stopping{false};
 std::atomic<bool> g_initialEvaluationCompleted{false};
-bool g_isPrimaryInstance = false;
 bool g_workersJoined = false;
+
+SRWLOCK g_audioPickerLock = SRWLOCK_INIT;
+HANDLE g_audioPickerThread = nullptr;
+HWND g_audioPickerWindow = nullptr;
+
+constexpr wchar_t kAudioPickerWindowClass[] =
+    L"WindhawkLowBatteryAlarmAudioPicker";
+constexpr UINT kAudioPickerBringToFrontMessage = WM_APP + 1;
+constexpr int kAudioPickerComboId = 1001;
+constexpr int kAudioPickerHintId = 1002;
+constexpr int kAudioPickerBrowseId = 1003;
+constexpr int kAudioPickerSoundPathId = 1004;
 
 template <typename T>
 class ComPtr {
@@ -310,38 +311,63 @@ int ClampAndLog(PCWSTR settingName, int value, int minimum, int maximum) {
     return clamped;
 }
 
-bool LoadStoredString(PCWSTR valueName, std::wstring* value) {
-    if (!valueName || !value) {
+bool LoadStringSetting(PCWSTR settingName, std::wstring* value) {
+    if (!settingName || !value) {
         return false;
     }
 
+    PCWSTR settingValue = Wh_GetStringSetting(settingName);
+    bool succeeded = false;
     try {
-        std::vector<wchar_t> buffer(32768);
-        size_t length =
-            Wh_GetStringValue(valueName, buffer.data(), buffer.size());
-        if (length == 0) {
-            value->clear();
-        } else {
-            value->assign(buffer.data(), length);
-        }
-        return true;
+        value->assign(settingValue ? settingValue : L"");
+        succeeded = true;
     } catch (...) {
-        Wh_Log(L"An exception occurred while loading a stored string value.");
-        return false;
+        Wh_Log(L"An exception occurred while loading string setting %s.",
+               settingName);
     }
+    Wh_FreeStringSetting(settingValue);
+    return succeeded;
 }
 
-bool LoadStoredSoundFileSelectionMethod(SoundFileSelectionMethod* method) {
-    if (!method) {
+AudioOutputMode LoadStoredAudioOutputMode(bool* hasStoredSelection) {
+    if (hasStoredSelection) {
+        *hasStoredSelection = false;
+    }
+    int storedMode = Wh_GetIntValue(
+        kStoredAudioOutputMode, -1);
+    if (storedMode == -1) {
+        return AudioOutputMode::WindowsDefault;
+    }
+    if (storedMode < static_cast<int>(AudioOutputMode::WindowsDefault) ||
+        storedMode > static_cast<int>(AudioOutputMode::EndpointId)) {
+        Wh_Log(L"The stored audio output mode is invalid; using the Windows "
+               L"default output.");
+        return AudioOutputMode::WindowsDefault;
+    }
+    if (hasStoredSelection) {
+        *hasStoredSelection = true;
+    }
+    return static_cast<AudioOutputMode>(storedMode);
+}
+
+bool LoadStoredStringValue(PCWSTR valueName,
+                           size_t maximumCharacters,
+                           PCWSTR description,
+                           std::wstring* value) {
+    if (!valueName || maximumCharacters == 0 || !description || !value) {
         return false;
     }
 
-    int storedMethod = Wh_GetIntValue(
-        kSoundSelectionMethodStorageName,
-        static_cast<int>(SoundFileSelectionMethod::WindowsFilePicker));
-    *method = storedMethod == static_cast<int>(SoundFileSelectionMethod::ManualPath)
-                  ? SoundFileSelectionMethod::ManualPath
-                  : SoundFileSelectionMethod::WindowsFilePicker;
+    std::vector<wchar_t> buffer(maximumCharacters);
+    size_t length =
+        Wh_GetStringValue(valueName, buffer.data(), buffer.size());
+    if (length >= buffer.size()) {
+        Wh_Log(L"The stored %s is too long and was ignored.", description);
+        value->clear();
+        return true;
+    }
+
+    value->assign(buffer.data(), length);
     return true;
 }
 
@@ -375,28 +401,23 @@ bool LoadSettings(Settings* loadedSettings) {
             L"CriticalRepeatIntervalSeconds",
             Wh_GetIntSetting(L"CriticalRepeatIntervalSeconds"), 1, 86400);
 
-        settings.configureSoundSource =
-            Wh_GetIntSetting(L"ConfigureSoundSource") != 0;
-        if (!LoadStoredSoundFileSelectionMethod(
-                &settings.soundFileSelectionMethod)) {
+        if (!LoadStringSetting(L"SoundFilePath",
+                               &settings.configuredSoundFilePath) ||
+            !LoadStoredStringValue(kStoredSoundFilePath, 32768,
+                                   L"sound file path",
+                                   &settings.pickerSoundFilePath) ||
+            !LoadStoredStringValue(kStoredAudioEndpointId, 4096,
+                                   L"audio endpoint ID",
+                                   &settings.audioOutputDevice)) {
             return false;
         }
-        if (settings.soundFileSelectionMethod ==
-            SoundFileSelectionMethod::ManualPath) {
-            if (!LoadStoredString(kManualSoundPathStorageName,
-                                  &settings.soundFilePath)) {
-                return false;
-            }
-        } else if (!LoadStoredString(kSelectedSoundPathStorageName,
-                                     &settings.soundFilePath)) {
-            return false;
-        }
-        if (!LoadStoredString(kAudioOutputDeviceIdStorageName,
-                              &settings.audioOutputDeviceId) ||
-            !LoadStoredString(kAudioOutputDeviceNameStorageName,
-                              &settings.audioOutputDeviceName)) {
-            return false;
-        }
+        settings.soundFilePath = settings.pickerSoundFilePath.empty()
+                                     ? settings.configuredSoundFilePath
+                                     : settings.pickerSoundFilePath;
+        settings.configureAudioOutput =
+            Wh_GetIntSetting(L"ConfigureAudioOutput") != 0;
+        settings.audioOutputMode = LoadStoredAudioOutputMode(
+            &settings.hasStoredAudioOutputSelection);
 
         settings.repetitionsPerAlert = ClampAndLog(
             L"RepetitionsPerAlert",
@@ -425,6 +446,34 @@ bool LoadSettings(Settings* loadedSettings) {
         Wh_Log(L"An exception occurred while loading settings.");
         return false;
     }
+}
+
+bool InitializeConfigurationTrigger(const Settings& settings) {
+    int storedState = Wh_GetIntValue(kStoredConfigurationTriggerState, -1);
+    bool requestConfiguration =
+        !settings.hasStoredAudioOutputSelection ||
+        (storedState == 0 && settings.configureAudioOutput);
+
+    if (!Wh_SetIntValue(kStoredConfigurationTriggerState,
+                        settings.configureAudioOutput ? 1 : 0)) {
+        Wh_Log(L"Unable to initialize the alarm configuration trigger state.");
+    }
+    return requestConfiguration;
+}
+
+bool ConsumeConfigurationTrigger(const Settings& previousSettings,
+                                 const Settings& updatedSettings) {
+    int fallbackState = previousSettings.configureAudioOutput ? 1 : 0;
+    int storedState =
+        Wh_GetIntValue(kStoredConfigurationTriggerState, fallbackState);
+    bool requestConfiguration =
+        updatedSettings.configureAudioOutput && storedState == 0;
+
+    if (!Wh_SetIntValue(kStoredConfigurationTriggerState,
+                        updatedSettings.configureAudioOutput ? 1 : 0)) {
+        Wh_Log(L"Unable to update the alarm configuration trigger state.");
+    }
+    return requestConfiguration;
 }
 
 bool ReplaceSettings(Settings settings) {
@@ -458,9 +507,9 @@ bool GetSettingsSnapshot(Settings* snapshot) {
 }
 
 bool PlaybackSettingsDiffer(const Settings& first, const Settings& second) {
-    return first.soundFileSelectionMethod != second.soundFileSelectionMethod ||
-           first.soundFilePath != second.soundFilePath ||
-           first.audioOutputDeviceId != second.audioOutputDeviceId ||
+    return first.soundFilePath != second.soundFilePath ||
+           first.audioOutputMode != second.audioOutputMode ||
+           first.audioOutputDevice != second.audioOutputDevice ||
            first.repetitionsPerAlert != second.repetitionsPerAlert ||
            first.pauseBetweenRepetitionsMilliseconds !=
                second.pauseBetweenRepetitionsMilliseconds ||
@@ -517,12 +566,8 @@ int PlaybackPriority(PlaybackKind kind) {
 }
 
 void StopActiveWaveformWhileControlLocked() {
-    if (g_activeWaveOut) {
-        MMRESULT result = waveOutReset(g_activeWaveOut);
-        if (result != MMSYSERR_NOERROR) {
-            Wh_Log(L"waveOutReset failed while stopping playback: %u.", result);
-        }
-    }
+    // WASAPI playback watches g_playbackCancelEvent and stops on its owning
+    // playback thread. PlaySoundW is only used by the final system-alias fallback.
     PlaySoundW(nullptr, nullptr, 0);
 }
 
@@ -879,965 +924,6 @@ bool HasWavExtension(const std::wstring& path) {
     return _wcsicmp(path.c_str() + dot, L".wav") == 0;
 }
 
-UINT_PTR CALLBACK SoundFilePickerHookProcedure(HWND hookWindow,
-                                               UINT message,
-                                               WPARAM,
-                                               LPARAM) {
-    if (message == WM_INITDIALOG) {
-        HWND dialogWindow = GetParent(hookWindow);
-        if (!dialogWindow) {
-            dialogWindow = hookWindow;
-        }
-        g_filePickerWindow.store(dialogWindow);
-
-        if (g_shutdownEvent &&
-            WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0) {
-            PostMessageW(dialogWindow, WM_CLOSE, 0, 0);
-        }
-    }
-
-    return 0;
-}
-
-void CloseSoundFilePicker() {
-    HWND dialogWindow = g_filePickerWindow.load();
-    if (dialogWindow && IsWindow(dialogWindow) &&
-        !PostMessageW(dialogWindow, WM_CLOSE, 0, 0)) {
-        LogWin32Failure(L"PostMessageW for the sound file picker",
-                        GetLastError());
-    }
-}
-
-bool ValidateLiteralWavPath(const std::wstring& path, PCWSTR* errorMessage) {
-    *errorMessage = nullptr;
-    if (path.empty()) {
-        return true;
-    }
-
-    if (!HasWavExtension(path)) {
-        *errorMessage = L"The selected file must have a .wav extension.";
-        return false;
-    }
-
-    DWORD attributes = GetFileAttributesW(path.c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES ||
-        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
-        *errorMessage =
-            L"The WAV file does not exist, is inaccessible, or is a directory.";
-        return false;
-    }
-
-    return true;
-}
-
-bool BrowseForWavFile(HWND owner,
-                      const std::wstring& currentPath,
-                      std::wstring* selectedPath) {
-    std::vector<wchar_t> selectedPathBuffer;
-    try {
-        selectedPathBuffer.resize(32768);
-        if (!currentPath.empty()) {
-            wcsncpy_s(selectedPathBuffer.data(), selectedPathBuffer.size(),
-                      currentPath.c_str(), _TRUNCATE);
-        }
-    } catch (...) {
-        Wh_Log(L"Unable to allocate the sound file picker path buffer.");
-        return false;
-    }
-
-    constexpr wchar_t filter[] =
-        L"WAV audio files (*.wav)\0*.wav\0All files (*.*)\0*.*\0\0";
-    OPENFILENAMEW openFileName{};
-    openFileName.lStructSize = sizeof(openFileName);
-    openFileName.hwndOwner = owner;
-    openFileName.lpstrFilter = filter;
-    openFileName.nFilterIndex = 1;
-    openFileName.lpstrFile = selectedPathBuffer.data();
-    openFileName.nMaxFile = static_cast<DWORD>(selectedPathBuffer.size());
-    openFileName.lpstrTitle = L"Select a WAV file for Low Battery Alarm";
-    openFileName.lpstrDefExt = L"wav";
-    openFileName.Flags = OFN_EXPLORER | OFN_ENABLEHOOK | OFN_FILEMUSTEXIST |
-                         OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
-                         OFN_DONTADDTORECENT;
-    openFileName.lpfnHook = SoundFilePickerHookProcedure;
-
-    BOOL selected = GetOpenFileNameW(&openFileName);
-    g_filePickerWindow.store(nullptr);
-    if (!selected) {
-        DWORD dialogError = CommDlgExtendedError();
-        if (dialogError != 0) {
-            Wh_Log(L"GetOpenFileNameW failed. CommDlgExtendedError=0x%08lX.",
-                   static_cast<unsigned long>(dialogError));
-        }
-        return false;
-    }
-
-    try {
-        std::wstring path(selectedPathBuffer.data());
-        PCWSTR errorMessage = nullptr;
-        if (!ValidateLiteralWavPath(path, &errorMessage)) {
-            MessageBoxW(owner, errorMessage, L"Low Battery Alarm",
-                        MB_OK | MB_ICONWARNING);
-            return false;
-        }
-        *selectedPath = std::move(path);
-        return true;
-    } catch (...) {
-        Wh_Log(L"Unable to store the path returned by GetOpenFileNameW.");
-        return false;
-    }
-}
-
-struct AudioOutputDevice {
-    std::wstring id;
-    std::wstring storedName;
-    std::wstring displayName;
-};
-
-bool QueryWaveOutDeviceInterface(UINT deviceId, std::wstring* interfaceId) {
-    if (!interfaceId) {
-        return false;
-    }
-
-    DWORD requiredBytes = 0;
-    HWAVEOUT deviceHandle =
-        reinterpret_cast<HWAVEOUT>(static_cast<UINT_PTR>(deviceId));
-    MMRESULT result = waveOutMessage(
-        deviceHandle, DRV_QUERYDEVICEINTERFACESIZE,
-        reinterpret_cast<DWORD_PTR>(&requiredBytes), 0);
-    if (result != MMSYSERR_NOERROR || requiredBytes < sizeof(wchar_t) ||
-        requiredBytes % sizeof(wchar_t) != 0) {
-        return false;
-    }
-
-    try {
-        std::vector<wchar_t> buffer(requiredBytes / sizeof(wchar_t), L'\0');
-        result = waveOutMessage(deviceHandle, DRV_QUERYDEVICEINTERFACE,
-                                reinterpret_cast<DWORD_PTR>(buffer.data()),
-                                requiredBytes);
-        if (result != MMSYSERR_NOERROR || buffer.front() == L'\0') {
-            return false;
-        }
-        buffer.back() = L'\0';
-        interfaceId->assign(buffer.data());
-        return true;
-    } catch (...) {
-        Wh_Log(L"Unable to allocate a wave-output device identifier.");
-        return false;
-    }
-}
-
-bool GetAudioEndpointFriendlyName(IMMDevice* device, std::wstring* name) {
-    if (!device || !name) {
-        return false;
-    }
-
-    ComPtr<IPropertyStore> propertyStore;
-    HRESULT result = device->OpenPropertyStore(STGM_READ, propertyStore.Put());
-    if (FAILED(result)) {
-        return false;
-    }
-
-    PROPVARIANT friendlyName{};
-    PropVariantInit(&friendlyName);
-    result = propertyStore->GetValue(PKEY_Device_FriendlyName, &friendlyName);
-    bool succeeded = false;
-    try {
-        if (SUCCEEDED(result) && friendlyName.vt == VT_LPWSTR &&
-            friendlyName.pwszVal && friendlyName.pwszVal[0] != L'\0') {
-            name->assign(friendlyName.pwszVal);
-            succeeded = true;
-        }
-    } catch (...) {
-        succeeded = false;
-    }
-    PropVariantClear(&friendlyName);
-    return succeeded;
-}
-
-bool EnumerateAudioOutputDevices(std::vector<AudioOutputDevice>* devices) {
-    if (!devices) {
-        return false;
-    }
-
-    try {
-        devices->clear();
-        devices->push_back({L"", L"Windows default output",
-                            L"Windows default output"});
-
-        ComPtr<IMMDeviceEnumerator> enumerator;
-        HRESULT comResult = CoCreateInstance(
-            __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
-            __uuidof(IMMDeviceEnumerator),
-            reinterpret_cast<void**>(enumerator.Put()));
-        ComPtr<IMMDeviceCollection> collection;
-        if (SUCCEEDED(comResult)) {
-            comResult = enumerator->EnumAudioEndpoints(
-                eRender, DEVICE_STATE_ACTIVE, collection.Put());
-        }
-        UINT endpointCount = 0;
-        if (SUCCEEDED(comResult)) {
-            comResult = collection->GetCount(&endpointCount);
-        }
-        if (SUCCEEDED(comResult)) {
-            for (UINT index = 0; index < endpointCount; ++index) {
-                ComPtr<IMMDevice> endpoint;
-                if (FAILED(collection->Item(index, endpoint.Put()))) {
-                    continue;
-                }
-
-                LPWSTR endpointId = nullptr;
-                HRESULT idResult = endpoint->GetId(&endpointId);
-                if (FAILED(idResult) || !endpointId) {
-                    CoTaskMemFree(endpointId);
-                    continue;
-                }
-                std::wstring name;
-                bool haveName = GetAudioEndpointFriendlyName(endpoint.Get(),
-                                                              &name);
-                std::wstring endpointIdString;
-                if (haveName) {
-                    try {
-                        endpointIdString.assign(endpointId);
-                    } catch (...) {
-                        CoTaskMemFree(endpointId);
-                        throw;
-                    }
-                }
-                CoTaskMemFree(endpointId);
-                if (haveName) {
-                    devices->push_back(
-                        {std::move(endpointIdString), name, name});
-                }
-            }
-            return true;
-        }
-
-        Wh_Log(L"Core Audio endpoint enumeration failed; using legacy "
-               L"wave-output names. HRESULT=0x%08lX.",
-               static_cast<unsigned long>(comResult));
-        UINT deviceCount = waveOutGetNumDevs();
-        for (UINT deviceId = 0; deviceId < deviceCount; ++deviceId) {
-            WAVEOUTCAPSW capabilities{};
-            MMRESULT result = waveOutGetDevCapsW(
-                deviceId, &capabilities, sizeof(capabilities));
-            if (result != MMSYSERR_NOERROR) {
-                Wh_Log(L"waveOutGetDevCapsW failed for device %u: %u.",
-                       deviceId, result);
-                continue;
-            }
-
-            std::wstring name = capabilities.szPname;
-            if (name.empty()) {
-                name = L"Audio output " + std::to_wstring(deviceId + 1);
-            }
-
-            std::wstring interfaceId;
-            if (!QueryWaveOutDeviceInterface(deviceId, &interfaceId)) {
-                interfaceId = L"legacy-waveout:" + name;
-            }
-
-            bool duplicate = false;
-            for (const auto& existingDevice : *devices) {
-                if (_wcsicmp(existingDevice.id.c_str(),
-                             interfaceId.c_str()) == 0) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                devices->push_back(
-                    {std::move(interfaceId), name, std::move(name)});
-            }
-        }
-        return true;
-    } catch (...) {
-        Wh_Log(L"Unable to allocate the audio-output device list.");
-        return false;
-    }
-}
-
-bool ResolveWaveOutDeviceId(const std::wstring& selectedDeviceId,
-                            const std::wstring& selectedDeviceName,
-                            UINT* deviceId) {
-    if (!deviceId) {
-        return false;
-    }
-    if (selectedDeviceId.empty()) {
-        *deviceId = WAVE_MAPPER;
-        return true;
-    }
-
-    constexpr wchar_t legacyPrefix[] = L"legacy-waveout:";
-    bool legacyId = selectedDeviceId.starts_with(legacyPrefix);
-    PCWSTR legacyName = legacyId
-                            ? selectedDeviceId.c_str() +
-                                  (ARRAYSIZE(legacyPrefix) - 1)
-                            : nullptr;
-
-    UINT deviceCount = waveOutGetNumDevs();
-    UINT uniquePrefixMatch = WAVE_MAPPER;
-    bool havePrefixMatch = false;
-    bool ambiguousPrefixMatch = false;
-    for (UINT candidateId = 0; candidateId < deviceCount; ++candidateId) {
-        WAVEOUTCAPSW capabilities{};
-        bool haveCapabilities =
-            waveOutGetDevCapsW(candidateId, &capabilities,
-                               sizeof(capabilities)) == MMSYSERR_NOERROR;
-        if (legacyId) {
-            if (haveCapabilities &&
-                _wcsicmp(capabilities.szPname, legacyName) == 0) {
-                *deviceId = candidateId;
-                return true;
-            }
-            continue;
-        }
-
-        std::wstring candidateInterfaceId;
-        if (QueryWaveOutDeviceInterface(candidateId,
-                                        &candidateInterfaceId) &&
-            (_wcsicmp(candidateInterfaceId.c_str(),
-                      selectedDeviceId.c_str()) == 0 ||
-             candidateInterfaceId.find(selectedDeviceId) !=
-                 std::wstring::npos)) {
-            *deviceId = candidateId;
-            return true;
-        }
-
-        if (haveCapabilities && !selectedDeviceName.empty()) {
-            size_t waveNameLength = wcslen(capabilities.szPname);
-            if (_wcsicmp(selectedDeviceName.c_str(),
-                         capabilities.szPname) == 0) {
-                *deviceId = candidateId;
-                return true;
-            }
-            if (waveNameLength > 0 &&
-                selectedDeviceName.size() >= waveNameLength &&
-                _wcsnicmp(selectedDeviceName.c_str(), capabilities.szPname,
-                           waveNameLength) == 0) {
-                if (havePrefixMatch) {
-                    ambiguousPrefixMatch = true;
-                } else {
-                    uniquePrefixMatch = candidateId;
-                    havePrefixMatch = true;
-                }
-            }
-        }
-    }
-
-    if (havePrefixMatch && !ambiguousPrefixMatch) {
-        *deviceId = uniquePrefixMatch;
-        return true;
-    }
-
-    *deviceId = WAVE_MAPPER;
-    return false;
-}
-
-std::wstring ExtractEndpointIdFromWaveOutInterface(
-    const std::wstring& interfaceId) {
-    size_t firstSeparator = interfaceId.find(L'#');
-    size_t secondSeparator =
-        firstSeparator == std::wstring::npos
-            ? std::wstring::npos
-            : interfaceId.find(L'#', firstSeparator + 1);
-    size_t thirdSeparator =
-        secondSeparator == std::wstring::npos
-            ? std::wstring::npos
-            : interfaceId.find(L'#', secondSeparator + 1);
-    if (secondSeparator == std::wstring::npos ||
-        thirdSeparator == std::wstring::npos ||
-        thirdSeparator <= secondSeparator + 1) {
-        return {};
-    }
-    return interfaceId.substr(secondSeparator + 1,
-                              thirdSeparator - secondSeparator - 1);
-}
-
-enum SoundConfigurationControlId {
-    kPickerRadioId = 1001,
-    kPickerPathId,
-    kBrowseButtonId,
-    kManualRadioId,
-    kManualPathId,
-    kOutputDeviceComboId,
-    kAcceptButtonId,
-    kCancelButtonId
-};
-
-struct SoundConfigurationWindowState {
-    SoundFileSelectionMethod method =
-        SoundFileSelectionMethod::WindowsFilePicker;
-    std::wstring pickerPath;
-    std::wstring manualPath;
-    std::vector<AudioOutputDevice> outputDevices;
-    size_t selectedOutputDeviceIndex = 0;
-    HWND pickerRadio = nullptr;
-    HWND pickerDescription = nullptr;
-    HWND pickerPathEdit = nullptr;
-    HWND browseButton = nullptr;
-    HWND manualRadio = nullptr;
-    HWND manualDescription = nullptr;
-    HWND manualPathEdit = nullptr;
-    HWND outputDeviceCombo = nullptr;
-};
-
-bool ReadWindowText(HWND window, std::wstring* text) {
-    if (!window || !text) {
-        return false;
-    }
-
-    int length = GetWindowTextLengthW(window);
-    if (length < 0 || length >= 32768) {
-        return false;
-    }
-
-    try {
-        std::vector<wchar_t> buffer(static_cast<size_t>(length) + 1);
-        int copied = GetWindowTextW(window, buffer.data(),
-                                    static_cast<int>(buffer.size()));
-        if (copied < 0) {
-            return false;
-        }
-        text->assign(buffer.data(), static_cast<size_t>(copied));
-        return true;
-    } catch (...) {
-        Wh_Log(L"Unable to allocate memory while reading a sound path field.");
-        return false;
-    }
-}
-
-void SetSoundConfigurationFont(HWND window, HFONT font) {
-    if (window) {
-        SendMessageW(window, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    }
-}
-
-HWND CreateSoundConfigurationControl(DWORD extendedStyle,
-                                     PCWSTR className,
-                                     PCWSTR text,
-                                     DWORD style,
-                                     int x,
-                                     int y,
-                                     int width,
-                                     int height,
-                                     HWND parent,
-                                     int controlId,
-                                     HFONT font) {
-    HWND control = CreateWindowExW(
-        extendedStyle, className, text, WS_CHILD | WS_VISIBLE | style, x, y,
-        width, height, parent, reinterpret_cast<HMENU>(
-                                   static_cast<INT_PTR>(controlId)),
-        GetModuleHandleW(nullptr), nullptr);
-    SetSoundConfigurationFont(control, font);
-    return control;
-}
-
-void UpdateSoundConfigurationControls(SoundConfigurationWindowState* state) {
-    if (!state) {
-        return;
-    }
-
-    bool pickerSelected =
-        state->method == SoundFileSelectionMethod::WindowsFilePicker;
-    SendMessageW(state->pickerRadio, BM_SETCHECK,
-                 pickerSelected ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendMessageW(state->manualRadio, BM_SETCHECK,
-                 pickerSelected ? BST_UNCHECKED : BST_CHECKED, 0);
-
-    EnableWindow(state->pickerPathEdit, pickerSelected);
-    EnableWindow(state->browseButton, pickerSelected);
-    EnableWindow(state->pickerDescription, pickerSelected);
-    EnableWindow(state->manualDescription, !pickerSelected);
-    EnableWindow(state->manualPathEdit, !pickerSelected);
-}
-
-bool ApplySoundConfiguration(SoundConfigurationWindowState* state,
-                             HWND owner) {
-    if (!state || !ReadWindowText(state->manualPathEdit, &state->manualPath)) {
-        MessageBoxW(owner, L"The manual path could not be read.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONERROR);
-        return false;
-    }
-
-    try {
-        state->manualPath = TrimAndUnquote(state->manualPath);
-    } catch (...) {
-        MessageBoxW(owner, L"The manual path could not be processed.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONERROR);
-        return false;
-    }
-
-    LRESULT selectedDeviceIndex =
-        SendMessageW(state->outputDeviceCombo, CB_GETCURSEL, 0, 0);
-    if (selectedDeviceIndex == CB_ERR || selectedDeviceIndex < 0 ||
-        static_cast<size_t>(selectedDeviceIndex) >=
-            state->outputDevices.size()) {
-        MessageBoxW(owner, L"Select a valid alarm output device.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONERROR);
-        return false;
-    }
-    const AudioOutputDevice& selectedDevice =
-        state->outputDevices[static_cast<size_t>(selectedDeviceIndex)];
-
-    if (!Wh_SetStringValue(kSelectedSoundPathStorageName,
-                           state->pickerPath.c_str()) ||
-        !Wh_SetStringValue(kManualSoundPathStorageName,
-                           state->manualPath.c_str()) ||
-        !Wh_SetStringValue(kAudioOutputDeviceIdStorageName,
-                           selectedDevice.id.c_str()) ||
-        !Wh_SetStringValue(kAudioOutputDeviceNameStorageName,
-                           selectedDevice.storedName.c_str()) ||
-        !Wh_SetIntValue(kSoundSelectionMethodStorageName,
-                        static_cast<int>(state->method))) {
-        MessageBoxW(owner, L"The sound-source settings could not be saved.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONERROR);
-        Wh_Log(L"Unable to save the sound-source configuration.");
-        return false;
-    }
-
-    Settings updatedSettings;
-    if (!GetSettingsSnapshot(&updatedSettings)) {
-        MessageBoxW(owner,
-                    L"The sound-source settings were saved but could not be "
-                    L"applied immediately.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONWARNING);
-        return true;
-    }
-
-    try {
-        updatedSettings.soundFileSelectionMethod = state->method;
-        updatedSettings.soundFilePath =
-            state->method == SoundFileSelectionMethod::WindowsFilePicker
-                ? state->pickerPath
-                : state->manualPath;
-        updatedSettings.audioOutputDeviceId = selectedDevice.id;
-        updatedSettings.audioOutputDeviceName = selectedDevice.storedName;
-        if (!ReplaceSettings(updatedSettings)) {
-            MessageBoxW(owner,
-                        L"The sound-source settings were saved but could not be "
-                        L"applied immediately.",
-                        L"Low Battery Alarm", MB_OK | MB_ICONWARNING);
-            return true;
-        }
-    } catch (...) {
-        MessageBoxW(owner,
-                    L"The sound-source settings were saved but could not be "
-                    L"applied immediately.",
-                    L"Low Battery Alarm", MB_OK | MB_ICONWARNING);
-        return true;
-    }
-    CancelAllPlayback();
-    if (g_settingsChangedEvent && !SetEvent(g_settingsChangedEvent)) {
-        LogWin32Failure(L"SetEvent after configuring the sound source",
-                        GetLastError());
-    }
-
-    Wh_Log(L"Sound source configured in %s mode. Effective path: %s. "
-           L"Output device: %s",
-           state->method == SoundFileSelectionMethod::WindowsFilePicker
-               ? L"Windows file picker"
-               : L"manual full path",
-           updatedSettings.soundFilePath.c_str(),
-           updatedSettings.audioOutputDeviceName.c_str());
-    if (updatedSettings.testSoundAfterSettingsChange && !g_stopping.load()) {
-        QueuePlayback(PlaybackKind::Test, updatedSettings, false);
-    }
-    return true;
-}
-
-LRESULT CALLBACK SoundConfigurationWindowProcedure(HWND window,
-                                                   UINT message,
-                                                   WPARAM wParam,
-                                                   LPARAM lParam) {
-    auto* state = reinterpret_cast<SoundConfigurationWindowState*>(
-        GetWindowLongPtrW(window, GWLP_USERDATA));
-
-    if (message == WM_NCCREATE) {
-        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
-        state = static_cast<SoundConfigurationWindowState*>(
-            create->lpCreateParams);
-        SetWindowLongPtrW(window, GWLP_USERDATA,
-                          reinterpret_cast<LONG_PTR>(state));
-    }
-
-    switch (message) {
-        case WM_CREATE: {
-            HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-            state->pickerRadio = CreateSoundConfigurationControl(
-                0, L"BUTTON", L"Windows file picker",
-                WS_TABSTOP | WS_GROUP | BS_AUTORADIOBUTTON, 18, 16, 250, 24,
-                window, kPickerRadioId, font);
-            state->pickerDescription = CreateSoundConfigurationControl(
-                0, L"STATIC",
-                L"Select a WAV file through the standard Windows dialog.", 0,
-                42, 43, 610, 20, window, 0, font);
-            state->pickerPathEdit = CreateSoundConfigurationControl(
-                WS_EX_CLIENTEDGE, L"EDIT", state->pickerPath.c_str(),
-                WS_TABSTOP | ES_AUTOHSCROLL | ES_READONLY, 42, 66, 500, 25,
-                window, kPickerPathId, font);
-            state->browseButton = CreateSoundConfigurationControl(
-                0, L"BUTTON", L"Browse...", WS_TABSTOP | BS_PUSHBUTTON, 552,
-                65, 100, 27, window, kBrowseButtonId, font);
-            state->manualRadio = CreateSoundConfigurationControl(
-                0, L"BUTTON", L"Manual full path",
-                WS_TABSTOP | BS_AUTORADIOBUTTON, 18, 110, 250, 24, window,
-                kManualRadioId, font);
-            state->manualDescription = CreateSoundConfigurationControl(
-                0, L"STATIC",
-                L"Type or paste the complete WAV file path.", 0, 42, 137,
-                610, 20, window, 0, font);
-            state->manualPathEdit = CreateSoundConfigurationControl(
-                WS_EX_CLIENTEDGE, L"EDIT", state->manualPath.c_str(),
-                WS_TABSTOP | ES_AUTOHSCROLL, 42, 160, 610, 25, window,
-                kManualPathId, font);
-            HWND outputDeviceLabel = CreateSoundConfigurationControl(
-                0, L"STATIC", L"Alarm output device", 0, 18, 201, 634, 20,
-                window, 0, font);
-            state->outputDeviceCombo = CreateSoundConfigurationControl(
-                0, L"COMBOBOX", L"",
-                WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 18, 224, 634, 220,
-                window, kOutputDeviceComboId, font);
-            HWND note = CreateSoundConfigurationControl(
-                0, L"STATIC",
-                L"Only the selected method is used. The other method is "
-                L"disabled and its path is kept independently.",
-                0, 18, 266, 634, 20, window, 0, font);
-            HWND acceptButton = CreateSoundConfigurationControl(
-                0, L"BUTTON", L"OK", WS_TABSTOP | BS_DEFPUSHBUTTON, 442, 307,
-                100, 29, window, kAcceptButtonId, font);
-            HWND cancelButton = CreateSoundConfigurationControl(
-                0, L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, 552, 307,
-                100, 29, window, kCancelButtonId, font);
-
-            if (!state->pickerRadio || !state->pickerDescription ||
-                !state->pickerPathEdit || !state->browseButton ||
-                !state->manualRadio || !state->manualDescription ||
-                !state->manualPathEdit || !outputDeviceLabel ||
-                !state->outputDeviceCombo || !note || !acceptButton ||
-                !cancelButton || state->outputDevices.empty()) {
-                return -1;
-            }
-
-            for (const auto& device : state->outputDevices) {
-                if (SendMessageW(state->outputDeviceCombo, CB_ADDSTRING, 0,
-                                 reinterpret_cast<LPARAM>(
-                                     device.displayName.c_str())) < 0) {
-                    return -1;
-                }
-            }
-            SendMessageW(state->outputDeviceCombo, CB_SETCURSEL,
-                         static_cast<WPARAM>(state->selectedOutputDeviceIndex),
-                         0);
-
-            SendMessageW(state->pickerPathEdit, EM_SETLIMITTEXT, 32767, 0);
-            SendMessageW(state->manualPathEdit, EM_SETLIMITTEXT, 32767, 0);
-            UpdateSoundConfigurationControls(state);
-            return 0;
-        }
-
-        case WM_COMMAND: {
-            if (!state) {
-                return 0;
-            }
-
-            switch (LOWORD(wParam)) {
-                case kPickerRadioId:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        state->method =
-                            SoundFileSelectionMethod::WindowsFilePicker;
-                        UpdateSoundConfigurationControls(state);
-                    }
-                    return 0;
-
-                case kManualRadioId:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        state->method = SoundFileSelectionMethod::ManualPath;
-                        UpdateSoundConfigurationControls(state);
-                        SetFocus(state->manualPathEdit);
-                    }
-                    return 0;
-
-                case kBrowseButtonId:
-                    if (HIWORD(wParam) == BN_CLICKED &&
-                        state->method ==
-                            SoundFileSelectionMethod::WindowsFilePicker) {
-                        std::wstring selectedPath;
-                        if (BrowseForWavFile(window, state->pickerPath,
-                                             &selectedPath)) {
-                            state->pickerPath = std::move(selectedPath);
-                            SetWindowTextW(state->pickerPathEdit,
-                                           state->pickerPath.c_str());
-                        }
-                    }
-                    return 0;
-
-                case kAcceptButtonId:
-                    if (HIWORD(wParam) == BN_CLICKED &&
-                        ApplySoundConfiguration(state, window)) {
-                        DestroyWindow(window);
-                    }
-                    return 0;
-
-                case kCancelButtonId:
-                    if (HIWORD(wParam) == BN_CLICKED) {
-                        DestroyWindow(window);
-                    }
-                    return 0;
-            }
-            break;
-        }
-
-        case WM_CTLCOLORSTATIC:
-        case WM_CTLCOLORBTN: {
-            HDC deviceContext = reinterpret_cast<HDC>(wParam);
-            HWND control = reinterpret_cast<HWND>(lParam);
-            SetBkMode(deviceContext, TRANSPARENT);
-            SetTextColor(deviceContext,
-                         GetSysColor(IsWindowEnabled(control) ? COLOR_BTNTEXT
-                                                              : COLOR_GRAYTEXT));
-            return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_BTNFACE));
-        }
-
-        case WM_CLOSE:
-            DestroyWindow(window);
-            return 0;
-
-        case WM_DESTROY:
-            g_soundConfigurationWindow.store(nullptr);
-            PostQuitMessage(0);
-            return 0;
-    }
-
-    return DefWindowProcW(window, message, wParam, lParam);
-}
-
-void RunSoundConfiguration() {
-    if (g_stopping.load()) {
-        Wh_Log(L"Sound-source configuration was cancelled during shutdown.");
-        return;
-    }
-
-    Settings settings;
-    if (!GetSettingsSnapshot(&settings)) {
-        Wh_Log(L"The sound-source window could not obtain settings.");
-        return;
-    }
-
-    SoundConfigurationWindowState state;
-    state.method = settings.soundFileSelectionMethod;
-    if (!LoadStoredString(kSelectedSoundPathStorageName, &state.pickerPath) ||
-        !LoadStoredString(kManualSoundPathStorageName, &state.manualPath)) {
-        Wh_Log(L"The sound-source window could not load its saved paths.");
-        return;
-    }
-    if (!EnumerateAudioOutputDevices(&state.outputDevices)) {
-        Wh_Log(L"The sound-source window could not enumerate audio outputs.");
-        return;
-    }
-
-    bool selectedDeviceFound = settings.audioOutputDeviceId.empty();
-    for (size_t index = 0; index < state.outputDevices.size(); ++index) {
-        if (_wcsicmp(state.outputDevices[index].id.c_str(),
-                     settings.audioOutputDeviceId.c_str()) == 0) {
-            state.selectedOutputDeviceIndex = index;
-            selectedDeviceFound = true;
-            break;
-        }
-    }
-    if (!selectedDeviceFound) {
-        try {
-            std::wstring storedName = settings.audioOutputDeviceName.empty()
-                                          ? L"Previously selected output"
-                                          : settings.audioOutputDeviceName;
-            std::wstring displayName =
-                storedName + L" (currently unavailable; Windows default will "
-                             L"be used)";
-            state.outputDevices.push_back({settings.audioOutputDeviceId,
-                                           std::move(storedName),
-                                           std::move(displayName)});
-            state.selectedOutputDeviceIndex = state.outputDevices.size() - 1;
-        } catch (...) {
-            Wh_Log(L"Unable to represent the unavailable saved audio output.");
-            return;
-        }
-    }
-
-    HINSTANCE instance = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<PCWSTR>(&g_soundConfigurationWindow),
-            &instance)) {
-        LogWin32Failure(L"GetModuleHandleExW for sound-source configuration",
-                        GetLastError());
-        return;
-    }
-
-    WNDCLASSEXW windowClass{};
-    windowClass.cbSize = sizeof(windowClass);
-    windowClass.lpfnWndProc = SoundConfigurationWindowProcedure;
-    windowClass.hInstance = instance;
-    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    windowClass.hbrBackground = GetSysColorBrush(COLOR_BTNFACE);
-    windowClass.lpszClassName = kSoundConfigurationWindowClass;
-    bool registeredWindowClass = RegisterClassExW(&windowClass) != 0;
-    if (!registeredWindowClass) {
-        DWORD error = GetLastError();
-        WNDCLASSEXW existingClass{};
-        existingClass.cbSize = sizeof(existingClass);
-        if (error != ERROR_CLASS_ALREADY_EXISTS ||
-            !GetClassInfoExW(instance, kSoundConfigurationWindowClass,
-                             &existingClass) ||
-            existingClass.lpfnWndProc !=
-                SoundConfigurationWindowProcedure) {
-            LogWin32Failure(L"RegisterClassExW for sound-source configuration",
-                            error);
-            return;
-        }
-    }
-
-    RECT workArea{};
-    if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0)) {
-        workArea = {0, 0, GetSystemMetrics(SM_CXSCREEN),
-                    GetSystemMetrics(SM_CYSCREEN)};
-    }
-    constexpr int windowWidth = 690;
-    constexpr int windowHeight = 390;
-    int x = workArea.left +
-            ((workArea.right - workArea.left) - windowWidth) / 2;
-    int y = workArea.top +
-            ((workArea.bottom - workArea.top) - windowHeight) / 2;
-
-    HWND window = CreateWindowExW(
-        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
-        kSoundConfigurationWindowClass,
-        L"Low Battery Alarm - Sound Source",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, x, y, windowWidth,
-        windowHeight, nullptr, nullptr, instance, &state);
-    if (!window) {
-        LogWin32Failure(L"CreateWindowExW for sound-source configuration",
-                        GetLastError());
-        if (registeredWindowClass) {
-            UnregisterClassW(kSoundConfigurationWindowClass, instance);
-        }
-        return;
-    }
-
-    g_soundConfigurationWindow.store(window);
-    if (!SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
-                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
-        LogWin32Failure(L"SetWindowPos for topmost sound-source configuration",
-                        GetLastError());
-    }
-    ShowWindow(window, SW_SHOWNORMAL);
-    SetForegroundWindow(window);
-    UpdateWindow(window);
-
-    MSG message{};
-    while (!g_stopping.load()) {
-        BOOL result = GetMessageW(&message, nullptr, 0, 0);
-        if (result <= 0) {
-            if (result < 0) {
-                LogWin32Failure(L"GetMessageW for sound-source configuration",
-                                GetLastError());
-            }
-            break;
-        }
-        if (!IsDialogMessageW(window, &message)) {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-    }
-
-    if (IsWindow(window)) {
-        DestroyWindow(window);
-    }
-    g_soundConfigurationWindow.store(nullptr);
-    if (registeredWindowClass &&
-        !UnregisterClassW(kSoundConfigurationWindowClass, instance)) {
-        LogWin32Failure(L"UnregisterClassW for sound-source configuration",
-                        GetLastError());
-    }
-}
-
-void CloseSoundConfiguration() {
-    CloseSoundFilePicker();
-    HWND window = g_soundConfigurationWindow.load();
-    if (window && IsWindow(window) &&
-        !PostMessageW(window, WM_CLOSE, 0, 0)) {
-        LogWin32Failure(L"PostMessageW for sound-source configuration",
-                        GetLastError());
-    }
-}
-
-DWORD WINAPI SoundConfigurationThreadProcedure(void*) {
-    Wh_Log(L"Sound-source configuration thread started.");
-    HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    bool mustUninitializeCom = SUCCEEDED(comResult);
-    if (FAILED(comResult)) {
-        LogHResultFailure(L"CoInitializeEx on the sound configuration thread",
-                          comResult);
-    }
-    try {
-        RunSoundConfiguration();
-    } catch (...) {
-        Wh_Log(L"An exception occurred in the sound-source configuration "
-               L"thread.");
-    }
-
-    g_filePickerWindow.store(nullptr);
-    g_soundConfigurationWindow.store(nullptr);
-    if (mustUninitializeCom) {
-        CoUninitialize();
-    }
-    Wh_Log(L"Sound-source configuration thread stopped.");
-    return 0;
-}
-
-bool RequestSoundConfiguration() {
-    AcquireSRWLockExclusive(&g_soundConfigurationLock);
-
-    if (g_soundConfigurationThread) {
-        DWORD waitResult = WaitForSingleObject(g_soundConfigurationThread, 0);
-        if (waitResult == WAIT_OBJECT_0) {
-            CloseHandle(g_soundConfigurationThread);
-            g_soundConfigurationThread = nullptr;
-        } else if (waitResult == WAIT_TIMEOUT) {
-            ReleaseSRWLockExclusive(&g_soundConfigurationLock);
-            Wh_Log(L"The sound-source configuration window is already open.");
-            HWND window = g_soundConfigurationWindow.load();
-            if (window) {
-                SetForegroundWindow(window);
-            }
-            return true;
-        } else {
-            DWORD error = GetLastError();
-            ReleaseSRWLockExclusive(&g_soundConfigurationLock);
-            LogWin32Failure(L"Sound-source configuration thread status check",
-                            error);
-            return false;
-        }
-    }
-
-    if (g_stopping.load()) {
-        ReleaseSRWLockExclusive(&g_soundConfigurationLock);
-        return false;
-    }
-
-    g_soundConfigurationThread = CreateThread(
-        nullptr, 0, SoundConfigurationThreadProcedure, nullptr, 0, nullptr);
-    if (!g_soundConfigurationThread) {
-        DWORD error = GetLastError();
-        ReleaseSRWLockExclusive(&g_soundConfigurationLock);
-        LogWin32Failure(L"CreateThread for sound-source configuration", error);
-        return false;
-    }
-
-    ReleaseSRWLockExclusive(&g_soundConfigurationLock);
-    return true;
-}
-
 bool ResolveCustomSoundPath(const std::wstring& storedPath,
                             std::wstring* resolvedPath) {
     std::wstring path;
@@ -2005,79 +1091,743 @@ bool LoadWaveFile(const std::wstring& path, LoadedWaveFile* loadedWave) {
     }
 }
 
-void LogWaveOutFailure(PCWSTR action, MMRESULT result) {
-    wchar_t message[MAXERRORLENGTH]{};
-    if (waveOutGetErrorTextW(result, message, ARRAYSIZE(message)) ==
-        MMSYSERR_NOERROR) {
-        Wh_Log(L"%s failed: %s (%u).", action, message, result);
-    } else {
-        Wh_Log(L"%s failed with multimedia error %u.", action, result);
+ERole GetDefaultAudioRole(AudioOutputMode mode) {
+    switch (mode) {
+        case AudioOutputMode::Multimedia:
+            return eMultimedia;
+        case AudioOutputMode::Communications:
+            return eCommunications;
+        case AudioOutputMode::WindowsDefault:
+        case AudioOutputMode::EndpointId:
+            return eConsole;
+    }
+    return eConsole;
+}
+
+HRESULT ResolveConfiguredAudioDevice(IMMDeviceEnumerator* enumerator,
+                                     AudioOutputMode mode,
+                                     const std::wstring& configuredValue,
+                                     IMMDevice** resolvedDevice) {
+    if (!enumerator || !resolvedDevice) {
+        return E_INVALIDARG;
+    }
+    *resolvedDevice = nullptr;
+
+    if (mode != AudioOutputMode::EndpointId) {
+        return enumerator->GetDefaultAudioEndpoint(eRender,
+                                                   GetDefaultAudioRole(mode),
+                                                   resolvedDevice);
+    }
+
+    std::wstring value;
+    try {
+        value = TrimAndUnquote(configuredValue);
+    } catch (...) {
+        return E_OUTOFMEMORY;
+    }
+    if (value.empty()) {
+        return E_INVALIDARG;
+    }
+
+    ComPtr<IMMDevice> device;
+    HRESULT result = enumerator->GetDevice(value.c_str(), device.Put());
+    if (FAILED(result)) {
+        return result;
+    }
+
+    DWORD state = 0;
+    result = device->GetState(&state);
+    if (FAILED(result)) {
+        return result;
+    }
+    if ((state & DEVICE_STATE_ACTIVE) == 0) {
+        return HRESULT_FROM_WIN32(ERROR_NOT_READY);
+    }
+
+    device.Get()->AddRef();
+    *resolvedDevice = device.Get();
+    return S_OK;
+}
+
+struct AudioOutputOption {
+    AudioOutputMode mode = AudioOutputMode::WindowsDefault;
+    std::wstring endpointId;
+    std::wstring displayName;
+};
+
+struct AudioPickerWindowState {
+    const std::vector<AudioOutputOption>* options = nullptr;
+    int initialSelection = 0;
+    HWND comboBox = nullptr;
+    HWND soundPathEdit = nullptr;
+    std::wstring selectedSoundFilePath;
+    bool soundFilePathChanged = false;
+};
+
+bool GetAudioEndpointDisplayName(IMMDevice* device, std::wstring* displayName) {
+    if (!device || !displayName) {
+        return false;
+    }
+
+    ComPtr<IPropertyStore> propertyStore;
+    HRESULT result = device->OpenPropertyStore(STGM_READ, propertyStore.Put());
+    if (FAILED(result)) {
+        return false;
+    }
+
+    PROPVARIANT value{};
+    PropVariantInit(&value);
+    result = propertyStore->GetValue(PKEY_Device_FriendlyName, &value);
+    bool succeeded = false;
+    try {
+        if (SUCCEEDED(result) && value.vt == VT_LPWSTR && value.pwszVal &&
+            value.pwszVal[0] != L'\0') {
+            displayName->assign(value.pwszVal);
+            succeeded = true;
+        }
+    } catch (...) {
+        succeeded = false;
+    }
+    PropVariantClear(&value);
+    return succeeded;
+}
+
+bool GetAudioEndpointId(IMMDevice* device, std::wstring* endpointId) {
+    if (!device || !endpointId) {
+        return false;
+    }
+
+    LPWSTR rawEndpointId = nullptr;
+    HRESULT result = device->GetId(&rawEndpointId);
+    if (FAILED(result) || !rawEndpointId) {
+        CoTaskMemFree(rawEndpointId);
+        return false;
+    }
+
+    bool succeeded = false;
+    try {
+        endpointId->assign(rawEndpointId);
+        succeeded = true;
+    } catch (...) {
+        succeeded = false;
+    }
+    CoTaskMemFree(rawEndpointId);
+    return succeeded;
+}
+
+bool BuildAudioOutputOptions(std::vector<AudioOutputOption>* options,
+                             const Settings& currentSettings,
+                             int* initialSelection) {
+    if (!options || !initialSelection) {
+        return false;
+    }
+
+    try {
+        options->clear();
+        options->push_back({AudioOutputMode::WindowsDefault, L"",
+                            L"Windows default output (console)"});
+        options->push_back({AudioOutputMode::Multimedia, L"",
+                            L"Windows default multimedia output"});
+        options->push_back({AudioOutputMode::Communications, L"",
+                            L"Windows default communications output"});
+
+        ComPtr<IMMDeviceEnumerator> enumerator;
+        HRESULT result = CoCreateInstance(
+            __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
+            __uuidof(IMMDeviceEnumerator),
+            reinterpret_cast<void**>(enumerator.Put()));
+        if (FAILED(result)) {
+            LogHResultFailure(L"Creating the audio device enumerator", result);
+        } else {
+            ComPtr<IMMDeviceCollection> collection;
+            result = enumerator->EnumAudioEndpoints(
+                eRender, DEVICE_STATE_ACTIVE, collection.Put());
+            if (FAILED(result)) {
+                LogHResultFailure(L"Enumerating active audio outputs", result);
+            } else {
+                UINT count = 0;
+                result = collection->GetCount(&count);
+                if (FAILED(result)) {
+                    LogHResultFailure(L"Counting active audio outputs", result);
+                } else {
+                    size_t deviceOptionsBegin = options->size();
+                    for (UINT index = 0; index < count; ++index) {
+                        ComPtr<IMMDevice> device;
+                        if (FAILED(collection->Item(index, device.Put()))) {
+                            continue;
+                        }
+
+                        std::wstring endpointId;
+                        if (!GetAudioEndpointId(device.Get(), &endpointId)) {
+                            continue;
+                        }
+
+                        std::wstring displayName;
+                        if (!GetAudioEndpointDisplayName(device.Get(),
+                                                         &displayName)) {
+                            displayName = endpointId;
+                        }
+                        options->push_back({AudioOutputMode::EndpointId,
+                                            std::move(endpointId),
+                                            L"Device: " + displayName});
+                    }
+
+                    std::sort(options->begin() +
+                                  static_cast<std::ptrdiff_t>(deviceOptionsBegin),
+                              options->end(),
+                              [](const AudioOutputOption& first,
+                                 const AudioOutputOption& second) {
+                                  return CompareStringOrdinal(
+                                             first.displayName.c_str(), -1,
+                                             second.displayName.c_str(), -1,
+                                             TRUE) == CSTR_LESS_THAN;
+                              });
+                }
+            }
+        }
+
+        *initialSelection = 0;
+        for (size_t index = 0; index < options->size(); ++index) {
+            const AudioOutputOption& option = (*options)[index];
+            bool matches = option.mode == currentSettings.audioOutputMode;
+            if (matches && option.mode == AudioOutputMode::EndpointId) {
+                matches = option.endpointId ==
+                          currentSettings.audioOutputDevice;
+            }
+            if (matches) {
+                *initialSelection = static_cast<int>(index);
+                break;
+            }
+        }
+        return true;
+    } catch (...) {
+        Wh_Log(L"Unable to allocate memory while enumerating audio outputs.");
+        return false;
     }
 }
 
-HRESULT FindAudioEndpointByFriendlyNamePrefix(
-    IMMDeviceEnumerator* enumerator,
-    PCWSTR namePrefix,
-    IMMDevice** matchedDevice) {
-    if (!enumerator || !namePrefix || !matchedDevice || namePrefix[0] == L'\0') {
-        return E_INVALIDARG;
-    }
-    *matchedDevice = nullptr;
-
-    ComPtr<IMMDeviceCollection> collection;
-    HRESULT result = enumerator->EnumAudioEndpoints(
-        eRender, DEVICE_STATE_ACTIVE, collection.Put());
-    if (FAILED(result)) {
-        return result;
+bool BrowseForWaveFile(HWND owner,
+                       const std::wstring& initialPath,
+                       std::wstring* selectedPath) {
+    if (!selectedPath) {
+        return false;
     }
 
-    UINT count = 0;
-    result = collection->GetCount(&count);
-    if (FAILED(result)) {
-        return result;
-    }
-
-    size_t prefixLength = wcslen(namePrefix);
-    IMMDevice* prefixMatch = nullptr;
-    bool ambiguousPrefixMatch = false;
-    for (UINT index = 0; index < count; ++index) {
-        ComPtr<IMMDevice> candidate;
-        if (FAILED(collection->Item(index, candidate.Put()))) {
-            continue;
-        }
-        std::wstring friendlyName;
-        if (!GetAudioEndpointFriendlyName(candidate.Get(), &friendlyName)) {
-            continue;
+    try {
+        std::vector<wchar_t> filePath(32768);
+        if (initialPath.size() < filePath.size()) {
+            std::copy(initialPath.begin(), initialPath.end(), filePath.begin());
         }
 
-        if (_wcsicmp(friendlyName.c_str(), namePrefix) == 0) {
-            if (prefixMatch) {
-                prefixMatch->Release();
+        OPENFILENAMEW dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        dialog.hwndOwner = owner;
+        dialog.lpstrFilter =
+            L"WAV audio files (*.wav)\0*.wav\0All files (*.*)\0*.*\0\0";
+        dialog.lpstrFile = filePath.data();
+        dialog.nMaxFile = static_cast<DWORD>(filePath.size());
+        dialog.lpstrDefExt = L"wav";
+        dialog.lpstrTitle = L"Select the Low Battery Alarm WAV file";
+        dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+                       OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+
+        if (!GetOpenFileNameW(&dialog)) {
+            DWORD error = CommDlgExtendedError();
+            if (error != 0) {
+                Wh_Log(L"The WAV file dialog failed. ExtendedError=%lu.",
+                       error);
+                MessageBoxW(owner, L"The WAV file dialog could not be opened.",
+                            L"Low Battery Alarm", MB_OK | MB_ICONERROR);
             }
-            candidate.Get()->AddRef();
-            *matchedDevice = candidate.Get();
-            return S_OK;
-        }
-        if (friendlyName.size() < prefixLength ||
-            _wcsnicmp(friendlyName.c_str(), namePrefix, prefixLength) != 0) {
-            continue;
+            return false;
         }
 
-        if (prefixMatch) {
-            prefixMatch->Release();
-            prefixMatch = nullptr;
-            ambiguousPrefixMatch = true;
-        } else if (!ambiguousPrefixMatch) {
-            candidate.Get()->AddRef();
-            prefixMatch = candidate.Get();
+        std::wstring path(filePath.data());
+        if (!HasWavExtension(path)) {
+            MessageBoxW(owner, L"Select a file with the .wav extension.",
+                        L"Low Battery Alarm", MB_OK | MB_ICONWARNING);
+            return false;
         }
+        *selectedPath = std::move(path);
+        return true;
+    } catch (...) {
+        Wh_Log(L"Unable to allocate memory for the WAV file dialog.");
+        MessageBoxW(owner, L"The WAV file dialog could not be prepared.",
+                    L"Low Battery Alarm", MB_OK | MB_ICONERROR);
+        return false;
+    }
+}
+
+bool SavePickerConfiguration(const AudioOutputOption& option,
+                             const std::wstring* selectedSoundFilePath) {
+    Settings previousSettings;
+    bool havePreviousSettings = GetSettingsSnapshot(&previousSettings);
+
+    if (!Wh_SetStringValue(kStoredAudioEndpointId, option.endpointId.c_str())) {
+        Wh_Log(L"Unable to store the selected audio endpoint ID.");
+        return false;
+    }
+    if (selectedSoundFilePath &&
+        !Wh_SetStringValue(kStoredSoundFilePath,
+                           selectedSoundFilePath->c_str())) {
+        Wh_Log(L"Unable to store the selected WAV file path.");
+        if (havePreviousSettings) {
+            if (!Wh_SetStringValue(
+                    kStoredAudioEndpointId,
+                    previousSettings.audioOutputDevice.c_str())) {
+                Wh_Log(L"Unable to restore the previous audio endpoint ID "
+                       L"after the WAV path could not be stored.");
+            }
+        }
+        return false;
+    }
+    if (!Wh_SetIntValue(kStoredAudioOutputMode,
+                        static_cast<int>(option.mode))) {
+        Wh_Log(L"Unable to store the selected audio output mode.");
+        if (havePreviousSettings) {
+            if (!Wh_SetStringValue(
+                    kStoredAudioEndpointId,
+                    previousSettings.audioOutputDevice.c_str())) {
+                Wh_Log(L"Unable to restore the previous audio endpoint ID "
+                       L"after the output mode could not be stored.");
+            }
+            if (selectedSoundFilePath &&
+                !Wh_SetStringValue(
+                    kStoredSoundFilePath,
+                    previousSettings.pickerSoundFilePath.c_str())) {
+                Wh_Log(L"Unable to restore the previous WAV picker path after "
+                       L"the output mode could not be stored.");
+            }
+        }
+        return false;
     }
 
-    if (prefixMatch && !ambiguousPrefixMatch) {
-        *matchedDevice = prefixMatch;
-        return S_OK;
+    bool settingsUpdated = false;
+    AcquireSRWLockExclusive(&g_settingsLock);
+    try {
+        g_settings.audioOutputMode = option.mode;
+        g_settings.audioOutputDevice = option.endpointId;
+        g_settings.hasStoredAudioOutputSelection = true;
+        if (selectedSoundFilePath) {
+            g_settings.pickerSoundFilePath = *selectedSoundFilePath;
+            g_settings.soundFilePath = *selectedSoundFilePath;
+        }
+        settingsUpdated = true;
+    } catch (...) {
+        Wh_Log(L"The audio output selection was stored but could not be "
+               L"applied to the current settings snapshot.");
     }
-    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    ReleaseSRWLockExclusive(&g_settingsLock);
+
+    if (settingsUpdated) {
+        CancelAllPlayback();
+        Wh_Log(L"Alarm output selection changed to: %s",
+               option.displayName.c_str());
+        if (selectedSoundFilePath) {
+            Wh_Log(L"Alarm WAV file selected with Windows Explorer: %s",
+                   selectedSoundFilePath->c_str());
+        }
+
+        Settings selectedSettings;
+        if (GetSettingsSnapshot(&selectedSettings) &&
+            selectedSettings.testSoundAfterSettingsChange) {
+            QueuePlayback(PlaybackKind::Test, selectedSettings, false);
+        }
+    }
+    return true;
+}
+
+BOOL CALLBACK SetAudioPickerControlFont(HWND window, LPARAM fontParameter) {
+    SendMessageW(window, WM_SETFONT, static_cast<WPARAM>(fontParameter), TRUE);
+    return TRUE;
+}
+
+LRESULT CALLBACK AudioPickerWindowProcedure(HWND window,
+                                            UINT message,
+                                            WPARAM wParam,
+                                            LPARAM lParam) {
+    AudioPickerWindowState* state = reinterpret_cast<AudioPickerWindowState*>(
+        GetWindowLongPtrW(window, GWLP_USERDATA));
+
+    switch (message) {
+        case WM_NCCREATE: {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(window, GWLP_USERDATA,
+                              reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+            return TRUE;
+        }
+
+        case WM_CREATE: {
+            state = reinterpret_cast<AudioPickerWindowState*>(
+                GetWindowLongPtrW(window, GWLP_USERDATA));
+            if (!state || !state->options) {
+                return -1;
+            }
+
+            HWND instruction = CreateWindowExW(
+                0, L"STATIC",
+                L"Select the output used for Low Battery Alarm:",
+                WS_CHILD | WS_VISIBLE, 16, 16, 568, 20, window, nullptr,
+                nullptr, nullptr);
+            state->comboBox = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"COMBOBOX", L"",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
+                    CBS_DROPDOWNLIST,
+                16, 44, 568, 300, window,
+                reinterpret_cast<HMENU>(
+                    static_cast<INT_PTR>(kAudioPickerComboId)),
+                nullptr, nullptr);
+            HWND soundPathLabel = CreateWindowExW(
+                0, L"STATIC", L"Alarm WAV file:", WS_CHILD | WS_VISIBLE, 16,
+                82, 568, 20, window, nullptr, nullptr, nullptr);
+            state->soundPathEdit = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT",
+                state->selectedSoundFilePath.c_str(),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL |
+                    ES_READONLY,
+                16, 106, 456, 25, window,
+                reinterpret_cast<HMENU>(
+                    static_cast<INT_PTR>(kAudioPickerSoundPathId)),
+                nullptr, nullptr);
+            HWND browseButton = CreateWindowExW(
+                0, L"BUTTON", L"Browse...",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP, 480, 104, 104, 29,
+                window,
+                reinterpret_cast<HMENU>(
+                    static_cast<INT_PTR>(kAudioPickerBrowseId)),
+                nullptr, nullptr);
+            HWND hint = CreateWindowExW(
+                0, L"STATIC",
+                L"Only active output devices are shown. Device selection is "
+                L"stored by endpoint ID.",
+                WS_CHILD | WS_VISIBLE, 16, 145, 568, 34, window,
+                reinterpret_cast<HMENU>(
+                    static_cast<INT_PTR>(kAudioPickerHintId)),
+                nullptr, nullptr);
+            HWND okButton = CreateWindowExW(
+                0, L"BUTTON", L"OK",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 376,
+                187, 100, 30, window,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), nullptr,
+                nullptr);
+            HWND cancelButton = CreateWindowExW(
+                0, L"BUTTON", L"Cancel",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP, 484, 187, 100, 30,
+                window,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDCANCEL)),
+                nullptr, nullptr);
+
+            if (!instruction || !state->comboBox || !soundPathLabel ||
+                !state->soundPathEdit || !browseButton || !hint ||
+                !okButton || !cancelButton) {
+                return -1;
+            }
+
+            for (const AudioOutputOption& option : *state->options) {
+                if (SendMessageW(state->comboBox, CB_ADDSTRING, 0,
+                                 reinterpret_cast<LPARAM>(
+                                     option.displayName.c_str())) < 0) {
+                    return -1;
+                }
+            }
+            SendMessageW(state->comboBox, CB_SETCURSEL,
+                         static_cast<WPARAM>(state->initialSelection), 0);
+
+            HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+            if (font) {
+                EnumChildWindows(window, SetAudioPickerControlFont,
+                                 reinterpret_cast<LPARAM>(font));
+            }
+            return 0;
+        }
+
+        case WM_COMMAND:
+            if (LOWORD(wParam) == kAudioPickerBrowseId &&
+                HIWORD(wParam) == BN_CLICKED) {
+                if (!state || !state->soundPathEdit) {
+                    return 0;
+                }
+                std::wstring selectedPath;
+                if (BrowseForWaveFile(window, state->selectedSoundFilePath,
+                                      &selectedPath)) {
+                    state->selectedSoundFilePath = std::move(selectedPath);
+                    state->soundFilePathChanged = true;
+                    SetWindowTextW(state->soundPathEdit,
+                                   state->selectedSoundFilePath.c_str());
+                }
+                return 0;
+            }
+            if (LOWORD(wParam) == IDOK && HIWORD(wParam) == BN_CLICKED) {
+                if (!state || !state->options || !state->comboBox) {
+                    return 0;
+                }
+                LRESULT selection =
+                    SendMessageW(state->comboBox, CB_GETCURSEL, 0, 0);
+                if (selection == CB_ERR ||
+                    static_cast<size_t>(selection) >= state->options->size()) {
+                    MessageBoxW(window, L"Select an audio output first.",
+                                L"Low Battery Alarm", MB_OK | MB_ICONWARNING);
+                    return 0;
+                }
+                const std::wstring* selectedSoundFilePath =
+                    state->soundFilePathChanged
+                        ? &state->selectedSoundFilePath
+                        : nullptr;
+                if (!SavePickerConfiguration(
+                        (*state->options)[static_cast<size_t>(selection)],
+                        selectedSoundFilePath)) {
+                    MessageBoxW(window,
+                                L"The alarm configuration could not be saved.",
+                                L"Low Battery Alarm", MB_OK | MB_ICONERROR);
+                    return 0;
+                }
+                DestroyWindow(window);
+                return 0;
+            }
+            if (LOWORD(wParam) == IDCANCEL &&
+                HIWORD(wParam) == BN_CLICKED) {
+                DestroyWindow(window);
+                return 0;
+            }
+            break;
+
+        case WM_CLOSE:
+            DestroyWindow(window);
+            return 0;
+
+        case WM_CTLCOLORSTATIC: {
+            HDC deviceContext = reinterpret_cast<HDC>(wParam);
+            SetBkMode(deviceContext, TRANSPARENT);
+            return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
+        }
+
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+
+        default:
+            if (message == kAudioPickerBringToFrontMessage) {
+                ShowWindow(window, SW_RESTORE);
+                SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SetForegroundWindow(window);
+                return 0;
+            }
+            break;
+    }
+
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+bool RunAudioOutputPicker(const std::vector<AudioOutputOption>& options,
+                          int initialSelection,
+                          const std::wstring& currentSoundFilePath) {
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = AudioPickerWindowProcedure;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.hIcon = LoadIconW(nullptr, IDI_INFORMATION);
+    windowClass.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
+    windowClass.lpszClassName = kAudioPickerWindowClass;
+    ATOM classAtom = RegisterClassExW(&windowClass);
+    if (!classAtom) {
+        LogWin32Failure(L"Registering the audio picker window class",
+                        GetLastError());
+        return false;
+    }
+
+    AudioPickerWindowState state;
+    state.options = &options;
+    state.initialSelection = initialSelection;
+    state.selectedSoundFilePath = currentSoundFilePath;
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+    DWORD extendedStyle = WS_EX_TOPMOST | WS_EX_DLGMODALFRAME;
+    RECT windowRectangle{0, 0, 600, 235};
+    AdjustWindowRectEx(&windowRectangle, style, FALSE, extendedStyle);
+    int windowWidth = windowRectangle.right - windowRectangle.left;
+    int windowHeight = windowRectangle.bottom - windowRectangle.top;
+
+    RECT workArea{};
+    if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0)) {
+        workArea.right = GetSystemMetrics(SM_CXSCREEN);
+        workArea.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+    int windowX = workArea.left +
+                  ((workArea.right - workArea.left) - windowWidth) / 2;
+    int windowY = workArea.top +
+                  ((workArea.bottom - workArea.top) - windowHeight) / 2;
+
+    HWND window = CreateWindowExW(
+        extendedStyle, kAudioPickerWindowClass,
+        L"Low Battery Alarm configuration", style, windowX, windowY,
+        windowWidth, windowHeight, nullptr, nullptr, windowClass.hInstance,
+        &state);
+    if (!window) {
+        LogWin32Failure(L"Creating the audio picker window", GetLastError());
+        UnregisterClassW(kAudioPickerWindowClass, windowClass.hInstance);
+        return false;
+    }
+
+    AcquireSRWLockExclusive(&g_audioPickerLock);
+    g_audioPickerWindow = window;
+    ReleaseSRWLockExclusive(&g_audioPickerLock);
+
+    if (g_stopping.load()) {
+        DestroyWindow(window);
+    } else {
+        ShowWindow(window, SW_SHOW);
+        SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetForegroundWindow(window);
+    }
+
+    MSG message{};
+    BOOL getMessageResult = 0;
+    while ((getMessageResult = GetMessageW(&message, nullptr, 0, 0)) > 0) {
+        if (!IsDialogMessageW(window, &message)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    if (getMessageResult < 0) {
+        LogWin32Failure(L"Reading an audio picker window message",
+                        GetLastError());
+    }
+
+    AcquireSRWLockExclusive(&g_audioPickerLock);
+    if (g_audioPickerWindow == window) {
+        g_audioPickerWindow = nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_audioPickerLock);
+
+    if (IsWindow(window)) {
+        DestroyWindow(window);
+    }
+    if (!UnregisterClassW(kAudioPickerWindowClass, windowClass.hInstance)) {
+        LogWin32Failure(L"Unregistering the audio picker window class",
+                        GetLastError());
+    }
+    return getMessageResult >= 0;
+}
+
+DWORD WINAPI AudioOutputPickerThreadProcedure(void*) {
+    Wh_Log(L"Audio output picker thread started.");
+    HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool comInitialized = SUCCEEDED(comResult);
+    if (FAILED(comResult)) {
+        LogHResultFailure(L"CoInitializeEx for the audio picker", comResult);
+        MessageBoxW(nullptr,
+                    L"The audio output picker could not initialize COM.",
+                    L"Low Battery Alarm", MB_OK | MB_ICONERROR | MB_TOPMOST |
+                                                MB_SETFOREGROUND);
+    }
+
+    try {
+        if (comInitialized && !g_stopping.load()) {
+            Settings currentSettings;
+            std::vector<AudioOutputOption> options;
+            int initialSelection = 0;
+            if (!GetSettingsSnapshot(&currentSettings) ||
+                !BuildAudioOutputOptions(&options, currentSettings,
+                                         &initialSelection)) {
+                MessageBoxW(nullptr,
+                            L"The list of audio output devices could not be "
+                            L"created.",
+                            L"Low Battery Alarm",
+                            MB_OK | MB_ICONERROR | MB_TOPMOST |
+                                MB_SETFOREGROUND);
+            } else if (!g_stopping.load() &&
+                       !RunAudioOutputPicker(options, initialSelection,
+                                             currentSettings.soundFilePath)) {
+                MessageBoxW(nullptr,
+                            L"The audio output picker window could not be "
+                            L"created.",
+                            L"Low Battery Alarm",
+                            MB_OK | MB_ICONERROR | MB_TOPMOST |
+                                MB_SETFOREGROUND);
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"An exception occurred in the audio output picker thread.");
+    }
+
+    if (comInitialized) {
+        CoUninitialize();
+    }
+    Wh_Log(L"Audio output picker thread stopped.");
+    return 0;
+}
+
+void RequestAudioOutputPicker() {
+    Wh_Log(L"Audio output picker requested.");
+    DWORD threadCreationError = ERROR_SUCCESS;
+    AcquireSRWLockExclusive(&g_audioPickerLock);
+    if (g_audioPickerThread) {
+        DWORD waitResult = WaitForSingleObject(g_audioPickerThread, 0);
+        if (waitResult == WAIT_TIMEOUT) {
+            HWND window = g_audioPickerWindow;
+            ReleaseSRWLockExclusive(&g_audioPickerLock);
+            if (window) {
+                PostMessageW(window, kAudioPickerBringToFrontMessage, 0, 0);
+            }
+            return;
+        }
+        CloseHandle(g_audioPickerThread);
+        g_audioPickerThread = nullptr;
+        g_audioPickerWindow = nullptr;
+    }
+
+    g_audioPickerThread = CreateThread(
+        nullptr, 0, AudioOutputPickerThreadProcedure, nullptr, 0, nullptr);
+    if (!g_audioPickerThread) {
+        threadCreationError = GetLastError();
+    }
+    ReleaseSRWLockExclusive(&g_audioPickerLock);
+
+    if (threadCreationError != ERROR_SUCCESS) {
+        LogWin32Failure(L"Creating the audio output picker thread",
+                        threadCreationError);
+        MessageBoxW(nullptr,
+                    L"The audio output picker thread could not be created.",
+                    L"Low Battery Alarm", MB_OK | MB_ICONERROR | MB_TOPMOST |
+                                                MB_SETFOREGROUND);
+    }
+}
+
+void StopAudioOutputPicker() {
+    AcquireSRWLockShared(&g_audioPickerLock);
+    HANDLE thread = g_audioPickerThread;
+    HWND window = g_audioPickerWindow;
+    if (window) {
+        PostMessageW(window, WM_CLOSE, 0, 0);
+    }
+    ReleaseSRWLockShared(&g_audioPickerLock);
+
+    if (!thread) {
+        return;
+    }
+
+    DWORD waitResult = WaitForSingleObject(
+        thread, kShutdownDiagnosticTimeoutMilliseconds);
+    if (waitResult == WAIT_TIMEOUT) {
+        Wh_Log(L"The audio output picker did not stop within %lu "
+               L"milliseconds; waiting for safe shutdown.",
+               kShutdownDiagnosticTimeoutMilliseconds);
+        WaitForSingleObject(thread, INFINITE);
+    } else if (waitResult == WAIT_FAILED) {
+        LogWin32Failure(L"Waiting for the audio output picker",
+                        GetLastError());
+        WaitForSingleObject(thread, INFINITE);
+    }
+
+    AcquireSRWLockExclusive(&g_audioPickerLock);
+    if (g_audioPickerThread == thread) {
+        CloseHandle(g_audioPickerThread);
+        g_audioPickerThread = nullptr;
+        g_audioPickerWindow = nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_audioPickerLock);
 }
 
 bool PlayWaveFileInterruptibly(const std::wstring& path,
@@ -2087,118 +1837,190 @@ bool PlayWaveFileInterruptibly(const std::wstring& path,
         return false;
     }
 
-    UINT outputDeviceId = WAVE_MAPPER;
-    if (!ResolveWaveOutDeviceId(settings.audioOutputDeviceId,
-                                settings.audioOutputDeviceName,
-                                &outputDeviceId)) {
-        Wh_Log(L"The selected alarm output is unavailable: %s. Windows default "
-               L"output will be used for this alert.",
-               settings.audioOutputDeviceName.c_str());
-    }
-
-    HANDLE completionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!completionEvent) {
-        LogWin32Failure(L"CreateEventW for wave-output completion",
-                        GetLastError());
+    WAVEFORMATEX* format = wave.Format();
+    if (format->nBlockAlign == 0 ||
+        wave.audioData.size() % format->nBlockAlign != 0) {
+        Wh_Log(L"The WAV data is not aligned to complete audio frames: %s",
+               path.c_str());
         return false;
     }
 
-    HWAVEOUT waveOut = nullptr;
-    WAVEHDR header{};
-    header.lpData = reinterpret_cast<LPSTR>(wave.audioData.data());
-    header.dwBufferLength = static_cast<DWORD>(wave.audioData.size());
-    bool prepared = false;
-    bool submitted = false;
-    MMRESULT result = MMSYSERR_NOERROR;
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    HRESULT result = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
+        __uuidof(IMMDeviceEnumerator),
+        reinterpret_cast<void**>(enumerator.Put()));
+    if (FAILED(result)) {
+        LogHResultFailure(L"CoCreateInstance for MMDeviceEnumerator", result);
+        return false;
+    }
 
-    AcquireSRWLockExclusive(&g_playbackControlLock);
-    if (IsPlaybackCancelled()) {
+    ComPtr<IMMDevice> device;
+    result = ResolveConfiguredAudioDevice(
+        enumerator.Get(), settings.audioOutputMode,
+        settings.audioOutputDevice, device.Put());
+    if (FAILED(result) &&
+        settings.audioOutputMode != AudioOutputMode::WindowsDefault) {
+        LogHResultFailure(L"Resolving the selected alarm output", result);
+        Wh_Log(L"The selected output is unavailable; the "
+               L"Windows default output will be used for this alert.");
+        result = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                                     device.Put());
+    }
+    if (FAILED(result)) {
+        LogHResultFailure(L"Obtaining the alarm output endpoint", result);
+        return false;
+    }
+
+    ComPtr<IAudioClient> audioClient;
+    result = device->Activate(__uuidof(IAudioClient), CLSCTX_INPROC_SERVER,
+                              nullptr,
+                              reinterpret_cast<void**>(audioClient.Put()));
+    if (FAILED(result)) {
+        LogHResultFailure(L"IMMDevice::Activate for IAudioClient", result);
+        return false;
+    }
+
+    HANDLE audioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!audioEvent) {
+        LogWin32Failure(L"CreateEventW for WASAPI playback", GetLastError());
+        return false;
+    }
+
+    constexpr DWORD streamFlags =
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST |
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+    result = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, streamFlags, 0, 0,
+                                     format, nullptr);
+    if (SUCCEEDED(result)) {
+        result = audioClient->SetEventHandle(audioEvent);
+    }
+
+    UINT32 bufferFrames = 0;
+    if (SUCCEEDED(result)) {
+        result = audioClient->GetBufferSize(&bufferFrames);
+    }
+
+    ComPtr<IAudioRenderClient> renderClient;
+    if (SUCCEEDED(result)) {
+        result = audioClient->GetService(
+            __uuidof(IAudioRenderClient),
+            reinterpret_cast<void**>(renderClient.Put()));
+    }
+
+    UINT32 totalFrames = static_cast<UINT32>(
+        wave.audioData.size() / format->nBlockAlign);
+    UINT32 frameOffset = 0;
+    auto writeFrames = [&](UINT32 frameCount) -> HRESULT {
+        if (frameCount == 0) {
+            return S_OK;
+        }
+        BYTE* destination = nullptr;
+        HRESULT writeResult =
+            renderClient->GetBuffer(frameCount, &destination);
+        if (FAILED(writeResult)) {
+            return writeResult;
+        }
+        size_t byteOffset =
+            static_cast<size_t>(frameOffset) * format->nBlockAlign;
+        size_t byteCount =
+            static_cast<size_t>(frameCount) * format->nBlockAlign;
+        std::memcpy(destination, wave.audioData.data() + byteOffset, byteCount);
+        writeResult = renderClient->ReleaseBuffer(frameCount, 0);
+        if (SUCCEEDED(writeResult)) {
+            frameOffset += frameCount;
+        }
+        return writeResult;
+    };
+
+    if (SUCCEEDED(result)) {
+        result = writeFrames((std::min)(bufferFrames, totalFrames));
+    }
+
+    bool started = false;
+    if (SUCCEEDED(result)) {
+        AcquireSRWLockExclusive(&g_playbackControlLock);
+        if (!IsPlaybackCancelled()) {
+            result = audioClient->Start();
+            started = SUCCEEDED(result);
+        }
         ReleaseSRWLockExclusive(&g_playbackControlLock);
-        CloseHandle(completionEvent);
-        return true;
     }
 
-    result = waveOutOpen(
-        &waveOut, outputDeviceId, wave.Format(),
-        reinterpret_cast<DWORD_PTR>(completionEvent), 0, CALLBACK_EVENT);
-    if (result == MMSYSERR_NOERROR) {
-        g_activeWaveOut = waveOut;
-        ResetEvent(completionEvent);
-        result = waveOutPrepareHeader(waveOut, &header, sizeof(header));
-        prepared = result == MMSYSERR_NOERROR;
-    }
-    if (prepared) {
-        ResetEvent(completionEvent);
-        result = waveOutWrite(waveOut, &header, sizeof(header));
-        submitted = result == MMSYSERR_NOERROR;
-    }
-    ReleaseSRWLockExclusive(&g_playbackControlLock);
-
-    bool waitSucceeded = submitted;
-    if (submitted) {
+    bool succeeded = SUCCEEDED(result);
+    if (started) {
         HANDLE waitHandles[] = {g_shutdownEvent, g_playbackCancelEvent,
-                                completionEvent};
-        while ((header.dwFlags & WHDR_DONE) == 0) {
+                                audioEvent};
+        while (!IsPlaybackCancelled()) {
+            if (frameOffset >= totalFrames) {
+                UINT32 padding = 0;
+                result = audioClient->GetCurrentPadding(&padding);
+                if (FAILED(result)) {
+                    succeeded = false;
+                    break;
+                }
+                if (padding == 0) {
+                    break;
+                }
+            }
+
             DWORD waitResult = WaitForMultipleObjects(
                 ARRAYSIZE(waitHandles), waitHandles, FALSE, INFINITE);
             if (waitResult == WAIT_OBJECT_0 ||
                 waitResult == WAIT_OBJECT_0 + 1) {
                 break;
             }
-            if (waitResult == WAIT_OBJECT_0 + 2) {
-                continue;
+            if (waitResult != WAIT_OBJECT_0 + 2) {
+                if (waitResult == WAIT_FAILED) {
+                    LogWin32Failure(L"Waiting for WASAPI playback",
+                                    GetLastError());
+                } else {
+                    Wh_Log(L"Unexpected WASAPI wait result: %lu.", waitResult);
+                }
+                result = HRESULT_FROM_WIN32(ERROR_GEN_FAILURE);
+                succeeded = false;
+                break;
             }
-            if (waitResult == WAIT_FAILED) {
-                LogWin32Failure(L"Waiting for wave-output completion",
-                                GetLastError());
-            } else {
-                Wh_Log(L"Unexpected wave-output wait result: %lu.",
-                       waitResult);
+
+            if (frameOffset < totalFrames) {
+                UINT32 padding = 0;
+                result = audioClient->GetCurrentPadding(&padding);
+                if (FAILED(result)) {
+                    succeeded = false;
+                    break;
+                }
+                if (padding > bufferFrames) {
+                    result = E_UNEXPECTED;
+                    succeeded = false;
+                    break;
+                }
+                UINT32 availableFrames = bufferFrames - padding;
+                UINT32 remainingFrames = totalFrames - frameOffset;
+                result =
+                    writeFrames((std::min)(availableFrames, remainingFrames));
+                if (FAILED(result)) {
+                    succeeded = false;
+                    break;
+                }
             }
-            waitSucceeded = false;
-            break;
         }
     }
 
-    AcquireSRWLockExclusive(&g_playbackControlLock);
-    if (waveOut) {
-        if ((header.dwFlags & WHDR_DONE) == 0) {
-            MMRESULT resetResult = waveOutReset(waveOut);
-            if (resetResult != MMSYSERR_NOERROR) {
-                LogWaveOutFailure(L"waveOutReset during cleanup", resetResult);
-            }
+    if (started) {
+        HRESULT stopResult = audioClient->Stop();
+        if (FAILED(stopResult)) {
+            LogHResultFailure(L"IAudioClient::Stop", stopResult);
         }
-        if (prepared) {
-            MMRESULT unprepareResult =
-                waveOutUnprepareHeader(waveOut, &header, sizeof(header));
-            if (unprepareResult == WAVERR_STILLPLAYING) {
-                waveOutReset(waveOut);
-                unprepareResult =
-                    waveOutUnprepareHeader(waveOut, &header, sizeof(header));
-            }
-            if (unprepareResult != MMSYSERR_NOERROR) {
-                LogWaveOutFailure(L"waveOutUnprepareHeader", unprepareResult);
-            }
-        }
-        if (g_activeWaveOut == waveOut) {
-            g_activeWaveOut = nullptr;
-        }
-        MMRESULT closeResult = waveOutClose(waveOut);
-        if (closeResult != MMSYSERR_NOERROR) {
-            LogWaveOutFailure(L"waveOutClose", closeResult);
-        }
+        audioClient->Reset();
     }
-    ReleaseSRWLockExclusive(&g_playbackControlLock);
-    CloseHandle(completionEvent);
+    CloseHandle(audioEvent);
 
-    if (!submitted) {
-        LogWaveOutFailure(prepared ? L"waveOutWrite"
-                                   : waveOut ? L"waveOutPrepareHeader"
-                                             : L"waveOutOpen",
-                          result);
+    if (!succeeded && !IsPlaybackCancelled()) {
+        LogHResultFailure(L"WASAPI WAV playback", result);
         return false;
     }
-    return waitSucceeded;
+    return true;
 }
 
 class AudioStateGuard {
@@ -2222,33 +2044,13 @@ public:
         }
 
         ComPtr<IMMDevice> device;
-        if (settings.audioOutputDeviceId.empty()) {
-            result = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
+        result = ResolveConfiguredAudioDevice(
+            enumerator.Get(), settings.audioOutputMode,
+            settings.audioOutputDevice, device.Put());
+        if (FAILED(result) &&
+            settings.audioOutputMode != AudioOutputMode::WindowsDefault) {
+            result = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
                                                          device.Put());
-        } else {
-            std::wstring endpointId;
-            try {
-                constexpr wchar_t legacyPrefix[] = L"legacy-waveout:";
-                if (settings.audioOutputDeviceId.starts_with(legacyPrefix)) {
-                    result = FindAudioEndpointByFriendlyNamePrefix(
-                        enumerator.Get(),
-                        settings.audioOutputDeviceId.c_str() +
-                            (ARRAYSIZE(legacyPrefix) - 1),
-                        device.Put());
-                } else {
-                    endpointId = settings.audioOutputDeviceId.starts_with(L"\\\\?\\")
-                                     ? ExtractEndpointIdFromWaveOutInterface(
-                                           settings.audioOutputDeviceId)
-                                     : settings.audioOutputDeviceId;
-                    result = endpointId.empty()
-                                 ? E_INVALIDARG
-                                 : enumerator->GetDevice(endpointId.c_str(),
-                                                         device.Put());
-                }
-            } catch (...) {
-                Wh_Log(L"Unable to allocate the selected audio endpoint ID.");
-                return;
-            }
         }
         if (FAILED(result)) {
             LogHResultFailure(L"Obtaining the alarm output audio endpoint",
@@ -2314,7 +2116,7 @@ public:
             result = endpoint_->SetMute(appliedMute_, nullptr);
             if (SUCCEEDED(result)) {
                 muteChanged_ = true;
-                Wh_Log(L"The default output device was temporarily unmuted.");
+                Wh_Log(L"The selected output device was temporarily unmuted.");
             } else {
                 LogHResultFailure(L"IAudioEndpointVolume::SetMute", result);
             }
@@ -2961,49 +2763,6 @@ bool CreateSynchronizationObjects() {
     return true;
 }
 
-bool CreateSessionInstanceMutex() {
-    DWORD sessionId = 0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId)) {
-        LogWin32Failure(L"ProcessIdToSessionId", GetLastError());
-        return false;
-    }
-
-    wchar_t mutexName[96]{};
-    int characters = swprintf_s(
-        mutexName, ARRAYSIZE(mutexName),
-        L"Local\\WindhawkLowBatteryAlarm_%lu", sessionId);
-    if (characters <= 0) {
-        Wh_Log(L"Unable to format the per-session mutex name.");
-        return false;
-    }
-
-    SetLastError(ERROR_SUCCESS);
-    // The open handle, rather than thread-affine mutex ownership, is the
-    // per-session lifetime marker.
-    g_instanceMutex = CreateMutexW(nullptr, FALSE, mutexName);
-    if (!g_instanceMutex) {
-        LogWin32Failure(L"CreateMutexW for the per-session controller",
-                        GetLastError());
-        return false;
-    }
-
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
-        g_isPrimaryInstance = false;
-        Wh_Log(L"Another Low Battery Alarm controller is active in session "
-               L"%lu; this Explorer instance will remain secondary.",
-               sessionId);
-        return true;
-    }
-
-    g_isPrimaryInstance = true;
-    Wh_Log(L"This Explorer instance is the primary Low Battery Alarm controller "
-           L"for session %lu.",
-           sessionId);
-    return true;
-}
-
 void SignalWorkersToStop() {
     g_stopping.store(true);
     if (g_shutdownEvent) {
@@ -3025,12 +2784,11 @@ void SignalWorkersToStop() {
         SetEvent(g_powerSourceChangedEvent);
     }
     ClosePowerNotificationController();
-    CloseSoundConfiguration();
     StopActiveWaveform();
 }
 
 void WaitForWorkers() {
-    HANDLE threads[4]{};
+    HANDLE threads[3]{};
     DWORD threadCount = 0;
     if (g_monitorThread) {
         threads[threadCount++] = g_monitorThread;
@@ -3041,12 +2799,6 @@ void WaitForWorkers() {
     if (g_powerNotificationThread) {
         threads[threadCount++] = g_powerNotificationThread;
     }
-    AcquireSRWLockShared(&g_soundConfigurationLock);
-    if (g_soundConfigurationThread) {
-        threads[threadCount++] = g_soundConfigurationThread;
-    }
-    ReleaseSRWLockShared(&g_soundConfigurationLock);
-
     if (threadCount == 0) {
         g_workersJoined = true;
         return;
@@ -3086,8 +2838,7 @@ void CloseHandleIfPresent(HANDLE* handle) {
 
 void CleanupHandles() {
     if (!g_workersJoined &&
-        (g_monitorThread || g_playbackThread || g_powerNotificationThread ||
-         g_soundConfigurationThread)) {
+        (g_monitorThread || g_playbackThread || g_powerNotificationThread)) {
         Wh_Log(L"Cleanup was requested before worker threads were joined; "
                L"joining them now.");
         StopAndJoinWorkers();
@@ -3096,9 +2847,6 @@ void CleanupHandles() {
     CloseHandleIfPresent(&g_monitorThread);
     CloseHandleIfPresent(&g_playbackThread);
     CloseHandleIfPresent(&g_powerNotificationThread);
-    AcquireSRWLockExclusive(&g_soundConfigurationLock);
-    CloseHandleIfPresent(&g_soundConfigurationThread);
-    ReleaseSRWLockExclusive(&g_soundConfigurationLock);
     CloseHandleIfPresent(&g_initialEvaluationEvent);
     CloseHandleIfPresent(&g_powerSourceChangedEvent);
     CloseHandleIfPresent(&g_powerNotificationReadyEvent);
@@ -3108,9 +2856,6 @@ void CleanupHandles() {
     CloseHandleIfPresent(&g_settingsChangedEvent);
     CloseHandleIfPresent(&g_shutdownEvent);
 
-    if (g_instanceMutex) {
-        CloseHandleIfPresent(&g_instanceMutex);
-    }
 }
 
 bool StartWorkers() {
@@ -3184,7 +2929,7 @@ bool StartWorkers() {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Low Battery Alarm initialization started.");
 
     try {
@@ -3193,7 +2938,6 @@ BOOL Wh_ModInit() {
         g_powerNotificationInitialized.store(false);
         g_externalPowerConnected.store(false);
         g_lastNotifiedPowerCondition.store(-1);
-        g_activeWaveOut = nullptr;
         g_workersJoined = false;
 
         Settings initialSettings;
@@ -3201,6 +2945,8 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Initial settings could not be loaded.");
             return FALSE;
         }
+        bool requestAudioPickerOnStartup =
+            InitializeConfigurationTrigger(initialSettings);
         if (!ReplaceSettings(std::move(initialSettings))) {
             return FALSE;
         }
@@ -3210,21 +2956,15 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        if (!CreateSessionInstanceMutex()) {
-            CleanupHandles();
-            return FALSE;
-        }
-
-        if (!g_isPrimaryInstance) {
-            Wh_Log(L"Low Battery Alarm initialized as a secondary instance.");
-            return TRUE;
-        }
-
         if (!StartWorkers()) {
             Wh_Log(L"Worker threads could not be started safely.");
             StopAndJoinWorkers();
             CleanupHandles();
             return FALSE;
+        }
+
+        if (requestAudioPickerOnStartup) {
+            RequestAudioOutputPicker();
         }
 
         Wh_Log(L"Low Battery Alarm initialized successfully.");
@@ -3238,7 +2978,7 @@ BOOL Wh_ModInit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_stopping.load()) {
         return;
     }
@@ -3256,22 +2996,28 @@ void Wh_ModSettingsChanged() {
             return;
         }
 
+        if (updatedSettings.configuredSoundFilePath !=
+            previousSettings.configuredSoundFilePath) {
+            if (!Wh_SetStringValue(kStoredSoundFilePath, L"")) {
+                Wh_Log(L"The manual WAV path is active, but the previously "
+                       L"stored picker path could not be cleared.");
+            }
+            updatedSettings.pickerSoundFilePath.clear();
+            updatedSettings.soundFilePath =
+                updatedSettings.configuredSoundFilePath;
+        }
+
         bool cancelPlayback =
             PlaybackSettingsDiffer(previousSettings, updatedSettings);
         bool requestTest = updatedSettings.testSoundAfterSettingsChange;
-        bool requestSoundConfiguration =
-            updatedSettings.configureSoundSource &&
-            !previousSettings.configureSoundSource;
         if (!ReplaceSettings(updatedSettings)) {
             Wh_Log(L"Settings reload failed; the previous settings remain "
                    L"active.");
             return;
         }
         Wh_Log(L"Settings reloaded successfully.");
-
-        if (!g_isPrimaryInstance) {
-            return;
-        }
+        bool requestAudioPicker = ConsumeConfigurationTrigger(
+            previousSettings, updatedSettings);
 
         if (cancelPlayback) {
             CancelAllPlayback();
@@ -3281,17 +3027,18 @@ void Wh_ModSettingsChanged() {
             LogWin32Failure(L"SetEvent for settings changes", GetLastError());
         }
 
-        if (requestSoundConfiguration) {
-            RequestSoundConfiguration();
-        } else if (requestTest) {
+        if (requestTest && !requestAudioPicker) {
             QueuePlayback(PlaybackKind::Test, updatedSettings, false);
+        }
+        if (requestAudioPicker) {
+            RequestAudioOutputPicker();
         }
     } catch (...) {
         Wh_Log(L"An exception occurred while applying changed settings.");
     }
 }
 
-void Wh_ModBeforeUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Low Battery Alarm shutdown started.");
 
     if (g_stopping.exchange(true)) {
@@ -3299,22 +3046,183 @@ void Wh_ModBeforeUninit() {
     }
 
     try {
+        StopAudioOutputPicker();
         CancelAllPlayback();
         StopAndJoinWorkers();
+        CleanupHandles();
         Wh_Log(L"All Low Battery Alarm worker activity has stopped.");
     } catch (...) {
         Wh_Log(L"An exception occurred while stopping Low Battery Alarm; "
                L"forcing a final safe worker join.");
+        StopAudioOutputPicker();
         SignalWorkersToStop();
         WaitForWorkers();
+        CleanupHandles();
     }
 }
 
-void Wh_ModUninit() {
-    try {
-        CleanupHandles();
-        Wh_Log(L"Low Battery Alarm cleanup completed successfully.");
-    } catch (...) {
-        Wh_Log(L"An exception occurred during final Low Battery Alarm cleanup.");
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
