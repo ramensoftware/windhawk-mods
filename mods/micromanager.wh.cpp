@@ -38,7 +38,7 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 # 1.1.0
 - **Fixed:** Tooltip now displays correctly when hovering the tray icon.
 - **Fixed:** Ghost window prevention — popup no longer flickers on rapid open/close.
-- **Fixed:** Data delays no longer cause missing stats — monitor recovers automatically.
+- **Fixed:** Removed stale exponential backoff in process enumeration retry — STATUS_INFO_LENGTH_MISMATCH only needs a larger buffer.
 - **Fixed:** Safe mod reload — icon and window clean up properly without crashing.
 - **Improved:** Tray tooltip updates only when values change, reducing unnecessary CPU work.
 - **Fixed:** Popup no longer leaves a ghost window behind.
@@ -251,7 +251,6 @@ static int CollectProcessInfo(MY_SYSTEM_PROCESS_INFO** outBuf) {
 
     *outBuf = nullptr;
 
-    DWORD retryDelay = 50;
     for (int retry = 0; retry < 5; retry++) {
         ULONG bufSize = PROCESS_BUF_SIZE * (retry + 2);
         MY_SYSTEM_PROCESS_INFO* newBuf = (MY_SYSTEM_PROCESS_INFO*)realloc(*outBuf, bufSize);
@@ -266,8 +265,6 @@ static int CollectProcessInfo(MY_SYSTEM_PROCESS_INFO** outBuf) {
             }
             return 1;
         }
-        Sleep(retryDelay);
-        retryDelay *= 2;
     }
     // All 5 attempts failed with STATUS_INFO_LENGTH_MISMATCH
     free(*outBuf);
