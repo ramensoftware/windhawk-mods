@@ -1,3 +1,7 @@
+## 1.2.7 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3e2632c748381ea643ee5c3d4ef6f9eb62e69c28/mods/classic-theme-enable.wh.cpp))
+
+add conflict dialog fix to the readme
+
 ## 1.2.6 ([Jun 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9e54b233e2a355cc50156b9863f1093a6aa20b53/mods/classic-theme-enable.wh.cpp))
 
 * Remove Control Panel Color Fix from tutorial (its functionality was included into Explorerframe fixes fork)

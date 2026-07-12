@@ -2129,7 +2129,7 @@
           10
         ],
         "ratingUsers": 11,
-        "updated": 1782472435000,
+        "updated": 1783833372000,
         "users": 255
       },
       "metadata": {
@@ -2141,7 +2141,7 @@
           "winlogon.exe"
         ],
         "name": "Classic Theme",
-        "version": "1.2.6"
+        "version": "1.2.7"
       }
     },
     "classic-theme-enable-with-extended-compatibility": {
@@ -2242,11 +2242,12 @@
           4
         ],
         "ratingUsers": 5,
-        "updated": 1782106934000,
+        "updated": 1783833093000,
         "users": 887
       },
       "metadata": {
         "author": "Anixx",
+        "compilerOptions": "-luxtheme",
         "description": "Fixes transparency glitches in Classic theme",
         "github": "https://github.com/Anixx",
         "include": [
@@ -2254,7 +2255,7 @@
           "dllhost.exe"
         ],
         "name": "Classic theme transparency fix",
-        "version": "1.4"
+        "version": "1.5"
       }
     },
     "classic-theme-uifile-fix": {
@@ -4036,7 +4037,7 @@
           7
         ],
         "ratingUsers": 8,
-        "updated": 1783005612000,
+        "updated": 1783833134000,
         "users": 526
       },
       "metadata": {
@@ -4052,7 +4053,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Dynamic Taskbar Transparency",
-        "version": "0.3.8"
+        "version": "0.3.9"
       }
     },
     "edge-hot-corner-desktop-switch": {
@@ -6740,7 +6741,7 @@
           17
         ],
         "ratingUsers": 27,
-        "updated": 1783175924000,
+        "updated": 1783833184000,
         "users": 388
       },
       "metadata": {
@@ -6748,7 +6749,7 @@
           "x86-64"
         ],
         "author": "usho",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1",
         "description": "Dynamic island-like media controls for the Windows 11 taskbar.",
         "github": "https://github.com/usho-lear",
         "include": [
@@ -6756,7 +6757,7 @@
         ],
         "license": "MIT",
         "name": "Island Media Controls",
-        "version": "0.9.27"
+        "version": "0.9.146"
       }
     },
     "isretailready-false": {
@@ -11363,6 +11364,37 @@
         ],
         "name": "Taskbar Dock Animation",
         "version": "1.9.2"
+      }
+    },
+    "taskbar-dock-animation-plus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783833050000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783833050000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "incconutwo",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32",
+        "description": "Animates taskbar icons on mouse hover like in macOS",
+        "github": "https://github.com/incconutwo",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Dock Animation Plus",
+        "version": "2.0.0"
       }
     },
     "taskbar-elastic-pill": {

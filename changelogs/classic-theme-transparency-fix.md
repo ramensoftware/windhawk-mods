@@ -1,3 +1,7 @@
+## 1.5 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4ee700e89ba0195554d24561ff71e1d8c75ae1cb/mods/classic-theme-transparency-fix.wh.cpp))
+
+If app themed, do nothing
+
 ## 1.4 ([Jun 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/17a8f399f5a96614befd658e6f313fbc22dc5a14/mods/classic-theme-transparency-fix.wh.cpp))
 
 Add workaround for all Avalonia applications

@@ -2,12 +2,161 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-11T18:07:43.000Z</updated>
+    <updated>2026-07-12T05:16:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.2.7]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#3e2632c748381ea643ee5c3d4ef6f9eb62e69c28</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2026-07-12T05:16:12.000Z</updated>
+        <content type="html"><![CDATA[<p>add conflict dialog fix to the readme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Island Media Controls 0.9.146]]></title>
+        <id>https://windhawk.net/mods/island-media-controls#a9b7eaed62566ac6fbe2fe5ea8371af1f475cced</id>
+        <link href="https://windhawk.net/mods/island-media-controls"/>
+        <updated>2026-07-12T05:13:04.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="materialsanddefaults">Materials and defaults</h3>
+<ul>
+<li>Changed the default material for new installs from Mica-like to Acrylic.</li>
+<li>Added a one-time migration for users who still had the old Mica-like default.</li>
+<li>Restored Mica-like as a normal explicit choice after migration.</li>
+<li>Fixed the light-mode Mica-like expanded background becoming almost pure white from a duplicated tint layer.</li>
+<li>Kept compact and expanded material colors consistent across light and dark themes.</li>
+</ul>
+<h3 id="liquidglassandacrylicrendering">Liquid Glass and Acrylic rendering</h3>
+<ul>
+<li>Added the Liquid Glass material option.</li>
+<li>Added GPU displacement-map refraction with a rounded-rectangle SDF so edge and corner refraction follows the component shape.</li>
+<li>Added a narrow high-index rim and a wider, smooth interior falloff into the center.</li>
+<li>Increased sampling quality and removed the earlier tiled/nine-slice appearance.</li>
+<li>Added theme-aware edge highlights, reduced dark-mode tint, and independently tuned blur for the main surface and playback card.</li>
+<li>Applied matching material treatment to the expanded playback controls.</li>
+<li>Retained the live WGC/D3D/D2D Acrylic backdrop and fallback blur handoff.</li>
+</ul>
+<h3 id="recordingsupport">Recording support</h3>
+<ul>
+<li>Added an optional screen-capture setting for the expanded popup.</li>
+<li>Added a capturable static blurred backdrop for Acrylic and Liquid Glass recording.</li>
+<li>Avoided recursive self-capture while keeping the blur layer visible to recorders.</li>
+<li>Added dark/light Mica-like, Acrylic, and Liquid Glass screenshots to the mod details page.</li>
+</ul>
+<h3 id="mediatransitionsandpresentation">Media transitions and presentation</h3>
+<ul>
+<li>Added smoother directional title and artist transitions.</li>
+<li>Added edge-aware fading that appears as text moves beneath the artwork or popup boundary.</li>
+<li>Reversed expanded transition direction when navigating to the previous track.</li>
+<li>Removed transition-end flicker, persistent fade overlays, black blocks, and abrupt clipping.</li>
+<li>Improved compact and expanded text clipping consistency.</li>
+</ul>
+<h3 id="mediaandbrowsersessionhandling">Media and browser session handling</h3>
+<ul>
+<li>Improved browser/live-media artwork identity tracking.</li>
+<li>Prevented stale thumbnails from leaking between browser sessions.</li>
+<li>Added bounded waits around media properties, thumbnail reads, transport commands, and manager requests.</li>
+<li>Kept event-driven GSMTC refreshes with a low-frequency provider compatibility fallback.</li>
+<li>Preserved Apple Music seeking and transport-control compatibility.</li>
+</ul>
+<h3 id="lifecycleandunloadsafety">Lifecycle and unload safety</h3>
+<ul>
+<li>Released GSMTC manager references before uninitializing the WinRT apartment.</li>
+<li>Explicitly released WGC D3D/DXGI/D2D and WinRT capture resources before DLL unload.</li>
+<li>Added lifecycle guards around injection, callbacks, settings changes, and teardown.</li>
+<li>Avoided indefinite unload joins and lost media-thread wakeups.</li>
+<li>Improved recompilation and reload behavior so Explorer no longer needs to be restarted after each build.</li>
+</ul>
+<h3 id="threadingperformanceanddpireviewfixes">Threading, performance, and DPI review fixes</h3>
+<ul>
+<li>Removed the dead WGC availability macro and unreachable stub implementation.</li>
+<li>Moved overlay window presentation to its owning UI thread through an asynchronous latest-frame queue.</li>
+<li>Kept cross-thread WGC rendering under its resource mutex without holding that lock across <code>UpdateLayeredWindow</code>, <code>ShowWindow</code>, or capture-affinity calls.</li>
+<li>Replaced the permanent per-frame taskbar layout monitor with a 600 ms Win32 timer.</li>
+<li>Created the popup on the taskbar monitor before initializing XAML and added <code>WM_DPICHANGED</code> handling for mixed-DPI multi-monitor setups.</li>
+<li>Switched the D2D factory to multi-threaded mode.</li>
+<li>Allocated the readback buffer before mapping the staging texture and explicitly closed consumed WGC frames.</li>
+<li>Removed the duplicate Windows.Foundation include and the dead popup controls scale state.</li>
+</ul>
+<h3 id="detailspage">Details page</h3>
+<ul>
+<li>Added a top-level What's new section.</li>
+<li>Added a three-material dark/light comparison table.</li>
+<li>Preserved the original overview, animated previews, and feature list.</li>
+</ul>]]></content>
+        <author>
+            <name>usho</name>
+            <uri>https://github.com/usho-lear</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.9]]></title>
+        <id>https://windhawk.net/mods/dynamic-taskbar-transparency#0deea25526cac2db241eccee154f4f599a062eb6</id>
+        <link href="https://windhawk.net/mods/dynamic-taskbar-transparency"/>
+        <updated>2026-07-12T05:12:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make disabled shell states fall through instead of overriding the current taskbar appearance</li>
+</ul>]]></content>
+        <author>
+            <name>11581</name>
+            <uri>https://github.com/r1file</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic theme transparency fix 1.5]]></title>
+        <id>https://windhawk.net/mods/classic-theme-transparency-fix#4ee700e89ba0195554d24561ff71e1d8c75ae1cb</id>
+        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
+        <updated>2026-07-12T05:11:33.000Z</updated>
+        <content type="html"><![CDATA[<p>If app themed, do nothing</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Dock Animation Plus 2.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-dock-animation-plus#15cf861e5bcf2c5d437b20b6c6b1505a8ffc3988</id>
+        <link href="https://windhawk.net/mods/taskbar-dock-animation-plus"/>
+        <updated>2026-07-12T05:10:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbardockanimationplus">Taskbar Dock Animation Plus</h1>
+<p>This mod adds a macOS-like taskbar animation.
+It is an updated fork of the original "Taskbar Dock Animation" mod, extending compatibility to all taskbar positions.</p>
+<p><strong>Requires Windows 11 or newer to function.</strong></p>
+<hr />
+<h3 id="keyadditionsinthisfork">🌟 Key Additions in this Fork</h3>
+<ul>
+<li><strong>Universal Layout Support</strong>: Native compatibility for Left, Right, and Top taskbar configurations.</li>
+<li><strong>Adaptive Animations</strong>: Dynamically aligns scaling directions, spacing shifts, and bounce offsets to the current taskbar orientation.</li>
+<li><strong>On-the-Fly Refreshing</strong>: Updates properties in real time when moving the taskbar, requiring no system restarts.</li>
+</ul>
+<hr />
+<h3 id="knownissueslimitations">⚠️ Known Issues &amp; Limitations</h3>
+<ul>
+<li>Icons are sometimes clipped by the taskbar.</li>
+<li>Upscaled icons may appear slightly blurry.</li>
+</ul>
+<p>"Taskbar height and icon size" Users: If you are using this mod to create a minimalistic taskbar, please keep the Max Scale at or below 130% to avoid clipping issues. This recommendation applies to other scaling mods as well.
+Dell / Alienware Users: If you encounter specific issues on these devices, please reach out to me directly or open an issue so we can investigate together.
+StartAllBack Compatibility: This mod does not and will not support StartAllBack. Supporting it would require a complete rewrite of the codebase, which is currently out of scope.
+Feedback: Feel free to suggest new animation ideas or curves in the mod topic or via direct message!</p>
+<p>You can experiment with the <strong>radius</strong> value to achieve the best result for your setup until proper fixes for the issues above are found.</p>
+<hr />
+<h3 id="credits">💖 Credits</h3>
+<p>This mod is a fork of the original <a href="https://windhawk.net/mods/taskbar-dock-animation">Taskbar Dock Animation</a> mod created by <a href="https://github.com/Ph0en1x-dev">@Ph0en1x-dev</a>. All original logic and visual concepts belong to the original author.</p>
+<hr />
+<h2 id="preview">🖼️ Preview</h2>
+<p><img src="https://raw.githubusercontent.com/Ph0en1x-dev/Hlam/refs/heads/main/Screen-recording-2025-11-06-155028.gif" alt="Taskbar Dock Animation Preview" /></p>]]></content>
+        <author>
+            <name>incconutwo</name>
+            <uri>https://github.com/incconutwo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Audio Visualizer 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-audio-visualizer#529a6018c34b778035bfe79a96650579439c0ca2</id>
@@ -372,140 +521,6 @@ added screenshots to readme</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Folder Thumbnail Style Switcher 2.0]]></title>
-        <id>https://windhawk.net/mods/folder-thumbnail-style-switcher#0033679d580da39a2503353ec651b6c3a4a1ceb6</id>
-        <link href="https://windhawk.net/mods/folder-thumbnail-style-switcher"/>
-        <updated>2026-07-06T18:30:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="folderthumbnailstyleswitcher">Folder Thumbnail Style Switcher</h1>
-<p>Tested on Windows 10 22H2, Windows 11 22H2, 23H2, 24H2, 25H2 with Windhawk 1.7.1</p>
-<p>It may support Windows 10 older version, try by yourself</p>
-<h2 id="preparation">📌Preparation</h2>
-<p>Please prepare icon group 5, 6 in imageres.dll and Bitmap 311 in shell32.dll from the respective Windows to match the folder icons and the shadow.
-And you need to clean the thumbnail cache after changing a style!</p>
-<h2 id="gallery">🎞Gallery</h2>
-<p>| Picture | Style |
-|:---:|:---:|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG" alt="7 style" />|Original 7 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG" alt="10 style" />|Original 10 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png" alt="11 style" />|Original 11 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG" alt="7 style on 10" />|7 style on Windows 10|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png" alt="11 style on 10" />|11 style on Windows 10|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG" alt="7 style on 11" />|7 style on Windows 11|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png" alt="10 style on 11" />|10 style on 11|</p>
-<p>What's the difference🤨? The position and the size of the thumbnails and the shadow are different.</p>
-<h2 id="notes">⚠️Notes</h2>
-<p><strong>Note 1:</strong>
-<strong>This mod only include explorer.exe as it's the main process that handle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to:</strong>
-<strong><code>// @include *</code>, but it may cause problems.</strong></p>
-<p>Note 2:
-Windows 10 has an issue, or rather a bug, when drawing thumbnails. 
-Folder icons are split into two parts - the front and the back - and stored as icons 5 and 6 in imageres.dll, as well as the "multiple folder icon" at icon number 162.
-Normally, the front half of the folder should have the same logic for whether to draw or not as the back half.
-However, the engineers seem to have taken the shortcut of always drawing the front half, which leads to errors in the thumbnails of such folders after replacing the icons.
-This mod attempts to fix this issue. <code>s_DrawIcon</code> hook is for this.</p>
-<p>Note 3:
-Windows 10 uses GDI to draw the thumbnails, while Windows 11 uses D2D/WIC. The latter one has higher resolution.
-This mod try to replicate that too.</p>
-<p>Note 4:
-I try my best to closely replicates the thumbnail drawing logic, including the shadow. Feel free to raise an issue.</p>
-<h2 id="credit">🔵Credit</h2>
-<p><em>win7-folder-thumbnail-skewing credited to <a href="https://github.com/Leymonaide" title="Leymonaide">Leymonaide</a></em></p>
-<p><em>This code is generated by AI</em></p>]]></content>
-        <author>
-            <name>QCQ171-C</name>
-            <uri>https://github.com/QCQ171-C</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Open Folder Icon 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-open-folder-icon#c65a768144aa08ac88ff893e29c9797e3cf32d77</id>
-        <link href="https://windhawk.net/mods/explorer-open-folder-icon"/>
-        <updated>2026-07-06T07:56:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="exploreropenfoldericon">Explorer Open Folder Icon</h1>
-<p>In Windows XP and before, File Explorer showed an open folder icon in the title bar and
-for selected folders in the Folders tree. This mod restores that behavior to Windows 10.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-open-folder-icon/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-elastic-pill#539e1e531d5bdf820354c713e6975552c18cad9d</id>
-        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
-        <updated>2026-07-06T07:55:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarelasticwinuipill">Taskbar Elastic WinUI Pill</h1>
-<p>Replaces the default active app pill in Windows 11's taskbar with an animated and customizable one.</p>
-<p><img src="https://i.imgur.com/PkPhNiH.gif" alt="" /></p>
-<hr />
-<h2 id="contributions">Contributions</h2>
-<p>Stretch animation by <a href="https://github.com/crazyboyybs">Dan</a></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Perform Speed Test Redirect 1.3.0]]></title>
-        <id>https://windhawk.net/mods/perform-speedtest-redirect#f837f4d05fbf60c84379db208824c10eca099e2c</id>
-        <link href="https://windhawk.net/mods/perform-speedtest-redirect"/>
-        <updated>2026-07-05T15:35:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Action Center support via <code>ShellHost.exe</code> and the <code>linkid=2325015</code> target substring.</li>
-<li>Add command execution mode through the new <code>Action text</code> setting, while keeping URL replacement as the default.</li>
-<li>Add configurable target substrings and runtime settings reload.</li>
-<li>Remove stale <code>ShellExecuteW</code> and <code>ShellExecuteExW</code> hooks, using <code>CreateProcessW</code> interception only.</li>
-<li>Fix bare URL handling in command mode and avoid logging full command lines or configured actions.</li>
-</ul>]]></content>
-        <author>
-            <name>mynameistito</name>
-            <uri>https://github.com/mynameistito</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Island Media Controls 0.9.27]]></title>
-        <id>https://windhawk.net/mods/island-media-controls#1f7614c178f23c0662bc8f677207cb9998bb9340</id>
-        <link href="https://windhawk.net/mods/island-media-controls"/>
-        <updated>2026-07-04T14:38:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="islandmediacontrols">Island Media Controls</h1>
-<p>Bring the current media session directly into the Windows 11 taskbar with a
-compact, theme-aware island built from native XAML. Unlike a floating Win32
-overlay, the island is inserted into the taskbar layout as a real XAML Grid, so
-it fits naturally alongside your taskbar and system tray items.</p>
-<h2 id="preview">Preview</h2>
-<p>| Dark mode | Light mode |
-| :---: | :---: |
-| <img src="https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif" alt="Island Media Controls in dark mode" /> | <img src="https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif" alt="Island Media Controls in light mode" /> |</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Native taskbar integration:</strong> Choose from several system tray and taskbar
-positions without placing a separate always-on-top window over the taskbar.</li>
-<li><strong>Live media information:</strong> See album artwork, track title, and artist at a
-glance, with smooth transitions when the active media session changes.</li>
-<li><strong>Expanded player:</strong> Click the compact island to open a native XAML player
-with artwork, seekable playback progress, and previous, play/pause, and next
-controls.</li>
-<li><strong>Light and dark themes:</strong> Colors, text, surfaces, and controls automatically
-follow the Windows app theme.</li>
-<li><strong>Fluent visuals:</strong> Native Acrylic, rounded XAML geometry, album-art color
-accents, hover feedback, and display-synced animations keep interactions
-fluid and consistent with Windows 11.</li>
-<li><strong>Flexible customization:</strong> Adjust position, size, spacing, shadows, hover
-behavior, background material, expanded button style, and idle visibility.</li>
-<li><strong>Artwork effects:</strong> Add an optional album-art background wash and choose
-whether low-resolution video thumbnails use the original browser artwork,
-a mesh gradient, or an energy-flame visual.</li>
-</ul>]]></content>
-        <author>
-            <name>usho</name>
-            <uri>https://github.com/usho-lear</uri>
         </author>
     </entry>
 </feed>

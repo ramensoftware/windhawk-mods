@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-11T18:07:43.000Z</updated>
+    <updated>2026-07-12T05:10:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Dock Animation Plus 2.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-dock-animation-plus#15cf861e5bcf2c5d437b20b6c6b1505a8ffc3988</id>
+        <link href="https://windhawk.net/mods/taskbar-dock-animation-plus"/>
+        <updated>2026-07-12T05:10:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbardockanimationplus">Taskbar Dock Animation Plus</h1>
+<p>This mod adds a macOS-like taskbar animation.
+It is an updated fork of the original "Taskbar Dock Animation" mod, extending compatibility to all taskbar positions.</p>
+<p><strong>Requires Windows 11 or newer to function.</strong></p>
+<hr />
+<h3 id="keyadditionsinthisfork">🌟 Key Additions in this Fork</h3>
+<ul>
+<li><strong>Universal Layout Support</strong>: Native compatibility for Left, Right, and Top taskbar configurations.</li>
+<li><strong>Adaptive Animations</strong>: Dynamically aligns scaling directions, spacing shifts, and bounce offsets to the current taskbar orientation.</li>
+<li><strong>On-the-Fly Refreshing</strong>: Updates properties in real time when moving the taskbar, requiring no system restarts.</li>
+</ul>
+<hr />
+<h3 id="knownissueslimitations">⚠️ Known Issues &amp; Limitations</h3>
+<ul>
+<li>Icons are sometimes clipped by the taskbar.</li>
+<li>Upscaled icons may appear slightly blurry.</li>
+</ul>
+<p>"Taskbar height and icon size" Users: If you are using this mod to create a minimalistic taskbar, please keep the Max Scale at or below 130% to avoid clipping issues. This recommendation applies to other scaling mods as well.
+Dell / Alienware Users: If you encounter specific issues on these devices, please reach out to me directly or open an issue so we can investigate together.
+StartAllBack Compatibility: This mod does not and will not support StartAllBack. Supporting it would require a complete rewrite of the codebase, which is currently out of scope.
+Feedback: Feel free to suggest new animation ideas or curves in the mod topic or via direct message!</p>
+<p>You can experiment with the <strong>radius</strong> value to achieve the best result for your setup until proper fixes for the issues above are found.</p>
+<hr />
+<h3 id="credits">💖 Credits</h3>
+<p>This mod is a fork of the original <a href="https://windhawk.net/mods/taskbar-dock-animation">Taskbar Dock Animation</a> mod created by <a href="https://github.com/Ph0en1x-dev">@Ph0en1x-dev</a>. All original logic and visual concepts belong to the original author.</p>
+<hr />
+<h2 id="preview">🖼️ Preview</h2>
+<p><img src="https://raw.githubusercontent.com/Ph0en1x-dev/Hlam/refs/heads/main/Screen-recording-2025-11-06-155028.gif" alt="Taskbar Dock Animation Preview" /></p>]]></content>
+        <author>
+            <name>incconutwo</name>
+            <uri>https://github.com/incconutwo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Audio Visualizer 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-audio-visualizer#529a6018c34b778035bfe79a96650579439c0ca2</id>
@@ -706,34 +744,6 @@ the microphone, the icon is immediately shown to alert the user.</p>
         <author>
             <name>Ikkecode</name>
             <uri>https://github.com/ikkecode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Borderless Fullscreen 1.1.0]]></title>
-        <id>https://windhawk.net/mods/borderless-fullscreen#c208c001106e00938f338cacf204cb1dfdf43528</id>
-        <link href="https://windhawk.net/mods/borderless-fullscreen"/>
-        <updated>2026-06-27T21:35:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="borderlessfullscreen">Borderless Fullscreen</h1>
-<p>Add an executable name (e.g. <code>game.exe</code>) to the target list and the app
-will automatically run without a title bar / border, stretched to fill
-the primary monitor's current resolution (multi monitor setup is planned
-for the next version).</p>
-<p>Optionally, set a fixed window size instead (the window will then be
-centered on the primary monitor) - useful for older games with a low
-native resolution.</p>
-<h2 id="howitworks">How it works</h2>
-<p>This mod runs in a separate, dedicated process and restores the original
-window style and size automatically if the app is removed from the
-target list, if the mod is disabled, or if the window is closed.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>If a target doesn't react, double-check the <em>exact</em> process name in
-Task Manager's Details tab while it's running. Some launchers start a
-child process with a different executable name than expected.</li>
-</ul>]]></content>
-        <author>
-            <name>TomberWolf</name>
-            <uri>https://github.com/TomberWolf</uri>
         </author>
     </entry>
 </feed>
