@@ -7095,6 +7095,35 @@
         "version": "2.0.0"
       }
     },
+    "lid-sleep-delay": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783880204000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783880204000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ansh Raj",
+        "compilerOptions": "-lpowrprof -luser32 -ladvapi32 -lole32 -loleaut32 -lwbemuuid",
+        "description": "Delays system sleep after laptop lid is closed by a configurable time (30s, 1min, 5min, 10min)",
+        "github": "https://github.com/remixansh",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Lid Close Sleep Delay",
+        "version": "1.1"
+      }
+    },
     "lines-in-mmc": {
       "details": {
         "defaultSorting": 1500,

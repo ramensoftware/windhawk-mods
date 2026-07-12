@@ -2,12 +2,55 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-12T05:10:50.000Z</updated>
+    <updated>2026-07-12T18:16:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lid Close Sleep Delay 1.1]]></title>
+        <id>https://windhawk.net/mods/lid-sleep-delay#9e43fb1dc75e18d58ee1081b0e0d461b4d43d869</id>
+        <link href="https://windhawk.net/mods/lid-sleep-delay"/>
+        <updated>2026-07-12T18:16:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lidclosesleepdelay">Lid Close Sleep Delay</h1>
+<p>Ever wished your laptop wouldn't immediately go to sleep the moment you close the lid? This mod adds a customizable delay before suspending your system, giving you a grace period to grab your laptop, move to another room, or simply change your mind without interrupting your workflow or breaking active network connections.</p>
+<p>Designed with stability in mind, it operates securely as a <strong>dedicated-process tool mod</strong>. This means it runs isolated in its own Windhawk process rather than injecting code into <code>explorer.exe</code> or other critical system components, guaranteeing a zero-crash impact on your desktop shell.</p>
+<h2 id="compatibilityfeatures">💻 Compatibility &amp; Features</h2>
+<ul>
+<li><strong>Smart Detection:</strong> Dynamically recognizes whether your system is a laptop, convertible, or tablet with a physical lid switch. On desktops, it safely detects the absence of a lid and disables itself to consume zero resources.</li>
+<li><strong>Universal Support:</strong> Works seamlessly across x86 (32-bit), x86-64 (64-bit), and ARM64 architectures.</li>
+<li><strong>OS Versions:</strong> Compatible with Windows 7, 8, 8.1, 10, and 11.</li>
+</ul>
+<h2 id="howitworks">⚙️ How it Works</h2>
+<ol>
+<li>When you close the lid, the mod kicks in, keeping your system awake while a countdown begins.</li>
+<li>If you reopen the lid before the timer runs out, the sleep action is seamlessly aborted, and you can resume work instantly.</li>
+<li>If the timer expires while the lid is still closed, it gently puts your system to sleep.</li>
+</ol>
+<h2 id="importantprerequisites">⚠️ Important Prerequisites</h2>
+<p>For this mod to take control of the sleep delay, you must first disable the default Windows instant-sleep behavior:</p>
+<ol>
+<li>Open <strong>Control Panel</strong> → <strong>Power Options</strong> → <strong>Choose what closing the lid does</strong> (on the left panel).</li>
+<li>Change the setting for <strong>"When I close the lid"</strong> to <strong>"Do nothing"</strong> for both <em>On battery</em> and <em>Plugged in</em>.</li>
+<li>Click <strong>Save changes</strong>.</li>
+</ol>
+<blockquote>
+  <p><strong>Note:</strong> Because this relies on your native Windows power settings, uninstalling or disabling this mod will <em>not</em> automatically restore the original instant-sleep behavior. You will need to manually revert the setting back to <strong>"Sleep"</strong> in your Power Options if you decide to stop using the mod.</p>
+</blockquote>
+<h2 id="configurationoptions">⏱️ Configuration Options</h2>
+<p>You can configure the exact delay duration directly in the mod settings. Changes apply instantly on save.</p>
+<p>| Delay Option | Description |
+|---|---|
+| <strong>30sec</strong> | 30 seconds |
+| <strong>1min</strong> | 1 minute (default) |
+| <strong>5min</strong> | 5 minutes |
+| <strong>10min</strong> | 10 minutes |</p>]]></content>
+        <author>
+            <name>Ansh Raj</name>
+            <uri>https://github.com/remixansh</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Dock Animation Plus 2.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-dock-animation-plus#15cf861e5bcf2c5d437b20b6c6b1505a8ffc3988</id>
@@ -726,24 +769,6 @@ significant impact on power consumption.</p>]]></content>
         <author>
             <name>Starfield</name>
             <uri>https://github.com/steveji2021</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adaptive Microphone Icon Visibility 1.0]]></title>
-        <id>https://windhawk.net/mods/adaptive-microphone-icon-visibility#0ba128210751d519899c9c5564c47a9aaf8460cb</id>
-        <link href="https://windhawk.net/mods/adaptive-microphone-icon-visibility"/>
-        <updated>2026-06-28T18:18:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="adaptivemicrophoneiconvisibility">Adaptive Microphone Icon Visibility</h1>
-<p>This mod hides the system tray microphone icon if only whitelisted applications
-(or no applications) have active access. If an unlisted application begins using
-the microphone, the icon is immediately shown to alert the user.</p>
-<p>Only Windows 11 is supported.</p>
-<h2 id="credits">Credits</h2>
-<p>Icon manipulation logic in this mod is based on the
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a> mod by <strong>m417z</strong>.</p>]]></content>
-        <author>
-            <name>Ikkecode</name>
-            <uri>https://github.com/ikkecode</uri>
         </author>
     </entry>
 </feed>
