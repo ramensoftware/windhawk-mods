@@ -2,12 +2,63 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-12T18:16:44.000Z</updated>
+    <updated>2026-07-12T18:23:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Low Battery Alarm 1.0.0]]></title>
+        <id>https://windhawk.net/mods/low-battery-alarm#e0077ff36df5d27591e24a8f90f5e7434ba67217</id>
+        <link href="https://windhawk.net/mods/low-battery-alarm"/>
+        <updated>2026-07-12T18:23:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lowbatteryalarm">Low Battery Alarm</h1>
+<p>Low Battery Alarm plays a repeating, clearly audible alarm when a laptop is
+discharging and reaches a configured low or critical battery level. It is useful
+when the laptop is left performing a long-running task in another room and a
+normal desktop notification might not be noticed.</p>
+<p>By default, low-battery alerts begin at 10% and repeat every 120 seconds.
+Critical alerts begin at 5% and repeat every 30 seconds. Critical alerts continue
+below 5%; 5% is the entry threshold, not a lower cutoff. Alerts stop when external
+power is connected and can start again during a later discharge cycle. AC/DC
+changes are handled through Windows power notifications, so an active waveform is
+stopped immediately instead of waiting for the next polling interval.</p>
+<h2 id="customsoundandfallback">Custom sound and fallback</h2>
+<p>Enter the complete WAV path manually in <strong>WAV file path</strong>, or use <strong>Browse…</strong>
+in the custom configuration window to select it with Windows Explorer. A manual
+path change saved in Windhawk replaces a path previously selected in the custom
+window. To open the window, enable <strong>Open alarm configuration</strong> and save the
+settings. The topmost window also lists the Windows default output roles and
+every active Core Audio output device. It stores the selected device by its
+stable endpoint ID. To reopen the window, disable the option and save, then
+enable it and save again. An enabled request is handled only once, so saving
+unrelated settings does not reopen the window. It also opens automatically on
+the first run, before an output selection has been stored.</p>
+<p>WAV is the guaranteed supported custom format. If no file has been selected, or
+if the selected file is later removed, becomes inaccessible, is not a WAV file,
+or cannot be played, the mod logs the reason. When the fallback option is
+enabled, the Windows critical system sound is used instead. A short, clearly
+audible, and recognizable WAV file is recommended.</p>
+<h2 id="volumeandtesting">Volume and testing</h2>
+<p>The mod can temporarily change the selected output device's master volume and can
+temporarily unmute it while an alert is playing. The previous volume and mute
+state are normally restored afterward. If the user changes the volume during
+playback, the new value is preserved when the change can be detected by comparing
+it with the exact value applied by the mod.</p>
+<p>Enable <strong>Test sound after settings change</strong> and save the settings to request one
+test alert. The test uses the current sound and volume settings without changing
+the battery state machine. The option is evaluated only when settings are saved;
+it does not run during normal polling.</p>
+<p>Desktop computers without a system battery are ignored. The mod creates no
+persistent UI, console, tray icon, or external player. It runs in a dedicated
+Windhawk tool process and uses low-overhead battery-monitoring, power-notification,
+and controlled sound-playback threads.</p>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lid Close Sleep Delay 1.1]]></title>
         <id>https://windhawk.net/mods/lid-sleep-delay#9e43fb1dc75e18d58ee1081b0e0d461b4d43d869</id>
@@ -740,35 +791,6 @@ afterwards, so the system's own minimize/restore animation doesn't fight ours.</
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VMware Audio Distortion Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/vmware-audio-fix#6d68c5bf92732b90a067961d33b9381b88811b25</id>
-        <link href="https://windhawk.net/mods/vmware-audio-fix"/>
-        <updated>2026-06-29T17:28:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="vmwareaudiodistortionfix">VMware Audio Distortion Fix</h1>
-<h3 id="thisprojectisinspiredbyvmaudiobackhosthttpsgithubcomraymai97vmaudiobackhostthankstoraymai97">This project is inspired by <a href="https://github.com/Raymai97/VMAudioBackHost">VMAudioBackHost</a>. Thanks to Raymai97</h3>
-<p>Fixes distorted audio in VMware virtual machines by setting a high-resolution
-timer in the vmware-vmx.exe process.</p>
-<h2 id="background">Background</h2>
-<p>Windows 10 build 2004+ made timer resolution per-process. VMware virtual
-machines may experience distorted audio because the vmware-vmx.exe process
-uses the default low timer resolution (15.625 ms). This mod injects into
-vmware-vmx.exe and calls <code>NtSetTimerResolution</code> to set a high-resolution
-timer, fixing the audio stuttering/distortion.</p>
-<h2 id="usage">Usage</h2>
-<ol>
-<li>Install this mod via <a href="https://windhawk.net">Windhawk</a>.</li>
-<li>The mod will automatically inject into all running and future
-vmware-vmx.exe processes.</li>
-<li>Configure the desired timer resolution in the mod settings.</li>
-</ol>
-<p>The recommended setting is 1.0 ms, which provides smooth audio without
-significant impact on power consumption.</p>]]></content>
-        <author>
-            <name>Starfield</name>
-            <uri>https://github.com/steveji2021</uri>
         </author>
     </entry>
 </feed>

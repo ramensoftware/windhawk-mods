@@ -1,3 +1,9 @@
+## 1.2.0 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1531df78bb6b21bdc2951ee4f54adc8d7625f46b/mods/taskbar-elastic-pill.wh.cpp))
+
+* Added requested 'None' animation mode
+* Fixed color app icon color mode crossfade sometimes permanently inheriting an app's icon color as the color-to-fade-from until mod is restarted.
+* Fixed rare flickering issue with color cross-fade with app icon color mode
+
 ## 1.1.0 ([Jul 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e845e641c7d0d1590296685d367841b91087f93a/mods/taskbar-elastic-pill.wh.cpp))
 
 * Added 'Elastic' animation mode, which is a hybrid of stretch and bounce, inspired by Apple's Dynamic Island animations.
