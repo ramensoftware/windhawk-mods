@@ -4,6 +4,7 @@
 // @description    Recreation of the Windows 7/8.1 Action Center Tray Icon and Flyout UI
 // @version        1.1.6
 // @author         babamohammed
+// @github         https://github.com/babamohammed2022.
 // @include        explorer.exe
 // @architecture   x86-64
 // @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lcrypt32 -luxtheme -lole32 -loleaut32 -lmsimg32 -ladvapi32
