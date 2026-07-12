@@ -14,54 +14,38 @@
 /*
 # Lid Close Sleep Delay
 
-This mod adds a configurable delay before your laptop goes to sleep when the
-lid is closed. It runs as a **dedicated-process tool mod** in its own
-`windhawk.exe` instance — it does not inject into `explorer.exe`, so a bug
-here cannot destabilize the shell.
+Ever wished your laptop wouldn't immediately go to sleep the moment you close the lid? This mod adds a customizable delay before suspending your system, giving you a grace period to grab your laptop, move to another room, or simply change your mind without interrupting your workflow or breaking active network connections.
 
-It works dynamically on **any Windows system** — laptops, convertibles, and
-tablets with a lid sensor. On desktops or systems without a lid switch, the
-mod detects this at startup and gracefully disables itself.
+Designed with stability in mind, it operates securely as a **dedicated-process tool mod**. This means it runs isolated in its own Windhawk process rather than injecting code into `explorer.exe` or other critical system components, guaranteeing a zero-crash impact on your desktop shell.
 
-## Compatibility
+## 💻 Compatibility & Features
+- **Smart Detection:** Dynamically recognizes whether your system is a laptop, convertible, or tablet with a physical lid switch. On desktops, it safely detects the absence of a lid and disables itself to consume zero resources.
+- **Universal Support:** Works seamlessly across x86 (32-bit), x86-64 (64-bit), and ARM64 architectures.
+- **OS Versions:** Compatible with Windows 7, 8, 8.1, 10, and 11.
 
-- **Architectures**: x86 (32-bit), x86-64 (64-bit), and ARM64
-- **Windows versions**: Windows 7, 8, 8.1, 10, and 11
-- **System types**: Automatically detects laptops vs desktops
+## ⚙️ How it Works
+1. When you close the lid, the mod kicks in, keeping your system awake while a countdown begins.
+2. If you reopen the lid before the timer runs out, the sleep action is seamlessly aborted, and you can resume work instantly.
+3. If the timer expires while the lid is still closed, it gently puts your system to sleep.
 
-## How it works
+## ⚠️ Important Prerequisites
+For this mod to take control of the sleep delay, you must first disable the default Windows instant-sleep behavior:
 
-1. On startup, the mod checks if the system has a **lid switch** (power
-   capabilities, battery presence, and chassis type are all checked).
-2. If a lid switch is detected, it listens for **lid state change** power
-   notifications.
-3. When the lid is closed, it keeps the system awake and starts a countdown.
-4. If you reopen the lid before the timer expires, sleep is cancelled.
-5. If the timer expires with the lid still closed, the system goes to sleep.
-6. On desktops without a lid, the mod logs a message and exits cleanly.
+1. Open **Control Panel** → **Power Options** → **Choose what closing the lid does** (on the left panel).
+2. Change the setting for **"When I close the lid"** to **"Do nothing"** for both *On battery* and *Plugged in*.
+3. Click **Save changes**.
 
-## Prerequisites
+> **Note:** Because this relies on your native Windows power settings, uninstalling or disabling this mod will *not* automatically restore the original instant-sleep behavior. You will need to manually revert the setting back to **"Sleep"** in your Power Options if you decide to stop using the mod.
 
-**Set your Windows lid-close action to "Do Nothing":**
+## ⏱️ Configuration Options
+You can configure the exact delay duration directly in the mod settings. Changes apply instantly on save.
 
-1. Open **Control Panel** → **Power Options** → **Choose what closing the lid
-   does**
-2. Set **"When I close the lid"** to **"Do nothing"** for both **On battery**
-   and **Plugged in**
-3. Click **Save changes**
-
-> **Note:** Disabling or removing this mod does *not* automatically restore
-> the original lid-close behavior. You must manually change **"When I close
-> the lid"** back to **"Sleep"** in Power Options.
-
-## Options
-
-| Option      | Delay           |
-|-------------|-----------------|
-| **30sec**   | 30 seconds      |
-| **1min**    | 1 minute (default) |
-| **5min**    | 5 minutes       |
-| **10min**   | 10 minutes      |
+| Delay Option | Description |
+|---|---|
+| **30sec** | 30 seconds |
+| **1min** | 1 minute (default) |
+| **5min** | 5 minutes |
+| **10min** | 10 minutes |
 */
 // ==/WindhawkModReadme==
 
@@ -575,4 +559,177 @@ void WhTool_ModUninit() {
     }
 
     Wh_Log(L"=== Uninit complete ===");
+}
+
+// ─── Windhawk Tool Mod Boilerplate ───────────────────────────────────────────
+//
+// Implementation for mods which don't need to inject to other processes.
+// Context: https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    WhTool_ModEntryPoint();
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
