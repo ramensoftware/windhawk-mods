@@ -36,6 +36,11 @@ Huge thanks for building it and generously handing it over.
   minimize or restore before it flows toward the taskbar. The animation still
   completes correctly; this is a known issue being worked on. If you spot anything
   else, please report it on the mod's GitHub issue thread.
+- If an app reopens (or restores a saved session) at coordinates left over from a
+  monitor that's no longer connected (e.g. an HDMI display you've since unplugged),
+  the window can appear off-screen or the genie can play oddly / land on the wrong
+  spot. This is a Windows/app placement quirk outside the mod's control, not
+  something the mod can reliably detect and fix.
 
 ## See it in action
 - Compile the mod with the button on the left or with Ctrl+B.
