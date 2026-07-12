@@ -26,10 +26,13 @@
 # Flexible Explorer Toolbars Deluxe
 
 **!Important!** This mod curently only supports Windows 10 or Windows 11 versions up to 23H2 and 24H2/25H2 builds up to 8037. 
-On 24H2 and 25H2 you may have to use vivetool to enable menus: `vivetool /disable /id:55063786`.
+On 24H2 and 25H2 you may have to use vivetool to enable toolbars in Explorer: `vivetool /disable /id:55063786`.
 
 **!Important!** To use this mod, you shoud disable any other mods that hide the clasic Navigation bar, such as the `Disable Navigation Bar` mod by ItsProfessional.
-This mod hides the Navication Bar by itself. It is recommended to install the `Windows 7 Comand Bar` mod.
+This mod hides the Navigation Bar by itself. 
+
+For this mod to work you should enable a mod that restores the Navigation bar, it is recommended to install the `Windows 7 Comand Bar` mod, altough, `Classic Explorer navigation bar`
+also would work if you want to retain elements of Windows 11 fluent interface, as well or any modification that restores ribbon.
 
 This mod hides the Navigation Bar and instead creates the following optional toolbars, which could be freely moved and ordered together with the Menu Bar, if it is enabled:
 
