@@ -427,7 +427,7 @@ static bool ClipboardImage(const std::wstring& path) {
 static constexpr wchar_t kAppUserModelId[] = L"mario0318.SnapSentry";
 static constexpr wchar_t kShortcutName[] = L"SnapSentry.lnk";
 
-// Generated once for this mod; do not reuse elsewhere and do not regenerate --
+// Assigned to this mod; do not reuse or change this value --
 // Windows ties the shortcut and registry state below to this exact value.
 // {304BD1DF-F3CE-414D-A33B-3BA70D2CE081}
 DEFINE_GUID(CLSID_SnapSentryToastActivator, 0x304bd1df, 0xf3ce, 0x414d, 0xa3,
