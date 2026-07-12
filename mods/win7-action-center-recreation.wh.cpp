@@ -1,36 +1,38 @@
 // ==WindhawkMod==
 // @id             win7-action-center-recreation
-// @name           Windows 7 Action Center Recreation
-// @description    This mod recreates the Windows 7 Action Center Tray Icon and Flyout UI
-// @version        1.0.0
+// @name           Windows 7/8.1 Action Center Recreation
+// @description    Recreation of the Windows 7/8.1 Action Center Tray Icon and Flyout UI
+// @version        1.1.6
 // @author         babamohammed
-// @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lcrypt32 -luxtheme -lole32 -loleaut32 -lmsimg32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lcrypt32 -luxtheme -lole32 -loleaut32 -lmsimg32 -ladvapi32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 
-# Windows 7 Action Center Recreation
-This mod recreates the classic Windows 7 Action Center tray icon and flyout for modern Windows versions.
+# Windows 7/8.1 Action Center Recreation
+This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout for modern Windows versions.
+## Screenshots
+Windows 7 theme
+
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png)
+Windows 8.1 theme
+
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.1.webp)
 
 ## Features
-
 - **Real-time Security Status**: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.
-
 - **Interactive Flyout**: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.
-
-- **Dark Mode**: Automatically adapts to your system theme.
+- **Dark Mode**: Automatically adapts to the system's theme.
+- **Rounded Corners**: Rounded corners are supported for a more similar look to the original Windows 7 flyout.
+- **Classic Theme support**: Disable the "Rounded Corners" theme to make the flyout use a classic theme.
 
 - **Hotkeys**:
   - `Ctrl+N`: Simulate a notification
   - `Ctrl+Shift+N`: Clear notifications
-  - `Ctrl+Alt+W`: Debug window tree
-
 - **Languages**: English, Italian, Spanish, French, Russian are currently supported.
 
-- **Rounded Corners**: Faithfully recreates the original Windows 7 look.
 
 ## How It Works
 
@@ -40,7 +42,8 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
 - If the icon doesn't appear, try restarting Explorer or the mod.
-
+## Credits 
+- Yvor - Testing on Windows 10 21H2.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -72,6 +75,7 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 #endif
 
 #include <windows.h>
+#include <winsvc.h>
 #include <windowsx.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
@@ -141,10 +145,11 @@ HKEY CreateFakeHandle(const std::wstring& path) {
 
 void FreeFakeHandle(HKEY hKey) {
     std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    if (g_fakeHandles.count(hKey)) {
-        g_fakeHandles.erase(hKey);
+    auto it = g_fakeHandles.find(hKey);
+    if (it != g_fakeHandles.end()) {
+        g_fakeHandles.erase(it);
         g_keyPaths.erase(hKey);
-        delete (int*)hKey;
+        delete (int*)hKey;  // guaranteed once: erased before delete
     }
 }
 
@@ -191,11 +196,12 @@ LSTATUS WINAPI RegCloseKey_hook(HKEY hKey) {
     if (!hKey) return ERROR_SUCCESS;
     {
         std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        if (g_fakeHandles.count(hKey)) {
-            g_fakeHandles.erase(hKey);
+        auto it = g_fakeHandles.find(hKey);
+        if (it != g_fakeHandles.end()) {
+            g_fakeHandles.erase(it);
             g_keyPaths.erase(hKey);
             delete (int*)hKey;
-            return ERROR_SUCCESS;
+            return ERROR_SUCCESS;  // never call RegCloseKey_orig on a fake handle
         }
     }
     LSTATUS status = RegCloseKey_orig(hKey);
@@ -333,6 +339,9 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define AUTOHIDE_TIMER_ID          2001
 #define NOTIFY_TIMER_ID            2002
 #define REFRESH_TIMER_ID           1001
+#define TRAY_RETRY_TIMER_ID        1002
+#define TRAY_HEALTH_TIMER_ID       1003
+#define WM_TRAY_SHUTDOWN           (WM_USER + 602)
 #define HOTKEY_ID_SIMULATE         9001
 #define HOTKEY_ID_CLEAR            9002
 #define HOTKEY_ID_LOGTREE          9003
@@ -361,7 +370,7 @@ static const GUID TRAY_ICON_GUID =
 #define MAX_PROBLEMS               8
 #define MAX_DISPLAY_PROBLEMS       3
 #define WM_CLOSE_FLYOUT_DELAY_MS   500
-#define AUTOHIDE_INACTIVITY_MS     30000
+#define AUTOHIDE_INACTIVITY_MS     120000
 #define THREAD_WAIT_TIMEOUT        500
 #define LOG_PREFIX L"[Win7AC] "
 
@@ -431,6 +440,8 @@ static GdipGraphicsClear_t pGdipGraphicsClear = NULL;
 static GdipCreateHBITMAPFromBitmap_t pGdipCreateHBITMAPFromBitmap = NULL;
 typedef int (WINAPI *GdipCreateBitmapFromStream_t)(IStream*, void**);
 typedef int (WINAPI *GdipCreateHICONFromBitmap_t)(void*, HICON*);
+typedef int (WINAPI *GdipGetImageWidth_t)(void*, unsigned int*);
+typedef int (WINAPI *GdipGetImageHeight_t)(void*, unsigned int*);
 static GdipCreateBitmapFromStream_t pGdipCreateBitmapFromStream = NULL;
 static GdipCreateHICONFromBitmap_t pGdipCreateHICON = NULL;
 static GdipDisposeImage_t pGdipDisposeImage = NULL;
@@ -571,6 +582,7 @@ static int  CalculateFlyoutHeight(int activeProblems);
 static void ShowBalloonNotification(int oldState, int newState);
 static void UpdateTrayIcon(void);
 static void AddTrayIcon(void);
+static void ScheduleTrayIconRecovery(void);
 static void PositionWindowNearTray(HWND hwnd);
 static void InstallClickOutsideHook(void);
 static void RemoveClickOutsideHook(void);
@@ -580,15 +592,38 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
 static void CleanupModResources(void);
 static void OpenProblemAction(int problemType);
 
+// Wait until the taskbar exists so Shell_NotifyIcon can succeed.
+// Defined after GlobalContext so it can observe g_Ctx.isUninitializing.
+static BOOL WaitForTaskbarReady(DWORD timeoutMs);
+
 // ============================================================================
 // Process Check
 // ============================================================================
-static bool IsExplorerProcess() {
+// True when this explorer.exe is (or will become) the main shell process.
+// IMPORTANT: at boot / right after explorer restart, Shell_TrayWnd may not
+// exist yet, so we must NOT require it here.
+static BOOL IsMainExplorerProcess() {
     WCHAR exePath[MAX_PATH] = {};
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
     WCHAR* name = wcsrchr(exePath, L'\\');
     name = name ? name + 1 : exePath;
-    return _wcsicmp(name, L"explorer.exe") == 0;
+
+    if (_wcsicmp(name, L"explorer.exe") != 0) return FALSE;
+
+    // Prefer the process that owns the desktop shell window when available.
+    HWND hShell = GetShellWindow();
+    if (hShell) {
+        DWORD shellPid = 0;
+        GetWindowThreadProcessId(hShell, &shellPid);
+        if (shellPid != 0 && shellPid != GetCurrentProcessId()) {
+            // Another explorer instance already owns the desktop shell.
+            return FALSE;
+        }
+    }
+
+    // If the tray is not ready yet (boot / restart), still allow init so the
+    // tray thread can wait for TaskbarCreated / Shell_TrayWnd.
+    return TRUE;
 }
 
 // ============================================================================
@@ -650,7 +685,8 @@ void RecalcDpiMetrics(UINT dpi, int activeProblems = -1) {
         g_ScaledHeight = CalculateFlyoutHeight(activeProblems);
     }
     
-    g_ScaledFooterHeight = ScaleDpi(BASE_FOOTER_HEIGHT);
+    // Footer +3.5% vs original base height (keeps proportions of the rest of the UI).
+    g_ScaledFooterHeight = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1035, 1000);
     g_ScaledNotifyWidth = ScaleDpi(BASE_NOTIFY_WIDTH);
     g_ScaledNotifyHeight = ScaleDpi(BASE_NOTIFY_HEIGHT);
     g_ScaledIconSize = ScaleDpi(BASE_ICON_SIZE);
@@ -658,6 +694,9 @@ void RecalcDpiMetrics(UINT dpi, int activeProblems = -1) {
     g_BorderPenWidth = MaxInt(1, ScaleDpi(1));
 }
 int CalculateFlyoutHeight(int activeProblems) {
+
+    // Keep footer height in sync with RecalcDpiMetrics (+3.5%).
+    int footerH = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1035, 1000);
 
     // Altezza minima di base (con o senza rounded corners)
     int minBaseHeight = ScaleDpi(160);
@@ -668,7 +707,7 @@ int CalculateFlyoutHeight(int activeProblems) {
     if (activeProblems == 0) {
 
         // Nessun problema: altezza fissa con descrizione
-        int height = ScaleDpi(BASE_HEADER_HEIGHT + BASE_DESCRIPTION_HEIGHT + BASE_FOOTER_HEIGHT + 10);
+        int height = ScaleDpi(BASE_HEADER_HEIGHT + BASE_DESCRIPTION_HEIGHT + 10) + footerH;
         if (height < minBaseHeight) height = minBaseHeight;
         return height;
 
@@ -698,9 +737,9 @@ int CalculateFlyoutHeight(int activeProblems) {
         int topPadding = ScaleDpi(12);
         int bottomPadding = ScaleDpi(8);
 
-        int height = ScaleDpi(BASE_HEADER_HEIGHT) + topPadding + problemsHeight + extraHeight + bottomPadding + ScaleDpi(BASE_FOOTER_HEIGHT);
+        int height = ScaleDpi(BASE_HEADER_HEIGHT) + topPadding + problemsHeight + extraHeight + bottomPadding + footerH;
 
-        int minHeight = ScaleDpi(BASE_HEADER_HEIGHT + BASE_MIN_PROBLEMS_HEIGHT + BASE_FOOTER_HEIGHT);
+        int minHeight = ScaleDpi(BASE_HEADER_HEIGHT + BASE_MIN_PROBLEMS_HEIGHT) + footerH;
         if (height < minHeight) height = minHeight;
 
         // Assicura che l'altezza sia almeno quella minima di base
@@ -733,7 +772,7 @@ typedef enum {
     STR_TIP_ALERT, STR_MSG_FIREWALL, STR_MSG_ANTIVIRUS, STR_MSG_UPDATE,
     STR_MSG_UAC, STR_NOTIFY_MESSAGE, STR_NOTIFY_SIMULATED, STR_MSG_AUTOUPDATE,
     STR_MSG_ANTISPYWARE, STR_MSG_INTERNET, STR_MSG_SERVICE, STR_MSG_DEFENDER,
-    STR_AND_MORE, STR_COUNT
+    STR_AND_MORE, STR_TIP_NO_ISSUES, STR_TIP_ISSUES, STR_COUNT
 } LocaleStringId;
 typedef struct { LANGID langId; const WCHAR* strings[STR_COUNT]; } LocalePack;
 static const LocalePack g_Locales[] = {
@@ -761,7 +800,9 @@ static const LocalePack g_Locales[] = {
         L"Internet security settings need attention.", 
         L"Security Center service is not running.", 
         L"Windows Defender real-time protection is off.", 
-        L"...and more" 
+        L"...and more", 
+        L"No current issues detected.", 
+        L"%d issues detected." 
     }},
     // Italiano (0x0410) - COMPLETO E FORMALE
     { 0x0410, { 
@@ -787,7 +828,9 @@ static const LocalePack g_Locales[] = {
         L"Le impostazioni di sicurezza di Internet richiedono attenzione.", 
         L"Il servizio Centro sicurezza non \u00E8 in esecuzione.", 
         L"La protezione in tempo reale di Windows Defender non \u00E8 attiva.", 
-        L"...e altri" 
+        L"...e altri", 
+        L"Nessun problema rilevato.", 
+        L"%d problemi rilevati." 
     }},
     // Spagnolo (0x040A) - COMPLETO
     { 0x040A, { 
@@ -813,7 +856,9 @@ static const LocalePack g_Locales[] = {
         L"La configuraci\u00F3n de seguridad de Internet necesita atenci\u00F3n.", 
         L"El servicio Centro de seguridad no se est\u00E1 ejecutando.", 
         L"La protecci\u00F3n en tiempo real de Windows Defender est\u00E1 desactivada.", 
-        L"...y m\u00E1s" 
+        L"...y m\u00E1s", 
+        L"No se detectaron problemas.", 
+        L"%d problemas detectados." 
     }},
     // Francese (0x040C) - COMPLETO
     { 0x040C, { 
@@ -839,7 +884,9 @@ static const LocalePack g_Locales[] = {
         L"Les param\u00E8tres de s\u00E9curit\u00E9 Internet n\u00E9cessitent une attention.", 
         L"Le service Centre de s\u00E9curit\u00E9 n'est pas en cours d'ex\u00E9cution.", 
         L"La protection en temps r\u00E9el de Windows Defender est d\u00E9sactiv\u00E9e.", 
-        L"...et plus" 
+        L"...et plus", 
+        L"Aucun probl\u00E8me d\u00E9tect\u00E9.", 
+        L"%d probl\u00E8mes d\u00E9tect\u00E9s." 
     }},
     // Russo (0x0419) - COMPLETO
     { 0x0419, { 
@@ -865,7 +912,9 @@ static const LocalePack g_Locales[] = {
         L"\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0418\u043D\u0442\u0435\u0440\u043D\u0435\u0442\u0430 \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F.", 
         L"\u0421\u043B\u0443\u0436\u0431\u0430 \u0426\u0435\u043D\u0442\u0440\u0430 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u043D\u0435 \u0437\u0430\u043F\u0443\u0449\u0435\u043D\u0430.", 
         L"\u0417\u0430\u0449\u0438\u0442\u0430 \u0432 \u0440\u0435\u0430\u043B\u044C\u043D\u043E\u043C \u0432\u0440\u0435\u043C\u0435\u043D\u0438 Windows Defender \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430.", 
-        L"... \u0438 \u0434\u0440\u0443\u0433\u0438\u0435" 
+        L"... \u0438 \u0434\u0440\u0443\u0433\u0438\u0435", 
+        L"\u041F\u0440\u043E\u0431\u043B\u0435\u043C \u043D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E", 
+        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E %d \u043F\u0440\u043E\u0431\u043B\u0435\u043C" 
     }},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -952,6 +1001,11 @@ struct GlobalContext {
     HWND hWndMsgHandler;
     HWND hWndNotify;
     HANDLE hTrayThread;
+    HANDLE hTrayReadyEvent;
+    DWORD trayThreadId;
+    UINT taskbarCreatedMessage;
+    UINT trayRetryAttempt;
+    BOOL trayIconAdded;
     volatile LONG refCount;
     volatile LONG isUninitializing;
     SRWLOCK srwLock;
@@ -967,6 +1021,28 @@ struct GlobalContext {
     volatile LONG regMonitorRunning;
 } g_Ctx = {0};
 
+
+// Wait until the taskbar exists so Shell_NotifyIcon can succeed.
+// Returns TRUE if Shell_TrayWnd is available, FALSE on timeout / uninit.
+static BOOL WaitForTaskbarReady(DWORD timeoutMs) {
+    const DWORD step = 200;
+    DWORD waited = 0;
+    while (TRUE) {
+        // Abort promptly if the mod is being unloaded (avoids UAF on late exit).
+        if (g_Ctx.isUninitializing)
+            return FALSE;
+        HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+        if (hTray && IsWindow(hTray)) {
+            // Give the notification area a brief moment to finish init.
+            Sleep(150);
+            return TRUE;
+        }
+        if (timeoutMs != INFINITE && waited >= timeoutMs)
+            return FALSE;
+        Sleep(step);
+        waited += step;
+    }
+}
 static NOTIFYICONDATAW g_nid = { 0 };
 static int g_SecurityState = STATE_GOOD;
 static BOOL g_IsHoveringLink = FALSE;
@@ -1083,6 +1159,346 @@ static HICON Base64ToIcon(const WCHAR* b64) {
     return hIcon;
 }
 
+// Decode Base64 PNG into a GDI+ Bitmap* (caller must pGdipDisposeImage).
+static void* Base64ToGdipBitmap(const WCHAR* b64) {
+    if (!b64 || !*b64 || !g_hGdiPlus || !pGdipCreateBitmapFromStream) return NULL;
+
+    int len = lstrlenW(b64);
+    while (len > 0 && b64[len - 1] == L'=') len--;
+
+    DWORD outLen = (len * 3) / 4;
+    BYTE* data = (BYTE*)malloc(outLen);
+    if (!data) return NULL;
+
+    DWORD val = 0;
+    int bits = -8, pos = 0;
+    for (int i = 0; i < len; i++) {
+        BYTE v = B64Val(b64[i]);
+        if (v == 0xFF) continue;
+        val = (val << 6) | v;
+        bits += 6;
+        if (bits >= 0) { data[pos++] = (val >> bits) & 0xFF; bits -= 8; }
+    }
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, outLen);
+    if (!hMem) { free(data); return NULL; }
+    memcpy(GlobalLock(hMem), data, outLen);
+    GlobalUnlock(hMem);
+    free(data);
+
+    IStream* stream = NULL;
+    if (FAILED(CreateStreamOnHGlobal(hMem, TRUE, &stream))) {
+        GlobalFree(hMem);
+        return NULL;
+    }
+
+    void* bmp = NULL;
+    if (pGdipCreateBitmapFromStream(stream, &bmp) != 0)
+        bmp = NULL;
+    stream->Release();
+    return bmp;
+}
+
+// Scale a GDI+ bitmap to size x size with high-quality interpolation.
+// Pixel format 32bpp ARGB = 2498570 (PixelFormat32bppARGB).
+// Scale a GDI+ bitmap to size x size with high-quality interpolation.
+// PixelFormat32bppARGB = 0x26200A
+static void* ScaleGdipBitmapHQ(void* src, int size) {
+    if (!src || size <= 0 || !pGdipCreateBitmapFromScan0 || !pGdipGetImageGraphicsContext
+        || !pGdipDrawImageRectI || !pGdipDeleteGraphics || !pGdipDisposeImage) return NULL;
+    void* dst = NULL;
+    if (pGdipCreateBitmapFromScan0(size, size, 0, 0x26200A, NULL, &dst) != 0 || !dst)
+        return NULL;
+    void* gfx = NULL;
+    if (pGdipGetImageGraphicsContext(dst, &gfx) != 0 || !gfx) {
+        pGdipDisposeImage(dst);
+        return NULL;
+    }
+    // InterpolationModeHighQualityBicubic = 7
+    // SmoothingModeHighQuality = 2
+    // CompositingQualityHighQuality = 2
+    // PixelOffsetModeHighQuality = 2
+    if (pGdipSetInterpolationMode) pGdipSetInterpolationMode(gfx, 7);
+    if (pGdipSetSmoothingMode) pGdipSetSmoothingMode(gfx, 2);
+    if (pGdipSetCompositingQuality) pGdipSetCompositingQuality(gfx, 2);
+    if (pGdipSetPixelOffsetMode) pGdipSetPixelOffsetMode(gfx, 2);
+    if (pGdipGraphicsClear) pGdipGraphicsClear(gfx, 0x00000000);
+    pGdipDrawImageRectI(gfx, src, 0, 0, size, size);
+    pGdipDeleteGraphics(gfx);
+    return dst;
+}
+
+// Create a single-size 32bpp-ARGB HICON from a GDI+ bitmap (already sized).
+static HICON CreateHiconFromGdipBitmapSized(void* bmp, int size) {
+    if (!bmp || !pGdipCreateHBITMAPFromBitmap) return NULL;
+
+    HBITMAP hbmColor = NULL;
+    if (pGdipCreateHBITMAPFromBitmap(bmp, &hbmColor, 0x00000000) != 0 || !hbmColor)
+        return NULL;
+
+    // 1-bit AND mask (zeros = opaque; modern shells use the 32bpp alpha channel)
+    HBITMAP hbmMask = CreateBitmap(size, size, 1, 1, NULL);
+    if (!hbmMask) {
+        DeleteObject(hbmColor);
+        return NULL;
+    }
+    HDC hdc = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    HGDIOBJ old = SelectObject(hdcMem, hbmMask);
+    PatBlt(hdcMem, 0, 0, size, size, BLACKNESS);
+    SelectObject(hdcMem, old);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdc);
+
+    ICONINFO ii = {};
+    ii.fIcon = TRUE;
+    ii.hbmColor = hbmColor;
+    ii.hbmMask = hbmMask;
+    HICON hIcon = CreateIconIndirect(&ii);
+    DeleteObject(hbmColor);
+    DeleteObject(hbmMask);
+    return hIcon;
+}
+
+// Build an in-memory multi-image .ICO (16 + 32 + 48) and extract the size that
+// the Control Panel "Notification Area Icons" list uses (typically 32).
+// The system tray continues to receive a dedicated SM_CXSMICON-sized handle
+// from Base64ToTrayIcon, so tray pixels stay unchanged.
+static BOOL BuildMultiSizeIcoBuffer(void* srcBmp, BYTE** outBuf, DWORD* outSize) {
+    if (!srcBmp || !outBuf || !outSize || !pGdipCreateHBITMAPFromBitmap) return FALSE;
+    *outBuf = NULL;
+    *outSize = 0;
+
+    const int kSizes[] = { 16, 32, 48 };
+    const int kCount = 3;
+
+#pragma pack(push, 1)
+    struct IconDir {
+        WORD idReserved;
+        WORD idType;
+        WORD idCount;
+    };
+    struct IconDirEntry {
+        BYTE  bWidth;
+        BYTE  bHeight;
+        BYTE  bColorCount;
+        BYTE  bReserved;
+        WORD  wPlanes;
+        WORD  wBitCount;
+        DWORD dwBytesInRes;
+        DWORD dwImageOffset;
+    };
+#pragma pack(pop)
+
+    BYTE* dibBits[3] = { NULL, NULL, NULL };
+    DWORD dibSize[3] = { 0, 0, 0 };
+    BOOL ok = TRUE;
+
+    for (int i = 0; i < kCount; i++) {
+        int w = kSizes[i];
+        int h = kSizes[i];
+        void* scaled = ScaleGdipBitmapHQ(srcBmp, w);
+        if (!scaled) { ok = FALSE; break; }
+
+        HBITMAP hbm = NULL;
+        if (pGdipCreateHBITMAPFromBitmap(scaled, &hbm, 0x00000000) != 0 || !hbm) {
+            pGdipDisposeImage(scaled);
+            ok = FALSE;
+            break;
+        }
+        pGdipDisposeImage(scaled);
+
+        DWORD xorStride = (DWORD)(w * 4);
+        DWORD xorBytes = xorStride * (DWORD)h;
+        DWORD andStride = (DWORD)(((w + 31) / 32) * 4);
+        DWORD andBytes = andStride * (DWORD)h;
+        dibSize[i] = sizeof(BITMAPINFOHEADER) + xorBytes + andBytes;
+        dibBits[i] = (BYTE*)calloc(1, dibSize[i]);
+        if (!dibBits[i]) {
+            DeleteObject(hbm);
+            ok = FALSE;
+            break;
+        }
+
+        BITMAPINFOHEADER* bih = (BITMAPINFOHEADER*)dibBits[i];
+        bih->biSize = sizeof(BITMAPINFOHEADER);
+        bih->biWidth = w;
+        bih->biHeight = h * 2; // XOR + AND
+        bih->biPlanes = 1;
+        bih->biBitCount = 32;
+        bih->biCompression = BI_RGB;
+
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h; // top-down read
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        BYTE* tmp = (BYTE*)malloc(xorBytes);
+        if (!tmp) {
+            DeleteObject(hbm);
+            ok = FALSE;
+            break;
+        }
+        HDC hdc = GetDC(NULL);
+        int got = GetDIBits(hdc, hbm, 0, h, tmp, &bmi, DIB_RGB_COLORS);
+        ReleaseDC(NULL, hdc);
+        DeleteObject(hbm);
+        if (got == 0) {
+            free(tmp);
+            ok = FALSE;
+            break;
+        }
+
+        BYTE* xorDst = dibBits[i] + sizeof(BITMAPINFOHEADER);
+        for (int y = 0; y < h; y++) {
+            memcpy(xorDst + (SIZE_T)(h - 1 - y) * xorStride, tmp + (SIZE_T)y * xorStride, xorStride);
+        }
+        free(tmp);
+        // AND mask left zeroed (opaque); alpha lives in XOR
+    }
+
+    if (!ok) {
+        for (int i = 0; i < kCount; i++) if (dibBits[i]) free(dibBits[i]);
+        return FALSE;
+    }
+
+    DWORD offset = (DWORD)(sizeof(IconDir) + kCount * sizeof(IconDirEntry));
+    DWORD total = offset;
+    for (int i = 0; i < kCount; i++) total += dibSize[i];
+
+    BYTE* ico = (BYTE*)malloc(total);
+    if (!ico) {
+        for (int i = 0; i < kCount; i++) free(dibBits[i]);
+        return FALSE;
+    }
+
+    IconDir* dir = (IconDir*)ico;
+    dir->idReserved = 0;
+    dir->idType = 1;
+    dir->idCount = (WORD)kCount;
+
+    IconDirEntry* entries = (IconDirEntry*)(ico + sizeof(IconDir));
+    DWORD cur = offset;
+    for (int i = 0; i < kCount; i++) {
+        entries[i].bWidth = (BYTE)kSizes[i];
+        entries[i].bHeight = (BYTE)kSizes[i];
+        entries[i].bColorCount = 0;
+        entries[i].bReserved = 0;
+        entries[i].wPlanes = 1;
+        entries[i].wBitCount = 32;
+        entries[i].dwBytesInRes = dibSize[i];
+        entries[i].dwImageOffset = cur;
+        memcpy(ico + cur, dibBits[i], dibSize[i]);
+        free(dibBits[i]);
+        cur += dibSize[i];
+    }
+
+    *outBuf = ico;
+    *outSize = total;
+    return TRUE;
+}
+
+// Pick the best matching image from an in-memory .ICO and create an HICON of
+// the requested size. Parses ICONDIRENTRY so CreateIconFromResourceEx gets the
+// correct per-image byte length (not "rest of file").
+static HICON ExtractIconSizeFromIcoBuffer(BYTE* ico, DWORD icoSize, int cx, int cy) {
+    if (!ico || icoSize < 6) return NULL;
+
+#pragma pack(push, 1)
+    struct IconDir {
+        WORD idReserved;
+        WORD idType;
+        WORD idCount;
+    };
+    struct IconDirEntry {
+        BYTE  bWidth;
+        BYTE  bHeight;
+        BYTE  bColorCount;
+        BYTE  bReserved;
+        WORD  wPlanes;
+        WORD  wBitCount;
+        DWORD dwBytesInRes;
+        DWORD dwImageOffset;
+    };
+#pragma pack(pop)
+
+    if (icoSize < sizeof(IconDir)) return NULL;
+    IconDir* dir = (IconDir*)ico;
+    if (dir->idType != 1 || dir->idCount == 0) return NULL;
+    if (icoSize < sizeof(IconDir) + dir->idCount * sizeof(IconDirEntry)) return NULL;
+
+    IconDirEntry* entries = (IconDirEntry*)(ico + sizeof(IconDir));
+
+    // Prefer exact size match; else nearest larger; else largest available.
+    int best = -1;
+    int bestDiff = 0x7fffffff;
+    for (WORD n = 0; n < dir->idCount; n++) {
+        int w = entries[n].bWidth ? entries[n].bWidth : 256;
+        int h = entries[n].bHeight ? entries[n].bHeight : 256;
+        if (entries[n].dwImageOffset >= icoSize) continue;
+        if (entries[n].dwBytesInRes == 0) continue;
+        if (entries[n].dwImageOffset + entries[n].dwBytesInRes > icoSize) continue;
+        if (w == cx && h == cy) { best = (int)n; break; }
+        int diff = (w - cx) * (w - cx) + (h - cy) * (h - cy);
+        // Prefer not-smaller-than-requested when possible
+        if (w >= cx && h >= cy) diff -= 100000;
+        if (diff < bestDiff) { bestDiff = diff; best = (int)n; }
+    }
+    if (best < 0) return NULL;
+
+    return CreateIconFromResourceEx(
+        ico + entries[best].dwImageOffset,
+        entries[best].dwBytesInRes,
+        TRUE,
+        0x00030000,
+        cx,
+        cy,
+        LR_DEFAULTCOLOR);
+}
+
+// High-quality icon for Shell_NotifyIcon.
+// Source PNGs are 32x32. We rebuild a multi-size ICO (16/32/48) with bicubic
+// scaling, then materialize a sharp 32x32 HICON for the shell.
+//
+// Why 32x32 (not SM_CXSMICON):
+//  - System tray scales 32 → 16 cleanly (same as before; tray look preserved).
+//  - Control Panel "Icone area di notifica" list uses ~32px and was showing a
+//    soft/sgranata glyph when the only available image was poorly converted.
+static HICON Base64ToTrayIcon(const WCHAR* b64) {
+    void* bmp = Base64ToGdipBitmap(b64);
+    if (!bmp)
+        return Base64ToIcon(b64);
+
+    HICON hIcon = NULL;
+    BYTE* icoBuf = NULL;
+    DWORD icoSize = 0;
+
+    if (BuildMultiSizeIcoBuffer(bmp, &icoBuf, &icoSize) && icoBuf) {
+        // 32x32 is what the CPL list needs; tray will downscale for the area.
+        hIcon = ExtractIconSizeFromIcoBuffer(icoBuf, icoSize, 32, 32);
+        if (!hIcon)
+            hIcon = ExtractIconSizeFromIcoBuffer(icoBuf, icoSize, 16, 16);
+        free(icoBuf);
+    }
+
+    if (!hIcon) {
+        void* scaled = ScaleGdipBitmapHQ(bmp, 32);
+        if (scaled) {
+            hIcon = CreateHiconFromGdipBitmapSized(scaled, 32);
+            pGdipDisposeImage(scaled);
+        }
+    }
+
+    pGdipDisposeImage(bmp);
+
+    if (!hIcon)
+        hIcon = Base64ToIcon(b64);
+    return hIcon;
+}
+
 static BOOL FileExistsW(const WCHAR* path) {
     return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
 }
@@ -1184,12 +1600,74 @@ static void CheckUACRegistry(int* idx, int* criticalCount) {
         }
     }
 }
+static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
+    // TRUE only when start type is SERVICE_DISABLED.
+    // Any failure (no rights / missing service) returns FALSE so other checks continue.
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (!hSCM) {
+        Wh_Log(LOG_PREFIX L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
+        return FALSE;
+    }
+    SC_HANDLE hSvc = OpenServiceW(hSCM, serviceName, SERVICE_QUERY_CONFIG);
+    if (!hSvc) {
+        CloseServiceHandle(hSCM);
+        return FALSE;
+    }
+    BOOL disabled = FALSE;
+    DWORD needed = 0;
+    QueryServiceConfigW(hSvc, NULL, 0, &needed);
+    if (needed > 0 && needed < 64 * 1024) {
+        BYTE* buf = (BYTE*)malloc(needed);
+        if (buf) {
+            QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
+            if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
+                disabled = (cfg->dwStartType == SERVICE_DISABLED);
+            }
+            free(buf);
+        }
+    }
+    CloseServiceHandle(hSvc);
+    CloseServiceHandle(hSCM);
+    return disabled;
+}
+
 static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
+    // 1) Modern GPO: NoAutoUpdate (managed / enterprise environments)
+    {
+        RegKey hKey;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            DWORD dwNoAuto = 0, dwSize = sizeof(DWORD);
+            if (RegQueryValueExW(hKey, L"NoAutoUpdate", NULL, NULL, (LPBYTE)&dwNoAuto, &dwSize) == ERROR_SUCCESS) {
+                if (dwNoAuto != 0) {
+                    Wh_Log(LOG_PREFIX L"AutoUpdate: NoAutoUpdate policy is set");
+                    AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+                    return;
+                }
+            }
+        }
+    }
+
+    // 2) Service start type: Update Orchestrator (UsoSvc) and legacy WU (wuauserv).
+    // Only SERVICE_DISABLED counts as "updates off"; stopped-but-auto is normal.
+    if (IsServiceStartDisabled(L"UsoSvc") || IsServiceStartDisabled(L"wuauserv")) {
+        Wh_Log(LOG_PREFIX L"AutoUpdate: update service start type is DISABLED");
+        AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+        return;
+    }
+
+    // 3) Legacy AUOptions (Windows 7 / early 8 style). Silent fallback when absent.
     RegKey hKey;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD dwAUOptions = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"AUOptions", NULL, NULL, (LPBYTE)&dwAUOptions, &dwSize) == ERROR_SUCCESS) {
-            if (dwAUOptions == 1) AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+            if (dwAUOptions == 1) {
+                Wh_Log(LOG_PREFIX L"AutoUpdate: legacy AUOptions=1 (never check)");
+                AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+            }
         }
     }
 }
@@ -1249,16 +1727,73 @@ void CheckSecurityProviders() {
                 BOOL isSilent = (RegQueryValueExW(hKeySub, L"Silent", NULL, NULL, (LPBYTE)&dwSilent, &dwSize) == ERROR_SUCCESS && dwSilent != 0);
                 dwSize = sizeof(DWORD);
                 if (!isSilent && RegQueryValueExW(hKeySub, L"State", NULL, NULL, (LPBYTE)&dwState, &dwSize) == ERROR_SUCCESS && dwState != 0 && idx < MAX_PROBLEMS) {
-                    WCHAR szLower[256] = { 0 }; dwSize = sizeof(szLower);
-                    RegQueryValueExW(hKeySub, L"DisplayName", NULL, NULL, (LPBYTE)szLower, &dwSize);
-                    if (!szLower[0]) StringCchCopyW(szLower, 256, szSubKeyName);
-                    CharLowerW(szLower);
-                    if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(PROB_FIREWALL)) AddProblem(PROB_FIREWALL, &idx, &criticalCount);
-                    else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(PROB_ANTIVIRUS)) AddProblem(PROB_ANTIVIRUS, &idx, &criticalCount);
-                    else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(PROB_ANTISPYWARE)) AddProblem(PROB_ANTISPYWARE, &idx, &criticalCount);
-                    else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(PROB_UAC)) AddProblem(PROB_UAC, &idx, &criticalCount);
-                    else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(PROB_INTERNET)) AddProblem(PROB_INTERNET, &idx, &criticalCount);
-                    else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(PROB_AUTOUPDATE)) AddProblem(PROB_AUTOUPDATE, &idx, &criticalCount);
+                    // Language-agnostic identity: subkey name + optional Id/ProviderId/CheckId,
+                    // then fall back to localized DisplayName substring matching (unchanged).
+                    WCHAR szIdentity[512] = { 0 };
+                    StringCchCopyW(szIdentity, 512, szSubKeyName);
+
+                    WCHAR szExtra[256] = { 0 };
+                    dwSize = sizeof(szExtra);
+                    if (RegQueryValueExW(hKeySub, L"ProviderId", NULL, NULL, (LPBYTE)szExtra, &dwSize) == ERROR_SUCCESS && szExtra[0]) {
+                        StringCchCatW(szIdentity, 512, L"|");
+                        StringCchCatW(szIdentity, 512, szExtra);
+                    }
+                    dwSize = sizeof(szExtra); ZeroMemory(szExtra, sizeof(szExtra));
+                    if (RegQueryValueExW(hKeySub, L"Id", NULL, NULL, (LPBYTE)szExtra, &dwSize) == ERROR_SUCCESS && szExtra[0]) {
+                        StringCchCatW(szIdentity, 512, L"|");
+                        StringCchCatW(szIdentity, 512, szExtra);
+                    }
+                    dwSize = sizeof(szExtra); ZeroMemory(szExtra, sizeof(szExtra));
+                    if (RegQueryValueExW(hKeySub, L"CheckId", NULL, NULL, (LPBYTE)szExtra, &dwSize) == ERROR_SUCCESS && szExtra[0]) {
+                        StringCchCatW(szIdentity, 512, L"|");
+                        StringCchCatW(szIdentity, 512, szExtra);
+                    }
+
+                    CharLowerW(szIdentity);
+
+                    // Well-known / locale-independent identity patterns (subkey often "{GUID}.check.N").
+                    int mappedType = PROB_NONE;
+                    if (wcsstr(szIdentity, L"e8433b72-5842-4d43-8645-bc2c35960837") ||
+                        wcsstr(szIdentity, L"windowsupdate") ||
+                        wcsstr(szIdentity, L"autoupdate")) {
+                        mappedType = PROB_AUTOUPDATE;
+                    } else if (wcsstr(szIdentity, L"b54924aa-401d-4e90-a50f-78ad0e4d4f6f") ||
+                               wcsstr(szIdentity, L"62f80045-1321-4d7a-8522-0d2e1d3494e3") ||
+                               wcsstr(szIdentity, L"firewall") ||
+                               wcsstr(szIdentity, L"mpssvc")) {
+                        mappedType = PROB_FIREWALL;
+                    } else if (wcsstr(szIdentity, L"antivirus") ||
+                               wcsstr(szIdentity, L"antimalware") ||
+                               wcsstr(szIdentity, L"virusprotection")) {
+                        mappedType = PROB_ANTIVIRUS;
+                    } else if (wcsstr(szIdentity, L"antispyware") ||
+                               wcsstr(szIdentity, L"spyware")) {
+                        mappedType = PROB_ANTISPYWARE;
+                    } else if (wcsstr(szIdentity, L"useraccountcontrol") ||
+                               wcsstr(szIdentity, L"enablelua") ||
+                               wcsstr(szIdentity, L"uac")) {
+                        mappedType = PROB_UAC;
+                    } else if (wcsstr(szIdentity, L"internetsettings") ||
+                               wcsstr(szIdentity, L"inetsettings") ||
+                               wcsstr(szIdentity, L"zonesecurity")) {
+                        mappedType = PROB_INTERNET;
+                    }
+
+                    if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(mappedType)) {
+                        AddProblem(mappedType, &idx, &criticalCount);
+                    } else if (mappedType == PROB_NONE) {
+                        // Last fallback: localized DisplayName substring matching (existing behavior)
+                        WCHAR szLower[256] = { 0 }; dwSize = sizeof(szLower);
+                        RegQueryValueExW(hKeySub, L"DisplayName", NULL, NULL, (LPBYTE)szLower, &dwSize);
+                        if (!szLower[0]) StringCchCopyW(szLower, 256, szSubKeyName);
+                        CharLowerW(szLower);
+                        if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(PROB_FIREWALL)) AddProblem(PROB_FIREWALL, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(PROB_ANTIVIRUS)) AddProblem(PROB_ANTIVIRUS, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(PROB_ANTISPYWARE)) AddProblem(PROB_ANTISPYWARE, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(PROB_UAC)) AddProblem(PROB_UAC, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(PROB_INTERNET)) AddProblem(PROB_INTERNET, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(PROB_AUTOUPDATE)) AddProblem(PROB_AUTOUPDATE, &idx, &criticalCount);
+                    }
                 }
             }
             dwIdx++; dwSubKeySize = 256;
@@ -1357,14 +1892,36 @@ DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
     Wh_Log(LOG_PREFIX L"Registry monitor thread started");
     InterlockedExchange(&g_Ctx.regMonitorRunning, 1);
     HANDLE hEvents[2] = { g_Ctx.hRegShutdownEvent, g_Ctx.hRegChangeEvent };
+    // Progressive backoff when Action Center\Checks is missing (common on some SKUs).
+    // Starts at 200ms and doubles up to 5s so we don't spin forever at 5 Hz.
+    DWORD missingKeyBackoffMs = 200;
     while (!g_Ctx.isUninitializing) {
         RegKey hKey;
         if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Action Center\\Checks", 0, KEY_READ | KEY_NOTIFY, &hKey) != ERROR_SUCCESS) {
-            Sleep(200); continue;
+            // Interruptible sleep: wake early on shutdown.
+            if (g_Ctx.hRegShutdownEvent) {
+                DWORD wr = WaitForSingleObject(g_Ctx.hRegShutdownEvent, missingKeyBackoffMs);
+                if (wr == WAIT_OBJECT_0 || g_Ctx.isUninitializing) break;
+            } else {
+                Sleep(missingKeyBackoffMs);
+            }
+            if (missingKeyBackoffMs < 5000) {
+                DWORD next = missingKeyBackoffMs * 2;
+                missingKeyBackoffMs = (next > 5000) ? 5000 : next;
+            }
+            continue;
         }
+        // Key is available again — reset backoff for future disappearances.
+        missingKeyBackoffMs = 200;
         ResetEvent(g_Ctx.hRegChangeEvent);
         LONG lr = RegNotifyChangeKeyValue(hKey, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_ATTRIBUTES, g_Ctx.hRegChangeEvent, TRUE);
-        if (lr != ERROR_SUCCESS) { Sleep(100); continue; }
+        if (lr != ERROR_SUCCESS) {
+            if (g_Ctx.hRegShutdownEvent)
+                WaitForSingleObject(g_Ctx.hRegShutdownEvent, 100);
+            else
+                Sleep(100);
+            continue;
+        }
         if (g_Ctx.isUninitializing) break;
         DWORD wr = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
         if (g_Ctx.isUninitializing) break;
@@ -1393,8 +1950,14 @@ void StartRegistryMonitor() {
 void StopRegistryMonitor() {
     if (g_Ctx.hRegShutdownEvent) SetEvent(g_Ctx.hRegShutdownEvent);
     if (g_Ctx.hRegMonitorThread) {
-        if (WaitForSingleObject(g_Ctx.hRegMonitorThread, 200) == WAIT_TIMEOUT)
-            Wh_Log(LOG_PREFIX L"Registry monitor thread did not exit within 200ms");
+        DWORD wr = WaitForSingleObject(g_Ctx.hRegMonitorThread, 5000);
+        if (wr == WAIT_TIMEOUT) {
+            // Non chiudere eventi/handle mentre il thread li usa: durante
+            // l'unload sarebbe un use-after-close. Il thread è event-driven e
+            // deve terminare prima che il codice del mod venga scaricato.
+            Wh_Log(LOG_PREFIX L"Waiting for registry monitor thread to exit");
+            WaitForSingleObject(g_Ctx.hRegMonitorThread, INFINITE);
+        }
         CloseHandle(g_Ctx.hRegMonitorThread);
         g_Ctx.hRegMonitorThread = NULL;
     }
@@ -1405,45 +1968,267 @@ HICON LoadTrayIcon(BOOL alert) {
     int secState = g_SecurityState;
     int id;
     const WCHAR* b64;
-    
+
     if (secState >= STATE_ALERT)          { id = 6; b64 = icon_id6_b64; }  // Bianca + X Rossa
     else if (secState >= STATE_WARNING)    { id = 5; b64 = icon_id5_b64; }  // Bianca + Triangolo
     else                                   { id = 4; b64 = icon_id4_b64; }  // Bianca OK
-    
-    HICON hIcon = Base64ToIcon(b64);
+
+    HICON hIcon = Base64ToTrayIcon(b64);
     if (hIcon) return hIcon;
-    
-    HICON hSmall = NULL;
-    if (LoadActionCenterIconFromDll(L"actioncenter.dll", id, &hIcon)) { if (hSmall) DestroyIcon(hSmall); return hIcon; }
-    if (LoadActionCenterIconFromDll(L"ActionCenterCPL.dll", id, &hIcon)) { if (hSmall) DestroyIcon(hSmall); return hIcon; }
-    ExtractIconExW(L"shell32.dll", 56 + id, &hIcon, &hSmall, 1);
+
+    // Fallbacks from system DLLs (large icon only; free the unused small handle).
+    if (LoadActionCenterIconFromDll(L"actioncenter.dll", id, &hIcon) && hIcon)
+        return hIcon;
+    if (LoadActionCenterIconFromDll(L"ActionCenterCPL.dll", id, &hIcon) && hIcon)
+        return hIcon;
+
+    HICON hLarge = NULL, hSmall = NULL;
+    ExtractIconExW(L"shell32.dll", 56 + id, &hLarge, &hSmall, 1);
     if (hSmall) DestroyIcon(hSmall);
-    return hIcon;
+    return hLarge;
 }
+// ============================================================================
+// Hook per rilevare il riavvio di Explorer e reinizializzare l'icona
+// ============================================================================
+typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CreateWindowExW_t CreateWindowExW_orig = NULL;
+
+static BOOL IsShellTrayWndClass(LPCWSTR lpClassName) {
+    if (!lpClassName) return FALSE;
+    // Class name may be an atom (low word only) — never dereference those.
+    if (IS_INTRESOURCE(lpClassName)) return FALSE;
+    return (wcscmp(lpClassName, L"Shell_TrayWnd") == 0);
+}
+
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, 
+                                  DWORD dwStyle, int X, int Y, int nWidth, int nHeight, 
+                                  HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+
+    // Rileva quando la taskbar viene ricreata (dopo riavvio di Explorer).
+    // Do NOT call Shell_NotifyIcon from inside CreateWindowEx: the tray is not
+    // fully ready yet. Schedule a delayed recovery on the message window instead.
+    if (hwnd && IsShellTrayWndClass(lpClassName)) {
+        Wh_Log(LOG_PREFIX L"Shell_TrayWnd created - scheduling delayed tray icon recovery");
+
+        if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
+            g_Ctx.trayIconAdded = FALSE;
+            g_Ctx.trayRetryAttempt = 0;
+            KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
+            KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
+            // Delay: notification area needs a moment after Shell_TrayWnd exists.
+            SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, 500, NULL);
+            SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+        }
+    }
+
+    return hwnd;
+}
+static void BuildTrayTooltip(WCHAR* buf, size_t bufSize) {
+    if (!buf || bufSize == 0) return;
+    int activeProblems = 0;
+    {
+        SRWGuard guard(g_Ctx.srwLock, false);
+        activeProblems = g_ActiveProblems;
+    }
+    const WCHAR* title = LOC(STR_ACTION_CENTER_TITLE);
+    if (activeProblems <= 0) {
+        StringCchPrintfW(buf, bufSize, L"%s - %s", title, LOC(STR_TIP_NO_ISSUES));
+    } else {
+        WCHAR issuesBuf[128] = {0};
+        StringCchPrintfW(issuesBuf, ARRAYSIZE(issuesBuf), LOC(STR_TIP_ISSUES), activeProblems);
+        StringCchPrintfW(buf, bufSize, L"%s - %s", title, issuesBuf);
+    }
+}
+
+static BOOL PublishTrayIcon(BOOL preferAdd) {
+    if (g_Ctx.isUninitializing || !g_Ctx.hWndMsgHandler ||
+        !IsWindow(g_Ctx.hWndMsgHandler)) return FALSE;
+
+    // Shell_NotifyIcon fails until the notification area exists.
+    if (!FindWindowW(L"Shell_TrayWnd", NULL)) {
+        Wh_Log(LOG_PREFIX L"PublishTrayIcon: Shell_TrayWnd not ready");
+        return FALSE;
+    }
+
+    int secState;
+    { SRWGuard g(g_Ctx.srwLock, false); secState = g_SecurityState; }
+
+    HICON hNewIcon = LoadTrayIcon(secState >= STATE_ALERT);
+    if (!hNewIcon) {
+        Wh_Log(LOG_PREFIX L"Unable to create tray icon");
+        return FALSE;
+    }
+
+    NOTIFYICONDATAW nid = {0};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_Ctx.hWndMsgHandler;
+    nid.uID = TRAY_ICON_ID;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
+    nid.uCallbackMessage = WM_TRAY_ICON_MSG;
+    nid.guidItem = TRAY_ICON_GUID;
+    nid.hIcon = hNewIcon;
+    WCHAR tipBuf[256] = {0};
+    BuildTrayTooltip(tipBuf, ARRAYSIZE(tipBuf));
+    StringCchCopyW(nid.szTip, ARRAYSIZE(nid.szTip), tipBuf);
+
+    BOOL ok = FALSE;
+    if (preferAdd || !g_Ctx.trayIconAdded) {
+        // After explorer restart the GUID may still be registered against a
+        // dead HWND. Delete first, then ADD cleanly.
+        NOTIFYICONDATAW delNid = {0};
+        delNid.cbSize = sizeof(delNid);
+        delNid.hWnd = nid.hWnd;
+        delNid.uID = nid.uID;
+        delNid.uFlags = NIF_GUID;
+        delNid.guidItem = nid.guidItem;
+        Shell_NotifyIconW(NIM_DELETE, &delNid);
+
+        ok = Shell_NotifyIconW(NIM_ADD, &nid);
+        if (!ok) {
+            // Retry without GUID (some tray rebuilds reject GUID reuse briefly)
+            NOTIFYICONDATAW nidNoGuid = nid;
+            nidNoGuid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+            ZeroMemory(&nidNoGuid.guidItem, sizeof(nidNoGuid.guidItem));
+            ok = Shell_NotifyIconW(NIM_ADD, &nidNoGuid);
+            if (ok) {
+                nid = nidNoGuid;
+                Wh_Log(LOG_PREFIX L"Tray icon added without GUID (fallback)");
+            }
+        }
+        if (!ok) ok = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    } else {
+        ok = Shell_NotifyIconW(NIM_MODIFY, &nid);
+        if (!ok) {
+            // MODIFY failed (icon lost after explorer restart) -> full re-add
+            NOTIFYICONDATAW delNid = {0};
+            delNid.cbSize = sizeof(delNid);
+            delNid.hWnd = nid.hWnd;
+            delNid.uID = nid.uID;
+            delNid.uFlags = NIF_GUID;
+            delNid.guidItem = nid.guidItem;
+            Shell_NotifyIconW(NIM_DELETE, &delNid);
+            ok = Shell_NotifyIconW(NIM_ADD, &nid);
+            if (!ok) {
+                NOTIFYICONDATAW nidNoGuid = nid;
+                nidNoGuid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+                ZeroMemory(&nidNoGuid.guidItem, sizeof(nidNoGuid.guidItem));
+                ok = Shell_NotifyIconW(NIM_ADD, &nidNoGuid);
+                if (ok) nid = nidNoGuid;
+            }
+        }
+    }
+
+    if (!ok) {
+        DestroyIcon(hNewIcon);
+        g_Ctx.trayIconAdded = FALSE;
+        Wh_Log(LOG_PREFIX L"Shell_NotifyIcon failed: %lu", GetLastError());
+        return FALSE;
+    }
+
+    // Imposta la versione dopo ogni ADD/MODIFY riuscito
+    NOTIFYICONDATAW versionNid = {0};
+    versionNid.cbSize = sizeof(versionNid);
+    versionNid.hWnd = nid.hWnd;
+    versionNid.uID = nid.uID;
+    versionNid.uFlags = (nid.uFlags & NIF_GUID) ? NIF_GUID : 0;
+    versionNid.guidItem = nid.guidItem;
+    versionNid.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &versionNid);
+
+    HICON hOldIcon = g_nid.hIcon;
+    g_nid = nid;
+    g_Ctx.trayIconAdded = TRUE;
+    if (hOldIcon && hOldIcon != hNewIcon) DestroyIcon(hOldIcon);
+    Wh_Log(LOG_PREFIX L"Tray icon published (preferAdd=%d)", (int)preferAdd);
+    return TRUE;
+}
+
 void UpdateTrayIcon() {
-    if (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler)) return;
-    if (g_nid.hIcon) { DestroyIcon(g_nid.hIcon); g_nid.hIcon = NULL; }
-    int secState; { SRWGuard g(g_Ctx.srwLock, false); secState = g_SecurityState; }
-    g_nid.hIcon = LoadTrayIcon(secState >= STATE_ALERT);  // DINAMICO!
-    const wchar_t* tip = secState >= STATE_ALERT ? LOC(STR_TIP_ALERT) : (secState >= STATE_WARNING ? LOC(STR_TIP_WARNING) : LOC(STR_TIP_OK));
-    StringCchCopyW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), tip);
-    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
-    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
+    if (!PublishTrayIcon(FALSE)) ScheduleTrayIconRecovery();
 }
+
 void AddTrayIcon() {
-    if (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler)) return;
+    if (g_Ctx.isUninitializing) return;
     CheckSecurityProviders();
-    ZeroMemory(&g_nid, sizeof(g_nid));
-    g_nid.cbSize = sizeof(NOTIFYICONDATAW);
-    g_nid.hWnd = g_Ctx.hWndMsgHandler;
-    g_nid.uID = TRAY_ICON_ID;
-    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
-    g_nid.uCallbackMessage = WM_TRAY_ICON_MSG;
-    g_nid.guidItem = TRAY_ICON_GUID;
-    g_nid.hIcon = LoadTrayIcon(g_SecurityState >= STATE_ALERT);
-    const wchar_t* tip = g_SecurityState >= STATE_ALERT ? LOC(STR_TIP_ALERT) : (g_SecurityState >= STATE_WARNING ? LOC(STR_TIP_WARNING) : LOC(STR_TIP_OK));
-    StringCchCopyW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), tip);
-    Shell_NotifyIconW(NIM_ADD, &g_nid);
+    if (!PublishTrayIcon(TRUE)) ScheduleTrayIconRecovery();
+}
+
+static BOOL IsTrayIconReachable() {
+    if (!g_Ctx.trayIconAdded || !g_Ctx.hWndMsgHandler ||
+        !IsWindow(g_Ctx.hWndMsgHandler)) return FALSE;
+    NOTIFYICONIDENTIFIER id = { sizeof(id) };
+    id.hWnd = g_Ctx.hWndMsgHandler;
+    id.uID = TRAY_ICON_ID;
+    id.guidItem = TRAY_ICON_GUID;
+    RECT rc = {0};
+    if (Shell_NotifyIconGetRect(&id, &rc) == S_OK) return TRUE;
+    // Fallback without GUID (used when ADD fell back to non-GUID path)
+    ZeroMemory(&id.guidItem, sizeof(id.guidItem));
+    return Shell_NotifyIconGetRect(&id, &rc) == S_OK;
+}
+static void ScheduleTrayIconRecovery() {
+    if (g_Ctx.isUninitializing || !g_Ctx.hWndMsgHandler ||
+        !IsWindow(g_Ctx.hWndMsgHandler)) return;
+
+    // Reset completo dello stato
+    g_Ctx.trayIconAdded = FALSE;
+    g_Ctx.trayRetryAttempt = 0;
+
+    // Cancella e reimposta entrambi i timer
+    KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
+    KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
+
+    // First attempt soon; health check keeps retrying if explorer restarts.
+    SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, 250, NULL);
+    SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+
+    Wh_Log(LOG_PREFIX L"Tray icon recovery scheduled");
+}
+
+static void RunTrayIconRecoveryAttempt() {
+    if (g_Ctx.isUninitializing) return;
+    KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
+
+    // Wait until the taskbar exists before calling Shell_NotifyIcon.
+    if (!FindWindowW(L"Shell_TrayWnd", NULL)) {
+        UINT attempt = ++g_Ctx.trayRetryAttempt;
+        UINT delay = (attempt < 10) ? 300 : 1000;
+        if (attempt < 60) {
+            SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
+            Wh_Log(LOG_PREFIX L"Tray not ready yet (attempt %u), retry in %ums", attempt, delay);
+        } else {
+            Wh_Log(LOG_PREFIX L"Tray icon recovery paused (no Shell_TrayWnd) after %u attempts", attempt);
+        }
+        return;
+    }
+
+    // Forza un refresh dello stato di sicurezza prima di riprovare
+    RefreshSecurityState();
+
+    // Prefer a full re-add after explorer restart.
+    if (PublishTrayIcon(TRUE)) {
+        // IsTrayIconReachable can lag briefly after NIM_ADD; treat ADD success
+        // as good enough, and let health timer re-check.
+        g_Ctx.trayRetryAttempt = 0;
+        Wh_Log(LOG_PREFIX L"Tray icon available after taskbar restart");
+        KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
+        SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+        return;
+    }
+
+    UINT attempt = ++g_Ctx.trayRetryAttempt;
+    if (attempt >= 40) {
+        Wh_Log(LOG_PREFIX L"Tray icon recovery paused after %u attempts", attempt);
+        return; // Il timer di health riproverà più tardi.
+    }
+
+    // Backoff esponenziale
+    UINT delay = 150u << (attempt < 6 ? attempt : 6);
+    if (delay > 8000) delay = 8000;
+    SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
+
+    Wh_Log(LOG_PREFIX L"Retry attempt %u scheduled in %ums", attempt, delay);
 }
 
 // ============================================================================
@@ -1521,15 +2306,26 @@ void ToggleFlyout() {
     { SRWGuard guard(g_Ctx.srwLock, false); activeProblems = g_ActiveProblems; }
     RecalcDpiMetrics(g_dpi, activeProblems);
     
-    if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) {
-        if (IsWindowVisible(g_Ctx.hWndFlyout) && !g_FlyoutClosing) { 
-            CloseFlyout(g_Ctx.hWndFlyout); 
-            return; 
+    // Toggle: if visible -> close; if hidden (autohide) -> re-show; else create.
+    if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
+        if (IsWindowVisible(g_Ctx.hWndFlyout)) {
+            CloseFlyout(g_Ctx.hWndFlyout);
+            return;
         }
-        if (!g_FlyoutClosing) { 
-            DestroyWindow(g_Ctx.hWndFlyout); 
-            g_Ctx.hWndFlyout = NULL; 
+        // Was auto-hidden: re-show without recreating.
+        CheckSecurityProviders();
+        PositionWindowNearTray(g_Ctx.hWndFlyout);
+        if (g_Settings.useRoundedCorners) {
+            POINT pt = AdjustWindowPosForTaskbar(g_Ctx.hWndFlyout);
+            SetWindowPos(g_Ctx.hWndFlyout, NULL, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
+        ShowWindow(g_Ctx.hWndFlyout, SW_SHOWNOACTIVATE);
+        UpdateWindow(g_Ctx.hWndFlyout);
+        InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
+        KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
+        SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
+        InstallClickOutsideHook();
+        return;
     }
     CreateFlyoutWindow();
     if (g_Ctx.hWndFlyout) {
@@ -1544,8 +2340,9 @@ void ToggleFlyout() {
         AnimateWindow(g_Ctx.hWndFlyout, 180, AW_SLIDE | AW_VER_NEGATIVE);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
         
-        // Timer di fallback: chiude il flyout dopo 15 secondi se il mouse hook fallisce
-        SetTimer(g_Ctx.hWndFlyout, 9999, 15000, NULL);
+        // Reset inactivity autohide timer every time the flyout is shown.
+        KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
+        SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         
         InstallClickOutsideHook();
     }
@@ -1602,6 +2399,7 @@ void CloseFlyout(HWND hwnd) {
     g_FlyoutClosing = TRUE;
     RemoveClickOutsideHook();
     AnimateWindow(hwnd, 150, AW_HIDE);
+    // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
 }
 
@@ -1653,7 +2451,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
     case WM_TIMER:
         if (wParam == AUTOHIDE_TIMER_ID) {
-            // Come network flyout: nascondi invece di distruggere
+            // Inactivity timeout: hide instead of destroy (keeps window ready).
+            RemoveClickOutsideHook();
             ShowWindow(hwnd, SW_HIDE);
             return 0;
         }
@@ -1666,12 +2465,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         ShowWindow(hwnd, SW_HIDE); 
         return 0;
     case WM_ACTIVATE:
-        // Come network flyout: quando perde il focus, nascondi
+        // Do NOT hide the flyout on deactivation.
+        // Hovering the tray icon / taskbar can steal activation and was
+        // causing rare spontaneous closes. Closing is handled by:
+        //  - click-outside mouse hook
+        //  - inactivity autohide timer (120s)
+        //  - Escape / explicit close
         if (LOWORD(wParam) == WA_INACTIVE) {
+            // Soft delay only as a safety net if the mouse hook fails; do not
+            // force-hide immediately (that was the hover-close bug).
             KillTimer(hwnd, AUTOHIDE_TIMER_ID);
-            SetTimer(hwnd, AUTOHIDE_TIMER_ID, WM_CLOSE_FLYOUT_DELAY_MS, NULL);
-            // Nascondi immediatamente quando perde il focus
-            ShowWindow(hwnd, SW_HIDE);
+            SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         } else {
             KillTimer(hwnd, AUTOHIDE_TIMER_ID);
             SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
@@ -1721,6 +2525,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_MOUSEMOVE: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         
+
+        // Keep the flyout open while the user is interacting with it.
+        KillTimer(hwnd, AUTOHIDE_TIMER_ID);
+        SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         // Check hover on problem links
         int newHover = -1;
         for (int i = 0; i < g_DisplayProblemCount; i++) {
@@ -1843,18 +2651,28 @@ if (activeProblems > 0) {
     SelectGuard sg2(hdcMem, g_hFontNormal);
     SetTextColor(hdcMem, clrLink);  // BLU (stesso colore dei link)
     WCHAR totalBuf[64] = {0};
-    const WCHAR* totalText = L"total messages";
-    if (g_CurrentLocalePack->langId == 0x0410) {
-        totalText = L"messaggi totali";
-    }
-    else if (g_CurrentLocalePack->langId == 0x040A) {
-        totalText = L"mensajes totales";
-    }
-    else if (g_CurrentLocalePack->langId == 0x040C) {
-        totalText = L"messages totaux";
-    }
-    else if (g_CurrentLocalePack->langId == 0x0419) {
-        totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439";
+    const WCHAR* totalText;
+    switch (g_CurrentLocalePack->langId) {
+        case 0x0410: // Italiano
+            totalText = (activeProblems == 1) ? L"messaggio totale" : L"messaggi totali";
+            break;
+        case 0x040A: // Español
+            totalText = (activeProblems == 1) ? L"mensaje total" : L"mensajes totales";
+            break;
+        case 0x040C: // Français
+            totalText = (activeProblems == 1) ? L"message total" : L"messages totaux";
+            break;
+        case 0x0419: // Русский
+            if (activeProblems % 10 == 1 && activeProblems % 100 != 11)
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435";   // сообщение
+            else if (activeProblems % 10 >= 2 && activeProblems % 10 <= 4 && (activeProblems % 100 < 10 || activeProblems % 100 >= 20))
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F";   // сообщения
+            else
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439";   // сообщений
+            break;
+        default:     // English
+            totalText = (activeProblems == 1) ? L"total message" : L"total messages";
+            break;
     }
     StringCchPrintfW(totalBuf, ARRAYSIZE(totalBuf), L"%d %s", activeProblems, totalText);
     
@@ -2008,13 +2826,19 @@ if (activeProblems > 0) {
           RECT rcClient; GetClientRect(hwnd, &rcClient);
           int currentFtrH = g_ScaledFooterHeight;
           RECT rcFtrDynamic = { 0, rcClient.bottom - currentFtrH, rcClient.right, rcClient.bottom };
-          
+
           if (g_Settings.useRoundedCorners) {
               int offset15 = (currentFtrH * 15) / 100;
               rcFtrDynamic.top += offset15;
               rcFtrDynamic.bottom += offset15;
           }
-          
+
+          // Raise "Open Action Center" text by 1.5% of footer height.
+          int raise15 = (currentFtrH * 15) / 1000; // 1.5%
+          if (raise15 < 1) raise15 = 1;
+          rcFtrDynamic.top -= raise15;
+          rcFtrDynamic.bottom -= raise15;
+
           g_rcFooterLink = rcFtrDynamic;
           DrawTextW(hdcMem, LOC(STR_LINK_OPEN_AC), -1, &rcFtrDynamic, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX); }
         
@@ -2034,7 +2858,8 @@ if (activeProblems > 0) {
         RemoveClickOutsideHook();
         g_FlyoutClosing = FALSE; 
         g_IsHoveringLink = FALSE;
-        g_Ctx.hWndFlyout = NULL;
+        if (g_Ctx.hWndFlyout == hwnd)
+            g_Ctx.hWndFlyout = NULL;
         KillTimer(hwnd, AUTOHIDE_TIMER_ID);
         InterlockedDecrement(&g_Ctx.refCount);
         break;
@@ -2187,9 +3012,49 @@ void CreateNotifyWindow() {
 // ============================================================================
 // Tray Message Handler
 // ============================================================================
+// ============================================================================
+// Tray Message Handler
+// ============================================================================
 LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (g_Ctx.taskbarCreatedMessage && uMsg == g_Ctx.taskbarCreatedMessage) {
+        Wh_Log(LOG_PREFIX L"TaskbarCreated received; scheduling tray icon re-creation");
+
+        // After explorer restart the notification area may still be initializing.
+        // Schedule a short delayed recovery instead of racing Shell_NotifyIcon.
+        g_Ctx.trayIconAdded = FALSE;
+        g_Ctx.trayRetryAttempt = 0;
+        KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
+        KillTimer(hwnd, TRAY_HEALTH_TIMER_ID);
+        SetTimer(hwnd, TRAY_RETRY_TIMER_ID, 300, NULL);
+        SetTimer(hwnd, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+        return 0;
+    }
+    if (uMsg == WM_TIMER) {
+        if (wParam == REFRESH_TIMER_ID) {
+            if (!g_Ctx.isUninitializing) RefreshSecurityState();
+            return 0;
+        }
+        if (wParam == TRAY_RETRY_TIMER_ID) {
+            RunTrayIconRecoveryAttempt();
+            return 0;
+        }
+        if (wParam == TRAY_HEALTH_TIMER_ID) {
+            if (!g_Ctx.isUninitializing && !IsTrayIconReachable())
+                ScheduleTrayIconRecovery();
+            return 0;
+        }
+    }
+    if (uMsg == WM_TRAY_SHUTDOWN) {
+        // La finestra e l'icona vengono distrutte ordinatamente nel cleanup
+        // del thread, dopo l'uscita dal message loop.
+        PostQuitMessage(0);
+        return 0;
+    }
     if (uMsg == WM_TRAY_ICON_MSG) {
-        if (LOWORD(lParam) == WM_LBUTTONUP) { PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0); return 0; }
+        if (LOWORD(lParam) == WM_LBUTTONUP) { 
+            PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0); 
+            return 0; 
+        }
         if (LOWORD(lParam) == WM_RBUTTONUP) {
             static DWORD lastMenuTime = 0;
             if (GetTickCount() - lastMenuTime < 500) return 0;
@@ -2213,25 +3078,78 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         return 0;
     }
-    if (uMsg == WM_TRIGGER_FLYOUT) { ToggleFlyout(); return 0; }
-    if (uMsg == WM_REFRESH_DATA) { if (!g_Ctx.isUninitializing) RefreshSecurityState(); return 0; }
-    if (uMsg == WM_SECURITY_CHANGED) { if (!g_Ctx.isUninitializing) { Wh_Log(LOG_PREFIX L"Security change notification"); RefreshSecurityState(); } return 0; }
-    if (uMsg == WM_SIMULATE_NOTIFICATION) { if (g_Settings.enableNotificationSimulation && !g_Ctx.isUninitializing) SimulateNotification((int)wParam); return 0; }
-    if (uMsg == WM_CLEAR_NOTIFICATIONS) { if (!g_Ctx.isUninitializing) ClearNotifications(); return 0; }
+    if (uMsg == WM_TRIGGER_FLYOUT) { 
+        ToggleFlyout(); 
+        return 0; 
+    }
+    if (uMsg == WM_REFRESH_DATA) { 
+        if (!g_Ctx.isUninitializing) RefreshSecurityState(); 
+        return 0; 
+    }
+    if (uMsg == WM_SECURITY_CHANGED) { 
+        if (!g_Ctx.isUninitializing) { 
+            Wh_Log(LOG_PREFIX L"Security change notification"); 
+            RefreshSecurityState(); 
+        } 
+        return 0; 
+    }
+    if (uMsg == WM_SIMULATE_NOTIFICATION) { 
+        if (g_Settings.enableNotificationSimulation && !g_Ctx.isUninitializing) 
+            SimulateNotification((int)wParam); 
+        return 0; 
+    }
+    if (uMsg == WM_CLEAR_NOTIFICATIONS) { 
+        if (!g_Ctx.isUninitializing) ClearNotifications(); 
+        return 0; 
+    }
     if (uMsg == WM_COMMAND) {
-        if (LOWORD(wParam) == ID_MENU_OPEN_AC) ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
-        else if (LOWORD(wParam) == ID_MENU_TROUBLESHOOT) ShellExecuteW(NULL, L"open", L"explorer.exe", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", NULL, SW_SHOWNORMAL);
+        if (LOWORD(wParam) == ID_MENU_OPEN_AC) 
+            ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
+        else if (LOWORD(wParam) == ID_MENU_TROUBLESHOOT) 
+            ShellExecuteW(NULL, L"open", L"explorer.exe", L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", NULL, SW_SHOWNORMAL);
         return 0;
     }
     if (uMsg == WM_HOTKEY) {
         if (g_Ctx.isUninitializing) return 0;
-        if (wParam == HOTKEY_ID_SIMULATE && g_Settings.enableNotificationSimulation) { static int c = 0; c = (c % 4) + 1; PostMessageW(hwnd, WM_SIMULATE_NOTIFICATION, c, 0); return 0; }
-        if (wParam == HOTKEY_ID_CLEAR) { PostMessageW(hwnd, WM_CLEAR_NOTIFICATIONS, 0, 0); return 0; }
-        if (wParam == HOTKEY_ID_LOGTREE) { LogWindowTree(GetForegroundWindow()); return 0; }
+        if (wParam == HOTKEY_ID_SIMULATE && g_Settings.enableNotificationSimulation) { 
+            static int c = 0; 
+            c = (c % 4) + 1; 
+            PostMessageW(hwnd, WM_SIMULATE_NOTIFICATION, c, 0); 
+            return 0; 
+        }
+        if (wParam == HOTKEY_ID_CLEAR) { 
+            PostMessageW(hwnd, WM_CLEAR_NOTIFICATIONS, 0, 0); 
+            return 0; 
+        }
+        if (wParam == HOTKEY_ID_LOGTREE) { 
+            LogWindowTree(GetForegroundWindow()); 
+            return 0; 
+        }
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
-
+void EnsureTrayTooltip() {
+    if (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler)) return;
+    if (!g_Ctx.trayIconAdded) {
+        AddTrayIcon();
+        return;
+    }
+    
+    WCHAR tipBuf[256] = {0};
+    BuildTrayTooltip(tipBuf, ARRAYSIZE(tipBuf));
+    const wchar_t* tip = tipBuf;
+    
+    // Usa NIM_MODIFY con NIF_TIP e NIF_SHOWTIP per aggiornare il tooltip
+    NOTIFYICONDATAW nid = {0};
+    nid.cbSize = sizeof(NOTIFYICONDATAW);
+    nid.hWnd = g_Ctx.hWndMsgHandler;
+    nid.uID = TRAY_ICON_ID;
+    nid.uFlags = NIF_TIP | NIF_GUID | NIF_SHOWTIP;
+    nid.guidItem = TRAY_ICON_GUID;
+    StringCchCopyW(nid.szTip, ARRAYSIZE(nid.szTip), tip);
+    
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
 // ============================================================================
 // Tray Thread
 // ============================================================================
@@ -2243,32 +3161,61 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         mwc.lpszClassName = TRAY_MESSAGE_CLASS_NAME;
         if (RegisterClassExW(&mwc)) g_Ctx.trayMsgClassRegistered = TRUE;
     }
-    g_Ctx.hWndMsgHandler = CreateWindowExW(0, TRAY_MESSAGE_CLASS_NAME, L"", 0,0,0,0,0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
-    if (!g_Ctx.hWndMsgHandler) { CoUninitialize(); return 1; }
-    UINT uTaskbarRestart = RegisterWindowMessageW(L"TaskbarCreated");
+
+    // TaskbarCreated è un broadcast inviato alle finestre top-level.
+    // Usiamo WS_POPUP per riceverlo e ripristinare l'icona dopo il riavvio di Explorer.
+    g_Ctx.taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
+    g_Ctx.hWndMsgHandler = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, TRAY_MESSAGE_CLASS_NAME, L"",
+        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandle(NULL), NULL);
+
+    if (!g_Ctx.hWndMsgHandler) {
+        if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
+        CoUninitialize();
+        return 1;
+    }
+    if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
+
+    // At Windows startup / explorer restart the tray may not exist yet.
+    // Wait a bit, then add; recovery timers cover the rest.
+    if (!WaitForTaskbarReady(15000)) {
+        Wh_Log(LOG_PREFIX L"Shell_TrayWnd not ready within 15s — scheduling recovery");
+    }
     AddTrayIcon();
+    if (!g_Ctx.trayIconAdded) {
+        ScheduleTrayIconRecovery();
+    }
+    EnsureTrayTooltip();
     RegisterWscNotifications();
     StartRegistryMonitor();
+
     if (g_Settings.refreshInterval > 0)
         g_Ctx.refreshTimer = SetTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
+
+    // Timer di autoriparazione per riavvio taskbar (in caso TaskbarCreated non venga ricevuto)
+    SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+
     if (g_Settings.enableHotkey) {
         RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
         RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
     }
     RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE, MOD_CONTROL | MOD_ALT, 'W');
+
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == uTaskbarRestart && !g_Ctx.isUninitializing) AddTrayIcon();
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
+
     // Thread cleanup
     if (g_Settings.enableHotkey) {
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE);
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR);
     }
     UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE);
-    if (g_Ctx.refreshTimer) { KillTimer(g_Ctx.hWndMsgHandler, g_Ctx.refreshTimer); g_Ctx.refreshTimer = 0; }
+    if (g_Ctx.refreshTimer) { KillTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID); g_Ctx.refreshTimer = 0; }
+    KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
+    KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
     UnregisterWscNotifications();
     Shell_NotifyIconW(NIM_DELETE, &g_nid);
     if (g_nid.hIcon) { DestroyIcon(g_nid.hIcon); g_nid.hIcon = NULL; }
@@ -2277,8 +3224,6 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     return 0;
 }
 
-// ============================================================================
-// CleanupModResources — centralized cleanup, called from Wh_ModUninit and Wh_ModInit on failure
 // ============================================================================
 void CleanupModResources() {
     Wh_Log(LOG_PREFIX L"CleanupModResources: starting");
@@ -2295,19 +3240,27 @@ void CleanupModResources() {
     StopRegistryMonitor();
     // 6. Post WM_QUIT to tray thread's message window
     if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler))
-        PostMessageW(g_Ctx.hWndMsgHandler, WM_QUIT, 0, 0);
+        PostMessageW(g_Ctx.hWndMsgHandler, WM_TRAY_SHUTDOWN, 0, 0);
     // 7. Wait for tray thread (short timeout — 500ms max)
     if (g_Ctx.hTrayThread) {
-        DWORD wr = WaitForSingleObject(g_Ctx.hTrayThread, THREAD_WAIT_TIMEOUT);
-        if (wr == WAIT_TIMEOUT)
-            Wh_Log(LOG_PREFIX L"Tray thread did not exit within %dms", THREAD_WAIT_TIMEOUT);
+        DWORD wr = WaitForSingleObject(g_Ctx.hTrayThread, 5000);
+        if (wr == WAIT_TIMEOUT) {
+            Wh_Log(LOG_PREFIX L"Waiting for tray thread to exit");
+            WaitForSingleObject(g_Ctx.hTrayThread, INFINITE);
+        }
         CloseHandle(g_Ctx.hTrayThread);
         g_Ctx.hTrayThread = NULL;
     }
-    // 8. Destroy any remaining windows (should be gone, but be safe)
-    if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) { DestroyWindow(g_Ctx.hWndFlyout); g_Ctx.hWndFlyout = NULL; }
-    if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler)) { DestroyWindow(g_Ctx.hWndMsgHandler); g_Ctx.hWndMsgHandler = NULL; }
-    if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) { DestroyWindow(g_Ctx.hWndNotify); g_Ctx.hWndNotify = NULL; }
+    // 8. Destroy any remaining windows (should be gone, but be safe).
+    // Snapshot HWNDs then null the globals first so concurrent WndProcs see NULL.
+    {
+        HWND hFly = g_Ctx.hWndFlyout;   g_Ctx.hWndFlyout = NULL;
+        HWND hMsg = g_Ctx.hWndMsgHandler; g_Ctx.hWndMsgHandler = NULL;
+        HWND hNtf = g_Ctx.hWndNotify;   g_Ctx.hWndNotify = NULL;
+        if (hFly && IsWindow(hFly)) DestroyWindow(hFly);
+        if (hMsg && IsWindow(hMsg)) DestroyWindow(hMsg);
+        if (hNtf && IsWindow(hNtf)) DestroyWindow(hNtf);
+    }
     // 9. Free GDI+ resources (bitmap cache)
     ShutdownGdiPlus();
     // 10. Free icons and fonts
@@ -2322,11 +3275,29 @@ void CleanupModResources() {
     g_Initialized = FALSE;
     Wh_Log(LOG_PREFIX L"CleanupModResources: complete");
 }
-
 BOOL Wh_ModInit(void) {
-    Wh_Log(LOG_PREFIX L"Win7 Action Center v5.1 - Initializing");
-    if (!IsExplorerProcess()) { Wh_Log(LOG_PREFIX L"Not explorer.exe, skipping"); return TRUE; }
+    Wh_Log(LOG_PREFIX L"Win7 Action Center - Initializing...");
+    
+    // Allow init even if Shell_TrayWnd is not ready yet (boot / explorer restart).
+    if (!IsMainExplorerProcess()) { 
+        Wh_Log(LOG_PREFIX L"Not shell explorer.exe, skipping");
+        return TRUE; 
+    }
+    
     InstallRegistryHooks();
+    
+    // Aggiungi hook per CreateWindowExW per rilevare la ricreazione della taskbar
+    if (!CreateWindowExW_orig) {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32) {
+            WindhawkUtils::Wh_SetFunctionHookT(
+                (CreateWindowExW_t)GetProcAddress(hUser32, "CreateWindowExW"), 
+                CreateWindowExW_hook, 
+                &CreateWindowExW_orig);
+            Wh_Log(LOG_PREFIX L"CreateWindowExW hook installed for Shell_TrayWnd detection");
+        }
+    }
+    
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     LoadSettings();
     DetermineLocale();
@@ -2340,14 +3311,14 @@ BOOL Wh_ModInit(void) {
     // Inizializza con 0 problemi (stato iniziale)
     RecalcDpiMetrics(dpi, 0);
     InitGlobalFonts();
-    InitFlyoutIcons();
-    
-    // Initialize GDI+ for high-quality icon rendering
+
+    // GDI+ deve essere inizializzato prima di decodificare le PNG Base64.
     if (!InitGdiPlusRendering()) {
         Wh_Log(LOG_PREFIX L"GDI+ init failed — will use DrawIconEx fallback");
     }
+    InitFlyoutIcons();
     CreateNotifyWindow();
-    g_Ctx.hTrayThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, NULL);
+    g_Ctx.hTrayThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, &g_Ctx.trayThreadId);
     if (!g_Ctx.hTrayThread) {
         Wh_Log(LOG_PREFIX L"Failed to create tray thread — cleaning up");
         CleanupModResources();
