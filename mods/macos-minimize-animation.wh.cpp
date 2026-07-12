@@ -14,7 +14,7 @@
 /*
 # MacOS Minimize Animation
 
-![Demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif)
+![Demo](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/99a9a78e9a06c49b282cc8e337854840a9f7fa73/Desktop2026.07.02-19.32.49.05-ezgif.com-video-to-gif-converter.gif)
 
 Brings the classic macOS **genie** effect to Windows. When you minimize a window
 it warps and flows down into the taskbar; when you restore it, it flows back out.
@@ -28,7 +28,10 @@ targeting, and the taskbar auto-hide handling - was contributed by
 **Potassiumuncher** - <https://github.com/Potassiumuncher>. As of v3.0.0 the
 animation that plays is his engine, integrated into this mod's hardening
 (multi-hook capture, flash-free cloak restore, safe unload, first-frame sync).
-Huge thanks for building it and generously handing it over.
+The demo GIF above is also his, from his own
+[MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
+repo. Huge thanks for building this, sharing the recording, and generously
+handing it all over - this mod wouldn't look nearly this good without him.
 
 ## Known issues
 - On multi-monitor setups (especially the secondary display), the genie can
