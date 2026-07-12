@@ -2,10 +2,10 @@
 // @id              lid-sleep-delay
 // @name            Lid Close Sleep Delay
 // @description     Delays system sleep after laptop lid is closed by a configurable time (30s, 1min, 5min, 10min)
-// @version         1.0
+// @version         1.1
 // @author          Ansh Raj
 // @github          https://github.com/remixansh
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lpowrprof -luser32 -ladvapi32 -lole32 -loleaut32 -lwbemuuid
 // @license         MIT
 // ==/WindhawkMod==
@@ -15,9 +15,13 @@
 # Lid Close Sleep Delay
 
 This mod adds a configurable delay before your laptop goes to sleep when the
-lid is closed. It works dynamically on **any Windows system** — laptops,
-convertibles, and tablets with a lid sensor. On desktops or systems without
-a lid switch, the mod detects this at startup and gracefully disables itself.
+lid is closed. It runs as a **dedicated-process tool mod** in its own
+`windhawk.exe` instance — it does not inject into `explorer.exe`, so a bug
+here cannot destabilize the shell.
+
+It works dynamically on **any Windows system** — laptops, convertibles, and
+tablets with a lid sensor. On desktops or systems without a lid switch, the
+mod detects this at startup and gracefully disables itself.
 
 ## Compatibility
 
@@ -27,8 +31,8 @@ a lid switch, the mod detects this at startup and gracefully disables itself.
 
 ## How it works
 
-1. On startup, the mod checks if the system has a **lid switch** (battery
-   presence, chassis type, and power capabilities are all checked).
+1. On startup, the mod checks if the system has a **lid switch** (power
+   capabilities, battery presence, and chassis type are all checked).
 2. If a lid switch is detected, it listens for **lid state change** power
    notifications.
 3. When the lid is closed, it keeps the system awake and starts a countdown.
@@ -45,6 +49,10 @@ a lid switch, the mod detects this at startup and gracefully disables itself.
 2. Set **"When I close the lid"** to **"Do nothing"** for both **On battery**
    and **Plugged in**
 3. Click **Save changes**
+
+> **Note:** Disabling or removing this mod does *not* automatically restore
+> the original lid-close behavior. You must manually change **"When I close
+> the lid"** back to **"Sleep"** in Power Options.
 
 ## Options
 
@@ -75,8 +83,7 @@ a lid switch, the mod detects this at startup and gracefully disables itself.
 #include <batclass.h>
 #include <comdef.h>
 #include <wbemidl.h>
-
-#pragma comment(lib, "wbemuuid.lib")
+#include <atomic>
 
 // ─── GUIDs ───────────────────────────────────────────────────────────────────
 
@@ -88,21 +95,21 @@ static const GUID GUID_LIDSWITCH_STATE_CHANGE_LOCAL = {
 
 // ─── Global State ────────────────────────────────────────────────────────────
 
-static volatile int g_sleepDelaySeconds = 60;
-static volatile BOOL g_bLidClosed = FALSE;
-static volatile BOOL g_bTimerActive = FALSE;
-static volatile BOOL g_bRunning = FALSE;
+// Cross-thread: WhTool_ModSettingsChanged runs on a Windhawk thread while the
+// entry-point thread reads this value.
+static std::atomic<int> g_sleepDelaySeconds{60};
 
-static HANDLE g_hThread = NULL;
-static DWORD g_dwThreadId = 0;
-static HANDLE g_hMutex = NULL;
+// Entry-point thread only — no synchronization needed.
+static BOOL g_bLidClosed = FALSE;
+static BOOL g_bTimerActive = FALSE;
+
 static HWND g_hWnd = NULL;
 static HPOWERNOTIFY g_hPowerNotify = NULL;
 
 static const UINT_PTR SLEEP_TIMER_ID = 0xD00D;
-// Custom message to tell the thread to reload settings
+// Custom message to tell the entry point to reload settings
 static const UINT WM_RELOAD_SETTINGS = WM_USER + 100;
-// Custom message to tell the thread to quit
+// Custom message to tell the entry point to quit
 static const UINT WM_QUIT_THREAD = WM_USER + 101;
 
 // ─── System Detection ────────────────────────────────────────────────────────
@@ -129,20 +136,9 @@ static BOOL HasBattery() {
 
 // Check the system's power capabilities for lid switch support
 static BOOL HasLidSwitchCapability() {
-    // Use CallNtPowerInformation to check SYSTEM_POWER_CAPABILITIES
-    typedef struct _SYSTEM_POWER_CAPABILITIES_FULL {
-        BOOLEAN PowerButtonPresent;
-        BOOLEAN SleepButtonPresent;
-        BOOLEAN LidPresent;
-        BOOLEAN SystemS1;
-        BOOLEAN SystemS2;
-        BOOLEAN SystemS3;
-        BOOLEAN SystemS4;
-        BOOLEAN SystemS5;
-        // ... more fields follow but we only need LidPresent
-    } SYSTEM_POWER_CAPABILITIES_FULL;
-
-    SYSTEM_POWER_CAPABILITIES_FULL caps = {};
+    // Use the full SYSTEM_POWER_CAPABILITIES from <powrprof.h> so
+    // CallNtPowerInformation receives a buffer large enough to succeed.
+    SYSTEM_POWER_CAPABILITIES caps = {};
     NTSTATUS status = CallNtPowerInformation(
         SystemPowerCapabilities,
         NULL, 0,
@@ -311,7 +307,7 @@ static BOOL EnableShutdownPrivilege() {
     return TRUE;
 }
 
-// ─── Window Proc (runs on our dedicated thread) ─────────────────────────────
+// ─── Window Proc (runs on the entry-point thread) ───────────────────────────
 
 static VOID CALLBACK SleepTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent,
                                      DWORD dwTime)
@@ -354,7 +350,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                     if (lidState == 0) {
                         // ── Lid Closed ──
                         g_bLidClosed = TRUE;
-                        int delay = g_sleepDelaySeconds;
+                        int delay = g_sleepDelaySeconds.load();
                         Wh_Log(L">>> LID CLOSED — will sleep in %d seconds",
                                delay);
 
@@ -393,12 +389,11 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         }
 
         case WM_RELOAD_SETTINGS: {
-            Wh_Log(L"Thread received WM_RELOAD_SETTINGS");
-            // Settings are already updated in g_sleepDelaySeconds
+            Wh_Log(L"Received WM_RELOAD_SETTINGS");
             // If timer is active, restart it with new delay
             if (g_bTimerActive) {
                 KillTimer(g_hWnd, SLEEP_TIMER_ID);
-                int delay = g_sleepDelaySeconds;
+                int delay = g_sleepDelaySeconds.load();
                 SetTimer(g_hWnd, SLEEP_TIMER_ID, (UINT)(delay * 1000),
                          SleepTimerProc);
                 Wh_Log(L"Timer restarted with new delay: %d seconds", delay);
@@ -407,13 +402,13 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         }
 
         case WM_QUIT_THREAD: {
-            Wh_Log(L"Thread received WM_QUIT_THREAD");
+            Wh_Log(L"Received WM_QUIT_THREAD");
             if (g_bTimerActive) {
                 KillTimer(g_hWnd, SLEEP_TIMER_ID);
                 g_bTimerActive = FALSE;
             }
             SetThreadExecutionState(ES_CONTINUOUS);
-            PostQuitMessage(0);
+            DestroyWindow(hWnd);
             return 0;
         }
 
@@ -430,99 +425,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-// ─── Dedicated Message-Pumping Thread ────────────────────────────────────────
-// This thread creates the window, registers for power notifications,
-// and runs its own message loop. This ensures WM_POWERBROADCAST and
-// WM_TIMER are always dispatched regardless of which thread Windhawk
-// loaded us on.
-
-static DWORD WINAPI LidMonitorThread(LPVOID lpParam) {
-    Wh_Log(L"[Thread] LidMonitorThread started (TID: %lu)",
-           GetCurrentThreadId());
-
-    // Enable shutdown privilege on this thread too
-    EnableShutdownPrivilege();
-
-    // Register window class
-    WNDCLASSEX wc = {};
-    wc.cbSize = sizeof(WNDCLASSEX);
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"WindhawkLidSleepDelay_v14";
-
-    ATOM atom = RegisterClassEx(&wc);
-    if (!atom && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        Wh_Log(L"[Thread] RegisterClassEx failed: %lu", GetLastError());
-        return 1;
-    }
-
-    // Create a regular hidden window (NOT HWND_MESSAGE)
-    g_hWnd = CreateWindowEx(
-        0,
-        L"WindhawkLidSleepDelay_v14",
-        L"LidSleepDelay",
-        WS_OVERLAPPED,
-        0, 0, 0, 0,
-        NULL, NULL,
-        GetModuleHandle(NULL),
-        NULL
-    );
-
-    if (!g_hWnd) {
-        Wh_Log(L"[Thread] CreateWindowEx failed: %lu", GetLastError());
-        return 1;
-    }
-
-    ShowWindow(g_hWnd, SW_HIDE);
-    Wh_Log(L"[Thread] Window created: HWND=%p", (void*)g_hWnd);
-
-    // Register for lid switch power notifications
-    g_hPowerNotify = RegisterPowerSettingNotification(
-        g_hWnd,
-        &GUID_LIDSWITCH_STATE_CHANGE_LOCAL,
-        DEVICE_NOTIFY_WINDOW_HANDLE
-    );
-
-    if (!g_hPowerNotify) {
-        Wh_Log(L"[Thread] RegisterPowerSettingNotification failed: %lu",
-               GetLastError());
-        DestroyWindow(g_hWnd);
-        g_hWnd = NULL;
-        return 1;
-    }
-
-    Wh_Log(L"[Thread] Power notification registered — listening for lid "
-           L"events");
-    Wh_Log(L"[Thread] Current delay: %d seconds", g_sleepDelaySeconds);
-
-    // ── Message Loop ──
-    // This is the key: our own message loop ensures WM_POWERBROADCAST
-    // and timer callbacks are always dispatched
-    g_bRunning = TRUE;
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    Wh_Log(L"[Thread] Message loop exited");
-
-    // Cleanup
-    if (g_hPowerNotify) {
-        UnregisterPowerSettingNotification(g_hPowerNotify);
-        g_hPowerNotify = NULL;
-    }
-    if (g_hWnd) {
-        DestroyWindow(g_hWnd);
-        g_hWnd = NULL;
-    }
-    UnregisterClass(L"WindhawkLidSleepDelay_v14", GetModuleHandle(NULL));
-
-    g_bRunning = FALSE;
-    Wh_Log(L"[Thread] LidMonitorThread exiting");
-    return 0;
-}
-
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 static int ParseDelayOption(PCWSTR option) {
@@ -533,37 +435,28 @@ static int ParseDelayOption(PCWSTR option) {
     return 60;
 }
 
-void LoadSettings() {
+static void LoadSettings() {
     PCWSTR delayStr = Wh_GetStringSetting(L"SleepDelay");
     g_sleepDelaySeconds = ParseDelayOption(delayStr);
     Wh_FreeStringSetting(delayStr);
-    Wh_Log(L"Settings loaded: sleepDelaySeconds = %d", g_sleepDelaySeconds);
+    Wh_Log(L"Settings loaded: sleepDelaySeconds = %d",
+           g_sleepDelaySeconds.load());
 }
 
-// ─── Windhawk Callbacks ──────────────────────────────────────────────────────
+// ─── Windhawk Tool-Mod Callbacks ─────────────────────────────────────────────
+//
+// This mod runs as a dedicated-process "tool mod": it targets windhawk.exe and
+// uses WhTool_* callbacks instead of Wh_*.  The Windhawk engine launches a
+// dedicated process, calls WhTool_ModInit, then WhTool_ModEntryPoint (which
+// blocks).  Settings changes and uninit are dispatched on a separate thread.
+//
+// Benefits over explorer.exe injection:
+//   • A crash here cannot destabilize the shell.
+//   • Single-instance is handled automatically (no hand-rolled mutex).
+//   • On unload the entire process exits — no TerminateThread needed.
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"=== Lid Close Sleep Delay v1.5: Init (TID: %lu) ===",
-           GetCurrentThreadId());
-
-    // ── Check Windows version ──
-    // The APIs we use (RegisterPowerSettingNotification, SetSuspendState)
-    // require Windows Vista or later. All modern Windows versions are fine.
-    OSVERSIONINFOEXW osvi = {};
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-    // Use RtlGetVersion for accurate results (GetVersionEx is shimmed)
-    typedef NTSTATUS(WINAPI* RtlGetVersionFunc)(PRTL_OSVERSIONINFOW);
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (hNtdll) {
-        RtlGetVersionFunc pRtlGetVersion =
-            (RtlGetVersionFunc)GetProcAddress(hNtdll, "RtlGetVersion");
-        if (pRtlGetVersion) {
-            pRtlGetVersion((PRTL_OSVERSIONINFOW)&osvi);
-            Wh_Log(L"Windows version: %lu.%lu.%lu",
-                   osvi.dwMajorVersion, osvi.dwMinorVersion,
-                   osvi.dwBuildNumber);
-        }
-    }
+BOOL WhTool_ModInit() {
+    Wh_Log(L"=== Lid Close Sleep Delay v1.1: Init ===");
 
     // ── Detect if this system has a lid ──
     if (!IsLidCapableSystem()) {
@@ -573,80 +466,113 @@ BOOL Wh_ModInit() {
     }
     Wh_Log(L"Lid-capable system detected — proceeding with initialization");
 
-    // Only run in one explorer.exe instance
-    g_hMutex = CreateMutex(NULL, TRUE,
-                            L"WindhawkLidSleepDelay_SingleInstance");
-    if (g_hMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"Another instance already running — skipping");
-        CloseHandle(g_hMutex);
-        g_hMutex = NULL;
-        return FALSE;
-    }
-
     LoadSettings();
-
-    // Enable shutdown privilege on the init thread
     EnableShutdownPrivilege();
 
-    // Launch the dedicated message-pumping thread
-    g_hThread = CreateThread(NULL, 0, LidMonitorThread, NULL, 0,
-                              &g_dwThreadId);
-    if (!g_hThread) {
-        Wh_Log(L"CreateThread failed: %lu", GetLastError());
-        return FALSE;
-    }
-
-    // Wait a moment for the thread to initialize
-    Sleep(200);
-
-    if (!g_bRunning) {
-        Wh_Log(L"Thread failed to start");
-        return FALSE;
-    }
-
-    Wh_Log(L"=== Init complete. Thread TID: %lu, Delay: %d sec ===",
-           g_dwThreadId, g_sleepDelaySeconds);
+    Wh_Log(L"=== Init complete. Delay: %d sec ===",
+           g_sleepDelaySeconds.load());
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"=== Lid Close Sleep Delay: Uninit ===");
+void WhTool_ModEntryPoint() {
+    Wh_Log(L"[EntryPoint] Starting (TID: %lu)", GetCurrentThreadId());
 
-    // Tell the thread to quit
-    if (g_dwThreadId && g_hWnd) {
-        PostMessage(g_hWnd, WM_QUIT_THREAD, 0, 0);
+    // Register window class
+    WNDCLASSEX wc = {};
+    wc.cbSize = sizeof(WNDCLASSEX);
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"WindhawkLidSleepDelay";
 
-        // Wait for thread to finish (max 3 seconds)
-        if (g_hThread) {
-            DWORD waitResult = WaitForSingleObject(g_hThread, 3000);
-            if (waitResult == WAIT_TIMEOUT) {
-                Wh_Log(L"Thread did not exit in time — terminating");
-                TerminateThread(g_hThread, 0);
-            }
-            CloseHandle(g_hThread);
-            g_hThread = NULL;
-        }
+    ATOM atom = RegisterClassEx(&wc);
+    if (!atom) {
+        Wh_Log(L"[EntryPoint] RegisterClassEx failed: %lu", GetLastError());
+        return;
     }
 
-    SetThreadExecutionState(ES_CONTINUOUS);
+    // Create a hidden window to receive WM_POWERBROADCAST and timer messages
+    g_hWnd = CreateWindowEx(
+        0,
+        L"WindhawkLidSleepDelay",
+        L"LidSleepDelay",
+        WS_OVERLAPPED,
+        0, 0, 0, 0,
+        NULL, NULL,
+        GetModuleHandle(NULL),
+        NULL
+    );
 
-    if (g_hMutex) {
-        ReleaseMutex(g_hMutex);
-        CloseHandle(g_hMutex);
-        g_hMutex = NULL;
+    if (!g_hWnd) {
+        Wh_Log(L"[EntryPoint] CreateWindowEx failed: %lu", GetLastError());
+        UnregisterClass(L"WindhawkLidSleepDelay", GetModuleHandle(NULL));
+        return;
     }
 
-    Wh_Log(L"=== Uninit complete ===");
+    ShowWindow(g_hWnd, SW_HIDE);
+    Wh_Log(L"[EntryPoint] Window created: HWND=%p", (void*)g_hWnd);
+
+    // Register for lid switch power notifications
+    g_hPowerNotify = RegisterPowerSettingNotification(
+        g_hWnd,
+        &GUID_LIDSWITCH_STATE_CHANGE_LOCAL,
+        DEVICE_NOTIFY_WINDOW_HANDLE
+    );
+
+    if (!g_hPowerNotify) {
+        Wh_Log(L"[EntryPoint] RegisterPowerSettingNotification failed: %lu",
+               GetLastError());
+        DestroyWindow(g_hWnd);
+        g_hWnd = NULL;
+        UnregisterClass(L"WindhawkLidSleepDelay", GetModuleHandle(NULL));
+        return;
+    }
+
+    Wh_Log(L"[EntryPoint] Power notification registered — listening for lid "
+           L"events");
+    Wh_Log(L"[EntryPoint] Current delay: %d seconds",
+           g_sleepDelaySeconds.load());
+
+    // ── Message Loop ──
+    // This blocks until PostQuitMessage is called (via WM_QUIT_THREAD →
+    // DestroyWindow → WM_DESTROY → PostQuitMessage).
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    Wh_Log(L"[EntryPoint] Message loop exited — cleaning up");
+
+    // Final cleanup (WM_DESTROY already unregistered the power notification)
+    UnregisterClass(L"WindhawkLidSleepDelay", GetModuleHandle(NULL));
+    g_hWnd = NULL;
+
+    Wh_Log(L"[EntryPoint] Exiting");
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"=== Settings Changed ===");
-    int oldDelay = g_sleepDelaySeconds;
+    int oldDelay = g_sleepDelaySeconds.load();
     LoadSettings();
-    Wh_Log(L"Delay: %d -> %d seconds", oldDelay, g_sleepDelaySeconds);
+    Wh_Log(L"Delay: %d -> %d seconds", oldDelay, g_sleepDelaySeconds.load());
 
-    // Tell the thread to reload
+    // Tell the entry-point thread to reload (it reads g_sleepDelaySeconds
+    // atomically; posting the message restarts any active timer with the new
+    // delay).
     if (g_hWnd) {
         PostMessage(g_hWnd, WM_RELOAD_SETTINGS, 0, 0);
     }
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"=== Lid Close Sleep Delay: Uninit ===");
+
+    // Ask the entry-point thread to stop.  If it doesn't exit in time, the
+    // tool-mod framework will ExitProcess the dedicated process — which is
+    // safe and clean (no host process to corrupt).
+    if (g_hWnd) {
+        PostMessage(g_hWnd, WM_QUIT_THREAD, 0, 0);
+    }
+
+    Wh_Log(L"=== Uninit complete ===");
 }
