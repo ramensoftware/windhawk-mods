@@ -28,7 +28,7 @@
 **!Important!** This mod curently only supports Windows 10 or Windows 11 versions up to 23H2 and 24H2/25H2 builds up to 8037. 
 On 24H2 and 25H2 you may have to use vivetool to enable toolbars in Explorer: `vivetool /disable /id:55063786`.
 
-**!Important!** To use this mod, you shoud disable any other mods that hide the clasic Navigation bar, such as the `Disable Navigation Bar` mod by ItsProfessional.
+**!Important!** To use this mod, you shoud disable any other mods that hide the classic Navigation bar, such as the `Disable Navigation Bar` mod by ItsProfessional.
 This mod hides the Navigation Bar by itself. 
 
 For this mod to work you should enable a mod that restores the Navigation bar, it is recommended to install the `Windows 7 Comand Bar` mod, altough, `Classic Explorer navigation bar`
