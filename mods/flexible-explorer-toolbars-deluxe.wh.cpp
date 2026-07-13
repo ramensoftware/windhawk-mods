@@ -6,14 +6,14 @@
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
-// @compilerOptions -luxtheme -lgdi32 -lcomctl32
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
 /*
 - MoveSearchBand: true
   $name: Show Search Bar
-- MoveBreadcrumb: false
+- MoveBreadcrumb: true
   $name: Show Breadcrumb Bar
 - MoveUpButton: true
   $name: Show Up Button
@@ -27,6 +27,7 @@
 
 **!Important!** This mod curently only supports Windows 10 or Windows 11 versions up to 23H2 and 24H2/25H2 builds up to 8037. 
 On 24H2 and 25H2 you may have to use vivetool to enable toolbars in Explorer: `vivetool /disable /id:55063786`.
+On later, unsuported builds you may need to replace the Explorerframe.dll from an earlier version.
 
 **!Important!** To use this mod, you shoud disable any other mods that hide the classic Navigation bar, such as the `Disable Navigation Bar` mod by ItsProfessional.
 This mod hides the Navigation Bar by itself. 
@@ -50,7 +51,7 @@ The toolbars can be locked and unlocked.
 
 * To make the toolbars to have the 3D borders, install this mod: [Separators around File Explorer toolbars](https://windhawk.net/mods/explorer-toolbars-separators).
 
-* To fix appearance of the default text in the search bar under dark Classic theme, install this mod: [Classic Theme Explorer Search Fix](https://windhawk.net/mods/classic-theme-explorer-search-fix).
+* To fix the appearance of the default text in the search bar under dark Classic theme, install this mod: [Classic Theme Explorer Search Fix](https://windhawk.net/mods/classic-theme-explorer-search-fix).
 
 ![screnshot](https://i.imgur.com/1YbTzZt.png)
 
@@ -75,7 +76,8 @@ The toolbars can be locked and unlocked.
 #include <string>
 
 constexpr int UP_BUTTON_ICON_SIZE  = 16;
-constexpr UINT WM_APP_DO_MOVE      = WM_APP + 0x501;
+
+UINT g_msgDoMove = 0;
 
 struct Settings {
     bool moveSearchBand    = true;
@@ -152,7 +154,10 @@ NTSTATUS NTAPI NtSetValueKey_Hook(
     PVOID Data,
     ULONG DataSize)
 {
-    if (!ValueName||UnicodeStringEqualsIgnoreCase(ValueName, L"ITBar7Layout")) {return 0;}
+
+    if (UnicodeStringEqualsIgnoreCase(ValueName, L"ITBar7Layout")) {
+        return 0;
+    }
     return NtSetValueKey_Original(KeyHandle, ValueName, TitleIndex, Type, Data, DataSize);
 }
 
@@ -225,20 +230,20 @@ void SaveBandPositions(HWND rebar){
         if(rbi.hwndChild&&IsWindow(rbi.hwndChild))
             GetEffectiveClassName(rbi.hwndChild,cls,ARRAYSIZE(cls));
         
-        WCHAR ok[64];wsprintf(ok,L"Order_%d",i);
+        WCHAR ok[64];swprintf_s(ok,ARRAYSIZE(ok),L"Order_%d",i);
         Wh_SetStringValue(ok, cls);
         
-        WCHAR ck[128];wsprintf(ck,L"Cx_%s",cls);
+        WCHAR ck[128];swprintf_s(ck,ARRAYSIZE(ck),L"Cx_%s",cls);
         Wh_SetIntValue(ck, (int)rbi.cx);
         
-        WCHAR bk[128];wsprintf(bk,L"Break_%s",cls);
+        WCHAR bk[128];swprintf_s(bk,ARRAYSIZE(bk),L"Break_%s",cls);
         Wh_SetIntValue(bk, (rbi.fStyle&RBBS_BREAK)?1:0);
     }
 }
 
 bool LoadBandState(const wchar_t* cls,BandState& out){
-    WCHAR ck[128];wsprintf(ck,L"Cx_%s",cls);
-    WCHAR bk[128];wsprintf(bk,L"Break_%s",cls);
+    WCHAR ck[128];swprintf_s(ck,ARRAYSIZE(ck),L"Cx_%s",cls);
+    WCHAR bk[128];swprintf_s(bk,ARRAYSIZE(bk),L"Break_%s",cls);
     
     int cx = Wh_GetIntValue(ck, -1);
     if(cx < 20 || cx > 8000) return false;
@@ -255,7 +260,7 @@ std::vector<std::wstring> LoadBandOrder(){
     int cnt = Wh_GetIntValue(L"BandCount", 0);
     
     for(int i=0; i<cnt; i++){
-        WCHAR ok[64];wsprintf(ok,L"Order_%d",i);
+        WCHAR ok[64];swprintf_s(ok,ARRAYSIZE(ok),L"Order_%d",i);
         WCHAR val[256]=L"";
         if(Wh_GetStringValue(ok, val, ARRAYSIZE(val)) > 0)
             order.push_back(val);
@@ -565,7 +570,7 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
     if(msg==RB_INSERTBAND){
         HWND cab=GetCabinetAncestor(hwnd);
         if(cab&&!WasAlreadyMoved(cab)&&IsRebarChildOfDirectWorkerW(hwnd,cab))
-            PostMessage(cab,WM_APP_DO_MOVE,0,0);
+            PostMessage(cab,g_msgDoMove,0,0);
     }
     
     if(msg==RB_SETBANDINFO && !g_insideGripperSync){
@@ -600,14 +605,14 @@ LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWO
             if(mr&&IsWindow(mr))SaveBandPositions(mr);
         }
     }
-    if(msg==WM_APP_DO_MOVE){DoMoveSearchBandToMenuBar(hwnd);return 0;}
+    if(msg==g_msgDoMove){DoMoveSearchBandToMenuBar(hwnd);return 0;}
     if((msg==WM_SIZE||msg==WM_WINDOWPOSCHANGED)&&WasAlreadyMoved(hwnd)){
         LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
         ExpandShellTabToFillCabinet(hwnd);
         return r;
     }
     if((msg==WM_ACTIVATE||msg==WM_SETFOCUS)&&!WasAlreadyMoved(hwnd))
-        PostMessage(hwnd,WM_APP_DO_MOVE,0,0);
+        PostMessage(hwnd,g_msgDoMove,0,0);
     return DefSubclassProc(hwnd,msg,wP,lP);
 }
 
@@ -798,7 +803,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD s,LPCWSTR c,LPCWSTR wn,DWORD st,int X,int
         ProcessWindow(hwnd);EnumChildWindows(hwnd,EnumChildHook,0);
         if(wcscmp(c,L"UniversalSearchBand")&&wcscmp(c,L"Address Band Root")&&wcscmp(c,L"Breadcrumb Parent")&&wcscmp(c,L"UpBand")){
             HWND cab=GetCabinetAncestor(hwnd);
-            if(cab&&!WasAlreadyMoved(cab))PostMessage(cab,WM_APP_DO_MOVE,0,0);
+            if(cab&&!WasAlreadyMoved(cab))PostMessage(cab,g_msgDoMove,0,0);
         }
     }
     return hwnd;
@@ -809,6 +814,15 @@ BOOL Wh_ModInit(){
     LoadSettings();
     InitializeCriticalSection(&g_mutex);
 
+    // Process-unique message, safe to post/handle only on windows we own.
+    // Unlike a fixed WM_APP+N constant, this can't collide with a message
+    // Explorer itself defines for CabinetWClass windows.
+    g_msgDoMove = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_DoMove");
+    if(!g_msgDoMove){
+        Wh_Log(L"RegisterWindowMessage failed");
+        return FALSE;
+    }
+
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
 
     Wh_SetFunctionHook(
@@ -816,10 +830,15 @@ BOOL Wh_ModInit(){
             (void*)NtSetValueKey_Hook,
             (void**)&NtSetValueKey_Original);
 
+    DWORD curPid = GetCurrentProcessId();
     for(HWND w=GetTopWindow(NULL);w;w=GetNextWindow(w,GW_HWNDNEXT)){
+        DWORD pid=0;
+        GetWindowThreadProcessId(w,&pid);
+        if(pid!=curPid)continue;
+
         WCHAR cls[64];
         if(GetClassName(w,cls,ARRAYSIZE(cls))&&!wcscmp(cls,L"CabinetWClass")){
-            ProcessWindow(w);EnumChildWindows(w,EnumChildHook,0);PostMessage(w,WM_APP_DO_MOVE,0,0);
+            ProcessWindow(w);EnumChildWindows(w,EnumChildHook,0);PostMessage(w,g_msgDoMove,0,0);
         }
     }
 
