@@ -11468,7 +11468,7 @@
           2
         ],
         "ratingUsers": 2,
-        "updated": 1783833050000,
+        "updated": 1783983256000,
         "users": 67
       },
       "metadata": {
@@ -11477,16 +11477,16 @@
         ],
         "author": "incconutwo",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32",
-        "description": "macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다",
+        "description": "macOS처럼 마우스를 올리면 작업 표시줄 아이콘이 애니메이션됩니다 (모든 작업 표시줄 위치 지원 및 멀티 모니터 버그가 수정된 업데이트 버전)",
         "github": "https://github.com/incconutwo",
         "include": [
           "explorer.exe"
         ],
         "name": "작업 표시줄 Dock 애니메이션 Plus",
-        "version": "2.0.0"
+        "version": "2.0.1"
       },
       "metadataEnglish": {
-        "description": "Animates taskbar icons on mouse hover like in macOS",
+        "description": "Animates taskbar icons on mouse hover like in macOS (updated fork with support for all taskbar positions and multi-monitor fixes)",
         "name": "Taskbar Dock Animation Plus"
       }
     },

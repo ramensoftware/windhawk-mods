@@ -11492,7 +11492,7 @@
           2
         ],
         "ratingUsers": 2,
-        "updated": 1783833050000,
+        "updated": 1783983256000,
         "users": 67
       },
       "metadata": {
@@ -11501,16 +11501,16 @@
         ],
         "author": "incconutwo",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32",
-        "description": "Anima os ícones da barra de tarefas ao passar o mouse, como no macOS",
+        "description": "Anima os ícones da barra de tarefas ao passar o mouse, como no macOS (versão atualizada com suporte para todas as posições da barra e correções para múltiplos monitores)",
         "github": "https://github.com/incconutwo",
         "include": [
           "explorer.exe"
         ],
         "name": "Animação Dock da Barra de Tarefas Plus",
-        "version": "2.0.0"
+        "version": "2.0.1"
       },
       "metadataEnglish": {
-        "description": "Animates taskbar icons on mouse hover like in macOS",
+        "description": "Animates taskbar icons on mouse hover like in macOS (updated fork with support for all taskbar positions and multi-monitor fixes)",
         "name": "Taskbar Dock Animation Plus"
       }
     },
