@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
-// @description    Recreation of the Windows 7/8.1 Action Center Tray Icon and Flyout UI
-// @version        1.2.4
+// @description    This mod recreates the Windows 7/8.1 Action Center Tray Icon and Flyout UI
+// @version        1.3.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lcrypt32 -luxtheme -lole32 -loleaut32 -lmsimg32 -ladvapi32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -21,25 +21,33 @@ Windows 7 theme
 
 Windows 8.1 theme
 
-![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81action.webp)
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81act.png)
 
 ## Features
+- **No File Replacement**: The mod's objective is to be stable and user-friendly and does not require the user to replace system files.
 - **Real-time Security Status**: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.
 - **Interactive Flyout**: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.
-- **Dark Mode**: The mod automatically adapts to the system's theme.
 - **Rounded Corners**: Rounded corners are supported for a more similar look to the original Windows 7 flyout.
 - **Classic Theme support**: Disable the "Rounded Corners" theme to make the flyout use a classic theme.
-- **Balloon Notifications**: The mod displays a balloon notification when potential problems are detected.
+- **Balloon Notifications**: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.
+- **SmartScreen Check**: Monitors Windows Defender SmartScreen status and reports if it is disabled.
+- **Privacy Mode**: The user can enable this mod to hide the eventual problems shown by the flyout.
+- **Maintenance Checks**: Automatically checks Backup status, Windows Error Reporting status, and Disk health.
+- **ESC to Close**: Press Escape to quickly close the flyout window.
+- **Multiple Languages Support**: English, Italian, Spanish, French, Russian are currently supported.
 
-- **Hotkeys**:
-  - `Ctrl+N`: Simulate a notification
-  - `Ctrl+Shift+N`: Clear notifications
-- **Languages**: English, Italian, Spanish, French, Russian are currently supported.
+## Hotkeys
+These are the hotkeys that can be configured in the mod.
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+N` | Simulate a notification |
+| `Ctrl+Shift+N` | Clear notifications |
 
 
 ## How It Works
 
-The mod monitors your system's security settings including Firewall, Antivirus, Windows Update, UAC, and Windows Defender. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
+The mod monitors the system's security settings including Firewall, Antivirus, Windows Update, UAC, Windows Defender and other settings. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
+The mod has been tested on Windows 10 21H2 and Windows 11 23H2.
 
 ## Notes
 
@@ -47,6 +55,7 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 - If the icon doesn't appear, try restarting Explorer or the mod.
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
+- ₮ዙℭ♔†WØLF† - Testing on Windows 11 23H2
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -60,6 +69,12 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 - enableHotkey: false
   $name: Enable Hotkeys
   $description: Ctrl+N to simulate notifications and Ctrl+Shift+N to clear them.
+- enableNotificationSimulation: true
+  $name: Enable Notification Simulation
+  $description: Allow Ctrl+N to simulate security notifications for testing.
+- privacyMode: false
+  $name: Privacy Mode
+  $description: When enabled, forces the tray icon to always show "good" status.
 - language: auto
   $name: Language
   $description: Interface language (auto, en, it, es, fr, ru).
@@ -86,211 +101,6 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <strsafe.h>
-#include <uxtheme.h>
-#include <process.h>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <mutex>
-
-// ============================================================================
-// Troubleshooting Control Panel Redirection (Ported from restore-classic-cpls)
-// ============================================================================
-std::unordered_map<HKEY, std::wstring> g_keyPaths;
-std::unordered_set<HKEY> g_fakeHandles;
-std::mutex g_keyPathsMutex;
-
-static const std::wstring kTroubleshootingGuid = L"{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}";
-
-std::wstring ToLower(const std::wstring& str) {
-    std::wstring res = str;
-    for (auto& c : res) c = towlower(c);
-    return res;
-}
-
-bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
-    if (str.size() < suffix.size()) return false;
-    return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
-std::wstring GetTrackedPath(HKEY hKey) {
-    if (!hKey) return L"";
-    if ((uintptr_t)hKey == 0x80000000) return L"HKEY_CLASSES_ROOT";
-    if ((uintptr_t)hKey == 0x80000001) return L"HKEY_CURRENT_USER";
-    if ((uintptr_t)hKey == 0x80000002) return L"HKEY_LOCAL_MACHINE";
-    
-    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    auto it = g_keyPaths.find(hKey);
-    if (it != g_keyPaths.end()) return it->second;
-    return L"";
-}
-
-void TrackKey(HKEY hKey, const std::wstring& path) {
-    if (!hKey || (uintptr_t)hKey >= 0x80000000) return;
-    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    g_keyPaths[hKey] = path;
-}
-
-void UntrackKey(HKEY hKey) {
-    if (!hKey || (uintptr_t)hKey >= 0x80000000) return;
-    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    g_keyPaths.erase(hKey);
-}
-
-HKEY CreateFakeHandle(const std::wstring& path) {
-    int* dummy = new int(1);
-    HKEY fake = (HKEY)dummy;
-    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    g_keyPaths[fake] = path;
-    g_fakeHandles.insert(fake);
-    return fake;
-}
-
-void FreeFakeHandle(HKEY hKey) {
-    std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-    auto it = g_fakeHandles.find(hKey);
-    if (it != g_fakeHandles.end()) {
-        g_fakeHandles.erase(it);
-        g_keyPaths.erase(hKey);
-        delete (int*)hKey;  // guaranteed once: erased before delete
-    }
-}
-
-bool IsTroubleshootingPath(const std::wstring& path) {
-    std::wstring lower = ToLower(path);
-    return lower.find(kTroubleshootingGuid) != std::string::npos;  // ✅ Correct
-}
-
-bool TryProvideValue(const std::wstring& path, const std::wstring& valueName, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData, LSTATUS& status) {
-    if (!IsTroubleshootingPath(path)) return false;
-    if (valueName == L"System.ControlPanel.Category") {
-        // La chiave reale di Recovery usa REG_SZ "0", non REG_DWORD.
-        // wscui.cpl si aspetta una stringa (VT_LPWSTR); un DWORD viene
-        // scartato silenziosamente durante l'enumerazione.
-        static const WCHAR kCategoryValue[] = L"0";
-        const DWORD cbNeeded = sizeof(kCategoryValue); // include il terminatore null
-        if (lpType) *lpType = REG_SZ;
-        if (!lpData || *lpcbData < cbNeeded) { *lpcbData = cbNeeded; status = ERROR_MORE_DATA; return true; }
-        memcpy(lpData, kCategoryValue, cbNeeded);
-        *lpcbData = cbNeeded;
-        status = ERROR_SUCCESS;
-        return true;
-    }
-    return false;
-}
-
-typedef LSTATUS (WINAPI *RegOpenKeyExW_t)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
-RegOpenKeyExW_t RegOpenKeyExW_orig;
-LSTATUS WINAPI RegOpenKeyExW_hook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
-    LSTATUS status = RegOpenKeyExW_orig(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-    if (status == ERROR_SUCCESS && phkResult && *phkResult) {
-        std::wstring basePath = GetTrackedPath(hKey);
-        std::wstring fullPath = basePath + (lpSubKey ? (basePath.empty() ? L"" : L"\\") + std::wstring(lpSubKey) : L"");
-        if (lpSubKey && IsTroubleshootingPath(lpSubKey))
-            Wh_Log(L"[TroubleshootDiag] RegOpenKeyExW aperta: %s", fullPath.c_str());
-        TrackKey(*phkResult, fullPath);
-    }
-    return status;
-}
-
-typedef LSTATUS (WINAPI *RegCloseKey_t)(HKEY);
-RegCloseKey_t RegCloseKey_orig;
-LSTATUS WINAPI RegCloseKey_hook(HKEY hKey) {
-    if (!hKey) return ERROR_SUCCESS;
-    {
-        std::lock_guard<std::mutex> lock(g_keyPathsMutex);
-        auto it = g_fakeHandles.find(hKey);
-        if (it != g_fakeHandles.end()) {
-            g_fakeHandles.erase(it);
-            g_keyPaths.erase(hKey);
-            delete (int*)hKey;
-            return ERROR_SUCCESS;  // never call RegCloseKey_orig on a fake handle
-        }
-    }
-    LSTATUS status = RegCloseKey_orig(hKey);
-    UntrackKey(hKey);
-    return status;
-}
-
-typedef LSTATUS (WINAPI *RegQueryValueExW_t)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-RegQueryValueExW_t RegQueryValueExW_orig;
-LSTATUS WINAPI RegQueryValueExW_hook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
-    std::wstring path = GetTrackedPath(hKey);
-    if (!path.empty()) {
-        if (IsTroubleshootingPath(path))
-            Wh_Log(L"[TroubleshootDiag] RegQueryValueExW su %s, valore=%s", path.c_str(), lpValueName ? lpValueName : L"(null)");
-        LSTATUS status;
-        if (TryProvideValue(path, lpValueName ? lpValueName : L"", lpType, lpData, lpcbData, status)) return status;
-    }
-    return RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-}
-
-typedef LSTATUS (WINAPI *RegGetValueW_t)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
-RegGetValueW_t RegGetValueW_orig;
-LSTATUS WINAPI RegGetValueW_hook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
-    std::wstring basePath = GetTrackedPath(hkey);
-    std::wstring fullPath = basePath + (lpSubKey ? (basePath.empty() ? L"" : L"\\") + std::wstring(lpSubKey) : L"");
-    bool isTroubleshootPath = (lpSubKey && IsTroubleshootingPath(lpSubKey)) || IsTroubleshootingPath(fullPath);
-    if (isTroubleshootPath)
-        Wh_Log(L"[TroubleshootDiag] RegGetValueW su %s, valore=%s", fullPath.c_str(), lpValue ? lpValue : L"(null)");
-    if (isTroubleshootPath && lpValue && std::wstring(lpValue) == L"System.ControlPanel.Category") {
-        static const WCHAR kCategoryValue[] = L"0";
-        const DWORD cbNeeded = sizeof(kCategoryValue); // include il terminatore null
-        if (pdwType) *pdwType = REG_SZ;
-        if (!pvData || !pcbData || *pcbData < cbNeeded) { if (pcbData) *pcbData = cbNeeded; return ERROR_MORE_DATA; }
-        memcpy(pvData, kCategoryValue, cbNeeded);
-        *pcbData = cbNeeded;
-        return ERROR_SUCCESS;
-    }
-    return RegGetValueW_orig(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-}
-
-void InstallRegistryHooks() {
-    HMODULE hKb = GetModuleHandleW(L"kernelbase.dll");
-    if (!hKb) hKb = GetModuleHandleW(L"advapi32.dll");
-    if (hKb) {
-        WindhawkUtils::Wh_SetFunctionHookT((RegOpenKeyExW_t)GetProcAddress(hKb, "RegOpenKeyExW"), RegOpenKeyExW_hook, &RegOpenKeyExW_orig);
-        WindhawkUtils::Wh_SetFunctionHookT((RegCloseKey_t)GetProcAddress(hKb, "RegCloseKey"), RegCloseKey_hook, &RegCloseKey_orig);
-        WindhawkUtils::Wh_SetFunctionHookT((RegQueryValueExW_t)GetProcAddress(hKb, "RegQueryValueExW"), RegQueryValueExW_hook, &RegQueryValueExW_orig);
-        WindhawkUtils::Wh_SetFunctionHookT((RegGetValueW_t)GetProcAddress(hKb, "RegGetValueW"), RegGetValueW_hook, &RegGetValueW_orig);
-    }
-}
-
-// ============================================================================
-
-
-
-// ============================================================================
-// Diagnostica: log dell'albero dei controlli figli di una finestra (sostituto
-// di Spy++/Inspect.exe quando non sono disponibili) — attivata con Ctrl+Alt+W
-// ============================================================================
-void LogWindowTreeRecursive(HWND hwnd, int depth) {
-    if (!hwnd) return;
-    WCHAR className[256] = {0};
-    WCHAR text[256] = {0};
-    GetClassNameW(hwnd, className, 256);
-    GetWindowTextW(hwnd, text, 256);
-    int ctrlId = GetDlgCtrlID(hwnd);
-    RECT rc = {0,0,0,0};
-    GetWindowRect(hwnd, &rc);
-    std::wstring indent(depth * 2, L' ');
-    Wh_Log(L"[WinTreeDiag]%s hwnd=0x%p class=%s id=%d text=\"%s\" rect=(%d,%d,%d,%d)",
-           indent.c_str(), hwnd, className, ctrlId, text, rc.left, rc.top, rc.right, rc.bottom);
-    HWND hChild = GetWindow(hwnd, GW_CHILD);
-    while (hChild) {
-        LogWindowTreeRecursive(hChild, depth + 1);
-        hChild = GetWindow(hChild, GW_HWNDNEXT);
-    }
-}
-
-void LogWindowTree(HWND hwndRoot) {
-    if (!hwndRoot || !IsWindow(hwndRoot)) { Wh_Log(L"[WinTreeDiag] Finestra in primo piano non valida"); return; }
-    WCHAR title[256] = {0};
-    GetWindowTextW(hwndRoot, title, 256);
-    Wh_Log(L"[WinTreeDiag] === Albero finestra in primo piano: \"%s\" ===", title);
-    LogWindowTreeRecursive(hwndRoot, 0);
-    Wh_Log(L"[WinTreeDiag] === Fine albero ===");
-}
 
 #define FLYOUT_OFFSET 8
 
@@ -348,6 +158,7 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define PROBLEM_BALLOON_FALLBACK_MS 30000
 #define PROBLEM_BALLOON_COOLDOWN_MS 60000
 #define WM_TRAY_SHUTDOWN           (WM_USER + 602)
+#define WM_SETTINGS_CHANGED        (WM_USER + 603)
 
 // Compatibilita' con SDK che non espongono ancora questi flag.
 #ifndef NIF_REALTIME
@@ -364,7 +175,6 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #endif
 #define HOTKEY_ID_SIMULATE         9001
 #define HOTKEY_ID_CLEAR            9002
-#define HOTKEY_ID_LOGTREE          9003
 #define ID_MENU_OPEN_AC            4001
 #define ID_MENU_TROUBLESHOOT       4002
 
@@ -388,11 +198,10 @@ static const GUID TRAY_ICON_GUID =
 
 // Limiti e timeout
 #define MAX_PROBLEMS               8
-#define MAX_DISPLAY_PROBLEMS       3
+#define MAX_DISPLAY_PROBLEMS       40
 #define WM_CLOSE_FLYOUT_DELAY_MS   500
 #define AUTOHIDE_INACTIVITY_MS     120000
 #define THREAD_WAIT_TIMEOUT        500
-#define LOG_PREFIX L"[Win7AC] "
 
 // Colors - Light theme
 #define COLOR_BG               RGB(255, 255, 255)
@@ -469,9 +278,6 @@ static GdipCreateHICONFromBitmap_t pGdipCreateHICON = NULL;
 static GdipDisposeImage_t pGdipDisposeImage = NULL;
 static GdiplusShutdown_t pGdiplusShutdown = NULL;
 // AlphaBlend from msimg32.dll
-typedef BOOL (WINAPI *AlphaBlend_t)(HDC, int, int, int, int, HDC, int, int, int, int, BLENDFUNCTION);
-static AlphaBlend_t pAlphaBlend = NULL;
-static HMODULE g_hMsImg32 = NULL;
 
 // Cached GDI+ bitmaps for flyout icons
 static void* g_pBmpFlyoutGood = NULL;
@@ -485,7 +291,7 @@ static IStream* g_pStreamFlyoutAlert = NULL;
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
     g_hGdiPlus = LoadLibraryW(L"gdiplus.dll");
-    if (!g_hGdiPlus) { Wh_Log(LOG_PREFIX L"GDI+: failed to load gdiplus.dll"); return FALSE; }
+    if (!g_hGdiPlus) { Wh_Log(L"GDI+: failed to load gdiplus.dll"); return FALSE; }
     pGdipCreateBitmapFromHICON = (GdipCreateBitmapFromHICON_t)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromHICON");
     pGdipCreateFromHDC = (GdipCreateFromHDC_t)GetProcAddress(g_hGdiPlus, "GdipCreateFromHDC");
     pGdipSetInterpolationMode = (GdipSetInterpolationMode_t)GetProcAddress(g_hGdiPlus, "GdipSetInterpolationMode");
@@ -507,14 +313,11 @@ static BOOL InitGdiPlusRendering() {
         !pGdipGetImageGraphicsContext ||
         !pGdipSetPixelOffsetMode || !pGdipGraphicsClear || !pGdipCreateHBITMAPFromBitmap ||
         !pGdipDisposeImage || !pStartup || !pGdiplusShutdown || !pGdipSetSmoothingMode || !pGdipSetCompositingQuality) {
-        Wh_Log(LOG_PREFIX L"GDI+: missing function pointers"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
+        Wh_Log(L"GDI+: missing function pointers"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
     struct { DWORD Version; void* Callback; BOOL Suppress; } si = {1, NULL, FALSE};
     if (pStartup(&g_gdiplusToken, &si, NULL) != 0) {
-        Wh_Log(LOG_PREFIX L"GDI+: GdiplusStartup failed"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
-    // Load AlphaBlend
-    g_hMsImg32 = LoadLibraryW(L"msimg32.dll");
-    if (g_hMsImg32) pAlphaBlend = (AlphaBlend_t)GetProcAddress(g_hMsImg32, "AlphaBlend");
-    Wh_Log(LOG_PREFIX L"GDI+ initialized successfully");
+        Wh_Log(L"GDI+: GdiplusStartup failed"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
+    Wh_Log(L"GDI+ initialized successfully");
     return TRUE;
 }
 
@@ -556,18 +359,43 @@ static BYTE B64Val(WCHAR c) {
 
 // Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
 static void ShutdownGdiPlus() {
+    // Dispose cached GDI+ bitmaps BEFORE shutting down the runtime
     if (g_pBmpFlyoutGood) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutGood); g_pBmpFlyoutGood = NULL; }
     if (g_pStreamFlyoutGood) { g_pStreamFlyoutGood->Release(); g_pStreamFlyoutGood = NULL; }
     if (g_pBmpFlyoutWarning) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutWarning); g_pBmpFlyoutWarning = NULL; }
     if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
     if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
+
+    // Shutdown GDI+ runtime
     if (g_hGdiPlus) {
         if (pGdiplusShutdown && g_gdiplusToken) pGdiplusShutdown(g_gdiplusToken);
-        FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; g_gdiplusToken = 0;
-        pGdiplusShutdown = NULL;
+        g_gdiplusToken = 0;
+        FreeLibrary(g_hGdiPlus);
+        g_hGdiPlus = NULL;
     }
-    if (g_hMsImg32) { FreeLibrary(g_hMsImg32); g_hMsImg32 = NULL; pAlphaBlend = NULL; }
+
+    // Reset ALL function pointers to prevent dangling pointers after FreeLibrary.
+    // This is critical: after FreeLibrary the code segment is unmapped, so any
+    // call through these pointers would be undefined behaviour / access violation.
+    pGdipCreateBitmapFromHICON = NULL;
+    pGdipCreateFromHDC = NULL;
+    pGdipSetInterpolationMode = NULL;
+    pGdipSetSmoothingMode = NULL;
+    pGdipSetCompositingQuality = NULL;
+    pGdipDrawImageRectI = NULL;
+    pGdipDeleteGraphics = NULL;
+    pGdipCreateBitmapFromScan0 = NULL;
+    pGdipGetImageGraphicsContext = NULL;
+    pGdipSetPixelOffsetMode = NULL;
+    pGdipGraphicsClear = NULL;
+    pGdipCreateHBITMAPFromBitmap = NULL;
+    pGdipDisposeImage = NULL;
+    pGdipCreateBitmapFromStream = NULL;
+    pGdipCreateHICON = NULL;
+    pGdiplusShutdown = NULL;
+
+    Wh_Log(L"GDI+ fully shut down, all function pointers reset");
 }
 
 
@@ -647,6 +475,10 @@ static void ScheduleTrayIconRecovery(void);
 static void PositionWindowNearTray(HWND hwnd);
 static void InstallClickOutsideHook(void);
 static void RemoveClickOutsideHook(void);
+static void UpdateCachedTrayIconRect(void);
+static void InstallKeyboardHook(void);
+static void RemoveKeyboardHook(void);
+LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CreateFlyoutWindow(void);
 static void CloseFlyout(HWND hwnd);
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam);
@@ -705,16 +537,19 @@ void LoadSettings() {
     g_Settings.privacyMode = Wh_GetIntSetting(L"privacyMode");
     g_Settings.refreshInterval = Wh_GetIntSetting(L"refreshInterval");
     g_Settings.enableHotkey = Wh_GetIntSetting(L"enableHotkey");
+    // Wh_GetStringSetting returns L"" (never NULL) when the setting doesn't exist
     LPCWSTR lang = Wh_GetStringSetting(L"language");
-    if (lang) {
+    if (lang && *lang) {
         if (_wcsicmp(lang, L"en") == 0) g_Settings.language = 1;
         else if (_wcsicmp(lang, L"it") == 0) g_Settings.language = 2;
         else if (_wcsicmp(lang, L"es") == 0) g_Settings.language = 3;
         else if (_wcsicmp(lang, L"fr") == 0) g_Settings.language = 4;
         else if (_wcsicmp(lang, L"ru") == 0) g_Settings.language = 5;
         else g_Settings.language = 0;
-        Wh_FreeStringSetting(lang);
+    } else {
+        g_Settings.language = 0; // auto-detect
     }
+    Wh_FreeStringSetting(lang);
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000)
         g_Settings.refreshInterval = 1000;
 }
@@ -746,8 +581,8 @@ void RecalcDpiMetrics(UINT dpi, int activeProblems = -1) {
         g_ScaledHeight = CalculateFlyoutHeight(activeProblems);
     }
     
-    // Footer +3.5% vs original base height (keeps proportions of the rest of the UI).
-    g_ScaledFooterHeight = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1035, 1000);
+    // Footer +5.5% vs original base height (more breathing room for the link text).
+    g_ScaledFooterHeight = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1055, 1000);
     g_ScaledNotifyWidth = ScaleDpi(BASE_NOTIFY_WIDTH);
     g_ScaledNotifyHeight = ScaleDpi(BASE_NOTIFY_HEIGHT);
     g_ScaledIconSize = ScaleDpi(BASE_ICON_SIZE);
@@ -757,7 +592,7 @@ void RecalcDpiMetrics(UINT dpi, int activeProblems = -1) {
 int CalculateFlyoutHeight(int activeProblems) {
 
     // Keep footer height in sync with RecalcDpiMetrics (+3.5%).
-    int footerH = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1035, 1000);
+    int footerH = MulDiv(ScaleDpi(BASE_FOOTER_HEIGHT), 1055, 1000);
 
     // Altezza minima di base (con o senza rounded corners)
     int minBaseHeight = ScaleDpi(160);
@@ -833,7 +668,9 @@ typedef enum {
     STR_TIP_ALERT, STR_MSG_FIREWALL, STR_MSG_ANTIVIRUS, STR_MSG_UPDATE,
     STR_MSG_UAC, STR_NOTIFY_MESSAGE, STR_NOTIFY_SIMULATED, STR_MSG_AUTOUPDATE,
     STR_MSG_ANTISPYWARE, STR_MSG_INTERNET, STR_MSG_SERVICE, STR_MSG_DEFENDER,
-    STR_AND_MORE, STR_TIP_NO_ISSUES, STR_TIP_ISSUES, STR_NOTIFY_PROBLEM, STR_COUNT
+    STR_AND_MORE, STR_TIP_NO_ISSUES, STR_TIP_ISSUES, STR_NOTIFY_PROBLEM,
+    STR_MSG_SMARTSCREEN, STR_MSG_BACKUP, STR_MSG_WER, STR_MSG_DISK_HEALTH,
+    STR_NOTIFY_ACTION, STR_TIP_RECOMMENDATION, STR_COUNT
 } LocaleStringId;
 typedef struct { LANGID langId; const WCHAR* strings[STR_COUNT]; } LocalePack;
 static const LocalePack g_Locales[] = {
@@ -864,7 +701,13 @@ static const LocalePack g_Locales[] = {
         L"...and more", 
         L"No current issues detected", 
         L"%d issues detected.", 
-        L"A problem has been detected. Please review your security status." 
+        L"A problem has been detected. Please review your security status.",
+        L"SmartScreen is turned off. Apps from the web won't be checked.",
+        L"System backup is not configured or not running.",
+        L"Windows Error Reporting service is disabled.",
+        L"Disk health check recommended.",
+        L"Open Action Center to review and fix issues.",
+        L"Review your system status"
     }},
     // Italiano (0x0410) - COMPLETO E FORMALE
     { 0x0410, { 
@@ -893,7 +736,13 @@ static const LocalePack g_Locales[] = {
         L"...e altri", 
         L"Nessun problema rilevato", 
         L"%d problemi rilevati.", 
-        L"\u00C8 stato rilevato un problema. Si prega di verificare lo stato di sicurezza del sistema." 
+        L"\u00C8 stato rilevato un problema. Si prega di verificare lo stato di sicurezza del sistema.",
+        L"SmartScreen \u00E8 disattivato. Le app dal web non verranno controllate.",
+        L"Il backup del sistema non \u00E8 configurato o non \u00E8 in esecuzione.",
+        L"Il servizio Segnalazione errori Windows \u00E8 disabilitato.",
+        L"Controllo integrit\u00E0 disco consigliato.",
+        L"Aprire il Centro operativo per verificare e risolvere i problemi.",
+        L"Verifica lo stato del sistema"
     }},
     // Spagnolo (0x040A) - COMPLETO
     { 0x040A, { 
@@ -922,7 +771,13 @@ static const LocalePack g_Locales[] = {
         L"...y m\u00E1s", 
         L"No se detectaron problemas.", 
         L"%d problemas detectados.", 
-        L"Se ha detectado un problema. Revise el estado de seguridad del sistema." 
+        L"Se ha detectado un problema. Revise el estado de seguridad del sistema.",
+        L"SmartScreen est\u00E1 desactivado. No se comprobar\u00E1n las aplicaciones de la web.",
+        L"La copia de seguridad del sistema no est\u00E1 configurada o no se est\u00E1 ejecutando.",
+        L"El servicio de Informe de errores de Windows est\u00E1 deshabilitado.",
+        L"Se recomienda comprobar el estado del disco.",
+        L"Abra el Centro de actividades para revisar y solucionar los problemas.",
+        L"Revise el estado del sistema"
     }},
     // Francese (0x040C) - COMPLETO
     { 0x040C, { 
@@ -951,7 +806,13 @@ static const LocalePack g_Locales[] = {
         L"...et plus", 
         L"Aucun probl\u00E8me d\u00E9tect\u00E9.", 
         L"%d probl\u00E8mes d\u00E9tect\u00E9s.", 
-        L"Un probl\u00E8me a \u00E9t\u00E9 d\u00E9tect\u00E9. Veuillez v\u00E9rifier l'\u00E9tat de s\u00E9curit\u00E9." 
+        L"Un probl\u00E8me a \u00E9t\u00E9 d\u00E9tect\u00E9. Veuillez v\u00E9rifier l'\u00E9tat de s\u00E9curit\u00E9.",
+        L"SmartScreen est d\u00E9sactiv\u00E9. Les applications web ne seront pas v\u00E9rifi\u00E9es.",
+        L"La sauvegarde du syst\u00E8me n'est pas configur\u00E9e ou n'est pas en cours d'ex\u00E9cution.",
+        L"Le service Rapport d'erreurs Windows est d\u00E9sactiv\u00E9.",
+        L"V\u00E9rification de l'int\u00E9grit\u00E9 du disque recommand\u00E9e.",
+        L"Ouvrez le Centre d'actions pour v\u00E9rifier et r\u00E9soudre les probl\u00E8mes.",
+        L"V\u00E9rifiez l'\u00E9tat du syst\u00E8me"
     }},
     // Russo (0x0419) - COMPLETO
     { 0x0419, { 
@@ -980,7 +841,13 @@ static const LocalePack g_Locales[] = {
         L"... \u0438 \u0434\u0440\u0443\u0433\u0438\u0435", 
         L"\u041F\u0440\u043E\u0431\u043B\u0435\u043C \u043D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E", 
         L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E %d \u043F\u0440\u043E\u0431\u043B\u0435\u043C", 
-        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0438\u0441\u0442\u0435\u043C\u044B." 
+        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0438\u0441\u0442\u0435\u043C\u044B.",
+        L"SmartScreen \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D. \u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0438\u0437 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442\u0430 \u043D\u0435 \u0431\u0443\u0434\u0443\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0442\u044C\u0441\u044F.",
+        L"\u0420\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0435 \u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u043D\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043E \u0438\u043B\u0438 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F.",
+        L"\u0421\u043B\u0443\u0436\u0431\u0430 \u043E\u0442\u0447\u0451\u0442\u0430\u043F\u0430 \u043E\u0431 \u043E\u0448\u0438\u0431\u043A\u0430\u0445 Windows \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430.",
+        L"\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u0442\u0441\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0434\u0438\u0441\u043A\u0430.",
+        L"\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0426\u0435\u043D\u0442\u0440 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0438 \u0443\u0441\u0442\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0431\u043B\u0435\u043C.",
+        L"\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0438\u0441\u0442\u0435\u043C\u044B"
     }},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -1002,14 +869,15 @@ static const LocalePack* FindLocalePack(LANGID langId) {
 // ============================================================================
 enum ProblemType {
     PROB_NONE = 0, PROB_FIREWALL = 1, PROB_AUTOUPDATE, PROB_ANTIVIRUS,
-    PROB_ANTISPYWARE, PROB_INTERNET, PROB_UAC, PROB_SERVICE, PROB_DEFENDER_RT
+    PROB_ANTISPYWARE, PROB_INTERNET, PROB_UAC, PROB_SERVICE, PROB_DEFENDER_RT,
+    PROB_SMARTSCREEN, PROB_BACKUP, PROB_WER, PROB_DISK_HEALTH
 };
 
 // ============================================================================
 // Open Problem Action (Firewall or Troubleshooting)
 // ============================================================================
 void OpenProblemAction(int problemType) {
-    Wh_Log(LOG_PREFIX L"Opening action for problem type: %d", problemType);
+    Wh_Log(L"Opening action for problem type: %d", problemType);
     
     // ONLY firewall opens directly the settings
     if (problemType == PROB_FIREWALL) {
@@ -1021,17 +889,38 @@ void OpenProblemAction(int problemType) {
         sei.nShow = SW_SHOWNORMAL;
         
         if (ShellExecuteExW(&sei)) {
-            Wh_Log(LOG_PREFIX L"Opened Windows Defender Firewall");
+            Wh_Log(L"Opened Windows Defender Firewall");
         } else {
-            Wh_Log(LOG_PREFIX L"Firewall shell command failed, using fallback");
+            Wh_Log(L"Firewall shell command failed, using fallback");
             ShellExecuteW(NULL, L"open", L"control.exe", 
                          L"/name Microsoft.WindowsFirewall", NULL, SW_SHOWNORMAL);
         }
         return;
     }
-    
+
+    // SmartScreen -> Windows Security App & Browser control
+    if (problemType == PROB_SMARTSCREEN) {
+        // Try Windows Security > App & browser control (ms-settings URI on Win10/11)
+        if (ShellExecuteW(NULL, L"open", L"ms-settings:windowsdefender-appbrowser",
+                          NULL, NULL, SW_SHOWNORMAL) > (HINSTANCE)32) {
+            Wh_Log(L"Opened SmartScreen settings via ms-settings URI");
+            return;
+        }
+        // Fallback: open Windows Security app
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.fMask = SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"open";
+        sei.lpFile = L"explorer.exe";
+        sei.lpParameters = L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}";
+        sei.nShow = SW_SHOWNORMAL;
+        if (ShellExecuteExW(&sei)) {
+            Wh_Log(L"Opened Windows Security (SmartScreen fallback)");
+        }
+        return;
+    }
+
     // ALL OTHER PROBLEMS -> Troubleshooting (like right-click)
-    Wh_Log(LOG_PREFIX L"Opening Troubleshooting for problem type: %d", problemType);
+    Wh_Log(L"Opening Troubleshooting for problem type: %d", problemType);
     
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
@@ -1041,7 +930,7 @@ void OpenProblemAction(int problemType) {
     sei.nShow = SW_SHOWNORMAL;
     
     if (!ShellExecuteExW(&sei)) {
-        Wh_Log(LOG_PREFIX L"Troubleshooting shell command failed, using fallback");
+        Wh_Log(L"Troubleshooting shell command failed, using fallback");
         ShellExecuteW(NULL, L"open", L"control.exe", 
                      L"/name Microsoft.Troubleshooting", NULL, SW_SHOWNORMAL);
     }
@@ -1143,10 +1032,12 @@ static HICON g_hFlyoutIconAlert = NULL;
 static HICON g_hShieldIcon = NULL;
 static HICON g_hProblemBalloonIcon = NULL;  
 static BOOL g_ProblemBalloonShowing = FALSE;
+static RECT g_CachedTrayIconRect = {0}; // Cached tray icon rect for mouse hook
 static DWORD g_LastProblemBalloonTick = 0;
 static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
+static HHOOK g_hKeyboardHook = NULL;
 static BOOL g_Initialized = FALSE;
 
 // Fonts managed with RAII via GdiObj wrappers
@@ -1619,7 +1510,7 @@ HICON LoadActionCenterIcon(int index) {
 }
 
 void InitFlyoutIcons() {
-    Wh_Log(LOG_PREFIX L"Loading flyout icons...");
+    Wh_Log(L"Loading flyout icons...");
 
     // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
     // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
@@ -1655,17 +1546,17 @@ void InitFlyoutIcons() {
         icon_id1_b64, &g_pStreamFlyoutWarning);
     g_pBmpFlyoutAlert = Base64ToGdipBitmap(
         icon_id2_b64, &g_pStreamFlyoutAlert);
-    Wh_Log(LOG_PREFIX L"Flyout state bitmaps HQ: good=%p warning=%p alert=%p",
+    Wh_Log(L"Flyout state bitmaps HQ: good=%p warning=%p alert=%p",
            g_pBmpFlyoutGood, g_pBmpFlyoutWarning, g_pBmpFlyoutAlert);
     
     g_hFlyoutIconGood    = Base64ToIcon(icon_id0_b64);
-    Wh_Log(LOG_PREFIX L"Flyout GOOD: %p", g_hFlyoutIconGood);
+    Wh_Log(L"Flyout GOOD: %p", g_hFlyoutIconGood);
     
     g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
-    Wh_Log(LOG_PREFIX L"Flyout WARNING: %p", g_hFlyoutIconWarning);
+    Wh_Log(L"Flyout WARNING: %p", g_hFlyoutIconWarning);
     
     g_hFlyoutIconAlert   = Base64ToIcon(icon_id2_b64);
-    Wh_Log(LOG_PREFIX L"Flyout ALERT: %p", g_hFlyoutIconAlert);
+    Wh_Log(L"Flyout ALERT: %p", g_hFlyoutIconAlert);
     // Load UAC Shield specifically from imageres.dll index 73 (small icon)
     g_hShieldIcon = NULL;
     ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
@@ -1679,9 +1570,9 @@ void InitFlyoutIcons() {
     }
     
     // Fallback se NULL
-    if (!g_hFlyoutIconGood)    { Wh_Log(LOG_PREFIX L"FALLBACK GOOD"); g_hFlyoutIconGood = LoadActionCenterIcon(0); }
-    if (!g_hFlyoutIconWarning) { Wh_Log(LOG_PREFIX L"FALLBACK WARNING"); g_hFlyoutIconWarning = LoadActionCenterIcon(1); }
-    if (!g_hFlyoutIconAlert)   { Wh_Log(LOG_PREFIX L"FALLBACK ALERT"); g_hFlyoutIconAlert = LoadActionCenterIcon(2); }
+    if (!g_hFlyoutIconGood)    { Wh_Log(L"FALLBACK GOOD"); g_hFlyoutIconGood = LoadActionCenterIcon(0); }
+    if (!g_hFlyoutIconWarning) { Wh_Log(L"FALLBACK WARNING"); g_hFlyoutIconWarning = LoadActionCenterIcon(1); }
+    if (!g_hFlyoutIconAlert)   { Wh_Log(L"FALLBACK ALERT"); g_hFlyoutIconAlert = LoadActionCenterIcon(2); }
 }
 void FreeAllIcons() {
     if (g_hProblemBalloonIcon) { DestroyIcon(g_hProblemBalloonIcon); g_hProblemBalloonIcon = NULL; }
@@ -1735,7 +1626,7 @@ static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     // Any failure (no rights / missing service) returns FALSE so other checks continue.
     SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (!hSCM) {
-        Wh_Log(LOG_PREFIX L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
+        Wh_Log(L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
         return FALSE;
     }
     SC_HANDLE hSvc = OpenServiceW(hSCM, serviceName, SERVICE_QUERY_CONFIG);
@@ -1771,7 +1662,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
             DWORD dwNoAuto = 0, dwSize = sizeof(DWORD);
             if (RegQueryValueExW(hKey, L"NoAutoUpdate", NULL, NULL, (LPBYTE)&dwNoAuto, &dwSize) == ERROR_SUCCESS) {
                 if (dwNoAuto != 0) {
-                    Wh_Log(LOG_PREFIX L"AutoUpdate: NoAutoUpdate policy is set");
+                    Wh_Log(L"AutoUpdate: NoAutoUpdate policy is set");
                     AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
                     return;
                 }
@@ -1782,7 +1673,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
     // 2) Service start type: Update Orchestrator (UsoSvc) and legacy WU (wuauserv).
     // Only SERVICE_DISABLED counts as "updates off"; stopped-but-auto is normal.
     if (IsServiceStartDisabled(L"UsoSvc") || IsServiceStartDisabled(L"wuauserv")) {
-        Wh_Log(LOG_PREFIX L"AutoUpdate: update service start type is DISABLED");
+        Wh_Log(L"AutoUpdate: update service start type is DISABLED");
         AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
         return;
     }
@@ -1795,7 +1686,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
         DWORD dwAUOptions = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"AUOptions", NULL, NULL, (LPBYTE)&dwAUOptions, &dwSize) == ERROR_SUCCESS) {
             if (dwAUOptions == 1) {
-                Wh_Log(LOG_PREFIX L"AutoUpdate: legacy AUOptions=1 (never check)");
+                Wh_Log(L"AutoUpdate: legacy AUOptions=1 (never check)");
                 AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
             }
         }
@@ -1812,7 +1703,195 @@ const WCHAR* GetProblemText(int problemType) {
         case PROB_UAC:         return LOC(STR_MSG_UAC);
         case PROB_SERVICE:     return LOC(STR_MSG_SERVICE);
         case PROB_DEFENDER_RT: return LOC(STR_MSG_DEFENDER);
+        case PROB_SMARTSCREEN: return LOC(STR_MSG_SMARTSCREEN);
+        case PROB_BACKUP:      return LOC(STR_MSG_BACKUP);
+        case PROB_WER:         return LOC(STR_MSG_WER);
+        case PROB_DISK_HEALTH: return LOC(STR_MSG_DISK_HEALTH);
         default: return L"";
+    }
+}
+
+// ============================================================================
+// SmartScreen Check
+// ============================================================================
+static void CheckSmartScreen(int* idx, int* criticalCount) {
+    // Check Windows Defender SmartScreen status via registry
+    // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -> SmartScreenEnabled
+    RegKey hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        WCHAR szValue[32] = {0};
+        DWORD dwSize = sizeof(szValue);
+        DWORD dwType = 0;
+        if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)szValue, &dwSize) == ERROR_SUCCESS) {
+            // Value can be "On" or "Off" (REG_SZ)
+            if (dwType == REG_SZ && _wcsicmp(szValue, L"Off") == 0) {
+                Wh_Log(L"SmartScreen: disabled (registry value = Off)");
+                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                return;
+            }
+        }
+        // Also check DWORD variant (some Windows versions)
+        DWORD dwVal = 1;
+        dwSize = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
+            if (dwType == REG_DWORD && dwVal == 0) {
+                Wh_Log(L"SmartScreen: disabled (DWORD = 0)");
+                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                return;
+            }
+        }
+    }
+
+    // Edge/Defender SmartScreen: HKCU\SOFTWARE\Microsoft\Edge\SmartScreenEnabled
+    RegKey hKeyEdge;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+        L"SOFTWARE\\Microsoft\\Edge",
+        0, KEY_READ, &hKeyEdge) == ERROR_SUCCESS) {
+        DWORD dwVal = 1, dwSize = sizeof(DWORD);
+        if (RegQueryValueExW(hKeyEdge, L"SmartScreenEnabled", NULL, NULL, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
+            if (dwVal == 0) {
+                Wh_Log(L"SmartScreen: Edge SmartScreen disabled");
+                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Maintenance Checks (non-critical, warning-level)
+// ============================================================================
+
+// Check if system backup is configured and running
+static void CheckBackupStatus(int* idx, int* criticalCount) {
+    // Windows Backup service (SDRSVC) or wbengine
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (!hSCM) return;
+
+    BOOL backupOk = FALSE;
+    // Check the main Windows Backup service
+    SC_HANDLE hSvc = OpenServiceW(hSCM, L"SDRSVC", SERVICE_QUERY_CONFIG);
+    if (hSvc) {
+        DWORD needed = 0;
+        QueryServiceConfigW(hSvc, NULL, 0, &needed);
+        if (needed > 0 && needed < 64 * 1024) {
+            BYTE* buf = (BYTE*)malloc(needed);
+            if (buf) {
+                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
+                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
+                    // If service is disabled, backup is not configured
+                    if (cfg->dwStartType == SERVICE_DISABLED) {
+                        backupOk = FALSE;
+                    } else {
+                        backupOk = TRUE; // service exists and is not disabled
+                    }
+                }
+                free(buf);
+            }
+        }
+        CloseServiceHandle(hSvc);
+    }
+
+    if (!backupOk) {
+        // Also check wbengine (Windows Backup Engine)
+        hSvc = OpenServiceW(hSCM, L"wbengine", SERVICE_QUERY_CONFIG);
+        if (hSvc) {
+            DWORD needed = 0;
+            QueryServiceConfigW(hSvc, NULL, 0, &needed);
+            if (needed > 0 && needed < 64 * 1024) {
+                BYTE* buf = (BYTE*)malloc(needed);
+                if (buf) {
+                    QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
+                    if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
+                        if (cfg->dwStartType != SERVICE_DISABLED) {
+                            backupOk = TRUE;
+                        }
+                    }
+                    free(buf);
+                }
+            }
+            CloseServiceHandle(hSvc);
+        }
+    }
+
+    CloseServiceHandle(hSCM);
+
+    if (!backupOk) {
+        Wh_Log(L"Maintenance: Backup service not configured");
+        AddProblem(PROB_BACKUP, idx, criticalCount);
+    }
+}
+
+// Check Windows Error Reporting service status
+static void CheckWerStatus(int* idx, int* criticalCount) {
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (!hSCM) return;
+
+    SC_HANDLE hSvc = OpenServiceW(hSCM, L"WerSvc", SERVICE_QUERY_CONFIG);
+    if (hSvc) {
+        DWORD needed = 0;
+        QueryServiceConfigW(hSvc, NULL, 0, &needed);
+        if (needed > 0 && needed < 64 * 1024) {
+            BYTE* buf = (BYTE*)malloc(needed);
+            if (buf) {
+                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
+                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
+                    if (cfg->dwStartType == SERVICE_DISABLED) {
+                        Wh_Log(L"Maintenance: Windows Error Reporting is disabled");
+                        AddProblem(PROB_WER, idx, criticalCount);
+                    }
+                }
+                free(buf);
+            }
+        }
+        CloseServiceHandle(hSvc);
+    }
+    CloseServiceHandle(hSCM);
+}
+
+// Check disk health via IOCTL_STORAGE_QUERY_PROPERTY or WMI
+// Simple approach: use Win32_DiskDrive via command-line or registry-based SMART check
+static void CheckDiskHealth(int* idx, int* criticalCount) {
+    // Check via Windows Reliability/Health mechanism:
+    // HKLM\SYSTEM\CurrentControlSet\Services\partmgr\Parameters -> DisablePivotX
+    // More practical: check if any disk reports predicted failure via registry
+    // HKLM\SYSTEM\CurrentControlSet\Control\Storage\PhyDisk\ -> PredictFailure
+    
+    BOOL diskIssue = FALSE;
+    
+    // Method: Check Device Parameters for SMART predicted failure
+    RegKey hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+        L"SYSTEM\\CurrentControlSet\\Services\\Disk\\Parameters",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD dwPredictFailure = 0;
+        DWORD dwSize = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"PredictedFailure", NULL, NULL, (LPBYTE)&dwPredictFailure, &dwSize) == ERROR_SUCCESS) {
+            if (dwPredictFailure != 0) {
+                Wh_Log(L"Maintenance: Disk predicted failure detected via Disk parameters");
+                diskIssue = TRUE;
+            }
+        }
+    }
+
+    // Additional check: look for disk-related entries in Event Log via registry
+    // (Windows stores recent disk errors in a diagnostic key)
+    if (!diskIssue) {
+        RegKey hKeyDiag;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management\\PrefetchParameters",
+            0, KEY_READ, &hKeyDiag) == ERROR_SUCCESS) {
+            DWORD dwBootOk = 1, dwSize = sizeof(DWORD);
+            if (RegQueryValueExW(hKeyDiag, L"BootExecute", NULL, NULL, (LPBYTE)&dwBootOk, &dwSize) == ERROR_SUCCESS) {
+                // This is informational; not a direct disk health indicator
+                // but combined with other signals can suggest issues
+            }
+        }
+    }
+
+    if (diskIssue) {
+        AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
     }
 }
 
@@ -1844,6 +1923,11 @@ void CheckSecurityProviders() {
     CheckDefenderRealtime(&idx, &criticalCount);
     CheckUACRegistry(&idx, &criticalCount);
     CheckAutoUpdateRegistry(&idx, &criticalCount);
+    CheckSmartScreen(&idx, &criticalCount);
+    // Maintenance checks (non-critical, warning-level)
+    CheckBackupStatus(&idx, &criticalCount);
+    CheckWerStatus(&idx, &criticalCount);
+    CheckDiskHealth(&idx, &criticalCount);
     // Action Center Checks registry
     RegKey hKeyChecks;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Action Center\\Checks", 0, KEY_READ, &hKeyChecks) == ERROR_SUCCESS) {
@@ -1907,6 +1991,9 @@ void CheckSecurityProviders() {
                                wcsstr(szIdentity, L"inetsettings") ||
                                wcsstr(szIdentity, L"zonesecurity")) {
                         mappedType = PROB_INTERNET;
+                    } else if (wcsstr(szIdentity, L"smartscreen") ||
+                               wcsstr(szIdentity, L"appcontrol")) {
+                        mappedType = PROB_SMARTSCREEN;
                     }
 
                     if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(mappedType)) {
@@ -2027,14 +2114,17 @@ static void BuildProblemBalloonText(
     }
 
     if (activeProblems <= 1) {
-        StringCchCopyW(text, textCount, firstProblem);
+        // Single problem: show the specific issue + action hint
+        StringCchPrintfW(text, textCount, L"%s\n%s", firstProblem, LOC(STR_NOTIFY_ACTION));
         return;
     }
 
+    // Multiple problems: show first problem, count, and action hint
     WCHAR countText[96] = {0};
     StringCchPrintfW(countText, ARRAYSIZE(countText),
                      LOC(STR_TIP_ISSUES), activeProblems);
-    StringCchPrintfW(text, textCount, L"%s\n%s", firstProblem, countText);
+    StringCchPrintfW(text, textCount, L"%s\n%s\n%s",
+                     firstProblem, countText, LOC(STR_NOTIFY_ACTION));
 }
 
 // Rilascia soltanto le risorse locali. Usata quando Windows comunica che il
@@ -2095,7 +2185,7 @@ void ShowProblemBalloon(void) {
     if (signature == g_LastProblemBalloonSignature &&
         secState == g_LastProblemBalloonState &&
         now - g_LastProblemBalloonTick < PROBLEM_BALLOON_COOLDOWN_MS) {
-        Wh_Log(LOG_PREFIX L"Duplicate problem balloon suppressed");
+        Wh_Log(L"Duplicate problem balloon suppressed");
         return;
     }
 
@@ -2149,7 +2239,7 @@ void ShowProblemBalloon(void) {
         SetTimer(g_Ctx.hWndMsgHandler, PROBLEM_BALLOON_TIMER_ID,
                  PROBLEM_BALLOON_FALLBACK_MS, NULL);
     } else {
-        Wh_Log(LOG_PREFIX L"Unable to publish problem balloon: %lu",
+        Wh_Log(L"Unable to publish problem balloon: %lu",
                GetLastError());
         ReleaseProblemBalloonResources();
     }
@@ -2200,9 +2290,9 @@ void RegisterWscNotifications() {
         return;
     }
     if (FAILED(hr))
-        Wh_Log(LOG_PREFIX L"WscRegisterForChanges failed: 0x%08X", hr);
+        Wh_Log(L"WscRegisterForChanges failed: 0x%08X", hr);
     else
-        Wh_Log(LOG_PREFIX L"WSC notifications registered");
+        Wh_Log(L"WSC notifications registered");
 }
 
 void UnregisterWscNotifications() {
@@ -2214,7 +2304,7 @@ void UnregisterWscNotifications() {
     }
     if (hReg) {
         WscUnRegisterChanges(hReg);
-        Wh_Log(LOG_PREFIX L"WSC notifications unregistered");
+        Wh_Log(L"WSC notifications unregistered");
     }
 }
 
@@ -2223,7 +2313,7 @@ static void WaitForWscCallbacksToDrain(void) {
     BOOL logged = FALSE;
     while (InterlockedCompareExchange(&g_WscCallbacksInFlight, 0, 0) != 0) {
         if (!logged && GetTickCount() - start >= 2000) {
-            Wh_Log(LOG_PREFIX L"Waiting for in-flight WSC callbacks");
+            Wh_Log(L"Waiting for in-flight WSC callbacks");
             logged = TRUE;
         }
         Sleep(1);
@@ -2234,7 +2324,7 @@ static void WaitForWscCallbacksToDrain(void) {
 // Registry Monitor Thread
 // ============================================================================
 DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
-    Wh_Log(LOG_PREFIX L"Registry monitor thread started");
+    Wh_Log(L"Registry monitor thread started");
     InterlockedExchange(&g_Ctx.regMonitorRunning, 1);
     HANDLE hEvents[2] = { g_Ctx.hRegShutdownEvent, g_Ctx.hRegChangeEvent };
     // Progressive backoff when Action Center\Checks is missing (common on some SKUs).
@@ -2275,7 +2365,7 @@ DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
         }
     }
     InterlockedExchange(&g_Ctx.regMonitorRunning, 0);
-    Wh_Log(LOG_PREFIX L"Registry monitor thread exiting");
+    Wh_Log(L"Registry monitor thread exiting");
     return 0;
 }
 void StartRegistryMonitor() {
@@ -2285,11 +2375,11 @@ void StartRegistryMonitor() {
     g_Ctx.hRegShutdownEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_Ctx.hRegChangeEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!g_Ctx.hRegShutdownEvent || !g_Ctx.hRegChangeEvent) {
-        Wh_Log(LOG_PREFIX L"Failed to create registry monitor events"); return;
+        Wh_Log(L"Failed to create registry monitor events"); return;
     }
     g_Ctx.hRegMonitorThread = CreateThread(NULL, 0, RegistryMonitorThread, NULL, 0, NULL);
     if (!g_Ctx.hRegMonitorThread) {
-        Wh_Log(LOG_PREFIX L"Failed to create registry monitor thread");
+        Wh_Log(L"Failed to create registry monitor thread");
         CloseHandle(g_Ctx.hRegShutdownEvent); g_Ctx.hRegShutdownEvent = NULL;
         CloseHandle(g_Ctx.hRegChangeEvent); g_Ctx.hRegChangeEvent = NULL;
     }
@@ -2305,7 +2395,7 @@ void StopRegistryMonitor() {
             // Non chiudere eventi/handle mentre il thread li usa: durante
             // l'unload sarebbe un use-after-close. Il thread è event-driven e
             // deve terminare prima che il codice del mod venga scaricato.
-            Wh_Log(LOG_PREFIX L"Waiting for registry monitor thread to exit");
+            Wh_Log(L"Waiting for registry monitor thread to exit");
             WaitForSingleObject(g_Ctx.hRegMonitorThread, INFINITE);
         }
         CloseHandle(g_Ctx.hRegMonitorThread);
@@ -2340,40 +2430,8 @@ HICON LoadTrayIcon(BOOL alert) {
 // ============================================================================
 // Hook per rilevare il riavvio di Explorer e reinizializzare l'icona
 // ============================================================================
-typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-CreateWindowExW_t CreateWindowExW_orig = NULL;
 
-static BOOL IsShellTrayWndClass(LPCWSTR lpClassName) {
-    if (!lpClassName) return FALSE;
-    // Class name may be an atom (low word only) — never dereference those.
-    if (IS_INTRESOURCE(lpClassName)) return FALSE;
-    return (wcscmp(lpClassName, L"Shell_TrayWnd") == 0);
-}
 
-HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, 
-                                  DWORD dwStyle, int X, int Y, int nWidth, int nHeight, 
-                                  HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hwnd = CreateWindowExW_orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-
-    // Rileva quando la taskbar viene ricreata (dopo riavvio di Explorer).
-    // Do NOT call Shell_NotifyIcon from inside CreateWindowEx: the tray is not
-    // fully ready yet. Schedule a delayed recovery on the message window instead.
-    if (hwnd && IsShellTrayWndClass(lpClassName)) {
-        Wh_Log(LOG_PREFIX L"Shell_TrayWnd created - scheduling delayed tray icon recovery");
-
-        if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
-            g_Ctx.trayIconAdded = FALSE;
-            g_Ctx.trayRetryAttempt = 0;
-            KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
-            KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
-            // Delay: notification area needs a moment after Shell_TrayWnd exists.
-            SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, 500, NULL);
-            SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
-        }
-    }
-
-    return hwnd;
-}
 static void BuildTrayTooltip(WCHAR* buf, size_t bufSize) {
     if (!buf || bufSize == 0) return;
     int activeProblems = 0;
@@ -2396,7 +2454,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
 
     // Shell_NotifyIcon fails until the notification area exists.
     if (!FindWindowW(L"Shell_TrayWnd", NULL)) {
-        Wh_Log(LOG_PREFIX L"PublishTrayIcon: Shell_TrayWnd not ready");
+        Wh_Log(L"PublishTrayIcon: Shell_TrayWnd not ready");
         return FALSE;
     }
 
@@ -2405,7 +2463,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
 
     HICON hNewIcon = LoadTrayIcon(secState >= STATE_ALERT);
     if (!hNewIcon) {
-        Wh_Log(LOG_PREFIX L"Unable to create tray icon");
+        Wh_Log(L"Unable to create tray icon");
         return FALSE;
     }
 
@@ -2442,7 +2500,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
             ok = Shell_NotifyIconW(NIM_ADD, &nidNoGuid);
             if (ok) {
                 nid = nidNoGuid;
-                Wh_Log(LOG_PREFIX L"Tray icon added without GUID (fallback)");
+                Wh_Log(L"Tray icon added without GUID (fallback)");
             }
         }
         if (!ok) ok = Shell_NotifyIconW(NIM_MODIFY, &nid);
@@ -2471,7 +2529,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
     if (!ok) {
         DestroyIcon(hNewIcon);
         g_Ctx.trayIconAdded = FALSE;
-        Wh_Log(LOG_PREFIX L"Shell_NotifyIcon failed: %lu", GetLastError());
+        Wh_Log(L"Shell_NotifyIcon failed: %lu", GetLastError());
         return FALSE;
     }
 
@@ -2489,7 +2547,7 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
     g_nid = nid;
     g_Ctx.trayIconAdded = TRUE;
     if (hOldIcon && hOldIcon != hNewIcon) DestroyIcon(hOldIcon);
-    Wh_Log(LOG_PREFIX L"Tray icon published (preferAdd=%d)", (int)preferAdd);
+    Wh_Log(L"Tray icon published (preferAdd=%d)", (int)preferAdd);
     return TRUE;
 }
 
@@ -2532,7 +2590,7 @@ static void ScheduleTrayIconRecovery() {
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, 250, NULL);
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
 
-    Wh_Log(LOG_PREFIX L"Tray icon recovery scheduled");
+    Wh_Log(L"Tray icon recovery scheduled");
 }
 
 static void RunTrayIconRecoveryAttempt() {
@@ -2545,9 +2603,9 @@ static void RunTrayIconRecoveryAttempt() {
         UINT delay = (attempt < 10) ? 300 : 1000;
         if (attempt < 60) {
             SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
-            Wh_Log(LOG_PREFIX L"Tray not ready yet (attempt %u), retry in %ums", attempt, delay);
+            Wh_Log(L"Tray not ready yet (attempt %u), retry in %ums", attempt, delay);
         } else {
-            Wh_Log(LOG_PREFIX L"Tray icon recovery paused (no Shell_TrayWnd) after %u attempts", attempt);
+            Wh_Log(L"Tray icon recovery paused (no Shell_TrayWnd) after %u attempts", attempt);
         }
         return;
     }
@@ -2560,7 +2618,7 @@ static void RunTrayIconRecoveryAttempt() {
         // IsTrayIconReachable can lag briefly after NIM_ADD; treat ADD success
         // as good enough, and let health timer re-check.
         g_Ctx.trayRetryAttempt = 0;
-        Wh_Log(LOG_PREFIX L"Tray icon available after taskbar restart");
+        Wh_Log(L"Tray icon available after taskbar restart");
         KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
         SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
         return;
@@ -2568,7 +2626,7 @@ static void RunTrayIconRecoveryAttempt() {
 
     UINT attempt = ++g_Ctx.trayRetryAttempt;
     if (attempt >= 40) {
-        Wh_Log(LOG_PREFIX L"Tray icon recovery paused after %u attempts", attempt);
+        Wh_Log(L"Tray icon recovery paused after %u attempts", attempt);
         return; // Il timer di health riproverà più tardi.
     }
 
@@ -2577,7 +2635,7 @@ static void RunTrayIconRecoveryAttempt() {
     if (delay > 8000) delay = 8000;
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
 
-    Wh_Log(LOG_PREFIX L"Retry attempt %u scheduled in %ums", attempt, delay);
+    Wh_Log(L"Retry attempt %u scheduled in %ums", attempt, delay);
 }
 
 // ============================================================================
@@ -2678,7 +2736,9 @@ void ToggleFlyout() {
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
+        UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
+        InstallKeyboardHook();
         return;
     }
     CreateFlyoutWindow();
@@ -2698,22 +2758,36 @@ void ToggleFlyout() {
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         
+        UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
+        InstallKeyboardHook();
     }
 }
 
 // ============================================================================
 // Mouse Hook (Click Outside) - Versione semplificata
 // ============================================================================
+
+// Cache the tray icon rect for use in the mouse hook (avoids cross-process call in WH_MOUSE_LL)
+static void UpdateCachedTrayIconRect() {
+    if (g_Ctx.hWndMsgHandler && g_Ctx.trayIconAdded) {
+        NOTIFYICONIDENTIFIER nidIcon = { sizeof(NOTIFYICONIDENTIFIER) };
+        nidIcon.hWnd = g_Ctx.hWndMsgHandler;
+        nidIcon.uID = TRAY_ICON_ID;
+        nidIcon.guidItem = TRAY_ICON_GUID;
+        Shell_NotifyIconGetRect(&nidIcon, &g_CachedTrayIconRect);
+    }
+}
+
 void InstallClickOutsideHook() {
     if (g_hMouseHook) return;
     
     // Usa WH_MOUSE_LL globale
     g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, ClickOutsideMouseHookProc, GetModInstance(), 0);
     if (!g_hMouseHook) {
-        Wh_Log(LOG_PREFIX L"Failed to install mouse hook (error: %lu)", GetLastError());
+        Wh_Log(L"Failed to install mouse hook (error: %lu)", GetLastError());
     } else {
-        Wh_Log(LOG_PREFIX L"Global mouse hook installed");
+        Wh_Log(L"Global mouse hook installed");
     }
 }
 
@@ -2721,8 +2795,47 @@ void RemoveClickOutsideHook() {
     if (g_hMouseHook) {
         UnhookWindowsHookEx(g_hMouseHook);
         g_hMouseHook = NULL;
-        Wh_Log(LOG_PREFIX L"Mouse hook removed");
+        Wh_Log(L"Mouse hook removed");
     }
+}
+
+// ============================================================================
+// Keyboard Hook (Escape to close flyout)
+// ============================================================================
+void InstallKeyboardHook() {
+    if (g_hKeyboardHook) return;
+    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, GetModInstance(), 0);
+    if (!g_hKeyboardHook) {
+        Wh_Log(L"Failed to install keyboard hook (error: %lu)", GetLastError());
+    } else {
+        Wh_Log(L"Keyboard hook installed (ESC to close flyout)");
+    }
+}
+
+void RemoveKeyboardHook() {
+    if (g_hKeyboardHook) {
+        UnhookWindowsHookEx(g_hKeyboardHook);
+        g_hKeyboardHook = NULL;
+        Wh_Log(L"Keyboard hook removed");
+    }
+}
+
+LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (g_Ctx.isUninitializing)
+        return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
+
+    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+        KBDLLHOOKSTRUCT* pKbd = (KBDLLHOOKSTRUCT*)lParam;
+        if (pKbd->vkCode == VK_ESCAPE) {
+            // Close flyout if visible
+            if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && 
+                IsWindowVisible(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
+                PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
+                return 1; // Swallow the key
+            }
+        }
+    }
+    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 }
 
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -2736,9 +2849,9 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
             MSLLHOOKSTRUCT* pMouse = (MSLLHOOKSTRUCT*)lParam;
             RECT rcFlyout; GetWindowRect(g_Ctx.hWndFlyout, &rcFlyout);
             if (!PtInRect(&rcFlyout, pMouse->pt)) {
-                RECT rcIcon; NOTIFYICONIDENTIFIER nidIcon = { sizeof(NOTIFYICONIDENTIFIER) };
-                nidIcon.hWnd = g_Ctx.hWndMsgHandler; nidIcon.uID = TRAY_ICON_ID; nidIcon.guidItem = TRAY_ICON_GUID;
-                BOOL overTrayIcon = (Shell_NotifyIconGetRect(&nidIcon, &rcIcon) == S_OK) && PtInRect(&rcIcon, pMouse->pt);
+                // Use cached tray icon rect (updated when flyout opens)
+                // Avoids expensive cross-process Shell_NotifyIconGetRect call in WH_MOUSE_LL
+                BOOL overTrayIcon = PtInRect(&g_CachedTrayIconRect, pMouse->pt);
                 if (!overTrayIcon) {
                     PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
                 }
@@ -2755,6 +2868,7 @@ void CloseFlyout(HWND hwnd) {
     if (g_FlyoutClosing || !hwnd || !IsWindow(hwnd)) return;
     g_FlyoutClosing = TRUE;
     RemoveClickOutsideHook();
+    RemoveKeyboardHook();
     AnimateWindow(hwnd, 150, AW_HIDE);
     // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
@@ -2810,6 +2924,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         if (wParam == AUTOHIDE_TIMER_ID) {
             // Inactivity timeout: hide instead of destroy (keeps window ready).
             RemoveClickOutsideHook();
+            RemoveKeyboardHook();
             ShowWindow(hwnd, SW_HIDE);
             return 0;
         }
@@ -2858,7 +2973,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // Check click on problem links
         for (int i = 0; i < g_DisplayProblemCount; i++) {
             if (PtInRect(&g_ProblemLinkRects[i], pt)) {
-                Wh_Log(LOG_PREFIX L"Clicked problem link: %d", g_ProblemTypesDisplay[i]);
+                Wh_Log(L"Clicked problem link: %d", g_ProblemTypesDisplay[i]);
                 
                 // Open appropriate action
                 OpenProblemAction(g_ProblemTypesDisplay[i]);
@@ -3019,7 +3134,7 @@ if (activeProblems > 0) {
     // Prima riga: "N important messages" in blu e bold
     SelectGuard sg(hdcMem, g_hFontBold);
     SetTextColor(hdcMem, clrLink);  // BLU
-    RECT rcT = {txL, ScaleDpi(2), g_ScaledWidth - padR, ScaleDpi(22)};
+    RECT rcT = {txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(25)};
     DrawTextW(hdcMem, headerBuf, -1, &rcT, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     
     // Seconda riga: "N total messages" in blu (non bold)
@@ -3052,19 +3167,19 @@ if (activeProblems > 0) {
     StringCchPrintfW(totalBuf, ARRAYSIZE(totalBuf), L"%d %s", activeProblems, totalText);
     
     // Riduci lo spazio tra le righe del 5% (da ScaleDpi(22) a ScaleDpi(21))
-    RECT rcTotal = {txL, ScaleDpi(21), g_ScaledWidth - padR, ScaleDpi(41)};
+    RECT rcTotal = {txL, ScaleDpi(24), g_ScaledWidth - padR, ScaleDpi(44)};
     DrawTextW(hdcMem, totalBuf, -1, &rcTotal, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 } else {
         // "Action Center" in blu e bold
         SelectGuard sg(hdcMem, g_hFontBold);
         SetTextColor(hdcMem, clrLink);
-        RECT rcTitleLine = {txL, ScaleDpi(3), g_ScaledWidth - padR, ScaleDpi(22)};
+        RECT rcTitleLine = {txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(24)};
         DrawTextW(hdcMem, LOC(STR_ACTION_CENTER_TITLE), -1, &rcTitleLine, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
         // "No current issues detected." in blu (non bold)
         SelectGuard sg2(hdcMem, g_hFontNormal);
         SetTextColor(hdcMem, clrLink);
-        RECT rcSubLine = {txL, ScaleDpi(22), g_ScaledWidth - padR, ScaleDpi(42)};
+        RECT rcSubLine = {txL, ScaleDpi(24), g_ScaledWidth - padR, ScaleDpi(44)};
         const WCHAR* npText = LOC(STR_NO_PROBLEMS);
         const WCHAR* npNewline = wcschr(npText, L'\n');
         if (npNewline) {
@@ -3191,28 +3306,25 @@ if (activeProblems > 0) {
                 DrawTextW(hdcMem, LOC(STR_AND_MORE), -1, &rcMore, DT_LEFT | DT_SINGLELINE);
             }
         }
-
         // ============================================================
-        // FOOTER LINK
+        // FOOTER LINK - Spostato 4% più in basso
         // ============================================================
         { SelectGuard sg(hdcMem, g_IsHoveringLink ? g_hFontLink : g_hFontNormal);
           SetTextColor(hdcMem, g_IsHoveringLink ? clrLinkHover : clrLink);
           
           RECT rcClient; GetClientRect(hwnd, &rcClient);
           int currentFtrH = g_ScaledFooterHeight;
-          RECT rcFtrDynamic = { 0, rcClient.bottom - currentFtrH, rcClient.right, rcClient.bottom };
-
-          if (g_Settings.useRoundedCorners) {
-              int offset15 = (currentFtrH * 15) / 100;
-              rcFtrDynamic.top += offset15;
-              rcFtrDynamic.bottom += offset15;
-          }
-
-          // Raise "Open Action Center" text by 1.5% of footer height.
-          int raise15 = (currentFtrH * 15) / 1000; // 1.5%
-          if (raise15 < 1) raise15 = 1;
-          rcFtrDynamic.top -= raise15;
-          rcFtrDynamic.bottom -= raise15;
+          
+          // Calcola l'inset per il rounded corners (se attivo)
+          int topInset = g_Settings.useRoundedCorners ? (currentFtrH * 12) / 100 : 0;
+          
+          int offsetPercent = 13;  
+          int offsetPixels = (currentFtrH * offsetPercent) / 87;
+          
+          // Applica l'offset: aumenta topInset per spostare il testo verso il basso
+          int adjustedTopInset = topInset + offsetPixels;
+          
+          RECT rcFtrDynamic = { 0, rcClient.bottom - currentFtrH + adjustedTopInset, rcClient.right, rcClient.bottom };
 
           g_rcFooterLink = rcFtrDynamic;
           DrawTextW(hdcMem, LOC(STR_LINK_OPEN_AC), -1, &rcFtrDynamic, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX); }
@@ -3251,7 +3363,7 @@ void CreateFlyoutWindow() {
         if (RegisterClassExW(&wc)) {
             g_Ctx.flyoutClassRegistered = TRUE;
         } else {
-            Wh_Log(LOG_PREFIX L"Flyout class registration failed: %lu", GetLastError());
+            Wh_Log(L"Flyout class registration failed: %lu", GetLastError());
             return; // non usare una classe residua con una vecchia WndProc
         }
     }
@@ -3282,7 +3394,7 @@ void CreateFlyoutWindow() {
             0, 0, flyoutWidth, flyoutHeight, 
             NULL, NULL, GetModInstance(), NULL);
     }
-    if (!g_Ctx.hWndFlyout) { Wh_Log(LOG_PREFIX L"Flyout creation failed: %lu", GetLastError()); return; }
+    if (!g_Ctx.hWndFlyout) { Wh_Log(L"Flyout creation failed: %lu", GetLastError()); return; }
     
     // Posiziona SUBITO il flyout accanto all'icona tray, prima di mostrarlo.
     // Questo evita che appaia in (0,0) per un frame e poi salti.
@@ -3400,7 +3512,7 @@ void CreateNotifyWindow() {
     if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) return;
     if (g_Ctx.isUninitializing) return;
     if (g_Ctx.trayThreadId && GetCurrentThreadId() != g_Ctx.trayThreadId) {
-        Wh_Log(LOG_PREFIX L"CreateNotifyWindow rejected on non-tray thread");
+        Wh_Log(L"CreateNotifyWindow rejected on non-tray thread");
         return;
     }
     if (!g_Ctx.notifyClassRegistered) {
@@ -3410,12 +3522,12 @@ void CreateNotifyWindow() {
         if (RegisterClassExW(&wc)) {
             g_Ctx.notifyClassRegistered = TRUE;
         } else {
-            Wh_Log(LOG_PREFIX L"Notify class registration failed: %lu", GetLastError());
+            Wh_Log(L"Notify class registration failed: %lu", GetLastError());
             return; // evita una WndProc residua appartenente alla vecchia build
         }
     }
     g_Ctx.hWndNotify = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, NOTIFY_WINDOW_CLASS_NAME, L"", WS_POPUP, 0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight, NULL,NULL,GetModInstance(),NULL);
-    if (!g_Ctx.hWndNotify) Wh_Log(LOG_PREFIX L"Notify window creation failed: %lu", GetLastError());
+    if (!g_Ctx.hWndNotify) Wh_Log(L"Notify window creation failed: %lu", GetLastError());
 }
 
 // ============================================================================
@@ -3426,7 +3538,7 @@ void CreateNotifyWindow() {
 // ============================================================================
 LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_Ctx.taskbarCreatedMessage && uMsg == g_Ctx.taskbarCreatedMessage) {
-        Wh_Log(LOG_PREFIX L"TaskbarCreated received; scheduling tray icon re-creation");
+        Wh_Log(L"TaskbarCreated received; scheduling tray icon re-creation");
 
         // After explorer restart the old balloon no longer belongs to a valid
         // tray icon. Release its local HICON before scheduling recovery.
@@ -3550,7 +3662,7 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
     if (uMsg == WM_SECURITY_CHANGED) { 
         if (!g_Ctx.isUninitializing) { 
-            Wh_Log(LOG_PREFIX L"Security change notification"); 
+            Wh_Log(L"Security change notification"); 
             RefreshSecurityState(); 
         } 
         return 0; 
@@ -3567,6 +3679,26 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     if (uMsg == WM_CLEAR_NOTIFICATIONS) { 
         if (!g_Ctx.isUninitializing) ClearNotifications(); 
         return 0; 
+    }
+    if (uMsg == WM_SETTINGS_CHANGED) {
+        // Handle hotkey and timer updates from the tray thread (correct thread affinity)
+        if (!g_Ctx.isUninitializing) {
+            if (g_Settings.enableHotkey) {
+                RegisterHotKey(hwnd, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
+                RegisterHotKey(hwnd, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
+            } else {
+                UnregisterHotKey(hwnd, HOTKEY_ID_SIMULATE);
+                UnregisterHotKey(hwnd, HOTKEY_ID_CLEAR);
+            }
+            if (g_Settings.refreshInterval > 0) {
+                if (g_Ctx.refreshTimer) KillTimer(hwnd, g_Ctx.refreshTimer);
+                g_Ctx.refreshTimer = SetTimer(hwnd, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
+            } else if (g_Ctx.refreshTimer) {
+                KillTimer(hwnd, g_Ctx.refreshTimer);
+                g_Ctx.refreshTimer = 0;
+            }
+        }
+        return 0;
     }
     if (uMsg == WM_COMMAND) {
         if (LOWORD(wParam) == ID_MENU_OPEN_AC) 
@@ -3587,10 +3719,6 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         if (wParam == HOTKEY_ID_CLEAR) { 
             PostMessageW(hwnd, WM_CLEAR_NOTIFICATIONS, 0, 0); 
-            return 0; 
-        }
-        if (wParam == HOTKEY_ID_LOGTREE) { 
-            LogWindowTree(GetForegroundWindow()); 
             return 0; 
         }
     }
@@ -3630,7 +3758,7 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         if (RegisterClassExW(&mwc)) {
             g_Ctx.trayMsgClassRegistered = TRUE;
         } else {
-            Wh_Log(LOG_PREFIX L"Tray message class registration failed: %lu", GetLastError());
+            Wh_Log(L"Tray message class registration failed: %lu", GetLastError());
             if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
             CoUninitialize();
             return 1; // non usare la WndProc appartenente alla build precedente
@@ -3659,7 +3787,7 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     // At Windows startup / explorer restart the tray may not exist yet.
     // Wait a bit, then add; recovery timers cover the rest.
     if (!WaitForTaskbarReady(15000)) {
-        Wh_Log(LOG_PREFIX L"Shell_TrayWnd not ready within 15s — scheduling recovery");
+        Wh_Log(L"Shell_TrayWnd not ready within 15s — scheduling recovery");
     }
     // Se Wh_ModUninit e' arrivato durante l'attesa della taskbar, non
     // registrare nuove sorgenti asincrone dopo che il cleanup le ha fermate.
@@ -3680,7 +3808,6 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
         }
-        RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE, MOD_CONTROL | MOD_ALT, 'W');
     }
 
     MSG msg;
@@ -3701,7 +3828,6 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE);
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR);
     }
-    UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE);
     if (g_Ctx.refreshTimer) { KillTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID); g_Ctx.refreshTimer = 0; }
     KillTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID);
     KillTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID);
@@ -3715,10 +3841,13 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 
 // ============================================================================
 void CleanupModResources() {
-    Wh_Log(LOG_PREFIX L"CleanupModResources: starting");
+    Wh_Log(L"CleanupModResources: starting");
 
     // 1. Blocca immediatamente nuove operazioni e nuove registrazioni.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
+
+    // Remove keyboard hook immediately (no window context needed)
+    RemoveKeyboardHook();
 
     // 2. Ferma le sorgenti esterne e attendi le callback gia' entrate.
     UnregisterWscNotifications();
@@ -3742,7 +3871,7 @@ void CleanupModResources() {
     if (!shutdownPosted && g_Ctx.hTrayThread &&
         WaitForSingleObject(g_Ctx.hTrayThread, 0) == WAIT_TIMEOUT &&
         g_Ctx.trayThreadId) {
-        Wh_Log(LOG_PREFIX L"Tray message window unavailable; posting WM_QUIT to owner thread");
+        Wh_Log(L"Tray message window unavailable; posting WM_QUIT to owner thread");
         PostThreadMessageW(g_Ctx.trayThreadId, WM_QUIT, 0, 0);
     }
 
@@ -3751,7 +3880,7 @@ void CleanupModResources() {
     if (g_Ctx.hTrayThread) {
         DWORD wr = WaitForSingleObject(g_Ctx.hTrayThread, 5000);
         if (wr == WAIT_TIMEOUT) {
-            Wh_Log(LOG_PREFIX L"Waiting for tray thread to finish owner-thread cleanup");
+            Wh_Log(L"Waiting for tray thread to finish owner-thread cleanup");
             WaitForSingleObject(g_Ctx.hTrayThread, INFINITE);
         }
         CloseHandle(g_Ctx.hTrayThread);
@@ -3773,7 +3902,7 @@ void CleanupModResources() {
     if ((g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) ||
         (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) ||
         (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler))) {
-        Wh_Log(LOG_PREFIX L"WARNING: a mod window survived tray-thread shutdown");
+        Wh_Log(L"WARNING: a mod window survived tray-thread shutdown");
     }
 
     g_Ctx.hWndFlyout = NULL;
@@ -3790,29 +3919,29 @@ void CleanupModResources() {
     if (g_Ctx.flyoutClassRegistered) {
         if (!UnregisterClassW(FLYOUT_CLASS_NAME, hInst) &&
             GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
-            Wh_Log(LOG_PREFIX L"Unregister flyout class failed: %lu", GetLastError());
+            Wh_Log(L"Unregister flyout class failed: %lu", GetLastError());
         g_Ctx.flyoutClassRegistered = FALSE;
     }
     if (g_Ctx.notifyClassRegistered) {
         if (!UnregisterClassW(NOTIFY_WINDOW_CLASS_NAME, hInst) &&
             GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
-            Wh_Log(LOG_PREFIX L"Unregister notify class failed: %lu", GetLastError());
+            Wh_Log(L"Unregister notify class failed: %lu", GetLastError());
         g_Ctx.notifyClassRegistered = FALSE;
     }
     if (g_Ctx.trayMsgClassRegistered) {
         if (!UnregisterClassW(TRAY_MESSAGE_CLASS_NAME, hInst) &&
             GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
-            Wh_Log(LOG_PREFIX L"Unregister tray class failed: %lu", GetLastError());
+            Wh_Log(L"Unregister tray class failed: %lu", GetLastError());
         g_Ctx.trayMsgClassRegistered = FALSE;
     }
 
     // 7. Ora non esistono piu' thread o finestre che possano leggere g_Ctx.
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     g_Initialized = FALSE;
-    Wh_Log(LOG_PREFIX L"CleanupModResources: complete");
+    Wh_Log(L"CleanupModResources: complete");
 }
 BOOL Wh_ModInit(void) {
-    Wh_Log(LOG_PREFIX L"Win7 Action Center - Initializing...");
+    Wh_Log(L"Win7 Action Center - Initializing...");
 
     // Ricava l'HINSTANCE della DLL della mod usando un indirizzo nei suoi dati.
     HMODULE hThisModule = NULL;
@@ -3823,7 +3952,7 @@ BOOL Wh_ModInit(void) {
         g_hModInstance = (HINSTANCE)hThisModule;
     } else {
         g_hModInstance = (HINSTANCE)GetModuleHandleW(NULL);
-        Wh_Log(LOG_PREFIX L"Unable to resolve mod HINSTANCE; using process fallback");
+        Wh_Log(L"Unable to resolve mod HINSTANCE; using process fallback");
     }
     InterlockedExchange(&g_WscCallbacksInFlight, 0);
     g_ProblemBalloonShowing = FALSE;
@@ -3833,22 +3962,8 @@ BOOL Wh_ModInit(void) {
     
     // Allow init even if Shell_TrayWnd is not ready yet (boot / explorer restart).
     if (!IsMainExplorerProcess()) { 
-        Wh_Log(LOG_PREFIX L"Not shell explorer.exe, skipping");
+        Wh_Log(L"Not shell explorer.exe, skipping");
         return TRUE; 
-    }
-    
-    InstallRegistryHooks();
-    
-    // Aggiungi hook per CreateWindowExW per rilevare la ricreazione della taskbar
-    if (!CreateWindowExW_orig) {
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        if (hUser32) {
-            WindhawkUtils::Wh_SetFunctionHookT(
-                (CreateWindowExW_t)GetProcAddress(hUser32, "CreateWindowExW"), 
-                CreateWindowExW_hook, 
-                &CreateWindowExW_orig);
-            Wh_Log(LOG_PREFIX L"CreateWindowExW hook installed for Shell_TrayWnd detection");
-        }
     }
     
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
@@ -3856,7 +3971,7 @@ BOOL Wh_ModInit(void) {
     DetermineLocale();
     InitializeSRWLock(&g_Ctx.srwLock);
     g_Ctx.darkMode = IsDarkModeEnabled();
-    Wh_Log(LOG_PREFIX L"Dark mode: %s", g_Ctx.darkMode ? L"enabled" : L"disabled");
+    Wh_Log(L"Dark mode: %s", g_Ctx.darkMode ? L"enabled" : L"disabled");
     HDC hScreenDC = GetDC(NULL);
     UINT dpi = hScreenDC ? (UINT)GetDeviceCaps(hScreenDC, LOGPIXELSX) : 96;
     if (hScreenDC) ReleaseDC(NULL, hScreenDC);
@@ -3867,19 +3982,19 @@ BOOL Wh_ModInit(void) {
 
     // GDI+ deve essere inizializzato prima di decodificare le PNG Base64.
     if (!InitGdiPlusRendering()) {
-        Wh_Log(LOG_PREFIX L"GDI+ init failed — will use DrawIconEx fallback");
+        Wh_Log(L"GDI+ init failed — will use DrawIconEx fallback");
     }
     InitFlyoutIcons();
 
     // Il ready event chiude la race tra CreateThread e un unload immediato.
     g_Ctx.hTrayReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_Ctx.hTrayReadyEvent)
-        Wh_Log(LOG_PREFIX L"Failed to create tray-ready event: %lu", GetLastError());
+        Wh_Log(L"Failed to create tray-ready event: %lu", GetLastError());
 
     // Tutte le finestre vengono create dal TrayThreadProc.
     g_Ctx.hTrayThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, &g_Ctx.trayThreadId);
     if (!g_Ctx.hTrayThread) {
-        Wh_Log(LOG_PREFIX L"Failed to create tray thread — cleaning up");
+        Wh_Log(L"Failed to create tray thread — cleaning up");
         CleanupModResources();
         return FALSE;
     }
@@ -3887,17 +4002,18 @@ BOOL Wh_ModInit(void) {
         DWORD ready = WaitForSingleObject(g_Ctx.hTrayReadyEvent, 5000);
         if (ready == WAIT_OBJECT_0 &&
             (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler))) {
-            Wh_Log(LOG_PREFIX L"Tray thread failed before creating its message window");
+            Wh_Log(L"Tray thread failed before creating its message window");
             CleanupModResources();
             return FALSE;
         }
     }
     g_Initialized = TRUE;
-    Wh_Log(LOG_PREFIX L"Initialization complete");
+    Wh_Log(L"Initialization complete");
     return TRUE;
 }
 
 void Wh_ModSettingsChanged(void) {
+    // Reload settings (can be called from any thread)
     LoadSettings();
     DetermineLocale();
     g_Ctx.darkMode = IsDarkModeEnabled();
@@ -3905,29 +4021,19 @@ void Wh_ModSettingsChanged(void) {
     // Aggiorna il tooltip dell'icona tray con la nuova lingua
     EnsureTrayTooltip();
     
+    // Post a message to the tray thread to handle hotkeys/timers
+    // Hotkeys and timers must be (un)registered from the thread that owns the window
     if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
-        if (g_Settings.enableHotkey) {
-            RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
-            RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
-        } else {
-            UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE);
-            UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR);
-        }
-        if (g_Settings.refreshInterval > 0) {
-            if (g_Ctx.refreshTimer) KillTimer(g_Ctx.hWndMsgHandler, g_Ctx.refreshTimer);
-            g_Ctx.refreshTimer = SetTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
-        } else if (g_Ctx.refreshTimer) {
-            KillTimer(g_Ctx.hWndMsgHandler, g_Ctx.refreshTimer);
-            g_Ctx.refreshTimer = 0;
-        }
+        PostMessageW(g_Ctx.hWndMsgHandler, WM_SETTINGS_CHANGED, 0, 0);
     }
+    
     if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && !g_Ctx.isUninitializing)
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
 }
 
 void Wh_ModUninit(void) {
-    Wh_Log(LOG_PREFIX L"Wh_ModUninit called");
+    Wh_Log(L"Wh_ModUninit called");
     // Balloon e finestre vengono rimossi dal loro tray thread proprietario.
     CleanupModResources();
-    Wh_Log(LOG_PREFIX L"Uninitialization complete");
+    Wh_Log(L"Uninitialization complete");
 }
