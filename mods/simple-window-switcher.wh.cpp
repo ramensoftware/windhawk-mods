@@ -5133,7 +5133,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
 // Tool Mod callbacks
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
     g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     return g_hSwitcherThread != NULL;
