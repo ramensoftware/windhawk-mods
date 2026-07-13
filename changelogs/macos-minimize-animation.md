@@ -1,3 +1,10 @@
+## 3.1.0 ([Jul 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a8862447e3495d146a8b444be27f71bb46fcaa0/mods/macos-minimize-animation.wh.cpp))
+
+- Adds a new **Animation style** setting with two options: **Modern** (the Direct2D genie engine, default since v3.0.0) and **Classic** (this mod's original v2.2.0 strip-based genie).
+- Some users who tried v3.0.0 said they preferred the original look, so this brings it back as an opt-in instead of replacing it.
+- Both styles share the exact same setup, capture, taskbar targeting, first-frame sync, and auto-hide teardown path - only the per-frame render thread differs (`MacGenieAnimThreadClassic` vs `MacGenieAnimThread`), so multi-monitor, launch animation, and auto-hide all behave identically under either style.
+- Readme updated: new "Animation style" section, Credits clarifies Modern = Potassiumuncher's engine, Classic = the mod's original.
+
 ## 3.0.0 ([Jul 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a5349ec77189b66033f27c0e3c0ac7119a2b2545/mods/macos-minimize-animation.wh.cpp))
 
 New Direct2D genie renderer

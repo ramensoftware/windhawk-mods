@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-13T07:41:26.000Z</updated>
+    <updated>2026-07-13T13:48:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#6a8862447e3495d146a8b444be27f71bb46fcaa0</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-07-13T13:48:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds a new <strong>Animation style</strong> setting with two options: <strong>Modern</strong> (the Direct2D genie engine, default since v3.0.0) and <strong>Classic</strong> (this mod's original v2.2.0 strip-based genie).</li>
+<li>Some users who tried v3.0.0 said they preferred the original look, so this brings it back as an opt-in instead of replacing it.</li>
+<li>Both styles share the exact same setup, capture, taskbar targeting, first-frame sync, and auto-hide teardown path - only the per-frame render thread differs (<code>MacGenieAnimThreadClassic</code> vs <code>MacGenieAnimThread</code>), so multi-monitor, launch animation, and auto-hide all behave identically under either style.</li>
+<li>Readme updated: new "Animation style" section, Credits clarifies Modern = Potassiumuncher's engine, Classic = the mod's original.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 3.0.0]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#a5349ec77189b66033f27c0e3c0ac7119a2b2545</id>
@@ -560,36 +576,6 @@ delete dialogs</li>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Screenshot Path to Clipboard 1.0.0]]></title>
-        <id>https://windhawk.net/mods/screenshot-path-to-clipboard#a426f3fb81b5984fb74e761c78927965be47aaa6</id>
-        <link href="https://windhawk.net/mods/screenshot-path-to-clipboard"/>
-        <updated>2026-07-08T08:07:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="screenshotpathtoclipboard">Screenshot Path to Clipboard</h1>
-<p>Watches the Windows Screenshots folder and copies the full path of every new
-screenshot to the clipboard, so you can paste it straight into any app
-without digging through File Explorer.</p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Take a screenshot (Win+PrintScreen, Snipping Tool, etc.).</li>
-<li>The full path to the new <code>.png</code> is copied to the clipboard automatically.</li>
-<li>Paste (Ctrl+V) anywhere the path is needed.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Runs as a dedicated background process (see the
-<a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">mods-as-tools</a>
-pattern) and watches the Screenshots known folder (<code>FOLDERID_Screenshots</code>)
-with <code>ReadDirectoryChangesW</code> — no polling.</li>
-<li>Only <code>.png</code> files trigger a clipboard update.</li>
-<li>No configuration is needed; the folder is resolved via the shell so it
-still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
-</ul>]]></content>
-        <author>
-            <name>Sondre Myrmel</name>
-            <uri>https://github.com/Sondre234</uri>
         </author>
     </entry>
 </feed>
