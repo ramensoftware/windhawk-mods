@@ -5,8 +5,8 @@
 // @version         1.0.0
 // @author          iMAboud
 // @github          https://github.com/iMAboud
-// @include         explorer.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -ldwmapi -luxtheme -lgdiplus -lwinhttp
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -ldwmapi -luxtheme -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -88,7 +88,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 
 * **Trail Color (Hex)**: The HEX color of the gesture trail (e.g., `00AAFF` for Cyan, `FF0055` for Pink).
 * **Trail Width**: The thickness of the gesture trail in pixels.
-* **Enable Particle Effects**: Shows high-quality glowing "echo" particles behind the gesture trail.
+
 * **Show Aura**: Displays a glowing ring around your cursor to indicate when Gesture Mode is fully armed and ready to draw.
 * **Armed Timeout (ms)**: How long Gesture Mode stays active after being armed by a Wiggle or Toggle (in milliseconds). Set to `0` to disable the timeout.
 * **Wiggle Strength (10-200)**: How far you must physically move the mouse to register a single wiggle stroke. Lower numbers mean you don't have to shake as far.
@@ -200,6 +200,9 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 - GestureSensitivity: 12
   $name: Gesture Sensitivity (8-20)
   $description: "How strict the shape matching is. Lower = Stricter, Higher = Looser. Default: 12."
+- SearchEngineUrl: "https://www.google.com/search?q="
+  $name: Search Engine URL
+  $description: "URL template for Search Selection. The selected text will be appended. Example: https://duckduckgo.com/?q="
 
 
 - Gestures:
@@ -316,10 +319,8 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 #include <wchar.h>
 #include <string>
 #include <gdiplus.h>
-#include <tlhelp32.h>
 #include <windowsx.h>
 #include <uxtheme.h>
-#include <winhttp.h>
 
 #ifndef DWMWA_BORDER_COLOR
 #define DWMWA_BORDER_COLOR 34
@@ -448,6 +449,7 @@ struct Settings {
     BOOL blockOtherClicks;
     double matchThreshold;
     int minGestureDistance;
+    wchar_t searchEngineUrl[512];
     GestureConfig gestures[MAX_GESTURES];
     int gestureCount;
 };
@@ -818,7 +820,27 @@ std::wstring UrlEncode(const std::wstring& value) {
 std::wstring GetSelectedText() {
     std::wstring selectedText = L"";
 
-    // 1. Simulate Ctrl+C
+    HGLOBAL hSaved = NULL;
+    if (OpenClipboard(NULL)) {
+        HANDLE hOld = GetClipboardData(CF_UNICODETEXT);
+        if (hOld) {
+            wchar_t* pOld = static_cast<wchar_t*>(GlobalLock(hOld));
+            if (pOld) {
+                size_t len = wcslen(pOld) + 1;
+                hSaved = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
+                if (hSaved) {
+                    wchar_t* pSaved = static_cast<wchar_t*>(GlobalLock(hSaved));
+                    if (pSaved) {
+                        memcpy(pSaved, pOld, len * sizeof(wchar_t));
+                        GlobalUnlock(hSaved);
+                    }
+                }
+                GlobalUnlock(hOld);
+            }
+        }
+        CloseClipboard();
+    }
+
     INPUT inputs[4] = {};
     inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_CONTROL;
     inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = 'C';
@@ -826,7 +848,7 @@ std::wstring GetSelectedText() {
     inputs[3].type = INPUT_KEYBOARD; inputs[3].ki.wVk = VK_CONTROL; inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(4, inputs, sizeof(INPUT));
 
-    Sleep(50); // Wait for clipboard to update
+    Sleep(100);
 
     if (OpenClipboard(NULL)) {
         HANDLE hData = GetClipboardData(CF_UNICODETEXT);
@@ -837,7 +859,15 @@ std::wstring GetSelectedText() {
                 GlobalUnlock(hData);
             }
         }
+
+        if (hSaved) {
+            EmptyClipboard();
+            SetClipboardData(CF_UNICODETEXT, hSaved);
+            hSaved = NULL;
+        }
         CloseClipboard();
+    } else {
+        if (hSaved) GlobalFree(hSaved);
     }
     return selectedText;
 }
@@ -1269,26 +1299,25 @@ static const wchar_t NOTE_CLASS[] = L"WindhawkStickyNote";
 static const wchar_t NOTE_SEL_CLASS[] = L"WindhawkStickyNoteSel";
 
 void SaveNotes() {
-    wchar_t path[MAX_PATH];
-    ExpandEnvironmentStrings(L"%APPDATA%\\WindhawkMagicNotes.dat", path, MAX_PATH);
-    HANDLE hFile = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        for (int i = 0; i < g_noteCount; i++) {
-            if (g_notes[i].hwndEdit) {
-                GetWindowText(g_notes[i].hwndEdit, g_notes[i].text, 4096);
-                GetWindowRect(g_notes[i].hwnd, &g_notes[i].rect);
-            }
+    for (int i = 0; i < g_noteCount; i++) {
+        if (g_notes[i].hwndEdit) {
+            GetWindowText(g_notes[i].hwndEdit, g_notes[i].text, 4096);
+            GetWindowRect(g_notes[i].hwnd, &g_notes[i].rect);
         }
-        DWORD written;
-        WriteFile(hFile, &g_noteCount, sizeof(int), &written, NULL);
-        WriteFile(hFile, &g_noteIdCounter, sizeof(int), &written, NULL);
-        for (int i = 0; i < g_noteCount; i++) {
-            WriteFile(hFile, &g_notes[i], sizeof(NoteData), &written, NULL);
-        }
-        WriteFile(hFile, &g_lastNoteColor, sizeof(DWORD), &written, NULL);
-        WriteFile(hFile, &g_lastNoteOpacity, sizeof(int), &written, NULL);
-        CloseHandle(hFile);
     }
+    size_t totalSize = sizeof(int) * 2 + sizeof(NoteData) * g_noteCount + sizeof(DWORD) + sizeof(int);
+    BYTE* buffer = (BYTE*)malloc(totalSize);
+    if (!buffer) return;
+    BYTE* p = buffer;
+    memcpy(p, &g_noteCount, sizeof(int)); p += sizeof(int);
+    memcpy(p, &g_noteIdCounter, sizeof(int)); p += sizeof(int);
+    for (int i = 0; i < g_noteCount; i++) {
+        memcpy(p, &g_notes[i], sizeof(NoteData)); p += sizeof(NoteData);
+    }
+    memcpy(p, &g_lastNoteColor, sizeof(DWORD)); p += sizeof(DWORD);
+    memcpy(p, &g_lastNoteOpacity, sizeof(int)); p += sizeof(int);
+    Wh_SetBinaryValue(L"NotesData", buffer, totalSize);
+    free(buffer);
 }
 
 void DeleteNote(int id) {
@@ -1552,31 +1581,40 @@ void CreateNoteWindow(NoteData* n) {
 }
 
 void LoadNotes() {
-    wchar_t path[MAX_PATH];
-    ExpandEnvironmentStrings(L"%APPDATA%\\WindhawkMagicNotes.dat", path, MAX_PATH);
-    HANDLE hFile = CreateFile(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD read;
-        ReadFile(hFile, &g_noteCount, sizeof(int), &read, NULL);
-        ReadFile(hFile, &g_noteIdCounter, sizeof(int), &read, NULL);
+    size_t maxSize = sizeof(int) * 2 + sizeof(NoteData) * MAX_NOTES + sizeof(DWORD) + sizeof(int);
+    BYTE* buffer = (BYTE*)malloc(maxSize);
+    if (!buffer) return;
+    size_t bytesRead = Wh_GetBinaryValue(L"NotesData", buffer, maxSize);
+    if (bytesRead >= sizeof(int) * 2) {
+        BYTE* p = buffer;
+        memcpy(&g_noteCount, p, sizeof(int)); p += sizeof(int);
+        memcpy(&g_noteIdCounter, p, sizeof(int)); p += sizeof(int);
         if (g_noteCount > MAX_NOTES) g_noteCount = MAX_NOTES;
-        for (int i = 0; i < g_noteCount; i++) {
-            ReadFile(hFile, &g_notes[i], sizeof(NoteData), &read, NULL);
-            g_notes[i].hwnd = nullptr;
-            g_notes[i].hwndEdit = nullptr;
+        size_t notesSize = sizeof(NoteData) * g_noteCount;
+        if (bytesRead >= sizeof(int) * 2 + notesSize) {
+            for (int i = 0; i < g_noteCount; i++) {
+                memcpy(&g_notes[i], p, sizeof(NoteData)); p += sizeof(NoteData);
+                g_notes[i].hwnd = nullptr;
+                g_notes[i].hwndEdit = nullptr;
+            }
+            if (bytesRead >= sizeof(int) * 2 + notesSize + sizeof(DWORD)) {
+                memcpy(&g_lastNoteColor, p, sizeof(DWORD)); p += sizeof(DWORD);
+            } else {
+                g_lastNoteColor = RGB(43, 43, 43);
+            }
+            if (bytesRead >= sizeof(int) * 2 + notesSize + sizeof(DWORD) + sizeof(int)) {
+                memcpy(&g_lastNoteOpacity, p, sizeof(int)); p += sizeof(int);
+            } else {
+                g_lastNoteOpacity = 255;
+            }
+        } else {
+            g_noteCount = 0;
         }
-        DWORD bytesRead = 0;
-        if (ReadFile(hFile, &g_lastNoteColor, sizeof(DWORD), &bytesRead, NULL) && bytesRead < sizeof(DWORD)) {
-            g_lastNoteColor = RGB(43, 43, 43);
-        }
-        if (ReadFile(hFile, &g_lastNoteOpacity, sizeof(int), &bytesRead, NULL) && bytesRead < sizeof(int)) {
-            g_lastNoteOpacity = 255;
-        }
-        CloseHandle(hFile);
     }
+    free(buffer);
 }
 void SpawnSavedNotes() {
-    LoadLibrary(L"Msftedit.dll");
+    LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     WNDCLASS wc = {0};
     wc.lpfnWndProc = NoteWndProc;
@@ -1638,7 +1676,7 @@ DWORD WINAPI RunNotesProcess(LPVOID lpParam) {
 
     g_mainMsgWnd = CreateWindowEx(0, MAIN_MSG_WND_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
 
-    LoadLibrary(L"Msftedit.dll");
+    LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     LoadNotes();
     for (int i = 0; i < g_noteCount; i++) {
@@ -1670,7 +1708,7 @@ DWORD WINAPI RunNotesProcess(LPVOID lpParam) {
 }
 
 void LaunchNotesProcess() {
-    if (FindWindow(MAIN_MSG_WND_CLASS, NULL)) return;
+    if (g_notesThread) return;
     g_notesThread = CreateThread(NULL, 0, RunNotesProcess, NULL, 0, &g_notesThreadId);
 }
 
@@ -1934,13 +1972,12 @@ BOOL HandleNoteCreationMouse(WPARAM wParam, MSLLHOOKSTRUCT* ms) {
         g_noteCreationMode = FALSE;
 
         if (w > 50 && h > 50) {
-            HWND hwndNotesMsg = FindWindow(MAIN_MSG_WND_CLASS, NULL);
+            HWND hwndNotesMsg = g_mainMsgWnd;
             if (!hwndNotesMsg) {
-                extern void LaunchNotesProcess();
                 LaunchNotesProcess();
                 for (int i = 0; i < 20; i++) {
                     Sleep(50);
-                    hwndNotesMsg = FindWindow(MAIN_MSG_WND_CLASS, NULL);
+                    hwndNotesMsg = g_mainMsgWnd;
                     if (hwndNotesMsg) break;
                 }
             }
@@ -2215,7 +2252,7 @@ void ExecuteAction(int gestureIdx, HWND target) {
             std::wstring selected = GetSelectedText();
             if (!selected.empty()) {
                 std::wstring encoded = UrlEncode(selected);
-                std::wstring url = L"https://www.google.com/search?q=" + encoded;
+                std::wstring url = g_settings.searchEngineUrl + encoded;
                 ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
             }
             break;
@@ -4685,6 +4722,14 @@ void LoadSettings() {
 
     g_settings.minGestureDistance = 60;
 
+    PCWSTR searchUrl = Wh_GetStringSetting(L"SearchEngineUrl");
+    if (searchUrl && searchUrl[0]) {
+        wcsncpy_s(g_settings.searchEngineUrl, searchUrl, _TRUNCATE);
+    } else {
+        wcscpy_s(g_settings.searchEngineUrl, L"https://www.google.com/search?q=");
+    }
+    if (searchUrl) Wh_FreeStringSetting(searchUrl);
+
     g_settings.gestureCount = 0;
     for (int i = 0; i < MAX_GESTURES; i++) {
         wchar_t key[128];
@@ -4750,7 +4795,7 @@ void LoadSettings() {
         g_settings.gestureCount, g_settings.modifierFlags);
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Mouse Gestures mod initializing...");
 
     LoadSettings();
@@ -4770,14 +4815,13 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Mouse Gestures mod uninitializing...");
 
     g_running = FALSE;
 
-    HWND hwndNotesMsg = FindWindow(MAIN_MSG_WND_CLASS, NULL);
-    if (hwndNotesMsg) {
-        PostMessage(hwndNotesMsg, WM_QUIT, 0, 0);
+    if (g_notesThreadId) {
+        PostThreadMessage(g_notesThreadId, WM_QUIT, 0, 0);
     }
 
     if (g_notesThread) {
@@ -4796,13 +4840,12 @@ void Wh_ModUninit() {
         g_hookThread = nullptr;
     }
 
-    UnregisterClass(NOTE_CLASS, GetModuleHandle(NULL));
-
     g_hookThreadId = 0;
+    g_notesThreadId = 0;
     Wh_Log(L"Mouse Gestures mod uninitialized");
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed...");
     if (g_gestureActive) {
         Wh_Log(L"Gesture active, skipping settings reload to avoid corruption.");
@@ -4810,4 +4853,188 @@ void Wh_ModSettingsChanged() {
     }
     Wh_Log(L"Reloading settings.");
     LoadSettings();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE,
+                                 NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si,
+                                 &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
