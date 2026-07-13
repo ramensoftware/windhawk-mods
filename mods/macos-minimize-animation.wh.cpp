@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.0.0
+// @version         3.1.0
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -21,17 +21,26 @@ it warps and flows down into the taskbar; when you restore it, it flows back out
 
 Definitely not inspired from MacOS.
 
+## Animation style
+There are two genie styles, selectable in the settings (**Animation style**):
+
+- **Modern** (default) - the Direct2D genie engine contributed by **Potassiumuncher**:
+  a smooth mesh warp that necks the window down into the taskbar. The demo GIF above
+  shows it.
+- **Classic** - this mod's original strip-based genie: lighter, with a slightly
+  different look. Kept because some people preferred it.
+
 ## Credits
-The genie animation you see - the Direct2D genie rendering engine (a 20x20 mesh
-warp driven by the macOS "lamp" curve), the UI Automation taskbar-button
-targeting, and the taskbar auto-hide handling - was contributed by
-**Potassiumuncher** - <https://github.com/Potassiumuncher>. As of v3.0.0 the
-animation that plays is his engine, integrated into this mod's hardening
-(multi-hook capture, flash-free cloak restore, safe unload, first-frame sync).
-The demo GIF above is also his, from his own
-[MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
-repo. Huge thanks for building this, sharing the recording, and generously
-handing it all over - this mod wouldn't look nearly this good without him.
+The **Modern** genie style - the Direct2D genie rendering engine (a 20x20 mesh warp
+driven by the macOS "lamp" curve), the UI Automation taskbar-button targeting, and
+the taskbar auto-hide handling - was contributed by **Potassiumuncher** -
+<https://github.com/Potassiumuncher>. As of v3.0.0 the default animation is his
+engine, integrated into this mod's hardening (multi-hook capture, flash-free cloak
+restore, safe unload, first-frame sync). The demo GIF above is also his, from his
+own [MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
+repo. Huge thanks for building this, sharing the recording, and generously handing
+it all over - this mod wouldn't look nearly this good without him. The **Classic**
+style is the mod's original renderer.
 
 ## Known issues
 - On multi-monitor setups (especially the secondary display), the genie can
@@ -51,7 +60,8 @@ handing it all over - this mod wouldn't look nearly this good without him.
 - Minimize it with the title bar `[-]` button or `Win`+`Down` and watch it warp
   and pour into the taskbar.
 - Restore it from the taskbar and watch the genie play in reverse.
-- Tweak the **Animation duration** in the settings to taste.
+- Tweak the **Animation duration** in the settings to taste, and switch the
+  **Animation style** between the modern (Potassiumuncher) and classic genie.
 
 ## Features
 - **Real genie warp.** The window is rendered as a Direct2D mesh whose vertices
@@ -139,6 +149,16 @@ Check out the documentation
   $description: >-
     How long to keep the taskbar revealed before performing the deferred minimize
     on the auto-hide path. Clamped to 0-5000.
+- engine: modern
+  $name: Animation style
+  $description: >-
+    Modern is the Direct2D genie engine contributed by Potassiumuncher - a smooth
+    mesh warp that necks the window down into the taskbar. Classic is this mod's
+    original strip-based genie (lighter, a slightly different look). Pick whichever
+    you prefer; some people asked to keep the classic one.
+  $options:
+  - modern: Modern genie (Direct2D engine by Potassiumuncher)
+  - classic: Classic genie (original)
 */
 // ==/WindhawkModSettings==
 
@@ -249,6 +269,9 @@ std::atomic<bool> g_launchAnimation{false};
 std::atomic<bool> g_multiMonitor{false};
 std::atomic<int>  g_unhideDurationMs{450};
 std::atomic<bool> g_unhideEnabled{true};
+// false = modern Direct2D genie (Potassiumuncher's engine), true = the original
+// v2.2.0 strip-based GDI genie, offered as an opt-in "classic" style.
+std::atomic<bool> g_classicEngine{false};
 
 // --- UNLOAD COORDINATION ---
 // Windhawk unmaps the mod DLL right after uninit, so any worker thread still
@@ -274,6 +297,10 @@ void MacGenieLoadSettings() {
     if (unhide_ms > 5000) unhide_ms = 5000;
     g_unhideDurationMs.store(unhide_ms, std::memory_order_relaxed);
     g_unhideEnabled.store(Wh_GetIntSetting(L"unhide_taskbar") != 0, std::memory_order_relaxed);
+
+    PCWSTR engine = Wh_GetStringSetting(L"engine");
+    g_classicEngine.store(engine && wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
+    Wh_FreeStringSetting(engine);
 }
 
 void MacGenieSetDwmTransitions(HWND hWnd, BOOL enable) {
@@ -993,6 +1020,293 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 }
 
 // -------------------------------------------------------------------------
+// CLASSIC engine: the mod's original (v2.2.0) per-output-scanline GDI strip warp,
+// kept as an opt-in alternative to Potassiumuncher's Direct2D engine (some users
+// preferred it). It consumes the SAME MacGenieAnimData contract the modern engine
+// does - snapshot bitmap, extended-frame rect, dock target, first-frame event - and
+// runs the SAME teardown (reveal, DWM transitions, auto-hide deferred minimize,
+// worker drain), so it drops in behind the identical setup/capture path; only the
+// per-frame rendering differs. Selected by the "Animation style" setting.
+// -------------------------------------------------------------------------
+DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
+    MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
+
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    const int W = data->width;
+    const int H = data->height;
+    // The monitor the genie plays on, in virtual-screen coords (from the shared
+    // setup: the primary when multi-monitor support is off, else the window's).
+    RECT mon;
+    MONITORINFO mmi; mmi.cbSize = sizeof(mmi);
+    if (data->hMon && GetMonitorInfoW(data->hMon, &mmi)) {
+        mon = mmi.rcMonitor;
+    } else {
+        mon.left = 0; mon.top = 0;
+        mon.right = GetSystemMetrics(SM_CXSCREEN);
+        mon.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+
+    const int origLeft = data->targetRect.left;
+    const int origTop  = data->targetRect.top;
+    const float origCenterX = (float)origLeft + W * 0.5f;
+
+    // Where the genie funnels to: the learned taskbar icon X, at the bottom of the
+    // monitor the genie plays on.
+    int dockX = data->targetDockX;
+    if (dockX < mon.left) dockX = mon.left;
+    if (dockX > mon.right) dockX = mon.right;
+    const float dockXf = (float)dockX;
+    const float dockY  = (float)mon.bottom;
+    float neckW = W * 0.03f;
+    if (neckW < 12.0f) neckW = 12.0f;
+    if (neckW > 60.0f) neckW = 60.0f;
+
+    // Bounding box the funnel can occupy.
+    int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
+    int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
+    int boundTop    = origTop;
+    int boundBottom = mon.bottom;
+    if (boundLeft < mon.left) boundLeft = mon.left;
+    if (boundRight > mon.right) boundRight = mon.right;
+    if (boundTop < mon.top) boundTop = mon.top;
+    int boundW = boundRight - boundLeft;
+    int boundH = boundBottom - boundTop;
+    if (boundW < 1) boundW = 1;
+    if (boundH < 1) boundH = 1;
+
+    // Layered "ghost" window (plain STATIC class - no custom WndProc, so no clash
+    // with the modern engine's ghost class). Created hidden, shown after frame 1.
+    HWND hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+        L"STATIC", NULL, WS_POPUP,
+        boundLeft, boundTop, boundW, boundH,
+        NULL, NULL, NULL, NULL);
+
+    HDC hScreenDC = GetDC(NULL);
+
+    // Source pixels as a readable 32-bit top-down DIB.
+    HDC hSrcDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldSrc = (HBITMAP)SelectObject(hSrcDC, data->hBitmap);
+
+    BITMAPINFO sbmi;
+    ZeroMemory(&sbmi, sizeof(sbmi));
+    sbmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    sbmi.bmiHeader.biWidth = W;
+    sbmi.bmiHeader.biHeight = -H;       // negative height = top-down
+    sbmi.bmiHeader.biPlanes = 1;
+    sbmi.bmiHeader.biBitCount = 32;
+    sbmi.bmiHeader.biCompression = BI_RGB;
+    BYTE* srcBits = NULL;
+    HBITMAP hSrcDib = CreateDIBSection(hScreenDC, &sbmi, DIB_RGB_COLORS, (void**)&srcBits, NULL, 0);
+    HDC hSrcDibDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldSrcDib = (HBITMAP)SelectObject(hSrcDibDC, hSrcDib);
+    BitBlt(hSrcDibDC, 0, 0, W, H, hSrcDC, 0, 0, SRCCOPY);
+    GdiFlush();
+    const int srcStride = W * 4;
+
+    // Canvas: 32-bit top-down DIB for genuine per-pixel alpha.
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = boundW;
+    bmi.bmiHeader.biHeight = -boundH;   // negative height = top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    BYTE* pBits = NULL;
+    HBITMAP hCanvas = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, (void**)&pBits, NULL, 0);
+    HDC hCanvasDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
+    const int canvasStride = boundW * 4;
+
+    const float SPREAD = 0.65f;   // lower rows lead the morph (bottom-first neck)
+    const size_t canvasBytes = (size_t)boundW * 4 * boundH;
+
+    const double totalMs = (double)data->durationMs;
+
+    auto morphAt = [&](float v, float tt) -> float {
+        float m = tt * (1.0f + SPREAD) - (1.0f - v) * SPREAD;
+        if (m < 0.0f) m = 0.0f;
+        if (m > 1.0f) m = 1.0f;
+        return m * m * (3.0f - 2.0f * m);
+    };
+
+    float* yb = new float[H + 1];
+
+    // Time-based progress synced to the DWM compose cycle via DwmFlush (vsync).
+    LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
+    QueryPerformanceFrequency(&qpcFreq);
+    QueryPerformanceCounter(&qpcStart);
+
+    BOOL firstFrame = TRUE;
+    for (;;) {
+        QueryPerformanceCounter(&qpcNow);
+        double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+        BOOL lastFrame = (elapsedMs >= totalMs);
+        float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
+
+        // 0 = full window at its place, 1 = collapsed at the dock; restore reverses.
+        float tt = data->isRising ? (1.0f - progress) : progress;
+
+        float fade = 1.0f;
+        if (tt > 0.8f) fade = (1.0f - tt) / 0.2f;
+        if (fade < 0.0f) fade = 0.0f;
+        if (fade > 1.0f) fade = 1.0f;
+
+        memset(pBits, 0, canvasBytes);
+
+        // Vertical map: where each source row lands on screen this frame.
+        for (int k = 0; k <= H; ++k) {
+            float v = (float)k / (float)H;
+            float e = morphAt(v, tt);
+            float idY = (float)origTop + (float)H * v;
+            yb[k] = idY + (dockY - idY) * e;
+        }
+
+        int kSeg = 0;
+        for (int yC = 0; yC < boundH; ++yC) {
+            float screenY = (float)(yC + boundTop) + 0.5f;
+            if (screenY < yb[0] || screenY >= yb[H]) continue;
+
+            while (kSeg < H - 1 && yb[kSeg + 1] <= screenY) kSeg++;
+            float segH = yb[kSeg + 1] - yb[kSeg];
+            float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
+            float v = ((float)kSeg + frac) / (float)H;
+
+            float em = morphAt(v, tt);
+            float width = (float)W + (neckW - (float)W) * em;
+            if (width < 1.0f) width = 1.0f;
+            float cx = origCenterX + (dockXf - origCenterX) * em;
+            float leftCanvas = (cx - width * 0.5f) - (float)boundLeft;
+
+            int srcRow = (int)(v * (float)H);
+            if (srcRow < 0) srcRow = 0;
+            if (srcRow > H - 1) srcRow = H - 1;
+            const BYTE* srcRowPtr = srcBits + (size_t)srcRow * srcStride;
+            BYTE* dstRowPtr = pBits + (size_t)yC * canvasStride;
+
+            int xStart = (int)leftCanvas;
+            int xEnd   = (int)(leftCanvas + width) + 1;
+            if (xStart < 0) xStart = 0;
+            if (xEnd > boundW) xEnd = boundW;
+
+            float invW = 1.0f / width;
+            for (int xC = xStart; xC < xEnd; ++xC) {
+                float u = ((float)xC + 0.5f - leftCanvas) * invW;
+                if (u < 0.0f || u >= 1.0f) continue;
+                int srcX = (int)(u * (float)W);
+                if (srcX < 0) srcX = 0;
+                if (srcX > W - 1) srcX = W - 1;
+                const BYTE* sp = srcRowPtr + (size_t)srcX * 4;
+                BYTE* dp = dstRowPtr + (size_t)xC * 4;
+                dp[0] = sp[0];
+                dp[1] = sp[1];
+                dp[2] = sp[2];
+                dp[3] = 255;      // opaque; the constant alpha below applies the fade
+            }
+        }
+
+        POINT ptDst = { boundLeft, boundTop };
+        SIZE  sz    = { boundW, boundH };
+        POINT ptSrc = { 0, 0 };
+        BLENDFUNCTION bf;
+        bf.BlendOp = AC_SRC_OVER;
+        bf.BlendFlags = 0;
+        bf.SourceConstantAlpha = (BYTE)(255.0f * fade);
+        bf.AlphaFormat = AC_SRC_ALPHA;
+        UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+
+        if (firstFrame) {
+            ShowWindow(hGhost, SW_SHOWNOACTIVATE);
+        }
+
+        if (lastFrame) break;
+        if (g_unloading.load(std::memory_order_relaxed)) break;
+
+        DwmFlush();   // block until the next compose cycle (vsync sync point)
+
+        if (firstFrame) {
+            firstFrame = FALSE;
+            // First frame is on screen; release the minimize hook it was holding.
+            if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+        }
+    }
+
+    // -------------------- COMMON TEARDOWN (identical to the modern engine) -----
+    if (data->isRising) {
+        // Reveal the real window the same way it was hidden.
+        if (data->hiddenByCloak) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+        } else {
+            SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+            }
+        }
+    }
+
+    // The auto-hide deferred path keeps transitions disabled through the real
+    // (deferred) minimize below; every other path re-enables them now.
+    if (!data->deferredMinimize) {
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+    }
+
+    delete[] yb;
+    SelectObject(hCanvasDC, hOldCanvas);
+    SelectObject(hSrcDibDC, hOldSrcDib);
+    SelectObject(hSrcDC, hOldSrc);
+    DeleteObject(hCanvas);
+    DeleteObject(hSrcDib);
+    DeleteObject(data->hBitmap);
+    DeleteDC(hCanvasDC);
+    DeleteDC(hSrcDibDC);
+    DeleteDC(hSrcDC);
+    ReleaseDC(NULL, hScreenDC);
+    DestroyWindow(hGhost);
+
+    if (data->hFirstFrameShown) {
+        SetEvent(data->hFirstFrameShown);
+        CloseHandle(data->hFirstFrameShown);
+    }
+
+    // Auto-hide "unhide" completion (Potassiumuncher's engine) - same as the modern
+    // thread, so the auto-hide feature behaves identically under the classic style.
+    if (data->deferredMinimize) {
+        int unhideMs = data->unhideDurationMs;
+        int animMs = data->durationMs;
+        if (data->requestedUnhide && unhideMs > animMs &&
+            !g_unloading.load(std::memory_order_relaxed)) {
+            Sleep(unhideMs - animMs);
+        }
+        if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
+            SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
+            SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+            RemovePropW(data->hRealWnd, L"GenieBypass");
+        }
+        if (IsWindow(data->hRealWnd)) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+            MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        }
+        if (data->requestedUnhide && !g_unloading.load(std::memory_order_relaxed)) {
+            if (data->hNextApp && IsWindow(data->hNextApp) && IsWindowVisible(data->hNextApp)) {
+                SetForegroundWindow(data->hNextApp);
+            } else {
+                SetForegroundWindow(FindWindowW(L"Progman", NULL));
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_AnimActive.erase(data->hRealWnd);
+    }
+    delete data;
+    g_workerCount.fetch_sub(1, std::memory_order_release);
+    return 0;
+}
+
+// -------------------------------------------------------------------------
 // Core Setup Engine & Smart Tracking Logic
 // -------------------------------------------------------------------------
 // Returns TRUE if the worker thread was spawned (the animation is now in flight).
@@ -1269,7 +1583,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
 
     g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    HANDLE hThread = CreateThread(NULL, 0, MacGenieAnimThread, data, 0, NULL);
+    // Same setup and capture for both styles; only the render thread differs.
+    LPTHREAD_START_ROUTINE renderProc =
+        g_classicEngine.load(std::memory_order_relaxed) ? MacGenieAnimThreadClassic
+                                                        : MacGenieAnimThread;
+    HANDLE hThread = CreateThread(NULL, 0, renderProc, data, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
         if (hFirstShown) {
