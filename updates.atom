@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-12T18:40:31.000Z</updated>
+    <updated>2026-07-13T07:41:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.0.0]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#a5349ec77189b66033f27c0e3c0ac7119a2b2545</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-07-13T07:41:26.000Z</updated>
+        <content type="html"><![CDATA[<p>New Direct2D genie renderer</p>
+<p>This release replaces the previous CPU-warp animation with a proper <strong>Direct2D genie renderer</strong> (a 20×20 mesh warp driven by the macOS "lamp" curve). The rendering engine, the UI Automation taskbar-button targeting, and the taskbar auto-hide handling were contributed by <strong>Potassiumuncher</strong> (https://github.com/Potassiumuncher) — huge thanks. The animation that now plays is his engine, integrated into this mod's hardening (six-hook capture, flash-free DWM-cloak restore, worker-drain on unload, first-frame sync).</p>
+<h3 id="whatsnewfixed">What's new / fixed</h3>
+<ul>
+<li><strong>Direct2D genie mesh</strong> — the whole frame necks down and funnels into the taskbar instead of a coarse strip warp.</li>
+<li><strong>Accurate taskbar targeting</strong> — locates the app's actual taskbar button via UI Automation (with a per-window / per-process cache), falling back to the cursor/center.</li>
+<li><strong>Pixel-aligned capture</strong> — geometry now comes from <code>DWMWA_EXTENDED_FRAME_BOUNDS</code>, so keyboard / AutoHotkey minimizes are no longer spatially shifted (#4670).</li>
+<li><strong>Translucency fix</strong> — minimize snapshots are taken from the composited screen image, so acrylic/translucent windows no longer flash grey or opaque.</li>
+<li><strong>Taskbar auto-hide</strong> — optional: briefly reveals an auto-hidden taskbar so the genie has a dock to flow into, then defers the real minimize.</li>
+</ul>
+<h3 id="preservedhardening">Preserved hardening</h3>
+<p>Six minimize/restore entry-point hooks (<code>ShowWindow</code>, <code>ShowWindowAsync</code>, <code>SetWindowPlacement</code>, <code>CloseWindow</code>, <code>SetWindowPos</code>, <code>DefWindowProcW</code>), DWM-cloak flash-free restore, first-frame sync event, <code>DwmFlush</code> vsync pacing, one-genie-per-window guard, and worker-thread drain on unload.</p>
+<h3 id="knownissue">Known issue</h3>
+<p>On multi-monitor setups (especially the secondary display), the genie can briefly slide sideways / to the left for a frame or two at the start of a minimize or restore before it flows toward the taskbar. The animation still completes correctly. Documented in the readme; a fix is planned for a follow-up.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MicroManager 1.1.0]]></title>
         <id>https://windhawk.net/mods/micromanager#1588c9290e6c51a476e1ce0e1b399a0055d5e5ce</id>
@@ -566,28 +590,6 @@ still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
         <author>
             <name>Sondre Myrmel</name>
             <uri>https://github.com/Sondre234</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Motion Blur 2.0]]></title>
-        <id>https://windhawk.net/mods/cursor-motion-blur#ccbe825f20d99d69a5b13419498c19c65fbd7d38</id>
-        <link href="https://windhawk.net/mods/cursor-motion-blur"/>
-        <updated>2026-07-08T08:07:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursorsmearframes">Cursor Smear Frames</h1>
-<p>Replaces your standard Windows cursor with a smooth, tapered motion blur trail when moving at high speeds. Hardware accelerated via Direct2D.</p>
-<p><img src="https://i.imgur.com/XJWuSS3.gif" alt="Demonstration" /></p>
-<h3 id="features">Features</h3>
-<ul>
-<li><strong>Dynamic 2D Mesh:</strong> Procedurally generates a continuous, overlapping-free polygon ribbon.</li>
-<li><strong>Direct2D Rendering:</strong> Buttery smooth sub-pixel anti-aliasing calculated directly on your GPU.</li>
-<li><strong>Zero Input Lag:</strong> Draws directly off the hardware cursor coordinates.</li>
-<li><strong>Game Detection:</strong> Automatically disables itself when playing fullscreen or borderless DirectX games.</li>
-<li><strong>Taskbar Friendly:</strong> Retains native edge-detection for auto-hiding taskbars.</li>
-<li><strong>Dynamic Rendering:</strong> Idles at 0% CPU usage when the mouse is stationary.</li>
-</ul>]]></content>
-        <author>
-            <name>TheatriChris</name>
-            <uri>https://github.com/chrisc44890</uri>
         </author>
     </entry>
 </feed>

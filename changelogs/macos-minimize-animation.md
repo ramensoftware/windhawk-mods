@@ -1,3 +1,22 @@
+## 3.0.0 ([Jul 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a5349ec77189b66033f27c0e3c0ac7119a2b2545/mods/macos-minimize-animation.wh.cpp))
+
+New Direct2D genie renderer
+
+This release replaces the previous CPU-warp animation with a proper **Direct2D genie renderer** (a 20×20 mesh warp driven by the macOS "lamp" curve). The rendering engine, the UI Automation taskbar-button targeting, and the taskbar auto-hide handling were contributed by **Potassiumuncher** (https://github.com/Potassiumuncher) — huge thanks. The animation that now plays is his engine, integrated into this mod's hardening (six-hook capture, flash-free DWM-cloak restore, worker-drain on unload, first-frame sync).
+
+### What's new / fixed
+- **Direct2D genie mesh** — the whole frame necks down and funnels into the taskbar instead of a coarse strip warp.
+- **Accurate taskbar targeting** — locates the app's actual taskbar button via UI Automation (with a per-window / per-process cache), falling back to the cursor/center.
+- **Pixel-aligned capture** — geometry now comes from `DWMWA_EXTENDED_FRAME_BOUNDS`, so keyboard / AutoHotkey minimizes are no longer spatially shifted (#4670).
+- **Translucency fix** — minimize snapshots are taken from the composited screen image, so acrylic/translucent windows no longer flash grey or opaque.
+- **Taskbar auto-hide** — optional: briefly reveals an auto-hidden taskbar so the genie has a dock to flow into, then defers the real minimize.
+
+### Preserved hardening
+Six minimize/restore entry-point hooks (`ShowWindow`, `ShowWindowAsync`, `SetWindowPlacement`, `CloseWindow`, `SetWindowPos`, `DefWindowProcW`), DWM-cloak flash-free restore, first-frame sync event, `DwmFlush` vsync pacing, one-genie-per-window guard, and worker-thread drain on unload.
+
+### Known issue
+On multi-monitor setups (especially the secondary display), the genie can briefly slide sideways / to the left for a frame or two at the start of a minimize or restore before it flows toward the taskbar. The animation still completes correctly. Documented in the readme; a fix is planned for a follow-up.
+
 ## 2.2.0 ([Jul 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/01929c0699e86e614c42934ca6aab388e1068647/mods/macos-minimize-animation.wh.cpp))
 
 Adds an experimental **Multi-monitor support** setting (off by default), as requested by a user on the mod page.

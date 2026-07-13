@@ -7442,12 +7442,12 @@
           140
         ],
         "ratingUsers": 175,
-        "updated": 1783162885000,
+        "updated": 1783928486000,
         "users": 9430
       },
       "metadata": {
         "author": "Abdullah Masood",
-        "compilerOptions": "-ldwmapi -lgdi32",
+        "compilerOptions": "-ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32",
         "description": "Smooth macOS-style genie minimize and restore (open) animations for every window.",
         "github": "https://github.com/Abdullah-Masood-05",
         "include": [
@@ -7455,7 +7455,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "2.2.0"
+        "version": "3.0.0"
       }
     },
     "magnifier-headless": {
