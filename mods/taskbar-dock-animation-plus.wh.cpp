@@ -13,7 +13,7 @@
 // @description:ko-KR 작업 표시줄 Dock 애니메이션 모드의 공식 후속 버전입니다. 새로운 기능, 향상된 호환성 및 안정성 업데이트를 위해 이 버전으로 업그레이드하는 것을 강력히 권장합니다.
 // @description:pt-BR O sucessor oficial do mod Taskbar Dock Animation. Recomenda-se atualizar para esta versão para obter novos recursos, melhor compatibilidade e estabilidade.
 // @description:it-IT Il successore ufficiale del mod Taskbar Dock Animation. Si consiglia vivamente di aggiornare a questa versione per le ultime funzionalità, una migliore compatibilità e aggiornamenti di stabilità.
-// @version           2.0.0
+// @version           2.0.1
 // @author            incconutwo
 // @github            https://github.com/incconutwo
 // @include           explorer.exe
