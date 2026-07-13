@@ -4,6 +4,7 @@
 // @description     Draw custom mouse gestures to trigger actions like launching apps, toggling desktop icons, fullscreen, and more. Record gestures via an on-screen canvas, then replay them with a configurable modifier key.
 // @version         1.0.0
 // @author          iMAboud
+// @github          iMAboud
 // @include         explorer.exe
 // @compilerOptions -luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -ldwmapi -luxtheme -lgdiplus -lwinhttp
 // ==/WindhawkMod==
