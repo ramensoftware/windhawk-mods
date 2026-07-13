@@ -230,7 +230,7 @@ static bool InstallSwitchHooks()
     // A single resolved entry point is enough to arm the window; all hooks are
     // optional so a future rename degrades gracefully instead of failing init.
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK switchHooks[] = {
         {
             {LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *))"},
             reinterpret_cast<void**>(&CVirtualDesktopManager_SwitchDesktopWithAnimation_Original),
@@ -251,8 +251,8 @@ static bool InstallSwitchHooks()
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(twinuiPcshellDll, twinuiPcshellDllHooks,
-                                    ARRAYSIZE(twinuiPcshellDllHooks)))
+    if (!WindhawkUtils::HookSymbols(twinuiPcshellDll, switchHooks,
+                                    ARRAYSIZE(switchHooks)))
     {
         Wh_Log(L"HookSymbols(twinui.pcshell.dll) failed");
         return false;
@@ -292,7 +292,7 @@ static bool InstallOsdHooks()
     }
 
     // Windows.Internal.HardwareConfirmator.dll
-    WindhawkUtils::SYMBOL_HOOK hardwareConfirmatorDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK osdHooks[] = {
         {
             {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowTextAsync(struct winrt::hstring,bool))"},
             reinterpret_cast<void**>(&HardwareConfirmatorHost_ShowTextAsync_Original),
@@ -307,8 +307,8 @@ static bool InstallOsdHooks()
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(hardwareConfirmatorDll, hardwareConfirmatorDllHooks,
-                                    ARRAYSIZE(hardwareConfirmatorDllHooks)))
+    if (!WindhawkUtils::HookSymbols(hardwareConfirmatorDll, osdHooks,
+                                    ARRAYSIZE(osdHooks)))
     {
         Wh_Log(L"HookSymbols(Windows.Internal.HardwareConfirmator.dll) failed");
         return false;
