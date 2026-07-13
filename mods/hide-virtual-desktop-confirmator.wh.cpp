@@ -227,8 +227,9 @@ static bool InstallSwitchHooks()
         return false;
     }
 
-    // All optional: a single resolved entry point is enough to arm the window,
-    // and a rename in a future build should degrade gracefully, not fail init.
+    // A single resolved entry point is enough to arm the window; all hooks are
+    // optional so a future rename degrades gracefully instead of failing init.
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *))"},
@@ -290,6 +291,7 @@ static bool InstallOsdHooks()
         return false;
     }
 
+    // Windows.Internal.HardwareConfirmator.dll
     WindhawkUtils::SYMBOL_HOOK hardwareConfirmatorDllHooks[] = {
         {
             {LR"(private: struct winrt::fire_and_forget __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::ShowTextAsync(struct winrt::hstring,bool))"},
