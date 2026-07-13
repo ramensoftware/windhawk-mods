@@ -6,7 +6,7 @@
 // @author     AhmedAwad7
 // @github     https://github.com/AhmedAwad7
 // @license    MIT
-// @include    explorer.exe
+// @include    windhawk.exe
 // @compilerOptions -luser32 -lwinmm
 // ==/WindhawkMod==
 
@@ -25,7 +25,7 @@ This mod helps you multitask by keeping important windows always visible.
 **Features:**
 - 🔊 Sound notifications to indicate pin/unpin actions.
 - ⚡ Event-driven hotkey using `RegisterHotKey` (no continuous polling).
-- 🧹 Lightweight: runs in a dedicated `explorer.exe` process.
+- 🧹 Lightweight: runs as a tool in a dedicated `windhawk.exe` process.
 
 **Requirements:**
 - Windhawk (latest version recommended).
@@ -46,7 +46,7 @@ We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.
 **المميزات:**
 - 🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.
 - ⚡ اختصار يعتمد على الأحداث (`RegisterHotKey`) بدون استقصاء مستمر.
-- 🧹 خفيف الوزن: يعمل في عملية مخصصة لـ `explorer.exe`.
+- 🧹 خفيف الوزن: يعمل كأداة في عملية مخصصة لـ `windhawk.exe`.
 
 **متطلبات النظام:**
 - Windhawk (يفضل الإصدار الأحدث).
@@ -74,6 +74,7 @@ We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.
 std::vector<HWND> g_trackedWindows;
 CRITICAL_SECTION g_cs;
 HWND g_hwndMod = nullptr;
+HANDLE g_hThread = nullptr;  // مقبض الخيط الرئيسي // Main thread handle
 
 // ===== تشغيل صوت من النظام =====
 // ===== Play a sound from the system =====
@@ -190,12 +191,12 @@ DWORD WINAPI MainThread(LPVOID lpParam) {
     }
 
     // تسجيل الاختصار
-    // Shortcut registration
+    // shortcut recorder
     if (!RegisterHotKey(g_hwndMod, HOTKEY_ID, HOTKEY_MODIFIERS, HOTKEY_KEY)) {
         Wh_Log(L"⚠️ Failed to register hotkey (may be already used)");
     }
 
-    Wh_Log(L"✅ Mod loaded in explorer.exe, waiting for hotkey...");
+    Wh_Log(L"✅ Mod loaded in windhawk.exe, waiting for hotkey...");
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -214,30 +215,229 @@ DWORD WINAPI MainThread(LPVOID lpParam) {
     return 0;
 }
 
-// ===== دوال المود =====
-// ===== Mode functions =====
-BOOL Wh_ModInit() {
-    Wh_Log(L"🔧 Initializing mod in explorer.exe...");
+// ============================================================
+// ===== دوال المود كأداة (Tool Mod) =====
+// ===== Mod functions as a tool (Tool Mod) =====
+// ============================================================
+
+// --- دوال المود الأساسية (التي ستُستدعى من قبل نظام Windhawk) ---
+// --- The core mod functions (which will be called by the Windhawk system) ---
+
+// هذه الدالة تُستدعى لتهيئة المود كأداة منفصلة
+// This function is called to initialize the mod as a separate tool
+BOOL WhTool_ModInit() {
+    Wh_Log(L"🔧 Initializing mod as a tool in windhawk.exe...");
     InitializeCriticalSection(&g_cs);
     
-    HANDLE hThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
-    if (!hThread) {
+    // إنشاء الخيط الرئيسي الذي يحتوي على حلقة الرسائل
+    // Create the main thread that contains the message loop
+    g_hThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
+    if (!g_hThread) {
         Wh_Log(L"❌ Failed to create main thread");
         DeleteCriticalSection(&g_cs);
         return FALSE;
     }
-    CloseHandle(hThread);
     
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"🛑 Unloading mod...");
-    if (g_hwndMod) PostMessage(g_hwndMod, WM_USER_QUIT, 0, 0);
-    Sleep(200);
+// هذه الدالة تُستدعى عندما تتغير إعدادات المود (في حال إضافتها مستقبلاً)
+// This function is called when the mod settings change (if they are added in the future)
+void WhTool_ModSettingsChanged() {
+    // يمكن إضافة منطق لإعادة تحميل الإعدادات هنا إذا لزم الأمر
+    // You can add logic to reload the settings here if needed
+    Wh_Log(L"⚙️ Settings changed (not implemented)");
+}
+
+// هذه الدالة تُستدعى عند إلغاء تحميل المود أو إغلاقه
+// This function is called when the mod is unloaded or closed
+void WhTool_ModUninit() {
+    Wh_Log(L"🛑 Unloading tool mod...");
+    
+    // 1. إرسال إشارة للخيط الرئيسي للخروج من حلقة الرسائل
+    // 1. Send a signal to the main thread to exit the message loop
+    if (g_hwndMod) {
+        PostMessage(g_hwndMod, WM_USER_QUIT, 0, 0);
+    }
+    
+    // 2. انتظار انتهاء الخيط الرئيسي بشكل آمن
+    // 2. Waiting for the main thread to finish safely
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, INFINITE);
+        CloseHandle(g_hThread);
+        g_hThread = nullptr;
+    }
+    
+    // 3. تنظيف الموارد المتبقية (بعد انتهاء الخيط)
+    // 3. Cleaning up leftover resources (after the thread finishes)
     EnterCriticalSection(&g_cs);
     g_trackedWindows.clear();
     LeaveCriticalSection(&g_cs);
+    
     DeleteCriticalSection(&g_cs);
-    Wh_Log(L"✅ Mod unloaded");
+    Wh_Log(L"✅ Tool mod unloaded");
+}
+
+// ============================================================
+// ===== كود "Launcher" القياسي لتشغيل المود كأداة =====
+// ===== The standard 'Launcher' code to run the mod as a tool =====
+// ============================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken,
+        LPCWSTR lpApplicationName,
+        LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        WINBOOL bInheritHandles,
+        DWORD dwCreationFlags,
+        LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken
+    );
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
+                                 FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
