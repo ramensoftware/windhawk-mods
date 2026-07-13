@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
-// @description    This mod recreates the Windows 7/8.1 Action Center Tray Icon and Flyout UI
-// @version        1.3.1
+// @description    Recreates the Windows 7/8.1 Action Center tray/flyout and restores classic Security and Maintenance CPL links
+// @version        1.4.1
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32 -lshlwapi
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -35,6 +35,7 @@ Windows 8.1 theme
 - **Maintenance Checks**: Automatically checks Backup status, Windows Error Reporting status, and Disk health.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
 - **Multiple Languages Support**: English, Italian, Spanish, French, Russian are currently supported.
+- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. 
 
 ## Hotkeys
 These are the hotkeys that can be configured in the mod.
@@ -53,6 +54,7 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
 - If the icon doesn't appear, try restarting Explorer or the mod.
+- The Control Panel hub links activate when you open *Security and Maintenance* (`control /name Microsoft.ActionCenter`). No system files are modified on disk.
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - ₮ዙℭ♔†WØLF† - Testing on Windows 11 23H2
@@ -61,30 +63,36 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.
 // ==WindhawkModSettings==
 /*
 - useRoundedCorners: true
-  $name: Rounded Corners
-  $description: Use rounded corners to better recreate the original Windows 7 appearance. Disable this option when using classic themes or other styles that do not support rounded window edges.
+  $name: Rounded corners
+  $description: Soft rounded edges on the flyout (Windows 7 look). Turn this off for Classic theme or other styles that need square corners.
 - refreshInterval: 5000
-  $name: Refresh Interval (ms)
-  $description: How often to check security status (min 1000ms, 0 to disable).
+  $name: Status check interval (ms)
+  $description: How often the tray icon re-checks security and maintenance (milliseconds). Use at least 1000. Set 0 to check only when Windows reports a change.
 - enableHotkey: false
-  $name: Enable Hotkeys
-  $description: Ctrl+N to simulate notifications and Ctrl+Shift+N to clear them.
+  $name: Enable hotkeys
+  $description: Turn on keyboard shortcuts for testing (see the options below).
 - enableNotificationSimulation: true
-  $name: Enable Notification Simulation
-  $description: Allow Ctrl+N to simulate security notifications for testing.
+  $name: Test notifications (Ctrl+N)
+  $description: When hotkeys are enabled, Ctrl+N shows a sample balloon and Ctrl+Shift+N clears it. Useful only for testing.
 - privacyMode: false
-  $name: Privacy Mode
-  $description: When enabled, forces the tray icon to always show "good" status.
+  $name: Privacy mode
+  $description: Always show a green "all good" tray icon and hide problems in the flyout. Handy on a shared screen.
 - language: auto
   $name: Language
-  $description: Interface language (auto, en, it, es, fr, ru).
+  $description: Language for the tray icon, flyout, and balloons. "Auto" follows Windows.
   $options:
-    - auto: Auto-detect
+    - auto: Auto (match Windows)
     - en: English
     - it: Italiano
     - es: Español
     - fr: Français
     - ru: Русский
+- restoreCplHubLinks: true
+  $name: Control Panel links
+  $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
+- useEmbeddedUifile: false
+  $name: Control Panel layout fallback
+  $description: Advanced. Only if those Control Panel links do not appear, try an alternate built-in page layout. Leave off in normal use.
 */
 // ==/WindhawkModSettings==
 
@@ -101,6 +109,8 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <strsafe.h>
+#include <shlwapi.h>
+#include <string>
 
 #define FLYOUT_OFFSET 8
 
@@ -317,7 +327,6 @@ static BOOL InitGdiPlusRendering() {
     struct { DWORD Version; void* Callback; BOOL Suppress; } si = {1, NULL, FALSE};
     if (pStartup(&g_gdiplusToken, &si, NULL) != 0) {
         Wh_Log(L"GDI+: GdiplusStartup failed"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
-    Wh_Log(L"GDI+ initialized successfully");
     return TRUE;
 }
 
@@ -352,9 +361,6 @@ static BYTE B64Val(WCHAR c) {
     const WCHAR* p = wcschr(kBase64Tbl, c);
     return p ? (BYTE)(p - kBase64Tbl) : 0xFF;
 }
-
-
-
 
 
 // Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
@@ -395,9 +401,7 @@ static void ShutdownGdiPlus() {
     pGdipCreateHICON = NULL;
     pGdiplusShutdown = NULL;
 
-    Wh_Log(L"GDI+ fully shut down, all function pointers reset");
 }
-
 
 
 // ============================================================================
@@ -877,7 +881,6 @@ enum ProblemType {
 // Open Problem Action (Firewall or Troubleshooting)
 // ============================================================================
 void OpenProblemAction(int problemType) {
-    Wh_Log(L"Opening action for problem type: %d", problemType);
     
     // ONLY firewall opens directly the settings
     if (problemType == PROB_FIREWALL) {
@@ -888,11 +891,9 @@ void OpenProblemAction(int problemType) {
         sei.lpParameters = L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}";
         sei.nShow = SW_SHOWNORMAL;
         
-        if (ShellExecuteExW(&sei)) {
-            Wh_Log(L"Opened Windows Defender Firewall");
-        } else {
+        if (!ShellExecuteExW(&sei)) {
             Wh_Log(L"Firewall shell command failed, using fallback");
-            ShellExecuteW(NULL, L"open", L"control.exe", 
+            ShellExecuteW(NULL, L"open", L"control.exe",
                          L"/name Microsoft.WindowsFirewall", NULL, SW_SHOWNORMAL);
         }
         return;
@@ -903,7 +904,6 @@ void OpenProblemAction(int problemType) {
         // Try Windows Security > App & browser control (ms-settings URI on Win10/11)
         if (ShellExecuteW(NULL, L"open", L"ms-settings:windowsdefender-appbrowser",
                           NULL, NULL, SW_SHOWNORMAL) > (HINSTANCE)32) {
-            Wh_Log(L"Opened SmartScreen settings via ms-settings URI");
             return;
         }
         // Fallback: open Windows Security app
@@ -913,14 +913,11 @@ void OpenProblemAction(int problemType) {
         sei.lpFile = L"explorer.exe";
         sei.lpParameters = L"shell:::{4026492F-2F69-46B8-B9BF-5654FC07E423}";
         sei.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&sei)) {
-            Wh_Log(L"Opened Windows Security (SmartScreen fallback)");
-        }
+        ShellExecuteExW(&sei);
         return;
     }
 
     // ALL OTHER PROBLEMS -> Troubleshooting (like right-click)
-    Wh_Log(L"Opening Troubleshooting for problem type: %d", problemType);
     
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
@@ -1071,7 +1068,6 @@ void InitGlobalFonts() {
 // ============================================================================
 // Icon Management - Embedded Base64 Icons from ActionCenter.dll Win8.1
 // ============================================================================
-
 
 
 // Embedded icons as base64 strings
@@ -1510,7 +1506,6 @@ HICON LoadActionCenterIcon(int index) {
 }
 
 void InitFlyoutIcons() {
-    Wh_Log(L"Loading flyout icons...");
 
     // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
     // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
@@ -1546,17 +1541,13 @@ void InitFlyoutIcons() {
         icon_id1_b64, &g_pStreamFlyoutWarning);
     g_pBmpFlyoutAlert = Base64ToGdipBitmap(
         icon_id2_b64, &g_pStreamFlyoutAlert);
-    Wh_Log(L"Flyout state bitmaps HQ: good=%p warning=%p alert=%p",
-           g_pBmpFlyoutGood, g_pBmpFlyoutWarning, g_pBmpFlyoutAlert);
+
     
     g_hFlyoutIconGood    = Base64ToIcon(icon_id0_b64);
-    Wh_Log(L"Flyout GOOD: %p", g_hFlyoutIconGood);
     
     g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
-    Wh_Log(L"Flyout WARNING: %p", g_hFlyoutIconWarning);
     
     g_hFlyoutIconAlert   = Base64ToIcon(icon_id2_b64);
-    Wh_Log(L"Flyout ALERT: %p", g_hFlyoutIconAlert);
     // Load UAC Shield specifically from imageres.dll index 73 (small icon)
     g_hShieldIcon = NULL;
     ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
@@ -1569,10 +1560,13 @@ void InitFlyoutIcons() {
         if (!g_hShieldIcon) ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
     }
     
-    // Fallback se NULL
-    if (!g_hFlyoutIconGood)    { Wh_Log(L"FALLBACK GOOD"); g_hFlyoutIconGood = LoadActionCenterIcon(0); }
-    if (!g_hFlyoutIconWarning) { Wh_Log(L"FALLBACK WARNING"); g_hFlyoutIconWarning = LoadActionCenterIcon(1); }
-    if (!g_hFlyoutIconAlert)   { Wh_Log(L"FALLBACK ALERT"); g_hFlyoutIconAlert = LoadActionCenterIcon(2); }
+    // Fallback se Base64 decode fallisce
+    if (!g_hFlyoutIconGood)
+        g_hFlyoutIconGood = LoadActionCenterIcon(0);
+    if (!g_hFlyoutIconWarning)
+        g_hFlyoutIconWarning = LoadActionCenterIcon(1);
+    if (!g_hFlyoutIconAlert)
+        g_hFlyoutIconAlert = LoadActionCenterIcon(2);
 }
 void FreeAllIcons() {
     if (g_hProblemBalloonIcon) { DestroyIcon(g_hProblemBalloonIcon); g_hProblemBalloonIcon = NULL; }
@@ -1662,7 +1656,6 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
             DWORD dwNoAuto = 0, dwSize = sizeof(DWORD);
             if (RegQueryValueExW(hKey, L"NoAutoUpdate", NULL, NULL, (LPBYTE)&dwNoAuto, &dwSize) == ERROR_SUCCESS) {
                 if (dwNoAuto != 0) {
-                    Wh_Log(L"AutoUpdate: NoAutoUpdate policy is set");
                     AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
                     return;
                 }
@@ -1673,7 +1666,6 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
     // 2) Service start type: Update Orchestrator (UsoSvc) and legacy WU (wuauserv).
     // Only SERVICE_DISABLED counts as "updates off"; stopped-but-auto is normal.
     if (IsServiceStartDisabled(L"UsoSvc") || IsServiceStartDisabled(L"wuauserv")) {
-        Wh_Log(L"AutoUpdate: update service start type is DISABLED");
         AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
         return;
     }
@@ -1686,7 +1678,6 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
         DWORD dwAUOptions = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"AUOptions", NULL, NULL, (LPBYTE)&dwAUOptions, &dwSize) == ERROR_SUCCESS) {
             if (dwAUOptions == 1) {
-                Wh_Log(L"AutoUpdate: legacy AUOptions=1 (never check)");
                 AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
             }
         }
@@ -1727,7 +1718,6 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)szValue, &dwSize) == ERROR_SUCCESS) {
             // Value can be "On" or "Off" (REG_SZ)
             if (dwType == REG_SZ && _wcsicmp(szValue, L"Off") == 0) {
-                Wh_Log(L"SmartScreen: disabled (registry value = Off)");
                 AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
@@ -1737,7 +1727,6 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwType == REG_DWORD && dwVal == 0) {
-                Wh_Log(L"SmartScreen: disabled (DWORD = 0)");
                 AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
@@ -1752,7 +1741,6 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         DWORD dwVal = 1, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKeyEdge, L"SmartScreenEnabled", NULL, NULL, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwVal == 0) {
-                Wh_Log(L"SmartScreen: Edge SmartScreen disabled");
                 AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
             }
         }
@@ -1818,7 +1806,6 @@ static void CheckBackupStatus(int* idx, int* criticalCount) {
     CloseServiceHandle(hSCM);
 
     if (!backupOk) {
-        Wh_Log(L"Maintenance: Backup service not configured");
         AddProblem(PROB_BACKUP, idx, criticalCount);
     }
 }
@@ -1838,7 +1825,6 @@ static void CheckWerStatus(int* idx, int* criticalCount) {
                 QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
                 if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
                     if (cfg->dwStartType == SERVICE_DISABLED) {
-                        Wh_Log(L"Maintenance: Windows Error Reporting is disabled");
                         AddProblem(PROB_WER, idx, criticalCount);
                     }
                 }
@@ -1869,7 +1855,6 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
         DWORD dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"PredictedFailure", NULL, NULL, (LPBYTE)&dwPredictFailure, &dwSize) == ERROR_SUCCESS) {
             if (dwPredictFailure != 0) {
-                Wh_Log(L"Maintenance: Disk predicted failure detected via Disk parameters");
                 diskIssue = TRUE;
             }
         }
@@ -2185,7 +2170,6 @@ void ShowProblemBalloon(void) {
     if (signature == g_LastProblemBalloonSignature &&
         secState == g_LastProblemBalloonState &&
         now - g_LastProblemBalloonTick < PROBLEM_BALLOON_COOLDOWN_MS) {
-        Wh_Log(L"Duplicate problem balloon suppressed");
         return;
     }
 
@@ -2239,12 +2223,10 @@ void ShowProblemBalloon(void) {
         SetTimer(g_Ctx.hWndMsgHandler, PROBLEM_BALLOON_TIMER_ID,
                  PROBLEM_BALLOON_FALLBACK_MS, NULL);
     } else {
-        Wh_Log(L"Unable to publish problem balloon: %lu",
-               GetLastError());
+
         ReleaseProblemBalloonResources();
     }
 }
-
 
 
 // ============================================================================
@@ -2291,8 +2273,6 @@ void RegisterWscNotifications() {
     }
     if (FAILED(hr))
         Wh_Log(L"WscRegisterForChanges failed: 0x%08X", hr);
-    else
-        Wh_Log(L"WSC notifications registered");
 }
 
 void UnregisterWscNotifications() {
@@ -2304,7 +2284,6 @@ void UnregisterWscNotifications() {
     }
     if (hReg) {
         WscUnRegisterChanges(hReg);
-        Wh_Log(L"WSC notifications unregistered");
     }
 }
 
@@ -2313,7 +2292,6 @@ static void WaitForWscCallbacksToDrain(void) {
     BOOL logged = FALSE;
     while (InterlockedCompareExchange(&g_WscCallbacksInFlight, 0, 0) != 0) {
         if (!logged && GetTickCount() - start >= 2000) {
-            Wh_Log(L"Waiting for in-flight WSC callbacks");
             logged = TRUE;
         }
         Sleep(1);
@@ -2324,7 +2302,6 @@ static void WaitForWscCallbacksToDrain(void) {
 // Registry Monitor Thread
 // ============================================================================
 DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
-    Wh_Log(L"Registry monitor thread started");
     InterlockedExchange(&g_Ctx.regMonitorRunning, 1);
     HANDLE hEvents[2] = { g_Ctx.hRegShutdownEvent, g_Ctx.hRegChangeEvent };
     // Progressive backoff when Action Center\Checks is missing (common on some SKUs).
@@ -2365,7 +2342,6 @@ DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
         }
     }
     InterlockedExchange(&g_Ctx.regMonitorRunning, 0);
-    Wh_Log(L"Registry monitor thread exiting");
     return 0;
 }
 void StartRegistryMonitor() {
@@ -2395,7 +2371,6 @@ void StopRegistryMonitor() {
             // Non chiudere eventi/handle mentre il thread li usa: durante
             // l'unload sarebbe un use-after-close. Il thread è event-driven e
             // deve terminare prima che il codice del mod venga scaricato.
-            Wh_Log(L"Waiting for registry monitor thread to exit");
             WaitForSingleObject(g_Ctx.hRegMonitorThread, INFINITE);
         }
         CloseHandle(g_Ctx.hRegMonitorThread);
@@ -2547,7 +2522,6 @@ static BOOL PublishTrayIcon(BOOL preferAdd) {
     g_nid = nid;
     g_Ctx.trayIconAdded = TRUE;
     if (hOldIcon && hOldIcon != hNewIcon) DestroyIcon(hOldIcon);
-    Wh_Log(L"Tray icon published (preferAdd=%d)", (int)preferAdd);
     return TRUE;
 }
 
@@ -2590,7 +2564,6 @@ static void ScheduleTrayIconRecovery() {
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, 250, NULL);
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
 
-    Wh_Log(L"Tray icon recovery scheduled");
 }
 
 static void RunTrayIconRecoveryAttempt() {
@@ -2603,6 +2576,7 @@ static void RunTrayIconRecoveryAttempt() {
         UINT delay = (attempt < 10) ? 300 : 1000;
         if (attempt < 60) {
             SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
+            if (attempt == 1 || (attempt % 5) == 0)
             Wh_Log(L"Tray not ready yet (attempt %u), retry in %ums", attempt, delay);
         } else {
             Wh_Log(L"Tray icon recovery paused (no Shell_TrayWnd) after %u attempts", attempt);
@@ -2635,7 +2609,8 @@ static void RunTrayIconRecoveryAttempt() {
     if (delay > 8000) delay = 8000;
     SetTimer(g_Ctx.hWndMsgHandler, TRAY_RETRY_TIMER_ID, delay, NULL);
 
-    Wh_Log(L"Retry attempt %u scheduled in %ums", attempt, delay);
+    if (attempt == 1 || (attempt % 5) == 0)
+        Wh_Log(L"Retry attempt %u scheduled in %ums", attempt, delay);
 }
 
 // ============================================================================
@@ -2787,7 +2762,6 @@ void InstallClickOutsideHook() {
     if (!g_hMouseHook) {
         Wh_Log(L"Failed to install mouse hook (error: %lu)", GetLastError());
     } else {
-        Wh_Log(L"Global mouse hook installed");
     }
 }
 
@@ -2795,7 +2769,6 @@ void RemoveClickOutsideHook() {
     if (g_hMouseHook) {
         UnhookWindowsHookEx(g_hMouseHook);
         g_hMouseHook = NULL;
-        Wh_Log(L"Mouse hook removed");
     }
 }
 
@@ -2808,7 +2781,6 @@ void InstallKeyboardHook() {
     if (!g_hKeyboardHook) {
         Wh_Log(L"Failed to install keyboard hook (error: %lu)", GetLastError());
     } else {
-        Wh_Log(L"Keyboard hook installed (ESC to close flyout)");
     }
 }
 
@@ -2816,7 +2788,6 @@ void RemoveKeyboardHook() {
     if (g_hKeyboardHook) {
         UnhookWindowsHookEx(g_hKeyboardHook);
         g_hKeyboardHook = NULL;
-        Wh_Log(L"Keyboard hook removed");
     }
 }
 
@@ -2973,7 +2944,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // Check click on problem links
         for (int i = 0; i < g_DisplayProblemCount; i++) {
             if (PtInRect(&g_ProblemLinkRects[i], pt)) {
-                Wh_Log(L"Clicked problem link: %d", g_ProblemTypesDisplay[i]);
                 
                 // Open appropriate action
                 OpenProblemAction(g_ProblemTypesDisplay[i]);
@@ -3662,7 +3632,6 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
     if (uMsg == WM_SECURITY_CHANGED) { 
         if (!g_Ctx.isUninitializing) { 
-            Wh_Log(L"Security change notification"); 
             RefreshSecurityState(); 
         } 
         return 0; 
@@ -3841,7 +3810,6 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 
 // ============================================================================
 void CleanupModResources() {
-    Wh_Log(L"CleanupModResources: starting");
 
     // 1. Blocca immediatamente nuove operazioni e nuove registrazioni.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
@@ -3938,8 +3906,1139 @@ void CleanupModResources() {
     // 7. Ora non esistono piu' thread o finestre che possano leggere g_Ctx.
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     g_Initialized = FALSE;
-    Wh_Log(L"CleanupModResources: complete");
 }
+
+// ===========================================================================
+// Security and Maintenance Control Panel hub links (DirectUI UIFILE patch)
+// Restores Troubleshooting + Recovery on the classic Action Center CPL page.
+// Keeps original atom IDs for stability when expanding Security/Maintenance.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+bool g_useEmbeddedUifile = false;
+
+bool g_cplRestoreHubLinks = true;
+
+void CplLoadSettings() {
+    g_cplRestoreHubLinks = Wh_GetIntSetting(L"restoreCplHubLinks") != 0;
+    g_useEmbeddedUifile = Wh_GetIntSetting(L"useEmbeddedUifile") != 0;
+}
+
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+struct LangPack {
+    WORD primaryLang;
+    const wchar_t* heading;
+    const wchar_t* tsTitle;
+    const wchar_t* tsDesc;
+    const wchar_t* recTitle;
+    const wchar_t* recDesc;
+};
+
+static const LangPack g_langPacks[] = {
+    {0x09, L"If the problem isn't listed, try one of these:", L"Troubleshooting", L"Find and fix problems with your computer.", L"Recovery", L"Refresh your PC without affecting your files, or reset it and start over."},
+    {0x10, L"Se il problema non \u00e8 incluso nell'elenco, provare uno dei metodi seguenti:", L"Risoluzione dei problemi", L"Trovare e risolvere i problemi del computer.", L"Ripristino", L"Aggiorna il PC mantenendo i file o reimpostalo e ricomincia dall'inizio."},
+    {0x0c, L"Si le probl\u00e8me n'est pas r\u00e9pertori\u00e9, essayez l'une des m\u00e9thodes suivantes :", L"R\u00e9solution des probl\u00e8mes", L"Rechercher et r\u00e9soudre les probl\u00e8mes de l'ordinateur.", L"R\u00e9cup\u00e9ration", L"Actualisez le PC sans affecter vos fichiers, ou r\u00e9initialisez-le et recommencez."},
+    {0x0a, L"Si el problema no est\u00e1 en la lista, pruebe uno de estos m\u00e9todos:", L"Soluci\u00f3n de problemas", L"Buscar y solucionar problemas del equipo.", L"Recuperaci\u00f3n", L"Actualiza el PC sin afectar a los archivos o restabl\u00e9celo y empieza de nuevo."},
+    {0x19, L"\u0415\u0441\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0434\u0438\u043d \u0438\u0437 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u0441\u043f\u043e\u0441\u043e\u0431\u043e\u0432:", L"\u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043e\u043a", L"\u041f\u043e\u0438\u0441\u043a \u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c \u0441 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c.", L"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435", L"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u041f\u041a, \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0432 \u0444\u0430\u0439\u043b\u044b, \u0438\u043b\u0438 \u0441\u0431\u0440\u043e\u0441\u044c\u0442\u0435 \u0435\u0433\u043e \u0438 \u043d\u0430\u0447\u043d\u0438\u0442\u0435 \u0441\u043d\u0430\u0447\u0430\u043b\u0430."},
+};
+
+static const LangPack* GetLangPack() {
+    WORD ui = PRIMARYLANGID(GetUserDefaultUILanguage());
+    for (const auto& p : g_langPacks) {
+        if (p.primaryLang == ui) {
+            return &p;
+        }
+    }
+    for (const auto& p : g_langPacks) {
+        if (p.primaryLang == 0x09) {
+            return &p;
+        }
+    }
+    return &g_langPacks[0];
+}
+
+static const char g_uifile201B64[] =
+    "PGR1aXhtbD4NCjxzdHlsZXNoZWV0cz4NCjxzdHlsZSByZXNpZD0iY3Bfc3R5bGUiPg0KPEJ1dHRvbiBhY2Nlc3NpYmxlPSJ0cnVl"
+    "IiBjb250ZW50YWxpZ249IndyYXBsZWZ0Ii8+DQo8RWxlbWVudCBvdmVyaGFuZz0iZmFsc2UiIGJhY2tncm91bmQ9ImFyZ2IoMCww"
+    "LDAsMCkiLz4NCjxOYXZpZ2F0ZUJ1dHRvbiBvdmVyaGFuZz0iZmFsc2UiIGJhY2tncm91bmQ9ImFyZ2IoMCwwLDAsMCkiLz4NCjxD"
+    "Q1B1c2hCdXR0b24gdHJhbnNwYXJlbnQ9InRydWUiIGFjY2Vzc2libGU9InRydWUiIG1pbnNpemU9InNpemUoNzZycCwyM3JwKSIg"
+    "Zm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDE0LDApIiBtYXJnaW49InJlY3QoNnJwLDBycCwwcnAsMHJwKSIvPg0KPENDQ2hl"
+    "Y2tCb3ggdHJhbnNwYXJlbnQ9InRydWUiIGFjY2Vzc2libGU9InRydWUiIGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSw2LDAp"
+    "IiBmb3JlZ3JvdW5kPSJndGMoQ09OVFJPTFBBTkVMU1RZTEUsNiwwLDM4MDMpIiBiYWNrZ3JvdW5kPSJ0aGVtZWFibGUoZHRiKENP"
+    "TlRST0xQQU5FTCwyLDApLHdpbmRvdykiLz4NCjxDb21ib0JveCB0cmFuc3BhcmVudD0idHJ1ZSIgYWNjZXNzaWJsZT0idHJ1ZSIg"
+    "Zm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDE0LDApIi8+DQo8Q0NSYWRpb0J1dHRvbiB0cmFuc3BhcmVudD0idHJ1ZSIgYWNj"
+    "ZXNzaWJsZT0idHJ1ZSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDYsMCkiIGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFO"
+    "RUxTVFlMRSw2LDAsMzgwMykiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoQ09OVFJPTFBBTkVMLDIsMCksd2luZG93KSIvPg0K"
+    "PENDU3lzTGluayB0cmFuc3BhcmVudD0idHJ1ZSIgYWNjZXNzaWJsZT0idHJ1ZSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxF"
+    "LDYsMCkiIGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxTVFlMRSw2LDAsMzgwMykiIGJhY2tncm91bmQ9InRoZW1lYWJsZShk"
+    "dGIoQ09OVFJPTFBBTkVMLDIsMCksIHdpbmRvdykiLz4NCjxFZGl0IHRyYW5zcGFyZW50PSJ0cnVlIiB0aGVtZWRib3JkZXI9InRy"
+    "dWUiIHdpZHRoPSIxMjBycCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0idGV4dCIgaGVpZ2h0PSIyMHJwIiBmb250PSJndGYo"
+    "Q09OVFJPTFBBTkVMU1RZTEUsNiwwKSIgZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDYsMCwzODAzKSIvPg0KPGlm"
+    "IGNsYXNzPSJjcF90b3Bib3giPg0KPEVsZW1lbnQgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0iY2xpZW50IiBiYWNrZ3JvdW5k"
+    "PSJ0aGVtZWFibGUoZHRiKENPTlRST0xQQU5FTCwyLDApLHdpbmRvdykiLz4NCjwvaWY+DQo8aWYgY2xhc3M9ImNwX2h1Yl9mcmFt"
+    "ZSI+DQo8RWxlbWVudCBwYWRkaW5nPSJyZWN0KDEzcnAsMXJwLDFycCwxMHJwKSIvPg0KPC9pZj4NCjxpZiBjbGFzcz0iY3Bfc3Bv"
+    "a2VfZnJhbWUiPg0KPEVsZW1lbnQgcGFkZGluZz0icmVjdCgwcnAsMTlycCwwcnAsMTBycCkiLz4NCjwvaWY+DQo8aWYgY2xhc3M9"
+    "ImNwX2hlbHBfZ2x5cGgiPg0KPEJ1dHRvbiBoZWlnaHQ9IjE4cnAiIHdpZHRoPSIxOHJwIiBjb250ZW50PSJpY29uKDk5LHN5c21l"
+    "dHJpYyg0OSksc3lzbWV0cmljKDUwKSxsaWJyYXJ5KGltYWdlcmVzLmRsbCkpIiBwYWRkaW5nPSJyZWN0KDFycCwxcnAsMXJwLDFy"
+    "cCkiIGN1cnNvcj0iaGFuZCIgYWNjUm9sZT0ibGluayIgYWNjZGVmYWN0aW9uPSJjbGljayIgYWNjU3RhdGU9IjB4MDAxMDAwMDAi"
+    "IHRvb2x0aXA9InRydWUiLz4NCjxpZiBrZXlmb2N1c2VkPSJ0cnVlIj4NCjxCdXR0b24gY29udGVudGFsaWduPSJmb2N1c3JlY3Qi"
+    "Lz4NCjwvaWY+DQo8L2lmPg0KPGlmIGNsYXNzPSJjcF9jb250ZW50X3BhbmUiPg0KPEVsZW1lbnQgd2lkdGg9IjYwMHJwIiBwYWRk"
+    "aW5nPSJyZWN0KDEwcnAsMHJwLDEwcnAsMHJwKSIgYmFja2dyb3VuZD0idGhlbWVhYmxlKGR0YihDT05UUk9MUEFORUwsMiwwKSx3"
+    "aW5kb3cpIi8+DQo8L2lmPg0KPGlmIGNsYXNzPSJjcF9jb250ZW50X2luc3RydWN0aW9uIj4NCjxFbGVtZW50IGNvbnRlbnRhbGln"
+    "bj0id3JhcGxlZnQiIGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxTVFlMRSw1LDAsMzgwMykiIGZvbnQ9Imd0ZihDT05UUk9M"
+    "UEFORUxTVFlMRSwgNSwgMCkiIGFjY2Vzc2libGU9InRydWUiIGFjY1JvbGU9InN0YXRpY3RleHQiLz4NCjwvaWY+DQo8aWYgY2xh"
+    "c3M9ImNwX2NvbnRlbnRfdl9zcGFjZXIiPg0KPEVsZW1lbnQgaGVpZ2h0PSI3cnAiLz4NCjwvaWY+DQo8aWYgY2xhc3M9ImNwX2Nv"
+    "bnRlbnRfdGV4dCI+DQo8RWxlbWVudCBmb250PSJndGYoQ09OVFJPTFBBTkVMU1RZTEUsIDYsIDApIiBmb3JlZ3JvdW5kPSJndGMo"
+    "Q09OVFJPTFBBTkVMU1RZTEUsNiwwLDM4MDMpIiBjb250ZW50YWxpZ249IndyYXBsZWZ0IiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2NS"
+    "b2xlPSJzdGF0aWN0ZXh0Ii8+DQo8UFRleHQgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLCA2LCAwKSIgZm9yZWdyb3VuZD0i"
+    "Z3RjKENPTlRST0xQQU5FTFNUWUxFLDYsMCwzODAzKSIgY29udGVudGFsaWduPSJ3cmFwbGVmdCIgYWNjZXNzaWJsZT0idHJ1ZSIg"
+    "YWNjUm9sZT0ic3RhdGljdGV4dCIvPg0KPC9pZj4NCjxpZiBjbGFzcz0iY3BfY29udGVudF90aXRsZV90ZXh0Ij4NCjxFbGVtZW50"
+    "IGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSwgMTksIDApIiBmb3JlZ3JvdW5kPSJndGMoQ09OVFJPTFBBTkVMU1RZTEUsMTks"
+    "MCwzODAzKSIgY29udGVudGFsaWduPSJ3cmFwbGVmdCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjUm9sZT0ic3RhdGljdGV4dCIvPg0K"
+    "PC9pZj4NCjxpZiBjbGFzcz0iY3BfaGVscF9saW5rIj4NCjxCdXR0b24gYWNjZXNzaWJsZT0idHJ1ZSIgYWNjUm9sZT0ibGluayIg"
+    "YWNjZGVmYWN0aW9uPSJjbGljayIgZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDcsMSwzODAzKSIgZm9udD0iZ3Rm"
+    "KENPTlRST0xQQU5FTFNUWUxFLDcsMSkiIG92ZXJoYW5nPSJmYWxzZSIvPg0KPEVsZW1lbnQgYWNjZXNzaWJsZT0idHJ1ZSIgYWNj"
+    "Um9sZT0ibGluayIgYWNjZGVmYWN0aW9uPSJjbGljayIgZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDcsMSwzODAz"
+    "KSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDcsMSkiIG92ZXJoYW5nPSJmYWxzZSIvPg0KPGlmIGtleWZvY3VzZWQ9InRy"
+    "dWUiPg0KPEJ1dHRvbiBjb250ZW50YWxpZ249IndyYXBsZWZ0IHwgZm9jdXNyZWN0Ii8+DQo8RWxlbWVudCBjb250ZW50YWxpZ249"
+    "IndyYXBsZWZ0IHwgZm9jdXNyZWN0Ii8+DQo8L2lmPg0KPGlmIGVuYWJsZWQ9ImZhbHNlIj4NCjxCdXR0b24gZm9yZWdyb3VuZD0i"
+    "Z3RjKENPTlRST0xQQU5FTFNUWUxFLDcsNCwzODAzKSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDcsNCkiLz4NCjxFbGVt"
+    "ZW50IGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxTVFlMRSw3LDQsMzgwMykiIGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlM"
+    "RSw3LDQpIi8+DQo8L2lmPg0KPGlmIG1vdXNlZm9jdXNlZD0idHJ1ZSI+DQo8QnV0dG9uIGN1cnNvcj0iaGFuZCIgZm9yZWdyb3Vu"
+    "ZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDcsMiwzODAzKSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDcsMikiLz4NCjxF"
+    "bGVtZW50IGN1cnNvcj0iaGFuZCIgZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDcsMiwzODAzKSIgZm9udD0iZ3Rm"
+    "KENPTlRST0xQQU5FTFNUWUxFLDcsMikiLz4NCjwvaWY+DQo8L2lmPg0KPGlmIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiPg0KPEJ1"
+    "dHRvbiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2NSb2xlPSJsaW5rIiBhY2NkZWZhY3Rpb249ImNsaWNrIiBmb3JlZ3JvdW5kPSJndGMo"
+    "Q09OVFJPTFBBTkVMU1RZTEUsMTAsMSwzODAzKSIgZm9udD0iZ3RmKENPTlRST0xQQU5FTFNUWUxFLDEwLDEpIiBvdmVyaGFuZz0i"
+    "ZmFsc2UiLz4NCjxFbGVtZW50IGFjY2Vzc2libGU9InRydWUiIGFjY1JvbGU9ImxpbmsiIGFjY2RlZmFjdGlvbj0iY2xpY2siIGZv"
+    "cmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxTVFlMRSwxMCwxLDM4MDMpIiBmb250PSJndGYoQ09OVFJPTFBBTkVMU1RZTEUsMTAs"
+    "MSkiIG92ZXJoYW5nPSJmYWxzZSIvPg0KPGlmIGtleWZvY3VzZWQ9InRydWUiPg0KPEJ1dHRvbiBjb250ZW50YWxpZ249IndyYXBs"
+    "ZWZ0IHwgZm9jdXNyZWN0Ii8+DQo8RWxlbWVudCBjb250ZW50YWxpZ249IndyYXBsZWZ0IHwgZm9jdXNyZWN0Ii8+DQo8L2lmPg0K"
+    "PGlmIGVuYWJsZWQ9ImZhbHNlIj4NCjxCdXR0b24gZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDEwLDQsMzgwMyki"
+    "IGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSwxMCw0KSIvPg0KPEVsZW1lbnQgZm9yZWdyb3VuZD0iZ3RjKENPTlRST0xQQU5F"
+    "TFNUWUxFLDEwLDQsMzgwMykiIGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSwxMCw0KSIvPg0KPC9pZj4NCjxpZiBtb3VzZWZv"
+    "Y3VzZWQ9InRydWUiPg0KPEJ1dHRvbiBjdXJzb3I9ImhhbmQiIGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxTVFlMRSwxMCwy"
+    "LDM4MDMpIiBmb250PSJndGYoQ09OVFJPTFBBTkVMU1RZTEUsMTAsMikiLz4NCjxFbGVtZW50IGN1cnNvcj0iaGFuZCIgZm9yZWdy"
+    "b3VuZD0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDEwLDIsMzgwMykiIGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSwxMCwyKSIv"
+    "Pg0KPC9pZj4NCjwvaWY+DQo8aWYgY2xhc3M9ImNwX2NvbnRlbnRfZGl2aWRlcl9oZWFkZXIiPg0KPEVsZW1lbnQgYmFja2dyb3Vu"
+    "ZD0idGhlbWVhYmxlKGR0YihDT05UUk9MUEFORUwsMiwwKSx3aW5kb3cpIiBmb3JlZ3JvdW5kPSJndGMoQ09OVFJPTFBBTkVMU1RZ"
+    "TEUsOSwwLDM4MDMpIiBmb250PSJndGYoQ09OVFJPTFBBTkVMU1RZTEUsIDksIDApIiBwYWRkaW5nPSJyZWN0KDBycCwwcnAsMnJw"
+    "LDBycCkiIGNvbnRlbnRhbGlnbj0id3JhcGxlZnQiIGFjY2Vzc2libGU9InRydWUiIGFjY1JvbGU9InN0YXRpY3RleHQiLz4NCjwv"
+    "aWY+DQo8aWYgY2xhc3M9ImNwX2NvbnRlbnRfZGl2aWRlcl9saW5lIj4NCjxFbGVtZW50IGhlaWdodD0iMXJwIiB3aWR0aD0iNTY1"
+    "cnAiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoQ09OVFJPTFBBTkVMLDE3LDApLGJ1dHRvbnNoYWRvdykiLz4NCjwvaWY+DQo8"
+    "aWYgY2xhc3M9ImNwX2NvbnRlbnRfYmFubmVyX2JveCI+DQo8RWxlbWVudCBwYWRkaW5nPSJyZWN0KDdycCw3cnAsN3JwLDdycCki"
+    "IGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoQ09OVFJPTFBBTkVMLDE4LDApLHdpbmRvdykiIGJvcmRlcnRoaWNrbmVzcz0icmVj"
+    "dCgxcnAsMXJwLDFycCwxcnApIiBib3JkZXJjb2xvcj0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDE3LDAsMzgyMSkiLz4NCjwvaWY+"
+    "DQo8aWYgY2xhc3M9ImNwX2NvbW1hbmRfc2luayI+DQo8RWxlbWVudCBsYXlvdXRwb3M9ImJvdHRvbSIgYmFja2dyb3VuZD0idGhl"
+    "bWVhYmxlKGR0YihDT05UUk9MUEFORUwsMTIsMCksd2luZG93KSIvPg0KPC9pZj4NCjxpZiBjbGFzcz0iY3BfY29tbWFuZF9mbG9h"
+    "dCI+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIgYmFja2dyb3VuZD0idGhlbWVhYmxlKGR0YihDT05UUk9MUEFORUwsMTMsMCks"
+    "d2luZG93KSIvPg0KPC9pZj4NCjxpZiBjbGFzcz0iY3BfY29tbWFuZF9idXR0b25fYm94Ij4NCjxFbGVtZW50IHBhZGRpbmc9InJl"
+    "Y3QoMHJwLDEwcnAsMTBycCwxMHJwKSIgd2lkdGg9IjYwMHJwIi8+IA0KPC9pZj4NCjwvc3R5bGU+DQojcHJhZ21hIG9uY2UNCjxz"
+    "dHlsZSByZXNpZD0iaGVhbHRoY2VudGVyX3N0eWxlIj4NCjxpZiBjbGFzcz0iaGNfY29udGVudF9ib3giPg0KPEVsZW1lbnQgcGFk"
+    "ZGluZz0icmVjdCgxMnJwLDVycCwxMnJwLDVycCkiIGJvcmRlcnRoaWNrbmVzcz0icmVjdCgxcnAsMXJwLDFycCwxcnApIiBib3Jk"
+    "ZXJjb2xvcj0iZ3RjKENPTlRST0xQQU5FTFNUWUxFLDE3LDAsMzgyMSkiLz4NCjwvaWY+DQo8aWYgY2xhc3M9ImhjX2hpZ2hjb250"
+    "cmFzdF9jb250ZW50X2JveCI+DQo8RWxlbWVudCBwYWRkaW5nPSJyZWN0KDEycnAsNXJwLDEycnAsNXJwKSIgYm9yZGVydGhpY2tu"
+    "ZXNzPSJyZWN0KDFycCwxcnAsMXJwLDFycCkiIGJvcmRlcmNvbG9yPSJhY3RpdmVjYXB0aW9uIi8+DQo8L2lmPg0KPGlmIGNsYXNz"
+    "PSJoY19yZWRfY29udGVudF9iYW5uZXJfYm94Ij4NCjxFbGVtZW50IGJhY2tncm91bmQ9ImdyYWRpZW50KFJHQigxNzIsMSwwKSxS"
+    "R0IoMjIyLDEsMCksMSkiIHdpZHRoPSIyMHJwIi8+DQo8L2lmPg0KPGlmIGNsYXNzPSJoY195ZWxsb3dfY29udGVudF9iYW5uZXJf"
+    "Ym94Ij4NCjxFbGVtZW50IGJhY2tncm91bmQ9ImdyYWRpZW50KFJHQigyNDIsMTc3LDApLFJHQigyNTUsMjA2LDczKSwxKSIgd2lk"
+    "dGg9IjIwcnAiLz4NCjwvaWY+DQo8aWYgY2xhc3M9ImhjX2hpZ2hjb250cmFzdF9jb250ZW50X2Jhbm5lcl9ib3giPg0KPEVsZW1l"
+    "bnQgYmFja2dyb3VuZD0iYWN0aXZlY2FwdGlvbiIgd2lkdGg9IjIwcnAiLz4NCjwvaWY+DQo8aWYgY2xhc3M9ImNwX2NvbnRlbnRf"
+    "dl9zcGFjZXIiPg0KPEVsZW1lbnQgaGVpZ2h0PSI3cnAiLz4NCjwvaWY+DQo8aWYgY2xhc3M9IkV4cGFuZG9CdXR0b25UZXh0Ij4N"
+    "CjxFbGVtZW50IGZvbnQ9Imd0ZihDT05UUk9MUEFORUxTVFlMRSwgNSwgMCkiIGZvcmVncm91bmQ9Imd0YyhDT05UUk9MUEFORUxT"
+    "VFlMRSw3LDEsMzgwMykiIGNvbnRlbnRhbGlnbj0id3JhcGxlZnQiIGxheW91dHBvcz0idG9wIi8+DQo8aWYga2V5Zm9jdXNlZD0i"
+    "dHJ1ZSI+DQo8RWxlbWVudCBjb250ZW50YWxpZ249IndyYXBsZWZ0IHwgZm9jdXNyZWN0Ii8+DQo8L2lmPg0KPGlmIGlkPSJhdG9t"
+    "KEV4cGFuZG9UZXh0RXhwYW5kZWQpIiBzZWxlY3RlZD0iZmFsc2UiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJub25lIiBlbmFibGVk"
+    "PSJmYWxzZSIvPg0KPC9pZj4NCjxpZiBpZD0iYXRvbShFeHBhbmRvVGV4dENvbGxhcHNlZCkiIHNlbGVjdGVkPSJ0cnVlIj4NCjxF"
+    "bGVtZW50IGxheW91dHBvcz0ibm9uZSIgZW5hYmxlZD0iZmFsc2UiLz4NCjwvaWY+DQo8L2lmPg0KPGlmIGNsYXNzPSJFeHBhbmRv"
+    "U3RhdHVzVGV4dCI+DQo8RWxlbWVudCBmb250PSJndGYoQ09OVFJPTFBBTkVMU1RZTEUsIDUsIDApIiBmb3JlZ3JvdW5kPSJndGMo"
+    "Q09OVFJPTFBBTkVMU1RZTEUsNiwwLDM4MDMpIiBjb250ZW50YWxpZ249IndyYXBsZWZ0IiBsYXlvdXRwb3M9InRvcCIvPg0KPC9p"
+    "Zj4NCjxpZiBjbGFzcz0iR3JvdXBIZWFkZXIiPg0KPGlmIG1vdXNld2l0aGluPSJ0cnVlIj4NCjxFbGVtZW50IGJhY2tncm91bmQ9"
+    "InRoZW1lYWJsZShkdGIoRXhwbG9yZXI6Okxpc3RWaWV3LDEsMiksIHRocmVlZGxpZ2h0c2hhZG93KSIvPg0KPC9pZj4NCjwvaWY+"
+    "DQo8aWYgY2xhc3M9IkV4cGFuZEJ1dHRvbk5vcm1hbCI+DQo8QnV0dG9uIGhlaWdodD0idGhlbWVhYmxlKGd0bWV0KFRhc2tEaWFs"
+    "b2csIDEzLCAwLCAyNDE3KSwgJzIxcnAnKSIgd2lkdGg9InRoZW1lYWJsZShndG1ldChUYXNrRGlhbG9nLCAxMywgMCwgMjQxNiks"
+    "ICcxOXJwJykiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoVGFza0RpYWxvZywgMTMsIDEpLCBkZmMoMywgMHgwMDAxKSkiIG1h"
+    "cmdpbj0idGhlbWVhYmxlKGd0bWFyKFRhc2tEaWFsb2csIDIwLCAwLCAzNjAyKSwgcmVjdCgwcnAsMHJwLDEwcnAsMHJwKSkiLz4N"
+    "CjxpZiBrZXlmb2N1c2VkPSJ0cnVlIj4NCjxCdXR0b24gY29udGVudGFsaWduPSJmb2N1c3JlY3QiLz4NCjwvaWY+DQo8aWYgc2Vs"
+    "ZWN0ZWQ9InRydWUiPg0KPEJ1dHRvbiBiYWNrZ3JvdW5kPSJ0aGVtZWFibGUoZHRiKFRhc2tEaWFsb2csIDEzLCA0KSxkZmMoMywg"
+    "MHgwMDAwKSkiLz4NCjwvaWY+DQo8L2lmPg0KPGlmIGNsYXNzPSJFeHBhbmRCdXR0b25Ib3ZlciI+DQo8QnV0dG9uIGhlaWdodD0i"
+    "dGhlbWVhYmxlKGd0bWV0KFRhc2tEaWFsb2csIDEzLCAwLCAyNDE3KSwgJzIxcnAnKSIgd2lkdGg9InRoZW1lYWJsZShndG1ldChU"
+    "YXNrRGlhbG9nLCAxMywgMCwgMjQxNiksICcxOXJwJykiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoVGFza0RpYWxvZywgMTMs"
+    "IDIpLCBkZmMoMywgMHgwMDAxIHwgMHgxMDAwKSkiIG1hcmdpbj0idGhlbWVhYmxlKGd0bWFyKFRhc2tEaWFsb2csIDIwLCAwLCAz"
+    "NjAyKSwgcmVjdCgwcnAsMHJwLDEwcnAsMHJwKSkiLz4NCjxpZiBrZXlmb2N1c2VkPSJ0cnVlIj4NCjxCdXR0b24gY29udGVudGFs"
+    "aWduPSJmb2N1c3JlY3QiLz4NCjwvaWY+DQo8aWYgc2VsZWN0ZWQ9InRydWUiPg0KPEJ1dHRvbiBiYWNrZ3JvdW5kPSJ0aGVtZWFi"
+    "bGUoZHRiKFRhc2tEaWFsb2csIDEzLCA1KSwgZGZjKDMsIDB4MDAwMCB8IDB4MTAwMCkpIi8+DQo8L2lmPg0KPC9pZj4NCjxpZiBj"
+    "bGFzcz0iRXhwYW5kQnV0dG9uUHJlc3NlZCI+DQo8QnV0dG9uIGhlaWdodD0idGhlbWVhYmxlKGd0bWV0KFRhc2tEaWFsb2csIDEz"
+    "LCAwLCAyNDE3KSwgJzIxcnAnKSIgd2lkdGg9InRoZW1lYWJsZShndG1ldChUYXNrRGlhbG9nLCAxMywgMCwgMjQxNiksICcxOXJw"
+    "JykiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoVGFza0RpYWxvZywgMTMsIDMpLCBkZmMoMywgMHgwMDAxIHwgMHgwMjAwKSAp"
+    "IiBtYXJnaW49InRoZW1lYWJsZShndG1hcihUYXNrRGlhbG9nLCAyMCwgMCwgMzYwMiksIHJlY3QoMHJwLDBycCwxMHJwLDBycCkp"
+    "Ii8+DQo8aWYga2V5Zm9jdXNlZD0idHJ1ZSI+DQo8QnV0dG9uIGNvbnRlbnRhbGlnbj0iZm9jdXNyZWN0Ii8+DQo8L2lmPg0KPGlm"
+    "IHNlbGVjdGVkPSJ0cnVlIj4NCjxCdXR0b24gYmFja2dyb3VuZD0idGhlbWVhYmxlKGR0YihUYXNrRGlhbG9nLCAxMywgNiksIGRm"
+    "YygzLCAweDAwMDB8IDB4MDIwMCkpIi8+DQo8L2lmPg0KPC9pZj4NCjwvc3R5bGU+DQo8L3N0eWxlc2hlZXRzPg0KPEVsZW1lbnQg"
+    "cmVzaWQ9IlJlZE1vZHVsZSIgbGF5b3V0cG9zPSJ0b3AiIGNsYXNzPSJoY19jb250ZW50X2JveCIgbGF5b3V0PSJib3JkZXJsYXlv"
+    "dXQoKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0icGFuZSIgYWNjbmFtZT0iSW1wb3J0YW50IG1lc3NhZ2UiIHBhZGRpbmc9"
+    "InJlY3QoMCwwLDAsMCkiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJjbGllbnQiIGlkPSJhdG9tKHJlZE5vdGlmaWNhdGlvbkJveCki"
+    "IGNsYXNzPSJoY19jb250ZW50X2JveCIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgcGFkZGluZz0icmVjdCgwLDAsMCwwKSI+DQo8"
+    "RWxlbWVudCBpZD0iYXRvbShyZWRCYW5uZXIpIiBjbGFzcz0iaGNfcmVkX2NvbnRlbnRfYmFubmVyX2JveCIgbGF5b3V0cG9zPSJs"
+    "ZWZ0Ii8+DQo8RWxlbWVudCBsYXlvdXRwb3M9ImNsaWVudCIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgcGFkZGluZz0icmVjdCgx"
+    "MnJwLDE0cnAsMTRycCw3cnApIj4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIj4NCjxF"
+    "bGVtZW50IGxheW91dHBvcz0iYm90dG9tIiBjbGFzcz0iY3BfY29udGVudF92X3NwYWNlciIvPg0KPEVsZW1lbnQgbGF5b3V0cG9z"
+    "PSJyaWdodCIgbGF5b3V0PSJmbG93bGF5b3V0KDAsMiwxLDMpIiBzaGVldD0iY3Bfc3R5bGUiIGNvbnRlbnRhbGlnbj0ibWlkZGxl"
+    "cmlnaHQiPg0KPHZpZXdlcj4NCjxOYXZpZ2F0ZUJ1dHRvbiBpZD0iYXRvbShBY3Rpb25CdXR0b24pIiBsYXlvdXQ9ImJvcmRlcmxh"
+    "eW91dCgpIiBsYXlvdXRwb3M9InJpZ2h0Ij4NCjxDQ1B1c2hCdXR0b24gaWQ9ImF0b20oQnV0dG9uRGF0YSkiIGxheW91dHBvcz0i"
+    "cmlnaHQiIGFjdGl2ZT0ibW91c2UgfCBrZXlib2FyZCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0icHVzaGJ1dHRvbiIvPg0K"
+    "PC9OYXZpZ2F0ZUJ1dHRvbj4NCjwvdmlld2VyPg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJsZWZ0IiBsYXlvdXQ9"
+    "ImJvcmRlcmxheW91dCgpIiBzaGVldD0iY3Bfc3R5bGUiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iYm9yZGVy"
+    "bGF5b3V0KCkiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgxLDAsMCwwKSI+DQo8RWxlbWVu"
+    "dCBjbGFzcz0iY3BfY29udGVudF90aXRsZV90ZXh0IiBsYXlvdXRwb3M9ImxlZnQiIGlkPSJhdG9tKFRpdGxlRGF0YSkiIGFjY2Vz"
+    "c2libGU9InRydWUiIGFjY3JvbGU9InRleHQiIHBhZGRpbmc9InJlY3QoMCwwLDVycCwwKSIvPg0KPEVsZW1lbnQgY2xhc3M9ImNw"
+    "X2NvbnRlbnRfdGl0bGVfdGV4dCIgbGF5b3V0cG9zPSJyaWdodCIgaWQ9ImF0b20oTm90aWZpY2F0aW9uVHlwZSkiIGFjY2Vzc2li"
+    "bGU9InRydWUiIGFjY3JvbGU9InRleHQiLz4NCjwvRWxlbWVudD4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBjbGFzcz0iY3Bf"
+    "Y29udGVudF92X3NwYWNlciIvPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgwLDAsMCwwKSI+"
+    "DQo8RWxlbWVudCBpZD0iYXRvbShEZXRhaWxJY29uKSIgbGF5b3V0cG9zPSJsZWZ0IiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xl"
+    "PSJncmFwaGljIiBtYXJnaW49InJlY3QoMHJwLDBycCw1cnAsMHJwKSIvPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRlbnRfdGV4"
+    "dCIgbGF5b3V0cG9zPSJyaWdodCIgaWQ9ImF0b20oRGV0YWlsRGF0YSkiIGNvbnRlbnRhbGlnbj0id3JhcGxlZnQiIGFjY2Vzc2li"
+    "bGU9InRydWUiIGFjY3JvbGU9InRleHQiLz4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4N"
+    "CjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBsYXlvdXQ9InRhYmxlbGF5b3V0KDAsMCwwLDAsLTYwLDEsMCwtNDApIiBzaGVldD0i"
+    "Y3Bfc3R5bGUiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiPg0KPEJ1dHRvbiBjbGFzcz0iY3BfY29u"
+    "dGVudF9saW5rIiBpZD0iYXRvbShUdXJuT2ZmV2FybmluZykiIGxheW91dHBvcz0ibGVmdCIgY29udGVudD0icmVzc3RyKDUwMSki"
+    "IGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8RWxlbWVudCBsYXlvdXQ9InZl"
+    "cnRpY2FsZmxvd2xheW91dCgxLDEsMSwyKSIgbGF5b3V0cG9zPSJyaWdodCI+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3Jk"
+    "ZXJsYXlvdXQoKSI+DQo8QnV0dG9uIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKFNlY29uZGFyeUxpbmspIiBjb250"
+    "ZW50YWxpZ249IndyYXByaWdodCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0ibGluayIvPg0KPC9OYXZpZ2F0ZUJ1dHRvbj4N"
+    "CjxOYXZpZ2F0ZUJ1dHRvbiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InJpZ2h0Ij4NCjxCdXR0b24gY2xhc3M9"
+    "ImNwX2NvbnRlbnRfbGluayIgaWQ9ImF0b20oSGVscE5vdGlmaWNhdGlvbikiIGNvbnRlbnRhbGlnbj0id3JhcHJpZ2h0IiBhY2Nl"
+    "c3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJsaW5rIi8+DQo8L05hdmlnYXRlQnV0dG9uPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0K"
+    "PC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJib3R0b20iIGNsYXNzPSJjcF9jb250ZW50X3Zfc3Bh"
+    "Y2VyIi8+DQo8L0VsZW1lbnQ+DQo8RWxlbWVudCByZXNpZD0iWWVsbG93TW9kdWxlIiBsYXlvdXRwb3M9InRvcCIgY2xhc3M9Imhj"
+    "X2NvbnRlbnRfYm94IiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJwYW5lIiBhY2Nu"
+    "YW1lPSJNZXNzYWdlIiBwYWRkaW5nPSJyZWN0KDAsMCwwLDApIj4NCjxFbGVtZW50IGxheW91dHBvcz0iY2xpZW50IiBpZD0iYXRv"
+    "bSh5ZWxsb3dOb3RpZmljYXRpb25Cb3gpIiBjbGFzcz0iaGNfY29udGVudF9ib3giIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIHBh"
+    "ZGRpbmc9InJlY3QoMCwwLDAsMCkiPg0KPEVsZW1lbnQgaWQ9ImF0b20oeWVsbG93QmFubmVyKSIgY2xhc3M9ImhjX3JlZF9jb250"
+    "ZW50X2Jhbm5lcl9ib3giIGxheW91dHBvcz0ibGVmdCIvPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJjbGllbnQiIGxheW91dD0iYm9y"
+    "ZGVybGF5b3V0KCkiIHBhZGRpbmc9InJlY3QoMTJycCwxNHJwLDE0cnAsN3JwKSI+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIg"
+    "bGF5b3V0PSJib3JkZXJsYXlvdXQoKSI+DQo8RWxlbWVudCBsYXlvdXRwb3M9ImJvdHRvbSIgY2xhc3M9ImNwX2NvbnRlbnRfdl9z"
+    "cGFjZXIiLz4NCjxFbGVtZW50IGxheW91dHBvcz0icmlnaHQiIGxheW91dD0iZmxvd2xheW91dCgwLDIsMSwzKSIgc2hlZXQ9ImNw"
+    "X3N0eWxlIiBjb250ZW50YWxpZ249Im1pZGRsZXJpZ2h0Ij4NCjx2aWV3ZXI+DQo8TmF2aWdhdGVCdXR0b24gaWQ9ImF0b20oQWN0"
+    "aW9uQnV0dG9uKSIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJyaWdodCI+DQo8Q0NQdXNoQnV0dG9uIGlkPSJh"
+    "dG9tKEJ1dHRvbkRhdGEpIiBsYXlvdXRwb3M9InJpZ2h0IiBhY3RpdmU9Im1vdXNlIHwga2V5Ym9hcmQiIGFjY2Vzc2libGU9InRy"
+    "dWUiIGFjY3JvbGU9InB1c2hidXR0b24iLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8L3ZpZXdlcj4NCjwvRWxlbWVudD4NCjxFbGVt"
+    "ZW50IGxheW91dHBvcz0ibGVmdCIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgc2hlZXQ9ImNwX3N0eWxlIj4NCjxFbGVtZW50IGxh"
+    "eW91dHBvcz0idG9wIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIj4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RpdGxlX3Rl"
+    "eHQiIGxheW91dHBvcz0idG9wIiBpZD0iYXRvbShUaXRsZURhdGEpIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJ0ZXh0Ii8+"
+    "DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIgY2xhc3M9ImNwX2NvbnRlbnRfdl9zcGFjZXIiLz4NCjxFbGVtZW50IGxheW91dHBv"
+    "cz0idG9wIiBsYXlvdXQ9ImZsb3dsYXlvdXQoMCwwLDAsMCkiPg0KPEVsZW1lbnQgaWQ9ImF0b20oRGV0YWlsSWNvbikiIGxheW91"
+    "dHBvcz0ibGVmdCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0iZ3JhcGhpYyIgbWFyZ2luPSJyZWN0KDBycCwwcnAsNXJwLDBy"
+    "cCkiLz4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RleHQiIGxheW91dHBvcz0icmlnaHQiIGlkPSJhdG9tKERldGFpbERh"
+    "dGEpIiBjb250ZW50YWxpZ249IndyYXBsZWZ0IiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJ0ZXh0Ii8+DQo8L0VsZW1lbnQ+"
+    "DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIgbGF5b3V0PSJ0YWJs"
+    "ZWxheW91dCgwLDAsMCwwLC02MCwxLDAsLTQwKSIgc2hlZXQ9ImNwX3N0eWxlIj4NCjxOYXZpZ2F0ZUJ1dHRvbiBsYXlvdXQ9ImJv"
+    "cmRlcmxheW91dCgpIj4NCjxCdXR0b24gY2xhc3M9ImNwX2NvbnRlbnRfbGluayIgaWQ9ImF0b20oVHVybk9mZldhcm5pbmcpIiBs"
+    "YXlvdXRwb3M9ImxlZnQiIGNvbnRlbnQ9InJlc3N0cig1MDEpIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJsaW5rIi8+DQo8"
+    "L05hdmlnYXRlQnV0dG9uPg0KPEVsZW1lbnQgbGF5b3V0PSJ2ZXJ0aWNhbGZsb3dsYXlvdXQoMSwxLDEsMikiPg0KPE5hdmlnYXRl"
+    "QnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0icmlnaHQiPg0KPEJ1dHRvbiBjbGFzcz0iY3BfY29udGVu"
+    "dF9saW5rIiBpZD0iYXRvbShTZWNvbmRhcnlMaW5rKSIgY29udGVudGFsaWduPSJ3cmFwcmlnaHQiIGFjY2Vzc2libGU9InRydWUi"
+    "IGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3JkZXJsYXlvdXQo"
+    "KSIgbGF5b3V0cG9zPSJyaWdodCI+DQo8QnV0dG9uIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKEhlbHBOb3RpZmlj"
+    "YXRpb24pIiBjb250ZW50YWxpZ249IndyYXByaWdodCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0ibGluayIvPg0KPC9OYXZp"
+    "Z2F0ZUJ1dHRvbj4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjxFbGVtZW50IGxheW91"
+    "dHBvcz0iYm90dG9tIiBjbGFzcz0iY3BfY29udGVudF92X3NwYWNlciIvPg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgcmVzaWQ9IkNo"
+    "ZWNrTW9kdWxlIiBsYXlvdXRwb3M9InRvcCIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9s"
+    "ZT0icGFuZSIgYWNjbmFtZT0iQ2hlY2siIHNoZWV0PSJjcF9zdHlsZSIgcGFkZGluZz0icmVjdCgwLDAsMCwyMHJwKSI+DQo8RWxl"
+    "bWVudCBsYXlvdXRwb3M9InRvcCIgbGF5b3V0PSJ0YWJsZWxheW91dCgwLDAsMywwLC03MCkiPg0KPEVsZW1lbnQgbGF5b3V0cG9z"
+    "PSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgwLDAsMywwKSIgbWFyZ2luPSJyZWN0KDAsN3JwLDAsMCkiPg0KPEVsZW1lbnQgY2xh"
+    "c3M9ImNwX2NvbnRlbnRfdGV4dCIgaWQ9ImF0b20oQ2hlY2tUaXRsZSkiIGNvbnRlbnRhbGlnbj0id3JhcGxlZnQiIHBhZGRpbmc9"
+    "InJlY3QoMCwwLDdycCwwKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0idGV4dCIvPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2Nv"
+    "bnRlbnRfdGV4dCIgaWQ9ImF0b20oQ2hlY2tTdGF0dXMpIiBjb250ZW50YWxpZ249IndyYXByaWdodCIgYWNjZXNzaWJsZT0idHJ1"
+    "ZSIgYWNjcm9sZT0idGV4dCIvPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91"
+    "dD0iYm9yZGVybGF5b3V0KCkiIHBhZGRpbmc9InJlY3QoMjBycCw3cnAsMCwwKSI+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIg"
+    "bGF5b3V0PSJmbG93bGF5b3V0KDAsMiwwLDApIiBtYXJnaW49InJlY3QoMjBycCw3cnAsMHJwLDBycCkiPg0KPEVsZW1lbnQgaWQ9"
+    "ImF0b20oQ2hlY2tJY29uKSIgbGF5b3V0cG9zPSJsZWZ0IiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJncmFwaGljIiBtYXJn"
+    "aW49InJlY3QoMHJwLDBycCw1cnAsMHJwKSIvPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRlbnRfdGV4dCIgaWQ9ImF0b20oQ2hl"
+    "Y2tEZXNjcmlwdGlvbikiIGxheW91dHBvcz0ibGVmdCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0idGV4dCIvPg0KPC9FbGVt"
+    "ZW50Pg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgpIiBtYXJnaW49InJlY3QoMjBycCw3cnAs"
+    "MHJwLDBycCkiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iZmxvd2xheW91dCgwLDIsMCwyKSI+DQo8RWxlbWVudCBsYXlvdXRQ"
+    "b3M9ImxlZnQiIGlkPSJhdG9tKENoZWNrTGlua0ljb24xKSIgY29udGVudD0iaWNvbig3OCxzeXNtZXRyaWMoNDkpLHN5c21ldHJp"
+    "Yyg1MCksbGlicmFyeShpbWFnZXJlcy5kbGwpKSIgY29udGVudGFsaWduPSJtaWRkbGVsZWZ0IiBhY2Nlc3NpYmxlPSJ0cnVlIiBh"
+    "Y2Nyb2xlPSJncmFwaGljIiBhY2NuYW1lPSJyZXNzdHIoNikiIG1hcmdpbj0icmVjdCgwcnAsMHJwLDVycCwwcnApIi8+DQo8QnV0"
+    "dG9uIGxheW91dFBvcz0ibGVmdCIgY2xhc3M9ImNwX2NvbnRlbnRfbGluayIgaWQ9ImF0b20oQ2hlY2tMaW5rMSkiIGxheW91dHBv"
+    "cz0icmlnaHQiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8TmF2aWdhdGVC"
+    "dXR0b24gbGF5b3V0PSJmbG93bGF5b3V0KDAsMiwwLDIpIj4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RleHQiIHBhZGRp"
+    "bmc9InJlY3QoNXJwLDBycCw1cnAsMHJwKSIgbGF5b3V0cG9zPSJsZWZ0IiBhY2Nlc3NpYmxlPSJmYWxzZSIgY29udGVudD0icmVz"
+    "c3RyKDUzOSkiLz4NCjxFbGVtZW50IGxheW91dFBvcz0ibGVmdCIgaWQ9ImF0b20oQ2hlY2tMaW5rSWNvbjIpIiBjb250ZW50PSJp"
+    "Y29uKDc4LHN5c21ldHJpYyg0OSksc3lzbWV0cmljKDUwKSxsaWJyYXJ5KGltYWdlcmVzLmRsbCkpIiBjb250ZW50YWxpZ249Im1p"
+    "ZGRsZWxlZnQiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImdyYXBoaWMiIGFjY25hbWU9InJlc3N0cig2KSIgbWFyZ2luPSJy"
+    "ZWN0KDBycCwwcnAsNXJwLDBycCkiLz4NCjxCdXR0b24gbGF5b3V0UG9zPSJsZWZ0IiBjbGFzcz0iY3BfY29udGVudF9saW5rIiBp"
+    "ZD0iYXRvbShDaGVja0xpbmsyKSIgbGF5b3V0cG9zPSJ0b3AiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwv"
+    "TmF2aWdhdGVCdXR0b24+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJmbG93bGF5b3V0KDAsMiwwLDIpIj4NCjxFbGVtZW50IGNs"
+    "YXNzPSJjcF9jb250ZW50X3RleHQiIHBhZGRpbmc9InJlY3QoNXJwLDBycCw1cnAsMHJwKSIgbGF5b3V0cG9zPSJsZWZ0IiBhY2Nl"
+    "c3NpYmxlPSJmYWxzZSIgY29udGVudD0icmVzc3RyKDUzOSkiLz4NCjxFbGVtZW50IGxheW91dFBvcz0ibGVmdCIgaWQ9ImF0b20o"
+    "Q2hlY2tMaW5rSWNvbjMpIiBjb250ZW50PSJpY29uKDc4LHN5c21ldHJpYyg0OSksc3lzbWV0cmljKDUwKSxsaWJyYXJ5KGltYWdl"
+    "cmVzLmRsbCkpIiBjb250ZW50YWxpZ249Im1pZGRsZWxlZnQiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImdyYXBoaWMiIGFj"
+    "Y25hbWU9InJlc3N0cig2KSIgbWFyZ2luPSJyZWN0KDBycCwwcnAsNXJwLDBycCkiLz4NCjxCdXR0b24gbGF5b3V0UG9zPSJsZWZ0"
+    "IiBjbGFzcz0iY3BfY29udGVudF9saW5rIiBpZD0iYXRvbShDaGVja0xpbmszKSIgbGF5b3V0cG9zPSJ0b3AiIGFjY2Vzc2libGU9"
+    "InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJmbG93bGF5"
+    "b3V0KDAsMiwwLDIpIj4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RleHQiIHBhZGRpbmc9InJlY3QoNXJwLDBycCw1cnAs"
+    "MHJwKSIgbGF5b3V0cG9zPSJsZWZ0IiBhY2Nlc3NpYmxlPSJmYWxzZSIgY29udGVudD0icmVzc3RyKDUzOSkiLz4NCjxFbGVtZW50"
+    "IGxheW91dFBvcz0ibGVmdCIgaWQ9ImF0b20oQ2hlY2tMaW5rSWNvbjQpIiBjb250ZW50PSJpY29uKDc4LHN5c21ldHJpYyg0OSks"
+    "c3lzbWV0cmljKDUwKSxsaWJyYXJ5KGltYWdlcmVzLmRsbCkpIiBjb250ZW50YWxpZ249Im1pZGRsZWxlZnQiIGFjY2Vzc2libGU9"
+    "InRydWUiIGFjY3JvbGU9ImdyYXBoaWMiIGFjY25hbWU9InJlc3N0cig2KSIgbWFyZ2luPSJyZWN0KDBycCwwcnAsNXJwLDBycCki"
+    "Lz4NCjxCdXR0b24gbGF5b3V0UG9zPSJsZWZ0IiBjbGFzcz0iY3BfY29udGVudF9saW5rIiBpZD0iYXRvbShDaGVja0xpbms0KSIg"
+    "bGF5b3V0cG9zPSJ0b3AiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8L0Vs"
+    "ZW1lbnQ+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiIG1hcmdpbj0icmVj"
+    "dCgxMnJwLDdycCwwcnAsMHJwKSI+DQo8QnV0dG9uIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKENoZWNrSGVscCki"
+    "IGxheW91dHBvcz0ibGVmdCIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0ibGluayIvPg0KPC9OYXZpZ2F0ZUJ1dHRvbj4NCjwv"
+    "RWxlbWVudD4NCjwvRWxlbWVudD4NCjxIZWFsdGhDZW50ZXJDUExQYWdlIHJlc2lkPSJtYWluIiBpZD0iYXRvbShIdWIpIiBsYXlv"
+    "dXQ9ImJvcmRlcmxheW91dCgpIj4NCjxFbGVtZW50IHNoZWV0PSJjcF9zdHlsZSIgY2xhc3M9ImNwX3RvcGJveCIgbGF5b3V0PSJi"
+    "b3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJjbGllbnQiPg0KPFNjcm9sbFZpZXdlciB4c2Nyb2xsYWJsZT0iZmFsc2UiIGxheW91"
+    "dHBvcz0iY2xpZW50IiBzaGVldD0iY29tbW9uIj4NCjxFbGVtZW50IGxheW91dD0iYm9yZGVybGF5b3V0KCkiIHNoZWV0PSJjcF9z"
+    "dHlsZSIgY2xhc3M9ImNwX2h1Yl9mcmFtZSIgd2lkdGg9IjY1MnJwIiBwYWRkaW5nPSJyZWN0KDAsMCwwLDApIj4NCjxFbGVtZW50"
+    "IGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIj4NCjxWaWV3ZXIgbGF5b3V0cG9zPSJyaWdodCI+DQo8QnV0"
+    "dG9uIGNsYXNzPSJjcF9oZWxwX2dseXBoIiBpZD0iYXRvbShoZWxwSHViKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0iZ3Jh"
+    "cGhpYyIgYWNjbmFtZT0icmVzc3RyKDcpIi8+DQo8L1ZpZXdlcj4NCjwvRWxlbWVudD4NCjxGb2N1c0luZGljYXRvciBpZD0iYXRv"
+    "bShGb2N1c0luZGljYXRvcikiIGZpcnN0dGFidGFyZ2V0PSJhdG9tKHN0YXJ0TGlua3MpIi8+DQo8RWxlbWVudCBpZD0iYXRvbShz"
+    "dGFydExpbmtzKSIgY2xhc3M9ImNwX2NvdGVudF9wYW5lIiBsYXlvdXRwb3M9ImxlZnQiIGxheW91dD0iYm9yZGVybGF5b3V0KCki"
+    "IHBhZGRpbmc9InJlY3QoMjZycCwwLDI2cnAsMjBycCkiIGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9IkFjdGlvbiBDZW50ZXIg"
+    "cGFuZWwiIGFjY3JvbGU9InBhbmUiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgpIj4NCjxF"
+    "bGVtZW50IGNsYXNzPSJjcF9jb250ZW50X2luc3RydWN0aW9uIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJ0ZXh0IiBjb250"
+    "ZW50PSJyZXNzdHIoNCkiLz4NCjwvRWxlbWVudD4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBjbGFzcz0iY3BfY29udGVudF92"
+    "X3NwYWNlciIvPg0KPEVsZW1lbnQgaWQ9ImF0b20oTm90SW5pdGlhbGl6ZWQpIiBsYXlvdXRwb3M9InRvcCIgbGF5b3V0PSJmbG93"
+    "bGF5b3V0KCkiPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRlbnRfdGV4dCIgY29udGVudD0icmVzc3RyKDUwMCkiLz4NCjwvRWxl"
+    "bWVudD4NCjxFbGVtZW50IGlkPSJhdG9tKE5vQWN0aW9ucykiIGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImZsb3dsYXlvdXQoKSI+"
+    "DQo8RWxlbWVudCBjbGFzcz0iY3BfY29udGVudF90ZXh0IiBjb250ZW50PSJyZXNzdHIoNTAyKSIvPg0KPC9FbGVtZW50Pg0KPEVs"
+    "ZW1lbnQgaWQ9ImF0b20oQXRSaXNrKSIgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iZmxvd2xheW91dCgpIj4NCjxFbGVtZW50IGNs"
+    "YXNzPSJjcF9jb250ZW50X3RleHQiIGNvbnRlbnQ9InJlc3N0cig1MDMpIi8+DQo8L0VsZW1lbnQ+DQo8RWxlbWVudCBsYXlvdXRw"
+    "b3M9InRvcCIgY2xhc3M9ImNwX2NvbnRlbnRfdl9zcGFjZXIiLz4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBjbGFzcz0iY3Bf"
+    "Y29udGVudF92X3NwYWNlciIvPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGNsYXNzPSJjcF9jb250ZW50X3Zfc3BhY2VyIi8+"
+    "DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIgY29udGVudGFsaWduPSJtaWRkbGVjZW50ZXIiIGxheW91dD0iYm9yZGVybGF5b3V0"
+    "KCkiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9InBhbmUiIGFjY25hbWU9IlNlY3VyaXR5IHNlY3Rpb24iPg0KPEVsZW1lbnQg"
+    "bGF5b3V0cG9zPSJ0b3AiIGNsYXNzPSJjcF9jb250ZW50X2RpdmlkZXJfbGluZSIgd2lkdGg9IjcwMHJwIi8+DQo8V0hDRXhwYW5k"
+    "byBpZD0iYXRvbShTZWN1cml0eUdyb3VwRXhwYW5kbykiIHNoZWV0PSJoZWFsdGhjZW50ZXJfc3R5bGUiIGxheW91dD0iYm9yZGVy"
+    "bGF5b3V0KCkiIGxheW91dHBvcz0idG9wIj4NCjxFbGVtZW50IGlkPSJhdG9tKEhlYWRlckJ1dHRvbikiIGNsYXNzPSJHcm91cEhl"
+    "YWRlciIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiIHBhZGRpbmc9InJlY3QoMCw3cnAsMCw3cnApIj4N"
+    "CjxBY2Nlc3NpYmxlYnV0dG9uIGlkPSJhdG9tKFNlY3VyaXR5R3JvdXBIZWFkaW5nKSIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIg"
+    "bGF5b3V0cG9zPSJ0b3AiIGJhY2tncm91bmQ9ImFyZ2IoMCwwLDAsMCkiIGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9InJlc3N0"
+    "cig1NjQpIiBhY2Nyb2xlPSJwdXNoYnV0dG9uIj4NCjxFbGVtZW50IGxheW91dD0iZmxvd2xheW91dCgwLDIsMCwyKSIgbGF5b3V0"
+    "cG9zPSJsZWZ0IiBwYWRkaW5nPSJyZWN0KDEwcnAsMHJwLDBycCwwcnApIj4NCjxFbGVtZW50IGNsYXNzPSJFeHBhbmRvQnV0dG9u"
+    "VGV4dCIgY29udGVudD0icmVzc3RyKDUwOSkiIHNob3J0Y3V0PSJhdXRvIi8+DQo8L0VsZW1lbnQ+DQo8QWNjZXNzaWJsZWJ1dHRv"
+    "biBpZD0iYXRvbShhcnJvdykiIGxheW91dHBvcz0icmlnaHQiIGxheW91dD0iZmxvd2xheW91dCgpIiBwYWRkaW5nPSJyZWN0KDEy"
+    "cnAsMCwxMnJwLDApIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJwdXNoYnV0dG9uIiBhY2NuYW1lPSJyZXNzdHIoNTExKSIg"
+    "YWNjZGVzYz0icmVzc3RyKDUxMikiPg0KPEJ1dHRvbiBpZD0iYXRvbShFeHBhbmRvQnV0dG9uSW1hZ2UpIiBjbGFzcz0iRXhwYW5k"
+    "QnV0dG9uTm9ybWFsIiBsYXlvdXRwb3M9InRvcCIgYWN0aXZlPSJpbmFjdGl2ZSIvPg0KPC9BY2Nlc3NpYmxlYnV0dG9uPg0KPC9B"
+    "Y2Nlc3NpYmxlYnV0dG9uPg0KPC9FbGVtZW50Pg0KPFdIQ1JlcGVhdGVyIGlkPSJhdG9tKFJlZFNlY3VyaXR5TGlzdCkiIGV4cGFu"
+    "ZD0iUmVkTW9kdWxlIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InRvcCI+DQo8YmluZCBjb25uZWN0PSJCdXR0"
+    "b25EYXRhIiBwcm9wZXJ0eT0iQnV0dG9uRGF0YSIvPg0KPGJpbmQgY29ubmVjdD0iVGl0bGVEYXRhIiBwcm9wZXJ0eT0iVGl0bGVE"
+    "YXRhIi8+DQo8YmluZCBjb25uZWN0PSJOb3RpZmljYXRpb25UeXBlIiBwcm9wZXJ0eT0iTm90aWZpY2F0aW9uVHlwZSIvPg0KPGJp"
+    "bmQgY29ubmVjdD0iRGV0YWlsRGF0YSIgcHJvcGVydHk9IkRldGFpbERhdGEiLz4NCjxiaW5kIGNvbm5lY3Q9IlNlY29uZGFyeUxp"
+    "bmsiIHByb3BlcnR5PSJTZWNvbmRhcnlMaW5rIi8+DQo8YmluZCBjb25uZWN0PSJEZXRhaWxJY29uIiBwcm9wZXJ0eT0iRGV0YWls"
+    "SWNvbiIvPg0KPGJpbmQgY29ubmVjdD0iSGVscE5vdGlmaWNhdGlvbiIgcHJvcGVydHk9IkhlbHBOb3RpZmljYXRpb24iLz4NCjxi"
+    "aW5kIGNvbm5lY3Q9IlR1cm5PZmZXYXJuaW5nIiBwcm9wZXJ0eT0iVHVybk9mZldhcm5pbmciLz4NCjwvV0hDUmVwZWF0ZXI+DQo8"
+    "RWxlbWVudCBpZD0iYXRvbShTZWN1cml0eVllbGxvd0V4cGFuZGVkKSIgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iYm9yZGVybGF5"
+    "b3V0KCkiPg0KPFdIQ1JlcGVhdGVyIGlkPSJhdG9tKFllbGxvd1NlY3VyaXR5TGlzdCkiIGV4cGFuZD0iWWVsbG93TW9kdWxlIiBs"
+    "YXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InRvcCI+DQo8YmluZCBjb25uZWN0PSJCdXR0b25EYXRhIiBwcm9wZXJ0"
+    "eT0iQnV0dG9uRGF0YSIvPg0KPGJpbmQgY29ubmVjdD0iVGl0bGVEYXRhIiBwcm9wZXJ0eT0iVGl0bGVEYXRhIi8+DQo8YmluZCBj"
+    "b25uZWN0PSJEZXRhaWxEYXRhIiBwcm9wZXJ0eT0iRGV0YWlsRGF0YSIvPg0KPGJpbmQgY29ubmVjdD0iU2Vjb25kYXJ5TGluayIg"
+    "cHJvcGVydHk9IlNlY29uZGFyeUxpbmsiLz4NCjxiaW5kIGNvbm5lY3Q9IkRldGFpbEljb24iIHByb3BlcnR5PSJEZXRhaWxJY29u"
+    "Ii8+DQo8YmluZCBjb25uZWN0PSJIZWxwTm90aWZpY2F0aW9uIiBwcm9wZXJ0eT0iSGVscE5vdGlmaWNhdGlvbiIvPg0KPGJpbmQg"
+    "Y29ubmVjdD0iVHVybk9mZldhcm5pbmciIHByb3BlcnR5PSJUdXJuT2ZmV2FybmluZyIvPg0KPC9XSENSZXBlYXRlcj4NCjwvRWxl"
+    "bWVudD4NCjxFbGVtZW50IGlkPSJhdG9tKFNlY3VyaXR5T3ZlcmZsb3cpIiBsYXlvdXRwb3M9InRvcCIgbGF5b3V0PSJib3JkZXJs"
+    "YXlvdXQoKSIgcGFkZGluZz0icmVjdCgwLDAsMCwwKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjbmFtZT0iT3ZlcmZsb3cgTm90aWZp"
+    "Y2F0aW9ucyIgYWNjcm9sZT0icGFuZSI+DQo8RWxlbWVudCBpZD0iYXRvbShTZWN1cml0eU92ZXJmbG93Qm94KSIgY2xhc3M9Imhj"
+    "X2NvbnRlbnRfYm94IiBsYXlvdXRwb3M9InRvcCIgcGFkZGluZz0icmVjdCgwLDAsMCwwKSIgbGF5b3V0PSJib3JkZXJsYXlvdXQo"
+    "KSI+DQo8RWxlbWVudCBpZD0iYXRvbShTZWN1cml0eU92ZXJmbG93QmFubmVyKSIgY2xhc3M9ImhjX3llbGxvd19jb250ZW50X2Jh"
+    "bm5lcl9ib3giIGxheW91dHBvcz0ibGVmdCIvPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJjbGllbnQiIGxheW91dD0iYm9yZGVybGF5"
+    "b3V0KCkiIHBhZGRpbmc9InJlY3QoMTJycCwxNHJwLDEycnAsMTRycCkiPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJyaWdodCIgbGF5"
+    "b3V0PSJib3JkZXJsYXlvdXQoKSIgc2hlZXQ9ImNwX3N0eWxlIj4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImZs"
+    "b3dsYXlvdXQoMCwyLDEsMikiPg0KPHZpZXdlcj4NCjxOYXZpZ2F0ZUJ1dHRvbiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlv"
+    "dXRwb3M9ImxlZnQiPg0KPENDUHVzaEJ1dHRvbiBpZD0iYXRvbShTZWN1cml0eUV4cGFuZE92ZXJmbG93KSIgY29udGVudD0icmVz"
+    "c3RyKDUxMykiIGxheW91dHBvcz0icmlnaHQiIGFjdGl2ZT0ibW91c2UgfCBrZXlib2FyZCIvPg0KPC9OYXZpZ2F0ZUJ1dHRvbj4N"
+    "Cjwvdmlld2VyPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJsZWZ0IiBsYXlvdXQ9ImJvcmRl"
+    "cmxheW91dCgpIiBzaGVldD0iY3Bfc3R5bGUiPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRlbnRfdGV4dCIgbGF5b3V0cG9zPSJ0"
+    "b3AiIGlkPSJhdG9tKFNlY3VyaXR5T3ZlcmZsb3dUZXh0KSIvPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0K"
+    "PEVsZW1lbnQgbGF5b3V0cG9zPSJib3R0b20iIGNsYXNzPSJjcF9jb250ZW50X3Zfc3BhY2VyIi8+DQo8L0VsZW1lbnQ+DQo8RWxl"
+    "bWVudCBpZD0iYXRvbShjbGlwcGVyKSIgc2hlZXQ9ImNwX3N0eWxlIiBjbGFzcz0iY3BfY29udGVudF9wYW5lIiBsYXlvdXRwb3M9"
+    "ImJvdHRvbSIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgcGFkZGluZz0icmVjdCgxMnJwLDEwcnAsMCw3cnApIiBhbmltYXRpb249"
+    "InJlY3RhbmdsZVYgfCBzIHwgZmFzdCI+DQo8V0hDUmVwZWF0ZXIgaWQ9ImF0b20oU2VjdXJpdHlDaGVja01vZHVsZSkiIGV4cGFu"
+    "ZD0iQ2hlY2tNb2R1bGUiIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0idG9wIj4NCjxiaW5kIGNvbm5lY3Q9IkNo"
+    "ZWNrVGl0bGUiIHByb3BlcnR5PSJDaGVja1RpdGxlIi8+DQo8YmluZCBjb25uZWN0PSJDaGVja1N0YXR1cyIgcHJvcGVydHk9IkNo"
+    "ZWNrU3RhdHVzIi8+DQo8YmluZCBjb25uZWN0PSJDaGVja0Rlc2NyaXB0aW9uIiBwcm9wZXJ0eT0iQ2hlY2tEZXNjcmlwdGlvbiIv"
+    "Pg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tMaW5rMSIgcHJvcGVydHk9IkNoZWNrTGluazEiLz4NCjxiaW5kIGNvbm5lY3Q9IkNoZWNr"
+    "TGlua0ljb24xIiBwcm9wZXJ0eT0iQ2hlY2tMaW5rSWNvbjEiLz4NCjxiaW5kIGNvbm5lY3Q9IkNoZWNrTGluazIiIHByb3BlcnR5"
+    "PSJDaGVja0xpbmsyIi8+DQo8YmluZCBjb25uZWN0PSJDaGVja0xpbmtJY29uMiIgcHJvcGVydHk9IkNoZWNrTGlua0ljb24yIi8+"
+    "DQo8YmluZCBjb25uZWN0PSJDaGVja0xpbmszIiBwcm9wZXJ0eT0iQ2hlY2tMaW5rMyIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tM"
+    "aW5rSWNvbjMiIHByb3BlcnR5PSJDaGVja0xpbmtJY29uMyIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tMaW5rNCIgcHJvcGVydHk9"
+    "IkNoZWNrTGluazQiLz4NCjxiaW5kIGNvbm5lY3Q9IkNoZWNrTGlua0ljb240IiBwcm9wZXJ0eT0iQ2hlY2tMaW5rSWNvbjQiLz4N"
+    "CjxiaW5kIGNvbm5lY3Q9IkNoZWNrSWNvbiIgcHJvcGVydHk9IkNoZWNrSWNvbiIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tIZWxw"
+    "IiBwcm9wZXJ0eT0iQ2hlY2tIZWxwIi8+DQo8L1dIQ1JlcGVhdGVyPg0KPENDU3lzTGluayBpZD0iYXRvbShzZWN1cml0eUhlbHBM"
+    "aW5rKSIgY2xhc3M9ImNwX2NvbnRlbnRfdGV4dCIgbGF5b3V0cG9zPSJ0b3AiIGNvbnRlbnQ9InJlc3N0cigzNykiIGFjY2Vzc2li"
+    "bGU9InRydWUiIGFjY25hbWU9InJlc3N0cig1NTUpIiBhY2Nyb2xlPSJsaW5rIiBtYXJnaW49InJlY3QoMCw3cnAsMCw3cnApIi8+"
+    "DQo8L0VsZW1lbnQ+DQo8L1dIQ0V4cGFuZG8+DQo8RWxlbWVudCBpZD0iYXRvbShTZWN1cml0eUJvdHRvbUxpbmUpIiBsYXlvdXRw"
+    "b3M9InRvcCIgY2xhc3M9ImNwX2NvbnRlbnRfZGl2aWRlcl9saW5lIiB3aWR0aD0iNzAwcnAiIGFuaW1hdGlvbj0icG9zaXRpb24g"
+    "fCBzIHwgZmFzdCIvPg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgaWQ9ImF0b20oU2VjdGlvbkJlbG93KSIgbGF5b3V0cG9zPSJ0b3Ai"
+    "IGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoQ09OVFJPTFBBTkVMLDIsMCksd2luZG93KSIgY29udGVudGFsaWduPSJtaWRkbGVj"
+    "ZW50ZXIiIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9InBhbmUiIGFjY25hbWU9Ik1h"
+    "aW50ZW5hbmNlIHNlY3Rpb24iIGFuaW1hdGlvbj0icG9zaXRpb24gfCBzIHwgZmFzdCI+DQo8V0hDRXhwYW5kbyBpZD0iYXRvbShN"
+    "YWludGVuYW5jZUdyb3VwRXhwYW5kbykiIHNoZWV0PSJoZWFsdGhjZW50ZXJfc3R5bGUiIGxheW91dD0iYm9yZGVybGF5b3V0KCki"
+    "IGxheW91dHBvcz0idG9wIj4NCjxFbGVtZW50IGlkPSJhdG9tKEhlYWRlckJ1dHRvbikiIGNsYXNzPSJHcm91cEhlYWRlciIgbGF5"
+    "b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiIHBhZGRpbmc9InJlY3QoMCw3cnAsMCw3cnApIj4NCjxBY2Nlc3Np"
+    "YmxlYnV0dG9uIGlkPSJhdG9tKE1haW50ZW5hbmNlR3JvdXBIZWFkaW5nKSIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0"
+    "cG9zPSJ0b3AiIGJhY2tncm91bmQ9ImFyZ2IoMCwwLDAsMCkiIGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9InJlc3N0cig1NjUp"
+    "IiBhY2Nyb2xlPSJwdXNoYnV0dG9uIj4NCjxFbGVtZW50IGxheW91dD0iZmxvd2xheW91dCgwLDIsMCwyKSIgbGF5b3V0cG9zPSJs"
+    "ZWZ0IiBwYWRkaW5nPSJyZWN0KDEwcnAsMHJwLDAsMHJwKSI+DQo8RWxlbWVudCBjbGFzcz0iRXhwYW5kb0J1dHRvblRleHQiIGNv"
+    "bnRlbnQ9InJlc3N0cig1MDQpIiBzaG9ydGN1dD0iYXV0byIvPg0KPC9FbGVtZW50Pg0KPEFjY2Vzc2libGVidXR0b24gaWQ9ImF0"
+    "b20oYXJyb3cpIiBsYXlvdXRwb3M9InJpZ2h0IiBsYXlvdXQ9ImZsb3dsYXlvdXQoKSIgcGFkZGluZz0icmVjdCgxMnJwLDAsMTJy"
+    "cCwwKSIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0icHVzaGJ1dHRvbiIgYWNjbmFtZT0icmVzc3RyKDUwNikiIGFjY2Rlc2M9"
+    "InJlc3N0cig1MDcpIj4NCjxCdXR0b24gaWQ9ImF0b20oRXhwYW5kb0J1dHRvbkltYWdlKSIgY2xhc3M9IkV4cGFuZEJ1dHRvbk5v"
+    "cm1hbCIgbGF5b3V0cG9zPSJ0b3AiIGFjdGl2ZT0iaW5hY3RpdmUiLz4NCjwvQWNjZXNzaWJsZWJ1dHRvbj4NCjwvQWNjZXNzaWJs"
+    "ZWJ1dHRvbj4NCjwvRWxlbWVudD4NCjxXSENSZXBlYXRlciBpZD0iYXRvbShSZWRNYWludGVuYW5jZUxpc3QpIiBleHBhbmQ9IlJl"
+    "ZE1vZHVsZSIgbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiPg0KPGJpbmQgY29ubmVjdD0iQnV0dG9uRGF0"
+    "YSIgcHJvcGVydHk9IkJ1dHRvbkRhdGEiLz4NCjxiaW5kIGNvbm5lY3Q9IlRpdGxlRGF0YSIgcHJvcGVydHk9IlRpdGxlRGF0YSIv"
+    "Pg0KPGJpbmQgY29ubmVjdD0iTm90aWZpY2F0aW9uVHlwZSIgcHJvcGVydHk9Ik5vdGlmaWNhdGlvblR5cGUiLz4NCjxiaW5kIGNv"
+    "bm5lY3Q9IkRldGFpbERhdGEiIHByb3BlcnR5PSJEZXRhaWxEYXRhIi8+DQo8YmluZCBjb25uZWN0PSJTZWNvbmRhcnlMaW5rIiBw"
+    "cm9wZXJ0eT0iU2Vjb25kYXJ5TGluayIvPg0KPGJpbmQgY29ubmVjdD0iRGV0YWlsSWNvbiIgcHJvcGVydHk9IkRldGFpbEljb24i"
+    "Lz4NCjxiaW5kIGNvbm5lY3Q9IkhlbHBOb3RpZmljYXRpb24iIHByb3BlcnR5PSJIZWxwTm90aWZpY2F0aW9uIi8+DQo8YmluZCBj"
+    "b25uZWN0PSJUdXJuT2ZmV2FybmluZyIgcHJvcGVydHk9IlR1cm5PZmZXYXJuaW5nIi8+DQo8L1dIQ1JlcGVhdGVyPg0KPEVsZW1l"
+    "bnQgaWQ9ImF0b20oTWFpbnRlbmFuY2VZZWxsb3dFeHBhbmRlZCkiIGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImJvcmRlcmxheW91"
+    "dCgpIj4NCjxXSENSZXBlYXRlciBpZD0iYXRvbShZZWxsb3dNYWludGVuYW5jZUxpc3QpIiBleHBhbmQ9IlllbGxvd01vZHVsZSIg"
+    "bGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiPg0KPGJpbmQgY29ubmVjdD0iQnV0dG9uRGF0YSIgcHJvcGVy"
+    "dHk9IkJ1dHRvbkRhdGEiLz4NCjxiaW5kIGNvbm5lY3Q9IlRpdGxlRGF0YSIgcHJvcGVydHk9IlRpdGxlRGF0YSIvPg0KPGJpbmQg"
+    "Y29ubmVjdD0iRGV0YWlsRGF0YSIgcHJvcGVydHk9IkRldGFpbERhdGEiLz4NCjxiaW5kIGNvbm5lY3Q9IlNlY29uZGFyeUxpbmsi"
+    "IHByb3BlcnR5PSJTZWNvbmRhcnlMaW5rIi8+DQo8YmluZCBjb25uZWN0PSJEZXRhaWxJY29uIiBwcm9wZXJ0eT0iRGV0YWlsSWNv"
+    "biIvPg0KPGJpbmQgY29ubmVjdD0iSGVscE5vdGlmaWNhdGlvbiIgcHJvcGVydHk9IkhlbHBOb3RpZmljYXRpb24iLz4NCjxiaW5k"
+    "IGNvbm5lY3Q9IlR1cm5PZmZXYXJuaW5nIiBwcm9wZXJ0eT0iVHVybk9mZldhcm5pbmciLz4NCjwvV0hDUmVwZWF0ZXI+DQo8L0Vs"
+    "ZW1lbnQ+DQo8RWxlbWVudCBpZD0iYXRvbShNYWludGVuYW5jZU92ZXJmbG93KSIgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iYm9y"
+    "ZGVybGF5b3V0KCkiIHBhZGRpbmc9InJlY3QoMCwwLDAsMCkiIGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9Ik92ZXJmbG93IE5v"
+    "dGlmaWNhdGlvbnMiIGFjY3JvbGU9InBhbmUiPg0KPEVsZW1lbnQgaWQ9ImF0b20oTWFpbnRlbmFuY2VPdmVyZmxvd0JveCkiIGNs"
+    "YXNzPSJoY19jb250ZW50X2JveCIgbGF5b3V0cG9zPSJ0b3AiIHBhZGRpbmc9InJlY3QoMCwwLDAsMCkiIGxheW91dD0iYm9yZGVy"
+    "bGF5b3V0KCkiPg0KPEVsZW1lbnQgaWQ9ImF0b20oTWFpbnRlbmFuY2VPdmVyZmxvd0Jhbm5lcikiIGNsYXNzPSJoY195ZWxsb3df"
+    "Y29udGVudF9iYW5uZXJfYm94IiBsYXlvdXRwb3M9ImxlZnQiLz4NCjxFbGVtZW50IGxheW91dHBvcz0iY2xpZW50IiBsYXlvdXQ9"
+    "ImJvcmRlcmxheW91dCgpIiBwYWRkaW5nPSJyZWN0KDEycnAsMTRycCwxMnJwLDE0cnApIj4NCjxFbGVtZW50IGxheW91dHBvcz0i"
+    "cmlnaHQiIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIHNoZWV0PSJjcF9zdHlsZSI+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIg"
+    "bGF5b3V0PSJmbG93bGF5b3V0KDAsMiwxLDIpIj4NCjx2aWV3ZXI+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3JkZXJsYXlv"
+    "dXQoKSIgbGF5b3V0cG9zPSJsZWZ0Ij4NCjxDQ1B1c2hCdXR0b24gaWQ9ImF0b20oTWFpbnRlbmFuY2VFeHBhbmRPdmVyZmxvdyki"
+    "IGNvbnRlbnQ9InJlc3N0cig1MDgpIiBsYXlvdXRwb3M9InJpZ2h0IiBhY3RpdmU9Im1vdXNlIHwga2V5Ym9hcmQiLz4NCjwvTmF2"
+    "aWdhdGVCdXR0b24+DQo8L3ZpZXdlcj4NCjwvRWxlbWVudD4NCjwvRWxlbWVudD4NCjxFbGVtZW50IGxheW91dHBvcz0ibGVmdCIg"
+    "bGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgc2hlZXQ9ImNwX3N0eWxlIj4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RleHQi"
+    "IGxheW91dHBvcz0idG9wIiBpZD0iYXRvbShNYWludGVuYW5jZU92ZXJmbG93VGV4dCkiLz4NCjwvRWxlbWVudD4NCjwvRWxlbWVu"
+    "dD4NCjwvRWxlbWVudD4NCjxFbGVtZW50IGxheW91dHBvcz0iYm90dG9tIiBjbGFzcz0iY3BfY29udGVudF92X3NwYWNlciIvPg0K"
+    "PC9FbGVtZW50Pg0KPEVsZW1lbnQgaWQ9ImF0b20oY2xpcHBlcikiIHNoZWV0PSJjcF9zdHlsZSIgY2xhc3M9ImNwX2NvbnRlbnRf"
+    "cGFuZSIgbGF5b3V0cG9zPSJib3R0b20iIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIHBhZGRpbmc9InJlY3QoMTJycCwxMHJwLDAs"
+    "N3JwKSIgYW5pbWF0aW9uPSJyZWN0YW5nbGVWIHwgcyB8IGZhc3QiPg0KPFdIQ1JlcGVhdGVyIGlkPSJhdG9tKE1haW50ZW5hbmNl"
+    "Q2hlY2tNb2R1bGUpIiBleHBhbmQ9IkNoZWNrTW9kdWxlIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InRvcCI+"
+    "DQo8YmluZCBjb25uZWN0PSJDaGVja1RpdGxlIiBwcm9wZXJ0eT0iQ2hlY2tUaXRsZSIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tT"
+    "dGF0dXMiIHByb3BlcnR5PSJDaGVja1N0YXR1cyIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tEZXNjcmlwdGlvbiIgcHJvcGVydHk9"
+    "IkNoZWNrRGVzY3JpcHRpb24iLz4NCjxiaW5kIGNvbm5lY3Q9IkNoZWNrTGluazEiIHByb3BlcnR5PSJDaGVja0xpbmsxIi8+DQo8"
+    "YmluZCBjb25uZWN0PSJDaGVja0xpbmtJY29uMSIgcHJvcGVydHk9IkNoZWNrTGlua0ljb24xIi8+DQo8YmluZCBjb25uZWN0PSJD"
+    "aGVja0xpbmsyIiBwcm9wZXJ0eT0iQ2hlY2tMaW5rMiIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tMaW5rSWNvbjIiIHByb3BlcnR5"
+    "PSJDaGVja0xpbmtJY29uMiIvPg0KPGJpbmQgY29ubmVjdD0iQ2hlY2tMaW5rMyIgcHJvcGVydHk9IkNoZWNrTGluazMiLz4NCjxi"
+    "aW5kIGNvbm5lY3Q9IkNoZWNrTGlua0ljb24zIiBwcm9wZXJ0eT0iQ2hlY2tMaW5rSWNvbjMiLz4NCjxiaW5kIGNvbm5lY3Q9IkNo"
+    "ZWNrTGluazQiIHByb3BlcnR5PSJDaGVja0xpbms0Ii8+DQo8YmluZCBjb25uZWN0PSJDaGVja0xpbmtJY29uNCIgcHJvcGVydHk9"
+    "IkNoZWNrTGlua0ljb240Ii8+DQo8YmluZCBjb25uZWN0PSJDaGVja0ljb24iIHByb3BlcnR5PSJDaGVja0ljb24iLz4NCjxiaW5k"
+    "IGNvbm5lY3Q9IkNoZWNrSGVscCIgcHJvcGVydHk9IkNoZWNrSGVscCIvPg0KPC9XSENSZXBlYXRlcj4NCjwvRWxlbWVudD4NCjwv"
+    "V0hDRXhwYW5kbz4NCjxFbGVtZW50IGlkPSJhdG9tKE1haW50ZW5hbmNlQm90dG9tTGluZSkiIGxheW91dHBvcz0idG9wIiBjbGFz"
+    "cz0iY3BfY29udGVudF9kaXZpZGVyX2xpbmUiIHdpZHRoPSI3MDBycCIgYW5pbWF0aW9uPSJwb3NpdGlvbiB8IHMgfCBmYXN0Ii8+"
+    "DQo8L0VsZW1lbnQ+DQo8RWxlbWVudCBpZD0iYXRvbShIYXZpbmdBUHJvYmxlbSkiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIo"
+    "Q09OVFJPTFBBTkVMLDIsMCksd2luZG93KSIgbGF5b3V0cG9zPSJ0b3AiIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGFjY2Vzc2li"
+    "bGU9InRydWUiIGFjY3JvbGU9InBhbmUiIGFjY25hbWU9IlNvbHV0aW9uIGJveCIgYW5pbWF0aW9uPSJwb3NpdGlvbiB8IHMgfCBm"
+    "YXN0Ij4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBjbGFzcz0iY3BfY29udGVudF92X3NwYWNlciIvPg0KPEVsZW1lbnQgbGF5"
+    "b3V0cG9zPSJ0b3AiIGNsYXNzPSJjcF9jb250ZW50X3Zfc3BhY2VyIi8+DQo8RWxlbWVudCBsYXlvdXRwb3M9InRvcCIgY2xhc3M9"
+    "ImNwX2NvbnRlbnRfdl9zcGFjZXIiLz4NCjxFbGVtZW50IGlkPSJhdG9tKFNvbHV0b25Cb3hIZWFkaW5nKSIgY2xhc3M9ImNwX2Nv"
+    "bnRlbnRfdGV4dCIgbGF5b3V0cG9zPSJ0b3AiIGNvbnRlbnQ9IklmIHRoZSBwcm9ibGVtIGlzbid0IGxpc3RlZCwgdHJ5IG9uZSBv"
+    "ZiB0aGVzZToiLz4NCjxFbGVtZW50IGlkPSJhdG9tKFdoU3RhdGljUGF0Y2hlZCkiIGxheW91dHBvcz0ibm9uZSIgd2lkdGg9IjAi"
+    "IGhlaWdodD0iMCIvPg0KPEVsZW1lbnQgbGF5b3V0PSJncmlkbGF5b3V0KDEsMikiIGxheW91dHBvcz0idG9wIiBwYWRkaW5nPSJy"
+    "ZWN0KDAsMjFycCwwLDApIiBiYWNrZ3JvdW5kPSJ0aGVtZWFibGUoZHRiKENPTlRST0xQQU5FTCwyLDApLHdpbmRvdykiPg0KPEVs"
+    "ZW1lbnQgbGF5b3V0PSJmbG93bGF5b3V0KDAsMCwwLDApIiBwYWRkaW5nPSJyZWN0KDEycnAsMCwxMnJwLDApIj4NCjxOYXZpZ2F0"
+    "ZUJ1dHRvbiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9ImxlZnQiIHNoZWxsZXhlY3V0ZT0iJVN5c3RlbVJvb3Ql"
+    "XFxleHBsb3Jlci5leGUiIHNoZWxsZXhlY3V0ZXBhcmFtcz0ic2hlbGw6Ojp7QzU4QzQ4OTMtM0JFMC00QjQ1LUFCQjUtQTYzRTRC"
+    "OEM4NjUxfSI+DQo8QnV0dG9uIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKFJ1blRyb3VibGVzaG9vdGluZykiIGxh"
+    "eW91dHBvcz0ibGVmdCIgY29udGVudD0iaWNvbigxMDIxLCA0OHJwLCA0OHJwLCBsaWJyYXJ5KGltYWdlcmVzLmRsbCkpIiBhY2Nl"
+    "c3NpYmxlPSJ0cnVlIiBhY2NuYW1lPSJUcm91Ymxlc2hvb3RpbmciIGFjY3JvbGU9InB1c2hidXR0b24iLz4NCjwvTmF2aWdhdGVC"
+    "dXR0b24+DQo8RWxlbWVudCBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InJpZ2h0IiBwYWRkaW5nPSJyZWN0KDEy"
+    "cnAsN3JwLDAsMCkiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0idG9wIiBzaGVs"
+    "bGV4ZWN1dGU9IiVTeXN0ZW1Sb290JVxcZXhwbG9yZXIuZXhlIiBzaGVsbGV4ZWN1dGVwYXJhbXM9InNoZWxsOjo6e0M1OEM0ODkz"
+    "LTNCRTAtNEI0NS1BQkI1LUE2M0U0QjhDODY1MX0iPg0KPEJ1dHRvbiBjbGFzcz0iY3BfY29udGVudF9saW5rIiBpZD0iYXRvbShS"
+    "dW5Ucm91Ymxlc2hvb3RpbmcpIiBsYXlvdXRwb3M9ImxlZnQiIGNvbnRlbnQ9IlRyb3VibGVzaG9vdGluZyIgc2hvcnRjdXQ9ImF1"
+    "dG8iIGFjY2Vzc2libGU9InRydWUiIGFjY3JvbGU9ImxpbmsiLz4NCjwvTmF2aWdhdGVCdXR0b24+DQo8RWxlbWVudCBjbGFzcz0i"
+    "Y3BfY29udGVudF90ZXh0IiBsYXlvdXRwb3M9InRvcCIgY29udGVudD0iRmluZCBhbmQgZml4IHByb2JsZW1zIHdpdGggeW91ciBj"
+    "b21wdXRlci4iIHBhZGRpbmc9InJlY3QoMCw1cnAsMCwwKSIvPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPEVsZW1lbnQgaWQ9"
+    "ImF0b20oU29sdXRvbkJveFJlY292ZXJ5KSIgbGF5b3V0PSJmbG93bGF5b3V0KDAsMCwwLDApIiBwYWRkaW5nPSJyZWN0KDEycnAs"
+    "MCwxMnJwLDApIj4NCjxOYXZpZ2F0ZUJ1dHRvbiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9ImxlZnQiIHNoZWxs"
+    "ZXhlY3V0ZT0iJVN5c3RlbVJvb3QlXFxTeXN0ZW0zMlxcY29udHJvbC5leGUiIHNoZWxsZXhlY3V0ZXBhcmFtcz0iL25hbWUgTWlj"
+    "cm9zb2Z0LlJlY292ZXJ5Ij4NCjxCdXR0b24gY2xhc3M9ImNwX2NvbnRlbnRfbGluayIgaWQ9ImF0b20oUmVzdG9yZVlvdXJQQyki"
+    "IGxheW91dHBvcz0ibGVmdCIgY29udGVudD0iaWNvbigxMDIyLCA0OHJwLCA0OHJwLCBsaWJyYXJ5KGltYWdlcmVzLmRsbCkpIiBh"
+    "Y2Nlc3NpYmxlPSJ0cnVlIiBhY2NuYW1lPSJSZWNvdmVyeSIgYWNjcm9sZT0icHVzaGJ1dHRvbiIvPg0KPC9OYXZpZ2F0ZUJ1dHRv"
+    "bj4NCjxFbGVtZW50IGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0icmlnaHQiIHBhZGRpbmc9InJlY3QoMTJycCw3"
+    "cnAsMjVycCwwKSI+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3JkZXJsYXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiIHNoZWxs"
+    "ZXhlY3V0ZT0iJVN5c3RlbVJvb3QlXFxTeXN0ZW0zMlxcY29udHJvbC5leGUiIHNoZWxsZXhlY3V0ZXBhcmFtcz0iL25hbWUgTWlj"
+    "cm9zb2Z0LlJlY292ZXJ5Ij4NCjxCdXR0b24gY2xhc3M9ImNwX2NvbnRlbnRfbGluayIgaWQ9ImF0b20oUmVzdG9yZVlvdXJQQyki"
+    "IGxheW91dHBvcz0ibGVmdCIgY29udGVudD0iUmVjb3ZlcnkiIHNob3J0Y3V0PSJhdXRvIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Ny"
+    "b2xlPSJsaW5rIi8+DQo8L05hdmlnYXRlQnV0dG9uPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRlbnRfdGV4dCIgbGF5b3V0cG9z"
+    "PSJ0b3AiIGNvbnRlbnQ9IlJlZnJlc2ggeW91ciBQQyB3aXRob3V0IGFmZmVjdGluZyB5b3VyIGZpbGVzLCBvciByZXNldCBpdCBh"
+    "bmQgc3RhcnQgb3Zlci4iIHBhZGRpbmc9InJlY3QoMCw1cnAsMCwwKSIvPg0KPC9FbGVtZW50Pg0KPC9FbGVtZW50Pg0KPC9FbGVt"
+    "ZW50Pg0KPC9FbGVtZW50Pg0KDQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8L1Njcm9sbFZpZXdlcj4NCjwvRWxlbWVudD4NCjwv"
+    "SGVhbHRoQ2VudGVyQ1BMUGFnZT4NCjwvZHVpeG1sPg0K"
+;
+
+static const char g_solutionBlockB64[] =
+    "PEVsZW1lbnQgaWQ9ImF0b20oSGF2aW5nQVByb2JsZW0pIiBiYWNrZ3JvdW5kPSJ0aGVtZWFibGUoZHRiKENPTlRST0xQQU5FTCwy"
+    "LDApLHdpbmRvdykiIGxheW91dHBvcz0idG9wIiBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBhY2Nlc3NpYmxlPSJ0cnVlIiBhY2Ny"
+    "b2xlPSJwYW5lIiBhY2NuYW1lPSJTb2x1dGlvbiBib3giIGFuaW1hdGlvbj0icG9zaXRpb24gfCBzIHwgZmFzdCI+DQo8RWxlbWVu"
+    "dCBsYXlvdXRwb3M9InRvcCIgY2xhc3M9ImNwX2NvbnRlbnRfdl9zcGFjZXIiLz4NCjxFbGVtZW50IGxheW91dHBvcz0idG9wIiBj"
+    "bGFzcz0iY3BfY29udGVudF92X3NwYWNlciIvPg0KPEVsZW1lbnQgbGF5b3V0cG9zPSJ0b3AiIGNsYXNzPSJjcF9jb250ZW50X3Zf"
+    "c3BhY2VyIi8+DQo8RWxlbWVudCBpZD0iYXRvbShTb2x1dG9uQm94SGVhZGluZykiIGNsYXNzPSJjcF9jb250ZW50X3RleHQiIGxh"
+    "eW91dHBvcz0idG9wIiBjb250ZW50PSJAQFdIX0hFQURJTkdAQCIvPg0KPEVsZW1lbnQgaWQ9ImF0b20oV2hTdGF0aWNQYXRjaGVk"
+    "KSIgbGF5b3V0cG9zPSJub25lIiB3aWR0aD0iMCIgaGVpZ2h0PSIwIi8+DQo8RWxlbWVudCBsYXlvdXQ9ImdyaWRsYXlvdXQoMSwy"
+    "KSIgbGF5b3V0cG9zPSJ0b3AiIHBhZGRpbmc9InJlY3QoMCwyMXJwLDAsMCkiIGJhY2tncm91bmQ9InRoZW1lYWJsZShkdGIoQ09O"
+    "VFJPTFBBTkVMLDIsMCksd2luZG93KSI+DQo8RWxlbWVudCBsYXlvdXQ9ImZsb3dsYXlvdXQoMCwwLDAsMCkiIHBhZGRpbmc9InJl"
+    "Y3QoMTJycCwwLDEycnAsMCkiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0ibGVm"
+    "dCIgc2hlbGxleGVjdXRlPSIlU3lzdGVtUm9vdCVcXGV4cGxvcmVyLmV4ZSIgc2hlbGxleGVjdXRlcGFyYW1zPSJzaGVsbDo6OntD"
+    "NThDNDg5My0zQkUwLTRCNDUtQUJCNS1BNjNFNEI4Qzg2NTF9Ij4NCjxCdXR0b24gY2xhc3M9ImNwX2NvbnRlbnRfbGluayIgaWQ9"
+    "ImF0b20oUnVuVHJvdWJsZXNob290aW5nKSIgbGF5b3V0cG9zPSJsZWZ0IiBjb250ZW50PSJpY29uKDEwMjEsIDQ4cnAsIDQ4cnAs"
+    "IGxpYnJhcnkoaW1hZ2VyZXMuZGxsKSkiIGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9IkBAV0hfVFNfVElUTEVAQCIgYWNjcm9s"
+    "ZT0icHVzaGJ1dHRvbiIvPg0KPC9OYXZpZ2F0ZUJ1dHRvbj4NCjxFbGVtZW50IGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91"
+    "dHBvcz0icmlnaHQiIHBhZGRpbmc9InJlY3QoMTJycCw3cnAsMCwwKSI+DQo8TmF2aWdhdGVCdXR0b24gbGF5b3V0PSJib3JkZXJs"
+    "YXlvdXQoKSIgbGF5b3V0cG9zPSJ0b3AiIHNoZWxsZXhlY3V0ZT0iJVN5c3RlbVJvb3QlXFxleHBsb3Jlci5leGUiIHNoZWxsZXhl"
+    "Y3V0ZXBhcmFtcz0ic2hlbGw6Ojp7QzU4QzQ4OTMtM0JFMC00QjQ1LUFCQjUtQTYzRTRCOEM4NjUxfSI+DQo8QnV0dG9uIGNsYXNz"
+    "PSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKFJ1blRyb3VibGVzaG9vdGluZykiIGxheW91dHBvcz0ibGVmdCIgY29udGVudD0i"
+    "QEBXSF9UU19USVRMRUBAIiBzaG9ydGN1dD0iYXV0byIgYWNjZXNzaWJsZT0idHJ1ZSIgYWNjcm9sZT0ibGluayIvPg0KPC9OYXZp"
+    "Z2F0ZUJ1dHRvbj4NCjxFbGVtZW50IGNsYXNzPSJjcF9jb250ZW50X3RleHQiIGxheW91dHBvcz0idG9wIiBjb250ZW50PSJAQFdI"
+    "X1RTX0RFU0NAQCIgcGFkZGluZz0icmVjdCgwLDVycCwwLDApIi8+DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8RWxlbWVudCBp"
+    "ZD0iYXRvbShTb2x1dG9uQm94UmVjb3ZlcnkpIiBsYXlvdXQ9ImZsb3dsYXlvdXQoMCwwLDAsMCkiIHBhZGRpbmc9InJlY3QoMTJy"
+    "cCwwLDEycnAsMCkiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0ibGVmdCIgc2hl"
+    "bGxleGVjdXRlPSIlU3lzdGVtUm9vdCVcXFN5c3RlbTMyXFxjb250cm9sLmV4ZSIgc2hlbGxleGVjdXRlcGFyYW1zPSIvbmFtZSBN"
+    "aWNyb3NvZnQuUmVjb3ZlcnkiPg0KPEJ1dHRvbiBjbGFzcz0iY3BfY29udGVudF9saW5rIiBpZD0iYXRvbShSZXN0b3JlWW91clBD"
+    "KSIgbGF5b3V0cG9zPSJsZWZ0IiBjb250ZW50PSJpY29uKDEwMjIsIDQ4cnAsIDQ4cnAsIGxpYnJhcnkoaW1hZ2VyZXMuZGxsKSki"
+    "IGFjY2Vzc2libGU9InRydWUiIGFjY25hbWU9IkBAV0hfUkVDX1RJVExFQEAiIGFjY3JvbGU9InB1c2hidXR0b24iLz4NCjwvTmF2"
+    "aWdhdGVCdXR0b24+DQo8RWxlbWVudCBsYXlvdXQ9ImJvcmRlcmxheW91dCgpIiBsYXlvdXRwb3M9InJpZ2h0IiBwYWRkaW5nPSJy"
+    "ZWN0KDEycnAsN3JwLDI1cnAsMCkiPg0KPE5hdmlnYXRlQnV0dG9uIGxheW91dD0iYm9yZGVybGF5b3V0KCkiIGxheW91dHBvcz0i"
+    "dG9wIiBzaGVsbGV4ZWN1dGU9IiVTeXN0ZW1Sb290JVxcU3lzdGVtMzJcXGNvbnRyb2wuZXhlIiBzaGVsbGV4ZWN1dGVwYXJhbXM9"
+    "Ii9uYW1lIE1pY3Jvc29mdC5SZWNvdmVyeSI+DQo8QnV0dG9uIGNsYXNzPSJjcF9jb250ZW50X2xpbmsiIGlkPSJhdG9tKFJlc3Rv"
+    "cmVZb3VyUEMpIiBsYXlvdXRwb3M9ImxlZnQiIGNvbnRlbnQ9IkBAV0hfUkVDX1RJVExFQEAiIHNob3J0Y3V0PSJhdXRvIiBhY2Nl"
+    "c3NpYmxlPSJ0cnVlIiBhY2Nyb2xlPSJsaW5rIi8+DQo8L05hdmlnYXRlQnV0dG9uPg0KPEVsZW1lbnQgY2xhc3M9ImNwX2NvbnRl"
+    "bnRfdGV4dCIgbGF5b3V0cG9zPSJ0b3AiIGNvbnRlbnQ9IkBAV0hfUkVDX0RFU0NAQCIgcGFkZGluZz0icmVjdCgwLDVycCwwLDAp"
+    "Ii8+DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo8L0VsZW1lbnQ+DQo="
+;
+
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+static std::string Base64Decode(const char* input) {
+    int table[256];
+    for (int i = 0; i < 256; i++) {
+        table[i] = -1;
+    }
+    const char* alpha =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (int i = 0; alpha[i]; i++) {
+        table[(unsigned char)alpha[i]] = i;
+    }
+
+    std::string out;
+    if (!input) {
+        return out;
+    }
+    size_t len = strlen(input);
+    out.reserve(len * 3 / 4 + 4);
+    int val = 0, valb = -8;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)input[i];
+        if (c == '=') {
+            break;
+        }
+        if (table[c] == -1) {
+            continue;
+        }
+        val = (val << 6) + table[c];
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(char((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
+
+static std::wstring BytesToWide(const std::string& bytes) {
+    std::wstring out;
+    if (bytes.empty()) {
+        return out;
+    }
+    int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
+                                (int)bytes.size(), nullptr, 0);
+    UINT cp = CP_UTF8;
+    if (n <= 0) {
+        cp = CP_ACP;
+        n = MultiByteToWideChar(cp, 0, bytes.data(), (int)bytes.size(), nullptr, 0);
+        if (n <= 0) {
+            return out;
+        }
+    }
+    out.resize((size_t)n);
+    MultiByteToWideChar(cp, 0, bytes.data(), (int)bytes.size(), out.data(), n);
+    return out;
+}
+
+static std::wstring XmlEscape(const wchar_t* s) {
+    std::wstring out;
+    if (!s) {
+        return out;
+    }
+    for (const wchar_t* p = s; *p; ++p) {
+        switch (*p) {
+            case L'&':
+                out += L"&amp;";
+                break;
+            case L'"':
+                out += L"&quot;";
+                break;
+            case L'<':
+                out += L"&lt;";
+                break;
+            case L'>':
+                out += L"&gt;";
+                break;
+            // Strip control chars that could break DirectUI XML
+            default:
+                if (*p == L'\t' || *p == L'\n' || *p == L'\r' || *p >= 32) {
+                    out.push_back(*p);
+                }
+                break;
+        }
+    }
+    return out;
+}
+
+static void ReplaceAll(std::wstring& s, const std::wstring& from, const std::wstring& to) {
+    if (from.empty() || s.empty()) {
+        return;
+    }
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::wstring::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+        // safety: avoid infinite loop if to contains from
+        if (to.find(from) != std::wstring::npos) {
+            break;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded resources (lazy)
+// ---------------------------------------------------------------------------
+std::wstring g_embeddedUifileW;
+std::wstring g_solutionTemplateW;
+bool g_embeddedReady = false;
+bool g_templateReady = false;
+
+bool EnsureEmbeddedUifile() {
+    if (g_embeddedReady) {
+        return !g_embeddedUifileW.empty();
+    }
+    g_embeddedReady = true;
+    std::string raw = Base64Decode(g_uifile201B64);
+    if (raw.empty()) {
+        Wh_Log(L"Failed to decode embedded UIFILE");
+        return false;
+    }
+    g_embeddedUifileW = BytesToWide(raw);
+    return !g_embeddedUifileW.empty();
+}
+
+bool EnsureSolutionTemplate() {
+    if (g_templateReady) {
+        return !g_solutionTemplateW.empty();
+    }
+    g_templateReady = true;
+    std::string raw = Base64Decode(g_solutionBlockB64);
+    if (raw.empty()) {
+        Wh_Log(L"Failed to decode solution template");
+        return false;
+    }
+    g_solutionTemplateW = BytesToWide(raw);
+    return !g_solutionTemplateW.empty();
+}
+
+std::wstring BuildLocalizedSolutionBlock() {
+    if (!EnsureSolutionTemplate()) {
+        return {};
+    }
+    const LangPack* pack = GetLangPack();
+    if (!pack || !pack->heading || !pack->tsTitle || !pack->tsDesc || !pack->recTitle ||
+        !pack->recDesc) {
+        Wh_Log(L"Invalid lang pack");
+        return {};
+    }
+
+
+    std::wstring block = g_solutionTemplateW;
+    ReplaceAll(block, L"@@WH_HEADING@@", XmlEscape(pack->heading));
+    ReplaceAll(block, L"@@WH_TS_TITLE@@", XmlEscape(pack->tsTitle));
+    ReplaceAll(block, L"@@WH_TS_DESC@@", XmlEscape(pack->tsDesc));
+    ReplaceAll(block, L"@@WH_REC_TITLE@@", XmlEscape(pack->recTitle));
+    ReplaceAll(block, L"@@WH_REC_DESC@@", XmlEscape(pack->recDesc));
+
+    // Refuse to return a block that still has unresolved tokens
+    if (block.find(L"@@WH_") != std::wstring::npos) {
+        Wh_Log(L"Unresolved localization tokens — abort block");
+        return {};
+    }
+    // Must keep native atoms
+    if (block.find(L"atom(HavingAProblem)") == std::wstring::npos ||
+        block.find(L"atom(RunTroubleshooting)") == std::wstring::npos ||
+        block.find(L"atom(RestoreYourPC)") == std::wstring::npos) {
+        Wh_Log(L"Solution block missing required native atoms — abort");
+        return {};
+    }
+    return block;
+}
+
+// ---------------------------------------------------------------------------
+// Hub detection / validation
+// ---------------------------------------------------------------------------
+bool LooksLikeActionCenterHub(const std::wstring& xml) {
+    // Full hub only — never patch module fragments (RedModule etc. alone).
+    if (xml.size() < 2000 || xml.size() > 2 * 1024 * 1024) {
+        return false;
+    }
+    if (xml.find(L"HealthCenterCPLPage") == std::wstring::npos) {
+        return false;
+    }
+    if (xml.find(L"atom(SecurityGroupExpando)") == std::wstring::npos) {
+        return false;
+    }
+    if (xml.find(L"atom(MaintenanceGroupExpando)") == std::wstring::npos) {
+        return false;
+    }
+    // Either stock or already-patched solution box
+    if (xml.find(L"atom(HavingAProblem)") == std::wstring::npos) {
+        return false;
+    }
+    return true;
+}
+
+bool ValidateHubXml(const std::wstring& xml) {
+    // Markers that MUST survive any patch — expandos + templates used at runtime
+    static const wchar_t* kRequired[] = {
+        L"HealthCenterCPLPage",
+        L"atom(SecurityGroupExpando)",
+        L"atom(MaintenanceGroupExpando)",
+        L"atom(HavingAProblem)",
+        L"atom(RunTroubleshooting)",
+        L"atom(RestoreYourPC)",
+        L"resid=\"RedModule\"",
+        L"resid=\"YellowModule\"",
+        L"resid=\"CheckModule\"",
+        L"atom(RedSecurityList)",
+        L"atom(YellowSecurityList)",
+        L"atom(RedMaintenanceList)",
+        L"atom(YellowMaintenanceList)",
+        L"atom(SecurityCheckModule)",
+        L"atom(MaintenanceCheckModule)",
+        L"</duixml>",
+    };
+    for (const wchar_t* m : kRequired) {
+        if (xml.find(m) == std::wstring::npos) {
+            Wh_Log(L"ValidateHubXml FAIL missing: %s", m);
+            return false;
+        }
+    }
+    // Rough well-formedness: balanced-ish Element open/close counts
+    // (self-closing not counted perfectly — only a sanity check)
+    size_t opens = 0, closes = 0;
+    for (size_t i = 0; i + 8 < xml.size(); ++i) {
+        if (xml[i] != L'<') {
+            continue;
+        }
+        if (xml.compare(i, 8, L"<Element") == 0) {
+            // self-close?
+            size_t gt = xml.find(L'>', i);
+            if (gt != std::wstring::npos && gt > 0 && xml[gt - 1] == L'/') {
+                continue;
+            }
+            ++opens;
+        } else if (xml.compare(i, 9, L"</Element") == 0) {
+            ++closes;
+        }
+    }
+    if (opens != closes) {
+        Wh_Log(L"ValidateHubXml FAIL Element open=%zu close=%zu", opens, closes);
+        return false;
+    }
+    // Ordering: Security before Maintenance before HavingAProblem
+    size_t sec = xml.find(L"atom(SecurityGroupExpando)");
+    size_t man = xml.find(L"atom(MaintenanceGroupExpando)");
+    size_t hav = xml.find(L"atom(HavingAProblem)");
+    if (!(sec < man && man < hav)) {
+        Wh_Log(L"ValidateHubXml FAIL section order sec=%zu man=%zu hav=%zu", sec, man, hav);
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Balanced element end (only Element / known DUI tags that nest)
+// ---------------------------------------------------------------------------
+static bool IsNameChar(wchar_t c) {
+    return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9') ||
+           c == L'_';
+}
+
+size_t FindBalancedElementEnd(const std::wstring& s, size_t start) {
+    if (start >= s.size() || s[start] != L'<') {
+        return std::wstring::npos;
+    }
+
+    // Only track tags that actually nest in this UIFILE tree.
+    // Counting every tag was fine too, but we require the start tag to be Element.
+    if (s.compare(start, 8, L"<Element") != 0) {
+        return std::wstring::npos;
+    }
+
+    size_t i = start;
+    int depth = 0;
+    const size_t n = s.size();
+    const size_t kMaxSteps = n;  // hard cap
+    size_t steps = 0;
+
+    while (i < n && steps++ < kMaxSteps) {
+        if (s[i] != L'<') {
+            ++i;
+            continue;
+        }
+        if (i + 1 < n && (s[i + 1] == L'!' || s[i + 1] == L'?')) {
+            size_t gt = s.find(L'>', i);
+            if (gt == std::wstring::npos) {
+                return std::wstring::npos;
+            }
+            i = gt + 1;
+            continue;
+        }
+        // closing
+        if (i + 1 < n && s[i + 1] == L'/') {
+            size_t nameStart = i + 2;
+            size_t nameEnd = nameStart;
+            while (nameEnd < n && IsNameChar(s[nameEnd])) {
+                ++nameEnd;
+            }
+            size_t gt = s.find(L'>', i);
+            if (gt == std::wstring::npos) {
+                return std::wstring::npos;
+            }
+            // Only depth-change for Element closes (matches how we open)
+            if (nameEnd > nameStart) {
+                std::wstring name = s.substr(nameStart, nameEnd - nameStart);
+                // Decrement for any non-empty close; DirectUI nests many types
+                --depth;
+            }
+            i = gt + 1;
+            if (depth == 0) {
+                return i;
+            }
+            continue;
+        }
+        // opening
+        size_t nameStart = i + 1;
+        size_t nameEnd = nameStart;
+        while (nameEnd < n && IsNameChar(s[nameEnd])) {
+            ++nameEnd;
+        }
+        size_t gt = s.find(L'>', i);
+        if (gt == std::wstring::npos) {
+            return std::wstring::npos;
+        }
+        const bool selfClose = (gt > i && s[gt - 1] == L'/');
+        if (!selfClose) {
+            ++depth;
+        }
+        i = gt + 1;
+        if (selfClose && depth == 0 && i > start) {
+            return i;
+        }
+    }
+    return std::wstring::npos;
+}
+
+// ---------------------------------------------------------------------------
+// Patch
+// ---------------------------------------------------------------------------
+std::wstring PatchHubXml(const std::wstring& input) {
+    // Already patched with our marker + CLSID + side-by-side? Still re-apply
+    // localization if needed, but only replace HavingAProblem section.
+    std::wstring block = BuildLocalizedSolutionBlock();
+    if (block.empty()) {
+        Wh_Log(L"Empty localized block — no patch");
+        return input;
+    }
+
+    const std::wstring marker = L"id=\"atom(HavingAProblem)\"";
+    size_t idPos = input.find(marker);
+    if (idPos == std::wstring::npos) {
+        Wh_Log(L"HavingAProblem not found — no patch");
+        return input;
+    }
+
+    size_t start = input.rfind(L'<', idPos);
+    if (start == std::wstring::npos) {
+        return input;
+    }
+    // Ensure we landed on <Element
+    if (input.compare(start, 8, L"<Element") != 0) {
+        Wh_Log(L"HavingAProblem not on Element tag — abort");
+        return input;
+    }
+
+    size_t end = FindBalancedElementEnd(input, start);
+    if (end == std::wstring::npos || end <= start || end > input.size()) {
+        Wh_Log(L"Could not balance HavingAProblem — abort");
+        return input;
+    }
+
+    // Never allow the replace range to swallow Security/Maintenance
+    size_t sec = input.find(L"atom(SecurityGroupExpando)");
+    size_t man = input.find(L"atom(MaintenanceGroupExpando)");
+    if (sec != std::wstring::npos && sec >= start && sec < end) {
+        Wh_Log(L"Replace range would remove SecurityGroup — abort");
+        return input;
+    }
+    if (man != std::wstring::npos && man >= start && man < end) {
+        Wh_Log(L"Replace range would remove MaintenanceGroup — abort");
+        return input;
+    }
+    // Range should be near the end of the document, after Maintenance
+    if (man != std::wstring::npos && end < man) {
+        Wh_Log(L"Replace range ends before Maintenance — abort");
+        return input;
+    }
+
+    // Bound size of replaced region (stock is ~2.4KB; allow up to 16KB)
+    if (end - start > 16 * 1024) {
+        Wh_Log(L"Replace range too large (%zu) — abort", end - start);
+        return input;
+    }
+
+    std::wstring xml = input;
+    xml.replace(start, end - start, block);
+
+    if (!ValidateHubXml(xml)) {
+        Wh_Log(L"Patched XML failed validation — keeping original");
+        return input;
+    }
+
+
+    return xml;
+}
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+#ifdef _WIN64
+#define THISCALL __cdecl
+#else
+#define THISCALL __thiscall
+#endif
+
+using SetXML_t = HRESULT(THISCALL*)(void* pThis, const WCHAR* pszXML, HINSTANCE hRes,
+                                    HINSTANCE hResTheme);
+SetXML_t SetXML_Original = nullptr;
+
+// Reentrancy: DirectUI may call SetXML nested; never patch re-entrantly.
+static thread_local int g_inSetXmlHook = 0;
+
+static HRESULT CallOriginalSetXML(void* pThis, const WCHAR* pszXML, HINSTANCE hRes,
+                                  HINSTANCE hResTheme) {
+    if (!SetXML_Original) {
+        return E_FAIL;
+    }
+    return SetXML_Original(pThis, pszXML, hRes, hResTheme);
+}
+
+// Patch body (called under reentrancy guard from SetXML_Hook)
+static HRESULT SetXML_HookBody(void* pThis, const WCHAR* pszXML, HINSTANCE hRes,
+                               HINSTANCE hResTheme) {
+    std::wstring xml(pszXML);
+    if (!LooksLikeActionCenterHub(xml)) {
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+
+
+    std::wstring source = xml;
+    if (g_useEmbeddedUifile && EnsureEmbeddedUifile()) {
+        source = g_embeddedUifileW;
+    }
+
+    std::wstring patched = PatchHubXml(source);
+    if (patched.empty() || patched == source) {
+        if (g_useEmbeddedUifile && source.c_str() != xml.c_str() && ValidateHubXml(source)) {
+            return CallOriginalSetXML(pThis, source.c_str(), hRes, hResTheme);
+        }
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+
+    HRESULT hr = CallOriginalSetXML(pThis, patched.c_str(), hRes, hResTheme);
+    if (FAILED(hr)) {
+        Wh_Log(L"SetXML(patched) failed 0x%08X — retry original", (unsigned)hr);
+        hr = CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+    return hr;
+}
+
+HRESULT THISCALL SetXML_Hook(void* pThis, const WCHAR* pszXML, HINSTANCE hRes,
+                             HINSTANCE hResTheme) {
+    if (!pszXML || !SetXML_Original) {
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+    if (!g_cplRestoreHubLinks || g_inSetXmlHook != 0) {
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+    // Cheap prefilter before any allocation / patching
+    if (!wcsstr(pszXML, L"HealthCenterCPLPage") ||
+        !wcsstr(pszXML, L"atom(HavingAProblem)") ||
+        !wcsstr(pszXML, L"atom(SecurityGroupExpando)")) {
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+
+    // Stability: validation + fallbacks (Windhawk/clang has no MSVC SEH).
+    g_inSetXmlHook++;
+    HRESULT hr = SetXML_HookBody(pThis, pszXML, hRes, hResTheme);
+    g_inSetXmlHook--;
+    return hr;
+}
+
+using SetXMLFromResource_t = HRESULT(THISCALL*)(void* pThis, PCWSTR lpName, PCWSTR lpType,
+                                                HMODULE hModule, HINSTANCE p4, HINSTANCE p5);
+SetXMLFromResource_t SetXMLFromResource_Original = nullptr;
+
+bool ModuleIsActionCenterCpl(HMODULE hModule) {
+    if (!hModule) {
+        return false;
+    }
+    wchar_t path[MAX_PATH];
+    DWORD n = GetModuleFileNameW(hModule, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) {
+        return false;
+    }
+    PCWSTR name = PathFindFileNameW(path);
+    return name && _wcsicmp(name, L"ActionCenterCPL.dll") == 0;
+}
+
+bool ResourceNameIs201(PCWSTR lpName) {
+    if (!lpName) {
+        return false;
+    }
+    if (IS_INTRESOURCE(lpName)) {
+        return (UINT_PTR)lpName == 201;
+    }
+    // Defensive: only short numeric names
+    return lpName[0] != L'\0' && _wcsicmp(lpName, L"201") == 0;
+}
+
+static HRESULT SetXMLFromResource_EmbeddedBody(void* pThis, HMODULE hModule, HINSTANCE p4) {
+    std::wstring source = g_embeddedUifileW;
+    std::wstring patched = PatchHubXml(source);
+    const std::wstring* use = &source;
+    if (!patched.empty() && ValidateHubXml(patched)) {
+        use = &patched;
+    } else if (!ValidateHubXml(source)) {
+        return E_FAIL;
+    }
+    return SetXML_Original(pThis, use->c_str(), hModule, p4);
+}
+
+HRESULT THISCALL SetXMLFromResource_Hook(void* pThis, PCWSTR lpName, PCWSTR lpType,
+                                         HMODULE hModule, HINSTANCE p4, HINSTANCE p5) {
+    if (!SetXMLFromResource_Original) {
+        return E_FAIL;
+    }
+
+    if (!g_cplRestoreHubLinks || !g_useEmbeddedUifile || g_inSetXmlHook != 0 || !lpType ||
+        !SetXML_Original) {
+        return SetXMLFromResource_Original(pThis, lpName, lpType, hModule, p4, p5);
+    }
+
+    if (_wcsicmp(lpType, L"UIFILE") != 0 || !ResourceNameIs201(lpName) ||
+        !ModuleIsActionCenterCpl(hModule) || !EnsureEmbeddedUifile()) {
+        return SetXMLFromResource_Original(pThis, lpName, lpType, hModule, p4, p5);
+    }
+
+    g_inSetXmlHook++;
+    HRESULT hr = SetXMLFromResource_EmbeddedBody(pThis, hModule, p4);
+    if (FAILED(hr)) {
+        Wh_Log(L"Embedded path failed 0x%08X — stock resource load", (unsigned)hr);
+        hr = SetXMLFromResource_Original(pThis, lpName, lpType, hModule, p4, p5);
+    }
+    g_inSetXmlHook--;
+    return hr;
+}
+
+bool CplHookDui() {
+    HMODULE dui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dui) {
+        Wh_Log(L"Failed to load dui70.dll");
+        return false;
+    }
+
+    const char* setXmlNames[] = {
+        "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
+        "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z",
+    };
+    bool hookedSetXml = false;
+    for (const char* name : setXmlNames) {
+        if (FARPROC p = GetProcAddress(dui, name)) {
+            Wh_SetFunctionHook((void*)p, (void*)SetXML_Hook, (void**)&SetXML_Original);
+            Wh_Log(L"Hooked SetXML: %S", name);
+            hookedSetXml = true;
+            break;
+        }
+    }
+    if (!hookedSetXml) {
+        Wh_Log(L"Could not find DUIXmlParser::SetXML");
+        return false;
+    }
+
+    const char* setFromResNames[] = {
+#ifdef _WIN64
+        "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
+#endif
+        "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z",
+    };
+    for (const char* name : setFromResNames) {
+        if (FARPROC p = GetProcAddress(dui, name)) {
+            Wh_SetFunctionHook((void*)p, (void*)SetXMLFromResource_Hook,
+                               (void**)&SetXMLFromResource_Original);
+            Wh_Log(L"Hooked _SetXMLFromResource: %S", name);
+            break;
+        }
+    }
+
+    return true;
+}
+
+
+// Called from Wh_ModInit — best-effort; failure must not block the tray flyout.
+static void CplInit(void) {
+    CplLoadSettings();
+    if (!g_cplRestoreHubLinks) {
+        Wh_Log(L"CPL hub links: disabled in settings");
+        return;
+    }
+    EnsureSolutionTemplate();
+    if (!CplHookDui()) {
+        Wh_Log(L"CPL hub links: DirectUI hooks unavailable (page patch inactive)");
+    } else {
+    }
+}
+
+static void CplSettingsChanged(void) {
+    CplLoadSettings();
+
+}
+
 BOOL Wh_ModInit(void) {
     Wh_Log(L"Win7 Action Center - Initializing...");
 
@@ -3971,7 +5070,6 @@ BOOL Wh_ModInit(void) {
     DetermineLocale();
     InitializeSRWLock(&g_Ctx.srwLock);
     g_Ctx.darkMode = IsDarkModeEnabled();
-    Wh_Log(L"Dark mode: %s", g_Ctx.darkMode ? L"enabled" : L"disabled");
     HDC hScreenDC = GetDC(NULL);
     UINT dpi = hScreenDC ? (UINT)GetDeviceCaps(hScreenDC, LOGPIXELSX) : 96;
     if (hScreenDC) ReleaseDC(NULL, hScreenDC);
@@ -4007,6 +5105,9 @@ BOOL Wh_ModInit(void) {
             return FALSE;
         }
     }
+    // Security and Maintenance CPL hub links (DirectUI) — independent of tray UI.
+    CplInit();
+
     g_Initialized = TRUE;
     Wh_Log(L"Initialization complete");
     return TRUE;
@@ -4016,9 +5117,9 @@ void Wh_ModSettingsChanged(void) {
     // Reload settings (can be called from any thread)
     LoadSettings();
     DetermineLocale();
+    CplSettingsChanged();
     g_Ctx.darkMode = IsDarkModeEnabled();
     
-    // Aggiorna il tooltip dell'icona tray con la nuova lingua
     EnsureTrayTooltip();
     
     // Post a message to the tray thread to handle hotkeys/timers
