@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         2.0
+// @version         2.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
