@@ -2,9 +2,9 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    Recreation of the Windows 7/8.1 Action Center Tray Icon and Flyout UI
-// @version        1.1.6
+// @version        1.2.4
 // @author         babamohammed
-// @github          https://github.com/babamohammed2022
+// @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
 // @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lcrypt32 -luxtheme -lole32 -loleaut32 -lmsimg32 -ladvapi32
@@ -18,16 +18,18 @@ This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout 
 Windows 7 theme
 
 ![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png)
+
 Windows 8.1 theme
 
-![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.1.webp)
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81action.webp)
 
 ## Features
 - **Real-time Security Status**: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.
 - **Interactive Flyout**: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.
-- **Dark Mode**: Automatically adapts to the system's theme.
+- **Dark Mode**: The mod automatically adapts to the system's theme.
 - **Rounded Corners**: Rounded corners are supported for a more similar look to the original Windows 7 flyout.
 - **Classic Theme support**: Disable the "Rounded Corners" theme to make the flyout use a classic theme.
+- **Balloon Notifications**: The mod displays a balloon notification when potential problems are detected.
 
 - **Hotkeys**:
   - `Ctrl+N`: Simulate a notification
@@ -44,20 +46,20 @@ The mod monitors your system's security settings including Firewall, Antivirus, 
 - The mod runs inside Explorer and works on Windows 10 and 11.
 - If the icon doesn't appear, try restarting Explorer or the mod.
 ## Credits 
-- Yvor - Testing on Windows 10 21H2.
+- Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
 - useRoundedCorners: true
   $name: Rounded Corners
-  $description: Use rounded corners to faithfully recreate the original Windows 7 appearance.
+  $description: Use rounded corners to better recreate the original Windows 7 appearance. Disable this option when using classic themes or other styles that do not support rounded window edges.
 - refreshInterval: 5000
   $name: Refresh Interval (ms)
   $description: How often to check security status (min 1000ms, 0 to disable).
 - enableHotkey: false
   $name: Enable Hotkeys
-  $description: Ctrl+N to simulate notification, Ctrl+Shift+N to clear.
+  $description: Ctrl+N to simulate notifications and Ctrl+Shift+N to clear them.
 - language: auto
   $name: Language
   $description: Interface language (auto, en, it, es, fr, ru).
@@ -342,7 +344,24 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define REFRESH_TIMER_ID           1001
 #define TRAY_RETRY_TIMER_ID        1002
 #define TRAY_HEALTH_TIMER_ID       1003
+#define PROBLEM_BALLOON_TIMER_ID   2003
+#define PROBLEM_BALLOON_FALLBACK_MS 30000
+#define PROBLEM_BALLOON_COOLDOWN_MS 60000
 #define WM_TRAY_SHUTDOWN           (WM_USER + 602)
+
+// Compatibilita' con SDK che non espongono ancora questi flag.
+#ifndef NIF_REALTIME
+#define NIF_REALTIME               0x00000040
+#endif
+#ifndef NIIF_RESPECT_QUIET_TIME
+#define NIIF_RESPECT_QUIET_TIME    0x00000080
+#endif
+#ifndef NIN_BALLOONSHOW
+#define NIN_BALLOONSHOW            (WM_USER + 2)
+#define NIN_BALLOONHIDE            (WM_USER + 3)
+#define NIN_BALLOONTIMEOUT         (WM_USER + 4)
+#define NIN_BALLOONUSERCLICK       (WM_USER + 5)
+#endif
 #define HOTKEY_ID_SIMULATE         9001
 #define HOTKEY_ID_CLEAR            9002
 #define HOTKEY_ID_LOGTREE          9003
@@ -412,6 +431,7 @@ static const WCHAR kBase64Tbl[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
 // GDI+ Rendering Subsystem (dynamic loading, from win7-network-flyout)
 // ============================================================================
 typedef int (WINAPI *GdipCreateBitmapFromHICON_t)(HICON, void**);
+typedef int (WINAPI *GdipCreateFromHDC_t)(HDC, void**);
 typedef int (WINAPI *GdipSetInterpolationMode_t)(void*, int);
 typedef int (WINAPI *GdipSetSmoothingMode_t)(void*, int);
 typedef int (WINAPI *GdipSetCompositingQuality_t)(void*, int);
@@ -429,6 +449,7 @@ typedef void (WINAPI *GdiplusShutdown_t)(ULONG_PTR);
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 static GdipCreateBitmapFromHICON_t pGdipCreateBitmapFromHICON = NULL;
+static GdipCreateFromHDC_t pGdipCreateFromHDC = NULL;
 static GdipSetInterpolationMode_t pGdipSetInterpolationMode = NULL;
 static GdipSetSmoothingMode_t pGdipSetSmoothingMode = NULL;
 static GdipSetCompositingQuality_t pGdipSetCompositingQuality = NULL;
@@ -456,12 +477,17 @@ static HMODULE g_hMsImg32 = NULL;
 static void* g_pBmpFlyoutGood = NULL;
 static void* g_pBmpFlyoutWarning = NULL;
 static void* g_pBmpFlyoutAlert = NULL;
+// GDI+ richiede che ogni stream PNG resti vivo quanto la relativa immagine.
+static IStream* g_pStreamFlyoutGood = NULL;
+static IStream* g_pStreamFlyoutWarning = NULL;
+static IStream* g_pStreamFlyoutAlert = NULL;
 
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
     g_hGdiPlus = LoadLibraryW(L"gdiplus.dll");
     if (!g_hGdiPlus) { Wh_Log(LOG_PREFIX L"GDI+: failed to load gdiplus.dll"); return FALSE; }
     pGdipCreateBitmapFromHICON = (GdipCreateBitmapFromHICON_t)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromHICON");
+    pGdipCreateFromHDC = (GdipCreateFromHDC_t)GetProcAddress(g_hGdiPlus, "GdipCreateFromHDC");
     pGdipSetInterpolationMode = (GdipSetInterpolationMode_t)GetProcAddress(g_hGdiPlus, "GdipSetInterpolationMode");
     pGdipSetSmoothingMode = (GdipSetSmoothingMode_t)GetProcAddress(g_hGdiPlus, "GdipSetSmoothingMode");
     pGdipSetCompositingQuality = (GdipSetCompositingQuality_t)GetProcAddress(g_hGdiPlus, "GdipSetCompositingQuality");
@@ -476,8 +502,9 @@ static BOOL InitGdiPlusRendering() {
         pGdipCreateBitmapFromStream = (GdipCreateBitmapFromStream_t)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromStream");
     auto pStartup = (GdiplusStartup_t)GetProcAddress(g_hGdiPlus, "GdiplusStartup");
     pGdiplusShutdown = (GdiplusShutdown_t)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
-    if (!pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode || !pGdipDrawImageRectI ||
-        !pGdipDeleteGraphics || !pGdipCreateBitmapFromScan0 || !pGdipGetImageGraphicsContext ||
+    if (!pGdipCreateBitmapFromHICON || !pGdipCreateFromHDC || !pGdipSetInterpolationMode ||
+        !pGdipDrawImageRectI || !pGdipDeleteGraphics || !pGdipCreateBitmapFromScan0 ||
+        !pGdipGetImageGraphicsContext ||
         !pGdipSetPixelOffsetMode || !pGdipGraphicsClear || !pGdipCreateHBITMAPFromBitmap ||
         !pGdipDisposeImage || !pStartup || !pGdiplusShutdown || !pGdipSetSmoothingMode || !pGdipSetCompositingQuality) {
         Wh_Log(LOG_PREFIX L"GDI+: missing function pointers"); FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; return FALSE; }
@@ -490,6 +517,34 @@ static BOOL InitGdiPlusRendering() {
     Wh_Log(LOG_PREFIX L"GDI+ initialized successfully");
     return TRUE;
 }
+
+// Disegna direttamente i PNG ARGB nel DC con ricampionamento di alta qualita'.
+// Evita il doppio passaggio PNG -> HICON -> DrawIconEx per le bandiere
+// ID 0, 1 e 2, soprattutto con fattori DPI non interi.
+static BOOL DrawGdipBitmapHighQuality(HDC hdc, void* bitmap,
+                                      int x, int y, int width, int height) {
+    if (!hdc || !bitmap || width <= 0 || height <= 0 ||
+        !pGdipCreateFromHDC || !pGdipDrawImageRectI || !pGdipDeleteGraphics)
+        return FALSE;
+
+    void* graphics = NULL;
+    if (pGdipCreateFromHDC(hdc, &graphics) != 0 || !graphics)
+        return FALSE;
+
+    // InterpolationModeHighQualityBicubic = 7
+    // SmoothingModeHighQuality = 2
+    // CompositingQualityHighQuality = 2
+    // PixelOffsetModeHighQuality = 2
+    if (pGdipSetInterpolationMode)   pGdipSetInterpolationMode(graphics, 7);
+    if (pGdipSetSmoothingMode)       pGdipSetSmoothingMode(graphics, 2);
+    if (pGdipSetCompositingQuality)  pGdipSetCompositingQuality(graphics, 2);
+    if (pGdipSetPixelOffsetMode)     pGdipSetPixelOffsetMode(graphics, 2);
+
+    int status = pGdipDrawImageRectI(graphics, bitmap, x, y, width, height);
+    pGdipDeleteGraphics(graphics);
+    return status == 0;
+}
+
 static BYTE B64Val(WCHAR c) {
     const WCHAR* p = wcschr(kBase64Tbl, c);
     return p ? (BYTE)(p - kBase64Tbl) : 0xFF;
@@ -502,8 +557,11 @@ static BYTE B64Val(WCHAR c) {
 // Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
 static void ShutdownGdiPlus() {
     if (g_pBmpFlyoutGood) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutGood); g_pBmpFlyoutGood = NULL; }
+    if (g_pStreamFlyoutGood) { g_pStreamFlyoutGood->Release(); g_pStreamFlyoutGood = NULL; }
     if (g_pBmpFlyoutWarning) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutWarning); g_pBmpFlyoutWarning = NULL; }
+    if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
+    if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
     if (g_hGdiPlus) {
         if (pGdiplusShutdown && g_gdiplusToken) pGdiplusShutdown(g_gdiplusToken);
         FreeLibrary(g_hGdiPlus); g_hGdiPlus = NULL; g_gdiplusToken = 0;
@@ -581,6 +639,8 @@ public:
 // ============================================================================
 static int  CalculateFlyoutHeight(int activeProblems);
 static void ShowBalloonNotification(int oldState, int newState);
+static void ShowProblemBalloon(void);
+static void RemoveProblemBalloon(void);
 static void UpdateTrayIcon(void);
 static void AddTrayIcon(void);
 static void ScheduleTrayIconRecovery(void);
@@ -773,7 +833,7 @@ typedef enum {
     STR_TIP_ALERT, STR_MSG_FIREWALL, STR_MSG_ANTIVIRUS, STR_MSG_UPDATE,
     STR_MSG_UAC, STR_NOTIFY_MESSAGE, STR_NOTIFY_SIMULATED, STR_MSG_AUTOUPDATE,
     STR_MSG_ANTISPYWARE, STR_MSG_INTERNET, STR_MSG_SERVICE, STR_MSG_DEFENDER,
-    STR_AND_MORE, STR_TIP_NO_ISSUES, STR_TIP_ISSUES, STR_COUNT
+    STR_AND_MORE, STR_TIP_NO_ISSUES, STR_TIP_ISSUES, STR_NOTIFY_PROBLEM, STR_COUNT
 } LocaleStringId;
 typedef struct { LANGID langId; const WCHAR* strings[STR_COUNT]; } LocalePack;
 static const LocalePack g_Locales[] = {
@@ -786,7 +846,7 @@ static const LocalePack g_Locales[] = {
         L"Windows Update", 
         L"2 important messages", 
         L"1 important message", 
-        L"No current issues detected.\nYou can use Action Center to review recent messages about your computer's status and find solutions to problems.", 
+        L"No current issues detected\nYou can use Action Center to review recent messages about your computer's status and find solutions to problems.", 
         L"Action Center", 
         L"Action Center", 
         L"Action Center", 
@@ -802,8 +862,9 @@ static const LocalePack g_Locales[] = {
         L"Security Center service is not running.", 
         L"Windows Defender real-time protection is off.", 
         L"...and more", 
-        L"No current issues detected.", 
-        L"%d issues detected." 
+        L"No current issues detected", 
+        L"%d issues detected.", 
+        L"A problem has been detected. Please review your security status." 
     }},
     // Italiano (0x0410) - COMPLETO E FORMALE
     { 0x0410, { 
@@ -814,7 +875,7 @@ static const LocalePack g_Locales[] = {
         L"Windows Update", 
         L"2 messaggi importanti", 
         L"1 messaggio importante", 
-        L"Nessun problema rilevato.\n\u00C8 possibile utilizzare il Centro operativo per visualizzare i messaggi recenti sullo stato del computer e trovare soluzioni ai problemi.", 
+        L"Nessun problema rilevato\n\u00C8 possibile utilizzare il Centro operativo per visualizzare i messaggi recenti sullo stato del computer e trovare soluzioni ai problemi.", 
         L"Centro operativo", 
         L"Centro operativo", 
         L"Centro operativo", 
@@ -830,8 +891,9 @@ static const LocalePack g_Locales[] = {
         L"Il servizio Centro sicurezza non \u00E8 in esecuzione.", 
         L"La protezione in tempo reale di Windows Defender non \u00E8 attiva.", 
         L"...e altri", 
-        L"Nessun problema rilevato.", 
-        L"%d problemi rilevati." 
+        L"Nessun problema rilevato", 
+        L"%d problemi rilevati.", 
+        L"\u00C8 stato rilevato un problema. Si prega di verificare lo stato di sicurezza del sistema." 
     }},
     // Spagnolo (0x040A) - COMPLETO
     { 0x040A, { 
@@ -859,7 +921,8 @@ static const LocalePack g_Locales[] = {
         L"La protecci\u00F3n en tiempo real de Windows Defender est\u00E1 desactivada.", 
         L"...y m\u00E1s", 
         L"No se detectaron problemas.", 
-        L"%d problemas detectados." 
+        L"%d problemas detectados.", 
+        L"Se ha detectado un problema. Revise el estado de seguridad del sistema." 
     }},
     // Francese (0x040C) - COMPLETO
     { 0x040C, { 
@@ -887,7 +950,8 @@ static const LocalePack g_Locales[] = {
         L"La protection en temps r\u00E9el de Windows Defender est d\u00E9sactiv\u00E9e.", 
         L"...et plus", 
         L"Aucun probl\u00E8me d\u00E9tect\u00E9.", 
-        L"%d probl\u00E8mes d\u00E9tect\u00E9s." 
+        L"%d probl\u00E8mes d\u00E9tect\u00E9s.", 
+        L"Un probl\u00E8me a \u00E9t\u00E9 d\u00E9tect\u00E9. Veuillez v\u00E9rifier l'\u00E9tat de s\u00E9curit\u00E9." 
     }},
     // Russo (0x0419) - COMPLETO
     { 0x0419, { 
@@ -915,7 +979,8 @@ static const LocalePack g_Locales[] = {
         L"\u0417\u0430\u0449\u0438\u0442\u0430 \u0432 \u0440\u0435\u0430\u043B\u044C\u043D\u043E\u043C \u0432\u0440\u0435\u043C\u0435\u043D\u0438 Windows Defender \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430.", 
         L"... \u0438 \u0434\u0440\u0443\u0433\u0438\u0435", 
         L"\u041F\u0440\u043E\u0431\u043B\u0435\u043C \u043D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E", 
-        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E %d \u043F\u0440\u043E\u0431\u043B\u0435\u043C" 
+        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u043E %d \u043F\u0440\u043E\u0431\u043B\u0435\u043C", 
+        L"\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 \u0441\u0438\u0441\u0442\u0435\u043C\u044B." 
     }},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -1022,6 +1087,14 @@ struct GlobalContext {
     volatile LONG regMonitorRunning;
 } g_Ctx = {0};
 
+// Handle reale del modulo Windhawk. Usare explorer.exe come hInstance lascia
+// le classi finestra associate al processo host e rende il hot-reload fragile.
+static HINSTANCE g_hModInstance = NULL;
+static volatile LONG g_WscCallbacksInFlight = 0;
+
+static HINSTANCE GetModInstance(void) {
+    return g_hModInstance ? g_hModInstance : (HINSTANCE)GetModuleHandleW(NULL);
+}
 
 // Wait until the taskbar exists so Shell_NotifyIcon can succeed.
 // Returns TRUE if Shell_TrayWnd is available, FALSE on timeout / uninit.
@@ -1068,6 +1141,11 @@ static HICON g_hFlyoutIconGood = NULL;
 static HICON g_hFlyoutIconWarning = NULL;
 static HICON g_hFlyoutIconAlert = NULL;
 static HICON g_hShieldIcon = NULL;
+static HICON g_hProblemBalloonIcon = NULL;  
+static BOOL g_ProblemBalloonShowing = FALSE;
+static DWORD g_LastProblemBalloonTick = 0;
+static DWORD g_LastProblemBalloonSignature = 0;
+static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
 static BOOL g_Initialized = FALSE;
 
@@ -1106,9 +1184,12 @@ void InitGlobalFonts() {
 
 
 // Embedded icons as base64 strings
-static const WCHAR icon_id0_b64[] = L"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";
-static const WCHAR icon_id1_b64[] = L"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";
-static const WCHAR icon_id2_b64[] = L"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";
+// ID 0/1/2 sono PNG RGBA validi e completi: le precedenti risorse ID 1 e 2
+// contenevano dati IDAT corrotti, quindi la sgranatura non dipendeva dal resize.
+// ID 1 usa un badge giallo di avviso; ID 2 un badge rosso con X.
+static const WCHAR icon_id0_b64[] = L"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";
+static const WCHAR icon_id1_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAJBUlEQVR42uWXaXRV1RXHf/fc+8bkZXxJgARQyAAJJJIwiCJiwSCKQ5YGBdvVWiYFlUK+IO0yYr+0yxbBZbWt1modkGBKJxEQcUJAhIJggZSSROBlnl7y8t6707n9AKGIDLpWV7/0fD173/v77/0/e50D/+9L+fVvXlgTDvc8YFn2ifT09KcfXLzw9f8lgBYO9zxwy8yZKUeOHiurq6urAq4I8OLb/bmOLZf1dEcqWpu6s5tCXaGG+o6q3Zvv2vCtAQCOHqvj9KkQ0nGKLhdc/fRhX3Ja8kppWStVTXMH0/1YUqUtLLJ1s+fNkhl/y/l8++xffhsAkZyc8vtQKITtSHRd3/Pgkkf8Fwtc8fjHN1umecgyzMdLRrrcs671khJwEYtJfAk+sgtHI237yan37U78VhXoj/SuCwaD04cPG1ZcW1ubZOmxc5v3z3/b7fGIO1we9eF41LwxmOVl2uRBnDjdz6adOpZU6Ok0aAt10NcdwZvg95u6UTt17p67P1p/beQbAUgpT0Wj0VNN3eljPzs+5hqvYtdU3DerzaV5imzLmRiVFh7hJX90LskBledfPowlfKQPGYTb58Pr8+BL8BHp7cc2Yli6Wa5q6oEb5+65/8P11+694ikAWLdu3byT/TNe2fFxk9Z7qtHx+dxKSlaQQDCT4JAMMjL9hOqO8WV9M4kpAVIz0gkOySKQlopl2nS199B6up3u9m76+2IE0tJQNRWhuXYLVf2t0NTDQlMPv/tCsTHr4WNXC1XNFaooU1R1vgZg2/b2RPlpaMa43uG7In/t/GdjyZ+CRfMXhPujtO0/Sri1CbdbwZfgwYgb6PE4sUgUfyAR1eXC6/fiT/QSjXiI9ccRioO0JGBNBiajgKIolC86jGNLsjI8ROIOMV12qQBbt27tn1U+uWjCuPzSeKzfq4kTrx7e78rrampOi4bDKIAiQFUFqibQXBoujwuPz4vH6wXA1C30mI5pGASSkyidOJLBgxMZMTyZksI0JpamUVyQzPgxSYwfG2DXgTCOw2JtoBcul+stFOX26dOnZ8VjRtnBOh4DahwJtnSQtoNl2ViGhRHX0WNx4tEYvoQEXG4Nb4L3HFDrqWb0uEFioo+UVC/HTzjggKMoLJg3ktotzZiGvXPLc/mvivP8sKOjo+NUQUEBgaTkioqZx/YAB6V0kDbYtoNtSSzTwtCNMwCRKKZhIFSB1+chIeDD7XWjuVUiPRE628M01HfQ0hSmt1fnzplD2bO/k/ovI4a07SUA6sDft23bJsvLywcFM4JTDNPxnQ61Hq+rD74L3KMoZ1oghIJQFVRVRXOpuNxuPF4PHp+XlIDG4Ew/7sRUdNtNX2cnQtVAUcjMTOSu2Xk0nOzloz2tKAqPbf9dyaZzk3BgGYbxelNz80MFBXmDDx48dh/wHUUhhEP216pw1oyWHqN8fCZpyS627Oqjp7MLOxbGl5zI8KuHkJOTRDDNw7b3Gmhp60do2qYPXpvw1LlJeD7A8uXL61uaWw5kZqSTlpZWPHv6yXFCKG8pioLjDPhAYpk2pmGSluRm6bwccGxqP4zR2i1PglgbC0ekNHRSW1ah/v1m/ly7l9DpLhzL2iIt6/6vjOILB4NumDXd3d2xgvzcFFVVbxFCeUvVFATiK2YcM3YocysL+eM7p3hzcwuGYVe73FreG/5RVb2dfe8pkQZGJ/2FsuFHSJc7LNuUP5uovHTnzo1TYpcFsEx9U2NjY9OYonxUVaucXNp2SAgl7HDGjIrQuKF8EnmjcnjmV5+w70BzOB6Jzn5qSeqTv1iSYmw8guJIZ8Eo9/N1N0ywuel6xRnjXXtyVsbNq9fU/sF0zg6/SwKsWLGity/St1PVYGhOVnFykjHW7VZ3u1wqGcNymFpRTjRqsv6V9+lo6ztixPXxrz1V8jZANYg5G5G3B+doxcO/uKowHydjmGOPL7JG9LRToSg4T1T/x/gXBQDQ4/EX29pa+gqL8hCK8kBigmtv7vVTyJ1QxqFPPmfn1r3oMXODZVqTtm+49V8DeUU1KIATlXz/mtF4VA92fxilKB/H42bR2TD5tfvA19pgmbtCoeZGQx0zdt+xtDnxeLyu4eBhIp1dCOEYbrd47MjeH645P8cBRZmDXHkX6X4/SyaV4fz8BdQdn6I8sxJZnM+0xdOZtno1H9RUos7ZiH3JClRVVcnWDmPzF42JdMWzA51d5rje9va4lHKDIylqPLJozYU5G2sQgKObPDKphGDCIGS4D6WrF9xunKkTIeCn2qlG/KMQ57IVANBE30s+87OlN13TkLh/774vjh09MM/UG49cLHZAfdV3SQjYPFhWjIOJUAW4XaDrqHljkCOGMm35XkrXvsP+gSqISwFUrfjR8UGpbYdmTB1JcdGQgvGlBcqlYjdWnlFvdXJ34Uiy0jOQWChCgFBASsCHM64IFJWlZ5gvY8IBYQ68mJGRbl0/ZZJ31OiS6ZdSX1mDrK7Enehn1XVlgHLmqOkGRKJnPoSOGFuIk5PFvGV3UDBnI7ZTjRCXv604b/T2hjuKigrwerWKhQurlIupVxScvjjzxhVSkD0M2zEQmLDkXnj5pzByKDhRlIRU5A0TcLsdVgE88cEVAJYvX653dXW9kxTwkpmZVCpUOf7CmAFDuVSWTijBQT2rWIERuVBWCokpZ4tuIIoKcNJSuaeqgszVH17GAwNLSrm+vb0tPqpgRBKOXX7+Xk0l6urVyGUzmXZ1DqWDBuPYUVQJGBKq18D3VkBbG0gVTB3Fn4QcV4jfirIIcK4IYNv2e62trQ15eSPwerW5ixYuHn6hep+fH996E9Kdian6sbQAltuL1d6D1daFpSpYagDLFcDCjz19CuagLB6aX06aeiWAzZs3O7fddutVwWDwOk0TmU1Nof379u07VFOJ+vBzyOp7mZ0d5CcJfkTLSbSmECJ0EtHSgrgqE1GSi1BAhOoRTSFEUyNqSyeqEScQ10nWvsndvb+/f219fcPC7OzsZJfL9QPgtcoaJAqgUd8TYVXNZlTbQRHnWgd+L2gavL+Lr7hNSgimgMfD/m/8glmzZs0zzz77bHzZo48u+G8+Tv8NTu4OxreiPpsAAAAASUVORK5CYII=";
+static const WCHAR icon_id2_b64[] = L"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";
 static const WCHAR icon_id4_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAKISURBVFhH7ZdPiBJRHMc9hB208pAZaYcOHoSgW5duoQihIWwe6mJ0MQg6SGARwmTZQoSX2JHFw9qpMIJOsyCI0C2IREhYL0J4EPyDmqKrqdPv9/a9bdh0ndHZ2ct+4YPv6Xu/33fG995vRge6ADwAOAq28TvNJE0uh0fAXeAmcBU4C6wkElikYn2F3AMuA0uJBKH5RZvNtk6bM1WtVmv5fH4nnU5/jUQin6xW6zqLAXgBxVJkYDqdiuPxWBwOh2K/3xfr9fpuIpHI6PX6FzTWdQyqRCsZ6Ha7YqfTEbPZ7E8aC9eUIqlioNVqiWaz+TWNdxoDy5VqBlgswADI1lEYeAJcBGRJVQOhUOgjiwngrrgEHNR54NReU2UDsCum8XhcYHEXcBvY69D4KxtoNpukXS6Xa7A9t91u9wbLwXA6ne+MRuNL2j8aA71ej4yZTCZ05j81Go0mzfsY0N5AMpncpnl9gLYG2u32b4vFws4LskA1NRCLxT7TnHcAopkGBoPBbiaT+RYOhz/4/f5Nr9fLs7Eej4cPBoPvU6lUFhZbQ66BQqGwQ2M8Bc4BRP8ZyOVy3/GT/XYYdrv9TSAQ2IIK+Qv78wyUSqWyZOXfAPZFApFRINanYJ3Hhw78rywAE7avAJzL5doQBOFHNBr9grVglgG4SxXJBZG9L9U8A9eARboPcCaT6RUePsVisSo1UKlUajzPC5JSvYaTDmqeAbnCrcTmcA6H463P59s0GAzsdjPmPqyQATT/MgZQWHhuAQ8BNh/B50dMfGhhIoNp/mUNSHUGwDWzX2wWSW0DinVi4MTAc4AbjUZ/jsvAM4DD4nNcBvC8Z0kZil8uVhGWRTRB7gSg4eu5TvcXhIRVJI4SYh0AAAAASUVORK5CYII=";
 static const WCHAR icon_id5_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAQMSURBVFhHvZdtTFNXGMdNZjDTZhLsC7O4pWZlvqAze/GL21wWGhRBtymJug+YfUGyxESyBJeFpEMZyeL4YpQQPqxLlgg4dcsSjCykDhS0WBgqatfIpsDYSjvubW9b2gLPnuf0nNqgzpZe+Se/9N7ec/7P/5x7zz3tIpQe+QSxcuiYvlswJRdPhU+Rfcj7SAHyApKRmDFwifM02Y+sQuYlZsLrQ15eXj0/fKzGx8c9AwMDd9va2rpqamrOGI3GeuGBlCJpK60As7OzMD09DZFIBEKhEExMTEw1NjZ2ZGVlfcm9NpNpOsooQCAQAFmWobOz8xb3omcqLakSYHJyEnQ63VfcbwkZpyrVAggvZBmSsp5FgM+QXCQlqRqgqqqqRXgitCpWInOlRRbHD1UOgKtitqGhoV34PoWdSPyE+2ccwOfzsePh4WEPLs8LRUVFJ0UNQWFh4QmNRnOUnz+bAIqisDYzMzO850N5vV4fr3sIWfgAzc3NF3jdD5CFDSBJkt9gMIj3BXtAFzRAXV3dWV5zD8L02ADhcHiqo6PjWnV19emysrKm0tLSU6JtSUnJqYqKiu9sNlsnPmzeVAMMDg7e5R5HkOUI0yMB7Hb7dfoU1/4Ps9n8dXl5+be4Q96ncxFgYqQL+s/lQ//5fAh4HeByuYaTnvwtSELMiNdno0iC9nn60UH3yoAI0bEJsVoslpPt7e39tbW1P9JeIAL89vNbMHTRBPd6CsB5flMsaUBs7SfrSQFeQ56mA4g1Ozv7GL18hoaGxinAmPsncLRoQR6zQNC7A/padbCv+Pnvse1u1muOnhQgVdFSEn2sBevXfmO3rZRu//IKxIIfMWgWLtlWjGKo56jDXGUagEQbTzFysHLv0rOOVi0E/t6WCBDyxWcBA9AtfURqBGDCAllXT2vdLns+xEIfkxcjPgsbKICL2rDGSVIzQCWNVPFsh5jyYSJA1L8LQp5tYhYqWeMkqRIAjTU0QnfXWogFdkFU3vkwwGQx44+e9WIWNKwTl1oBjvS16XGkRRCVdkDk3+2JABGPhREcew+oDbVlnbgyDoCGOTQyGuHUX1shPPouhEfegcMH8xjhB1vijLwNf/auE7OQw7urEqDe+YMBFPebEHRtguCdDaDcLmAE72yMf0e4X4fA72+IWaAXE9MXiDUajcbmEwCNjDSi0R585Q7mg99pAn/fy+B3vJS4BQHnanZNufEqKDfXwMgVs5gFI3l8jlhp85lngKaBc7lYeDXIV40gX8kF+bIepG59IoDc8yK7RqEI+boJnGfYLDSRB70cRFFByn8uaCT/XDOzIlKXDqRfV4B0KSf+mUAbv9ZN6DGgAUa7TWwWyIO2RQrBZgJJ6+85mvS2Hl8O88HRou39D0aewSDtJRCqAAAAAElFTkSuQmCC";  // Tray: Bianca + Triangolo
 static const WCHAR icon_id6_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARLSURBVFhHvZd/SJx1HMcf2fxRuttynid3mjk7XWLLVcoG7o/ixAVa/pFBgzCKMPr1hxQWJl00GxQIJZuEf2QQFEYkBbOkS7AoEtO2GW1e2rEs5+6cZ5qPP+/d+/Pc97HLtna3c77hxfN9Hp/7vN/P9/n+eNSoTPIYcSukLde2TJHm0fA0eZjcS4qJhcQlozCUzPMYOUJyyDXJKKL8kZ2dfUw1L6vJycmLw8PDZ7u6uvqbm5s/cjgcx8wapJrErJgChEIhrK6uYmlpCQsLC/D7/Yvt7e29SUlJr6paZVI0FsUVYG5uDrOzs/B4PCOqloypmLQpAWZmZmC1Wl9X9ZKlcLTatABmLZJKotb1CPA8ySJRaVMDNDQ0fGjWJDIr7GSjMsj2cHOTA3BWhFpbW0+ada/C/SR8ourHHWB6etpoj4+PX+T07KmsrDxuepi4XK62tLS019T59QkwPz9v3LO2tqZ++Y8CgcC08n2ObH2Ajo6OHuVbQ7Y2QDAY/NNms5nrhTFAtzRAS0vLx8rzQWLosgF0XV/s7e39vrGx8YPa2tp3qqurT5j3VlVVnaivr3+vs7PTw8EWiAxwaeQM9BY3psoPQC9wYDYnAxMHS7B49ChGPvt0TNV4kewkhv4ToK+vb1CO5t/+D6fT+UZdXd27P3Z/8sebO5K7cXchUOwADh8CDu4D7iwASouAjETMp6fgZU3rfiIz/RH+dl1GIeVvPEUEss/LR4e8KxsxJe084q6oqDj+VdtbZydvsYaQvxu4zQ7kWICiHKCQ7fwsII/XUzUDXdMwtl1b+Wm/c33XvFKAO8jV9Chxv23P6IF9J3A7n3xfLlCyRwoBWamA7YZw+y4ncE8pkKAhwPNRTXsqXOLKAaLSrUmJR1CSD6TRZD+NTZXtNZ52Xswfuk9dBFZKC+FPS8F4OITxORdXAF++owm5fPr0bcCBYmBpUVWiXngWeObxcFtd/4LmZxQ/52Y2SY24Alwo4lPnZwJ21dU5u/4dQqTOOarxLY2HyAj5ja9IasQVYMpC04xkYHcijynwW3dgRoJsCMHvNXSTczQ+TaQHThGpEVeACTGjeYjmQZr7yFzlIeiqnhlErzkc7nbiJWObFcCXx+633YhLNJ5y3AT9gQpVidr4Kp6sw680nSDnGdxr2RZ/gFEOJB8L/sIA+l5OQ5EyfoUm70sPRQapqUCQ9w/z+imnI/5BKFNpkMV+YNEphjDNuOJhgNeGePRFhOD9YgJ5dUMJ4WkoKdzLy8srcoO0FVHrNBcVGd1fEwnSxuJyLgNOutw0NY/cEPBdxEL0EnHL5nOtAc4VOMoGE7QVbnP4RgzZEzLVZMCdJxeUsfA7GUhPWRl1la8vxbLem6YmMf9z4S28ufhLLs39NOinqRzl1YjhX8RL+BkED+/xusplf1mXbIsSwugJEte/533cpBikyZuejM9pyDZ8WRbp8qaB8AYWIU37G1xt2pFGvWvBAAAAAElFTkSuQmCC";  // Tray: Bianca + X Rossa
@@ -1161,7 +1242,8 @@ static HICON Base64ToIcon(const WCHAR* b64) {
 }
 
 // Decode Base64 PNG into a GDI+ Bitmap* (caller must pGdipDisposeImage).
-static void* Base64ToGdipBitmap(const WCHAR* b64) {
+static void* Base64ToGdipBitmap(const WCHAR* b64, IStream** retainedStream = NULL) {
+    if (retainedStream) *retainedStream = NULL;
     if (!b64 || !*b64 || !g_hGdiPlus || !pGdipCreateBitmapFromStream) return NULL;
 
     int len = lstrlenW(b64);
@@ -1196,7 +1278,13 @@ static void* Base64ToGdipBitmap(const WCHAR* b64) {
     void* bmp = NULL;
     if (pGdipCreateBitmapFromStream(stream, &bmp) != 0)
         bmp = NULL;
-    stream->Release();
+
+    if (bmp && retainedStream) {
+        // Il chiamante rilascera' lo stream solo dopo GdipDisposeImage.
+        *retainedStream = stream;
+    } else {
+        stream->Release();
+    }
     return bmp;
 }
 
@@ -1532,6 +1620,43 @@ HICON LoadActionCenterIcon(int index) {
 
 void InitFlyoutIcons() {
     Wh_Log(LOG_PREFIX L"Loading flyout icons...");
+
+    // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
+    // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
+    // la rasterizzazione aggiuntiva introdotta dalla conversione in HICON.
+    if (g_pBmpFlyoutGood && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpFlyoutGood);
+        g_pBmpFlyoutGood = NULL;
+    }
+    if (g_pStreamFlyoutGood) {
+        g_pStreamFlyoutGood->Release();
+        g_pStreamFlyoutGood = NULL;
+    }
+    if (g_pBmpFlyoutWarning && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpFlyoutWarning);
+        g_pBmpFlyoutWarning = NULL;
+    }
+    if (g_pStreamFlyoutWarning) {
+        g_pStreamFlyoutWarning->Release();
+        g_pStreamFlyoutWarning = NULL;
+    }
+    if (g_pBmpFlyoutAlert && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpFlyoutAlert);
+        g_pBmpFlyoutAlert = NULL;
+    }
+    if (g_pStreamFlyoutAlert) {
+        g_pStreamFlyoutAlert->Release();
+        g_pStreamFlyoutAlert = NULL;
+    }
+
+    g_pBmpFlyoutGood = Base64ToGdipBitmap(
+        icon_id0_b64, &g_pStreamFlyoutGood);
+    g_pBmpFlyoutWarning = Base64ToGdipBitmap(
+        icon_id1_b64, &g_pStreamFlyoutWarning);
+    g_pBmpFlyoutAlert = Base64ToGdipBitmap(
+        icon_id2_b64, &g_pStreamFlyoutAlert);
+    Wh_Log(LOG_PREFIX L"Flyout state bitmaps HQ: good=%p warning=%p alert=%p",
+           g_pBmpFlyoutGood, g_pBmpFlyoutWarning, g_pBmpFlyoutAlert);
     
     g_hFlyoutIconGood    = Base64ToIcon(icon_id0_b64);
     Wh_Log(LOG_PREFIX L"Flyout GOOD: %p", g_hFlyoutIconGood);
@@ -1545,8 +1670,11 @@ void InitFlyoutIcons() {
     g_hShieldIcon = NULL;
     ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
     if (!g_hShieldIcon) {
-        // Fallbacks
-        g_hShieldIcon = (HICON)LoadImageW(NULL, (LPCWSTR)32518, IMAGE_ICON, 16, 16, LR_SHARED); // IDI_SHIELD
+        // LR_SHARED restituisce un handle che non va distrutto: ne conserviamo
+        // una copia posseduta, compatibile con FreeAllIcons().
+        HICON hSharedShield = (HICON)LoadImageW(
+            NULL, (LPCWSTR)32518, IMAGE_ICON, 16, 16, LR_SHARED); // IDI_SHIELD
+        if (hSharedShield) g_hShieldIcon = CopyIcon(hSharedShield);
         if (!g_hShieldIcon) ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
     }
     
@@ -1556,6 +1684,7 @@ void InitFlyoutIcons() {
     if (!g_hFlyoutIconAlert)   { Wh_Log(LOG_PREFIX L"FALLBACK ALERT"); g_hFlyoutIconAlert = LoadActionCenterIcon(2); }
 }
 void FreeAllIcons() {
+    if (g_hProblemBalloonIcon) { DestroyIcon(g_hProblemBalloonIcon); g_hProblemBalloonIcon = NULL; }
     if (g_hFlyoutIconGood)    { DestroyIcon(g_hFlyoutIconGood);    g_hFlyoutIconGood    = NULL; }
     if (g_hFlyoutIconWarning) { DestroyIcon(g_hFlyoutIconWarning); g_hFlyoutIconWarning = NULL; }
     if (g_hFlyoutIconAlert)   { DestroyIcon(g_hFlyoutIconAlert);   g_hFlyoutIconAlert   = NULL; }
@@ -1855,34 +1984,249 @@ void RefreshSecurityState() {
 // ============================================================================
 void ShowBalloonNotification(int oldState, int newState) {
     if (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler)) return;
-    if (newState <= oldState) return;
-    // Non mostrare notifiche balloon: può causare instabilità di explorer
-    // quando il tray icon è in stato modificato di frequente.
-    // L'utente vedrà comunque il flyout aggiornato.
-    Wh_Log(LOG_PREFIX L"State change %d -> %d (balloon disabled for stability)", oldState, newState);
+
+    // Se il problema e' migliorato o risolto, non lasciare una notifica ormai
+    // obsoleta sullo schermo. Una futura ricomparsa potra' essere notificata.
+    if (newState <= oldState) {
+        if (newState < oldState)
+            RemoveProblemBalloon();
+        if (newState <= STATE_GOOD) {
+            g_LastProblemBalloonTick = 0;
+            g_LastProblemBalloonSignature = 0;
+            g_LastProblemBalloonState = STATE_GOOD;
+        }
+        return;
+    }
+    if (newState <= STATE_GOOD) return;
+    ShowProblemBalloon();
 }
+
+static DWORD ComputeProblemBalloonSignature(
+        int secState, int activeProblems, const int* problemTypes) {
+    // FNV-1a: sufficiente per riconoscere rapidamente notifiche identiche.
+    DWORD hash = 2166136261u;
+    hash ^= (DWORD)secState; hash *= 16777619u;
+    hash ^= (DWORD)activeProblems; hash *= 16777619u;
+    for (int i = 0; i < activeProblems && i < MAX_PROBLEMS; i++) {
+        hash ^= (DWORD)problemTypes[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static void BuildProblemBalloonText(
+        WCHAR* text, size_t textCount,
+        int activeProblems, int firstProblemType) {
+    if (!text || textCount == 0) return;
+    text[0] = L'\0';
+
+    const WCHAR* firstProblem = GetProblemText(firstProblemType);
+    if (!firstProblem || !firstProblem[0]) {
+        StringCchCopyW(text, textCount, LOC(STR_NOTIFY_PROBLEM));
+        return;
+    }
+
+    if (activeProblems <= 1) {
+        StringCchCopyW(text, textCount, firstProblem);
+        return;
+    }
+
+    WCHAR countText[96] = {0};
+    StringCchPrintfW(countText, ARRAYSIZE(countText),
+                     LOC(STR_TIP_ISSUES), activeProblems);
+    StringCchPrintfW(text, textCount, L"%s\n%s", firstProblem, countText);
+}
+
+// Rilascia soltanto le risorse locali. Usata quando Windows comunica che il
+// balloon e' gia' scomparso, quindi non serve un ulteriore NIM_MODIFY.
+static void ReleaseProblemBalloonResources(void) {
+    HWND hMsg = g_Ctx.hWndMsgHandler;
+    if (hMsg && IsWindow(hMsg))
+        KillTimer(hMsg, PROBLEM_BALLOON_TIMER_ID);
+
+    g_ProblemBalloonShowing = FALSE;
+    if (g_hProblemBalloonIcon) {
+        DestroyIcon(g_hProblemBalloonIcon);
+        g_hProblemBalloonIcon = NULL;
+    }
+}
+
+static void RemoveProblemBalloon(void) {
+    HWND hMsg = g_Ctx.hWndMsgHandler;
+    if (hMsg && IsWindow(hMsg)) {
+        KillTimer(hMsg, PROBLEM_BALLOON_TIMER_ID);
+
+        // Chiede prima alla shell di chiudere il balloon, mantenendo valida
+        // l'icona personalizzata fino al completamento di NIM_MODIFY.
+        if (g_Ctx.trayIconAdded) {
+            NOTIFYICONDATAW nid = g_nid;
+            nid.cbSize = sizeof(NOTIFYICONDATAW);
+            nid.uFlags |= NIF_INFO;
+            nid.szInfo[0] = L'\0';
+            nid.szInfoTitle[0] = L'\0';
+            nid.dwInfoFlags = NIIF_NONE;
+            nid.hBalloonIcon = NULL;
+            Shell_NotifyIconW(NIM_MODIFY, &nid);
+        }
+    }
+
+    ReleaseProblemBalloonResources();
+}
+
+void ShowProblemBalloon(void) {
+    if (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler)) return;
+    if (!g_Ctx.trayIconAdded || g_Ctx.isUninitializing) return;
+
+    // Snapshot coerente dello stato e dei problemi.
+    int secState, activeProblems, problemTypes[MAX_PROBLEMS];
+    {
+        SRWGuard guard(g_Ctx.srwLock, false);
+        secState = g_SecurityState;
+        activeProblems = g_ActiveProblems;
+        memcpy(problemTypes, g_ProblemTypes, sizeof(problemTypes));
+    }
+    if (secState <= STATE_GOOD || activeProblems <= 0) return;
+
+    // Non accodare ripetutamente lo stesso avviso. NIF_REALTIME impedisce
+    // inoltre a Windows di mostrare molto piu' tardi un balloon ormai vecchio.
+    DWORD signature = ComputeProblemBalloonSignature(
+        secState, activeProblems, problemTypes);
+    DWORD now = GetTickCount();
+    if (signature == g_LastProblemBalloonSignature &&
+        secState == g_LastProblemBalloonState &&
+        now - g_LastProblemBalloonTick < PROBLEM_BALLOON_COOLDOWN_MS) {
+        Wh_Log(LOG_PREFIX L"Duplicate problem balloon suppressed");
+        return;
+    }
+
+    if (g_ProblemBalloonShowing || g_hProblemBalloonIcon)
+        RemoveProblemBalloon();
+
+    // Stessa bandiera del flyout: ID 1 per avviso, ID 2 per problema critico.
+    HICON sourceIcon = g_hFlyoutIconGood;
+    const WCHAR* sourceB64 = icon_id0_b64;
+    if (secState >= STATE_ALERT) {
+        sourceIcon = g_hFlyoutIconAlert;
+        sourceB64 = icon_id2_b64;
+    } else if (secState >= STATE_WARNING) {
+        sourceIcon = g_hFlyoutIconWarning;
+        sourceB64 = icon_id1_b64;
+    }
+
+    if (sourceIcon)
+        g_hProblemBalloonIcon = CopyIcon(sourceIcon);
+    if (!g_hProblemBalloonIcon)
+        g_hProblemBalloonIcon = Base64ToIcon(sourceB64);
+
+    NOTIFYICONDATAW nid = g_nid;
+    nid.cbSize = sizeof(NOTIFYICONDATAW);
+    nid.uFlags |= NIF_INFO | NIF_REALTIME;
+    nid.uTimeout = 10000; // Windows recenti possono scegliere autonomamente.
+
+    if (g_hProblemBalloonIcon) {
+        nid.hBalloonIcon = g_hProblemBalloonIcon;
+        nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON |
+                          NIIF_RESPECT_QUIET_TIME;
+    } else {
+        nid.hBalloonIcon = g_nid.hIcon;
+        nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON |
+                          NIIF_RESPECT_QUIET_TIME;
+    }
+
+    StringCchCopyW(nid.szInfoTitle, ARRAYSIZE(nid.szInfoTitle),
+                   LOC(STR_NOTIFY_TITLE));
+    BuildProblemBalloonText(nid.szInfo, ARRAYSIZE(nid.szInfo),
+                            activeProblems, problemTypes[0]);
+
+    if (Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        g_ProblemBalloonShowing = TRUE;
+        g_LastProblemBalloonTick = now;
+        g_LastProblemBalloonSignature = signature;
+        g_LastProblemBalloonState = secState;
+
+        // Fallback di sicurezza: normalmente Windows invia NIN_BALLOONHIDE o
+        // NIN_BALLOONTIMEOUT e le risorse vengono rilasciate prima.
+        SetTimer(g_Ctx.hWndMsgHandler, PROBLEM_BALLOON_TIMER_ID,
+                 PROBLEM_BALLOON_FALLBACK_MS, NULL);
+    } else {
+        Wh_Log(LOG_PREFIX L"Unable to publish problem balloon: %lu",
+               GetLastError());
+        ReleaseProblemBalloonResources();
+    }
+}
+
+
 
 // ============================================================================
 // WSC Notifications
 // ============================================================================
 DWORD WINAPI WscChangeCallback(LPVOID lpParam) {
-    if (g_Ctx.isUninitializing) return 0;
-    if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler)) {
-        PostMessageW(g_Ctx.hWndMsgHandler, WM_SECURITY_CHANGED, 0, 0);
+    InterlockedIncrement(&g_WscCallbacksInFlight);
+
+    // Incrementiamo prima del controllo: il cleanup puo' attendere anche una
+    // callback entrata nello stesso istante dell'unregister.
+    if (!InterlockedCompareExchange(&g_Ctx.isUninitializing, 0, 0)) {
+        HWND hMsg = g_Ctx.hWndMsgHandler;
+        if (hMsg && IsWindow(hMsg))
+            PostMessageW(hMsg, WM_SECURITY_CHANGED, 0, 0);
     }
+
+    InterlockedDecrement(&g_WscCallbacksInFlight);
     return 0;
 }
+
 void RegisterWscNotifications() {
-    if (g_Ctx.hWscRegistration) return;
-    HRESULT hr = WscRegisterForChanges(NULL, &g_Ctx.hWscRegistration, WscChangeCallback, NULL);
-    if (FAILED(hr)) { Wh_Log(LOG_PREFIX L"WscRegisterForChanges failed: 0x%08X", hr); g_Ctx.hWscRegistration = NULL; }
-    else { Wh_Log(LOG_PREFIX L"WscRegisterForChanges registered"); }
+    HANDLE hLateRegistration = NULL;
+    HRESULT hr = E_ABORT;
+
+    {
+        // Serializza la registrazione con Wh_ModUninit. L'handle viene prima
+        // creato localmente, evitando che l'unregister possa perderlo.
+        SRWGuard guard(g_Ctx.srwLock, true);
+        if (g_Ctx.isUninitializing || g_Ctx.hWscRegistration) return;
+
+        HANDLE hNew = NULL;
+        hr = WscRegisterForChanges(NULL, &hNew, WscChangeCallback, NULL);
+        if (SUCCEEDED(hr) && hNew) {
+            if (g_Ctx.isUninitializing)
+                hLateRegistration = hNew;
+            else
+                g_Ctx.hWscRegistration = hNew;
+        }
+    }
+
+    if (hLateRegistration) {
+        WscUnRegisterChanges(hLateRegistration);
+        return;
+    }
+    if (FAILED(hr))
+        Wh_Log(LOG_PREFIX L"WscRegisterForChanges failed: 0x%08X", hr);
+    else
+        Wh_Log(LOG_PREFIX L"WSC notifications registered");
 }
+
 void UnregisterWscNotifications() {
-    HANDLE hReg = (HANDLE)InterlockedExchangePointer((PVOID*)&g_Ctx.hWscRegistration, NULL);
+    HANDLE hReg = NULL;
+    {
+        SRWGuard guard(g_Ctx.srwLock, true);
+        hReg = g_Ctx.hWscRegistration;
+        g_Ctx.hWscRegistration = NULL;
+    }
     if (hReg) {
         WscUnRegisterChanges(hReg);
         Wh_Log(LOG_PREFIX L"WSC notifications unregistered");
+    }
+}
+
+static void WaitForWscCallbacksToDrain(void) {
+    DWORD start = GetTickCount();
+    BOOL logged = FALSE;
+    while (InterlockedCompareExchange(&g_WscCallbacksInFlight, 0, 0) != 0) {
+        if (!logged && GetTickCount() - start >= 2000) {
+            Wh_Log(LOG_PREFIX L"Waiting for in-flight WSC callbacks");
+            logged = TRUE;
+        }
+        Sleep(1);
     }
 }
 
@@ -1935,7 +2279,9 @@ DWORD WINAPI RegistryMonitorThread(LPVOID lpParam) {
     return 0;
 }
 void StartRegistryMonitor() {
-    if (g_Ctx.hRegMonitorThread) return;
+    // Impedisce una creazione tardiva dopo StopRegistryMonitor durante reload.
+    SRWGuard lifecycleGuard(g_Ctx.srwLock, true);
+    if (g_Ctx.isUninitializing || g_Ctx.hRegMonitorThread) return;
     g_Ctx.hRegShutdownEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_Ctx.hRegChangeEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!g_Ctx.hRegShutdownEvent || !g_Ctx.hRegChangeEvent) {
@@ -1949,6 +2295,9 @@ void StartRegistryMonitor() {
     }
 }
 void StopRegistryMonitor() {
+    // Si accoppia al lock di StartRegistryMonitor: gli handle sono ormai
+    // completamente pubblicati oppure la creazione e' stata saltata.
+    SRWGuard lifecycleGuard(g_Ctx.srwLock, true);
     if (g_Ctx.hRegShutdownEvent) SetEvent(g_Ctx.hRegShutdownEvent);
     if (g_Ctx.hRegMonitorThread) {
         DWORD wr = WaitForSingleObject(g_Ctx.hRegMonitorThread, 5000);
@@ -2036,9 +2385,8 @@ static void BuildTrayTooltip(WCHAR* buf, size_t bufSize) {
     if (activeProblems <= 0) {
         StringCchPrintfW(buf, bufSize, L"%s - %s", title, LOC(STR_TIP_NO_ISSUES));
     } else {
-        WCHAR issuesBuf[128] = {0};
-        StringCchPrintfW(issuesBuf, ARRAYSIZE(issuesBuf), LOC(STR_TIP_ISSUES), activeProblems);
-        StringCchPrintfW(buf, bufSize, L"%s - %s", title, issuesBuf);
+        // Localized "something is wrong" message (same as the problem balloon).
+        StringCchPrintfW(buf, bufSize, L"%s - %s", title, LOC(STR_NOTIFY_PROBLEM));
     }
 }
 
@@ -2236,6 +2584,11 @@ static void RunTrayIconRecoveryAttempt() {
 // Notifications
 // ============================================================================
 void ClearNotifications() {
+    RemoveProblemBalloon();
+    g_LastProblemBalloonTick = 0;
+    g_LastProblemBalloonSignature = 0;
+    g_LastProblemBalloonState = STATE_GOOD;
+
     { SRWGuard g(g_Ctx.srwLock, true); g_SimulatedNotificationType = 0; }
     CheckSecurityProviders();
     if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify) && !g_Ctx.isUninitializing) {
@@ -2356,7 +2709,7 @@ void InstallClickOutsideHook() {
     if (g_hMouseHook) return;
     
     // Usa WH_MOUSE_LL globale
-    g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, ClickOutsideMouseHookProc, GetModuleHandle(NULL), 0);
+    g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, ClickOutsideMouseHookProc, GetModInstance(), 0);
     if (!g_hMouseHook) {
         Wh_Log(LOG_PREFIX L"Failed to install mouse hook (error: %lu)", GetLastError());
     } else {
@@ -2373,6 +2726,9 @@ void RemoveClickOutsideHook() {
 }
 
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (g_Ctx.isUninitializing)
+        return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+
     if (nCode == HC_ACTION &&
         (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
          wParam == WM_MBUTTONDOWN || wParam == WM_NCLBUTTONDOWN || wParam == WM_NCRBUTTONDOWN)) {
@@ -2612,16 +2968,34 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         
         SetBkMode(hdcMem, TRANSPARENT);
         
-        // Leggi stato
-        int activeProblems, problemTypesCopy[MAX_PROBLEMS];
+        // Leggi problemi e stato in un unico snapshot coerente.
+        int activeProblems, secState, problemTypesCopy[MAX_PROBLEMS];
         { SRWGuard guard(g_Ctx.srwLock, false);
           activeProblems = g_ActiveProblems;
+          secState = g_SecurityState;
           memcpy(problemTypesCopy, g_ProblemTypes, sizeof(g_ProblemTypes)); }
         
-        // Icona header
-        HICON hIcon = g_hFlyoutIconGood; 
-        int flagSize = ScaleDpi(34);
-        DrawIconEx(hdcMem, padL, (hdrH - flagSize) / 2, hIcon, flagSize, flagSize, 0, NULL, DI_NORMAL);
+        // Selezione dinamica della bandiera senza modificare la system tray:
+        // ID 0 = buono, ID 1 = avviso, ID 2 = allarme.
+        void* flagBitmap = g_pBmpFlyoutGood;
+        HICON flagFallback = g_hFlyoutIconGood;
+        if (secState >= STATE_ALERT) {
+            flagBitmap = g_pBmpFlyoutAlert;
+            flagFallback = g_hFlyoutIconAlert;
+        } else if (secState >= STATE_WARNING) {
+            flagBitmap = g_pBmpFlyoutWarning;
+            flagFallback = g_hFlyoutIconWarning;
+        }
+
+        // Tutti e tre i PNG sono 32x32 e usano la stessa pipeline GDI+ HQ.
+        int flagSize = ScaleDpi(32);
+        int flagY = (hdrH - flagSize) / 2;
+        if (!DrawGdipBitmapHighQuality(hdcMem, flagBitmap,
+                                       padL, flagY, flagSize, flagSize)) {
+            // Fallback HICON dello stesso stato se GDI+ non e' disponibile.
+            DrawIconEx(hdcMem, padL, flagY, flagFallback,
+                       flagSize, flagSize, 0, NULL, DI_NORMAL);
+        }
         
         int txL = padL + flagSize + ScaleDpi(8);
 
@@ -2871,10 +3245,15 @@ void CreateFlyoutWindow() {
     if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) return;
     if (!g_Ctx.flyoutClassRegistered) {
         WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
-        wc.lpfnWndProc = FlyoutWndProc; wc.hInstance = GetModuleHandle(NULL);
+        wc.lpfnWndProc = FlyoutWndProc; wc.hInstance = GetModInstance();
         wc.lpszClassName = FLYOUT_CLASS_NAME; wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        if (RegisterClassExW(&wc)) g_Ctx.flyoutClassRegistered = TRUE;
+        if (RegisterClassExW(&wc)) {
+            g_Ctx.flyoutClassRegistered = TRUE;
+        } else {
+            Wh_Log(LOG_PREFIX L"Flyout class registration failed: %lu", GetLastError());
+            return; // non usare una classe residua con una vecchia WndProc
+        }
     }
     
     // Calcola altezza dinamica in base ai problemi attivi
@@ -2897,11 +3276,11 @@ void CreateFlyoutWindow() {
         int h = rcWin.bottom - rcWin.top;
         g_Ctx.hWndFlyout = CreateWindowExW(dwExStyle, FLYOUT_CLASS_NAME, L"Win7 AC", dwStyle, 
             0, 0, w, h, 
-            NULL, NULL, GetModuleHandle(NULL), NULL);
+            NULL, NULL, GetModInstance(), NULL);
     } else {
         g_Ctx.hWndFlyout = CreateWindowExW(dwExStyle, FLYOUT_CLASS_NAME, L"Win7 AC", dwStyle, 
             0, 0, flyoutWidth, flyoutHeight, 
-            NULL, NULL, GetModuleHandle(NULL), NULL);
+            NULL, NULL, GetModInstance(), NULL);
     }
     if (!g_Ctx.hWndFlyout) { Wh_Log(LOG_PREFIX L"Flyout creation failed: %lu", GetLastError()); return; }
     
@@ -2929,6 +3308,7 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_CREATE:
+        InterlockedIncrement(&g_Ctx.refCount);
         RecalcDpiMetrics(GetDpiForWindow(hwnd));
         if (g_Ctx.darkMode) { BOOL useDark = TRUE; DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark)); }
         break;
@@ -2976,9 +3356,21 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         { SelectGuard sg(hdcMem, g_hFontBold); SetTextColor(hdcMem, clrTitle);
           RECT rcT = {ScaleDpi(8),ScaleDpi(2),g_ScaledNotifyWidth-ScaleDpi(8),ScaleDpi(20)}; DrawTextW(hdcMem, LOC(STR_NOTIFY_TITLE), -1, &rcT, DT_LEFT|DT_SINGLELINE); }
         int secState; { SRWGuard guard(g_Ctx.srwLock, false); secState = g_SecurityState; }
-        HICON hIcon = (secState >= STATE_ALERT) ? g_hFlyoutIconAlert :
-                     ((secState >= STATE_WARNING) ? g_hFlyoutIconWarning : g_hFlyoutIconGood);
-        DrawIconEx(hdcMem, ScaleDpi(10), ScaleDpi(26), hIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        void* notifyBitmap = g_pBmpFlyoutGood;
+        HICON notifyFallback = g_hFlyoutIconGood;
+        if (secState >= STATE_ALERT) {
+            notifyBitmap = g_pBmpFlyoutAlert;
+            notifyFallback = g_hFlyoutIconAlert;
+        } else if (secState >= STATE_WARNING) {
+            notifyBitmap = g_pBmpFlyoutWarning;
+            notifyFallback = g_hFlyoutIconWarning;
+        }
+        if (!DrawGdipBitmapHighQuality(hdcMem, notifyBitmap,
+                                       ScaleDpi(10), ScaleDpi(26),
+                                       iconSize, iconSize)) {
+            DrawIconEx(hdcMem, ScaleDpi(10), ScaleDpi(26), notifyFallback,
+                       iconSize, iconSize, 0, NULL, DI_NORMAL);
+        }
         int txL = ScaleDpi(10) + iconSize + ScaleDpi(6);
         { SelectGuard sg(hdcMem, g_hFontSmall); SetTextColor(hdcMem, clrText);
           RECT rcM = {txL,ScaleDpi(26),g_ScaledNotifyWidth-ScaleDpi(8),ScaleDpi(44)};
@@ -2994,19 +3386,35 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) { KillTimer(hwnd, NOTIFY_TIMER_ID); SetTimer(hwnd, NOTIFY_TIMER_ID, 1500, NULL); }
         break;
+    case WM_DESTROY:
+        KillTimer(hwnd, NOTIFY_TIMER_ID);
+        if (g_Ctx.hWndNotify == hwnd) g_Ctx.hWndNotify = NULL;
+        g_NotifyShowing = FALSE;
+        InterlockedDecrement(&g_Ctx.refCount);
+        break;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 void CreateNotifyWindow() {
     if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) return;
+    if (g_Ctx.isUninitializing) return;
+    if (g_Ctx.trayThreadId && GetCurrentThreadId() != g_Ctx.trayThreadId) {
+        Wh_Log(LOG_PREFIX L"CreateNotifyWindow rejected on non-tray thread");
+        return;
+    }
     if (!g_Ctx.notifyClassRegistered) {
         WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
-        wc.lpfnWndProc = NotifyWndProc; wc.hInstance = GetModuleHandle(NULL);
+        wc.lpfnWndProc = NotifyWndProc; wc.hInstance = GetModInstance();
         wc.lpszClassName = NOTIFY_WINDOW_CLASS_NAME; wc.hCursor = LoadCursor(NULL, IDC_HAND);
-        if (RegisterClassExW(&wc)) g_Ctx.notifyClassRegistered = TRUE;
+        if (RegisterClassExW(&wc)) {
+            g_Ctx.notifyClassRegistered = TRUE;
+        } else {
+            Wh_Log(LOG_PREFIX L"Notify class registration failed: %lu", GetLastError());
+            return; // evita una WndProc residua appartenente alla vecchia build
+        }
     }
-    g_Ctx.hWndNotify = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, NOTIFY_WINDOW_CLASS_NAME, L"", WS_POPUP, 0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight, NULL,NULL,GetModuleHandle(NULL),NULL);
+    g_Ctx.hWndNotify = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, NOTIFY_WINDOW_CLASS_NAME, L"", WS_POPUP, 0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight, NULL,NULL,GetModInstance(),NULL);
     if (!g_Ctx.hWndNotify) Wh_Log(LOG_PREFIX L"Notify window creation failed: %lu", GetLastError());
 }
 
@@ -3020,7 +3428,10 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     if (g_Ctx.taskbarCreatedMessage && uMsg == g_Ctx.taskbarCreatedMessage) {
         Wh_Log(LOG_PREFIX L"TaskbarCreated received; scheduling tray icon re-creation");
 
-        // After explorer restart the notification area may still be initializing.
+        // After explorer restart the old balloon no longer belongs to a valid
+        // tray icon. Release its local HICON before scheduling recovery.
+        ReleaseProblemBalloonResources();
+
         // Schedule a short delayed recovery instead of racing Shell_NotifyIcon.
         g_Ctx.trayIconAdded = FALSE;
         g_Ctx.trayRetryAttempt = 0;
@@ -3031,6 +3442,10 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         return 0;
     }
     if (uMsg == WM_TIMER) {
+        if (wParam == PROBLEM_BALLOON_TIMER_ID) {
+            RemoveProblemBalloon();
+            return 0;
+        }
         if (wParam == REFRESH_TIMER_ID) {
             if (!g_Ctx.isUninitializing) RefreshSecurityState();
             return 0;
@@ -3046,17 +3461,62 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
     }
     if (uMsg == WM_TRAY_SHUTDOWN) {
-        // La finestra e l'icona vengono distrutte ordinatamente nel cleanup
-        // del thread, dopo l'uscita dal message loop.
+        // Tutto cio' che possiede una WndProc della mod viene distrutto qui,
+        // sul thread proprietario, prima che Windhawk scarichi il codice.
+        InterlockedExchange(&g_Ctx.isUninitializing, 1L);
+        RemoveClickOutsideHook();
+
+        KillTimer(hwnd, PROBLEM_BALLOON_TIMER_ID);
+        KillTimer(hwnd, REFRESH_TIMER_ID);
+        KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
+        KillTimer(hwnd, TRAY_HEALTH_TIMER_ID);
+        RemoveProblemBalloon();
+
+        HWND hFly = g_Ctx.hWndFlyout;
+        if (hFly && IsWindow(hFly)) {
+            // Nessuna AnimateWindow durante l'unload: distruzione sincrona.
+            KillTimer(hFly, AUTOHIDE_TIMER_ID);
+            DestroyWindow(hFly);
+        }
+
+        HWND hNotify = g_Ctx.hWndNotify;
+        if (hNotify && IsWindow(hNotify)) {
+            KillTimer(hNotify, NOTIFY_TIMER_ID);
+            DestroyWindow(hNotify);
+        }
+
         PostQuitMessage(0);
         return 0;
     }
     if (uMsg == WM_TRAY_ICON_MSG) {
-        if (LOWORD(lParam) == WM_LBUTTONUP) { 
+        UINT trayEvent = LOWORD(lParam);
+
+        if (trayEvent == NIN_BALLOONSHOW) {
+            g_ProblemBalloonShowing = TRUE;
+            return 0;
+        }
+        if (trayEvent == NIN_BALLOONHIDE ||
+            trayEvent == NIN_BALLOONTIMEOUT) {
+            ReleaseProblemBalloonResources();
+            return 0;
+        }
+        if (trayEvent == NIN_BALLOONUSERCLICK) {
+            RemoveProblemBalloon();
+            // Il clic deve aprire, non chiudere, il flyout.
+            if (!g_Ctx.hWndFlyout || !IsWindow(g_Ctx.hWndFlyout) ||
+                !IsWindowVisible(g_Ctx.hWndFlyout)) {
+                PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0);
+            }
+            return 0;
+        }
+
+        if (trayEvent == WM_LBUTTONUP) { 
+            if (g_ProblemBalloonShowing) RemoveProblemBalloon();
             PostMessageW(hwnd, WM_TRIGGER_FLYOUT, 0, 0); 
             return 0; 
         }
-        if (LOWORD(lParam) == WM_RBUTTONUP) {
+        if (trayEvent == WM_RBUTTONUP) {
+            if (g_ProblemBalloonShowing) RemoveProblemBalloon();
             static DWORD lastMenuTime = 0;
             if (GetTickCount() - lastMenuTime < 500) return 0;
             lastMenuTime = GetTickCount();
@@ -3080,6 +3540,7 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         return 0;
     }
     if (uMsg == WM_TRIGGER_FLYOUT) { 
+ 
         ToggleFlyout(); 
         return 0; 
     }
@@ -3095,8 +3556,12 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         return 0; 
     }
     if (uMsg == WM_SIMULATE_NOTIFICATION) { 
-        if (g_Settings.enableNotificationSimulation && !g_Ctx.isUninitializing) 
-            SimulateNotification((int)wParam); 
+        if (g_Settings.enableNotificationSimulation && !g_Ctx.isUninitializing) {
+            SimulateNotification((int)wParam);
+            // Ora g_SecurityState e' gia' aggiornato: il balloon seleziona
+            // correttamente ID 1 oppure ID 2.
+            ShowProblemBalloon();
+        }
         return 0; 
     }
     if (uMsg == WM_CLEAR_NOTIFICATIONS) { 
@@ -3115,6 +3580,8 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         if (wParam == HOTKEY_ID_SIMULATE && g_Settings.enableNotificationSimulation) { 
             static int c = 0; 
             c = (c % 4) + 1; 
+            // Il relativo handler aggiorna prima lo stato e mostra poi il
+            // balloon, evitando che venga usata l'icona dello stato precedente.
             PostMessageW(hwnd, WM_SIMULATE_NOTIFICATION, c, 0); 
             return 0; 
         }
@@ -3158,9 +3625,16 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (!g_Ctx.trayMsgClassRegistered) {
         WNDCLASSEXW mwc = { sizeof(WNDCLASSEXW) };
-        mwc.lpfnWndProc = TrayMsgHandlerProc; mwc.hInstance = GetModuleHandle(NULL);
+        mwc.lpfnWndProc = TrayMsgHandlerProc; mwc.hInstance = GetModInstance();
         mwc.lpszClassName = TRAY_MESSAGE_CLASS_NAME;
-        if (RegisterClassExW(&mwc)) g_Ctx.trayMsgClassRegistered = TRUE;
+        if (RegisterClassExW(&mwc)) {
+            g_Ctx.trayMsgClassRegistered = TRUE;
+        } else {
+            Wh_Log(LOG_PREFIX L"Tray message class registration failed: %lu", GetLastError());
+            if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
+            CoUninitialize();
+            return 1; // non usare la WndProc appartenente alla build precedente
+        }
     }
 
     // TaskbarCreated è un broadcast inviato alle finestre top-level.
@@ -3168,13 +3642,18 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     g_Ctx.taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
     g_Ctx.hWndMsgHandler = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, TRAY_MESSAGE_CLASS_NAME, L"",
-        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandle(NULL), NULL);
+        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModInstance(), NULL);
 
     if (!g_Ctx.hWndMsgHandler) {
         if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
         CoUninitialize();
         return 1;
     }
+
+    // La notify window appartiene ora allo stesso thread/message loop del
+    // flyout e del tray handler, quindi puo' essere distrutta sincronicamente.
+    CreateNotifyWindow();
+
     if (g_Ctx.hTrayReadyEvent) SetEvent(g_Ctx.hTrayReadyEvent);
 
     // At Windows startup / explorer restart the tray may not exist yet.
@@ -3182,25 +3661,27 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     if (!WaitForTaskbarReady(15000)) {
         Wh_Log(LOG_PREFIX L"Shell_TrayWnd not ready within 15s — scheduling recovery");
     }
-    AddTrayIcon();
-    if (!g_Ctx.trayIconAdded) {
-        ScheduleTrayIconRecovery();
+    // Se Wh_ModUninit e' arrivato durante l'attesa della taskbar, non
+    // registrare nuove sorgenti asincrone dopo che il cleanup le ha fermate.
+    if (!g_Ctx.isUninitializing) {
+        AddTrayIcon();
+        if (!g_Ctx.trayIconAdded)
+            ScheduleTrayIconRecovery();
+        EnsureTrayTooltip();
+        RegisterWscNotifications();
+        StartRegistryMonitor();
+
+        if (g_Settings.refreshInterval > 0)
+            g_Ctx.refreshTimer = SetTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
+
+        SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+
+        if (g_Settings.enableHotkey) {
+            RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
+            RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
+        }
+        RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE, MOD_CONTROL | MOD_ALT, 'W');
     }
-    EnsureTrayTooltip();
-    RegisterWscNotifications();
-    StartRegistryMonitor();
-
-    if (g_Settings.refreshInterval > 0)
-        g_Ctx.refreshTimer = SetTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
-
-    // Timer di autoriparazione per riavvio taskbar (in caso TaskbarCreated non venga ricevuto)
-    SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
-
-    if (g_Settings.enableHotkey) {
-        RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
-        RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR, MOD_CONTROL | MOD_SHIFT, 'N');
-    }
-    RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_LOGTREE, MOD_CONTROL | MOD_ALT, 'W');
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -3208,7 +3689,14 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         DispatchMessageW(&msg);
     }
 
-    // Thread cleanup
+    // Thread cleanup. Fallback anche per un WM_QUIT che non sia passato
+    // attraverso WM_TRAY_SHUTDOWN.
+    RemoveClickOutsideHook();
+    if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout))
+        DestroyWindow(g_Ctx.hWndFlyout);
+    if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify))
+        DestroyWindow(g_Ctx.hWndNotify);
+
     if (g_Settings.enableHotkey) {
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE);
         UnregisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_CLEAR);
@@ -3228,56 +3716,120 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 // ============================================================================
 void CleanupModResources() {
     Wh_Log(LOG_PREFIX L"CleanupModResources: starting");
-    // 1. Signal uninitializing — prevents re-entry, tells threads to exit
+
+    // 1. Blocca immediatamente nuove operazioni e nuove registrazioni.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
-    // 2. Remove mouse hook immediately (no thread affinity)
-    RemoveClickOutsideHook();
-    // 3. Close flyout on its owning thread — just post, don't wait
-    if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout))
-        PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
-    // 4. Stop notification sources (thread-safe via InterlockedExchangePointer)
+
+    // 2. Ferma le sorgenti esterne e attendi le callback gia' entrate.
     UnregisterWscNotifications();
-    // 5. Signal registry monitor thread to exit (event-driven, instant)
+    WaitForWscCallbacksToDrain();
     StopRegistryMonitor();
-    // 6. Post WM_QUIT to tray thread's message window
-    if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler))
-        PostMessageW(g_Ctx.hWndMsgHandler, WM_TRAY_SHUTDOWN, 0, 0);
-    // 7. Wait for tray thread (short timeout — 500ms max)
+
+    // Se l'unload arriva immediatamente dopo CreateThread, attendi che il
+    // tray thread abbia creato la propria message window (o sia fallito).
+    if (g_Ctx.hTrayThread && g_Ctx.hTrayReadyEvent &&
+        (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler))) {
+        WaitForSingleObject(g_Ctx.hTrayReadyEvent, 5000);
+    }
+
+    // 3. Chiedi al thread proprietario di distruggere TUTTE le sue finestre.
+    // Non chiamiamo mai DestroyWindow da questo thread.
+    BOOL shutdownPosted = FALSE;
+    HWND hMsg = g_Ctx.hWndMsgHandler;
+    if (hMsg && IsWindow(hMsg))
+        shutdownPosted = PostMessageW(hMsg, WM_TRAY_SHUTDOWN, 0, 0);
+
+    if (!shutdownPosted && g_Ctx.hTrayThread &&
+        WaitForSingleObject(g_Ctx.hTrayThread, 0) == WAIT_TIMEOUT &&
+        g_Ctx.trayThreadId) {
+        Wh_Log(LOG_PREFIX L"Tray message window unavailable; posting WM_QUIT to owner thread");
+        PostThreadMessageW(g_Ctx.trayThreadId, WM_QUIT, 0, 0);
+    }
+
+    // 4. La fine del thread e' la barriera: dopo non esistono WndProc, timer
+    // o low-level mouse hook della mod ancora in esecuzione.
     if (g_Ctx.hTrayThread) {
         DWORD wr = WaitForSingleObject(g_Ctx.hTrayThread, 5000);
         if (wr == WAIT_TIMEOUT) {
-            Wh_Log(LOG_PREFIX L"Waiting for tray thread to exit");
+            Wh_Log(LOG_PREFIX L"Waiting for tray thread to finish owner-thread cleanup");
             WaitForSingleObject(g_Ctx.hTrayThread, INFINITE);
         }
         CloseHandle(g_Ctx.hTrayThread);
         g_Ctx.hTrayThread = NULL;
     }
-    // 8. Destroy any remaining windows (should be gone, but be safe).
-    // Snapshot HWNDs then null the globals first so concurrent WndProcs see NULL.
-    {
-        HWND hFly = g_Ctx.hWndFlyout;   g_Ctx.hWndFlyout = NULL;
-        HWND hMsg = g_Ctx.hWndMsgHandler; g_Ctx.hWndMsgHandler = NULL;
-        HWND hNtf = g_Ctx.hWndNotify;   g_Ctx.hWndNotify = NULL;
-        if (hFly && IsWindow(hFly)) DestroyWindow(hFly);
-        if (hMsg && IsWindow(hMsg)) DestroyWindow(hMsg);
-        if (hNtf && IsWindow(hNtf)) DestroyWindow(hNtf);
+
+    // Il tray thread potrebbe aver completato una registrazione WSC tardiva
+    // mentre il cleanup attendeva il lock. Dopo la sua uscita non possono più
+    // nascere nuove registrazioni; eseguiamo quindi una seconda barriera.
+    WaitForWscCallbacksToDrain();
+
+    if (g_Ctx.hTrayReadyEvent) {
+        CloseHandle(g_Ctx.hTrayReadyEvent);
+        g_Ctx.hTrayReadyEvent = NULL;
     }
-    // 9. Free GDI+ resources (bitmap cache)
+
+    // Nessun DestroyWindow cross-thread. Questi controlli sono diagnostici:
+    // normalmente il thread terminato ha gia' invalidato tutti gli HWND.
+    if ((g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) ||
+        (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) ||
+        (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler))) {
+        Wh_Log(LOG_PREFIX L"WARNING: a mod window survived tray-thread shutdown");
+    }
+
+    g_Ctx.hWndFlyout = NULL;
+    g_Ctx.hWndNotify = NULL;
+    g_Ctx.hWndMsgHandler = NULL;
+
+    // 5. Solo dopo la barriera del thread e' sicuro liberare il rendering.
     ShutdownGdiPlus();
-    // 10. Free icons and fonts
     FreeAllIcons();
     FreeGlobalFonts();
-    // 11. Unregister window classes
-    if (g_Ctx.flyoutClassRegistered) { UnregisterClassW(FLYOUT_CLASS_NAME, GetModuleHandle(NULL)); g_Ctx.flyoutClassRegistered = FALSE; }
-    if (g_Ctx.trayMsgClassRegistered) { UnregisterClassW(TRAY_MESSAGE_CLASS_NAME, GetModuleHandle(NULL)); g_Ctx.trayMsgClassRegistered = FALSE; }
-    if (g_Ctx.notifyClassRegistered) { UnregisterClassW(NOTIFY_WINDOW_CLASS_NAME, GetModuleHandle(NULL)); g_Ctx.notifyClassRegistered = FALSE; }
-    // 12. Zero out context
+
+    // 6. Le classi appartengono al modulo della mod, non a explorer.exe.
+    HINSTANCE hInst = GetModInstance();
+    if (g_Ctx.flyoutClassRegistered) {
+        if (!UnregisterClassW(FLYOUT_CLASS_NAME, hInst) &&
+            GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
+            Wh_Log(LOG_PREFIX L"Unregister flyout class failed: %lu", GetLastError());
+        g_Ctx.flyoutClassRegistered = FALSE;
+    }
+    if (g_Ctx.notifyClassRegistered) {
+        if (!UnregisterClassW(NOTIFY_WINDOW_CLASS_NAME, hInst) &&
+            GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
+            Wh_Log(LOG_PREFIX L"Unregister notify class failed: %lu", GetLastError());
+        g_Ctx.notifyClassRegistered = FALSE;
+    }
+    if (g_Ctx.trayMsgClassRegistered) {
+        if (!UnregisterClassW(TRAY_MESSAGE_CLASS_NAME, hInst) &&
+            GetLastError() != ERROR_CLASS_DOES_NOT_EXIST)
+            Wh_Log(LOG_PREFIX L"Unregister tray class failed: %lu", GetLastError());
+        g_Ctx.trayMsgClassRegistered = FALSE;
+    }
+
+    // 7. Ora non esistono piu' thread o finestre che possano leggere g_Ctx.
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     g_Initialized = FALSE;
     Wh_Log(LOG_PREFIX L"CleanupModResources: complete");
 }
 BOOL Wh_ModInit(void) {
     Wh_Log(LOG_PREFIX L"Win7 Action Center - Initializing...");
+
+    // Ricava l'HINSTANCE della DLL della mod usando un indirizzo nei suoi dati.
+    HMODULE hThisModule = NULL;
+    if (GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (LPCWSTR)(const void*)&g_hModInstance, &hThisModule)) {
+        g_hModInstance = (HINSTANCE)hThisModule;
+    } else {
+        g_hModInstance = (HINSTANCE)GetModuleHandleW(NULL);
+        Wh_Log(LOG_PREFIX L"Unable to resolve mod HINSTANCE; using process fallback");
+    }
+    InterlockedExchange(&g_WscCallbacksInFlight, 0);
+    g_ProblemBalloonShowing = FALSE;
+    g_LastProblemBalloonTick = 0;
+    g_LastProblemBalloonSignature = 0;
+    g_LastProblemBalloonState = STATE_GOOD;
     
     // Allow init even if Shell_TrayWnd is not ready yet (boot / explorer restart).
     if (!IsMainExplorerProcess()) { 
@@ -3318,12 +3870,27 @@ BOOL Wh_ModInit(void) {
         Wh_Log(LOG_PREFIX L"GDI+ init failed — will use DrawIconEx fallback");
     }
     InitFlyoutIcons();
-    CreateNotifyWindow();
+
+    // Il ready event chiude la race tra CreateThread e un unload immediato.
+    g_Ctx.hTrayReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_Ctx.hTrayReadyEvent)
+        Wh_Log(LOG_PREFIX L"Failed to create tray-ready event: %lu", GetLastError());
+
+    // Tutte le finestre vengono create dal TrayThreadProc.
     g_Ctx.hTrayThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, &g_Ctx.trayThreadId);
     if (!g_Ctx.hTrayThread) {
         Wh_Log(LOG_PREFIX L"Failed to create tray thread — cleaning up");
         CleanupModResources();
         return FALSE;
+    }
+    if (g_Ctx.hTrayReadyEvent) {
+        DWORD ready = WaitForSingleObject(g_Ctx.hTrayReadyEvent, 5000);
+        if (ready == WAIT_OBJECT_0 &&
+            (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler))) {
+            Wh_Log(LOG_PREFIX L"Tray thread failed before creating its message window");
+            CleanupModResources();
+            return FALSE;
+        }
     }
     g_Initialized = TRUE;
     Wh_Log(LOG_PREFIX L"Initialization complete");
@@ -3334,6 +3901,10 @@ void Wh_ModSettingsChanged(void) {
     LoadSettings();
     DetermineLocale();
     g_Ctx.darkMode = IsDarkModeEnabled();
+    
+    // Aggiorna il tooltip dell'icona tray con la nuova lingua
+    EnsureTrayTooltip();
+    
     if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
         if (g_Settings.enableHotkey) {
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
@@ -3356,6 +3927,7 @@ void Wh_ModSettingsChanged(void) {
 
 void Wh_ModUninit(void) {
     Wh_Log(LOG_PREFIX L"Wh_ModUninit called");
+    // Balloon e finestre vengono rimossi dal loro tray thread proprietario.
     CleanupModResources();
     Wh_Log(LOG_PREFIX L"Uninitialization complete");
 }
