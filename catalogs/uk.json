@@ -339,6 +339,35 @@
         "version": "1.2"
       }
     },
+    "always-on-top": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1783968636000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1783968636000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "AhmedAwad7",
+        "compilerOptions": "-luser32 -lwinmm",
+        "description": "Pin/unpin active window with Ctrl+Alt+T",
+        "github": "https://github.com/AhmedAwad7",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Always On Top Windows",
+        "version": "1.1"
+      }
+    },
     "amd-radeon-software-window-fix": {
       "details": {
         "defaultSorting": 2080,

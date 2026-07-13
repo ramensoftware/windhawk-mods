@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-13T13:48:47.000Z</updated>
+    <updated>2026-07-13T18:50:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Always On Top Windows 1.1]]></title>
+        <id>https://windhawk.net/mods/always-on-top#c0198738db007d4c83236e726efb078bd8ab0e76</id>
+        <link href="https://windhawk.net/mods/always-on-top"/>
+        <updated>2026-07-13T18:50:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alwaysontopwindows">Always On Top Windows</h1>
+<p><img src="https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/gif.gif" alt="Screenrecord" /></p>
+<h2 id="english">English</h2>
+<p>Press <strong><code>Ctrl+Alt+T</code></strong> to pin/unpin the active window on top of all other windows.</p>
+<p>This mod helps you multitask by keeping important windows always visible.</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>🔊 Sound notifications to indicate pin/unpin actions.</li>
+<li>⚡ Event-driven hotkey using <code>RegisterHotKey</code> (no continuous polling).</li>
+<li>🧹 Lightweight: runs as a tool in a dedicated <code>windhawk.exe</code> process.</li>
+</ul>
+<p><strong>Requirements:</strong></p>
+<ul>
+<li>Windhawk (latest version recommended).</li>
+<li>Windows 7 → Works efficiently</li>
+<li>Windows 8 → Works efficiently</li>
+<li>Windows 8.1 → Works efficiently</li>
+<li>Windows 10/11 → Not tested yet (if it works well for you, please let me know in Issues on GitHub)</li>
+</ul>
+<p><strong>Contributing:</strong></p>
+<h2 id="wewelcomecontributorsfeelfreetoopenissuesorpullrequestsongithub">We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.</h2>
+<h2 id="">العربية</h2>
+<p>اضغط <strong><code>Ctrl+Alt+T</code></strong> لتثبيت/إلغاء تثبيت النافذة النشطة فوق جميع النوافذ الأخرى.</p>
+<p>هذا المود يساعدك في تعدد المهام عن طريق تثبيت النوافذ المهمة لتظل مرئية دائماً.</p>
+<p><strong>المميزات:</strong></p>
+<ul>
+<li>🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.</li>
+<li>⚡ اختصار يعتمد على الأحداث (<code>RegisterHotKey</code>) بدون استقصاء مستمر.</li>
+<li>🧹 خفيف الوزن: يعمل كأداة في عملية مخصصة لـ <code>windhawk.exe</code>.</li>
+</ul>
+<p><strong>متطلبات النظام:</strong></p>
+<ul>
+<li>Windhawk (يفضل الإصدار الأحدث).</li>
+<li>ويندوز 7 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 8 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 8.1 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 10\11 --&gt; لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)</li>
+</ul>
+<p><strong>المساهمة:</strong>
+نرحب بالمساهمين! يمكنكم فتح Issues أو Pull Requests على GitHub.</p>]]></content>
+        <author>
+            <name>AhmedAwad7</name>
+            <uri>https://github.com/AhmedAwad7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 3.1.0]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#6a8862447e3495d146a8b444be27f71bb46fcaa0</id>
@@ -547,35 +597,6 @@ delete dialogs</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 3.8]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#d6ae7753bb4fba7be3bc2784d1e0fc4287d35fcc</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-07-08T08:08:12.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Fixed</strong></p>
-<ul>
-<li>Fixed Word Application resolution failures that could stop autosave with <code>0x80070490</code>.</li>
-<li>Relaxed overly strict validation of Word <code>Application.Hwnd</code>.</li>
-<li>Added support for Word COM HWND values that can arrive as sign-extended 32-bit handles on x64.</li>
-<li>Added fallback validation through <code>Application.ActiveWindow.Hwnd</code>.</li>
-<li>Added fallback validation through the <code>Application.Windows</code> collection.</li>
-<li>Prevented valid Word Application instances from being rejected when the direct application HWND does not map cleanly to the current <code>WINWORD.EXE</code> root window.</li>
-</ul>
-<p><strong>Improved</strong></p>
-<ul>
-<li>Made COM binding to the current Word instance more tolerant of different Word window/handle layouts.</li>
-<li>Improved startup/runtime reliability after settings reloads when Word automation is available but direct HWND validation is inconsistent.</li>
-<li>Added internal self-test coverage for COM HWND normalization.</li>
-</ul>
-<p><strong>Notes</strong></p>
-<ul>
-<li>No new user-facing settings or features.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

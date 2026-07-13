@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-12T18:23:07.000Z</updated>
+    <updated>2026-07-13T18:50:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Always On Top Windows 1.1]]></title>
+        <id>https://windhawk.net/mods/always-on-top#c0198738db007d4c83236e726efb078bd8ab0e76</id>
+        <link href="https://windhawk.net/mods/always-on-top"/>
+        <updated>2026-07-13T18:50:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alwaysontopwindows">Always On Top Windows</h1>
+<p><img src="https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/gif.gif" alt="Screenrecord" /></p>
+<h2 id="english">English</h2>
+<p>Press <strong><code>Ctrl+Alt+T</code></strong> to pin/unpin the active window on top of all other windows.</p>
+<p>This mod helps you multitask by keeping important windows always visible.</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>🔊 Sound notifications to indicate pin/unpin actions.</li>
+<li>⚡ Event-driven hotkey using <code>RegisterHotKey</code> (no continuous polling).</li>
+<li>🧹 Lightweight: runs as a tool in a dedicated <code>windhawk.exe</code> process.</li>
+</ul>
+<p><strong>Requirements:</strong></p>
+<ul>
+<li>Windhawk (latest version recommended).</li>
+<li>Windows 7 → Works efficiently</li>
+<li>Windows 8 → Works efficiently</li>
+<li>Windows 8.1 → Works efficiently</li>
+<li>Windows 10/11 → Not tested yet (if it works well for you, please let me know in Issues on GitHub)</li>
+</ul>
+<p><strong>Contributing:</strong></p>
+<h2 id="wewelcomecontributorsfeelfreetoopenissuesorpullrequestsongithub">We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.</h2>
+<h2 id="">العربية</h2>
+<p>اضغط <strong><code>Ctrl+Alt+T</code></strong> لتثبيت/إلغاء تثبيت النافذة النشطة فوق جميع النوافذ الأخرى.</p>
+<p>هذا المود يساعدك في تعدد المهام عن طريق تثبيت النوافذ المهمة لتظل مرئية دائماً.</p>
+<p><strong>المميزات:</strong></p>
+<ul>
+<li>🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.</li>
+<li>⚡ اختصار يعتمد على الأحداث (<code>RegisterHotKey</code>) بدون استقصاء مستمر.</li>
+<li>🧹 خفيف الوزن: يعمل كأداة في عملية مخصصة لـ <code>windhawk.exe</code>.</li>
+</ul>
+<p><strong>متطلبات النظام:</strong></p>
+<ul>
+<li>Windhawk (يفضل الإصدار الأحدث).</li>
+<li>ويندوز 7 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 8 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 8.1 --&gt; يعمل بكفاءة</li>
+<li>ويندوز 10\11 --&gt; لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)</li>
+</ul>
+<p><strong>المساهمة:</strong>
+نرحب بالمساهمين! يمكنكم فتح Issues أو Pull Requests على GitHub.</p>]]></content>
+        <author>
+            <name>AhmedAwad7</name>
+            <uri>https://github.com/AhmedAwad7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Low Battery Alarm 1.0.0]]></title>
         <id>https://windhawk.net/mods/low-battery-alarm#e0077ff36df5d27591e24a8f90f5e7434ba67217</id>
@@ -729,68 +779,6 @@ same general taskbar background use case.</p>]]></content>
         <author>
             <name>11581</name>
             <uri>https://github.com/r1file</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 2.0.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#4ec57cbfabddd7e1259a2f4de6d0cd8d27582ec4</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-06-29T17:34:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="macosminimizeanimation">MacOS Minimize Animation</h1>
-<p><img src="https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif" alt="Demo" /></p>
-<p>Brings the classic macOS <strong>genie</strong> effect to Windows. When you minimize a window
-it warps and flows down into the taskbar; when you restore it, it flows back out.</p>
-<p>Eye candy for something you do a hundred times a day.</p>
-<h2 id="seeitinaction">See it in action</h2>
-<ul>
-<li>Compile the mod with the button on the left or with Ctrl+B.</li>
-<li>Enable the mod and open any normal window (Explorer, a browser, Notepad…).</li>
-<li>Minimize it with the title bar <code>[-]</code> button or <code>Win</code>+<code>Down</code> and watch it warp
-and pour into the taskbar.</li>
-<li>Restore it from the taskbar and watch the genie play in reverse.</li>
-<li>Tweak the <strong>Animation duration</strong> in the settings to taste.</li>
-</ul>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Real genie warp.</strong> The window is sliced into horizontal strips that curve and
-funnel toward the taskbar (the bottom flows in first), instead of just shrinking.</li>
-<li><strong>Actually smooth.</strong> Progress is driven by real elapsed time and every rendered
-frame is gated on the DWM compose cycle (<code>DwmFlush</code>), so each frame you render is
-exactly one frame you see - perfectly aligned with vsync at any duration you set.</li>
-<li><strong>Smoothstep easing</strong> instead of a linear ramp, so it eases in and out.</li>
-<li><strong>Clean edges and fade</strong> via a per-pixel-alpha layered surface.</li>
-<li><strong>Smart targeting.</strong> The mod learns where each app's taskbar icon is (from where
-your cursor was when you minimized) and aims the genie at that spot next time.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>ShowWindow</code> and <code>DefWindowProcW</code> to catch minimize / restore
-requests. It snapshots the window, then on a dedicated high-priority thread it
-draws a transparent layered "ghost" window that warps the snapshot frame by frame
-into the taskbar, leaving the real window to minimize behind it without the
-system's own animation getting in the way.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Animation duration</strong> - how long the effect lasts (50-2000 ms).</li>
-<li><strong>Animate window restore (open)</strong> - also play the reverse genie when restoring.</li>
-<li><strong>Animate app launch (experimental)</strong> - also play the genie when an application
-window first opens. <strong>Experimental and off by default</strong>: it may briefly flash the
-window before animating, may not catch borderless apps, and can occasionally fire
-on splash / dialog windows. Leave it off and the mod behaves exactly like plain
-minimize / restore.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Works on all top-level windows; child / tiny / hidden windows are skipped.</li>
-<li>DWM transitions are temporarily disabled on the animated window and restored
-afterwards, so the system's own minimize/restore animation doesn't fight ours.</li>
-<li>The genie currently targets the primary monitor's taskbar edge.</li>
-</ul>
-<h1 id="gettingstarted">Getting started</h1>
-<p>Check out the documentation
-<a href="https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod">here</a>.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
