@@ -463,6 +463,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - hideMinimizedWindows: false
       $name: Hide Minimized Windows
       $description: Hide minimized windows from the switcher. When "Group Windows by Application" is enabled, an application is only hidden if all of its windows are minimized.
+    - sortMinimizedWindowsToEnd: true
+      $name: Sort Minimized Windows to the End
+      $description: Sort minimized windows after all active windows. Disable this to keep minimized windows in their Z-order.
   $name: Accessibility
 - ExcludedWindows:
     - excludeByTitle: ""
@@ -601,6 +604,7 @@ struct Settings {
     WCHAR showTitles[32];
     bool restoreAllWindows;
     bool hideMinimizedWindows;
+    bool sortMinimizedWindowsToEnd;
     int customCornerRadius;
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
@@ -1614,9 +1618,11 @@ static void BuildWindowList() {
                 return IsIconic(w.hWnd) != FALSE;  // hide if minimized
             }), g_windows.end());
     }
-    std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
-        return IsIconic(a.hWnd) < IsIconic(b.hWnd);
-    });
+    if (g_settings.sortMinimizedWindowsToEnd) {
+        std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
+            return IsIconic(a.hWnd) < IsIconic(b.hWnd);
+        });
+    }
 }
 
 // Layout + Thumbnails
@@ -3317,6 +3323,22 @@ static void PaintSwitcher() {
         void* bits = NULL;
         HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
         HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+        INT cp = GetCornerPref();
+        int radius = 0;
+        if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+            radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        } else if (cp == 2) {
+            radius = MulDiv(8, g_dpiX, 96);
+        } else if (cp == 3) {
+            radius = MulDiv(4, g_dpiX, 96);
+        }
+        if (radius > 0) {
+            HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+            SelectClipRgn(hdcMem, hClip);
+            DeleteObject(hClip);
+        }
+
         DrawSwitcherContent(hdcMem, true, g_hSwitcher);
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
         BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -3503,7 +3525,16 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
     return TRUE;
 }
 
+static void DestroyMirrorSwitchers() {
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror)) DestroyWindow(hMirror);
+    }
+    g_hMirrorSwitchers.clear();
+}
+
 static void ShowSwitcher(bool sticky) {
+    DestroyMirrorSwitchers();
+
     POINT pt; GetCursorPos(&pt);
     HMONITOR hMon = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0) ?
                     MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY) :
@@ -3601,10 +3632,7 @@ static void HideSwitcher() {
     CancelPendingShow();
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
 
-    for (HWND hMirror : g_hMirrorSwitchers) {
-        if (IsWindow(hMirror)) DestroyWindow(hMirror);
-    }
-    g_hMirrorSwitchers.clear();
+    DestroyMirrorSwitchers();
 
     UnregisterThumbnails();
     if (g_hSwitcher) {
@@ -3655,8 +3683,10 @@ static bool IsWindowTruncated(int idx) {
 // Helper: recompute layout and reposition switcher window
 static void RecomputeAndReposition() {
     UnregisterThumbnails();
+    DestroyMirrorSwitchers();
     RegisterThumbnailsEarly();
     HMONITOR hMon = MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+    g_hCurrentMonitor = hMon;
     ComputeLayout(hMon);
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfoW(hMon, &mi);
@@ -3679,6 +3709,9 @@ static void RecomputeAndReposition() {
     }
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
+        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    }
     if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     }
@@ -3973,6 +4006,10 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     }
 }
 
+static void SafeCloseWindow(HWND hWnd) {
+    PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+}
+
 // Close the window for the entry at idx (graceful WM_CLOSE, same as the close
 // button), remove it from the list and relayout. Shared by the close button,
 // middle-click and the Q key.
@@ -3983,12 +4020,12 @@ static void CloseSwitcherEntry(int idx) {
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             for (HWND hw : g_windows[idx].groupWindows) {
-                PostMessage(hw, WM_CLOSE, 0, 0);
+                SafeCloseWindow(hw);
             }
         } else {
             // closeRecent (Default)
             HWND closedHwnd = g_windows[idx].hWnd;
-            PostMessage(closedHwnd, WM_CLOSE, 0, 0);
+            SafeCloseWindow(closedHwnd);
             
             auto& group = g_windows[idx].groupWindows;
             group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
@@ -4004,27 +4041,23 @@ static void CloseSwitcherEntry(int idx) {
             }
         }
     } else {
-        PostMessage(g_windows[idx].hWnd, WM_CLOSE, 0, 0);
+        SafeCloseWindow(g_windows[idx].hWnd);
     }
 
     if (eraseEntry) {
+        for (const auto& kv : g_windows[idx].hThumbs) {
+            if (kv.second) DwmUnregisterThumbnail(kv.second);
+        }
+        g_windows[idx].hThumbs.clear();
+
         g_windows.erase(g_windows.begin() + idx);
     }
 
     if (g_windows.empty()) { HideSwitcher(); return; }
     if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
-    UnregisterThumbnails();
-    RegisterThumbnailsEarly();
-    ComputeLayout(g_hCurrentMonitor);
-    // Resize and re-center the window to match new layout
-    MONITORINFO rmi = { sizeof(rmi) }; GetMonitorInfoW(g_hCurrentMonitor, &rmi);
-    int cx, cy;
-    GetSwitcherPosition(rmi.rcWork, &cx, &cy);
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    if (g_hCloseBtnWnd) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    }
-    RegisterThumbnails();
+
+    RecomputeAndReposition();
+
     g_hoverIndex = -1;
     g_hoverWnd = NULL;
     g_isCloseHovered = false;
@@ -4539,6 +4572,7 @@ static void LoadSettings() {
     g_settings.showApplications = Wh_GetIntSetting(L"Grouping.showApplications");
     g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
     g_settings.hideMinimizedWindows = Wh_GetIntSetting(L"Accessibility.hideMinimizedWindows");
+    g_settings.sortMinimizedWindowsToEnd = Wh_GetIntSetting(L"Accessibility.sortMinimizedWindowsToEnd");
     v = Wh_GetStringSetting(L"Grouping.showTitles");
     wcscpy_s(g_settings.showTitles, v ? v : L"windowTitle"); Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
