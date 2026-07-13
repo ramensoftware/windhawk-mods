@@ -230,7 +230,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
       - maximize: 🗖 Maximize Window
       - minimize: 🗕 Minimize Window
       - close: ❌ Close Window
-      - show_desktop: 👁️‍🗨️ Show Desktop
+      - show_desktop: 👁️🗨️ Show Desktop
       - lock: 🔒 Lock PC
       - sleep: 🌙 Sleep PC
       - restart: 🔄 Restart PC
@@ -277,7 +277,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
           - maximize: 🗖 Maximize Window
           - minimize: 🗕 Minimize Window
           - close: ❌ Close Window
-          - show_desktop: 👁️‍🗨️ Show Desktop
+          - show_desktop: 👁️🗨️ Show Desktop
           - lock: 🔒 Lock PC
           - sleep: 🌙 Sleep PC
           - restart: 🔄 Restart PC
