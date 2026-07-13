@@ -1,102 +1,116 @@
 // ==WindhawkMod==
 // @id         always-on-top
 // @name       Always On Top Windows
-// @description Pin/unpin active window with Ctrl+Shift+T (with speech notifications)
-// @version    1.0
+// @description Pin/unpin active window with Ctrl+Alt+T
+// @version    1.1
 // @author     AhmedAwad7
 // @github     https://github.com/AhmedAwad7
 // @license    MIT
-// @include    *
-// @compilerOptions -luser32 -lsapi -lole32
+// @include    explorer.exe
+// @compilerOptions -luser32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Always On Top Windows
-Windhawk Mod
-==========================
+# Always On Top Windows
 
 ![Screenrecord](https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/gif.gif)
 
-لتفعيل تثبيت\إلغاء التثبيت فوق النوافذ الأخري أستخدم أختصار `Ctrl+Shift+T`
+## English
 
-من مميزات هذه الإضافة أنها ستساعدك في تعدد المهام
+Press **`Ctrl+Alt+T`** to pin/unpin the active window on top of all other windows.
 
-لأن هدف هذا المود هو تثبيت النافذة فوق التطبيقات الأخري
+This mod helps you multitask by keeping important windows always visible.
 
-نرحب بالمساهمين سواء كان لديك اقتراح Issues أو التعديل على الكود Pull requests على Github
+**Features:**
+- 🔊 Sound notifications to indicate pin/unpin actions.
+- ⚡ Event-driven hotkey using `RegisterHotKey` (no continuous polling).
+- 🧹 Lightweight: runs in a dedicated `explorer.exe` process.
 
-يعتمد هذا المود على تقنية Ease of Access Center لنطق إذا كان التثبيت يعمل أم لا 
+**Requirements:**
+- Windhawk (latest version recommended).
+- Windows 7 → Works efficiently
+- Windows 8 → Works efficiently
+- Windows 8.1 → Works efficiently
+- Windows 10/11 → Not tested yet (if it works well for you, please let me know in Issues on GitHub)
 
-إذا كان هناك مشكلة في هذه التقنية داخل الويندوز فأحتمال أنه لا يصدر صوت كلام عند الضغط على الأختصار
-
-**متطلبات المود**
-
-Windhawk ولكن لا يكون قديم جداً
-- ويندوز 7 --> يعمل بكفائة
-- ويندوز 8 --> يعمل بكفائة
-- ويندوز 8.1 --> يعمل بكفائة
-- ويندوز 10\11 --> لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)
+**Contributing:**
+We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.
 ---
-Always On Top Windows
-Windhawk Mod
-==========================
+## العربية
 
-To enable/disable staying on top of other windows, use the shortcut `Ctrl+Shift+T`
+اضغط **`Ctrl+Alt+T`** لتثبيت/إلغاء تثبيت النافذة النشطة فوق جميع النوافذ الأخرى.
 
-One of the features of this addition is that it will help you multitask
+هذا المود يساعدك في تعدد المهام عن طريق تثبيت النوافذ المهمة لتظل مرئية دائماً.
 
-Because the goal of this mod is to pin the window on top of other applications
+**المميزات:**
+- 🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.
+- ⚡ اختصار يعتمد على الأحداث (`RegisterHotKey`) بدون استقصاء مستمر.
+- 🧹 خفيف الوزن: يعمل في عملية مخصصة لـ `explorer.exe`.
 
-We welcome contributors, whether you have suggestions (Issues) or code modifications (Pull requests) on Github
+**متطلبات النظام:**
+- Windhawk (يفضل الإصدار الأحدث).
+- ويندوز 7 --> يعمل بكفاءة
+- ويندوز 8 --> يعمل بكفاءة
+- ويندوز 8.1 --> يعمل بكفاءة
+- ويندوز 10\11 --> لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)
 
-This mod relies on the Ease of Access Center technology to announce whether the pin is active or not
-
-If there is an issue with this technology in Windows, it's possible that no speech will be issued when pressing the shortcut
-
-**Mod Requirements**
-
-Windhawk, but not too old
-- Windows 7 --> Works efficiently
-- Windows 8 --> Works efficiently
-- Windows 8.1 --> Works efficiently
-- Windows 10/11 --> I haven't tried it (if it works well for you, please let me know in Issues on Github)
+**المساهمة:**
+نرحب بالمساهمين! يمكنكم فتح Issues أو Pull Requests على GitHub.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <vector>
-#include <sapi.h>      // لـ ISpVoice
-#include <sphelper.h>  // لـ SPF_DEFAULT (اختياري)
-#include <comdef.h>    // للتعامل مع COM
+#include <mmsystem.h>
 
-#define KEY_1 VK_CONTROL
-#define KEY_2 VK_SHIFT
-#define KEY_3 'T'
+#define WM_USER_QUIT   (WM_USER + 101)
+#define HOTKEY_ID 1
+#define HOTKEY_MODIFIERS (MOD_CONTROL | MOD_ALT)   // Ctrl+Alt
+#define HOTKEY_KEY 'T'
 
-// ===== المتغيرات العامة =====
-// ===== Global variables =====
+// ===== قائمة النوافذ المثبتة =====
+// ===== List of pinned windows =====
 std::vector<HWND> g_trackedWindows;
 CRITICAL_SECTION g_cs;
-volatile BOOL g_running = TRUE;
-BOOL g_isExplorer = FALSE;
-ISpVoice* g_pVoice = NULL;  // مؤشر لـ SAPI
+HWND g_hwndMod = nullptr;
 
-// ===== دالة النطق =====
-// ===== Speech function =====
-void Speak(PCWSTR text) {
-    if (!g_pVoice) return;  // إذا لم يتم تهيئة SAPI، نتجاوز // If SAPI isn't initialized, we skip it 
-    g_pVoice->Speak(text, SPF_DEFAULT, NULL);
+// ===== تشغيل صوت من النظام =====
+// ===== Play a sound from the system =====
+void PlaySystemSound(bool isPinned) {
+    // 1. حاول تشغيل ملف Speech On/Off مباشرة
+    // 1. Try running the Speech On/Off file directly
+    LPCWSTR soundPath = isPinned ? 
+        L"C:\\Windows\\Media\\Speech On.wav" : 
+        L"C:\\Windows\\Media\\Speech Off.wav";
+    
+    if (GetFileAttributes(soundPath) != INVALID_FILE_ATTRIBUTES) {
+        if (PlaySound(soundPath, NULL, SND_FILENAME | SND_ASYNC)) {
+            Wh_Log(L"🔊 Played: %s", isPinned ? L"Speech On" : L"Speech Off");
+            return;
+        }
+    }
+    
+    // 2. البديل: أصوات النظام المضمونة
+    // 2. Alternative: Guaranteed system votes
+    LPCWSTR soundAlias = isPinned ? L"SystemAsterisk" : L"SystemExclamation";
+    if (PlaySound(soundAlias, NULL, SND_ALIAS | SND_ASYNC)) {
+        Wh_Log(L"🔊 Played system sound: %s", soundAlias);
+        return;
+    }
+    
+    // 3. الحل الأخير: MessageBeep (يعمل دائماً)
+    // 3. Last solution: MessageBeep (always works)
+    Wh_Log(L"🔊 Using MessageBeep as fallback");
+    MessageBeep(isPinned ? MB_ICONASTERISK : MB_ICONEXCLAMATION);
 }
 
-// ===== دالة تبديل التثبيت =====
-// ===== Switch Pin function =====
+// ===== تبديل التثبيت =====
+// ===== Switch Pin =====
 void ToggleTopMost() {
-    if (!g_isExplorer) return;
-
     HWND hWnd = GetForegroundWindow();
     if (!hWnd) return;
-
+    
     wchar_t className[64];
     GetClassName(hWnd, className, 64);
     if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) return;
@@ -109,120 +123,121 @@ void ToggleTopMost() {
     LeaveCriticalSection(&g_cs);
 
     if (isPinned) {
-        // إلغاء التثبيت // Unpin
         SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         EnterCriticalSection(&g_cs);
         for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end(); ++it) {
             if (*it == hWnd) { g_trackedWindows.erase(it); break; }
         }
         LeaveCriticalSection(&g_cs);
-        Speak(L"Desable Pin");  // 🔊 إشعار صوتي // Notification Speech
-        Wh_Log(L"⬇️ إلغاء تثبيت النافذة %p + تشغيل صوت Speech Off", hWnd);
+        PlaySystemSound(false);
+        Wh_Log(L"🔽 Unpinned window %p", hWnd);
     } else {
-        // تثبيت النافذة // Pin
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         EnterCriticalSection(&g_cs);
         g_trackedWindows.push_back(hWnd);
         LeaveCriticalSection(&g_cs);
-        Speak(L"Enable Pin");  // 🔊 إشعار صوتي // Notification Speech
-        Wh_Log(L"⬆️ تثبيت النافذة %p + تشغيل صوت Speech On", hWnd);
+        PlaySystemSound(true);
+        Wh_Log(L"🔼 Pinned window %p", hWnd);
     }
 }
 
-// ===== خيط المراقبة =====
-// ===== Monitoring thread =====
-DWORD WINAPI MonitorThread(LPVOID lpParam) {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-    bool wasPressed = false;
-
-    while (g_running) {
-        bool k1 = (GetAsyncKeyState(KEY_1) & 0x8000) != 0;
-        bool k2 = (GetAsyncKeyState(KEY_2) & 0x8000) != 0;
-        bool k3 = (GetAsyncKeyState(KEY_3) & 0x8000) != 0;
-        bool pressed = k1 && k2 && k3;
-
-        if (pressed && !wasPressed) {
-            ToggleTopMost();
-        }
-        wasPressed = pressed;
-
-        Sleep(50);
+// ===== تنظيف النوافذ المغلقة =====
+// ===== Cleaning closed windows =====
+void CleanupDeadWindows() {
+    EnterCriticalSection(&g_cs);
+    for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end(); ) {
+        if (!IsWindow(*it)) it = g_trackedWindows.erase(it);
+        else ++it;
     }
+    LeaveCriticalSection(&g_cs);
+}
+
+// ===== معالج الرسائل =====
+// ===== Message processor =====
+LRESULT CALLBACK ModWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_HOTKEY:
+        if (wParam == HOTKEY_ID) {
+            Wh_Log(L"⌨️ Hotkey pressed");
+            ToggleTopMost();
+            CleanupDeadWindows();
+        }
+        return 0;
+    case WM_USER_QUIT:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+// ===== الخيط الرئيسي =====
+// ===== The main thread =====
+DWORD WINAPI MainThread(LPVOID lpParam) {
+    const wchar_t* CLASS_NAME = L"TopMostModClass";
+    
+    WNDCLASSEX wc = { sizeof(WNDCLASSEX) };
+    wc.lpfnWndProc = ModWndProc;
+    wc.lpszClassName = CLASS_NAME;
+    if (!RegisterClassEx(&wc)) {
+        Wh_Log(L"❌ Failed to register window class");
+        return 0;
+    }
+
+    g_hwndMod = CreateWindowEx(0, CLASS_NAME, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, nullptr, nullptr);
+    if (!g_hwndMod) {
+        Wh_Log(L"❌ Failed to create message window");
+        return 0;
+    }
+
+    // تسجيل الاختصار
+    // Shortcut registration
+    if (!RegisterHotKey(g_hwndMod, HOTKEY_ID, HOTKEY_MODIFIERS, HOTKEY_KEY)) {
+        Wh_Log(L"⚠️ Failed to register hotkey (may be already used)");
+    }
+
+    Wh_Log(L"✅ Mod loaded in explorer.exe, waiting for hotkey...");
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_hwndMod) {
+        UnregisterHotKey(g_hwndMod, HOTKEY_ID);
+        DestroyWindow(g_hwndMod);
+        g_hwndMod = nullptr;
+    }
+    UnregisterClass(CLASS_NAME, nullptr);
+
+    Wh_Log(L"🛑 Main thread exiting");
     return 0;
 }
 
-// ===== دالة مساعدة لاستخراج اسم العملية =====
-// ===== Helper function to get the process name =====
-PCWSTR GetProcessName() {
-    static WCHAR processName[MAX_PATH] = {0};
-    if (processName[0] != 0) return processName;
-    WCHAR path[MAX_PATH];
-    GetModuleFileName(NULL, path, MAX_PATH);
-    PCWSTR p = wcsrchr(path, L'\\');
-    if (p) p++;
-    else p = path;
-    wcscpy_s(processName, MAX_PATH, p);
-    return processName;
-}
-
-// ===== دالة التهيئة =====
-// ===== Initialization function =====
+// ===== دوال المود =====
+// ===== Mode functions =====
 BOOL Wh_ModInit() {
-    Wh_Log(L"🔧 بدء تحميل المود v1.0 (مع الإشعارات الصوتية)");
-
+    Wh_Log(L"🔧 Initializing mod in explorer.exe...");
     InitializeCriticalSection(&g_cs);
-
-    // تهيئة COM (ضروري لـ SAPI)
-    HRESULT hr = CoInitialize(NULL);
-    if (FAILED(hr)) {
-        Wh_Log(L"❌ فشل تهيئة COM");
-    } else {
-        // إنشاء كائن SAPI
-        hr = CoCreateInstance(CLSID_SpVoice, NULL, CLSCTX_ALL, IID_ISpVoice, (void**)&g_pVoice);
-        if (FAILED(hr)) {
-            Wh_Log(L"❌ فشل إنشاء كائن SAPI (رمز: %lx)", hr);
-        } else {
-            Wh_Log(L"✅ تم تهيئة SAPI بنجاح");
-        }
-    }
-
-    PCWSTR procName = GetProcessName();
-    if (_wcsicmp(procName, L"explorer.exe") == 0) {
-        g_isExplorer = TRUE;
-        Wh_Log(L"✅ هذه العملية هي explorer.exe (ستنفذ التبديل)");
-    } else {
-        Wh_Log(L"ℹ️ هذه العملية: %s (لن تنفذ التبديل)", procName);
-    }
-
-    HANDLE hThread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
+    
+    HANDLE hThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
     if (!hThread) {
-        Wh_Log(L"❌ فشل إنشاء خيط المراقبة");
+        Wh_Log(L"❌ Failed to create main thread");
         DeleteCriticalSection(&g_cs);
         return FALSE;
     }
     CloseHandle(hThread);
-
-    Wh_Log(L"✅ تم تحميل المود بنجاح");
+    
     return TRUE;
 }
 
-// ===== دالة إنهاء المود =====
-// ===== Mod Exit Function =====
 void Wh_ModUninit() {
-    g_running = FALSE;
-    Sleep(100);
-
+    Wh_Log(L"🛑 Unloading mod...");
+    if (g_hwndMod) PostMessage(g_hwndMod, WM_USER_QUIT, 0, 0);
+    Sleep(200);
     EnterCriticalSection(&g_cs);
     g_trackedWindows.clear();
     LeaveCriticalSection(&g_cs);
-
-    // تنظيف SAPI // SAPI Cleaning
-    if (g_pVoice) {
-        g_pVoice->Release();
-        g_pVoice = NULL;
-    }
-    CoUninitialize();
-
     DeleteCriticalSection(&g_cs);
-    Wh_Log(L"🛑 تم إلغاء تحميل المود");
+    Wh_Log(L"✅ Mod unloaded");
 }
