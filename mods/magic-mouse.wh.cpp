@@ -96,7 +96,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 
 ## Example Setups
 
-**Setup 1: Right-Click Wiggle (Highly Recommended)**
+**Setup 1: Right-Click Wiggle**
 - `Modifier Key`: Right Click
 - `Modifier Behavior`: Hold
 - `Draw Button`: Left Click
@@ -123,7 +123,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 /*
 - ModifierKey: none
   $name: Modifier Key / Button
-  $description: "Tip: 'Right Click' + 'Wiggle' is a very popular setup!"
+  $description: "Use gestures when holding or toggling this modifier. If none, gestures will always be enabled."
   $options:
   - none: None (No modifier)
   - ctrl: Ctrl
