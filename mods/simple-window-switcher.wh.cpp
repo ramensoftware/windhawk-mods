@@ -669,6 +669,7 @@ static HHOOK g_hMouseHook = NULL;
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
 static bool g_isPaginatedView = false;
+static bool g_isDryRunLayout = false;
 static HWND g_hoverWnd = NULL;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
 // App drill-in: when grouping by application, Ctrl drills into the selected app's
@@ -1931,10 +1932,17 @@ static void ComputeLayout(HMONITOR hMon) {
             g_windows[ji].rcCell = {0, 0, 0, 0};
             g_windows[ji].rcThumbActual = {0, 0, 0, 0};
             g_windows[ji].rcThumbSlot = {0, 0, 0, 0};
-            for (const auto& kv : g_windows[ji].hThumbs) {
-                if (kv.second) DwmUnregisterThumbnail(kv.second);
+            // During dry-run layout passes (e.g. CyclePage page-map discovery),
+            // we do NOT destroy DWM thumbnail handles. Doing so on every scroll
+            // event triggers rapid DwmUnregister/Register cycles that cause
+            // visible flicker in the DWM compositor. The caller is responsible
+            // for proper cleanup when g_isDryRunLayout is false.
+            if (!g_isDryRunLayout) {
+                for (const auto& kv : g_windows[ji].hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                g_windows[ji].hThumbs.clear();
             }
-            g_windows[ji].hThumbs.clear();
         }
         placedCount = startIdx;
     };
@@ -3458,12 +3466,14 @@ static void PaintSwitcher() {
         ReleaseDC(g_hSwitcher, hdcScreen);
         PaintSwitcherOverlay();
     } else {
-        // Acrylic: trigger WM_PAINT via InvalidateRect
-        InvalidateRect(g_hSwitcher, NULL, TRUE);
+        // Acrylic: trigger WM_PAINT via InvalidateRect.
+        // Use FALSE for the erase parameter: TRUE would send WM_ERASEBKGND which
+        // blanks the window before WM_PAINT fires, producing a visible flicker gap.
+        InvalidateRect(g_hSwitcher, NULL, FALSE);
         UpdateWindow(g_hSwitcher);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
-                InvalidateRect(hMirror, NULL, TRUE);
+                InvalidateRect(hMirror, NULL, FALSE);
                 UpdateWindow(hMirror);
             }
         }
@@ -3860,7 +3870,20 @@ static void RecomputeAndReposition() {
         return;
     }
 
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    // Only call SetWindowPos when the size or position has actually changed.
+    // An unconditional SetWindowPos sends WM_SIZE which triggers a WM_PAINT
+    // before our own rendering pass completes, causing a momentary flicker.
+    RECT curWndRect = {};
+    GetWindowRect(g_hSwitcher, &curWndRect);
+    bool posChanged = (curWndRect.left != cx || curWndRect.top != cy
+                       || (curWndRect.right - curWndRect.left) != g_winW
+                       || (curWndRect.bottom - curWndRect.top) != g_winH);
+    if (posChanged) {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    } else {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH,
+                     SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE | SWP_NOREDRAW);
+    }
     if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
         EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
     }
@@ -3975,69 +3998,161 @@ static void CycleLinear(int delta) {
 static void CyclePage(int dir) {
     if (g_windows.empty()) return;
     int n = (int)g_windows.size();
-    
-    int visibleCount = 0;
-    for (int i = 0; i < n; i++) {
-        int wi = (g_layoutStartIndex + i) % n;
-        if (IsWindowTruncated(wi)) break;
-        visibleCount++;
-    }
-    
-    if (visibleCount == 0 || visibleCount == n) {
-        // No pagination needed, or error state
-        CycleLinear(dir);
-        return;
-    }
-    
-    int relPos = -1;
-    for (int i = 0; i < visibleCount; i++) {
-        if (((g_layoutStartIndex + i) % n) == g_selectedIndex) {
-            relPos = i;
-            break;
+
+    // ── Step 1: Build a stable page map via a dry-run layout from index 0 ────
+    //
+    // We temporarily set g_layoutStartIndex = 0 and g_isPaginatedView = false
+    // so ComputeLayout places ALL windows with no wrapping suppression.
+    // We then read the resulting rcCell coordinates to find where rows/columns
+    // are, and record the window index at which each new "page" starts.
+    //
+    // This is the only reliable approach because ComputeLayout's row/column
+    // break conditions depend on many DPI-scaled constants that would be
+    // error-prone to replicate here.
+
+    HMONITOR hMon = g_hCurrentMonitor
+                    ? g_hCurrentMonitor
+                    : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+
+    // Save current start index — the dry-run will overwrite g_layoutStartIndex.
+    // Also save g_winW/g_winH: the dry-run ComputeLayout calls will overwrite them
+    // with intermediate values, which would cause WM_PAINT to draw with wrong dims.
+    int savedStart = g_layoutStartIndex;
+    int savedWinW  = g_winW;
+    int savedWinH  = g_winH;
+
+    // Dry-run: full layout pass from index 0, with wrapping allowed
+    g_isDryRunLayout   = true;
+    g_layoutStartIndex = 0;
+    g_isPaginatedView  = false;
+    ComputeLayout(hMon);  // populates rcCell for all windows
+
+    // ── Step 2: Walk rcCell coords to identify page boundaries ───────────────
+    //
+    // In horizontal mode each page is a group of rows (by rcCell.top).
+    // In vertical   mode each page is a group of columns (by rcCell.left).
+    //
+    // A page boundary occurs at the first row/column whose windows were
+    // TRUNCATED by ComputeLayout (rcCell all-zeros), because that is
+    // exactly where the layout engine ran out of screen space.
+    //
+    // pageStarts[p] = the window index (in layout order, which equals the
+    // absolute window index when g_layoutStartIndex == 0) at which page p
+    // starts.
+
+    std::vector<int> pageStarts;
+    pageStarts.push_back(0);
+
+    bool vertical = LayoutIsVertical();
+    int  prevLine = -1;   // previous row-top (horiz) or col-left (vert)
+
+    for (int idx = 0; idx < n; idx++) {
+        auto& w = g_windows[idx];  // g_layoutStartIndex==0, so idx == window index
+
+        // Truncated window signals the end of what fits on the current page
+        if (w.rcCell.left == 0 && w.rcCell.right  == 0 &&
+            w.rcCell.top  == 0 && w.rcCell.bottom == 0) {
+            // Start a new page here
+            pageStarts.push_back(idx);
+            prevLine = -1;  // reset for the next page's dry-run (see below)
+            break;          // only one overflow region possible per layout pass
+        }
+
+        int lineCoord = vertical ? w.rcCell.left : w.rcCell.top;
+        if (lineCoord != prevLine) {
+            prevLine = lineCoord;
         }
     }
-    if (relPos < 0) relPos = 0;
-    
-    int originalStart = g_layoutStartIndex;
-    
-    if (dir > 0) {
-        g_layoutStartIndex = (g_layoutStartIndex + visibleCount) % n;
-    } else {
-        int bestStart = originalStart;
-        for (int step = 1; step <= n; step++) {
-            int testStart = (originalStart - step + n) % n;
-            g_layoutStartIndex = testStart;
-            RecomputeAndReposition();
-            
-            int cap = 0;
-            for (int i = 0; i < n; i++) {
-                if (IsWindowTruncated((testStart + i) % n)) break;
-                cap++;
-            }
-            
-            if (cap >= step) {
-                bestStart = testStart;
-            } else {
+
+    // If more than one page exists, we need to recursively find further page
+    // boundaries by repeating the dry-run from each new page start.
+    // We loop until no more pages are detected.
+    while (true) {
+        int lastPageStart = pageStarts.back();
+        if (lastPageStart >= n) break;
+
+        // Dry-run from the last page start
+        g_layoutStartIndex = lastPageStart;
+        g_isPaginatedView  = true;   // prevent wrapping past end
+        ComputeLayout(hMon);
+
+        bool foundTruncation = false;
+        prevLine = -1;
+        for (int idx = 0; idx < n; idx++) {
+            int wi = (lastPageStart + idx) % n;
+            // Stop if we've wrapped past the array in paginated mode
+            if (idx > 0 && wi < lastPageStart) break;
+
+            auto& w = g_windows[wi];
+            if (w.rcCell.left == 0 && w.rcCell.right  == 0 &&
+                w.rcCell.top  == 0 && w.rcCell.bottom == 0) {
+                // This window starts the next page
+                int nextStart = wi;
+                if (nextStart <= lastPageStart) break;  // sanity: no progress
+                pageStarts.push_back(nextStart);
+                foundTruncation = true;
                 break;
             }
         }
-        g_layoutStartIndex = bestStart;
+        if (!foundTruncation) break;  // all remaining windows fit — done
     }
-    
-    RecomputeAndReposition();
-    
-    int newVisibleCount = 0;
-    for (int i = 0; i < n; i++) {
-        int wi = (g_layoutStartIndex + i) % n;
-        if (IsWindowTruncated(wi)) break;
-        newVisibleCount++;
+
+    g_isDryRunLayout = false;
+
+    // ── Step 3: Determine which page we're currently on ──────────────────────
+    int currentPage = 0;
+    for (int p = (int)pageStarts.size() - 1; p >= 0; p--) {
+        if (savedStart >= pageStarts[p]) {
+            currentPage = p;
+            break;
+        }
     }
-    
-    if (newVisibleCount > 0 && relPos >= newVisibleCount) {
-        relPos = newVisibleCount - 1;
+
+    // ── Step 4: Navigate to next or previous page ────────────────────────────
+    int numPages   = (int)pageStarts.size();
+    int targetPage = currentPage;
+
+    if (dir > 0) {
+        // Scroll forward: go to next page, clamp at last
+        if (currentPage + 1 < numPages)
+            targetPage = currentPage + 1;
+    } else {
+        // Scroll backward: go to previous page, clamp at first
+        if (currentPage - 1 >= 0)
+            targetPage = currentPage - 1;
     }
-    
-    g_selectedIndex = (g_layoutStartIndex + relPos) % n;
+
+    // ── Boundary guard: if already on the first/last page, restore state and
+    // exit immediately. Since g_isDryRunLayout prevented any thumbnails from
+    // being destroyed during the dry runs, no DWM cleanup or reflow is needed.
+    if (targetPage == currentPage) {
+        g_layoutStartIndex = savedStart;
+        g_winW             = savedWinW;
+        g_winH             = savedWinH;
+        g_isPaginatedView  = true;
+
+        // Restore the g_windows memory geometry (rcCell, rcThumbActual) to the
+        // current page. The dry-runs overwrote it with the last page's layout.
+        // We set g_isDryRunLayout = true so truncateRemaining doesn't touch DWM handles.
+        g_isDryRunLayout = true;
+        ComputeLayout(hMon);
+        g_isDryRunLayout = false;
+
+        return;  // nothing changed — no reflow, no repaint, no flicker
+    }
+
+    // ── Step 5: Apply the new page and do the real reflow ────────────────────
+    // Restore g_winW/g_winH so the window doesn't resize to a dry-run value
+    // before RecomputeAndReposition sets the correct final dimensions.
+    g_winW = savedWinW;
+    g_winH = savedWinH;
+    g_layoutStartIndex = pageStarts[targetPage];
+    g_isPaginatedView  = true;
+    RecomputeAndReposition();  // single real reflow — no flicker, no loops
+
+    // ── Step 6: Place selection on the first visible window of the new page ──
+    g_selectedIndex = g_layoutStartIndex % n;
+
     PaintSwitcher();
 }
 
