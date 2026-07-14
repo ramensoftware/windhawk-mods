@@ -2,7 +2,7 @@
 // @id              dynamic-taskbar-transparency
 // @name            Dynamic Taskbar Transparency
 // @description     Dynamically changes the Windows 11 taskbar XAML background transparency for desktop, Start, search, tray flyouts, task view, and maximized windows.
-// @version         0.3.8
+// @version         0.3.9
 // @author          11581
 // @github          https://github.com/r1file
 // @include         explorer.exe
@@ -1929,32 +1929,32 @@ StateResolution ResolveState(const Settings& settings,
     const bool hasMaximizedWindow =
         HasMaximizedWindow(settings.fullscreenAsMaximized, taskbars);
 
-    if (shellActivity.taskViewOpened) {
+    if (shellActivity.taskViewOpened && settings.taskViewOpened.enabled) {
         return {TaskbarDynamicState::taskViewOpened, L"taskViewOpened",
                 hasMaximizedWindow};
     }
 
-    if (shellActivity.startOpened) {
+    if (shellActivity.startOpened && settings.startOpened.enabled) {
         return {TaskbarDynamicState::startOpened, L"startOpened",
                 hasMaximizedWindow};
     }
 
-    if (shellActivity.searchOpened) {
+    if (shellActivity.searchOpened && settings.searchOpened.enabled) {
         return {TaskbarDynamicState::searchOpened, L"searchOpened",
                 hasMaximizedWindow};
     }
 
-    if (shellActivity.trayFlyoutOpened) {
+    if (shellActivity.trayFlyoutOpened && settings.trayFlyoutOpened.enabled) {
         return {TaskbarDynamicState::trayFlyoutOpened, L"trayFlyoutOpened",
                 hasMaximizedWindow};
     }
 
-    if (hasMaximizedWindow) {
+    if (hasMaximizedWindow && settings.maximized.enabled) {
         return {TaskbarDynamicState::maximized, L"maximizedWindow",
                 hasMaximizedWindow};
     }
 
-    if (shellActivity.otherInteraction) {
+    if (shellActivity.otherInteraction && settings.otherInteraction.enabled) {
         return {TaskbarDynamicState::otherInteraction, L"otherShellInteraction",
                 hasMaximizedWindow};
     }
