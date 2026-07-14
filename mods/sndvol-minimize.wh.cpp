@@ -25,19 +25,80 @@ After:
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <tlhelp32.h>
+#include <vector>
+
+std::vector<HHOOK> g_hooks;
 
 LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode < 0)
+    if (nCode < 0) 
         return CallNextHookEx(NULL, nCode, wParam, lParam);
+
     CWPSTRUCT* pwp = (CWPSTRUCT*)lParam;
     if (pwp->message == WM_CREATE) {
         LONG_PTR style = GetWindowLongPtrW(pwp->hwnd, GWL_STYLE);
-        SetWindowLongPtrW(pwp->hwnd, GWL_STYLE, style | WS_MINIMIZEBOX);
+        if (!(style & WS_CHILD)) {
+            SetWindowLongPtrW(pwp->hwnd, GWL_STYLE, style | WS_MINIMIZEBOX);
+        }
     }
+
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
-BOOL Wh_ModInit(void) {
-    SetWindowsHookExW(WH_CALLWNDPROC, CallWndProc, NULL, GetCurrentThreadId());
+BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) {
+        return TRUE;
+    }
+
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (!(style & WS_CHILD)) {
+        SetWindowLongPtrW(hWnd, GWL_STYLE, style | WS_MINIMIZEBOX);
+    }
+
     return TRUE;
+}
+
+void HookAllProcessThreads() {
+    DWORD pid = GetCurrentProcessId();
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    if (Thread32First(hSnap, &te)) {
+        do {
+            if (te.dwSize >= FIELD_OFFSET(THREADENTRY32, th32OwnerProcessID) +
+                                  sizeof(te.th32OwnerProcessID) &&
+                te.th32OwnerProcessID == pid) {
+                HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProc,
+                                                NULL, te.th32ThreadID);
+                if (hook) {
+                    g_hooks.push_back(hook);
+                }
+            }
+            te.dwSize = sizeof(te);
+        } while (Thread32Next(hSnap, &te));
+    }
+
+    CloseHandle(hSnap);
+}
+
+BOOL Wh_ModInit(void) {
+    HookAllProcessThreads();
+    return TRUE;
+}
+
+void Wh_ModAfterInit(void) {
+    EnumWindows(EnumWindowsProc, 0);
+}
+
+void Wh_ModUninit(void) {
+    for (HHOOK hook : g_hooks) {
+        UnhookWindowsHookEx(hook);
+    }
+    g_hooks.clear();
 }
