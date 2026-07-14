@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.0
+// @version         3.1.1
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -21,6 +21,13 @@ it warps and flows down into the taskbar; when you restore it, it flows back out
 
 Definitely not inspired from MacOS.
 
+> **Maintenance note:** the current round of fixes - the translucent-window (grey
+> capture) fix, the taskbar capture fixes, the renderer quality / frame pacing
+> improvements and the tile-count setting - was contributed entirely by
+> **Potassiumuncher** (v1.5 of his engine). I'm not actively working on issues at
+> the moment and will be unavailable for a month or more; in the meantime his
+> contributions are keeping this mod moving - thank you!
+
 ## Animation style
 There are two genie styles, selectable in the settings (**Animation style**):
 
@@ -31,12 +38,16 @@ There are two genie styles, selectable in the settings (**Animation style**):
   different look. Kept because some people preferred it.
 
 ## Credits
-The **Modern** genie style - the Direct2D genie rendering engine (a 20x20 mesh warp
-driven by the macOS "lamp" curve), the UI Automation taskbar-button targeting, and
-the taskbar auto-hide handling - was contributed by **Potassiumuncher** -
-<https://github.com/Potassiumuncher>. As of v3.0.0 the default animation is his
-engine, integrated into this mod's hardening (multi-hook capture, flash-free cloak
-restore, safe unload, first-frame sync). The demo GIF above is also his, from his
+The **Modern** genie style - the Direct2D genie rendering engine (a configurable
+mesh warp driven by the macOS "lamp" curve), the UI Automation taskbar-button
+targeting, and the taskbar auto-hide handling - was contributed by
+**Potassiumuncher** - <https://github.com/Potassiumuncher>. As of v3.0.0 the
+default animation is his engine, integrated into this mod's hardening (multi-hook
+capture, flash-free cloak restore, safe unload, first-frame sync). The fixes in
+v3.1.1 are his as well (from v1.5 of his engine): the translucent-window capture
+fix that stops acrylic / Mica windows going grey, the window-only capture that
+keeps the taskbar out of the animation, the smoother mask / mesh rendering, the
+frame pacer, and the tile-count setting. The demo GIF above is also his, from his
 own [MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
 repo. Huge thanks for building this, sharing the recording, and generously handing
 it all over - this mod wouldn't look nearly this good without him. The **Classic**
@@ -53,6 +64,20 @@ style is the mod's original renderer.
   the window can appear off-screen or the genie can play oddly / land on the wrong
   spot. This is a Windows/app placement quirk outside the mod's control, not
   something the mod can reliably detect and fix.
+- Translucent (acrylic / Mica) windows are captured much more faithfully as of
+  v3.1.1 - transparent regions now stay transparent instead of turning grey - but
+  some apps may still show a flat or slightly-off backdrop during the genie,
+  because the live blur effect itself can't be carried into a static snapshot.
+- On NON-primary monitors specifically, Windows often refuses to hand over the
+  Mica / acrylic backdrop at all (the capture comes back fully transparent
+  there). The mod detects this and falls back to an opaque dark backdrop for the
+  animation instead of letting the window background vanish - so translucent
+  windows on a secondary display animate with the older dark look. A proper fix
+  needs deeper investigation.
+- A repeating / looping animation has been reported on Zen Browser
+  (Firefox-based). It's under investigation; if it hits you, add the browser to
+  the mod's **Excluded programs** setting as a workaround and please share
+  details on the GitHub issue thread.
 
 ## See it in action
 - Compile the mod with the button on the left or with Ctrl+B.
@@ -103,6 +128,17 @@ minimize behind it without the system's own animation getting in the way.
   to flow into, then let it slide back once the animation finishes.
 - **Taskbar unhide duration** - how long (ms) to keep the taskbar revealed before
   performing the deferred minimize on the auto-hide path.
+- **Animation style** - Modern (Potassiumuncher's Direct2D engine, default) or
+  Classic (this mod's original renderer).
+- **Animation tile count** - mesh resolution of the modern genie (8-96, default
+  35). Higher is smoother but costs more per frame. Contributed by Potassiumuncher.
+- **Excluded programs** - windows owned by these processes never animate. Use
+  this rather than Windhawk's per-mod process exclusion: that list only stops the
+  mod from loading INTO a process, but a window's animation is often driven from
+  a different process (Explorer's taskbar, the shell), so the app would still
+  animate. Example: for Windows Terminal's Quake mode, exclude
+  `WindowsTerminal.exe` (the window's owner) - excluding `powershell.exe` has no
+  effect, since the terminal window doesn't belong to PowerShell.
 
 ## Notes
 - Works on all top-level windows; child / tiny / hidden windows are skipped.
@@ -110,9 +146,9 @@ minimize behind it without the system's own animation getting in the way.
   afterwards, so the system's own minimize/restore animation doesn't fight ours.
 - Minimize snapshots are captured from the window itself, so the taskbar and other
   windows never bleed into the animation (even for maximized / fullscreen apps).
-  Windows with DWM acrylic / translucency may appear opaque during the genie, since
-  the composited backdrop isn't part of the window's own render - a known
-  limitation.
+  Since v3.1.1 the capture preserves per-pixel transparency (Potassiumuncher's
+  fix), so translucent windows keep their see-through regions during the genie
+  instead of flattening to grey.
 
 # Getting started
 Check out the documentation
@@ -159,6 +195,23 @@ Check out the documentation
   $options:
   - modern: Modern genie (Direct2D engine by Potassiumuncher)
   - classic: Classic genie (original)
+- tile_count: 35
+  $name: Animation tile count (modern style)
+  $description: >-
+    Mesh resolution for the modern genie warp (higher = smoother curve, but more
+    expensive to render each frame). 24-32 is cheap/fast, 35 is a good middle
+    ground, 64+ is highest quality. Clamped to 8-96. Contributed by
+    Potassiumuncher.
+- excluded_programs: [""]
+  $name: Excluded programs
+  $description: >-
+    Programs whose windows should never animate (one per entry, e.g.
+    WindowsTerminal.exe - with or without .exe). Use this instead of Windhawk's
+    process exclusion list: that list only stops the mod from loading INTO a
+    process, but animations for a window are often driven from a different
+    process (Explorer's taskbar, the shell), so excluded apps would still
+    animate. This setting matches the process that OWNS the window, wherever the
+    animation is triggered from.
 */
 // ==/WindhawkModSettings==
 
@@ -173,6 +226,7 @@ Check out the documentation
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cwctype>
 #include <uiautomation.h>
 #include <shellapi.h>
 
@@ -186,8 +240,11 @@ Check out the documentation
 
 // Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
 #define PI 3.14159265f
-#define GHOST_X_TILES 20
-#define GHOST_Y_TILES 20
+// Mesh tile-count bounds for the modern engine (Potassiumuncher's v1.5 update:
+// resolution is now a user setting instead of a fixed 20x20 grid).
+#define TILE_COUNT_MIN 8
+#define TILE_COUNT_MAX 96
+#define TILE_COUNT_DEFAULT 35
 #define COMPAT_TASKBAR_HEIGHT 70
 #define COMPAT_ICON_SIZE      33
 
@@ -272,6 +329,11 @@ std::atomic<bool> g_unhideEnabled{true};
 // false = modern Direct2D genie (Potassiumuncher's engine), true = the original
 // v2.2.0 strip-based GDI genie, offered as an opt-in "classic" style.
 std::atomic<bool> g_classicEngine{false};
+// Mesh resolution of the modern engine (Potassiumuncher's tile-count setting).
+std::atomic<int> g_tileCount{TILE_COUNT_DEFAULT};
+// Lowercased entries of the "Excluded programs" setting. Guarded by g_CacheMutex
+// (written only from LoadSettings, read once per animation start).
+std::vector<std::wstring> g_ExcludedPrograms;
 
 // --- UNLOAD COORDINATION ---
 // Windhawk unmaps the mod DLL right after uninit, so any worker thread still
@@ -301,6 +363,69 @@ void MacGenieLoadSettings() {
     PCWSTR engine = Wh_GetStringSetting(L"engine");
     g_classicEngine.store(engine && wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
     Wh_FreeStringSetting(engine);
+
+    int tiles = Wh_GetIntSetting(L"tile_count");
+    if (tiles < TILE_COUNT_MIN) tiles = TILE_COUNT_MIN;
+    if (tiles > TILE_COUNT_MAX) tiles = TILE_COUNT_MAX;
+    g_tileCount.store(tiles, std::memory_order_relaxed);
+
+    // "Excluded programs" list: lowercase each entry once here so the per-anim
+    // check is a straight comparison.
+    std::vector<std::wstring> excluded;
+    for (int i = 0;; i++) {
+        PCWSTR prog = Wh_GetStringSetting(L"excluded_programs[%d]", i);
+        bool has = prog && *prog;
+        if (has) {
+            std::wstring s = prog;
+            std::transform(s.begin(), s.end(), s.begin(), ::towlower);
+            excluded.push_back(std::move(s));
+        }
+        Wh_FreeStringSetting(prog);
+        if (!has) break;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_ExcludedPrograms.swap(excluded);
+    }
+}
+
+// TRUE if the process that OWNS hWnd is on the "Excluded programs" list. This is
+// checked at the single animation choke point (StartMacGenieAnim), NOT via
+// Windhawk's own exclusion list: that list only prevents the mod from being
+// LOADED into a process, but this mod's hooks animate a window from whichever
+// process manipulates it (Explorer's taskbar click, the shell, the app itself),
+// so an app excluded there would still animate. Matching the window's owning
+// process here respects the exclusion no matter where the trigger came from.
+bool MacGenieIsExcluded(HWND hWnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_ExcludedPrograms.empty()) return false;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (!pid) return false;
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return false;
+    WCHAR path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    bool ok = QueryFullProcessImageNameW(hProc, 0, path, &len) != 0;
+    CloseHandle(hProc);
+    if (!ok) return false;
+
+    std::wstring full = path;
+    std::transform(full.begin(), full.end(), full.begin(), ::towlower);
+    size_t slash = full.find_last_of(L"\\/");
+    std::wstring base = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+    std::wstring baseNoExt = base;
+    if (baseNoExt.size() > 4 && baseNoExt.compare(baseNoExt.size() - 4, 4, L".exe") == 0) {
+        baseNoExt.resize(baseNoExt.size() - 4);
+    }
+
+    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    for (const std::wstring& e : g_ExcludedPrograms) {
+        if (e == full || e == base || e == baseNoExt) return true;
+    }
+    return false;
 }
 
 void MacGenieSetDwmTransitions(HWND hWnd, BOOL enable) {
@@ -668,6 +793,9 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         );
         g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
         if (rt) {
+            // Potassiumuncher's v1.5: fix the AA modes once at creation.
+            rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+            rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
             );
@@ -728,8 +856,9 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
-    int xTiles = GHOST_X_TILES;
-    int yTiles = GHOST_Y_TILES;
+    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
+    int xTiles = g_tileCount.load(std::memory_order_relaxed);
+    int yTiles = xTiles;
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
 
     ID2D1PathGeometry* cachedOutlineGeo = nullptr;
@@ -737,9 +866,29 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     BOOL firstFrame = TRUE;
 
+    // Potassiumuncher's v1.5 frame pacer: cap delivery at ~120fps so frames land
+    // at even intervals when per-frame cost varies (it does not change the
+    // animation's duration). On <=120Hz displays MINE's DwmFlush below already
+    // paces slower than this, so the pacer is a no-op there; on faster displays
+    // it keeps the mesh render cost bounded.
+    const double kTargetFrameMs = 1000.0 / 120.0;
+    LARGE_INTEGER qpcLastFrame = qpcStart;
+
     if (d2dOk) {
         for (;;) {
-            QueryPerformanceCounter(&qpcNow);
+            for (;;) {
+                QueryPerformanceCounter(&qpcNow);
+                double sinceLastMs = (qpcNow.QuadPart - qpcLastFrame.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+                if (sinceLastMs >= kTargetFrameMs) break;
+                double remainingMs = kTargetFrameMs - sinceLastMs;
+                if (remainingMs > 2.0) {
+                    Sleep((DWORD)(remainingMs - 1.0));
+                } else {
+                    YieldProcessor();
+                }
+            }
+            qpcLastFrame = qpcNow;
+
             double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
             BOOL lastFrame = (elapsedMs >= animDur);
 
@@ -805,7 +954,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
                     float w = right - left;
                     float h = bottom - top;
-                    float r = fminf(8.0f, fminf(w, h) / 2.0f);
+                    float r = fminf(12.0f, fminf(w, h) / 2.0f);   // Potassiumuncher's v1.5 radius
                     const float K = 0.5523f;
                     float L = left, T = top, R = right, B = bottom;
 
@@ -851,7 +1000,9 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                 rt->CreateLayer(&layer);
                 D2D1_LAYER_PARAMETERS layerParams = D2D1::LayerParameters();
                 layerParams.geometricMask = outlineGeo;
-                layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_ALIASED;
+                // Per-primitive AA on the outline mask (Potassiumuncher's v1.5):
+                // smooth silhouette edges without per-tile seam artifacts.
+                layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
                 rt->PushLayer(&layerParams, layer);
 
                 for (int y = 0; y < yTiles; y++) {
@@ -865,8 +1016,10 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
                         float quadW = fmaxf(fabsf(p2.x - p1.x), fabsf(p4.x - p3.x));
                         float quadH = fmaxf(fabsf(p3.y - p1.y), fabsf(p4.y - p2.y));
-                        float bloatAmt = fminf(quadW, quadH) * 0.04f;
-                        bloatAmt = fmaxf(0.15f, fminf(0.35f, bloatAmt));
+                        // Potassiumuncher's v1.5 bloat: slightly larger overlap so
+                        // tile seams stay closed at higher tile counts.
+                        float bloatAmt = fminf(quadW, quadH) * 0.05f;
+                        bloatAmt = fmaxf(0.20f, fminf(0.40f, bloatAmt));
 
                         ID2D1PathGeometry* quadGeo = CreateQuadGeo(g_d2dFactory,
                             BloatPoint(p1, c, bloatAmt), BloatPoint(p2, c, bloatAmt),
@@ -1200,10 +1353,14 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
                 if (srcX > W - 1) srcX = W - 1;
                 const BYTE* sp = srcRowPtr + (size_t)srcX * 4;
                 BYTE* dp = dstRowPtr + (size_t)xC * 4;
+                // Snapshots carry premultiplied per-pixel alpha since the v1.5
+                // capture fix (translucent regions have a<255); propagate it so
+                // acrylic areas stay see-through in the classic style too. The
+                // constant alpha below still applies the global fade on top.
                 dp[0] = sp[0];
                 dp[1] = sp[1];
                 dp[2] = sp[2];
-                dp[3] = 255;      // opaque; the constant alpha below applies the fade
+                dp[3] = sp[3];
             }
         }
 
@@ -1319,6 +1476,17 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
                        BOOL cloakHidden = FALSE, BOOL deferredMinimize = FALSE,
                        BOOL requestedUnhide = FALSE, HWND hNextApp = NULL) {
+    // "Excluded programs" gate - single choke point for every animation path
+    // (all six minimize/restore hooks AND the launch thread funnel through here).
+    // Bail exactly like the other early-outs so hook-side state is restored: a
+    // rising caller gets its hide undone, a falling caller gets DWM transitions
+    // back so the DEFAULT system animation plays for the excluded app.
+    if (MacGenieIsExcluded(hWnd)) {
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else MacGenieSetDwmTransitions(hWnd, TRUE);
+        return false;
+    }
+
     // Animation geometry via DWM extended frame bounds (Goal D / bug #4670):
     // GetWindowRect returns the legacy frame (invisible resize borders / shadow),
     // which is offset a few px from where the pixels actually are on composited
@@ -1474,29 +1642,62 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         return false;
     }
 
-    // Rising-no-cache fallback only: copy a rawW x rawH PrintWindow capture into the
-    // w x h snapshot at the extended-frame offset, forcing every pixel OPAQUE (GDI
-    // gives no reliable alpha; the rounded-rect D2D mask supplies clean corners).
-    auto CopyOpaque = [&](void* srcBits) {
+    // Copy a rawW x rawH PrintWindow capture into the w x h snapshot at the
+    // extended-frame offset. Potassiumuncher's v1.5 grey-screen fix: PrintWindow
+    // (PW_RENDERFULLCONTENT) returns pixels that are ALREADY premultiplied, so pass
+    // them through untouched and keep a==0 pixels fully TRANSPARENT. The old code
+    // forced every pixel opaque, which flattened acrylic / Mica backdrop regions
+    // (alpha 0 or partial) into a solid grey - the "grey top" on translucent
+    // windows. With alpha preserved, those regions stay see-through during the
+    // genie and the desktop shows through them, matching the window's real look.
+    auto CopySnapshot = [&](void* srcBits) {
         DWORD* src = (DWORD*)srcBits;
         DWORD* dst = (DWORD*)data->pBits;
+        int inBounds = 0, zeroAlpha = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int sx = x + offsetX;
                 int sy = y + offsetY;
                 if (sx >= 0 && sx < rawW && sy >= 0 && sy < rawH) {
-                    dst[y * w + x] = 0xFF000000u | (src[sy * rawW + sx] & 0x00FFFFFFu);
+                    DWORD p = src[sy * rawW + sx];
+                    BYTE a = (BYTE)((p >> 24) & 0xFF);
+                    inBounds++;
+                    if (a == 0) zeroAlpha++;
+                    dst[y * w + x] = (a == 0) ? 0 : p;
                 } else {
                     dst[y * w + x] = 0;
                 }
             }
         }
+        // Fallback: on NON-PRIMARY monitors DWM often returns the entire Mica /
+        // acrylic backdrop region as a==0 - with alpha preserved the whole window
+        // background would simply VANISH during the genie (reported on Explorer on
+        // a secondary display). If most of the window came back fully transparent,
+        // the alpha channel clearly isn't describing real translucency, so force
+        // those pixels opaque - restoring the pre-3.1 dark-backdrop look for this
+        // case, which beats a see-through hole. Windows where transparency is
+        // sparse (rounded corners, small blur regions) keep the faithful alpha.
+        if (inBounds > 0 && zeroAlpha * 2 > inBounds) {
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    int sx = x + offsetX;
+                    int sy = y + offsetY;
+                    if (sx >= 0 && sx < rawW && sy >= 0 && sy < rawH) {
+                        DWORD p = src[sy * rawW + sx];
+                        if (((p >> 24) & 0xFF) == 0) {
+                            dst[y * w + x] = 0xFF000000u | (p & 0x00FFFFFFu);
+                        }
+                    }
+                }
+            }
+        }
     };
 
-    // Rising-no-cache fallback: grab the (cloaked, off-screen-invisible) window into
-    // a rawW x rawH DIB via PrintWindow, then CopyOpaque into the extended-frame
-    // snapshot. Only used when there's no cached minimize snapshot to restore from -
-    // the window isn't on screen to BitBlt, so PrintWindow is the only option here.
+    // Window-only capture: grab the window into a rawW x rawH DIB via PrintWindow,
+    // then CopySnapshot into the extended-frame snapshot. PrintWindow renders only
+    // the window's own content, so the taskbar / other windows can never bleed into
+    // the animation (Potassiumuncher's taskbar fix) - and it also works on a
+    // cloaked window (the rising-no-cache path), where a screen grab would not.
     auto CaptureNow = [&]() -> bool {
         HDC hTempDC = CreateCompatibleDC(hScreenDC);
         BITMAPINFO bmiTemp = bmi;
@@ -1512,7 +1713,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
         PrintWindow(hWnd, hTempDC, PW_RENDERFULLCONTENT);
         GdiFlush();
-        CopyOpaque(pTempBits);
+        CopySnapshot(pTempBits);
         SelectObject(hTempDC, hOldTempBmp);
         DeleteObject(hTempBmp);
         DeleteDC(hTempDC);
