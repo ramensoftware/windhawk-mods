@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-14T12:04:47.000Z</updated>
+    <updated>2026-07-14T15:29:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[PivotLink: Browser Router 1.0]]></title>
+        <id>https://windhawk.net/mods/pivotlink-browser-router#111292111761fd2ba68b8c850b9b916424eb97e7</id>
+        <link href="https://windhawk.net/mods/pivotlink-browser-router"/>
+        <updated>2026-07-14T15:29:50.000Z</updated>
+        <content type="html"><![CDATA[<p>Ever had a browser open already and Windows opened a Discord/Slack link in your default browser by launching it from scratch? Now it won't.</p>
+<h2 id="whatitdoes">What It Does</h2>
+<p>PivotLink intercepts outgoing URL launches system-wide and redirects them to whichever browser you already have running, based on a 5-tier priority list you configure. Instead of Windows blindly spawning your default browser, PivotLink checks what's actually open and sends the link there.</p>
+<h2 id="howitworks">How It Works</h2>
+<ul>
+<li>Hooks <code>ShellExecuteW</code>, <code>ShellExecuteExW</code>, <code>ShellExecuteA</code>, <code>ShellExecuteExA</code>, and <code>CreateProcessW</code> to catch URL opens before they reach the OS default handler.</li>
+<li>Scans the running process list using a single-pass converging search to find the highest-priority browser that's already active.</li>
+<li>If a match is found, the link is silently rerouted to that browser. If none of your ranked browsers are running, the call falls through to normal Windows behavior.</li>
+<li>Circular routing is prevented — if you're already inside the target browser, the hook steps aside.</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<ul>
+<li><strong>Priority 1–5 Browsers</strong>: Rank up to five browsers by executable name (e.g. <code>brave.exe</code>, <code>firefox.exe</code>). The first one found running wins.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod skips Session 0 processes (system services) automatically.</li>
+<li>A thread-local guard prevents recursive hook calls during redirection.</li>
+</ul>]]></content>
+        <author>
+            <name>gauthumj</name>
+            <uri>https://github.com/gauthumj</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 1.5.0]]></title>
         <id>https://windhawk.net/mods/win7-action-center-recreation#16034bdcfe218948d5917d77a0d8823e8e460b19</id>
@@ -775,27 +804,6 @@ classic popup menu, install global mouse hooks, or show a separate flyout.</p>
         <author>
             <name>Mgrmjp</name>
             <uri>https://github.com/Mgrmjp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Gather Windows To Monitor 0.1.0]]></title>
-        <id>https://windhawk.net/mods/gather-windows-to-monitor#c9b5f51600ef0346d22d7d229b640edaa215a837</id>
-        <link href="https://windhawk.net/mods/gather-windows-to-monitor"/>
-        <updated>2026-07-02T15:27:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="gatherwindowstomonitor">Gather Windows To Monitor</h1>
-<p>Global hotkeys gather visible application windows to a selected monitor work area.</p>
-<p>Configure hotkeys in Windhawk settings. Use strings such as <code>Ctrl+Alt+Shift+1</code>,
-<code>Ctrl+Win+M</code>, <code>F9</code>, or <code>None</code>.</p>
-<p>Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
-tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
-and untitled windows.</p>
-<p>Enable debug logging to see per-window skip reasons in the Windhawk log.</p>
-<p>Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
-the Windows Settings display number. Moving minimized windows without restoring is
-not attempted because it is not reliable for all apps.</p>]]></content>
-        <author>
-            <name>Fred</name>
-            <uri>https://github.com/fjdiazt</uri>
         </author>
     </entry>
 </feed>

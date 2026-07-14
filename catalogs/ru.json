@@ -9281,6 +9281,35 @@
         "version": "1.0.1"
       }
     },
+    "pivotlink-browser-router": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784042990000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784042990000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "gauthumj",
+        "compilerOptions": "-lshell32",
+        "description": "Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout.",
+        "github": "https://github.com/gauthumj",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "PivotLink: Browser Router",
+        "version": "1.0"
+      }
+    },
     "power-options-button": {
       "details": {
         "defaultSorting": 252,
