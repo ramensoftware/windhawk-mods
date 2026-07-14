@@ -20,7 +20,7 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 
 ## How It Works
 
-- Hooks `ShellExecuteW`, `ShellExecuteExW`, and `CreateProcessW` to catch URL opens before they reach the OS default handler.
+- Hooks `ShellExecuteW`, `ShellExecuteExW`, `ShellExecuteA`, `ShellExecuteExA`, and `CreateProcessW` to catch URL opens before they reach the OS default handler.
 - Scans the running process list using a single-pass converging search to find the highest-priority browser that's already active.
 - If a match is found, the link is silently rerouted to that browser. If none of your ranked browsers are running, the call falls through to normal Windows behavior.
 - Circular routing is prevented — if you're already inside the target browser, the hook steps aside.
@@ -145,15 +145,18 @@ std::wstring GetHighestPriorityRunningBrowser() {
     return L"";
 }
 
-std::wstring GetCurrentProcessName() {
-    WCHAR path[MAX_PATH];
-    if (GetModuleFileNameW(NULL, path, MAX_PATH)) {
-        std::wstring sPath(path);
-        size_t pos = sPath.find_last_of(L"\\/");
-        if (pos != std::wstring::npos) return sPath.substr(pos + 1);
-        return sPath;
-    }
-    return L"UNKNOWN";
+const std::wstring& GetCurrentProcessName() {
+    static std::wstring name = []() -> std::wstring {
+        WCHAR path[MAX_PATH];
+        if (GetModuleFileNameW(NULL, path, MAX_PATH)) {
+            std::wstring sPath(path);
+            size_t pos = sPath.find_last_of(L"\\/");
+            if (pos != std::wstring::npos) return sPath.substr(pos + 1);
+            return sPath;
+        }
+        return L"UNKNOWN";
+    }();
+    return name;
 }
 
 void LoadSettings() {
@@ -219,7 +222,9 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, const WCHAR*
 BOOL WINAPI ShellExecuteExW_Hook(LPSHELLEXECUTEINFOW pExecInfo) {
     if (pExecInfo && pExecInfo->lpFile) {
         if (RouteLinkIfNecessary(pExecInfo->lpFile, pExecInfo->lpVerb, pExecInfo->lpParameters, pExecInfo->nShow)) {
-            pExecInfo->hInstApp = (HINSTANCE)33; 
+            pExecInfo->hInstApp = (HINSTANCE)33;
+            if (pExecInfo->fMask & SEE_MASK_NOCLOSEPROCESS)
+                pExecInfo->hProcess = NULL;
             return TRUE;
         }
     }
@@ -228,6 +233,12 @@ BOOL WINAPI ShellExecuteExW_Hook(LPSHELLEXECUTEINFOW pExecInfo) {
 
 using ShellExecuteW_t = decltype(&ShellExecuteW);
 ShellExecuteW_t ShellExecuteW_Original;
+
+using ShellExecuteExA_t = decltype(&ShellExecuteExA);
+ShellExecuteExA_t ShellExecuteExA_Original;
+
+using ShellExecuteA_t = decltype(&ShellExecuteA);
+ShellExecuteA_t ShellExecuteA_Original;
 
 using CreateProcessW_t = decltype(&CreateProcessW);
 CreateProcessW_t CreateProcessW_Original;
@@ -250,6 +261,46 @@ HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFi
         return (HINSTANCE)33;
     }
     return ShellExecuteW_Original(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShow);
+}
+
+static std::wstring WideFromAnsi(LPCSTR str) {
+    if (!str) return L"";
+    int len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+    if (len <= 0) return L"";
+    std::wstring out(len - 1, L'\0');
+    MultiByteToWideChar(CP_ACP, 0, str, -1, &out[0], len);
+    return out;
+}
+
+BOOL WINAPI ShellExecuteExA_Hook(LPSHELLEXECUTEINFOA pExecInfo) {
+    if (pExecInfo && pExecInfo->lpFile) {
+        std::wstring file = WideFromAnsi(pExecInfo->lpFile);
+        std::wstring verb = WideFromAnsi(pExecInfo->lpVerb);
+        std::wstring params = WideFromAnsi(pExecInfo->lpParameters);
+        if (RouteLinkIfNecessary(file.c_str(),
+                pExecInfo->lpVerb ? verb.c_str() : NULL,
+                pExecInfo->lpParameters ? params.c_str() : NULL,
+                pExecInfo->nShow)) {
+            pExecInfo->hInstApp = (HINSTANCE)33;
+            if (pExecInfo->fMask & SEE_MASK_NOCLOSEPROCESS)
+                pExecInfo->hProcess = NULL;
+            return TRUE;
+        }
+    }
+    return ShellExecuteExA_Original(pExecInfo);
+}
+
+HINSTANCE WINAPI ShellExecuteA_Hook(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShow) {
+    std::wstring file = WideFromAnsi(lpFile);
+    std::wstring op = WideFromAnsi(lpOperation);
+    std::wstring params = WideFromAnsi(lpParameters);
+    if (RouteLinkIfNecessary(file.c_str(),
+            lpOperation ? op.c_str() : NULL,
+            lpParameters ? params.c_str() : NULL,
+            nShow)) {
+        return (HINSTANCE)33;
+    }
+    return ShellExecuteA_Original(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShow);
 }
 
 BOOL WINAPI CreateProcessW_Hook(
@@ -365,6 +416,8 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
+    WindhawkUtils::SetFunctionHook(ShellExecuteExA, ShellExecuteExA_Hook, &ShellExecuteExA_Original);
+    WindhawkUtils::SetFunctionHook(ShellExecuteA, ShellExecuteA_Hook, &ShellExecuteA_Original);
     WindhawkUtils::SetFunctionHook(CreateProcessW, CreateProcessW_Hook, &CreateProcessW_Original);
     return TRUE;
 }
