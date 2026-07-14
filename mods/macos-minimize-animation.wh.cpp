@@ -793,8 +793,8 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         );
         g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
         if (rt) {
-            // Potassiumuncher's v1.5: fix the AA modes once at creation.
-            rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+            // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
+            // AA mode is set per frame in the draw loop below).
             rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
@@ -822,7 +822,11 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
 
     UINT dpiX = 96, dpiY = 96;
-    HMODULE hShcore = LoadLibraryW(L"Shcore.dll");
+    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
+    // this code runs inside every process - a bare-name LoadLibrary would search
+    // the host .exe's own directory first, letting a planted Shcore.dll next to
+    // any portable app execute in that process (windhawk-mods #2063 pattern).
+    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hShcore) {
         typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
         auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
