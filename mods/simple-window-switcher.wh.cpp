@@ -485,7 +485,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - cursorMonitor: Monitor Based on Cursor Location
     - perMonitorWindows: false
       $name: Display Windows Only from the Monitor Containing the Cursor
-    - virtualDesktopBehavior: currentOnly
+    - virtualDesktopBehavior: allDesktops
       $name: Virtual Desktop Behavior
       $description: Choose which virtual desktops to show windows from.
       $options:
@@ -3800,16 +3800,29 @@ static void SwitchToSelected() {
     if (g_settings.showApplications && g_settings.restoreAllWindows) {
         groupWindows = g_windows[g_selectedIndex].groupWindows;
     }
-    HideSwitcher();
-    for (HWND hw : groupWindows) {
-        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
-    }
+    
+    // Switch to the selected window FIRST while we still have foreground rights
     if (IsWindow(hT)) {
         HWND hP = GetLastActivePopup(hT);
         HWND hF = IsWindowVisible(hP) ? hP : hT;
         if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
-        SwitchToThisWindow(hF, TRUE);
+        
+        // Forcefully attach thread input to guarantee SetForegroundWindow succeeds
+        DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), NULL);
+        DWORD myThread = GetCurrentThreadId();
+        if (fgThread != myThread) AttachThreadInput(myThread, fgThread, TRUE);
+        
+        SetForegroundWindow(hF);
+        
+        if (fgThread != myThread) AttachThreadInput(myThread, fgThread, FALSE);
     }
+
+    for (HWND hw : groupWindows) {
+        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+    }
+    
+    // Hide the switcher AFTER we've successfully transferred focus and updated the Z-order
+    HideSwitcher();
 }
 
 // Helper: check if a window is truncated (not placed in current layout)
@@ -4775,11 +4788,11 @@ static void LoadSettings() {
     wcscpy_s(g_settings.altBacktickBehavior, v ? v : L"backward"); Wh_FreeStringSetting(v);
 
     v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
-    wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"currentOnly");
+    wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"allDesktops");
     Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.virtualDesktopBehavior, L"currentOnly") != 0 &&
         wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
-        wcscpy_s(g_settings.virtualDesktopBehavior, L"currentOnly");
+        wcscpy_s(g_settings.virtualDesktopBehavior, L"allDesktops");
     }
 
     g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
