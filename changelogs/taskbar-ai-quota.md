@@ -1,3 +1,7 @@
+## 0.10.3 ([Jul 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bb827ab3f6f8cd2dfa0348865e30cb50c3f99fdc/mods/taskbar-ai-quota.wh.cpp))
+
+- Fix tooltip hover being inconsistent (occasionally not showing or not dismissing)
+
 ## 0.10.2 ([Jun 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3b5be7d2026357e86981da619e48f0e58af30ecf/mods/taskbar-ai-quota.wh.cpp))
 
 - Built-in OAuth: the mod now signs you in to Anthropic and OpenAI through your browser instead of reading CLI credential files. Tokens are stored encrypted and refreshed automatically. Sign in / Sign out from a column's right-click menu.
