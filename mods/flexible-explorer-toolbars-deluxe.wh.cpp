@@ -44,6 +44,7 @@ This mod hides the Navigation Bar and instead creates the following optional too
 * The Up Buton
 
 The toolbars can be locked and unlocked.
+If you are using this mod together with Classic Explorer toolbar (Open Shell), enable that toolbar before enabling this mod, otherwise its enabled state will not be remembered.
 
 # Further adjustments
 
