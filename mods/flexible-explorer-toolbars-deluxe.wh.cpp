@@ -74,8 +74,10 @@ The toolbars can be locked and unlocked.
 #include <unordered_set>
 #include <vector>
 #include <string>
+#include <windowsx.h>
 
 constexpr int UP_BUTTON_ICON_SIZE  = 16;
+constexpr UINT LOCK_TOOLBARS_CMD_ID = 41484;
 
 UINT g_msgDoMove = 0;
 
@@ -121,10 +123,6 @@ int GetDesiredBandHeight() {
     return GetSystemMetrics(SM_CYSIZE) + GetSystemMetrics(SM_CYBORDER) * 2 + 2;
 }
 
-// =====================================================================
-// NTDLL registry hooks
-// =====================================================================
-
 using NtSetValueKey_t = NTSTATUS(NTAPI*)(
     HANDLE KeyHandle,
     PUNICODE_STRING ValueName,
@@ -133,7 +131,7 @@ using NtSetValueKey_t = NTSTATUS(NTAPI*)(
     PVOID Data,
     ULONG DataSize);
 
-NtSetValueKey_t   NtSetValueKey_Original   = nullptr;
+NtSetValueKey_t NtSetValueKey_Original = nullptr;
 
 bool UnicodeStringEqualsIgnoreCase(PUNICODE_STRING vn, const wchar_t* target) {
     if (!vn || !vn->Buffer || vn->Length == 0) return false;
@@ -154,48 +152,106 @@ NTSTATUS NTAPI NtSetValueKey_Hook(
     PVOID Data,
     ULONG DataSize)
 {
-
     if (UnicodeStringEqualsIgnoreCase(ValueName, L"ITBar7Layout")) {
         return 0;
     }
     return NtSetValueKey_Original(KeyHandle, ValueName, TitleIndex, Type, Data, DataSize);
 }
 
-// =====================================================================
-// Accessors
-// =====================================================================
 bool WasAlreadyMoved(HWND c){EnterCriticalSection(&g_mutex);bool r=g_alreadyMoved.count(c)&&g_alreadyMoved[c];LeaveCriticalSection(&g_mutex);return r;}
 void MarkMoved(HWND c){EnterCriticalSection(&g_mutex);g_alreadyMoved[c]=true;LeaveCriticalSection(&g_mutex);}
+void UnmarkMoved(HWND c){EnterCriticalSection(&g_mutex);g_alreadyMoved.erase(c);LeaveCriticalSection(&g_mutex);}
+
 bool IsForceHidden(HWND w){EnterCriticalSection(&g_mutex);bool r=g_forceHiddenWorkers.count(w)&&g_forceHiddenWorkers[w];LeaveCriticalSection(&g_mutex);return r;}
 void MarkForceHidden(HWND w){EnterCriticalSection(&g_mutex);g_forceHiddenWorkers[w]=true;LeaveCriticalSection(&g_mutex);}
+void UnmarkForceHidden(HWND w){EnterCriticalSection(&g_mutex);g_forceHiddenWorkers.erase(w);LeaveCriticalSection(&g_mutex);}
+
 void MarkNeutered(HWND h){EnterCriticalSection(&g_mutex);g_neuteredAddressRoots.insert(h);LeaveCriticalSection(&g_mutex);}
 bool IsNeutered(HWND h){EnterCriticalSection(&g_mutex);bool r=g_neuteredAddressRoots.count(h)!=0;LeaveCriticalSection(&g_mutex);return r;}
+void UnmarkNeutered(HWND h){EnterCriticalSection(&g_mutex);g_neuteredAddressRoots.erase(h);LeaveCriticalSection(&g_mutex);}
+
 void RegisterRebarCabinet(HWND r,HWND c){EnterCriticalSection(&g_mutex);g_rebarToCabinet[r]=c;LeaveCriticalSection(&g_mutex);}
 HWND GetRebarCabinet(HWND r){EnterCriticalSection(&g_mutex);auto it=g_rebarToCabinet.find(r);HWND c=it!=g_rebarToCabinet.end()?it->second:NULL;LeaveCriticalSection(&g_mutex);return c;}
+void UnregisterRebarCabinet(HWND r){EnterCriticalSection(&g_mutex);g_rebarToCabinet.erase(r);LeaveCriticalSection(&g_mutex);}
+
 void RegisterCabinetMenuRebar(HWND cab,HWND r){EnterCriticalSection(&g_mutex);g_cabinetToMenuRebar[cab]=r;LeaveCriticalSection(&g_mutex);}
 HWND GetCabinetMenuRebar(HWND cab){EnterCriticalSection(&g_mutex);auto it=g_cabinetToMenuRebar.find(cab);HWND r=it!=g_cabinetToMenuRebar.end()?it->second:NULL;LeaveCriticalSection(&g_mutex);return r;}
+void UnregisterCabinetMenuRebar(HWND cab){EnterCriticalSection(&g_mutex);g_cabinetToMenuRebar.erase(cab);LeaveCriticalSection(&g_mutex);}
+
 void MarkPendingApply(HWND r){EnterCriticalSection(&g_mutex);g_pendingApply.insert(r);LeaveCriticalSection(&g_mutex);}
 bool IsPendingApply(HWND r){EnterCriticalSection(&g_mutex);bool v=g_pendingApply.count(r)!=0;LeaveCriticalSection(&g_mutex);return v;}
 void ClearPendingApply(HWND r){EnterCriticalSection(&g_mutex);g_pendingApply.erase(r);LeaveCriticalSection(&g_mutex);}
 
-void SetChildFlag(HWND h,int f){EnterCriticalSection(&g_mutex);g_childFlags[h]|=f;LeaveCriticalSection(&g_mutex);}
+void SetChildFlag(HWND h,int f){
+    EnterCriticalSection(&g_mutex);
+    g_childFlags[h]|=f;
+    LeaveCriticalSection(&g_mutex);
+}
 void ClearChildFlag(HWND h,int f){
     EnterCriticalSection(&g_mutex);
     auto it=g_childFlags.find(h);
     if(it!=g_childFlags.end()){it->second&=~f;if(!it->second)g_childFlags.erase(it);}
     LeaveCriticalSection(&g_mutex);
 }
-bool HasChildFlag(HWND h,int f){EnterCriticalSection(&g_mutex);auto it=g_childFlags.find(h);bool r=it!=g_childFlags.end()&&(it->second&f);LeaveCriticalSection(&g_mutex);return r;}
+bool HasChildFlag(HWND h,int f){
+    EnterCriticalSection(&g_mutex);
+    auto it=g_childFlags.find(h);
+    bool r=it!=g_childFlags.end()&&(it->second&f);
+    LeaveCriticalSection(&g_mutex);
+    return r;
+}
 void ClearAllChildFlags(HWND h){EnterCriticalSection(&g_mutex);g_childFlags.erase(h);LeaveCriticalSection(&g_mutex);}
 
-void CleanupCabinetMovedChildren(HWND cab){
+void CleanupCabinetState(HWND cab){
+    // Очистка всех карт при закрытии окна Cabinet
+    UnmarkMoved(cab);
+    
     HWND mr=GetCabinetMenuRebar(cab);
-    if(!mr||!IsWindow(mr))return;
-    int cnt=(int)SendMessage(mr,RB_GETBANDCOUNT,0,0);
-    for(int i=0;i<cnt;i++){
-        REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
-        if(!SendMessage(mr,RB_GETBANDINFO,i,(LPARAM)&rbi)||!rbi.hwndChild)continue;
-        ClearAllChildFlags(rbi.hwndChild);
+    if(mr&&IsWindow(mr)){
+        UnregisterRebarCabinet(mr);
+        ClearPendingApply(mr);
+        EnterCriticalSection(&g_mutex);
+        g_applyAttempts.erase(mr);
+        LeaveCriticalSection(&g_mutex);
+        
+        // Очистка флагов детей
+        int cnt=(int)SendMessage(mr,RB_GETBANDCOUNT,0,0);
+        for(int i=0;i<cnt;i++){
+            REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
+            if(SendMessage(mr,RB_GETBANDINFO,i,(LPARAM)&rbi)&&rbi.hwndChild){
+                ClearAllChildFlags(rbi.hwndChild);
+                EnterCriticalSection(&g_mutex);
+                g_toolbarGuards.erase(rbi.hwndChild);
+                LeaveCriticalSection(&g_mutex);
+            }
+        }
+    }
+    UnregisterCabinetMenuRebar(cab);
+    
+    // Очистка WorkerW и нейтрализованных окон
+    HWND navRebar=NULL;
+    HWND w=FindWindowEx(cab,NULL,L"WorkerW",NULL);
+    while(w){
+        WCHAR cls[64];
+        if(GetClassName(w,cls,ARRAYSIZE(cls))){
+            HWND r=FindWindowEx(w,NULL,L"ReBarWindow32",NULL);
+            if(r){navRebar=r;break;}
+        }
+        w=FindWindowEx(cab,w,L"WorkerW",NULL);
+    }
+    if(navRebar){
+        HWND navWorker=GetParent(navRebar);
+        if(navWorker){
+            UnmarkForceHidden(navWorker);
+        }
+        
+        int cnt=(int)SendMessage(navRebar,RB_GETBANDCOUNT,0,0);
+        for(int i=0;i<cnt;i++){
+            REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
+            if(SendMessage(navRebar,RB_GETBANDINFO,i,(LPARAM)&rbi)&&rbi.hwndChild){
+                UnmarkNeutered(rbi.hwndChild);
+            }
+        }
     }
 }
 
@@ -211,45 +267,33 @@ void GetEffectiveClassName(HWND child, wchar_t* out, size_t outCount) {
     }
 }
 
-// =====================================================================
-// Storage via Windhawk API
-// =====================================================================
-struct BandState{UINT cx;bool brk;};
-
 void SaveBandPositions(HWND rebar){
     if(!rebar||!IsWindow(rebar))return;
     int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
-    
     Wh_SetIntValue(L"BandCount", cnt);
-    
     for(int i=0;i<cnt;i++){
         REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_SIZE|RBBIM_STYLE|RBBIM_CHILD;
         if(!SendMessage(rebar,RB_GETBANDINFO,i,(LPARAM)&rbi))continue;
-        
         WCHAR cls[256]=L"";
         if(rbi.hwndChild&&IsWindow(rbi.hwndChild))
             GetEffectiveClassName(rbi.hwndChild,cls,ARRAYSIZE(cls));
-        
         WCHAR ok[64];swprintf_s(ok,ARRAYSIZE(ok),L"Order_%d",i);
         Wh_SetStringValue(ok, cls);
-        
         WCHAR ck[128];swprintf_s(ck,ARRAYSIZE(ck),L"Cx_%s",cls);
         Wh_SetIntValue(ck, (int)rbi.cx);
-        
         WCHAR bk[128];swprintf_s(bk,ARRAYSIZE(bk),L"Break_%s",cls);
         Wh_SetIntValue(bk, (rbi.fStyle&RBBS_BREAK)?1:0);
     }
 }
 
+struct BandState{UINT cx;bool brk;};
+
 bool LoadBandState(const wchar_t* cls,BandState& out){
     WCHAR ck[128];swprintf_s(ck,ARRAYSIZE(ck),L"Cx_%s",cls);
     WCHAR bk[128];swprintf_s(bk,ARRAYSIZE(bk),L"Break_%s",cls);
-    
     int cx = Wh_GetIntValue(ck, -1);
     if(cx < 20 || cx > 8000) return false;
-    
     int brk = Wh_GetIntValue(bk, 0);
-    
     out.cx = (UINT)cx;
     out.brk = brk != 0;
     return true;
@@ -258,7 +302,6 @@ bool LoadBandState(const wchar_t* cls,BandState& out){
 std::vector<std::wstring> LoadBandOrder(){
     std::vector<std::wstring> order;
     int cnt = Wh_GetIntValue(L"BandCount", 0);
-    
     for(int i=0; i<cnt; i++){
         WCHAR ok[64];swprintf_s(ok,ARRAYSIZE(ok),L"Order_%d",i);
         WCHAR val[256]=L"";
@@ -275,9 +318,6 @@ void ResizeUpButtonToolbar(HWND toolbar) {
     SendMessage(toolbar, TB_AUTOSIZE, 0, 0);
 }
 
-// =====================================================================
-// ApplySavedLayout + ReapplyCx
-// =====================================================================
 void ReapplyCx(HWND rebar){
     ClearPendingApply(rebar);
     int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
@@ -290,7 +330,7 @@ void ReapplyCx(HWND rebar){
         if(rbi.hwndChild)GetEffectiveClassName(rbi.hwndChild,cls,ARRAYSIZE(cls));
         BandState bs;
         if(!LoadBandState(cls,bs))continue;
-        bool cxOk =rbi.cx==bs.cx;
+        bool cxOk=rbi.cx==bs.cx;
         bool brkOk=((rbi.fStyle&RBBS_BREAK)!=0)==bs.brk;
         if(!cxOk||!brkOk){
             REBARBANDINFO set={sizeof(set)};
@@ -350,9 +390,6 @@ void ApplySavedLayout(HWND rebar){
     MarkPendingApply(rebar);
 }
 
-// =====================================================================
-// Window helpers
-// =====================================================================
 HWND GetCabinetAncestor(HWND hwnd){
     for(HWND c=hwnd;c;c=GetParent(c)){
         WCHAR cls[64];
@@ -364,6 +401,10 @@ HWND FindMenuBarRebar(HWND c){
     HWND w=FindWindowEx(s,NULL,L"WorkerW",NULL);if(!w)return NULL;
     return FindWindowEx(w,NULL,L"ReBarWindow32",NULL);
 }
+HWND FindMenuBarWorkerW(HWND cab){
+    HWND s=FindWindowEx(cab,NULL,L"ShellTabWindowClass",NULL);if(!s)return NULL;
+    return FindWindowEx(s,NULL,L"WorkerW",NULL);
+}
 HWND FindNavbarRebar(HWND c){
     HWND w=FindWindowEx(c,NULL,L"WorkerW",NULL);
     while(w){HWND r=FindWindowEx(w,NULL,L"ReBarWindow32",NULL);if(r)return r;w=FindWindowEx(c,w,L"WorkerW",NULL);}
@@ -373,14 +414,12 @@ HWND FindNavbarRebar(HWND c){
 HWND FindUpButton(HWND cab) {
     HWND navRebar = FindNavbarRebar(cab);
     if (!navRebar) return NULL;
-    
     int cnt = (int)SendMessage(navRebar, RB_GETBANDCOUNT, 0, 0);
     for (int i = 0; i < cnt; i++) {
         REBARBANDINFO rbi = {sizeof(rbi)};
         rbi.fMask = RBBIM_CHILD;
         if (!SendMessage(navRebar, RB_GETBANDINFO, i, (LPARAM)&rbi)) continue;
         if (!rbi.hwndChild) continue;
-        
         WCHAR cls[256];
         if (GetClassName(rbi.hwndChild, cls, ARRAYSIZE(cls))) {
             if (wcscmp(cls, L"UpBand") == 0) {
@@ -446,6 +485,17 @@ DWORD GetReferenceGripperStyle(HWND rebar){
     return RBBS_GRIPPERALWAYS;
 }
 
+bool AreToolbarsLockedByGripper(HWND rebar){
+    int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
+    for(int i=0;i<cnt;i++){
+        REBARBANDINFO rbi={sizeof(rbi)};
+        rbi.fMask=RBBIM_STYLE;
+        if(!SendMessage(rebar,RB_GETBANDINFO,i,(LPARAM)&rbi))continue;
+        return (rbi.fStyle & RBBS_NOGRIPPER) != 0;
+    }
+    return false;
+}
+
 void SyncMovedBandGrippers(HWND rebar){
     if(g_insideGripperSync) return;
     if(!rebar||!IsWindow(rebar))return;
@@ -468,18 +518,89 @@ void SyncMovedBandGrippers(HWND rebar){
     g_insideGripperSync=false;
 }
 
-// =====================================================================
-// Subclass Procs
-// =====================================================================
+void ShowToolbarContextMenu(HWND rebar, int x, int y) {
+    if(!rebar || !IsWindow(rebar)) return;
 
-LRESULT CALLBACK UpButton_SubclassProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP, DWORD_PTR /*data*/) {
-    if (msg == WM_SIZE) {
-        ResizeUpButtonToolbar(hwnd);
+    HWND cab = rebar;
+    while (cab) {
+        WCHAR cls[64];
+        if (GetClassName(cab, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0)
+            break;
+        cab = GetParent(cab);
     }
+    if (!cab) return;
+
+    HWND workerW = FindMenuBarWorkerW(cab);
+    if (!workerW) return;
+
+    HMODULE hMod = LoadLibraryW(L"explorerframe.dll");
+    if (!hMod) return;
+
+    HMENU hMenu = LoadMenuW(hMod, MAKEINTRESOURCEW(264));
+    if (!hMenu) { FreeLibrary(hMod); return; }
+
+    HMENU hSubMenu = GetSubMenu(hMenu, 0);
+    if (!hSubMenu) { DestroyMenu(hMenu); FreeLibrary(hMod); return; }
+
+    bool locked = AreToolbarsLockedByGripper(rebar);
+    int itemCount = GetMenuItemCount(hSubMenu);
+    for (int i = 0; i < itemCount; i++) {
+        MENUITEMINFOW mii = {sizeof(mii)};
+        mii.fMask = MIIM_ID;
+        if (GetMenuItemInfoW(hSubMenu, i, TRUE, &mii)) {
+            if (mii.wID == LOCK_TOOLBARS_CMD_ID) {
+                MENUITEMINFOW setInfo = {sizeof(setInfo)};
+                setInfo.fMask = MIIM_STATE;
+                setInfo.fState = locked ? MFS_CHECKED : MFS_UNCHECKED;
+                SetMenuItemInfoW(hSubMenu, i, TRUE, &setInfo);
+                break;
+            }
+        }
+    }
+
+    TrackPopupMenuEx(hSubMenu,
+        TPM_RIGHTBUTTON | TPM_LEFTBUTTON,
+        x, y,
+        workerW,
+        NULL);
+    
+    // Workaround для известного глюка Windows с паразитными сообщениями после popup
+    PostMessage(workerW, WM_NULL, 0, 0);
+
+    DestroyMenu(hMenu);
+    FreeLibrary(hMod);
+}
+
+LRESULT CALLBACK UpButton_SubclassProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP, DWORD_PTR) {
+    if(msg == WM_CONTEXTMENU) {
+        HWND rebar = GetParent(hwnd);
+        if(rebar && IsWindow(rebar)) {
+            POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
+            if(pt.x == -1 && pt.y == -1) {
+                RECT rc; GetWindowRect(hwnd, &rc);
+                pt.x = rc.left; pt.y = rc.bottom;
+            }
+            ShowToolbarContextMenu(rebar, pt.x, pt.y);
+            return 0;
+        }
+    }
+    if (msg == WM_SIZE) ResizeUpButtonToolbar(hwnd);
     return DefSubclassProc(hwnd, msg, wP, lP);
 }
 
 LRESULT CALLBACK BreadcrumbToolbar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
+    if(msg == WM_CONTEXTMENU) {
+        HWND rebar = GetParent(hwnd);
+        if(rebar && IsWindow(rebar)) {
+            POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
+            if(pt.x == -1 && pt.y == -1) {
+                RECT rc; GetWindowRect(hwnd, &rc);
+                pt.x = rc.left; pt.y = rc.bottom;
+            }
+            ShowToolbarContextMenu(rebar, pt.x, pt.y);
+            return 0;
+        }
+    }
     if(msg==WM_WINDOWPOSCHANGING){
         auto*pos=(WINDOWPOS*)lP;
         EnterCriticalSection(&g_mutex);
@@ -541,6 +662,44 @@ LRESULT CALLBACK MenuReBarParent_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARA
 }
 
 LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
+    if(msg==WM_CONTEXTMENU){
+        POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
+        bool isMovedBand = false;
+        HWND src = (HWND)wP;
+
+        if (pt.x != -1 || pt.y != -1) {
+            POINT clientPt = pt;
+            ScreenToClient(hwnd, &clientPt);
+            RBHITTESTINFO hti = {0};
+            hti.pt = clientPt;
+            int bandIdx = (int)SendMessage(hwnd, RB_HITTEST, 0, (LPARAM)&hti);
+            if (bandIdx >= 0) {
+                REBARBANDINFO rbi = {sizeof(rbi)};
+                rbi.fMask = RBBIM_CHILD;
+                if (SendMessage(hwnd, RB_GETBANDINFO, bandIdx, (LPARAM)&rbi)) {
+                    if (rbi.hwndChild && HasChildFlag(rbi.hwndChild, CF_MOVED)) {
+                        isMovedBand = true;
+                    }
+                }
+            }
+        } else {
+            bool srcMoved = src && HasChildFlag(src, CF_MOVED);
+            HWND srcParent = src ? GetParent(src) : NULL;
+            bool parentMoved = srcParent && HasChildFlag(srcParent, CF_MOVED);
+            isMovedBand = srcMoved || parentMoved;
+        }
+
+        if (isMovedBand) {
+            int x = pt.x, y = pt.y;
+            if (x == -1 && y == -1) {
+                RECT rc; GetWindowRect(hwnd, &rc);
+                x = rc.left; y = rc.top;
+            }
+            ShowToolbarContextMenu(hwnd, x, y);
+            return 0;
+        }
+    }
+
     if(msg==RB_SETBANDINFO){
         auto*inf=(REBARBANDINFO*)lP;
         if(inf&&(inf->fMask&RBBIM_CHILDSIZE)){
@@ -557,7 +716,7 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
     g_rebarLayoutDepth++;
     LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
     g_rebarLayoutDepth--;
-    
+
     if(msg==WM_SIZE&&IsPendingApply(hwnd)&&!g_insideApply){
         EnterCriticalSection(&g_mutex);
         int&attempts=g_applyAttempts[hwnd];
@@ -572,14 +731,12 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
         if(cab&&!WasAlreadyMoved(cab)&&IsRebarChildOfDirectWorkerW(hwnd,cab))
             PostMessage(cab,g_msgDoMove,0,0);
     }
-    
     if(msg==RB_SETBANDINFO && !g_insideGripperSync){
         HWND cab=GetCabinetAncestor(hwnd);
         if(cab && WasAlreadyMoved(cab)){
             SyncMovedBandGrippers(hwnd);
         }
     }
-    
     if(msg==WM_MOUSEMOVE || msg==WM_LBUTTONUP) {
         HWND cab=GetRebarCabinet(hwnd);
         if(!cab)cab=GetCabinetAncestor(hwnd);
@@ -592,18 +749,18 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
             }
         }
     }
-    
     return r;
 }
 
 bool DoMoveSearchBandToMenuBar(HWND cabinetWnd);
 
 LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
-    if(msg==WM_CLOSE){
+    if(msg==WM_CLOSE||msg==WM_DESTROY){
         if(WasAlreadyMoved(hwnd)){
             HWND mr=GetCabinetMenuRebar(hwnd);
             if(mr&&IsWindow(mr))SaveBandPositions(mr);
         }
+        CleanupCabinetState(hwnd);
     }
     if(msg==g_msgDoMove){DoMoveSearchBandToMenuBar(hwnd);return 0;}
     if((msg==WM_SIZE||msg==WM_WINDOWPOSCHANGED)&&WasAlreadyMoved(hwnd)){
@@ -621,20 +778,20 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
     HWND menuRebar=FindMenuBarRebar(cabinetWnd);
     HWND navRebar=FindNavbarRebar(cabinetWnd);
     if(!menuRebar||!navRebar)return false;
-    
+
     int bandHeight = GetDesiredBandHeight();
-    
+
     struct BandToMove{
         int navIdx;HWND child;HWND leftover;int width;
         bool isUpButton;bool isBreadcrumb;
     };
     std::vector<BandToMove> toMove;
     int navCnt=(int)SendMessage(navRebar,RB_GETBANDCOUNT,0,0);
-    
+
     for(int i=0;i<navCnt;i++){
         REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
         if(!SendMessage(navRebar,RB_GETBANDINFO,i,(LPARAM)&rbi)||!rbi.hwndChild)continue;
-        
+
         if(g_settings.moveSearchBand&&ContainsSearchBand(rbi.hwndChild)){
             RECT rc;GetWindowRect(rbi.hwndChild,&rc);int w=rc.right-rc.left;if(w<50)w=200;
             toMove.push_back({i,rbi.hwndChild,NULL,w,false,false});
@@ -644,12 +801,12 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
                 HWND bcToolbar=FindWindowEx(bc,NULL,L"ToolbarWindow32",NULL);
                 if(bcToolbar){
                     RECT rc;GetWindowRect(bcToolbar,&rc);int w=rc.right-rc.left;if(w<50)w=250;
-                    toMove.push_back({i,bcToolbar,rbi.hwndChild,w,false,true});
+                    toMove.push_back({i,bcToolbar,bc,w,false,true});
                 }
             }
         }
     }
-    
+
     if(g_settings.moveUpButton) {
         HWND upButton = FindUpButton(cabinetWnd);
         if(upButton && IsWindow(upButton)) {
@@ -657,7 +814,6 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
                 REBARBANDINFO rbi = {sizeof(rbi)};
                 rbi.fMask = RBBIM_CHILD;
                 if(!SendMessage(navRebar, RB_GETBANDINFO, i, (LPARAM)&rbi)) continue;
-                
                 WCHAR cls[256];
                 if(rbi.hwndChild && GetClassName(rbi.hwndChild, cls, ARRAYSIZE(cls))) {
                     if(wcscmp(cls, L"UpBand") == 0) {
@@ -672,23 +828,23 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
             }
         }
     }
-    
+
     LONG_PTR st=GetWindowLongPtr(menuRebar,GWL_STYLE);
     st=(st&~RBS_FIXEDORDER)|RBS_VARHEIGHT;
     SetWindowLongPtr(menuRebar,GWL_STYLE,st);
     HWND navWorker=GetParent(navRebar);
-    
+
     if(!toMove.empty()){
         DWORD gripperStyle = GetReferenceGripperStyle(menuRebar);
-        
+
         for(auto it=toMove.rbegin();it!=toMove.rend();++it){
             SendMessage(navRebar,RB_DELETEBAND,it->navIdx,0);
             if(it->leftover&&IsWindow(it->leftover)){MarkNeutered(it->leftover);ShowWindow(it->leftover,SW_HIDE);}
         }
-        
+
         for(auto&b:toMove){
             SetParent(b.child,menuRebar);
-            
+
             WCHAR cls[256]=L"";
             if(b.isUpButton){
                 wcsncpy_s(cls,ARRAYSIZE(cls),L"UpButtonToolbar",_TRUNCATE);
@@ -697,20 +853,19 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
             }else{
                 GetClassName(b.child,cls,ARRAYSIZE(cls));
             }
-            
+
             BandState bs;bool hasSaved=LoadBandState(cls,bs);
             UINT useCx=hasSaved?bs.cx:(UINT)b.width;
-            
+
             if(b.isUpButton) {
                 ResizeUpButtonToolbar(b.child);
             }else if(b.isBreadcrumb){
                 SendMessage(b.child, TB_AUTOSIZE, 0, 0);
             }
-            
+
             REBARBANDINFO rbi={sizeof(rbi)};
             rbi.fMask=RBBIM_STYLE|RBBIM_CHILD|RBBIM_CHILDSIZE|RBBIM_SIZE|RBBIM_IDEALSIZE;
             rbi.fStyle=gripperStyle;
-            
             if(hasSaved&&bs.brk)rbi.fStyle|=RBBS_BREAK;
             rbi.hwndChild=b.child;
             rbi.cxMinChild = 80;
@@ -720,7 +875,7 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
             rbi.cx = useCx;
             rbi.cxIdeal = useCx;
             rbi.cyIntegral=1;
-            
+
             BOOL ins=(BOOL)SendMessage(menuRebar,RB_INSERTBAND,(WPARAM)-1,(LPARAM)&rbi);
             if(ins){
                 int flags=CF_MOVED;
@@ -738,25 +893,23 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
                 SetParent(b.child,b.leftover?b.leftover:navRebar);
             }
         }
-        
+
         {
             HWND mrParent=GetParent(menuRebar);
-            if(mrParent){
-                HookWindow(mrParent, MenuReBarParent_SubclassProc);
-            }
+            if(mrParent) HookWindow(mrParent, MenuReBarParent_SubclassProc);
         }
         RegisterRebarCabinet(menuRebar,cabinetWnd);
         RegisterCabinetMenuRebar(cabinetWnd,menuRebar);
     }
-    
+
     if(navWorker)MarkForceHidden(navWorker);
     MarkMoved(cabinetWnd);
-    
+
     if(!toMove.empty()){
         ApplySavedLayout(menuRebar);
         SyncMovedBandGrippers(menuRebar);
     }
-    
+
     ExpandShellTabToFillCabinet(cabinetWnd);
     RedrawWindow(cabinetWnd,NULL,NULL,
         RDW_INVALIDATE|RDW_ERASE|RDW_UPDATENOW|RDW_ALLCHILDREN|RDW_ERASENOW|RDW_FRAME);
@@ -766,7 +919,6 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
 void HookWindow(HWND hwnd, WindhawkUtils::WH_SUBCLASSPROC subclassProc){
     if(!hwnd||!IsWindow(hwnd))return;
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, subclassProc, 0);
-    
     EnterCriticalSection(&g_mutex);
     g_subclassedWindows[hwnd] = subclassProc;
     LeaveCriticalSection(&g_mutex);
@@ -793,6 +945,7 @@ void ProcessWindow(HWND hwnd){
     if(!wcscmp(cls,L"ReBarWindow32")){HookWindow(hwnd,ReBar_SubclassProc);return;}
     if(!wcscmp(cls,L"Address Band Root")){HookWindow(hwnd,AddressBandRoot_SubclassProc);return;}
 }
+
 BOOL CALLBACK EnumChildHook(HWND hwnd,LPARAM){ProcessWindow(hwnd);return TRUE;}
 
 using CreateWindowExW_t=decltype(&CreateWindowExW);
@@ -814,52 +967,38 @@ BOOL Wh_ModInit(){
     LoadSettings();
     InitializeCriticalSection(&g_mutex);
 
-    // Process-unique message, safe to post/handle only on windows we own.
-    // Unlike a fixed WM_APP+N constant, this can't collide with a message
-    // Explorer itself defines for CabinetWClass windows.
     g_msgDoMove = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_DoMove");
-    if(!g_msgDoMove){
-        Wh_Log(L"RegisterWindowMessage failed");
-        return FALSE;
-    }
+    if(!g_msgDoMove){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
 
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
-
     Wh_SetFunctionHook(
-            (void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"NtSetValueKey"),
-            (void*)NtSetValueKey_Hook,
-            (void**)&NtSetValueKey_Original);
+        (void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"NtSetValueKey"),
+        (void*)NtSetValueKey_Hook,
+        (void**)&NtSetValueKey_Original);
 
     DWORD curPid = GetCurrentProcessId();
     for(HWND w=GetTopWindow(NULL);w;w=GetNextWindow(w,GW_HWNDNEXT)){
         DWORD pid=0;
         GetWindowThreadProcessId(w,&pid);
         if(pid!=curPid)continue;
-
         WCHAR cls[64];
         if(GetClassName(w,cls,ARRAYSIZE(cls))&&!wcscmp(cls,L"CabinetWClass")){
             ProcessWindow(w);EnumChildWindows(w,EnumChildHook,0);PostMessage(w,g_msgDoMove,0,0);
         }
     }
-
     return TRUE;
 }
 
 void Wh_ModUninit(){
-    Wh_Log(L"FlexibleExplorer uninit - removing subclasses");
-    
+    Wh_Log(L"FlexibleExplorer uninit");
     EnterCriticalSection(&g_mutex);
     std::vector<std::pair<HWND, WindhawkUtils::WH_SUBCLASSPROC>> windowsToClean(
         g_subclassedWindows.begin(), g_subclassedWindows.end());
     g_subclassedWindows.clear();
     LeaveCriticalSection(&g_mutex);
-    
-    for(auto& pair : windowsToClean) {
-        if(IsWindow(pair.first)) {
+    for(auto& pair : windowsToClean){
+        if(IsWindow(pair.first))
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(pair.first, pair.second);
-        }
     }
-    
     DeleteCriticalSection(&g_mutex);
-    Wh_Log(L"FlexibleExplorer uninit complete");
 }
