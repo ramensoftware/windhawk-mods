@@ -14442,6 +14442,37 @@
         "version": "1.0.0"
       }
     },
+    "win7-action-center-recreation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784030687000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784030687000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32 -lshlwapi",
+        "description": "This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores classic Security and Maintenance CPL links",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 7/8.1 Action Center Recreation",
+        "version": "1.5.0"
+      }
+    },
     "win7-alttab-loader": {
       "details": {
         "defaultSorting": 11394,

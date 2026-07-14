@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-13T18:50:36.000Z</updated>
+    <updated>2026-07-14T12:04:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 1.5.0]]></title>
+        <id>https://windhawk.net/mods/win7-action-center-recreation#16034bdcfe218948d5917d77a0d8823e8e460b19</id>
+        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
+        <updated>2026-07-14T12:04:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781actioncenterrecreation">Windows 7/8.1 Action Center Recreation</h1>
+<p>This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout for modern Windows versions.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>Windows 7 theme</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png" alt="Image" /></p>
+<p>Windows 8.1 theme</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81act.png" alt="Image" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>No File Replacement</strong>: The mod's objective is to be stable and user-friendly and does not require the user to replace system files.</li>
+<li><strong>Real-time Security Status</strong>: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.</li>
+<li><strong>Interactive Flyout</strong>: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.</li>
+<li><strong>Rounded Corners</strong>: Rounded corners are supported for a more similar look to the original Windows 7 flyout.</li>
+<li><strong>Classic Theme support</strong>: Disable the "Rounded Corners" theme to make the flyout use a classic theme.</li>
+<li><strong>Balloon Notifications</strong>: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.</li>
+<li><strong>SmartScreen Check</strong>: Monitors Windows Defender SmartScreen status and reports if it is disabled.</li>
+<li><strong>Privacy Mode</strong>: The user can enable this mod to hide the eventual problems shown by the flyout.</li>
+<li><strong>Maintenance Checks</strong>: Automatically checks Backup status, Windows Error Reporting status, and Disk health. The disk health check is <strong>best-effort</strong>: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside <code>explorer.exe</code>, some drives may not answer — in that case the check is simply skipped and never reports a false problem.</li>
+<li><strong>ESC to Close</strong>: Press Escape to quickly close the flyout window.</li>
+<li><strong>Multiple Languages Support</strong>: English, Italian, Spanish, French, Russian are currently supported.</li>
+<li><strong>Security and Maintenance CPL Links</strong>: The mod restores the classic side-by-side <strong>Troubleshooting</strong> and <strong>Recovery</strong> entries on the Control Panel <em>Security and Maintenance</em> hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. </li>
+</ul>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>These are the hotkeys that can be configured in the mod.
+| Hotkey | Action |
+|--------|--------|
+| <code>Ctrl+N</code> | Simulate a notification |
+| <code>Ctrl+Shift+N</code> | Clear notifications |</p>
+<h2 id="howitworks">How It Works</h2>
+<p>The mod monitors the system's security settings including Firewall, Antivirus, Windows Update, UAC, Windows Defender and other settings. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
+The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod runs inside Explorer and works on Windows 10 and 11.</li>
+<li>If the icon doesn't appear, try restarting Explorer or the mod.</li>
+<li>The Control Panel hub links activate when you open <em>Security and Maintenance</em> (<code>control /name Microsoft.ActionCenter</code>). No system files are modified on disk.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme</li>
+<li>₮ዙℭ♔†WØLF† - Testing on Windows 11 23H2</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always On Top Windows 1.1]]></title>
         <id>https://windhawk.net/mods/always-on-top#c0198738db007d4c83236e726efb078bd8ab0e76</id>
@@ -744,41 +796,6 @@ not attempted because it is not reliable for all apps.</p>]]></content>
         <author>
             <name>Fred</name>
             <uri>https://github.com/fjdiazt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.8]]></title>
-        <id>https://windhawk.net/mods/dynamic-taskbar-transparency#2bdab8f5726d042025598ca446c44f4711c25f9b</id>
-        <link href="https://windhawk.net/mods/dynamic-taskbar-transparency"/>
-        <updated>2026-07-02T15:20:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dynamictaskbartransparency">Dynamic Taskbar Transparency</h1>
-<p><img src="https://i.imgur.com/Ab7hMYp.gif" alt="Dynamic Taskbar Transparency demo" /></p>
-<p>This mod applies a TranslucentTB-like state machine to the Windows 11 taskbar.
-It keeps the taskbar clear on the desktop or when no maximized window is
-present, then restores or changes the taskbar appearance while Start, search,
-task view, notification/quick settings flyouts, tray flyouts, other shell
-interactions, or maximized windows are active.</p>
-<p>Version 0.3 edits the Windows 11 taskbar XAML background rectangles directly.
-It fades the rectangles with <code>Opacity</code> instead of applying a colored alpha
-overlay, and it can fall back to the captured existing style, clear the mod's
-local overrides for the Windows native/default style, clear, blur, or
-blur-backed acrylic.</p>
-<p>State detection is driven by shell/window events and uses heuristic window
-class/process-name matching for Start, search, task view, tray flyouts, and
-other shell surfaces. These heuristics can change between Windows 11 builds.</p>
-<p>Do not run this together with TranslucentTB or another tool that continuously
-writes the same taskbar background.</p>
-<p>Compared with taskbar-background-helper, this mod focuses on a TranslucentTB-
-style state machine: desktop/no-maximized-window, maximized windows, Start,
-search, task view, tray flyouts, notification/quick settings flyouts, and an
-optional catch-all for other shell surfaces can each choose their own
-appearance and fade duration. taskbar-background-helper is a lower-level
-background helper for always/maximized behavior and pairs well with Taskbar
-Styler; this mod adds per-shell-state switching and animation on top of the
-same general taskbar background use case.</p>]]></content>
-        <author>
-            <name>11581</name>
-            <uri>https://github.com/r1file</uri>
         </author>
     </entry>
 </feed>
