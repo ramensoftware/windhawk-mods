@@ -1,3 +1,7 @@
+## 2.2.0 ([Jul 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/166dd814535f10902ff3b5b594deb37b16c5351c/mods/taskbar-fade.wh.cpp))
+
+* Added Hover Fade Delay: A new configurable setting that waits a specific amount of time (in milliseconds) after the cursor leaves the taskbar before the dim fade begins. This prevents accidental dimming during brief cursor movements. (Feature contributed by @kushaagrasood)
+
 ## 2.1.2 ([May 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/74895ac05f9a2c534316168062b322ab6d62e2ab/mods/taskbar-fade.wh.cpp))
 
 Updated the "Mods as Tool" code to the latest Windhawk standard
