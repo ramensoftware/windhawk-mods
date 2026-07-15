@@ -65,7 +65,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Style
       $description: Visual theme style for the switcher background.
       $options:
-      - none: None (Transparent)
+      - none: None (Solid/Transparent)
       - backdrop: Acrylic (Windows 10+)
       - mica: Mica Blur (Windows 11 only)
     - colorScheme: system
@@ -271,7 +271,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $description: Show the 'X' button on hover to close windows.
         - showOverflowIndicator: true
           $name: Show Overflow Indicator
-          $description: Show '...' at the bottom right when there are more windows off-screen.
+          $description: Show chevron indicators at the edges when there are more windows off-screen.
         - showHoverBorder: true
           $name: Show Hover Border
           $description: Show a colored border around the thumbnail when hovered.
@@ -401,7 +401,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Maximum Height (percentage of screen height)
     - stretchThumbnailsToTaskWidth: true
       $name: Stretch Thumbnails to Task Width
-      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
+      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width. (Note: Has no effect if Row Width is set to 0).
     - autoFitTasks: false
       $name: Shrink Tasks to Fit
       $description: Automatically shrink task tiles (thumbnails and icons) in discrete steps as the number of visible windows grows, so more tasks stay visible without being pushed off-screen. Your Row Height and Icon Size act as the maximum size.
@@ -516,7 +516,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $description: "Full path to an icon source (.ico, .exe or .dll); the first icon in the file is used. Leave empty to keep the default icon. Example: C:\\Icons\\myapp.ico"
     - appName: ""
       $name: Application Name
-      $description: "Custom name to display for matching tasks, replacing the detected application name. Leave empty to keep the default. Shown in the 'App name' and 'App name + Window title' title modes."
+      $description: "Custom name to display for matching tasks, replacing the detected application name. Leave empty to keep the default. Shown in the 'App name' and 'App name + Window title' title modes (requires 'Group Windows by Application' to be enabled)."
   $name: Custom Header
   $description: Assign a custom icon and/or application name to tasks based on their executable name. The first matching rule wins.
 
