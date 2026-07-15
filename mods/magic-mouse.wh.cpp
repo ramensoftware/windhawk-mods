@@ -4889,6 +4889,42 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (g_drawModeActive) {
             POINT pt = ms->pt;
+            BOOL overStopwatch = FALSE;
+            if (!g_drawDrawing && g_stopwatchWnd && IsWindowVisible(g_stopwatchWnd)) {
+                RECT rcStopwatch;
+                if (GetWindowRect(g_stopwatchWnd, &rcStopwatch)) {
+                    if (PtInRect(&rcStopwatch, pt)) {
+                        overStopwatch = TRUE;
+                    }
+                }
+            }
+            BOOL overTimer = FALSE;
+            if (!g_drawDrawing && g_timerWnd && IsWindowVisible(g_timerWnd)) {
+                RECT rcTimer;
+                if (GetWindowRect(g_timerWnd, &rcTimer)) {
+                    if (PtInRect(&rcTimer, pt)) {
+                        overTimer = TRUE;
+                    }
+                }
+            }
+            BOOL overPalette = FALSE;
+            if (!g_drawDrawing && g_paletteY > -60.0f) {
+                HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = { sizeof(mi) };
+                GetMonitorInfo(hMonitor, &mi);
+                int monitorWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+                int pW = 500;
+                int pH = 50;
+                int px = mi.rcMonitor.left + (monitorWidth - pW) / 2;
+                int py = mi.rcMonitor.top + (int)g_paletteY;
+                RECT paletteRect = { px, py, px + pW, py + pH };
+                if (PtInRect(&paletteRect, pt)) {
+                    overPalette = TRUE;
+                }
+            }
+            if (overStopwatch || overTimer || overPalette) {
+                return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+            }
             if (wParam == WM_MOUSEMOVE) {
                 if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_DRAW, wParam, MAKELPARAM(pt.x, pt.y));
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
@@ -4904,7 +4940,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_DRAW, wParam, MAKELPARAM(pt.x, pt.y));
                 return 1;
             }
-            return 1; // Swallow other mouse events in draw mode
+            return 1;
         }
 
         if (wParam == WM_XBUTTONUP) {
