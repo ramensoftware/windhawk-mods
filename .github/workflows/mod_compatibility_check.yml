@@ -23,6 +23,7 @@ jobs:
           '1.5.1',
           '1.6.1',
           '1.7.3',
+          '2.0.0-alpha.1',
         ]
         exclude:
           # Exclude 1.5.1, which is quite old, for everyone but m417z.
@@ -43,14 +44,25 @@ jobs:
       - name: Extract Windhawk
         if: steps.cache-windhawk.outputs.cache-hit != 'true'
         run: |
-          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v${{ matrix.version }}/windhawk_setup.exe"
+          if [[ "${{ matrix.version }}" == 1.* ]]; then
+            release_tag="v${{ matrix.version }}"
+            installer_args=''
+          else
+            # Starting with 2.0.0-alpha.1, the release tag has no "v" prefix, and
+            # the compiler is a separate component that /DEVTOOLS pulls into the
+            # install.
+            release_tag="${{ matrix.version }}"
+            installer_args='/DEVTOOLS'
+          fi
+
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/$release_tag/windhawk_setup.exe"
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
 
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
-          MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
+          MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE $installer_args "/D=$extract_path"
       - name: Get changed files
         if: github.event_name == 'pull_request'
         id: changed-files
@@ -69,9 +81,22 @@ jobs:
           if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
             echo "Compiling $ALL_CHANGED_AND_MODIFIED_FILES"
             windhawk_path="${{ runner.temp }}\windhawk"
-            python -u scripts/compile_mod.py -w "$windhawk_path" \
-              -f "$ALL_CHANGED_AND_MODIFIED_FILES" \
-              -o32 "${{ runner.temp }}\mod_32.dll" \
-              -o64 "${{ runner.temp }}\mod_64.dll" \
-              -oarm64 "${{ runner.temp }}\mod_arm64.dll"
+            if [[ "${{ matrix.version }}" == 1.* ]]; then
+              python -u scripts/compile_mod.py -w "$windhawk_path" \
+                -f "$ALL_CHANGED_AND_MODIFIED_FILES" \
+                -o32 "${{ runner.temp }}\mod_32.dll" \
+                -o64 "${{ runner.temp }}\mod_64.dll" \
+                -oarm64 "${{ runner.temp }}\mod_arm64.dll"
+            else
+              # Compile via the CLI (--disabled builds the mod without activating
+              # it). Two passes: with WINDHAWK_ARM64_ENABLED=1 the CLI drops the
+              # x86-64 build for a mod whose targets are all common system
+              # processes, so the first pass (arm64 off) covers x86/x86-64 and the
+              # second (arm64 on) covers arm64.
+              cli="$windhawk_path\windhawk-cli.exe"
+              MSYS_NO_PATHCONV=1 "$cli" --app-root "$windhawk_path" \
+                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
+              MSYS_NO_PATHCONV=1 WINDHAWK_ARM64_ENABLED=1 "$cli" --app-root "$windhawk_path" \
+                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
+            fi
           fi
