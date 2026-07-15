@@ -46,7 +46,7 @@ Panel pages, using only native Windows components.
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some Windows 11 configurations if explorer is restarted the network system tray redirect might not work.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
 
-**Note**: For a better experience on Windows 11, it is recommended to pair this mod with Anixx's **[Restore the classic Personalization and other CPLs](https://windhawk.net/mods/restore-classic-cpls)** that re-enables some of the classic applets from older Windows versions.
+**Recommendation**: For a better experience on Windows 11, it is recommended to pair this mod with Anixx's **[Restore the classic Personalization and other CPLs](https://windhawk.net/mods/restore-classic-cpls)** that re-enables some of the classic applets from older Windows versions.
 
 ---
 
@@ -78,14 +78,13 @@ Panel pages, using only native Windows components.
   - "2": Pass through to the modern Settings application (ms-settings.exe)"
 - Win11CompatibilityMode: false
   $name: Windows 11 Compatibility Mode
-  $description: "Safer mode for Windows 11. When enabled, only uses proven redirects while everything else opens the standard Control Panel page as a fallback to avoid loops or other issues."
+  $description: "This is a safer mode for Windows 11. When enabled, only uses proven redirects while everything else opens the standard Control Panel page as a fallback to avoid loops or other issues."
 - MaxLaunchesPerUri: 3
   $name: Anti-Loop Limit (per window, every 5 seconds)
   $description: "Safety measure: if the same window gets opened too many times within a few seconds, the mod stops reopening it. Set to 0 to disable this limit."
 - ComActivationRedirect: true
   $name: COM-activation Redirect (EXPERIMENTAL)
   $description: "This setting redirects modern Settings calls made through the COM interface to ensure they open correctly. This addresses compatibility issues with certain Windows 11 builds where Settings may fail to launch."
-
 - LegacyNameMappingFix: true
   $name: Fix Legacy Name Mapping
   $description: "This setting attempts to correct a mapping error that causes legacy Control Panel items to display as blank pages or automatically redirect to the modern Settings app. This should ensure that the classic system tools open and function as intended."
@@ -113,11 +112,6 @@ static const CLSID CLSID_ApplicationActivationManager_STC =
 static const IID IID_IApplicationActivationManager_STC =
     { 0x2e941141, 0x7f97, 0x4756, { 0xba, 0x1d, 0x9d, 0xec, 0xde, 0x89, 0x4a, 0x3d } };
 
-// Custom IDs for tray menu redirection (TrackPopupMenuEx method)
-#define TRAY_CUSTOM_ID_AUDIO    65001
-#define TRAY_CUSTOM_ID_NETWORK  65002
-#define TRAY_CUSTOM_ID_DEVICES  65003
-
 // TrackPopupMenuEx hook (DLL-based fallback method)
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, const TPMPARAMS*);
 static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
@@ -133,11 +127,10 @@ static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
 static bool g_pniduiHookInstalled = false;
+static bool g_legacyNameHookInstalled = false;
 static std::mutex g_pniduiHookMutex;
 static HANDLE g_pniduiRetryThread = nullptr;
-static volatile bool g_pniduiRetryStop = false;
 static HANDLE g_traySubclassWatchdogThread = nullptr;
-static volatile bool g_traySubclassWatchdogStop = false;
 static HWND g_lastShellTrayWnd = nullptr;
 static HANDLE g_stopEvent = nullptr;
 
@@ -374,7 +367,7 @@ static const std::unordered_set<std::wstring> g_win11LoopClsids = {
     L"shell:::{17cd9488-1228-4b2f-88ce-4298e93e0966}",
     L"shell:::{80f3f1d5-feca-45f3-bc32-752c152e456e}",
     L"shell:::{9fe63afd-59cf-4419-9775-abcc3849f861}",
-    L"shell:::{bb06c0e4-d293-4f75-8a90-cb05B6477EEE}",
+    L"shell:::{bb06c0e4-d293-4f75-8a90-cb05b6477eee}",
     L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}",
 };
 
@@ -669,7 +662,7 @@ static BOOL WINAPI CommonTrackPopupMenuEx_Hook(
     BOOL result     = pOrig(hMenu, uFlags, x, y, hWnd, lptpm);
     int selectedId  = (int)result;
 
-    if (selectedId == (int)originalId) {
+    if (originalId != 0 && selectedId == (int)originalId) {
         Wh_Log(L"[%s] Redirecting selection", logPrefix);
         if (isAudioMenu)        OpenClassicSoundPanel();
         else if (isNetworkMenu) OpenClassicNetworkConnections();
@@ -1193,30 +1186,6 @@ bool COpenControlPanel__MapLegacyName_hook(
     return false;
 }
 
-static bool InstallLegacyNameHook() {
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        Wh_Log(L"[MAP-LEGACY] shell32.dll not loaded");
-        return false;
-    }
-
-    WindhawkUtils::SYMBOL_HOOK shell32_dll_hook = {{
-        L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
-        L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
-    },
-    (void**)&COpenControlPanel__MapLegacyName_orig,
-    (void*)COpenControlPanel__MapLegacyName_hook,
-    false};
-
-    if (WindhawkUtils::HookSymbols(hShell32, &shell32_dll_hook, 1)) {
-        Wh_Log(L"[MAP-LEGACY] Hook installed successfully");
-        return true;
-    } else {
-        Wh_Log(L"[MAP-LEGACY] Failed to install hook (symbol may differ on this build)");
-        return false;
-    }
-}
-
 static std::wstring BaseNameLower(const std::wstring& path) {
     size_t pos = path.rfind(L'\\');
     return ToLower((pos != std::wstring::npos) ? path.substr(pos + 1) : path);
@@ -1276,7 +1245,6 @@ static std::wstring ExtractExplorerLaunchUri(const std::wstring& cmdLine) {
 
     const wchar_t* restC = rest.c_str();
     if (ToLower(restC).find(L"ms-settings:") != std::wstring::npos) return NormalizeUri(rest);
-    if (ToLower(restC).find(L"shell:::") != std::wstring::npos) return ToLower(rest);
     return L"";
 }
 
@@ -1446,6 +1414,7 @@ static DWORD WINAPI PniduiRetryThread(LPVOID) {
     if (dllLoaded) {
         if (TryInstallPniduiHook()) {
             g_pniduiHookInstalled = true;
+            Wh_ApplyHookOperations();
         }
     }
     
@@ -1487,34 +1456,59 @@ static void InstallImmersiveMenuHooks() {
     if (!g_pniduiHookInstalled) {
         if (!TryInstallPniduiHook()) {
             if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
-                g_pniduiRetryStop = false;
                 g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
             }
         }
     }
+}
 
-    if (g_isWin11 && !g_shell32DevicesHookInstalled) {
-        HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-        if (hShell32) {
-            WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {{
-                {
-                    L"bool "
+// Combines all shell32.dll hooks into a single HookSymbols call per the
+// Windhawk API best practice.  Called when either the Win11 devices hook
+// or the legacy-name-mapping hook is needed.
+static void InstallShell32Hooks() {
+    bool needDevices = g_isWin11 && !g_shell32DevicesHookInstalled;
+    bool needLegacy = g_settings.legacyNameMappingFix && !g_legacyNameHookInstalled;
+    if (!needDevices && !needLegacy) return;
+
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (!hShell32) return;
+
+    WindhawkUtils::SYMBOL_HOOK hooks[2];
+    int hookCount = 0;
+
+    if (needDevices) {
+        hooks[hookCount] = {{
+            L"bool "
 #ifdef _WIN64
-                    L"__cdecl"
+            L"__cdecl"
 #else
-                    L"__stdcall"
+            L"__stdcall"
 #endif
-                    L" CDevicesAndPrintersFolder::_HandleContextMenu"
-                    L"(struct HMENU__ *,unsigned int)"
-                },
-                (void**)&g_icmhOrig_Shell32Devices,
-                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
-                false
-            }};
-            
-            if (WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1)) {
-                g_shell32DevicesHookInstalled = true;
-            }
+            L" CDevicesAndPrintersFolder::_HandleContextMenu"
+            L"(struct HMENU__ *,unsigned int)"
+        },
+        (void**)&g_icmhOrig_Shell32Devices,
+        (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+        false};
+        hookCount++;
+    }
+
+    if (needLegacy) {
+        hooks[hookCount] = {{
+            L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
+            L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
+        },
+        (void**)&COpenControlPanel__MapLegacyName_orig,
+        (void*)COpenControlPanel__MapLegacyName_hook,
+        false};
+        hookCount++;
+    }
+
+    if (hookCount > 0) {
+        if (WindhawkUtils::HookSymbols(hShell32, hooks, hookCount)) {
+            if (needDevices) g_shell32DevicesHookInstalled = true;
+            if (needLegacy) g_legacyNameHookInstalled = true;
+            Wh_Log(L"[SHELL32-HOOKS] Installed %d hook(s)", hookCount);
         }
     }
 }
@@ -1552,20 +1546,23 @@ static void ReinitializeTrayRedirect() {
     }
 
     InstallImmersiveMenuHooks();
+    InstallShell32Hooks();
+    Wh_ApplyHookOperations();
 }
 
-static void PerformBackgroundInit() {
-    Sleep(200);
+static void PerformBackgroundInit(bool skipSleep = false) {
+    if (!skipSleep) {
+        Sleep(200);
+    }
 
-    InstallImmersiveMenuHooks();    
+    InstallImmersiveMenuHooks();
+    InstallShell32Hooks();
 
     if (g_settings.comActivationRedirect && g_isWin11) {
         InstallAAMHook();
     }
 
-    if (g_settings.legacyNameMappingFix) {
-        InstallLegacyNameHook();
-    }
+    Wh_ApplyHookOperations();
 }
 
 static DWORD WINAPI TraySubclassWatchdogThread(LPVOID) {
@@ -1666,7 +1663,6 @@ BOOL Wh_ModInit() {
         }
         
         g_lastShellTrayWnd = nullptr;
-        g_traySubclassWatchdogStop = false;
         g_traySubclassWatchdogThread = CreateThread(nullptr, 0, TraySubclassWatchdogThread, nullptr, 0, nullptr);
     }
 
@@ -1706,6 +1702,6 @@ void Wh_ModSettingsChanged() {
         if (g_settings.redirectSystemTray) {
             SetupTraySubclass();
         }
-        PerformBackgroundInit();
+        PerformBackgroundInit(true);
     }
 }
