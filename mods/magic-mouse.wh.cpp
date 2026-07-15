@@ -364,6 +364,18 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 #define WM_HOOK_TOGGLE_STOPWATCH (WM_APP + 106)
 #define WM_HOOK_TOGGLE_TIMER (WM_APP + 107)
 #define WM_HOOK_TOGGLE_FLASH (WM_APP + 108)
+#define WM_HOOK_START_GESTURE (WM_APP + 109)
+#define WM_HOOK_ADD_GESTURE_POINT (WM_APP + 110)
+#define WM_HOOK_END_GESTURE (WM_APP + 111)
+#define WM_HOOK_SHOW_AURA (WM_APP + 112)
+#define WM_HOOK_HIDE_AURA (WM_APP + 113)
+#define WM_HOOK_UPDATE_AURA (WM_APP + 114)
+#define WM_HOOK_RECORD_CANVAS (WM_APP + 115)
+#define WM_HOOK_KEY_TIMER_EDIT (WM_APP + 116)
+#define WM_HOOK_MOUSE_NOTE (WM_APP + 117)
+#define WM_HOOK_STOP_PICKER (WM_APP + 118)
+#define WM_HOOK_MOUSE_PICKER (WM_APP + 119)
+#define WM_HOOK_MOUSE_DRAW (WM_APP + 120)
 static const int MAX_HEX_CODE = 512;
 
 static const int MAX_GESTURES = 64;
@@ -494,7 +506,7 @@ static HANDLE g_notesThread = nullptr;
 static DWORD g_notesThreadId = 0;
 static std::atomic<bool> g_running{false};
 
-static BOOL g_gestureActive = FALSE;
+static std::atomic<BOOL> g_gestureActive{FALSE};
 static POINT g_points[MAX_POINTS];
 static int g_pointCount = 0;
 
@@ -531,12 +543,12 @@ static int g_fadePointCount = 0;
 static const int FADE_DURATION_MS = 150;
 
 // Modifier Toggle State
-static BOOL g_modifierToggleArmed = FALSE;
+static std::atomic<BOOL> g_modifierToggleArmed{FALSE};
 static BOOL g_modifierWasActive = FALSE;
 static DWORD g_modifierToggleArmTime = 0;
 
 // Wiggle State
-static BOOL g_wiggleArmed = FALSE;
+static std::atomic<BOOL> g_wiggleArmed{FALSE};
 static DWORD g_wiggleArmTime = 0;
 static HWND g_auraWnd = nullptr;
 static int g_wiggleCount = 0;
@@ -562,7 +574,7 @@ static int g_drawStrokeCount = 0;
 static DrawStroke g_currentDrawStroke = {};
 static BOOL g_drawDrawing = FALSE;
 
-static BOOL g_drawModeActive = FALSE;
+static std::atomic<BOOL> g_drawModeActive{FALSE};
 static HWND g_drawModeWnd = nullptr;
 static Gdiplus::Color g_drawColor = Gdiplus::Color(255, 0, 170, 255);
 static Gdiplus::Color g_drawSavedColor = Gdiplus::Color(0, 0, 0, 0);
@@ -571,7 +583,7 @@ static float g_drawWidth = 5.0f;
 static BOOL g_paletteVisible = FALSE;
 static float g_paletteY = -60.0f;
 
-static BOOL g_pickerActive = FALSE;
+static std::atomic<BOOL> g_pickerActive{FALSE};
 static HWND g_pickerWnd = nullptr;
 static POINT g_pickerPos = {};
 
@@ -602,7 +614,7 @@ static int g_timerSelectedPreset = -1;
 static int g_timerShakeState = 0;
 static DWORD g_timerShakeStart = 0;
 static float g_timerGlowPhase = 0.0f;
-static BOOL g_timerEditMode = FALSE;
+static std::atomic<BOOL> g_timerEditMode{FALSE};
 static int g_timerEditIndex = -1;
 static wchar_t g_timerEditBuf[16] = {};
 
@@ -641,6 +653,10 @@ void ShowToast(const wchar_t* text, BOOL isSuccess, POINT pt);
 void ToggleStopwatch();
 void ToggleTimer();
 void ToggleFlash();
+
+void StartGesture(POINT pt);
+void AddGesturePoint(POINT pt);
+void EndGesture();
 
 static HFONT g_uiFont = nullptr;
 
@@ -943,66 +959,7 @@ std::wstring GetSelectedText() {
     return selectedText;
 }
 
-std::wstring Base64Encode(const BYTE* data, size_t len) {
-    const char* cb64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::wstring result;
-    for (size_t i = 0; i < len; i += 3) {
-        BYTE b1 = data[i];
-        BYTE b2 = (i + 1 < len) ? data[i + 1] : 0;
-        BYTE b3 = (i + 2 < len) ? data[i + 2] : 0;
-        
-        result += cb64[b1 >> 2];
-        result += cb64[((b1 & 0x03) << 4) | (b2 >> 4)];
-        if (i + 1 < len) {
-            result += cb64[((b2 & 0x0F) << 2) | (b3 >> 6)];
-        } else {
-            result += L'=';
-        }
-        if (i + 2 < len) {
-            result += cb64[b3 & 0x3F];
-        } else {
-            result += L'=';
-        }
-    }
-    return result;
-}
-
-bool IsImageFile(const std::wstring& path) {
-    DWORD attr = GetFileAttributes(path.c_str());
-    if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        return false;
-    }
-    size_t dotPos = path.find_last_of(L'.');
-    if (dotPos == std::wstring::npos) return false;
-    std::wstring ext = path.substr(dotPos);
-    for (auto& c : ext) c = towlower(c);
-    return (ext == L".png" || ext == L".jpg" || ext == L".jpeg" || 
-            ext == L".gif" || ext == L".bmp" || ext == L".webp");
-}
-
-void SearchImage(const std::wstring& filePath) {
-    std::wstring escapedPath;
-    for (wchar_t c : filePath) {
-        if (c == L'\'') {
-            escapedPath += L"''";
-        } else {
-            escapedPath += c;
-        }
-    }
-    
-    std::wstring script = 
-        L"$filePath = '" + escapedPath + L"'; "
-        L"$res = curl.exe -s -F \"file=@$filePath\" https://tmpfiles.org/api/v1/upload; "
-        L"$j = $res | ConvertFrom-Json; "
-        L"if ($j.status -eq 'success') { "
-        L"  $url = $j.data.url.Replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/'); "
-        L"  Start-Process ('https://lens.google.com/uploadbyurl?url=' + [uri]::EscapeDataString($url)); "
-        L"}";
-        
-    std::wstring b64 = Base64Encode((const BYTE*)script.c_str(), script.length() * sizeof(wchar_t));
-    std::wstring args = L"-NoProfile -WindowStyle Hidden -EncodedCommand " + b64;
-    ShellExecuteW(NULL, L"open", L"powershell.exe", args.c_str(), NULL, SW_HIDE);
-}
+// Search Image helpers removed to reduce bugs
 
 int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
     UINT num = 0, size = 0;
@@ -1533,7 +1490,7 @@ static NoteData g_notes[MAX_NOTES];
 static int g_noteCount = 0;
 static int g_noteIdCounter = 1;
 
-static BOOL g_noteCreationMode = FALSE;
+static std::atomic<BOOL> g_noteCreationMode{FALSE};
 static POINT g_noteSelStart = {0,0};
 static POINT g_noteSelCurrent = {0,0};
 static DWORD g_lastNoteColor = RGB(43, 43, 43);
@@ -1968,7 +1925,7 @@ HWND g_spotlightWnd = nullptr;
 POINT g_spotlightCurrentPt = {0,0};
 float g_spotlightAlpha = 0.0f;
 float g_spotlightRadius = 150.0f;
-int g_spotlightState = 0; 
+std::atomic<int> g_spotlightState{0}; 
 
 HDC g_spotlightHdcMem = NULL;
 HBITMAP g_spotlightHBitmap = NULL;
@@ -2850,24 +2807,8 @@ LRESULT CALLBACK FlashProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-HHOOK g_flashKeyboardHook = nullptr;
-
-LRESULT CALLBACK FlashKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && g_flashWnd && IsWindowVisible(g_flashWnd)) {
-        if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
-            ToggleFlash();
-            return 1;
-        }
-    }
-    return CallNextHookEx(g_flashKeyboardHook, nCode, wParam, lParam);
-}
-
 void ToggleFlash() {
     if (g_flashWnd && IsWindowVisible(g_flashWnd)) {
-        if (g_flashKeyboardHook) {
-            UnhookWindowsHookEx(g_flashKeyboardHook);
-            g_flashKeyboardHook = nullptr;
-        }
         ShowWindow(g_flashWnd, SW_HIDE);
         RestoreMonitorBrightness();
         return;
@@ -2906,8 +2847,6 @@ void ToggleFlash() {
     ShowWindow(g_flashWnd, SW_SHOW);
     SetForegroundWindow(g_flashWnd);
     SetFocus(g_flashWnd);
-
-    g_flashKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, FlashKeyboardProc, GetModuleHandle(NULL), 0);
 }
 
 void ExecuteAction(int gestureIdx, HWND target) {
@@ -3035,15 +2974,11 @@ void ExecuteAction(int gestureIdx, HWND target) {
         }
 
         case ACTION_DRAW:
-            if (g_hookThreadId) {
-                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_DRAW, 0, 0);
-            }
+            ToggleDrawMode();
             break;
 
         case ACTION_COLOR_PICKER:
-            if (g_hookThreadId) {
-                PostThreadMessage(g_hookThreadId, WM_HOOK_START_PICKER, 0, 0);
-            }
+            StartColorPicker();
             break;
 
         case ACTION_TOGGLE_DESKTOP_ICONS:
@@ -3201,13 +3136,9 @@ void ExecuteAction(int gestureIdx, HWND target) {
         case ACTION_SEARCH_SELECTION: {
             std::wstring selected = GetSelectedText();
             if (!selected.empty()) {
-                if (IsImageFile(selected)) {
-                    SearchImage(selected);
-                } else {
-                    std::wstring encoded = UrlEncode(selected);
-                    std::wstring url = g_settings.searchEngineUrl + encoded;
-                    ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
-                }
+                std::wstring encoded = UrlEncode(selected);
+                std::wstring url = g_settings.searchEngineUrl + encoded;
+                ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
             }
             break;
         }
@@ -3218,13 +3149,11 @@ void ExecuteAction(int gestureIdx, HWND target) {
         }
 
         case ACTION_SPOTLIGHT: {
-            extern int g_spotlightState;
-            if (g_spotlightState > 0) {
+            extern std::atomic<int> g_spotlightState;
+            if (g_spotlightState.load() > 0) {
                 g_spotlightState = 3;
             } else {
-                if (g_hookThreadId) {
-                    PostThreadMessage(g_hookThreadId, WM_HOOK_START_SPOTLIGHT, 0, 0);
-                }
+                StartSpotlight();
             }
             break;
         }
@@ -3289,21 +3218,15 @@ void ExecuteAction(int gestureIdx, HWND target) {
         }
 
         case ACTION_STOPWATCH:
-            if (g_hookThreadId) {
-                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_STOPWATCH, 0, 0);
-            }
+            ToggleStopwatch();
             break;
 
         case ACTION_TIMER:
-            if (g_hookThreadId) {
-                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_TIMER, 0, 0);
-            }
+            ToggleTimer();
             break;
 
         case ACTION_FLASH:
-            if (g_hookThreadId) {
-                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_FLASH, 0, 0);
-            }
+            ToggleFlash();
             break;
 
         case ACTION_NEXT_VIRTUAL_DESKTOP: {
@@ -3545,6 +3468,217 @@ void UpdateOverlay() {
     ReleaseDC(NULL, screenDC);
 }
 
+void HandleTimerEditKey(WPARAM vkCode) {
+    extern void PaintTimerPill(HWND hwnd);
+    if (vkCode == VK_ESCAPE) {
+        g_timerEditMode = FALSE;
+        g_timerEditIndex = -1;
+        PaintTimerPill(g_timerWnd);
+    } else if (vkCode == VK_RETURN) {
+        int val = _wtoi(g_timerEditBuf);
+        if (val > 0 && val <= 999 && g_timerEditIndex >= 0 && g_timerEditIndex < 3) {
+            g_timerPresets[g_timerEditIndex] = val * 60;
+        }
+        g_timerEditMode = FALSE;
+        g_timerEditIndex = -1;
+        PaintTimerPill(g_timerWnd);
+    } else if (vkCode == VK_BACK) {
+        int len = (int)wcslen(g_timerEditBuf);
+        if (len > 0) g_timerEditBuf[len - 1] = 0;
+        PaintTimerPill(g_timerWnd);
+    } else if ((vkCode >= '0' && vkCode <= '9') || (vkCode >= VK_NUMPAD0 && vkCode <= VK_NUMPAD9)) {
+        int len = (int)wcslen(g_timerEditBuf);
+        if (len < 3) {
+            wchar_t c = (vkCode >= VK_NUMPAD0 && vkCode <= VK_NUMPAD9) ? (wchar_t)(vkCode - VK_NUMPAD0 + L'0') : (wchar_t)vkCode;
+            g_timerEditBuf[len] = c;
+            g_timerEditBuf[len + 1] = 0;
+        }
+        PaintTimerPill(g_timerWnd);
+    }
+}
+
+void HandleNoteCreationMouseWorker(WPARAM wParam, POINT pt) {
+    extern LRESULT CALLBACK NoteSelWndProc(HWND, UINT, WPARAM, LPARAM);
+    if (wParam == WM_LBUTTONDOWN) {
+        g_noteSelStart = pt;
+        g_noteSelCurrent = pt;
+
+        if (!g_noteSelWnd) {
+            WNDCLASS wc = {0};
+            wc.lpfnWndProc = NoteSelWndProc;
+            wc.hInstance = GetModuleHandle(NULL);
+            wc.lpszClassName = NOTE_SEL_CLASS;
+            RegisterClass(&wc);
+
+            g_noteSelWnd = CreateWindowEx(
+                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+                NOTE_SEL_CLASS, L"",
+                WS_POPUP | WS_VISIBLE,
+                pt.x, pt.y, 0, 0,
+                NULL, NULL, GetModuleHandle(NULL), NULL);
+            SetLayeredWindowAttributes(g_noteSelWnd, RGB(0,0,0), 160, LWA_COLORKEY | LWA_ALPHA);
+        }
+    }
+    else if (wParam == WM_MOUSEMOVE) {
+        if (g_noteSelWnd) {
+            g_noteSelCurrent = pt;
+            int x = (g_noteSelStart.x < g_noteSelCurrent.x) ? g_noteSelStart.x : g_noteSelCurrent.x;
+            int y = (g_noteSelStart.y < g_noteSelCurrent.y) ? g_noteSelStart.y : g_noteSelCurrent.y;
+            int w = abs(g_noteSelStart.x - g_noteSelCurrent.x);
+            int h = abs(g_noteSelStart.y - g_noteSelCurrent.y);
+            MoveWindow(g_noteSelWnd, x, y, w, h, TRUE);
+        }
+    }
+    else if (wParam == WM_LBUTTONUP) {
+        int x = (g_noteSelStart.x < g_noteSelCurrent.x) ? g_noteSelStart.x : g_noteSelCurrent.x;
+        int y = (g_noteSelStart.y < g_noteSelCurrent.y) ? g_noteSelStart.y : g_noteSelCurrent.y;
+        int w = abs(g_noteSelStart.x - g_noteSelCurrent.x);
+        int h = abs(g_noteSelStart.y - g_noteSelCurrent.y);
+
+        if (g_noteSelWnd) {
+            DestroyWindow(g_noteSelWnd);
+            g_noteSelWnd = nullptr;
+        }
+
+        if (w > 50 && h > 50) {
+            if (g_msgWnd) {
+                PostMessage(g_msgWnd, WM_POST_NOTE_CREATION, MAKEWPARAM(x, y), MAKELPARAM(w, h));
+            }
+        }
+    }
+}
+
+void HandlePickerMouseWorker(WPARAM wParam, POINT pt) {
+    if (wParam == WM_LBUTTONDOWN) {
+        HDC hdcScreen = GetDC(NULL);
+        COLORREF color = GetPixel(hdcScreen, pt.x, pt.y);
+        ReleaseDC(NULL, hdcScreen);
+
+        wchar_t hexSeq[16];
+        swprintf_s(hexSeq, L"#%02X%02X%02X", GetRValue(color), GetGValue(color), GetBValue(color));
+
+        if (OpenClipboard(NULL)) {
+            EmptyClipboard();
+            size_t len = (wcslen(hexSeq) + 1) * sizeof(wchar_t);
+            HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len);
+            if (hg) {
+                memcpy(GlobalLock(hg), hexSeq, len);
+                GlobalUnlock(hg);
+                SetClipboardData(CF_UNICODETEXT, hg);
+            }
+            CloseClipboard();
+        }
+
+        HideAura();
+        TriggerStandaloneSplash(pt);
+        StopColorPicker();
+    }
+    else if (wParam == WM_RBUTTONUP) {
+        HideAura();
+        TriggerStandaloneSplash(pt);
+        StopColorPicker();
+    }
+    else if (wParam == WM_MOUSEMOVE) {
+        g_pickerPos = pt;
+        if (g_pickerWnd) {
+            HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = { sizeof(mi) };
+            GetMonitorInfo(hMonitor, &mi);
+
+            int wx = pt.x + 15;
+            int wy = pt.y + 15;
+            if (wx + 160 > mi.rcMonitor.right) wx = pt.x - 160 - 15;
+            if (wy + 160 > mi.rcMonitor.bottom) wy = pt.y - 160 - 15;
+            if (wx < mi.rcMonitor.left) wx = mi.rcMonitor.left;
+            if (wy < mi.rcMonitor.top) wy = mi.rcMonitor.top;
+
+            SetWindowPos(g_pickerWnd, HWND_TOPMOST, wx, wy, 160, 160, SWP_NOACTIVATE);
+            InvalidateRect(g_pickerWnd, NULL, FALSE);
+        }
+    }
+}
+
+void HandleDrawMouseWorker(WPARAM wParam, POINT pt) {
+    HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+    
+    int monitorWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+    int pW = 500;
+    int pH = 50;
+    int px = mi.rcMonitor.left + (monitorWidth - pW) / 2;
+    int py = mi.rcMonitor.top + (int)g_paletteY;
+    RECT paletteRect = { px, py, px + pW, py + pH };
+    
+    BOOL overPalette = (g_paletteY > -60.0f && PtInRect(&paletteRect, pt));
+    
+    if (wParam == WM_MOUSEMOVE) {
+        if (g_drawDrawing && !overPalette) {
+            int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            double localX = pt.x - wndX;
+            double localY = pt.y - wndY;
+            
+            if (g_currentDrawStroke.count > 0 && g_currentDrawStroke.count < 1000) {
+                DrawPoint last = g_currentDrawStroke.points[g_currentDrawStroke.count - 1];
+                float dx = (float)localX - last.x;
+                float dy = (float)localY - last.y;
+                if (dx*dx + dy*dy >= 4.0f) {
+                    g_currentDrawStroke.points[g_currentDrawStroke.count++] = { (float)localX, (float)localY };
+                }
+            }
+        }
+    }
+    else if (!overPalette) {
+        if (wParam == WM_RBUTTONUP) {
+            HideAura();
+            TriggerStandaloneSplash(pt);
+            ToggleDrawMode();
+        }
+        else if (wParam == WM_LBUTTONDOWN || wParam == WM_MBUTTONDOWN) {
+            if (wParam == WM_MBUTTONDOWN && !g_drawEraserMode) {
+                g_drawEraserMode = TRUE;
+                g_drawSavedColor = g_drawColor;
+                g_drawColor = Gdiplus::Color(0, 0, 0, 0);
+            }
+            if (g_drawStrokeCount < 200) {
+                HideAura();
+                g_drawDrawing = TRUE;
+                g_currentDrawStroke.count = 0;
+                g_currentDrawStroke.color = g_drawColor;
+                g_currentDrawStroke.width = (g_drawColor.GetAlpha() == 0) ? g_drawWidth * 4.0f : g_drawWidth;
+                
+                int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                g_currentDrawStroke.points[g_currentDrawStroke.count++] = { (float)(pt.x - wndX), (float)(pt.y - wndY) };
+            }
+        }
+        else if ((wParam == WM_LBUTTONUP || wParam == WM_MBUTTONUP) && g_drawDrawing) {
+            g_drawDrawing = FALSE;
+            int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            if (g_currentDrawStroke.count > 0 && g_currentDrawStroke.count < 1000) {
+                DrawPoint last = g_currentDrawStroke.points[g_currentDrawStroke.count - 1];
+                float localX = (float)(pt.x - wndX);
+                float localY = (float)(pt.y - wndY);
+                if (localX != last.x || localY != last.y) {
+                    g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX, localY };
+                } else {
+                    g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX + 0.01f, localY };
+                }
+            }
+            if (g_currentDrawStroke.count >= 2) {
+                g_drawStrokes[g_drawStrokeCount++] = g_currentDrawStroke;
+            }
+            if (wParam == WM_MBUTTONUP && g_drawEraserMode) {
+                g_drawEraserMode = FALSE;
+                g_drawColor = g_drawSavedColor;
+            }
+            InvalidateRect(g_drawModeWnd, NULL, FALSE);
+        }
+    }
+}
+
 LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_EXECUTE_ACTION) {
         ExecuteAction(wParam, (HWND)lParam);
@@ -3568,6 +3702,87 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (hwndNotesMsg) {
             PostMessage(hwndNotesMsg, WM_USER + 105, MAKEWPARAM(x, y), MAKELPARAM(w, h));
         }
+        return 0;
+    }
+    if (msg == WM_HOOK_START_GESTURE) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        StartGesture(pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_ADD_GESTURE_POINT) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        AddGesturePoint(pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_END_GESTURE) {
+        EndGesture();
+        return 0;
+    }
+    if (msg == WM_HOOK_SHOW_AURA) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        if (g_settings.showAura) {
+            ShowAura(pt);
+        }
+        return 0;
+    }
+    if (msg == WM_HOOK_HIDE_AURA) {
+        HideAura();
+        return 0;
+    }
+    if (msg == WM_HOOK_UPDATE_AURA) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        UpdateAura(pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_RECORD_CANVAS) {
+        ShowCanvas();
+        return 0;
+    }
+    if (msg == WM_HOOK_KEY_TIMER_EDIT) {
+        HandleTimerEditKey(wParam);
+        return 0;
+    }
+    if (msg == WM_HOOK_MOUSE_NOTE) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        HandleNoteCreationMouseWorker(wParam, pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_MOUSE_PICKER) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        HandlePickerMouseWorker(wParam, pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_MOUSE_DRAW) {
+        POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
+        HandleDrawMouseWorker(wParam, pt);
+        return 0;
+    }
+    if (msg == WM_HOOK_TOGGLE_DRAW) {
+        ToggleDrawMode();
+        return 0;
+    }
+    if (msg == WM_HOOK_START_PICKER) {
+        StartColorPicker();
+        return 0;
+    }
+    if (msg == WM_HOOK_START_SPOTLIGHT) {
+        StartSpotlight();
+        return 0;
+    }
+    if (msg == WM_HOOK_TOGGLE_STOPWATCH) {
+        ToggleStopwatch();
+        return 0;
+    }
+    if (msg == WM_HOOK_TOGGLE_TIMER) {
+        ToggleTimer();
+        return 0;
+    }
+    if (msg == WM_HOOK_TOGGLE_FLASH) {
+        ToggleFlash();
+        return 0;
+    }
+    if (msg == WM_HOOK_STOP_PICKER) {
+        StopColorPicker();
         return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -4292,8 +4507,10 @@ void HideCanvas() {
 }
 
 void StartGesture(POINT pt) {
-    if (g_gestureActive) return;
-    if (IsFullscreenAppActive()) return;
+    if (IsFullscreenAppActive()) {
+        g_gestureActive = FALSE;
+        return;
+    }
 
     if (g_fadeActive) {
         g_fadeActive = FALSE;
@@ -4302,7 +4519,6 @@ void StartGesture(POINT pt) {
     }
 
     g_gestureTarget = WindowFromPoint(pt);
-    g_gestureActive = TRUE;
     g_pointCount = 0;
     g_points[g_pointCount++] = pt;
     g_particleIndex = 0;
@@ -4318,7 +4534,7 @@ void StartGesture(POINT pt) {
 
 void AddGesturePoint(POINT pt) {
     if (!g_gestureActive) return;
-    if (g_pointCount >= MAX_POINTS) return;
+    if (g_pointCount == 0 || g_pointCount >= MAX_POINTS) return;
 
     POINT smoothedPt = { pt.x, pt.y };
 
@@ -4370,8 +4586,7 @@ void SynthesizeClick() {
 }
 
 void EndGesture() {
-    if (!g_gestureActive) return;
-    g_gestureActive = FALSE;
+    if (g_pointCount == 0) return;
 
     if (g_pointCount > 1 && g_overlayWnd) {
         g_fadeActive = TRUE;
@@ -4490,12 +4705,12 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             DWORD now = GetTickCount();
             if (g_wiggleArmed && (now - g_wiggleArmTime > (DWORD)g_settings.armTimeout)) {
                 g_wiggleArmed = FALSE;
-                HideAura();
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_HIDE_AURA, 0, 0);
             }
             if (g_settings.modifierBehavior == MOD_BEHAVIOR_TOGGLE && g_modifierToggleArmed) {
                 if (now - g_modifierToggleArmTime > (DWORD)g_settings.armTimeout) {
                     g_modifierToggleArmed = FALSE;
-                    HideAura();
+                    if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_HIDE_AURA, 0, 0);
                 }
             }
         }
@@ -4506,10 +4721,18 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
         }
 
-        
-        extern BOOL HandleNoteCreationMouse(WPARAM wParam, MSLLHOOKSTRUCT* ms);
         if (g_noteCreationMode) {
-            if (HandleNoteCreationMouse(wParam, ms)) return 1;
+            POINT pt = ms->pt;
+            if (g_msgWnd) {
+                PostMessage(g_msgWnd, WM_HOOK_MOUSE_NOTE, wParam, MAKELPARAM(pt.x, pt.y));
+            }
+            if (wParam == WM_LBUTTONUP) {
+                g_noteCreationMode = FALSE;
+            }
+            if (wParam == WM_MOUSEMOVE) {
+                return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+            }
+            return 1;
         }
 
         if (wParam == WM_MOUSEMOVE && !g_gestureActive && !g_pickerActive && !g_drawModeActive) {
@@ -4519,15 +4742,14 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     if (g_settings.modifierFlags == 0) {
                         modActive = FALSE;
                     } else {
-                        modActive = (g_settings.modifierBehavior == MOD_BEHAVIOR_TOGGLE) ? g_modifierToggleArmed : IsModifierActive();
+                        modActive = (g_settings.modifierBehavior == MOD_BEHAVIOR_TOGGLE) ? (BOOL)g_modifierToggleArmed : IsModifierActive();
                     }
                 }
 
                 if (modActive) {
                     DWORD now = GetTickCount();
                     if (g_wiggleArmed) {
-                        extern void UpdateAura(POINT pt);
-                        UpdateAura(ms->pt);
+                        if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_UPDATE_AURA, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
                     } else {
                         if (now - g_lastWiggleTime > 250) {
                             g_wiggleCount = 0;
@@ -4572,9 +4794,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                                 g_wiggleArmTime = now;
                                 g_wiggleCount = 0;
                                 g_wiggleSign = 0;
-                                extern void ShowAura(POINT pt);
-                                if (g_settings.showAura) {
-                                    ShowAura(ms->pt);
+                                if (g_msgWnd) {
+                                    PostMessage(g_msgWnd, WM_HOOK_SHOW_AURA, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
                                 }
                             }
                         }
@@ -4592,26 +4813,19 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (g_gestureActive) {
             if (wParam == WM_MOUSEMOVE) {
-                AddGesturePoint(ms->pt);
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_ADD_GESTURE_POINT, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
             }
             if (IsDrawButtonUp(wParam, ms)) {
-                if (g_pointCount > 0 && g_pointCount < MAX_POINTS) {
-                    POINT last = g_points[g_pointCount - 1];
-                    if (ms->pt.x != last.x || ms->pt.y != last.y) {
-                        g_points[g_pointCount++] = ms->pt;
-                    }
-                }
-                EndGesture();
+                g_gestureActive = FALSE;
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_END_GESTURE, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
                 return 1;
             }
-            if (TRUE) {
-                if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP ||
-                    wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
-                    wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONUP ||
-                    wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONUP) {
-                    return 1;
-                }
+            if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP ||
+                wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
+                wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONUP ||
+                wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONUP) {
+                return 1;
             }
         }
 
@@ -4619,7 +4833,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         if (g_settings.modifierFlags == 0) {
             modifierValid = TRUE;
         } else {
-            modifierValid = (g_settings.modifierBehavior == MOD_BEHAVIOR_TOGGLE) ? g_modifierToggleArmed : IsModifierActive();
+            modifierValid = (g_settings.modifierBehavior == MOD_BEHAVIOR_TOGGLE) ? (BOOL)g_modifierToggleArmed : IsModifierActive();
         }
 
         BOOL isReady = FALSE;
@@ -4647,69 +4861,27 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (!conflict) {
                 g_wiggleArmed = FALSE;
                 g_modifierToggleArmed = FALSE;
-                extern void HideAura();
-                HideAura();
-                StartGesture(ms->pt);
+                g_gestureActive = TRUE;
+                if (g_msgWnd) {
+                    PostMessage(g_msgWnd, WM_HOOK_HIDE_AURA, 0, 0);
+                    PostMessage(g_msgWnd, WM_HOOK_START_GESTURE, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
+                }
                 return 1;
             }
         }
 
         if (g_pickerActive) {
-            if (wParam == WM_LBUTTONDOWN) {
-                HDC hdcScreen = GetDC(NULL);
-                COLORREF color = GetPixel(hdcScreen, ms->pt.x, ms->pt.y);
-                ReleaseDC(NULL, hdcScreen);
-
-                wchar_t hexSeq[16];
-                swprintf_s(hexSeq, L"#%02X%02X%02X", GetRValue(color), GetGValue(color), GetBValue(color));
-
-                if (OpenClipboard(NULL)) {
-                    EmptyClipboard();
-                    size_t len = (wcslen(hexSeq) + 1) * sizeof(wchar_t);
-                    HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len);
-                    if (hg) {
-                        memcpy(GlobalLock(hg), hexSeq, len);
-                        GlobalUnlock(hg);
-                        SetClipboardData(CF_UNICODETEXT, hg);
-                    }
-                    CloseClipboard();
-                }
-
-                extern void HideAura();
-                HideAura();
-                extern void TriggerStandaloneSplash(POINT pt);
-                TriggerStandaloneSplash(ms->pt);
-                StopColorPicker();
+            POINT pt = ms->pt;
+            if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONUP) {
+                g_pickerActive = FALSE;
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_PICKER, wParam, MAKELPARAM(pt.x, pt.y));
                 return 1;
             }
             if (wParam == WM_RBUTTONDOWN) {
                 return 1;
             }
-            if (wParam == WM_RBUTTONUP) {
-                extern void HideAura();
-                HideAura();
-                extern void TriggerStandaloneSplash(POINT pt);
-                TriggerStandaloneSplash(ms->pt);
-                StopColorPicker();
-                return 1;
-            }
             if (wParam == WM_MOUSEMOVE) {
-                g_pickerPos = ms->pt;
-                if (g_pickerWnd) {
-                    HMONITOR hMonitor = MonitorFromPoint(ms->pt, MONITOR_DEFAULTTONEAREST);
-                    MONITORINFO mi = { sizeof(mi) };
-                    GetMonitorInfo(hMonitor, &mi);
-
-                    int wx = ms->pt.x + 15;
-                    int wy = ms->pt.y + 15;
-                    if (wx + 160 > mi.rcMonitor.right) wx = ms->pt.x - 160 - 15;
-                    if (wy + 160 > mi.rcMonitor.bottom) wy = ms->pt.y - 160 - 15;
-                    if (wx < mi.rcMonitor.left) wx = mi.rcMonitor.left;
-                    if (wy < mi.rcMonitor.top) wy = mi.rcMonitor.top;
-
-                    SetWindowPos(g_pickerWnd, HWND_TOPMOST, wx, wy, 160, 160, SWP_NOACTIVATE);
-                    InvalidateRect(g_pickerWnd, NULL, FALSE);
-                }
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_PICKER, wParam, MAKELPARAM(pt.x, pt.y));
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
             }
             return 1; // Swallow all other mouse inputs during color pick
@@ -4717,102 +4889,32 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (g_drawModeActive) {
             POINT pt = ms->pt;
-            HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = { sizeof(mi) };
-            GetMonitorInfo(hMonitor, &mi);
-            
-            int monitorWidth = mi.rcMonitor.right - mi.rcMonitor.left;
-            int pW = 500;
-            int pH = 50;
-            int px = mi.rcMonitor.left + (monitorWidth - pW) / 2;
-            int py = mi.rcMonitor.top + (int)g_paletteY;
-            RECT paletteRect = { px, py, px + pW, py + pH };
-            
-            BOOL overPalette = (g_paletteY > -60.0f && PtInRect(&paletteRect, pt));
             if (wParam == WM_MOUSEMOVE) {
-                if (g_drawDrawing && !overPalette) {
-                    int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-                    int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-                    double localX = pt.x - wndX;
-                    double localY = pt.y - wndY;
-                    
-                    if (g_currentDrawStroke.count > 0 && g_currentDrawStroke.count < 1000) {
-                        DrawPoint last = g_currentDrawStroke.points[g_currentDrawStroke.count - 1];
-                        float dx = (float)localX - last.x;
-                        float dy = (float)localY - last.y;
-                        if (dx*dx + dy*dy >= 4.0f) {
-                            g_currentDrawStroke.points[g_currentDrawStroke.count++] = { (float)localX, (float)localY };
-                        }
-                    }
-                }
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_DRAW, wParam, MAKELPARAM(pt.x, pt.y));
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
             }
-
-            if (!overPalette) {
-                if (wParam == WM_RBUTTONDOWN) {
-                    return 1;
-                }
-                if (wParam == WM_RBUTTONUP) {
-                    HideAura();
-                    TriggerStandaloneSplash(ms->pt);
-                    ToggleDrawMode();
-                    return 1;
-                }
-                if (wParam == WM_LBUTTONDOWN || wParam == WM_MBUTTONDOWN) {
-                    if (wParam == WM_MBUTTONDOWN && !g_drawEraserMode) {
-                        g_drawEraserMode = TRUE;
-                        g_drawSavedColor = g_drawColor;
-                        g_drawColor = Gdiplus::Color(0, 0, 0, 0);
-                    }
-                    if (g_drawStrokeCount < 200) {
-                        HideAura();
-                        g_drawDrawing = TRUE;
-                        g_currentDrawStroke.count = 0;
-                        g_currentDrawStroke.color = g_drawColor;
-                        g_currentDrawStroke.width = (g_drawColor.GetAlpha() == 0) ? g_drawWidth * 4.0f : g_drawWidth;
-                        
-                        int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-                        int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-                        g_currentDrawStroke.points[g_currentDrawStroke.count++] = { (float)(pt.x - wndX), (float)(pt.y - wndY) };
-                    }
-                    return 1;
-                }
-                if ((wParam == WM_LBUTTONUP || wParam == WM_MBUTTONUP) && g_drawDrawing) {
-                    g_drawDrawing = FALSE;
-                    int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-                    int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-                    if (g_currentDrawStroke.count > 0 && g_currentDrawStroke.count < 1000) {
-                        DrawPoint last = g_currentDrawStroke.points[g_currentDrawStroke.count - 1];
-                        float localX = (float)(pt.x - wndX);
-                        float localY = (float)(pt.y - wndY);
-                        if (localX != last.x || localY != last.y) {
-                            g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX, localY };
-                        } else {
-                            g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX + 0.01f, localY };
-                        }
-                    }
-                    if (g_currentDrawStroke.count >= 2) {
-                        g_drawStrokes[g_drawStrokeCount++] = g_currentDrawStroke;
-                    }
-                    if (wParam == WM_MBUTTONUP && g_drawEraserMode) {
-                        g_drawEraserMode = FALSE;
-                        g_drawColor = g_drawSavedColor;
-                    }
-                    InvalidateRect(g_drawModeWnd, NULL, FALSE);
-                    return 1;
-                }
+            if (wParam == WM_RBUTTONUP) {
+                g_drawModeActive = FALSE;
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_DRAW, wParam, MAKELPARAM(pt.x, pt.y));
+                return 1;
             }
+            if (wParam == WM_LBUTTONDOWN || wParam == WM_MBUTTONDOWN || 
+                wParam == WM_LBUTTONUP || wParam == WM_MBUTTONUP ||
+                wParam == WM_RBUTTONDOWN) {
+                if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_MOUSE_DRAW, wParam, MAKELPARAM(pt.x, pt.y));
+                return 1;
+            }
+            return 1; // Swallow other mouse events in draw mode
         }
 
-        if (wParam == WM_XBUTTONDOWN) {
-        }
         if (wParam == WM_XBUTTONUP) {
             DWORD btn = HIWORD(ms->mouseData);
-            if (btn == XBUTTON1) {
-                if (g_gestureActive) { EndGesture(); return 1; }
-            }
-            if (btn == XBUTTON2) {
-                if (g_gestureActive) { EndGesture(); return 1; }
+            if (btn == XBUTTON1 || btn == XBUTTON2) {
+                if (g_gestureActive) {
+                    g_gestureActive = FALSE;
+                    if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_END_GESTURE, 0, MAKELPARAM(ms->pt.x, ms->pt.y));
+                    return 1;
+                }
             }
         }
     }
@@ -4820,12 +4922,10 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 void ToggleDrawMode() {
-    if (g_drawModeActive) {
+    if (g_drawModeWnd) {
         g_drawModeActive = FALSE;
-        if (g_drawModeWnd) {
-            DestroyWindow(g_drawModeWnd);
-            g_drawModeWnd = nullptr;
-        }
+        DestroyWindow(g_drawModeWnd);
+        g_drawModeWnd = nullptr;
     } else {
         g_drawModeActive = TRUE;
         g_drawStrokeCount = 0;
@@ -5374,58 +5474,43 @@ LRESULT CALLBACK ColorPickerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_KEYUP || wParam == WM_SYSKEYDOWN || wParam == WM_SYSKEYUP)) {
         UpdateModifierToggle();
+
         if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
             KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
             if (kb->vkCode == VK_ESCAPE) {
                 if (g_spotlightState == 2 || g_spotlightState == 1) g_spotlightState = 3;
             }
         }
-        POINT pt;
-        GetCursorPos(&pt);
-        // Removed modifier held logic for orb
+
+        if (g_timerEditMode) {
+            if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+                KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+                if (g_msgWnd) {
+                    PostMessage(g_msgWnd, WM_HOOK_KEY_TIMER_EDIT, kb->vkCode, 0);
+                }
+            }
+            return 1;
+        }
 
         if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
             KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
 
-            if (g_timerEditMode) {
-                if (kb->vkCode == VK_ESCAPE) {
-                    g_timerEditMode = FALSE;
-                    g_timerEditIndex = -1;
-                    PaintTimerPill(g_timerWnd);
-                    return 1;
-                } else if (kb->vkCode == VK_RETURN) {
-                    int val = _wtoi(g_timerEditBuf);
-                    if (val > 0 && val <= 999 && g_timerEditIndex >= 0 && g_timerEditIndex < 3) {
-                        g_timerPresets[g_timerEditIndex] = val * 60;
-                    }
-                    g_timerEditMode = FALSE;
-                    g_timerEditIndex = -1;
-                    PaintTimerPill(g_timerWnd);
-                    return 1;
-                } else if (kb->vkCode == VK_BACK) {
-                    int len = (int)wcslen(g_timerEditBuf);
-                    if (len > 0) g_timerEditBuf[len - 1] = 0;
-                    PaintTimerPill(g_timerWnd);
-                    return 1;
-                } else if ((kb->vkCode >= '0' && kb->vkCode <= '9') || (kb->vkCode >= VK_NUMPAD0 && kb->vkCode <= VK_NUMPAD9)) {
-                    int len = (int)wcslen(g_timerEditBuf);
-                    if (len < 3) {
-                        wchar_t c = (kb->vkCode >= VK_NUMPAD0 && kb->vkCode <= VK_NUMPAD9) ? (wchar_t)(kb->vkCode - VK_NUMPAD0 + L'0') : (wchar_t)kb->vkCode;
-                        g_timerEditBuf[len] = c;
-                        g_timerEditBuf[len + 1] = 0;
-                    }
-                    PaintTimerPill(g_timerWnd);
-                    return 1;
+            if (g_flashWnd && IsWindowVisible(g_flashWnd)) {
+                if (g_msgWnd) {
+                    PostMessage(g_msgWnd, WM_HOOK_TOGGLE_FLASH, 0, 0);
                 }
+                return 1;
             }
 
             if (kb->vkCode == VK_ESCAPE) {
                 if (g_pickerActive) {
-                    StopColorPicker();
+                    g_pickerActive = FALSE;
+                    if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_STOP_PICKER, 0, 0);
                     return 1;
                 }
                 if (g_drawModeActive) {
-                    ToggleDrawMode();
+                    g_drawModeActive = FALSE;
+                    if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_TOGGLE_DRAW, 0, 0);
                     return 1;
                 }
             }
@@ -5440,7 +5525,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     modOk = modOk && (GetAsyncKeyState(VK_MENU) & 0x8000);
 
                 if (modOk) {
-                    PostMessage(NULL, WM_APP + 100, 0, 0);
+                    if (g_msgWnd) PostMessage(g_msgWnd, WM_HOOK_RECORD_CANVAS, 0, 0);
                     return 1;
                 }
             }
@@ -5659,34 +5744,6 @@ void HideAura() {
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     OleInitialize(NULL);
 
-    WNDCLASS mwc = {};
-    mwc.lpfnWndProc = MsgWndProc;
-    mwc.hInstance = GetModuleHandle(NULL);
-    mwc.lpszClassName = MSG_WND_CLASS;
-    RegisterClass(&mwc);
-
-    g_msgWnd = CreateWindowEx(0, MSG_WND_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
-
-    MSG msg;
-    while (g_running.load() && GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    if (g_msgWnd) {
-        DestroyWindow(g_msgWnd);
-        g_msgWnd = nullptr;
-    }
-
-    UnregisterClass(MSG_WND_CLASS, GetModuleHandle(NULL));
-
-    OleUninitialize();
-    return 0;
-}
-
-DWORD WINAPI HookThreadProc(LPVOID lpParam) {
-    OleInitialize(NULL);
-
     ULONG_PTR gdiplusToken;
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -5733,66 +5790,34 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     twc.lpszClassName = TOAST_CLASS;
     RegisterClass(&twc);
 
-
-
     g_uiFont = CreateFont(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-    g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
-    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
+    WNDCLASS mwc = {};
+    mwc.lpfnWndProc = MsgWndProc;
+    mwc.hInstance = GetModuleHandle(NULL);
+    mwc.lpszClassName = MSG_WND_CLASS;
+    RegisterClass(&mwc);
 
-    if (!g_mouseHook || !g_keyboardHook) {
-        Wh_Log(L"Failed to install hooks (mouse=%p keyboard=%p)", g_mouseHook, g_keyboardHook);
-    } else {
-        Wh_Log(L"Hooks installed successfully");
-    }
+    g_msgWnd = CreateWindowEx(0, MSG_WND_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
 
     MSG msg;
     while (g_running.load() && GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_APP + 100) {
-            ShowCanvas();
-            continue;
-        }
-        if (msg.message == WM_HOOK_TOGGLE_DRAW) {
-            ToggleDrawMode();
-            continue;
-        }
-        if (msg.message == WM_HOOK_START_PICKER) {
-            StartColorPicker();
-            continue;
-        }
-        if (msg.message == WM_HOOK_START_SPOTLIGHT) {
-            StartSpotlight();
-            continue;
-        }
-        if (msg.message == WM_HOOK_TOGGLE_STOPWATCH) {
-            ToggleStopwatch();
-            continue;
-        }
-        if (msg.message == WM_HOOK_TOGGLE_TIMER) {
-            ToggleTimer();
-            continue;
-        }
-        if (msg.message == WM_HOOK_TOGGLE_FLASH) {
-            ToggleFlash();
-            continue;
-        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
-    if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
-
-
+    if (g_msgWnd) {
+        DestroyWindow(g_msgWnd);
+        g_msgWnd = nullptr;
+    }
 
     HideCanvas();
     DestroyOverlay();
     if (g_drawModeActive) ToggleDrawMode();
     if (g_pickerActive) StopColorPicker();
 
-    if (g_flashKeyboardHook) { UnhookWindowsHookEx(g_flashKeyboardHook); g_flashKeyboardHook = nullptr; }
     if (g_flashWnd && IsWindowVisible(g_flashWnd)) { RestoreMonitorBrightness(); }
     if (g_flashWnd) { DestroyWindow(g_flashWnd); g_flashWnd = nullptr; }
     if (g_stopwatchWnd) { KillTimer(g_stopwatchWnd, 1); DestroyWindow(g_stopwatchWnd); g_stopwatchWnd = nullptr; }
@@ -5800,6 +5825,7 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
 
     if (g_uiFont) { DeleteObject(g_uiFont); g_uiFont = nullptr; }
 
+    UnregisterClass(MSG_WND_CLASS, GetModuleHandle(NULL));
     UnregisterClass(OVERLAY_CLASS, GetModuleHandle(NULL));
     UnregisterClass(CANVAS_CLASS, GetModuleHandle(NULL));
     UnregisterClass(DRAW_MODE_CLASS, GetModuleHandle(NULL));
@@ -5812,6 +5838,31 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     UnregisterClass(FLASH_CLASS, GetModuleHandle(NULL));
 
     Gdiplus::GdiplusShutdown(gdiplusToken);
+    OleUninitialize();
+    return 0;
+}
+
+DWORD WINAPI HookThreadProc(LPVOID lpParam) {
+    OleInitialize(NULL);
+
+    g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
+
+    if (!g_mouseHook || !g_keyboardHook) {
+        Wh_Log(L"Failed to install hooks (mouse=%p keyboard=%p)", g_mouseHook, g_keyboardHook);
+    } else {
+        Wh_Log(L"Hooks installed successfully");
+    }
+
+    MSG msg;
+    while (g_running.load() && GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
+    if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
+
     OleUninitialize();
     return 0;
 }
