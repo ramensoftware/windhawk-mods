@@ -1,3 +1,19 @@
+## 3.1.1 ([Jul 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c022aaa6684072a8feb8ccb7d6d97ae9c293c7c2/mods/macos-minimize-animation.wh.cpp))
+
+- **Translucent windows no longer go grey**: the capture was force-flattening `PrintWindow` output to opaque and re-premultiplying already-premultiplied pixels. It now passes premultiplied pixels through and keeps fully-transparent regions transparent, so acrylic / Mica windows keep their see-through areas during the genie.
+- **Window-only capture**: snapshots render just the window's own content, so the taskbar / other windows never bleed into the animation on maximized or fullscreen apps.
+- **Renderer quality**: per-primitive mask antialiasing, aliased RT modes set once at creation, larger corner radius, retuned tile bloat — smoother silhouette without seams at higher mesh resolutions.
+- **~120fps frame pacer**: frames land at even intervals when per-frame cost varies (no duration change; a no-op at ≤120Hz where the DwmFlush gate already paces slower).
+- **Animation tile count setting** (8–96, default 35), replacing the fixed 20x20 mesh.
+
+**The fixes in this release were contributed by @Potassiumuncher** (v1.5 of his genie engine — he's credited in the mod readme as well).
+
+**Mod-side additions:**
+- **Excluded programs setting** (fixes the exclusion-list report): Windhawk's per-mod process exclusion only prevents the mod from loading *into* a process, but a window's animation is often driven from a *different* process (Explorer's taskbar, the shell) — so excluded apps still animated (reported with Windows Terminal Quake mode, where the window belongs to WindowsTerminal.exe, not powershell.exe). The new setting matches the process that *owns* the window at the single animation choke point.
+- **Non-primary-monitor backdrop fallback**: on secondary displays DWM often returns the whole Mica/acrylic backdrop as fully transparent, which made window backgrounds vanish during the genie. When a majority of captured pixels are fully transparent, the capture now falls back to an opaque backdrop for that snapshot (documented in Known issues; a deeper fix needs investigation).
+
+Readme also documents the reported (not yet reproduced) looping animation on Zen Browser as a known issue, with the exclusion setting as a workaround.
+
 ## 3.1.0 ([Jul 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a8862447e3495d146a8b444be27f71bb46fcaa0/mods/macos-minimize-animation.wh.cpp))
 
 - Adds a new **Animation style** setting with two options: **Modern** (the Direct2D genie engine, default since v3.0.0) and **Classic** (this mod's original v2.2.0 strip-based genie).
