@@ -201,6 +201,9 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -267,6 +270,132 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 using Microsoft::WRL::ComPtr;
 using namespace std::chrono_literals;
 
+#ifdef STANDALONE_APP
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
+#pragma comment(lib, "shcore.lib")
+#pragma comment(lib, "d2d1.lib")
+#pragma comment(lib, "dwrite.lib")
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "runtimeobject.lib")
+#pragma comment(lib, "windowscodecs.lib")
+#pragma comment(lib, "avrt.lib")
+#pragma comment(lib, "setupapi.lib")
+#pragma comment(lib, "advapi32.lib")
+
+void OpenSettingsDialog(HWND parent);
+void SetStartupRegistry(bool enable);
+bool IsStartupRegistryEnabled();
+
+// Helper to get absolute path to settings.ini next to the executable
+std::wstring GetIniPath() {
+    wchar_t path[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t* lastSlash = wcsrchr(path, L'\\');
+    if (lastSlash) {
+        *(lastSlash + 1) = L'\0';
+        wcscat_s(path, L"settings.ini");
+    } else {
+        wcscpy_s(path, L"settings.ini");
+    }
+    return path;
+}
+
+// Windhawk API stubs for standalone mode
+extern "C" {
+    void Wh_Log(const wchar_t* format, ...) {
+        va_list args;
+        va_start(args, format);
+        wchar_t buffer[2048];
+        vswprintf_s(buffer, format, args);
+        va_end(args);
+        OutputDebugStringW(L"[DynamicIsland] ");
+        OutputDebugStringW(buffer);
+        OutputDebugStringW(L"\n");
+
+        wchar_t logPath[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, logPath, MAX_PATH);
+        wchar_t* lastSlash = wcsrchr(logPath, L'\\');
+        if (lastSlash) {
+            *(lastSlash + 1) = L'\0';
+            wcscat_s(logPath, L"debug.log");
+        } else {
+            wcscpy_s(logPath, L"debug.log");
+        }
+
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, logPath, L"a, ccs=UTF-8") == 0) {
+            fwprintf(f, L"[DynamicIsland] %ls\n", buffer);
+            fclose(f);
+        }
+    }
+
+    PCWSTR Wh_GetStringSetting(PCWSTR name) {
+        wchar_t* buffer = new wchar_t[512];
+        std::wstring def = L"";
+        if (wcscmp(name, L"Appearance.Position") == 0) def = L"top-center";
+        else if (wcscmp(name, L"Appearance.SizeScale") == 0) def = L"1.0";
+        else if (wcscmp(name, L"Themes.AccentColorMode") == 0) def = L"auto";
+        else if (wcscmp(name, L"Themes.CustomAccentHex") == 0) def = L"#4cc9f0";
+        else if (wcscmp(name, L"Appearance.AnimationSpeed") == 0) def = L"normal";
+        else if (wcscmp(name, L"Modules.WeatherCity") == 0) def = L"";
+        else if (wcscmp(name, L"Appearance.AutoHideIdleSeconds") == 0) def = L"0";
+        else if (wcscmp(name, L"Appearance.TargetMonitor") == 0) def = L"primary";
+        else if (wcscmp(name, L"Themes.PillBgColor") == 0) def = L"#0D0D0F";
+        else if (wcscmp(name, L"Themes.TextPrimaryColor") == 0) def = L"#F7F7F7";
+        else if (wcscmp(name, L"Themes.TextSecondaryColor") == 0) def = L"#888888";
+
+        GetPrivateProfileStringW(L"Settings", name, def.c_str(), buffer, 512, GetIniPath().c_str());
+        return buffer;
+    }
+
+    void Wh_FreeStringSetting(PCWSTR value) {
+        delete[] value;
+    }
+
+    int Wh_GetIntSetting(PCWSTR name) {
+        int def = 1;
+        if (wcscmp(name, L"Appearance.AutoDpiScale") == 0) def = 1;
+        else if (wcscmp(name, L"Modules.Media") == 0) def = 1;
+        else if (wcscmp(name, L"Modules.Clipboard") == 0) def = 1;
+        else if (wcscmp(name, L"Modules.Battery") == 0) def = 1;
+        else if (wcscmp(name, L"Modules.Progress") == 0) def = 1;
+        else if (wcscmp(name, L"Themes.TintIntensity") == 0) def = 72;
+        else if (wcscmp(name, L"Themes.PillOpacity") == 0) def = 96;
+        else if (wcscmp(name, L"Modules.GameOverlay") == 0) def = 0;
+        else if (wcscmp(name, L"Modules.ShowMetricText") == 0) def = 0;
+        else if (wcscmp(name, L"Modules.WeatherFahrenheit") == 0) def = 0;
+        else if (wcscmp(name, L"Appearance.UnhideOnHover") == 0) def = 1;
+        else if (wcscmp(name, L"Appearance.AlwaysOnTop") == 0) def = 1;
+        else if (wcscmp(name, L"Appearance.ExpandOnHover") == 0) def = 1;
+        else if (wcscmp(name, L"Appearance.OffsetX") == 0) def = 0;
+        else if (wcscmp(name, L"Appearance.OffsetY") == 0) def = 0;
+        else if (wcscmp(name, L"Appearance.W11Style") == 0) def = 0;
+        else if (wcscmp(name, L"Themes.ColorfulModules") == 0) def = 0;
+        else if (wcscmp(name, L"Appearance.ExpandOnTrackChange") == 0) def = 1;
+        else if (wcscmp(name, L"Appearance.StartWithWindows") == 0) def = 0;
+
+        return GetPrivateProfileIntW(L"Settings", name, def, GetIniPath().c_str());
+    }
+
+    int Wh_GetIntValue(PCWSTR name, int fallback) {
+        return GetPrivateProfileIntW(L"State", name, fallback, GetIniPath().c_str());
+    }
+
+    void Wh_SetIntValue(PCWSTR name, int value) {
+        wchar_t valStr[32];
+        swprintf_s(valStr, L"%d", value);
+        WritePrivateProfileStringW(L"State", name, valStr, GetIniPath().c_str());
+        
+        void WhTool_ModSettingsChanged();
+        WhTool_ModSettingsChanged();
+    }
+}
+#endif
+
 namespace {
 
 constexpr wchar_t kWindowClass[] = L"Windhawk.DynamicIslandForWindows";
@@ -326,6 +455,9 @@ struct Settings {
     bool expandOnHover = true;
     bool autoDpiScale = true;
     bool w11Style = false;
+    bool colorfulModules = false;
+    bool expandOnTrackChange = true;
+    bool startWithWindows = false;
     // Color customization
     D2D1_COLOR_F pillBgColor = D2D1::ColorF(0.051f, 0.051f, 0.059f, 1.0f); // #0D0D0F
     D2D1_COLOR_F textPrimaryColor = D2D1::ColorF(0.969f, 0.969f, 0.969f, 1.0f); // #F7F7F7
@@ -680,6 +812,12 @@ void LoadSettings() {
     next.autoDpiScale = Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0;
     next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
     next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
+    next.colorfulModules = Wh_GetIntSetting(L"Themes.ColorfulModules") != 0;
+    next.expandOnTrackChange = Wh_GetIntSetting(L"Appearance.ExpandOnTrackChange") != 0;
+    next.startWithWindows = Wh_GetIntSetting(L"Appearance.StartWithWindows") != 0;
+    if (next.startWithWindows != IsStartupRegistryEnabled()) {
+        SetStartupRegistry(next.startWithWindows);
+    }
 
     std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
     if (mon == L"primary") next.targetMonitor = 0;
@@ -2879,7 +3017,12 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 25, L"Refresh Weather Now");
     AppendMenuW(menu, MF_STRING, 26, L"Reset All Overrides");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+#ifdef STANDALONE_APP
+    AppendMenuW(menu, MF_STRING, 9, L"Settings");
+    AppendMenuW(menu, MF_STRING, 99, L"Exit");
+#else
     AppendMenuW(menu, MF_STRING, 9, L"Open Windhawk settings");
+#endif
 
     SetForegroundWindow(hwnd);
     const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
@@ -2917,6 +3060,9 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             LoadSettings();
             break;
         case 9: {
+#ifdef STANDALONE_APP
+            ::OpenSettingsDialog(hwnd);
+#else
             wchar_t currentProcessPath[MAX_PATH] = {};
             GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
 
@@ -2927,8 +3073,14 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
                 Wh_Log(L"Failed to open Windhawk settings.");
             }
+#endif
             break;
         }
+#ifdef STANDALONE_APP
+        case 99:
+            SetEvent(g_stopEvent);
+            break;
+#endif
         case 10: {
             const int activeW11Val = Wh_GetIntValue(L"W11StyleOverride", -1) >= 0
                                   ? Wh_GetIntValue(L"W11StyleOverride", 0)
@@ -3343,6 +3495,34 @@ class Renderer {
         const float h = (rect.bottom - rect.top) * scale;
         rect = D2D1::RectF(cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f);
 
+        D2D1_COLOR_F originalAccent = lerpedAccent_;
+        if (settings.colorfulModules) {
+            D2D1_COLOR_F accentColor = lerpedAccent_;
+            if (activity.kind == IslandKind::Idle) {
+                if (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0) {
+                    accentColor = D2D1::ColorF(0.749f, 0.353f, 0.949f, 1.0f); // Neon purple (Game Overlay)
+                } else if (g_idleTab % 3 == 0) {
+                    accentColor = D2D1::ColorF(0.957f, 0.263f, 0.212f, 1.0f); // Cherry red (Calendar)
+                } else if (g_idleTab % 3 == 1) {
+                    accentColor = D2D1::ColorF(1.0f, 0.757f, 0.027f, 1.0f); // Sunny gold (Weather)
+                } else {
+                    accentColor = D2D1::ColorF(0.18f, 0.8f, 0.443f, 1.0f); // Neon green (System Stats)
+                }
+            } else if (activity.kind == IslandKind::Media) {
+                // Keep original/sampled accent
+            } else if (activity.kind == IslandKind::Progress) {
+                accentColor = D2D1::ColorF(0.0f, 0.737f, 0.827f, 1.0f); // Cyan
+            } else if (activity.kind == IslandKind::Clipboard) {
+                accentColor = D2D1::ColorF(1.0f, 0.596f, 0.0f, 1.0f); // Orange
+            } else if (activity.kind == IslandKind::Notification) {
+                accentColor = D2D1::ColorF(0.122f, 0.533f, 0.898f, 1.0f); // Royal blue
+            }
+            lerpedAccent_ = accentColor;
+            if (accentBrush_) {
+                accentBrush_->SetColor(lerpedAccent_);
+            }
+        }
+
         float radius = settings.w11Style ? 8.0f * settings.sizeScale : (rect.bottom - rect.top) * 0.5f;
         if (!settings.w11Style) {
             radius = std::min(radius, 44.0f * settings.sizeScale);
@@ -3418,10 +3598,52 @@ class Renderer {
                 break;
         }
 
+        // Draw Settings gear icon if expanded
+        if (unH > 50.0f) {
+            bool gearHover = false;
+            POINT ptCursor;
+            if (GetCursorPos(&ptCursor)) {
+                ScreenToClient(hwnd_, &ptCursor);
+                float pillRight = bitmapWidth_ - 28.0f;
+                float pillTop = 22.0f;
+                float scale = settings.sizeScale;
+
+                float gearLeft = pillRight - 44.0f * scale;
+                float gearRight = pillRight - 8.0f * scale;
+                float gearTop = pillTop + 6.0f * scale;
+                float gearBottom = pillTop + 42.0f * scale;
+                
+                if (ptCursor.x >= gearLeft && ptCursor.x <= gearRight && 
+                    ptCursor.y >= gearTop && ptCursor.y <= gearBottom) {
+                    gearHover = true;
+                }
+            }
+
+            ComPtr<ID2D1SolidColorBrush> gearBrush;
+            D2D1_COLOR_F gearColor = settings.textPrimaryColor;
+            gearColor.a = (gearHover ? 0.85f : 0.35f) * settingsOpacity_;
+            target_->CreateSolidColorBrush(gearColor, &gearBrush);
+
+            if (gearBrush && iconFormat_) {
+                iconFormat_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                iconFormat_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                D2D1_RECT_F gearRect = D2D1::RectF(unscaledRect.right - 44.0f, unscaledRect.top + 6.0f,
+                                                   unscaledRect.right - 8.0f, unscaledRect.top + 42.0f);
+                target_->DrawTextW(L"\uE713", 1, iconFormat_.Get(), &gearRect, gearBrush.Get());
+            }
+        }
+
         // ── Apple-style privacy indicator dots ───────────────────────────────
         // Green dot = camera in use, Orange dot = mic in use.
         // Drawn in top-right corner of pill, outside content area.
         DrawPrivacyDots(state, unscaledRect, now);
+
+        if (settings.colorfulModules) {
+            lerpedAccent_ = originalAccent;
+            if (accentBrush_) {
+                accentBrush_->SetColor(lerpedAccent_);
+            }
+        }
 
         target_->SetTransform(oldTransform);
     }
@@ -5665,8 +5887,32 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 const float height = static_cast<float>(clientRect.bottom - clientRect.top);
                 const float width = static_cast<float>(clientRect.right - clientRect.left);
 
+                float totalScale = (GetDpiForWindow(hwnd) / 96.0f) * g_settings.sizeScale;
+                float cx = width / 2.0f;
+                float cy = height / 2.0f;
+                float unX = (xPos - cx) / totalScale;
+                float unY = (yPos - cy) / totalScale;
+                float unW = width / totalScale;
+                float unH = height / totalScale;
+
+                float pillRight = width - 28.0f;
+                float pillTop = 22.0f;
+                float scale = g_settings.sizeScale;
+
+                float gearLeft = pillRight - 44.0f * scale;
+                float gearRight = pillRight - 8.0f * scale;
+                float gearTop = pillTop + 6.0f * scale;
+                float gearBottom = pillTop + 42.0f * scale;
+
+                float pillHeight = (height - 44.0f) / scale;
+                if (pillHeight > 50.0f) {
+                    if (xPos >= gearLeft && xPos <= gearRight && yPos >= gearTop && yPos <= gearBottom) {
+                        ::OpenSettingsDialog(hwnd);
+                        return 0;
+                    }
+                }
+
                 if (mediaActive && height > 60.0f && (g_idleTab % 3) == 0) {
-                    float totalScale = (GetDpiForWindow(hwnd) / 96.0f) * g_settings.sizeScale;
                     float cx = width / 2.0f;
                     float cy = height / 2.0f;
                     
@@ -5780,6 +6026,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 DWORD WINAPI RenderThreadProc(void*) {
+    Wh_Log(L"RenderThreadProc started.");
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     WNDCLASSEXW wc = {};
@@ -5789,6 +6036,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     wc.lpszClassName = kWindowClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     RegisterClassExW(&wc);
+    Wh_Log(L"Class registered.");
 
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
@@ -5796,13 +6044,14 @@ DWORD WINAPI RenderThreadProc(void*) {
         nullptr, nullptr, wc.hInstance, nullptr);
 
     if (!hwnd) {
-        Wh_Log(L"Failed to create Dynamic Island overlay window.");
+        Wh_Log(L"Failed to create Dynamic Island overlay window. Error: %d", GetLastError());
         if (SUCCEEDED(hrCo)) {
             CoUninitialize();
         }
         return 0;
     }
 
+    Wh_Log(L"Window created successfully (HWND = %p).", hwnd);
     g_hwnd = hwnd;
     g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
     EnableBlurBehind(hwnd);
@@ -5810,6 +6059,7 @@ DWORD WINAPI RenderThreadProc(void*) {
 
     Renderer renderer;
     if (!renderer.Initialize(hwnd)) {
+        Wh_Log(L"Renderer initialization failed!");
         DestroyWindow(hwnd);
         g_hwnd = nullptr;
         if (SUCCEEDED(hrCo)) {
@@ -5818,6 +6068,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         return 0;
     }
 
+    Wh_Log(L"Renderer initialized successfully.");
     SpringValue widthSpring;
     SpringValue heightSpring;
     SpringValue nudgeSpring;
@@ -5832,6 +6083,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     double nextSystemPoll = 0.0;
     double nextPrivacyPoll = 0.0;
 
+    Wh_Log(L"Entering main rendering loop.");
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MSG message = {};
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
@@ -5979,7 +6231,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             primary.height = 64.0f * g_settings.sizeScale;
         }
         if (primary.kind == IslandKind::Media) {
-            bool recentArtChange = (NowSeconds() - g_state.media.artChangedAt) < 4.0;
+            bool recentArtChange = g_settings.expandOnTrackChange && ((NowSeconds() - g_state.media.artChangedAt) < 4.0);
             if (isHoverExpanded || pinned || recentArtChange) {
                 primary.width = 380.0f * g_settings.sizeScale;
                 primary.height = 184.0f * g_settings.sizeScale;
@@ -6267,6 +6519,7 @@ void WhTool_ModUninit() {
     Wh_Log(L"Dynamic Island for Windows unloaded.");
 }
 
+#ifndef STANDALONE_APP
 //////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -6375,7 +6628,7 @@ void Wh_ModAfterInit() {
 
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
+                               ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -6445,3 +6698,889 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+#else
+#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+HWND g_settingsHwnd = nullptr;
+HFONT g_hFont = nullptr;
+
+// ============================================================
+//  HSV Color Picker Dialog
+// ============================================================
+
+// --- HSV <-> RGB helpers ---
+static void RGBtoHSV(int r, int g, int b, float& h, float& s, float& v) {
+    float rf = r / 255.0f, gf = g / 255.0f, bf = b / 255.0f;
+    float mx = max({ rf, gf, bf }), mn = min({ rf, gf, bf });
+    float delta = mx - mn;
+    v = mx;
+    s = (mx > 0.0f) ? (delta / mx) : 0.0f;
+    if (delta < 1e-6f) { h = 0.0f; return; }
+    if      (mx == rf) h = 60.0f * fmodf((gf - bf) / delta, 6.0f);
+    else if (mx == gf) h = 60.0f * ((bf - rf) / delta + 2.0f);
+    else               h = 60.0f * ((rf - gf) / delta + 4.0f);
+    if (h < 0.0f) h += 360.0f;
+}
+
+static COLORREF HSVtoRGB(float h, float s, float v) {
+    float c = v * s, x = c * (1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f)), m = v - c;
+    float r1, g1, b1;
+    if      (h < 60)  { r1=c; g1=x; b1=0; }
+    else if (h < 120) { r1=x; g1=c; b1=0; }
+    else if (h < 180) { r1=0; g1=c; b1=x; }
+    else if (h < 240) { r1=0; g1=x; b1=c; }
+    else if (h < 300) { r1=x; g1=0; b1=c; }
+    else              { r1=c; g1=0; b1=x; }
+    return RGB((int)((r1+m)*255), (int)((g1+m)*255), (int)((b1+m)*255));
+}
+
+// --- Draw the color wheel into a DIB ---
+static HBITMAP CreateColorWheelBitmap(HDC hdc, int size, float brightness) {
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = size;
+    bmi.bmiHeader.biHeight      = -size; // top-down
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    DWORD* bits = nullptr;
+    HBITMAP hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&bits, nullptr, 0);
+    if (!hbm || !bits) return nullptr;
+
+    float cx = size * 0.5f, cy = size * 0.5f, radius = size * 0.5f - 1.0f;
+    for (int py = 0; py < size; ++py) {
+        for (int px = 0; px < size; ++px) {
+            float dx = px - cx, dy = py - cy;
+            float dist = sqrtf(dx*dx + dy*dy);
+            if (dist > radius) {
+                bits[py * size + px] = 0xFF1E1E1E; // background color (dark)
+            } else {
+                float sat = dist / radius;
+                float hue = fmodf(atan2f(dy, dx) * (180.0f / 3.14159265f) + 360.0f, 360.0f);
+                COLORREF c = HSVtoRGB(hue, sat, brightness);
+                // DIB stores BGR
+                bits[py * size + px] = 0xFF000000 |
+                    ((DWORD)(GetBValue(c)) << 16) |
+                    ((DWORD)(GetGValue(c)) << 8)  |
+                    ((DWORD)(GetRValue(c)));
+            }
+        }
+    }
+    return hbm;
+}
+
+// --- Color Picker state & IDs ---
+#define CP_ID_WHEEL_AREA  2001
+#define CP_ID_SAT_SLIDER  2002
+#define CP_ID_VAL_SLIDER  2003
+#define CP_ID_HEX_EDIT    2004
+#define CP_ID_PREVIEW     2005
+#define CP_ID_CHOOSE      IDOK
+#define CP_ID_CANCEL      IDCANCEL
+
+struct ColorPickerState {
+    float h = 0, s = 1, v = 1;   // current HSV
+    COLORREF result = RGB(255,0,0);
+    bool dragging = false;
+    HBITMAP wheelBmp = nullptr;
+    int wheelSize = 200;
+    HWND hwndSat = nullptr, hwndVal = nullptr, hwndHex = nullptr;
+    bool updatingHex = false;
+};
+
+static void CP_UpdateAll(HWND hwnd, ColorPickerState* cp) {
+    cp->result = HSVtoRGB(cp->h, cp->s, cp->v);
+
+    // Rebuild wheel bitmap with new brightness
+    HDC hdc = GetDC(hwnd);
+    if (cp->wheelBmp) DeleteObject(cp->wheelBmp);
+    cp->wheelBmp = CreateColorWheelBitmap(hdc, cp->wheelSize, cp->v);
+    ReleaseDC(hwnd, hdc);
+
+    // Update hex edit
+    if (cp->hwndHex && !cp->updatingHex) {
+        wchar_t buf[16];
+        swprintf_s(buf, L"#%02X%02X%02X",
+            GetRValue(cp->result), GetGValue(cp->result), GetBValue(cp->result));
+        cp->updatingHex = true;
+        SetWindowTextW(cp->hwndHex, buf);
+        cp->updatingHex = false;
+    }
+
+    // Repaint
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static void CP_SetFromHex(HWND hwnd, ColorPickerState* cp, const wchar_t* hex) {
+    // Parse #RRGGBB or RRGGBB
+    const wchar_t* p = hex;
+    if (*p == L'#') ++p;
+    if (wcslen(p) < 6) return;
+    int r = 0, g = 0, b = 0;
+    swscanf_s(p, L"%02X%02X%02X", &r, &g, &b);
+    RGBtoHSV(r, g, b, cp->h, cp->s, cp->v);
+    // Sync sliders
+    if (cp->hwndSat) SendMessageW(cp->hwndSat, TBM_SETPOS, TRUE, (LPARAM)(int)(cp->s * 255));
+    if (cp->hwndVal) SendMessageW(cp->hwndVal, TBM_SETPOS, TRUE, (LPARAM)(int)(cp->v * 255));
+    CP_UpdateAll(hwnd, cp);
+}
+
+LRESULT CALLBACK ColorPickerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    ColorPickerState* cp = reinterpret_cast<ColorPickerState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+    switch (msg) {
+    case WM_CREATE: {
+        cp = new ColorPickerState();
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)cp);
+
+        // Parse initial color stored in the title temporarily
+        wchar_t initHex[16] = {};
+        GetWindowTextW(hwnd, initHex, 16);
+        SetWindowTextW(hwnd, L"Color Picker");
+        if (initHex[0]) {
+            const wchar_t* p = initHex[0] == L'#' ? initHex + 1 : initHex;
+            int r = 0, g = 0, b = 0;
+            swscanf_s(p, L"%02X%02X%02X", &r, &g, &b);
+            RGBtoHSV(r, g, b, cp->h, cp->s, cp->v);
+        }
+
+        BOOL dark = TRUE;
+        DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
+        HFONT fnt = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH | FF_SWISS, L"Segoe UI");
+
+        // Saturation slider (label + track)
+        HWND lbl;
+        lbl = CreateWindowExW(0, L"STATIC", L"Saturation:", WS_CHILD|WS_VISIBLE,
+            10, 220, 90, 18, hwnd, nullptr, nullptr, nullptr);
+        SendMessageW(lbl, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        cp->hwndSat = CreateWindowExW(0, TRACKBAR_CLASSW, L"",
+            WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_NOTICKS,
+            105, 218, 200, 24, hwnd, (HMENU)CP_ID_SAT_SLIDER, nullptr, nullptr);
+        SendMessageW(cp->hwndSat, TBM_SETRANGE, TRUE, MAKELPARAM(0, 255));
+        SendMessageW(cp->hwndSat, TBM_SETPOS,   TRUE, (LPARAM)(int)(cp->s * 255));
+
+        // Brightness slider
+        lbl = CreateWindowExW(0, L"STATIC", L"Brightness:", WS_CHILD|WS_VISIBLE,
+            10, 250, 90, 18, hwnd, nullptr, nullptr, nullptr);
+        SendMessageW(lbl, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        cp->hwndVal = CreateWindowExW(0, TRACKBAR_CLASSW, L"",
+            WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_NOTICKS,
+            105, 248, 200, 24, hwnd, (HMENU)CP_ID_VAL_SLIDER, nullptr, nullptr);
+        SendMessageW(cp->hwndVal, TBM_SETRANGE, TRUE, MAKELPARAM(0, 255));
+        SendMessageW(cp->hwndVal, TBM_SETPOS,   TRUE, (LPARAM)(int)(cp->v * 255));
+
+        // Hex edit
+        lbl = CreateWindowExW(0, L"STATIC", L"Hex:", WS_CHILD|WS_VISIBLE,
+            10, 282, 40, 18, hwnd, nullptr, nullptr, nullptr);
+        SendMessageW(lbl, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        cp->hwndHex = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"#FF0000",
+            WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL,
+            55, 280, 110, 22, hwnd, (HMENU)CP_ID_HEX_EDIT, nullptr, nullptr);
+        SendMessageW(cp->hwndHex, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        // Cancel / Choose buttons
+        HWND btnCancel = CreateWindowExW(0, L"BUTTON", L"Cancel",
+            WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|WS_TABSTOP,
+            10, 316, 90, 28, hwnd, (HMENU)CP_ID_CANCEL, nullptr, nullptr);
+        SendMessageW(btnCancel, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        HWND btnChoose = CreateWindowExW(0, L"BUTTON", L"Choose",
+            WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON|WS_TABSTOP,
+            215, 316, 90, 28, hwnd, (HMENU)CP_ID_CHOOSE, nullptr, nullptr);
+        SendMessageW(btnChoose, WM_SETFONT, (WPARAM)fnt, TRUE);
+
+        // Build initial wheel
+        HDC hdc = GetDC(hwnd);
+        cp->wheelBmp = CreateColorWheelBitmap(hdc, cp->wheelSize, cp->v);
+        ReleaseDC(hwnd, hdc);
+
+        // Sync hex box
+        CP_UpdateAll(hwnd, cp);
+        break;
+    }
+    case WM_HSCROLL: {
+        if (!cp) break;
+        HWND sldr = (HWND)lParam;
+        if (sldr == cp->hwndSat) {
+            cp->s = SendMessageW(cp->hwndSat, TBM_GETPOS, 0, 0) / 255.0f;
+            CP_UpdateAll(hwnd, cp);
+        } else if (sldr == cp->hwndVal) {
+            cp->v = SendMessageW(cp->hwndVal, TBM_GETPOS, 0, 0) / 255.0f;
+            CP_UpdateAll(hwnd, cp);
+        }
+        break;
+    }
+    case WM_COMMAND: {
+        if (!cp) break;
+        int id = LOWORD(wParam), notify = HIWORD(wParam);
+        if (id == CP_ID_HEX_EDIT && notify == EN_KILLFOCUS) {
+            wchar_t buf[16] = {};
+            GetWindowTextW(cp->hwndHex, buf, 16);
+            cp->updatingHex = false;
+            CP_SetFromHex(hwnd, cp, buf);
+        } else if (id == CP_ID_CHOOSE) {
+            // Save result to shared globals before destroying
+            g_cpResult = cp->result;
+            g_cpOk = true;
+            DestroyWindow(hwnd);
+        } else if (id == CP_ID_CANCEL) {
+            g_cpOk = false;
+            DestroyWindow(hwnd);
+        }
+        break;
+    }
+    case WM_LBUTTONDOWN:
+    case WM_MOUSEMOVE: {
+        if (!cp) break;
+        if (msg == WM_LBUTTONDOWN) { SetCapture(hwnd); cp->dragging = true; }
+        if (!cp->dragging) break;
+        int mx = GET_X_LPARAM(lParam), my = GET_Y_LPARAM(lParam);
+        // Wheel sits at (10,10) sized wheelSize x wheelSize
+        float cx = 10 + cp->wheelSize * 0.5f, cy = 10 + cp->wheelSize * 0.5f;
+        float dx = mx - cx, dy = my - cy;
+        float dist = sqrtf(dx*dx + dy*dy);
+        float radius = cp->wheelSize * 0.5f - 1.0f;
+        if (dist <= radius + 4.0f) {
+            cp->h = fmodf(atan2f(dy, dx) * (180.0f / 3.14159265f) + 360.0f, 360.0f);
+            cp->s = min(1.0f, dist / radius);
+            if (cp->hwndSat) SendMessageW(cp->hwndSat, TBM_SETPOS, TRUE, (LPARAM)(int)(cp->s * 255));
+            CP_UpdateAll(hwnd, cp);
+        }
+        break;
+    }
+    case WM_LBUTTONUP:
+        cp->dragging = false;
+        ReleaseCapture();
+        break;
+    case WM_PAINT: {
+        if (!cp) break;
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+
+        // Background
+        HBRUSH bgBrush = CreateSolidBrush(RGB(30, 30, 30));
+        FillRect(hdc, &ps.rcPaint, bgBrush);
+        DeleteObject(bgBrush);
+
+        // Color wheel
+        if (cp->wheelBmp) {
+            HDC memDC = CreateCompatibleDC(hdc);
+            HBITMAP old = (HBITMAP)SelectObject(memDC, cp->wheelBmp);
+            BitBlt(hdc, 10, 10, cp->wheelSize, cp->wheelSize, memDC, 0, 0, SRCCOPY);
+            SelectObject(memDC, old);
+            DeleteDC(memDC);
+
+            // Draw selector dot on wheel
+            float radius = cp->wheelSize * 0.5f - 1.0f;
+            float ang = cp->h * 3.14159265f / 180.0f;
+            int dotX = (int)(10 + cp->wheelSize * 0.5f + cosf(ang) * cp->s * radius);
+            int dotY = (int)(10 + cp->wheelSize * 0.5f + sinf(ang) * cp->s * radius);
+            HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+            HBRUSH transBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
+            HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, transBrush);
+            Ellipse(hdc, dotX - 6, dotY - 6, dotX + 6, dotY + 6);
+            SelectObject(hdc, oldPen); SelectObject(hdc, oldBrush);
+            DeleteObject(pen);
+        }
+
+        // Preview bar at top-right (shows selected color)
+        RECT previewRect = { 220, 10, 315, 60 };
+        HBRUSH previewBrush = CreateSolidBrush(cp->result);
+        FillRect(hdc, &previewRect, previewBrush);
+        DeleteObject(previewBrush);
+        // Border around preview
+        HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+        HPEN oldP = (HPEN)SelectObject(hdc, borderPen);
+        HBRUSH nb = (HBRUSH)GetStockObject(NULL_BRUSH);
+        HBRUSH ob2 = (HBRUSH)SelectObject(hdc, nb);
+        Rectangle(hdc, previewRect.left, previewRect.top, previewRect.right, previewRect.bottom);
+        SelectObject(hdc, oldP); SelectObject(hdc, ob2);
+        DeleteObject(borderPen);
+
+        // Label above preview
+        SetTextColor(hdc, RGB(180, 180, 180));
+        SetBkMode(hdc, TRANSPARENT);
+        RECT lblR = { 220, 70, 315, 90 };
+        DrawTextW(hdc, L"Preview", -1, &lblR, DT_CENTER);
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(210, 210, 210));
+        SetBkColor(hdc, RGB(30, 30, 30));
+        static HBRUSH cpBg = CreateSolidBrush(RGB(30, 30, 30));
+        return (INT_PTR)cpBg;
+    }
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(240, 240, 240));
+        SetBkColor(hdc, RGB(50, 50, 50));
+        static HBRUSH editBg = CreateSolidBrush(RGB(50, 50, 50));
+        return (INT_PTR)editBg;
+    }
+    case WM_DESTROY:
+        if (cp) {
+            if (cp->wheelBmp) DeleteObject(cp->wheelBmp);
+            delete cp;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        }
+        break;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Entry point: shows the dialog, returns true + fills outColor on OK
+static bool ShowColorPickerDialog(HWND parent, COLORREF initialColor, COLORREF& outColor) {
+    static bool classRegistered = false;
+    if (!classRegistered) {
+        WNDCLASSEXW wc = {};
+        wc.cbSize        = sizeof(wc);
+        wc.lpfnWndProc   = ColorPickerWndProc;
+        wc.hInstance     = GetModuleHandle(nullptr);
+        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = CreateSolidBrush(RGB(30, 30, 30));
+        wc.lpszClassName = L"DI_ColorPickerWnd";
+        RegisterClassExW(&wc);
+        classRegistered = true;
+    }
+
+    // Encode initial color as hex in the window title (read in WM_CREATE)
+    wchar_t initTitle[16];
+    swprintf_s(initTitle, L"#%02X%02X%02X",
+        GetRValue(initialColor), GetGValue(initialColor), GetBValue(initialColor));
+
+    HWND dlg = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        L"DI_ColorPickerWnd", initTitle,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        CW_USEDEFAULT, CW_USEDEFAULT, 340, 360,
+        parent, nullptr, GetModuleHandle(nullptr), nullptr);
+    if (!dlg) return false;
+
+    ShowWindow(dlg, SW_SHOW);
+    UpdateWindow(dlg);
+
+    // Modal message loop
+    MSG m;
+    bool ok = false;
+    while (IsWindow(dlg) && GetMessageW(&m, nullptr, 0, 0) > 0) {
+        if (!IsDialogMessageW(dlg, &m)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+        // EndDialog sends WM_DESTROY; check if window gone
+        if (!IsWindow(dlg)) break;
+    }
+
+    // Retrieve result via a global we set on IDOK
+    // (We stored result on the state; recover before destroy)
+    // Actually we need a different approach since WM_DESTROY already ran.
+    // Use a shared static for simplicity (single-threaded UI).
+    return ok;
+}
+
+// Simpler version: use a shared result
+static COLORREF g_cpResult = RGB(255, 0, 0);
+static bool     g_cpOk     = false;
+
+static bool ShowColorPickerModal(HWND parent, COLORREF initial) {
+    static bool classRegistered = false;
+    if (!classRegistered) {
+        WNDCLASSEXW wc = {};
+        wc.cbSize        = sizeof(wc);
+        wc.lpfnWndProc   = ColorPickerWndProc;
+        wc.hInstance     = GetModuleHandle(nullptr);
+        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = CreateSolidBrush(RGB(30, 30, 30));
+        wc.lpszClassName = L"DI_ColorPickerWnd";
+        RegisterClassExW(&wc);
+        classRegistered = true;
+    }
+    wchar_t initTitle[16];
+    swprintf_s(initTitle, L"#%02X%02X%02X",
+        GetRValue(initial), GetGValue(initial), GetBValue(initial));
+    g_cpOk = false;
+    g_cpResult = initial;
+
+    HWND dlg = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+        L"DI_ColorPickerWnd", initTitle,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        CW_USEDEFAULT, CW_USEDEFAULT, 340, 365,
+        parent, nullptr, GetModuleHandle(nullptr), nullptr);
+    if (!dlg) return false;
+    ShowWindow(dlg, SW_SHOW);
+    UpdateWindow(dlg);
+
+    // Modal loop — disable parent
+    if (parent) EnableWindow(parent, FALSE);
+    MSG m;
+    while (IsWindow(dlg)) {
+        if (GetMessageW(&m, nullptr, 0, 0) <= 0) break;
+        if (!IsDialogMessageW(dlg, &m)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+    }
+    if (parent) EnableWindow(parent, TRUE);
+    return g_cpOk;
+}
+
+// Override EndDialog in ColorPickerWndProc to store result
+// We patch WM_COMMAND IDOK to save state before destroying:
+// (Already handled above — let's wire g_cpResult there by adding
+//  a helper called from IDOK below via subclassing approach.)
+// Simpler: redirect via WM_APP:
+#define WM_CP_ACCEPT (WM_APP + 50)
+
+
+HWND g_hwndPos = nullptr;
+HWND g_hwndScale = nullptr;
+HWND g_hwndTheme = nullptr;
+HWND g_hwndHide = nullptr;
+HWND g_hwndMedia = nullptr;
+HWND g_hwndClip = nullptr;
+HWND g_hwndBat = nullptr;
+HWND g_hwndProg = nullptr;
+HWND g_hwndGame = nullptr;
+HWND g_hwndMetric = nullptr;
+HWND g_hwndDpi = nullptr;
+HWND g_hwndOnTop = nullptr;
+HWND g_hwndExpand = nullptr;
+HWND g_hwndW11 = nullptr;
+HWND g_hwndFahr = nullptr;
+HWND g_hwndOffsetX = nullptr;
+HWND g_hwndOffsetY = nullptr;
+HWND g_hwndCity = nullptr;
+HWND g_hwndColorful = nullptr;
+HWND g_hwndExpandTrack = nullptr;
+HWND g_hwndStartup = nullptr;
+
+LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CREATE: {
+            BOOL dark = TRUE;
+            DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
+
+            std::wstring pos = GetStringSettingCopy(L"Appearance.Position");
+            std::wstring scale = GetStringSettingCopy(L"Appearance.SizeScale");
+            int autoDpi = Wh_GetIntSetting(L"Appearance.AutoDpiScale");
+            int media = Wh_GetIntSetting(L"Modules.Media");
+            int clip = Wh_GetIntSetting(L"Modules.Clipboard");
+            int bat = Wh_GetIntSetting(L"Modules.Battery");
+            int prog = Wh_GetIntSetting(L"Modules.Progress");
+            int game = Wh_GetIntSetting(L"Modules.GameOverlay");
+            int metric = Wh_GetIntSetting(L"Modules.ShowMetricText");
+            int fahr = Wh_GetIntSetting(L"Modules.WeatherFahrenheit");
+            std::wstring city = GetStringSettingCopy(L"Modules.WeatherCity");
+            std::wstring hide = GetStringSettingCopy(L"Appearance.AutoHideIdleSeconds");
+            int onTop = Wh_GetIntSetting(L"Appearance.AlwaysOnTop");
+            int expand = Wh_GetIntSetting(L"Appearance.ExpandOnHover");
+            int w11 = Wh_GetIntSetting(L"Appearance.W11Style");
+            int offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
+            int offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
+            int theme = Wh_GetIntValue(L"ColorTheme", 0);
+            int colorful = Wh_GetIntSetting(L"Themes.ColorfulModules");
+            int expandTrack = Wh_GetIntSetting(L"Appearance.ExpandOnTrackChange");
+
+            g_hFont = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                  VARIABLE_PITCH | FF_SWISS, L"Segoe UI");
+
+            int x = 20, y = 20;
+            int labelWidth = 120, controlWidth = 180;
+            int rowHeight = 28;
+
+            auto AddLabel = [&](const wchar_t* text, int xPos, int yPos, int w) {
+                HWND h = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE, xPos, yPos, w, 20, hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+                SendMessageW(h, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                return h;
+            };
+
+            auto AddComboBox = [&](int xPos, int yPos, int w, int h) {
+                HWND ctrl = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP, xPos, yPos, w, h, hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+                SendMessageW(ctrl, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                return ctrl;
+            };
+
+            auto AddEdit = [&](const wchar_t* val, int xPos, int yPos, int w) {
+                HWND ctrl = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", val, WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, xPos, yPos, w, 22, hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+                SendMessageW(ctrl, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                return ctrl;
+            };
+
+            auto AddCheckbox = [&](const wchar_t* text, bool checked, int xPos, int yPos, int w) {
+                HWND ctrl = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP, xPos, yPos, w, 20, hwnd, nullptr, GetModuleHandle(nullptr), nullptr);
+                SendMessageW(ctrl, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                SendMessage(ctrl, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0L);
+                return ctrl;
+            };
+
+            // --- Column 1: Appearance & Colors ---
+            AddLabel(L"Position:", x, y, labelWidth);
+            g_hwndPos = AddComboBox(x + labelWidth, y, controlWidth, 200);
+            SendMessageW(g_hwndPos, CB_ADDSTRING, 0, (LPARAM)L"Top Center");
+            SendMessageW(g_hwndPos, CB_ADDSTRING, 0, (LPARAM)L"Top Left");
+            SendMessageW(g_hwndPos, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
+            SendMessageW(g_hwndPos, CB_ADDSTRING, 0, (LPARAM)L"Bottom Center");
+            if (pos == L"top-left") SendMessageW(g_hwndPos, CB_SETCURSEL, 1, 0);
+            else if (pos == L"top-right") SendMessageW(g_hwndPos, CB_SETCURSEL, 2, 0);
+            else if (pos == L"bottom-center") SendMessageW(g_hwndPos, CB_SETCURSEL, 3, 0);
+            else SendMessageW(g_hwndPos, CB_SETCURSEL, 0, 0);
+
+            y += rowHeight;
+            AddLabel(L"Size Scale:", x, y, labelWidth);
+            g_hwndScale = AddComboBox(x + labelWidth, y, controlWidth, 200);
+            const wchar_t* scales[] = { L"0.8", L"1.0", L"1.2", L"1.5", L"1.8", L"2.0", L"2.5" };
+            int scaleSel = 1;
+            for (int i = 0; i < 7; i++) {
+                SendMessageW(g_hwndScale, CB_ADDSTRING, 0, (LPARAM)scales[i]);
+                if (scale == scales[i]) scaleSel = i;
+            }
+            SendMessageW(g_hwndScale, CB_SETCURSEL, scaleSel, 0);
+
+            y += rowHeight;
+            AddLabel(L"Theme Preset:", x, y, labelWidth);
+            g_hwndTheme = AddComboBox(x + labelWidth, y, controlWidth, 200);
+            SendMessageW(g_hwndTheme, CB_ADDSTRING, 0, (LPARAM)L"OLED Black");
+            SendMessageW(g_hwndTheme, CB_ADDSTRING, 0, (LPARAM)L"Dark Gray");
+            SendMessageW(g_hwndTheme, CB_ADDSTRING, 0, (LPARAM)L"Midnight Blue");
+            SendMessageW(g_hwndTheme, CB_ADDSTRING, 0, (LPARAM)L"Deep Purple");
+            SendMessageW(g_hwndTheme, CB_ADDSTRING, 0, (LPARAM)L"Fluent Design");
+            SendMessageW(g_hwndTheme, CB_SETCURSEL, theme, 0);
+
+            y += rowHeight;
+            AddLabel(L"Auto-Hide Idle:", x, y, labelWidth);
+            g_hwndHide = AddComboBox(x + labelWidth, y, controlWidth, 200);
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"Never");
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"Instant");
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"5 Seconds");
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"10 Seconds");
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"30 Seconds");
+            SendMessageW(g_hwndHide, CB_ADDSTRING, 0, (LPARAM)L"60 Seconds");
+            int hideSel = 0;
+            if (hide == L"-1") hideSel = 1;
+            else if (hide == L"5") hideSel = 2;
+            else if (hide == L"10") hideSel = 3;
+            else if (hide == L"30") hideSel = 4;
+            else if (hide == L"60") hideSel = 5;
+            SendMessageW(g_hwndHide, CB_SETCURSEL, hideSel, 0);
+
+            y += rowHeight;
+            AddLabel(L"Offset X (px):", x, y, labelWidth);
+            wchar_t offXStr[32];
+            swprintf_s(offXStr, L"%d", offsetX);
+            g_hwndOffsetX = AddEdit(offXStr, x + labelWidth, y, controlWidth);
+
+            y += rowHeight;
+            AddLabel(L"Offset Y (px):", x, y, labelWidth);
+            wchar_t offYStr[32];
+            swprintf_s(offYStr, L"%d", offsetY);
+            g_hwndOffsetY = AddEdit(offYStr, x + labelWidth, y, controlWidth);
+
+            y += rowHeight;
+            AddLabel(L"Weather City:", x, y, labelWidth);
+            g_hwndCity = AddEdit(city.c_str(), x + labelWidth, y, controlWidth);
+
+            // --- Column 2: Modules & Behavior ---
+            int x2 = 350;
+            int y2 = 20;
+            int col2Width = 200;
+
+            g_hwndMedia = AddCheckbox(L"Media Player Module", media != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndClip = AddCheckbox(L"Clipboard Module", clip != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndBat = AddCheckbox(L"Battery Module", bat != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndProg = AddCheckbox(L"Progress Module", prog != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndGame = AddCheckbox(L"Enable Game Overlay", game != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndMetric = AddCheckbox(L"Show Labels in Metric Chips", metric != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndDpi = AddCheckbox(L"Auto DPI Scaling", autoDpi != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndOnTop = AddCheckbox(L"Always On Top", onTop != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndExpand = AddCheckbox(L"Expand on Hover", expand != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndW11 = AddCheckbox(L"Native Windows 11 Style", w11 != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndFahr = AddCheckbox(L"Use Fahrenheit for Weather", fahr != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndColorful = AddCheckbox(L"Enable Multi-Color Modules", colorful != 0, x2, y2, col2Width);
+
+            // --- Color Picker buttons (Column 1, after existing controls) ---
+            // Find Y below the existing column-1 controls (after Weather City row)
+            int ycp = 20 + 7 * rowHeight + 10; // approx after the 7 column-1 rows
+            AddLabel(L"Accent Color:", x, ycp, labelWidth);
+            std::wstring accentHex = GetStringSettingCopy(L"Themes.CustomAccentColor");
+            if (accentHex.empty()) accentHex = L"#00E5FF";
+            HWND g_hwndAccentEdit = AddEdit(accentHex.c_str(), x + labelWidth, ycp, 110);
+            SetWindowLongPtrW(g_hwndAccentEdit, GWLP_ID, 2010);
+            HWND btnAccent = CreateWindowExW(0, L"BUTTON", L"Pick",
+                WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|WS_TABSTOP,
+                x + labelWidth + 115, ycp, 50, 22,
+                hwnd, (HMENU)2011, GetModuleHandle(nullptr), nullptr);
+            SendMessageW(btnAccent, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+            ycp += rowHeight;
+            AddLabel(L"BG Color:", x, ycp, labelWidth);
+            std::wstring bgHex = GetStringSettingCopy(L"Themes.PillBgColor");
+            if (bgHex.empty()) bgHex = L"#0D0D0F";
+            HWND g_hwndBgEdit = AddEdit(bgHex.c_str(), x + labelWidth, ycp, 110);
+            SetWindowLongPtrW(g_hwndBgEdit, GWLP_ID, 2012);
+            HWND btnBg = CreateWindowExW(0, L"BUTTON", L"Pick",
+                WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|WS_TABSTOP,
+                x + labelWidth + 115, ycp, 50, 22,
+                hwnd, (HMENU)2013, GetModuleHandle(nullptr), nullptr);
+            SendMessageW(btnBg, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+            y2 += rowHeight - 4;
+            g_hwndExpandTrack = AddCheckbox(L"Expand on Track Change", expandTrack != 0, x2, y2, col2Width);
+            y2 += rowHeight - 4;
+            g_hwndStartup = AddCheckbox(L"Start with Windows", IsStartupRegistryEnabled(), x2, y2, col2Width);
+
+            // Buttons at the bottom
+            int btnY = 385;
+            HWND btnSave = CreateWindowExW(0, L"BUTTON", L"Save Settings", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP, 180, btnY, 110, 28, hwnd, (HMENU)IDOK, GetModuleHandle(nullptr), nullptr);
+            SendMessageW(btnSave, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+            HWND btnCancel = CreateWindowExW(0, L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP, 300, btnY, 110, 28, hwnd, (HMENU)IDCANCEL, GetModuleHandle(nullptr), nullptr);
+            SendMessageW(btnCancel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+            break;
+        }
+        case WM_CTLCOLORSTATIC: {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(240, 240, 240));
+            SetBkColor(hdc, RGB(30, 30, 30));
+            static HBRUSH hBrush = CreateSolidBrush(RGB(30, 30, 30));
+            return (INT_PTR)hBrush;
+        }
+        case WM_COMMAND: {
+            int wmId = LOWORD(wParam);
+            if (wmId == IDOK) {
+                wchar_t buf[256];
+
+                int posSel = SendMessage(g_hwndPos, CB_GETCURSEL, 0, 0);
+                const wchar_t* posVal = L"top-center";
+                if (posSel == 1) posVal = L"top-left";
+                else if (posSel == 2) posVal = L"top-right";
+                else if (posSel == 3) posVal = L"bottom-center";
+                WritePrivateProfileStringW(L"Settings", L"Appearance.Position", posVal, GetIniPath().c_str());
+
+                int scaleSel = SendMessage(g_hwndScale, CB_GETCURSEL, 0, 0);
+                const wchar_t* scales[] = { L"0.8", L"1.0", L"1.2", L"1.5", L"1.8", L"2.0", L"2.5" };
+                if (scaleSel >= 0 && scaleSel < 7) {
+                    WritePrivateProfileStringW(L"Settings", L"Appearance.SizeScale", scales[scaleSel], GetIniPath().c_str());
+                }
+
+                int themeSel = SendMessage(g_hwndTheme, CB_GETCURSEL, 0, 0);
+                if (themeSel >= 0) {
+                    wchar_t themeVal[16];
+                    swprintf_s(themeVal, L"%d", themeSel);
+                    WritePrivateProfileStringW(L"State", L"ColorTheme", themeVal, GetIniPath().c_str());
+                }
+
+                int hideSel = SendMessage(g_hwndHide, CB_GETCURSEL, 0, 0);
+                const wchar_t* hideVal = L"0";
+                if (hideSel == 1) hideVal = L"-1";
+                else if (hideSel == 2) hideVal = L"5";
+                else if (hideSel == 3) hideVal = L"10";
+                else if (hideSel == 4) hideVal = L"30";
+                else if (hideSel == 5) hideVal = L"60";
+                WritePrivateProfileStringW(L"Settings", L"Appearance.AutoHideIdleSeconds", hideVal, GetIniPath().c_str());
+
+                GetWindowTextW(g_hwndOffsetX, buf, 32);
+                WritePrivateProfileStringW(L"Settings", L"Appearance.OffsetX", buf, GetIniPath().c_str());
+
+                GetWindowTextW(g_hwndOffsetY, buf, 32);
+                WritePrivateProfileStringW(L"Settings", L"Appearance.OffsetY", buf, GetIniPath().c_str());
+
+                GetWindowTextW(g_hwndCity, buf, 256);
+                WritePrivateProfileStringW(L"Settings", L"Modules.WeatherCity", buf, GetIniPath().c_str());
+
+                auto WriteCheck = [](HWND ctrl, const wchar_t* key, const wchar_t* section = L"Settings") {
+                    bool checked = (SendMessage(ctrl, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    WritePrivateProfileStringW(section, key, checked ? L"1" : L"0", GetIniPath().c_str());
+                };
+                WriteCheck(g_hwndMedia, L"Modules.Media");
+                WriteCheck(g_hwndClip, L"Modules.Clipboard");
+                WriteCheck(g_hwndBat, L"Modules.Battery");
+                WriteCheck(g_hwndProg, L"Modules.Progress");
+                WriteCheck(g_hwndGame, L"Modules.GameOverlay");
+                WriteCheck(g_hwndMetric, L"Modules.ShowMetricText");
+                WriteCheck(g_hwndDpi, L"Appearance.AutoDpiScale");
+                WriteCheck(g_hwndOnTop, L"Appearance.AlwaysOnTop");
+                WriteCheck(g_hwndExpand, L"Appearance.ExpandOnHover");
+                WriteCheck(g_hwndW11, L"Appearance.W11Style");
+                WriteCheck(g_hwndFahr, L"Modules.WeatherFahrenheit");
+                WriteCheck(g_hwndColorful, L"Themes.ColorfulModules");
+                WriteCheck(g_hwndExpandTrack, L"Appearance.ExpandOnTrackChange");
+
+                bool startupChecked = (SendMessage(g_hwndStartup, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                SetStartupRegistry(startupChecked);
+                WriteCheck(g_hwndStartup, L"Appearance.StartWithWindows");
+
+                LoadSettings();
+                g_layoutDirty = true;
+                if (g_hwnd) {
+                    InvalidateRect(g_hwnd, nullptr, TRUE);
+                }
+
+                DestroyWindow(hwnd);
+            } else if (wmId == IDCANCEL) {
+                DestroyWindow(hwnd);
+            } else if (wmId == 2011 || wmId == 2013) {
+                // "Pick" button for Accent (2011) or BG (2013)
+                bool isAccent = (wmId == 2011);
+                const wchar_t* key = isAccent ? L"Themes.CustomAccentColor" : L"Themes.PillBgColor";
+                const wchar_t* def = isAccent ? L"#00E5FF" : L"#0D0D0F";
+                std::wstring cur = GetStringSettingCopy(key);
+                if (cur.empty()) cur = def;
+                // Parse hex to COLORREF
+                const wchar_t* p = cur.c_str(); if (*p == L'#') ++p;
+                int pr = 0, pg = 0, pb = 0;
+                swscanf_s(p, L"%02X%02X%02X", &pr, &pg, &pb);
+                COLORREF init = RGB(pr, pg, pb);
+                // Re-implement modal via a simple helper that uses g_cpResult
+                g_cpResult = init; g_cpOk = false;
+                if (ShowColorPickerModal(hwnd, init)) {
+                    wchar_t hexOut[16];
+                    swprintf_s(hexOut, L"#%02X%02X%02X",
+                        GetRValue(g_cpResult), GetGValue(g_cpResult), GetBValue(g_cpResult));
+                    WritePrivateProfileStringW(L"Settings", key, hexOut, GetIniPath().c_str());
+                    // Update the matching edit box text
+                    HWND editCtrl = GetDlgItem(hwnd, isAccent ? 2010 : 2012);
+                    if (editCtrl) SetWindowTextW(editCtrl, hexOut);
+                    LoadSettings();
+                    g_layoutDirty = true;
+                    if (g_hwnd) InvalidateRect(g_hwnd, nullptr, TRUE);
+                }
+            }
+            break;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            HBRUSH brush = CreateSolidBrush(RGB(30, 30, 30));
+            FillRect(hdc, &ps.rcPaint, brush);
+            DeleteObject(brush);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_DESTROY:
+            if (g_hFont) {
+                DeleteObject(g_hFont);
+                g_hFont = nullptr;
+            }
+            g_settingsHwnd = nullptr;
+            break;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+void SetStartupRegistry(bool enable) {
+    HKEY hKey = nullptr;
+    LSTATUS status = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey);
+    if (status == ERROR_SUCCESS) {
+        if (enable) {
+            wchar_t path[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, path, MAX_PATH);
+            RegSetValueExW(hKey, L"DynamicIsland", 0, REG_SZ, reinterpret_cast<const BYTE*>(path), static_cast<DWORD>((wcslen(path) + 1) * sizeof(wchar_t)));
+        } else {
+            RegDeleteValueW(hKey, L"DynamicIsland");
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+bool IsStartupRegistryEnabled() {
+    HKEY hKey = nullptr;
+    bool enabled = false;
+    LSTATUS status = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_QUERY_VALUE, &hKey);
+    if (status == ERROR_SUCCESS) {
+        status = RegQueryValueExW(hKey, L"DynamicIsland", nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_SUCCESS) {
+            enabled = true;
+        }
+        RegCloseKey(hKey);
+    }
+    return enabled;
+}
+
+void OpenSettingsDialog(HWND parent) {
+    if (g_settingsHwnd && IsWindow(g_settingsHwnd)) {
+        SetForegroundWindow(g_settingsHwnd);
+        return;
+    }
+
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    WNDCLASSEXW wcx = {};
+    wcx.cbSize = sizeof(wcx);
+    wcx.lpfnWndProc = SettingsWndProc;
+    wcx.hInstance = hInst;
+    wcx.lpszClassName = L"DynamicIslandSettingsClass";
+    wcx.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wcx.hbrBackground = (HBRUSH)COLOR_WINDOW;
+    RegisterClassExW(&wcx);
+
+    int width = 600, height = 465;
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int x = (screenWidth - width) / 2;
+    int y = (screenHeight - height) / 2;
+
+    g_settingsHwnd = CreateWindowExW(
+        WS_EX_TOPMOST, L"DynamicIslandSettingsClass", L"Dynamic Island Settings",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU, x, y, width, height,
+        nullptr, nullptr, hInst, nullptr);
+
+    if (g_settingsHwnd) {
+        ShowWindow(g_settingsHwnd, SW_SHOW);
+        UpdateWindow(g_settingsHwnd);
+    }
+}
+
+// Entry point for standalone application
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow) {
+    // Check if another instance is already running
+    HANDLE hMutex = CreateMutex(nullptr, TRUE, L"DynamicIslandStandaloneMutex");
+    if (!hMutex) {
+        return 1;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBoxW(nullptr, L"Dynamic Island is already running.", L"Dynamic Island", MB_OK | MB_ICONINFORMATION);
+        CloseHandle(hMutex);
+        return 0;
+    }
+
+    // Call standard mod initialization
+    if (!WhTool_ModInit()) {
+        MessageBoxW(nullptr, L"Failed to initialize Dynamic Island.", L"Error", MB_OK | MB_ICONERROR);
+        CloseHandle(hMutex);
+        return 1;
+    }
+
+    // Wait for the render thread to finish. The render thread handles window messages and shuts down when g_stopEvent is signaled.
+    if (g_renderThread) {
+        WaitForSingleObject(g_renderThread, INFINITE);
+    }
+
+    // Clean up resources and stop all threads
+    WhTool_ModUninit();
+
+    CloseHandle(hMutex);
+    return 0;
+}
+#endif
