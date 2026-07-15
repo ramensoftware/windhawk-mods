@@ -184,7 +184,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
   $description: Displays a glowing aura around your cursor when Gesture Mode is armed.
 
 - ArmTimeout: 3000
-  $name: Gesture Mode Timeout (ms)
+  $name: Armed Timeout (ms)
   $description: How long Gesture Mode stays active after being armed by a Wiggle or Toggle. Set to 0 to disable timeout.
 
 - AllowInFullscreen: false
@@ -624,6 +624,7 @@ struct MonitorBrightnessInfo {
     HANDLE hPhysical;
     DWORD originalBrightness;
     BOOL valid;
+    BOOL opened;
 };
 #define MAX_FLASH_MONITORS 16
 static MonitorBrightnessInfo g_flashMonitors[MAX_FLASH_MONITORS];
@@ -2134,60 +2135,6 @@ LRESULT CALLBACK NoteSelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-BOOL HandleNoteCreationMouse(WPARAM wParam, MSLLHOOKSTRUCT* ms) {
-    if (wParam == WM_LBUTTONDOWN) {
-        g_noteSelStart = ms->pt;
-        g_noteSelCurrent = ms->pt;
-
-        if (!g_noteSelWnd) {
-            WNDCLASS wc = {0};
-            wc.lpfnWndProc = NoteSelWndProc;
-            wc.hInstance = GetModuleHandle(NULL);
-            wc.lpszClassName = NOTE_SEL_CLASS;
-            RegisterClass(&wc);
-
-            g_noteSelWnd = CreateWindowEx(
-                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
-                NOTE_SEL_CLASS, L"",
-                WS_POPUP | WS_VISIBLE,
-                ms->pt.x, ms->pt.y, 0, 0,
-                NULL, NULL, GetModuleHandle(NULL), NULL);
-            SetLayeredWindowAttributes(g_noteSelWnd, RGB(0,0,0), 160, LWA_COLORKEY | LWA_ALPHA);
-        }
-        return TRUE;
-    }
-    else if (wParam == WM_MOUSEMOVE) {
-        if (g_noteSelWnd) {
-            g_noteSelCurrent = ms->pt;
-            int x = (g_noteSelStart.x < g_noteSelCurrent.x) ? g_noteSelStart.x : g_noteSelCurrent.x;
-            int y = (g_noteSelStart.y < g_noteSelCurrent.y) ? g_noteSelStart.y : g_noteSelCurrent.y;
-            int w = abs(g_noteSelStart.x - g_noteSelCurrent.x);
-            int h = abs(g_noteSelStart.y - g_noteSelCurrent.y);
-            MoveWindow(g_noteSelWnd, x, y, w, h, TRUE);
-        }
-        return FALSE; // IMPORTANT: Do not swallow mouse move, let the cursor move!
-    }
-    else if (wParam == WM_LBUTTONUP) {
-        int x = (g_noteSelStart.x < g_noteSelCurrent.x) ? g_noteSelStart.x : g_noteSelCurrent.x;
-        int y = (g_noteSelStart.y < g_noteSelCurrent.y) ? g_noteSelStart.y : g_noteSelCurrent.y;
-        int w = abs(g_noteSelStart.x - g_noteSelCurrent.x);
-        int h = abs(g_noteSelStart.y - g_noteSelCurrent.y);
-
-        if (g_noteSelWnd) {
-            DestroyWindow(g_noteSelWnd);
-            g_noteSelWnd = nullptr;
-        }
-        g_noteCreationMode = FALSE;
-
-        if (w > 50 && h > 50) {
-            if (g_msgWnd) {
-                PostMessage(g_msgWnd, WM_POST_NOTE_CREATION, MAKEWPARAM(x, y), MAKELPARAM(w, h));
-            }
-        }
-        return TRUE;
-    }
-    return TRUE; // Swallow other clicks
-}
 
 DWORD WINAPI EmptyRecycleBinThreadProc(LPVOID lpParam) {
     SHEmptyRecycleBinW(NULL, NULL, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
@@ -2729,12 +2676,14 @@ static BOOL CALLBACK SaveMonitorBrightnessCallback(HMONITOR hMon, HDC, LPRECT, L
     MonitorBrightnessInfo& info = d->infos[*d->count];
     info.hMon = hMon;
     info.valid = FALSE;
+    info.opened = FALSE;
 
     DWORD numPhysical = 0;
     PHYSICAL_MONITOR physMon[1] = {};
     if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMon, &numPhysical) && numPhysical > 0) {
         if (GetPhysicalMonitorsFromHMONITOR(hMon, 1, physMon)) {
             info.hPhysical = physMon[0].hPhysicalMonitor;
+            info.opened = TRUE;
             DWORD minB = 0, curB = 0, maxB = 0;
             if (GetMonitorBrightness(info.hPhysical, &minB, &curB, &maxB)) {
                 info.originalBrightness = curB;
@@ -2757,6 +2706,8 @@ void RestoreMonitorBrightness() {
     for (int i = 0; i < g_flashMonitorCount; i++) {
         if (g_flashMonitors[i].valid) {
             SetMonitorBrightness(g_flashMonitors[i].hPhysical, g_flashMonitors[i].originalBrightness);
+        }
+        if (g_flashMonitors[i].opened) {
             DestroyPhysicalMonitor(g_flashMonitors[i].hPhysical);
         }
     }
@@ -4687,10 +4638,14 @@ void UpdateModifierToggle() {
             if (g_modifierToggleArmed) {
                 POINT pt; GetCursorPos(&pt);
                 if (g_settings.showAura) {
-                    ShowAura(pt);
+                    if (g_msgWnd) {
+                        PostMessage(g_msgWnd, WM_HOOK_SHOW_AURA, 0, MAKELPARAM(pt.x, pt.y));
+                    }
                 }
             } else {
-                HideAura();
+                if (g_msgWnd) {
+                    PostMessage(g_msgWnd, WM_HOOK_HIDE_AURA, 0, 0);
+                }
             }
         }
     }
@@ -5868,6 +5823,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
     UnregisterClass(PICKER_CLASS, GetModuleHandle(NULL));
     UnregisterClass(AURA_CLASS, GetModuleHandle(NULL));
     UnregisterClass(TOAST_CLASS, GetModuleHandle(NULL));
+    UnregisterClass(L"MagicMouseSpotlight", GetModuleHandle(NULL));
+    UnregisterClass(NOTE_SEL_CLASS, GetModuleHandle(NULL));
 
     UnregisterClass(STOPWATCH_CLASS, GetModuleHandle(NULL));
     UnregisterClass(TIMER_CLASS, GetModuleHandle(NULL));
@@ -5967,11 +5924,13 @@ void LoadSettings() {
         g_settings.enableWiggle = WIGGLE_NEVER;
     }
     g_settings.wiggleStrength = Wh_GetIntSetting(L"WiggleStrength");
-    if (g_settings.wiggleStrength < 2) g_settings.wiggleStrength = 2;
+    if (g_settings.wiggleStrength < 10) g_settings.wiggleStrength = 10;
     if (g_settings.wiggleStrength > 200) g_settings.wiggleStrength = 200;
 
-    g_settings.matchThreshold = (double)Wh_GetIntSetting(L"GestureSensitivity");
-    if (g_settings.matchThreshold <= 0.0) g_settings.matchThreshold = 12.5;
+    int sens = Wh_GetIntSetting(L"GestureSensitivity");
+    if (sens < 8) sens = 8;
+    if (sens > 20) sens = 20;
+    g_settings.matchThreshold = (double)sens;
 
     g_settings.minGestureDistance = 60;
 
