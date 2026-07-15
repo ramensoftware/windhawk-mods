@@ -6,7 +6,7 @@
 // @author          iMAboud
 // @github          https://github.com/iMAboud
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -ldwmapi -luxtheme -lgdiplus
+// @compilerOptions -luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -luxtheme -lgdiplus -ldxva2
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -52,18 +52,21 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 
 ## Supported Actions
 
-| Actions | | |
-| :--- | :--- | :--- |
-| **Launch App / URL** | **Run Command Line** | **Send Keyboard Shortcut** |
-| **Task Manager** | **Windows Settings** | **Admin Terminal Here** |
-| **Mute / Unmute Volume** | **Play / Pause Media** | **Next / Prev Track** |
-| **Toggle Always-on-Top** | **Create Sticky Note** | **Search Selection** |
-| **Trigger Spotlight** | **Toggle Draw Mode** | **Color Picker** |
-| **Toggle Desktop Icons** | **Fullscreen** | **Maximize Window** |
-| **Minimize Window** | **Close Window** | **Show Desktop** |
-| **Lock Computer** | **Sleep Computer** | **Restart / Shutdown** |
-| **Explorer Back / Forward** | **Snap Left / Right** | **Snap Top / Bottom** |
-| **Snap Corners** | | |
+| Action | Parameter? | Description & Example Usage |
+| :--- | :---: | :--- |
+| **Launch App / URL** | Yes | Launches a file, program, folder, or website. (e.g. `notepad.exe`, `D:\MyFolder`, or `https://google.com`) |
+| **Run Command Line** | Yes | Executes a CMD/PowerShell command silently. (e.g. `shutdown /s /t 0`) |
+| **Send Keyboard Shortcut** | Yes | Simulates keystrokes. Use standard keys separated by `+`. (e.g. `ctrl+shift+esc` or `win+d`) |
+| **Admin Terminal Here** | Optional | Opens PowerShell as Administrator in the current Explorer folder. Parameter: Optional command to execute. |
+| **Take Screenshot** | Optional | Captures the monitor under your cursor. Copies to clipboard and saves to file. Parameter: custom save folder (defaults to `Pictures`). |
+| **Window Controls** | No | `Maximize`, `Minimize`, `Close`, `Fullscreen`, `Toggle Always-on-Top` for the active window. |
+| **Window Snapping** | No | Snaps the active window `Left`, `Right`, `Top`, `Bottom`, or to any of the 4 corners. |
+| **Media Controls** | No | `Play / Pause`, `Next Track`, `Prev Track`, `Mute / Unmute Volume`. |
+| **System Controls** | No | `Lock PC`, `Sleep Monitor`, `Sleep PC`, `Restart`, `Shut Down`, `Empty Recycle Bin`, `Show Desktop`, `Task Manager`, `Settings`. |
+| **Utilities** | No | `Stopwatch`, `Timer`, `Flash (Flashlight)`, `Next Virtual Desktop`. |
+| **Explorer Navigation** | No | `Explorer Back` and `Explorer Forward` to navigate folders. |
+| **Special Tools** | No | `Create Sticky Note`, `Search Selection`, `Trigger Spotlight`, `Toggle Draw Mode`, `Color Picker`. |
+
 
 ## Special Features
 
@@ -83,6 +86,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
   ![Spotlight Feature](https://i.imgur.com/aFt2jvq.gif)
 
 * **Toggle Draw Mode & Color Picker**: You can assign actions to draw freely on your screen or pick a color. To exit these modes, simply press the `ESC` key. (You can also press `ESC` to close the Gesture Recording Canvas).
+* **Take Screenshot**: Takes a full-quality screenshot of the specific monitor your cursor is currently hovering over. The image is instantly copied to your clipboard. It is also saved as a PNG file. By default, it saves to your user `Pictures` folder. You can customize this by entering a specific folder path (e.g., `C:\Screenshots`) into the Action Parameter field!
 
 ## Additional Settings
 
@@ -235,15 +239,22 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
       - close: ❌ Close Window
       - show_desktop: 👁️ Show Desktop
       - lock: 🔒 Lock PC
+      - sleep_monitor: 🖥️ Sleep Monitor
       - sleep: 🌙 Sleep PC
       - restart: 🔄 Restart PC
       - shutdown: ⏻ Shut Down PC
+      - empty_recycle_bin: 🗑️ Empty Recycle Bin
       - create_note: 📝 Create Sticky Note
       - search_selection: 🔍 Search Selection
+      - screenshot: 📸 Take Screenshot
       - spotlight: 🔦 Trigger Spotlight
       - admin_terminal: ⚡ Admin Terminal Here
       - explorer_back: ⬅️ Explorer Back
       - explorer_forward: ➡️ Explorer Forward
+      - stopwatch: ⏱️ Stopwatch
+      - timer: ⏲️ Timer
+      - flash: 💡 Flash (Flashlight)
+      - next_virtual_desktop: 🖥️ Next Virtual Desktop
       - snap_top_left: ↖️ Snap to Top-Left
       - snap_top_right: ↗️ Snap to Top-Right
       - snap_bottom_left: ↙️ Snap to Bottom-Left
@@ -282,15 +293,22 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
           - close: ❌ Close Window
           - show_desktop: 👁️🗨️ Show Desktop
           - lock: 🔒 Lock PC
+          - sleep_monitor: 🖥️ Sleep Monitor
           - sleep: 🌙 Sleep PC
           - restart: 🔄 Restart PC
           - shutdown: ⏻ Shut Down PC
+          - empty_recycle_bin: 🗑️ Empty Recycle Bin
           - create_note: 📝 Create Sticky Note
           - search_selection: 🔍 Search Selection
+          - screenshot: 📸 Take Screenshot
           - spotlight: 🔦 Trigger Spotlight
           - admin_terminal: ⚡ Admin Terminal Here
           - explorer_back: ⬅️ Explorer Back
           - explorer_forward: ➡️ Explorer Forward
+          - stopwatch: ⏱️ Stopwatch
+          - timer: ⏲️ Timer
+          - flash: 💡 Flash (Flashlight)
+          - next_virtual_desktop: 🖥️ Next Virtual Desktop
           - snap_top_left: ↖️ Snap to Top-Left
           - snap_top_right: ↗️ Snap to Top-Right
           - snap_bottom_left: ↙️ Snap to Bottom-Left
@@ -309,7 +327,7 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <dwmapi.h>
+#include <atomic>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <exdisp.h>
@@ -321,11 +339,10 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 #include <gdiplus.h>
 #include <windowsx.h>
 #include <uxtheme.h>
+#include <highlevelmonitorconfigurationapi.h>
+#include <physicalmonitorenumerationapi.h>
 
-#ifndef DWMWA_BORDER_COLOR
-#define DWMWA_BORDER_COLOR 34
-#define DWMWA_COLOR_DEFAULT 0xFFFFFFFF
-#endif
+
 
 #ifndef WM_XBUTTONDOWN
 #define WM_XBUTTONDOWN 0x020B
@@ -340,6 +357,13 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
 #define GET_XBUTTON_WPARAM(wParam) (HIWORD(wParam))
 #endif
 #define WM_EXECUTE_ACTION (WM_APP + 101)
+#define WM_POST_NOTE_CREATION (WM_APP + 102)
+#define WM_HOOK_TOGGLE_DRAW (WM_APP + 103)
+#define WM_HOOK_START_PICKER (WM_APP + 104)
+#define WM_HOOK_START_SPOTLIGHT (WM_APP + 105)
+#define WM_HOOK_TOGGLE_STOPWATCH (WM_APP + 106)
+#define WM_HOOK_TOGGLE_TIMER (WM_APP + 107)
+#define WM_HOOK_TOGGLE_FLASH (WM_APP + 108)
 static const int MAX_HEX_CODE = 512;
 
 static const int MAX_GESTURES = 64;
@@ -363,9 +387,11 @@ enum GestureAction {
     ACTION_CLOSE,
     ACTION_SHOW_DESKTOP,
     ACTION_LOCK,
+    ACTION_SLEEP_MONITOR,
     ACTION_SLEEP,
     ACTION_RESTART,
     ACTION_SHUTDOWN,
+    ACTION_EMPTY_RECYCLE_BIN,
     ACTION_SNAP_TOP_LEFT,
     ACTION_SNAP_TOP_RIGHT,
     ACTION_SNAP_BOTTOM_LEFT,
@@ -382,7 +408,12 @@ enum GestureAction {
     ACTION_SPOTLIGHT,
     ACTION_ADMIN_TERMINAL,
     ACTION_EXPLORER_BACK,
-    ACTION_EXPLORER_FORWARD
+    ACTION_EXPLORER_FORWARD,
+    ACTION_SCREENSHOT,
+    ACTION_STOPWATCH,
+    ACTION_TIMER,
+    ACTION_FLASH,
+    ACTION_NEXT_VIRTUAL_DESKTOP
 };
 
 enum ModifierType {
@@ -436,7 +467,6 @@ struct Settings {
     DrawButtonType drawButton;
     COLORREF trailColor;
     int trailWidth;
-    BOOL enableParticles;
     int armTimeout;
     EnableWiggleType enableWiggle;
     int wiggleStrength;
@@ -446,7 +476,6 @@ struct Settings {
     wchar_t fullscreenIncludeList[1024];
     wchar_t fullscreenExcludeList[1024];
     bool showAura;
-    BOOL blockOtherClicks;
     double matchThreshold;
     int minGestureDistance;
     wchar_t searchEngineUrl[512];
@@ -459,9 +488,11 @@ static HHOOK g_mouseHook = nullptr;
 static HHOOK g_keyboardHook = nullptr;
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
+static HANDLE g_workerThread = nullptr;
+static DWORD g_workerThreadId = 0;
 static HANDLE g_notesThread = nullptr;
 static DWORD g_notesThreadId = 0;
-static volatile BOOL g_running = FALSE;
+static std::atomic<bool> g_running{false};
 
 static BOOL g_gestureActive = FALSE;
 static POINT g_points[MAX_POINTS];
@@ -534,6 +565,8 @@ static BOOL g_drawDrawing = FALSE;
 static BOOL g_drawModeActive = FALSE;
 static HWND g_drawModeWnd = nullptr;
 static Gdiplus::Color g_drawColor = Gdiplus::Color(255, 0, 170, 255);
+static Gdiplus::Color g_drawSavedColor = Gdiplus::Color(0, 0, 0, 0);
+static BOOL g_drawEraserMode = FALSE;
 static float g_drawWidth = 5.0f;
 static BOOL g_paletteVisible = FALSE;
 static float g_paletteY = -60.0f;
@@ -549,7 +582,40 @@ static const wchar_t PICKER_CLASS[] = L"WindhawkGestureColorPicker";
 static const wchar_t MSG_WND_CLASS[] = L"WindhawkGestureMsgWnd";
 static const wchar_t AURA_CLASS[] = L"WindhawkGestureAura";
 static const wchar_t TOAST_CLASS[] = L"WindhawkGestureToast";
+static const wchar_t STOPWATCH_CLASS[] = L"MagicMouseStopwatch";
+static const wchar_t TIMER_CLASS[] = L"MagicMouseTimer";
+static const wchar_t FLASH_CLASS[] = L"MagicMouseFlash";
 static HWND g_msgWnd = nullptr;
+
+static HWND g_stopwatchWnd = nullptr;
+static BOOL g_stopwatchRunning = FALSE;
+static LARGE_INTEGER g_stopwatchStart = {};
+static LARGE_INTEGER g_stopwatchAccum = {};
+static LARGE_INTEGER g_perfFreq = {};
+
+static HWND g_timerWnd = nullptr;
+static BOOL g_timerRunning = FALSE;
+static int g_timerRemainingMs = 0;
+static DWORD g_timerLastTick = 0;
+static int g_timerPresets[3] = { 300, 600, 900 };
+static int g_timerSelectedPreset = -1;
+static int g_timerShakeState = 0;
+static DWORD g_timerShakeStart = 0;
+static float g_timerGlowPhase = 0.0f;
+static BOOL g_timerEditMode = FALSE;
+static int g_timerEditIndex = -1;
+static wchar_t g_timerEditBuf[16] = {};
+
+static HWND g_flashWnd = nullptr;
+struct MonitorBrightnessInfo {
+    HMONITOR hMon;
+    HANDLE hPhysical;
+    DWORD originalBrightness;
+    BOOL valid;
+};
+#define MAX_FLASH_MONITORS 16
+static MonitorBrightnessInfo g_flashMonitors[MAX_FLASH_MONITORS];
+static int g_flashMonitorCount = 0;
 
 static HWND g_toastWnd = nullptr;
 static DWORD g_toastStartTick = 0;
@@ -572,6 +638,9 @@ void UpdateParticles();
 void ShowCanvas();
 void HideCanvas();
 void ShowToast(const wchar_t* text, BOOL isSuccess, POINT pt);
+void ToggleStopwatch();
+void ToggleTimer();
+void ToggleFlash();
 
 static HFONT g_uiFont = nullptr;
 
@@ -680,9 +749,11 @@ GestureAction ParseAction(const wchar_t* str) {
     if (wcscmp(buf, L"close") == 0) return ACTION_CLOSE;
     if (wcscmp(buf, L"show_desktop") == 0) return ACTION_SHOW_DESKTOP;
     if (wcscmp(buf, L"lock") == 0) return ACTION_LOCK;
+    if (wcscmp(buf, L"sleep_monitor") == 0) return ACTION_SLEEP_MONITOR;
     if (wcscmp(buf, L"sleep") == 0) return ACTION_SLEEP;
     if (wcscmp(buf, L"restart") == 0) return ACTION_RESTART;
     if (wcscmp(buf, L"shutdown") == 0) return ACTION_SHUTDOWN;
+    if (wcscmp(buf, L"empty_recycle_bin") == 0) return ACTION_EMPTY_RECYCLE_BIN;
     if (wcscmp(buf, L"snap_top_left") == 0) return ACTION_SNAP_TOP_LEFT;
     if (wcscmp(buf, L"snap_top_right") == 0) return ACTION_SNAP_TOP_RIGHT;
     if (wcscmp(buf, L"snap_bottom_left") == 0) return ACTION_SNAP_BOTTOM_LEFT;
@@ -700,6 +771,11 @@ GestureAction ParseAction(const wchar_t* str) {
     if (wcscmp(buf, L"admin_terminal") == 0) return ACTION_ADMIN_TERMINAL;
     if (wcscmp(buf, L"explorer_back") == 0) return ACTION_EXPLORER_BACK;
     if (wcscmp(buf, L"explorer_forward") == 0) return ACTION_EXPLORER_FORWARD;
+    if (wcscmp(buf, L"screenshot") == 0) return ACTION_SCREENSHOT;
+    if (wcscmp(buf, L"stopwatch") == 0) return ACTION_STOPWATCH;
+    if (wcscmp(buf, L"timer") == 0) return ACTION_TIMER;
+    if (wcscmp(buf, L"flash") == 0) return ACTION_FLASH;
+    if (wcscmp(buf, L"next_virtual_desktop") == 0) return ACTION_NEXT_VIRTUAL_DESKTOP;
     return ACTION_NONE;
 }
 
@@ -820,26 +896,8 @@ std::wstring UrlEncode(const std::wstring& value) {
 std::wstring GetSelectedText() {
     std::wstring selectedText = L"";
 
-    HGLOBAL hSaved = NULL;
-    if (OpenClipboard(NULL)) {
-        HANDLE hOld = GetClipboardData(CF_UNICODETEXT);
-        if (hOld) {
-            wchar_t* pOld = static_cast<wchar_t*>(GlobalLock(hOld));
-            if (pOld) {
-                size_t len = wcslen(pOld) + 1;
-                hSaved = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
-                if (hSaved) {
-                    wchar_t* pSaved = static_cast<wchar_t*>(GlobalLock(hSaved));
-                    if (pSaved) {
-                        memcpy(pSaved, pOld, len * sizeof(wchar_t));
-                        GlobalUnlock(hSaved);
-                    }
-                }
-                GlobalUnlock(hOld);
-            }
-        }
-        CloseClipboard();
-    }
+    IDataObject* pDataObj = nullptr;
+    HRESULT hrOle = OleGetClipboard(&pDataObj);
 
     INPUT inputs[4] = {};
     inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_CONTROL;
@@ -851,25 +909,212 @@ std::wstring GetSelectedText() {
     Sleep(100);
 
     if (OpenClipboard(NULL)) {
-        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-        if (hData) {
-            wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
-            if (pszText) {
-                selectedText = pszText;
-                GlobalUnlock(hData);
+        HANDLE hDrop = GetClipboardData(CF_HDROP);
+        if (hDrop) {
+            HDROP hDropInfo = (HDROP)hDrop;
+            UINT fileCount = DragQueryFileW(hDropInfo, 0xFFFFFFFF, NULL, 0);
+            if (fileCount > 0) {
+                wchar_t filePath[MAX_PATH];
+                if (DragQueryFileW(hDropInfo, 0, filePath, MAX_PATH)) {
+                    selectedText = filePath;
+                }
             }
         }
-
-        if (hSaved) {
-            EmptyClipboard();
-            SetClipboardData(CF_UNICODETEXT, hSaved);
-            hSaved = NULL;
+        
+        if (selectedText.empty()) {
+            HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+            if (hData) {
+                wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
+                if (pszText) {
+                    selectedText = pszText;
+                    GlobalUnlock(hData);
+                }
+            }
         }
         CloseClipboard();
-    } else {
-        if (hSaved) GlobalFree(hSaved);
     }
+
+    if (SUCCEEDED(hrOle) && pDataObj) {
+        OleSetClipboard(pDataObj);
+        OleFlushClipboard();
+        pDataObj->Release();
+    }
+
     return selectedText;
+}
+
+std::wstring Base64Encode(const BYTE* data, size_t len) {
+    const char* cb64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::wstring result;
+    for (size_t i = 0; i < len; i += 3) {
+        BYTE b1 = data[i];
+        BYTE b2 = (i + 1 < len) ? data[i + 1] : 0;
+        BYTE b3 = (i + 2 < len) ? data[i + 2] : 0;
+        
+        result += cb64[b1 >> 2];
+        result += cb64[((b1 & 0x03) << 4) | (b2 >> 4)];
+        if (i + 1 < len) {
+            result += cb64[((b2 & 0x0F) << 2) | (b3 >> 6)];
+        } else {
+            result += L'=';
+        }
+        if (i + 2 < len) {
+            result += cb64[b3 & 0x3F];
+        } else {
+            result += L'=';
+        }
+    }
+    return result;
+}
+
+bool IsImageFile(const std::wstring& path) {
+    DWORD attr = GetFileAttributes(path.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+        return false;
+    }
+    size_t dotPos = path.find_last_of(L'.');
+    if (dotPos == std::wstring::npos) return false;
+    std::wstring ext = path.substr(dotPos);
+    for (auto& c : ext) c = towlower(c);
+    return (ext == L".png" || ext == L".jpg" || ext == L".jpeg" || 
+            ext == L".gif" || ext == L".bmp" || ext == L".webp");
+}
+
+void SearchImage(const std::wstring& filePath) {
+    std::wstring escapedPath;
+    for (wchar_t c : filePath) {
+        if (c == L'\'') {
+            escapedPath += L"''";
+        } else {
+            escapedPath += c;
+        }
+    }
+    
+    std::wstring script = 
+        L"$filePath = '" + escapedPath + L"'; "
+        L"$res = curl.exe -s -F \"file=@$filePath\" https://tmpfiles.org/api/v1/upload; "
+        L"$j = $res | ConvertFrom-Json; "
+        L"if ($j.status -eq 'success') { "
+        L"  $url = $j.data.url.Replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/'); "
+        L"  Start-Process ('https://lens.google.com/uploadbyurl?url=' + [uri]::EscapeDataString($url)); "
+        L"}";
+        
+    std::wstring b64 = Base64Encode((const BYTE*)script.c_str(), script.length() * sizeof(wchar_t));
+    std::wstring args = L"-NoProfile -WindowStyle Hidden -EncodedCommand " + b64;
+    ShellExecuteW(NULL, L"open", L"powershell.exe", args.c_str(), NULL, SW_HIDE);
+}
+
+int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
+    UINT num = 0, size = 0;
+    Gdiplus::GetImageEncodersSize(&num, &size);
+    if (size == 0) return -1;
+    Gdiplus::ImageCodecInfo* pImageCodecInfo = (Gdiplus::ImageCodecInfo*)(malloc(size));
+    if (pImageCodecInfo == NULL) return -1;
+    Gdiplus::GetImageEncoders(num, size, pImageCodecInfo);
+    for (UINT j = 0; j < num; ++j) {
+        if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
+            *pClsid = pImageCodecInfo[j].Clsid;
+            free(pImageCodecInfo);
+            return j;
+        }
+    }
+    free(pImageCodecInfo);
+    return -1;
+}
+
+void TakeScreenshot(const std::wstring& customPath) {
+    POINT pt;
+    GetCursorPos(&pt);
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMon, &mi);
+    
+    extern HWND g_overlayWnd;
+    extern HWND g_auraWnd;
+    if (g_overlayWnd) ShowWindow(g_overlayWnd, SW_HIDE);
+    if (g_auraWnd) ShowWindow(g_auraWnd, SW_HIDE);
+    
+    Sleep(150);
+    
+    int width = mi.rcMonitor.right - mi.rcMonitor.left;
+    int height = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
+    HGDIOBJ hOld = SelectObject(hdcMem, hBitmap);
+    BitBlt(hdcMem, 0, 0, width, height, hdcScreen, mi.rcMonitor.left, mi.rcMonitor.top, SRCCOPY);
+    SelectObject(hdcMem, hOld);
+    
+    HDC hdcCopy = CreateCompatibleDC(hdcScreen);
+    HBITMAP hClipBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
+    HGDIOBJ hOldCopy = SelectObject(hdcCopy, hClipBitmap);
+    HDC hdcSrc = CreateCompatibleDC(hdcScreen);
+    HGDIOBJ hOldSrc = SelectObject(hdcSrc, hBitmap);
+    BitBlt(hdcCopy, 0, 0, width, height, hdcSrc, 0, 0, SRCCOPY);
+    SelectObject(hdcSrc, hOldSrc);
+    SelectObject(hdcCopy, hOldCopy);
+    DeleteDC(hdcSrc);
+    DeleteDC(hdcCopy);
+    
+    std::wstring outPath;
+    Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(hBitmap, NULL);
+    CLSID pngClsid;
+    if (GetEncoderClsid(L"image/png", &pngClsid) != -1) {
+        outPath = customPath;
+        if (outPath.empty()) {
+            PWSTR picturesPath = NULL;
+            if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, 0, NULL, &picturesPath))) {
+                outPath = picturesPath;
+                CoTaskMemFree(picturesPath);
+            } else {
+                outPath = L"C:\\"; 
+            }
+        }
+        
+        if (!outPath.empty() && outPath.back() != L'\\' && outPath.back() != L'/') outPath += L"\\";
+        
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        wchar_t filename[128];
+        swprintf_s(filename, L"Screenshot_%04d%02d%02d_%02d%02d%02d.png", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        outPath += filename;
+        
+        bmp->Save(outPath.c_str(), &pngClsid, NULL);
+    }
+    delete bmp;
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    
+    HGLOBAL hDrop = NULL;
+    if (!outPath.empty()) {
+        size_t pathLen = (outPath.length() + 2) * sizeof(wchar_t);
+        hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DROPFILES) + pathLen);
+        if (hDrop) {
+            DROPFILES* pdf = (DROPFILES*)GlobalLock(hDrop);
+            pdf->pFiles = sizeof(DROPFILES);
+            pdf->fWide = TRUE;
+            wchar_t* pDst = (wchar_t*)((BYTE*)pdf + sizeof(DROPFILES));
+            wcscpy_s(pDst, outPath.length() + 1, outPath.c_str());
+            GlobalUnlock(hDrop);
+        }
+    }
+    
+    for (int retry = 0; retry < 10; ++retry) {
+        if (OpenClipboard(GetForegroundWindow())) {
+            EmptyClipboard();
+            SetClipboardData(CF_BITMAP, hClipBitmap);
+            if (hDrop) {
+                SetClipboardData(CF_HDROP, hDrop);
+            }
+            CloseClipboard();
+            return;
+        }
+        Sleep(50);
+    }
+    DeleteObject(hClipBitmap);
+    if (hDrop) GlobalFree(hDrop);
 }
 
 void GetForegroundProcessName(HWND hwnd, wchar_t* outName, DWORD maxLen);
@@ -1117,9 +1362,11 @@ void ToggleFullscreen(HWND fg) {
         WINDOWPLACEMENT wp = { sizeof(wp) };
         GetWindowPlacement(fg, &wp);
         if (wp.showCmd == SW_SHOWMAXIMIZED) {
-            SendMessage(fg, WM_SYSCOMMAND, SC_RESTORE, 0);
+            DWORD_PTR dwResult;
+            SendMessageTimeout(fg, WM_SYSCOMMAND, SC_RESTORE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
         } else {
-            SendMessage(fg, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+            DWORD_PTR dwResult;
+            SendMessageTimeout(fg, WM_SYSCOMMAND, SC_MAXIMIZE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
         }
     }
 }
@@ -1414,15 +1661,31 @@ LRESULT CALLBACK NoteWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             EndPaint(hwnd, &ps);
             return 0;
         }
+        case WM_DESTROY: {
+            HBRUSH hbr = (HBRUSH)GetProp(hwnd, L"NoteBgBrush");
+            if (hbr) {
+                DeleteObject(hbr);
+                RemoveProp(hwnd, L"NoteBgBrush");
+            }
+            RemoveProp(hwnd, L"NoteBgBrushColor");
+            break;
+        }
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLOREDIT: {
             if (note) {
                 SetTextColor((HDC)wParam, RGB(255, 255, 255));
                 SetBkColor((HDC)wParam, note->color);
-                static HBRUSH s_br = NULL;
-                if (s_br) DeleteObject(s_br);
-                s_br = CreateSolidBrush(note->color);
-                return (LRESULT)s_br;
+                HBRUSH hbr = (HBRUSH)GetProp(hwnd, L"NoteBgBrush");
+                COLORREF lastColor = (COLORREF)(UINT_PTR)GetProp(hwnd, L"NoteBgBrushColor");
+                if (!hbr || lastColor != note->color) {
+                    if (hbr) {
+                        DeleteObject(hbr);
+                    }
+                    hbr = CreateSolidBrush(note->color);
+                    SetProp(hwnd, L"NoteBgBrush", hbr);
+                    SetProp(hwnd, L"NoteBgBrushColor", (HANDLE)(UINT_PTR)note->color);
+                }
+                return (LRESULT)hbr;
             }
             break;
         }
@@ -1613,21 +1876,7 @@ void LoadNotes() {
     }
     free(buffer);
 }
-void SpawnSavedNotes() {
-    LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    WNDCLASS wc = {0};
-    wc.lpfnWndProc = NoteWndProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = NOTE_CLASS;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    RegisterClass(&wc);
-
-    LoadNotes();
-    for (int i = 0; i < g_noteCount; i++) {
-        CreateNoteWindow(&g_notes[i]);
-    }
-}
 
 LRESULT CALLBACK MainMsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_USER + 105) {
@@ -1688,6 +1937,8 @@ DWORD WINAPI RunNotesProcess(LPVOID lpParam) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    SaveNotes();
 
     for (int i = 0; i < g_noteCount; i++) {
         if (g_notes[i].hwnd) {
@@ -1972,22 +2223,691 @@ BOOL HandleNoteCreationMouse(WPARAM wParam, MSLLHOOKSTRUCT* ms) {
         g_noteCreationMode = FALSE;
 
         if (w > 50 && h > 50) {
-            HWND hwndNotesMsg = g_mainMsgWnd;
-            if (!hwndNotesMsg) {
-                LaunchNotesProcess();
-                for (int i = 0; i < 20; i++) {
-                    Sleep(50);
-                    hwndNotesMsg = g_mainMsgWnd;
-                    if (hwndNotesMsg) break;
-                }
-            }
-            if (hwndNotesMsg) {
-                PostMessage(hwndNotesMsg, WM_USER + 105, MAKEWPARAM(x, y), MAKELPARAM(w, h));
+            if (g_msgWnd) {
+                PostMessage(g_msgWnd, WM_POST_NOTE_CREATION, MAKEWPARAM(x, y), MAKELPARAM(w, h));
             }
         }
         return TRUE;
     }
     return TRUE; // Swallow other clicks
+}
+
+DWORD WINAPI EmptyRecycleBinThreadProc(LPVOID lpParam) {
+    SHEmptyRecycleBinW(NULL, NULL, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+    return 0;
+}
+
+enum ACCENT_STATE {
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_GRADIENT = 1,
+    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+    ACCENT_ENABLE_BLURBEHIND = 3,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    ACCENT_INVALID_STATE = 5
+};
+struct ACCENT_POLICY {
+    ACCENT_STATE AccentState;
+    DWORD AccentFlags;
+    DWORD GradientColor;
+    DWORD AnimationId;
+};
+enum WINDOWCOMPOSITIONATTRIB {
+    WCA_ACCENT_POLICY = 19
+};
+struct WINDOWCOMPOSITIONATTRIBDATA {
+    WINDOWCOMPOSITIONATTRIB Attrib;
+    PVOID pvData;
+    SIZE_T cbData;
+};
+
+void EnableAcrylicBlur(HWND hwnd) {
+    HMODULE hUser = GetModuleHandle(L"user32.dll");
+    if (hUser) {
+        typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
+        pSetWindowCompositionAttribute SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute");
+        if (SetWindowCompositionAttribute) {
+            ACCENT_POLICY policy = {};
+            policy.AccentState = ACCENT_ENABLE_BLURBEHIND; // Respects per-pixel alpha on UpdateLayeredWindow
+
+            WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(ACCENT_POLICY) };
+            SetWindowCompositionAttribute(hwnd, &data);
+        }
+    }
+}
+
+// ============================================================================
+// STOPWATCH
+// ============================================================================
+
+static const int SW_PILL_W = 180;
+static const int SW_PILL_H = 46;
+static const int SW_BTN_RADIUS = 14;
+
+void PaintStopwatchPill(HWND hwnd) {
+    int w = SW_PILL_W;
+    int h = SW_PILL_H;
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    DWORD* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, (void**)&bits, NULL, 0);
+    HBITMAP oldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+    Gdiplus::Graphics gfx(hdcMem);
+    gfx.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+
+    gfx.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    Gdiplus::GraphicsPath pillPath;
+    int radius = h / 2;
+    pillPath.AddArc(0, 0, h, h, 90, 180);
+    pillPath.AddArc(w - h, 0, h, h, 270, 180);
+    pillPath.CloseFigure();
+
+    Gdiplus::SolidBrush bgBrush(Gdiplus::Color(210, 20, 20, 30));
+    gfx.FillPath(&bgBrush, &pillPath);
+
+
+
+    double elapsedSec = 0.0;
+    if (g_stopwatchRunning) {
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        elapsedSec = (double)(g_stopwatchAccum.QuadPart + (now.QuadPart - g_stopwatchStart.QuadPart)) / (double)g_perfFreq.QuadPart;
+    } else {
+        elapsedSec = (double)g_stopwatchAccum.QuadPart / (double)g_perfFreq.QuadPart;
+    }
+    if (elapsedSec < 0) elapsedSec = 0;
+
+    int mins = (int)(elapsedSec / 60.0);
+    int secs = (int)fmod(elapsedSec, 60.0);
+    int tenths = (int)(fmod(elapsedSec * 10.0, 10.0));
+
+    wchar_t timeStr[32];
+    swprintf_s(timeStr, L"%02d:%02d.%d", mins, secs, tenths);
+
+    Gdiplus::FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font font(&fontFamily, 24, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 240, 240, 245));
+
+    Gdiplus::StringFormat fmt;
+    fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
+    fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+    Gdiplus::RectF textRect(0, 0, (float)(w - 46), (float)h);
+    gfx.DrawString(timeStr, -1, &font, textRect, &fmt, &textBrush);
+
+    int btnCx = w - radius - 2;
+    int btnCy = h / 2;
+    int btnR = SW_BTN_RADIUS;
+
+    if (g_stopwatchRunning) {
+        Gdiplus::SolidBrush btnBrush(Gdiplus::Color(220, 220, 60, 60));
+        gfx.FillEllipse(&btnBrush, btnCx - btnR, btnCy - btnR, btnR * 2, btnR * 2);
+        Gdiplus::Pen btnBorder(Gdiplus::Color(120, 255, 255, 255), 1.5f);
+        gfx.DrawEllipse(&btnBorder, btnCx - btnR, btnCy - btnR, btnR * 2, btnR * 2);
+
+        Gdiplus::SolidBrush iconBrush(Gdiplus::Color(255, 255, 255, 255));
+        int pauseW = 5, pauseH = 16, pauseGap = 6;
+        gfx.FillRectangle(&iconBrush, btnCx - pauseGap/2 - pauseW, btnCy - pauseH/2, pauseW, pauseH);
+        gfx.FillRectangle(&iconBrush, btnCx + pauseGap/2, btnCy - pauseH/2, pauseW, pauseH);
+    } else {
+        Gdiplus::SolidBrush btnBrush(Gdiplus::Color(220, 40, 180, 80));
+        gfx.FillEllipse(&btnBrush, btnCx - btnR, btnCy - btnR, btnR * 2, btnR * 2);
+        Gdiplus::Pen btnBorder(Gdiplus::Color(120, 255, 255, 255), 1.5f);
+        gfx.DrawEllipse(&btnBorder, btnCx - btnR, btnCy - btnR, btnR * 2, btnR * 2);
+
+        Gdiplus::Point tri[3];
+        tri[0] = Gdiplus::Point(btnCx - 6, btnCy - 10);
+        tri[1] = Gdiplus::Point(btnCx - 6, btnCy + 10);
+        tri[2] = Gdiplus::Point(btnCx + 10, btnCy);
+        Gdiplus::SolidBrush iconBrush(Gdiplus::Color(255, 255, 255, 255));
+        gfx.FillPolygon(&iconBrush, tri, 3);
+    }
+
+    gfx.Flush();
+
+    POINT ptDst;
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMon, &mi);
+    ptDst.x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2;
+    ptDst.y = mi.rcWork.top + 30;
+
+    SIZE sizeWnd = { w, h };
+    POINT ptSrc = { 0, 0 };
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    UpdateLayeredWindow(hwnd, hdcScreen, &ptDst, &sizeWnd, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
+
+    SelectObject(hdcMem, oldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+}
+
+LRESULT CALLBACK StopwatchProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_TIMER && wParam == 1) {
+        PaintStopwatchPill(hwnd);
+        return 0;
+    }
+    if (msg == WM_LBUTTONDOWN) {
+        int xClick = GET_X_LPARAM(lParam);
+        int btnCx = SW_PILL_W - SW_PILL_H / 2 - 2;
+        int btnCy = SW_PILL_H / 2;
+        int dx = xClick - btnCx;
+        int dy = GET_Y_LPARAM(lParam) - btnCy;
+        if (dx * dx + dy * dy <= SW_BTN_RADIUS * SW_BTN_RADIUS) {
+            if (g_stopwatchRunning) {
+                LARGE_INTEGER now;
+                QueryPerformanceCounter(&now);
+                g_stopwatchAccum.QuadPart += (now.QuadPart - g_stopwatchStart.QuadPart);
+                g_stopwatchRunning = FALSE;
+            } else {
+                QueryPerformanceCounter(&g_stopwatchStart);
+                g_stopwatchRunning = TRUE;
+            }
+            PaintStopwatchPill(hwnd);
+        }
+        return 0;
+    }
+    if (msg == WM_RBUTTONDOWN) {
+        ToggleStopwatch();
+        return 0;
+    }
+    if (msg == WM_MOUSEACTIVATE) {
+        return MA_NOACTIVATE;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+void ToggleStopwatch() {
+    if (g_stopwatchWnd && IsWindowVisible(g_stopwatchWnd)) {
+        KillTimer(g_stopwatchWnd, 1);
+        ShowWindow(g_stopwatchWnd, SW_HIDE);
+        g_stopwatchRunning = FALSE;
+        g_stopwatchAccum.QuadPart = 0;
+        return;
+    }
+
+    QueryPerformanceFrequency(&g_perfFreq);
+    g_stopwatchAccum.QuadPart = 0;
+    g_stopwatchRunning = FALSE;
+
+    if (!g_stopwatchWnd) {
+        WNDCLASS wc = {};
+        wc.lpfnWndProc = StopwatchProc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = STOPWATCH_CLASS;
+        wc.hCursor = LoadCursor(NULL, IDC_HAND);
+        RegisterClass(&wc);
+
+        g_stopwatchWnd = CreateWindowEx(
+            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            STOPWATCH_CLASS, L"",
+            WS_POPUP,
+            0, 0, SW_PILL_W, SW_PILL_H,
+            NULL, NULL, GetModuleHandle(NULL), NULL);
+
+    }
+
+    PaintStopwatchPill(g_stopwatchWnd);
+    ShowWindow(g_stopwatchWnd, SW_SHOWNOACTIVATE);
+    SetTimer(g_stopwatchWnd, 1, 30, NULL);
+}
+
+// ============================================================================
+// TIMER
+// ============================================================================
+
+static const int TM_PILL_W = 190;
+static const int TM_PILL_H = 52;
+static const int TM_PRESET_W = 44;
+static const int TM_PRESET_H = 26;
+static const int TM_PRESET_GAP = 8;
+
+void FormatTimerPreset(int seconds, wchar_t* buf, int bufLen) {
+    int m = seconds / 60;
+    int s = seconds % 60;
+    if (s > 0) swprintf_s(buf, bufLen, L"%dm%ds", m, s);
+    else swprintf_s(buf, bufLen, L"%dm", m);
+}
+
+void PaintTimerPill(HWND hwnd) {
+    int w = TM_PILL_W;
+    int h = TM_PILL_H;
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    DWORD* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, (void**)&bits, NULL, 0);
+    HBITMAP oldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+    Gdiplus::Graphics gfx(hdcMem);
+    gfx.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+
+    gfx.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    Gdiplus::GraphicsPath pillPath;
+    pillPath.AddArc(0, 0, h, h, 90, 180);
+    pillPath.AddArc(w - h, 0, h, h, 270, 180);
+    pillPath.CloseFigure();
+
+    Gdiplus::SolidBrush bgBrush(Gdiplus::Color(210, 20, 20, 30));
+    gfx.FillPath(&bgBrush, &pillPath);
+
+    if (g_timerShakeState > 0) {
+        float glowAlpha = (sinf(g_timerGlowPhase) * 0.5f + 0.5f) * 180.0f;
+        Gdiplus::Pen glowPen(Gdiplus::Color((BYTE)glowAlpha, 255, 80, 40), 4.0f);
+        gfx.DrawPath(&glowPen, &pillPath);
+        Gdiplus::Pen glowPen2(Gdiplus::Color((BYTE)(glowAlpha * 0.4f), 255, 120, 60), 8.0f);
+        gfx.DrawPath(&glowPen2, &pillPath);
+    }
+
+
+
+    Gdiplus::FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::StringFormat fmt;
+    fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
+    fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+    if (g_timerSelectedPreset < 0 && !g_timerRunning && g_timerShakeState == 0) {
+        int totalPresetsW = 3 * TM_PRESET_W + 2 * TM_PRESET_GAP;
+        int startX = (w - totalPresetsW) / 2;
+        int presetY = (h - TM_PRESET_H) / 2;
+
+        for (int i = 0; i < 3; i++) {
+            int px = startX + i * (TM_PRESET_W + TM_PRESET_GAP);
+
+            Gdiplus::GraphicsPath presetPath;
+            presetPath.AddArc(px, presetY, TM_PRESET_H, TM_PRESET_H, 90, 180);
+            presetPath.AddArc(px + TM_PRESET_W - TM_PRESET_H, presetY, TM_PRESET_H, TM_PRESET_H, 270, 180);
+            presetPath.CloseFigure();
+
+            Gdiplus::SolidBrush presetBg(Gdiplus::Color(160, 50, 50, 65));
+            gfx.FillPath(&presetBg, &presetPath);
+            Gdiplus::Pen presetBorder(Gdiplus::Color(60, 200, 200, 220), 1.0f);
+            gfx.DrawPath(&presetBorder, &presetPath);
+
+            wchar_t label[16];
+            if (g_timerEditMode && g_timerEditIndex == i) {
+                wcsncpy_s(label, g_timerEditBuf, _TRUNCATE);
+                wcscat_s(label, L"|");
+            } else {
+                FormatTimerPreset(g_timerPresets[i], label, 16);
+            }
+
+            Gdiplus::Font presetFont(&fontFamily, 14, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+            Gdiplus::SolidBrush presetText(Gdiplus::Color(255, 220, 220, 230));
+            Gdiplus::RectF presetRect((float)px, (float)presetY, (float)TM_PRESET_W, (float)TM_PRESET_H);
+            gfx.DrawString(label, -1, &presetFont, presetRect, &fmt, &presetText);
+        }
+    } else {
+        int totalSec = g_timerRemainingMs / 1000;
+        if (totalSec < 0) totalSec = 0;
+        int mins = totalSec / 60;
+        int secs = totalSec % 60;
+
+        wchar_t timeStr[32];
+        swprintf_s(timeStr, L"%02d:%02d", mins, secs);
+
+        float fontSize = 32.0f;
+        if (g_timerShakeState > 0) {
+            float pulse = sinf(g_timerGlowPhase * 2.0f) * 0.15f + 1.0f;
+            fontSize *= pulse;
+        }
+
+        Gdiplus::Font font(&fontFamily, fontSize, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+
+        Gdiplus::Color textColor(255, 240, 240, 245);
+        if (g_timerShakeState > 0) {
+            float pulse = sinf(g_timerGlowPhase * 3.0f) * 0.5f + 0.5f;
+            textColor = Gdiplus::Color(255, 255, (BYTE)(100 + 155 * pulse), (BYTE)(60 + 60 * pulse));
+        }
+        Gdiplus::SolidBrush textBrush(textColor);
+        Gdiplus::RectF textRect(0, 0, (float)w, (float)h);
+        gfx.DrawString(timeStr, -1, &font, textRect, &fmt, &textBrush);
+    }
+
+    gfx.Flush();
+
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMon, &mi);
+    POINT ptDst;
+    ptDst.x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2;
+    ptDst.y = mi.rcWork.top + 30;
+
+    if (g_timerShakeState > 0) {
+        DWORD elapsed = GetTickCount() - g_timerShakeStart;
+        if (elapsed < 3000) {
+            ptDst.x += (rand() % 11) - 5;
+            ptDst.y += (rand() % 7) - 3;
+        } else {
+            g_timerShakeState = 0;
+        }
+    }
+
+    SIZE sizeWnd = { w, h };
+    POINT ptSrc = { 0, 0 };
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    UpdateLayeredWindow(hwnd, hdcScreen, &ptDst, &sizeWnd, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
+
+
+    SelectObject(hdcMem, oldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+}
+
+LRESULT CALLBACK TimerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_TIMER && wParam == 1) {
+        if (g_timerRunning) {
+            DWORD now = GetTickCount();
+            int delta = (int)(now - g_timerLastTick);
+            g_timerLastTick = now;
+            g_timerRemainingMs -= delta;
+            if (g_timerRemainingMs <= 0) {
+                g_timerRemainingMs = 0;
+                g_timerRunning = FALSE;
+                g_timerShakeState = 1;
+                g_timerShakeStart = GetTickCount();
+                g_timerGlowPhase = 0.0f;
+            }
+        }
+        if (g_timerShakeState > 0) {
+            g_timerGlowPhase += 0.25f;
+        }
+        PaintTimerPill(hwnd);
+        return 0;
+    }
+    if (msg == WM_LBUTTONDOWN) {
+        if (g_timerEditMode) {
+            g_timerEditMode = FALSE;
+            int val = _wtoi(g_timerEditBuf);
+            if (val > 0 && val <= 999 && g_timerEditIndex >= 0 && g_timerEditIndex < 3) {
+                g_timerPresets[g_timerEditIndex] = val * 60;
+            }
+            g_timerEditIndex = -1;
+            PaintTimerPill(hwnd);
+            return 0;
+        }
+
+        if (g_timerShakeState > 0) {
+            g_timerShakeState = 0;
+            g_timerSelectedPreset = -1;
+            PaintTimerPill(hwnd);
+            return 0;
+        }
+
+        if (g_timerSelectedPreset < 0 && !g_timerRunning) {
+            int xClick = GET_X_LPARAM(lParam);
+            int yClick = GET_Y_LPARAM(lParam);
+            int totalPresetsW = 3 * TM_PRESET_W + 2 * TM_PRESET_GAP;
+            int startX = (TM_PILL_W - totalPresetsW) / 2;
+            int presetY = (TM_PILL_H - TM_PRESET_H) / 2;
+
+            for (int i = 0; i < 3; i++) {
+                int px = startX + i * (TM_PRESET_W + TM_PRESET_GAP);
+                if (xClick >= px && xClick <= px + TM_PRESET_W &&
+                    yClick >= presetY && yClick <= presetY + TM_PRESET_H) {
+                    g_timerSelectedPreset = i;
+                    g_timerRemainingMs = g_timerPresets[i] * 1000;
+                    g_timerLastTick = GetTickCount();
+                    g_timerRunning = TRUE;
+                    PaintTimerPill(hwnd);
+                    return 0;
+                }
+            }
+        }
+        return 0;
+    }
+    if (msg == WM_RBUTTONDOWN) {
+        if (g_timerSelectedPreset < 0 && !g_timerRunning && g_timerShakeState == 0) {
+            int xClick = GET_X_LPARAM(lParam);
+            int yClick = GET_Y_LPARAM(lParam);
+            int totalPresetsW = 3 * TM_PRESET_W + 2 * TM_PRESET_GAP;
+            int startX = (TM_PILL_W - totalPresetsW) / 2;
+            int presetY = (TM_PILL_H - TM_PRESET_H) / 2;
+
+            for (int i = 0; i < 3; i++) {
+                int px = startX + i * (TM_PRESET_W + TM_PRESET_GAP);
+                if (xClick >= px && xClick <= px + TM_PRESET_W &&
+                    yClick >= presetY && yClick <= presetY + TM_PRESET_H) {
+                    g_timerEditMode = TRUE;
+                    g_timerEditIndex = i;
+                    swprintf_s(g_timerEditBuf, L"%d", g_timerPresets[i] / 60);
+                    PaintTimerPill(hwnd);
+                    return 0;
+                }
+            }
+        }
+        ToggleTimer();
+        return 0;
+    }
+
+    if (msg == WM_MOUSEACTIVATE) {
+        return MA_NOACTIVATE;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+void ToggleTimer() {
+    if (g_timerWnd && IsWindowVisible(g_timerWnd)) {
+        KillTimer(g_timerWnd, 1);
+        ShowWindow(g_timerWnd, SW_HIDE);
+        g_timerRunning = FALSE;
+        g_timerSelectedPreset = -1;
+        g_timerShakeState = 0;
+        g_timerEditMode = FALSE;
+        return;
+    }
+
+    g_timerRunning = FALSE;
+    g_timerSelectedPreset = -1;
+    g_timerShakeState = 0;
+    g_timerRemainingMs = 0;
+    g_timerEditMode = FALSE;
+
+    if (!g_timerWnd) {
+        WNDCLASS wc = {};
+        wc.lpfnWndProc = TimerProc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = TIMER_CLASS;
+        wc.hCursor = LoadCursor(NULL, IDC_HAND);
+        RegisterClass(&wc);
+
+        g_timerWnd = CreateWindowEx(
+            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            TIMER_CLASS, L"",
+            WS_POPUP,
+            0, 0, TM_PILL_W, TM_PILL_H,
+            NULL, NULL, GetModuleHandle(NULL), NULL);
+
+    }
+
+    PaintTimerPill(g_timerWnd);
+    ShowWindow(g_timerWnd, SW_SHOWNOACTIVATE);
+    SetTimer(g_timerWnd, 1, 30, NULL);
+}
+
+// ============================================================================
+// FLASH (Flashlight)
+// ============================================================================
+
+struct EnumData {
+    MonitorBrightnessInfo* infos;
+    int* count;
+};
+
+static BOOL CALLBACK SaveMonitorBrightnessCallback(HMONITOR hMon, HDC, LPRECT, LPARAM lp) {
+    EnumData* d = (EnumData*)lp;
+    if (*d->count >= MAX_FLASH_MONITORS) return FALSE;
+
+    MonitorBrightnessInfo& info = d->infos[*d->count];
+    info.hMon = hMon;
+    info.valid = FALSE;
+
+    DWORD numPhysical = 0;
+    PHYSICAL_MONITOR physMon[1] = {};
+    if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMon, &numPhysical) && numPhysical > 0) {
+        if (GetPhysicalMonitorsFromHMONITOR(hMon, 1, physMon)) {
+            info.hPhysical = physMon[0].hPhysicalMonitor;
+            DWORD minB = 0, curB = 0, maxB = 0;
+            if (GetMonitorBrightness(info.hPhysical, &minB, &curB, &maxB)) {
+                info.originalBrightness = curB;
+                info.valid = TRUE;
+                SetMonitorBrightness(info.hPhysical, maxB);
+            }
+        }
+    }
+    (*d->count)++;
+    return TRUE;
+}
+
+void SaveMonitorBrightness() {
+    g_flashMonitorCount = 0;
+    EnumData data = { g_flashMonitors, &g_flashMonitorCount };
+    EnumDisplayMonitors(NULL, NULL, SaveMonitorBrightnessCallback, (LPARAM)&data);
+}
+
+void RestoreMonitorBrightness() {
+    for (int i = 0; i < g_flashMonitorCount; i++) {
+        if (g_flashMonitors[i].valid) {
+            SetMonitorBrightness(g_flashMonitors[i].hPhysical, g_flashMonitors[i].originalBrightness);
+            DestroyPhysicalMonitor(g_flashMonitors[i].hPhysical);
+        }
+    }
+    g_flashMonitorCount = 0;
+}
+
+LRESULT CALLBACK FlashProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+
+        HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+        FillRect(hdc, &rc, whiteBrush);
+        DeleteObject(whiteBrush);
+
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(180, 180, 180));
+        HFONT font = CreateFont(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+        HFONT oldFont = (HFONT)SelectObject(hdc, font);
+
+        const wchar_t* label = L"Click any key to turn FLASH off";
+        RECT textRect = rc;
+        textRect.top = rc.bottom - 50;
+        DrawText(hdc, label, -1, &textRect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+        SelectObject(hdc, oldFont);
+        DeleteObject(font);
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN ||
+        msg == WM_XBUTTONDOWN || msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        ToggleFlash();
+        return 0;
+    }
+    if (msg == WM_ERASEBKGND) {
+        return 1;
+    }
+    if (msg == WM_SETCURSOR) {
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return TRUE;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+HHOOK g_flashKeyboardHook = nullptr;
+
+LRESULT CALLBACK FlashKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && g_flashWnd && IsWindowVisible(g_flashWnd)) {
+        if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+            ToggleFlash();
+            return 1;
+        }
+    }
+    return CallNextHookEx(g_flashKeyboardHook, nCode, wParam, lParam);
+}
+
+void ToggleFlash() {
+    if (g_flashWnd && IsWindowVisible(g_flashWnd)) {
+        if (g_flashKeyboardHook) {
+            UnhookWindowsHookEx(g_flashKeyboardHook);
+            g_flashKeyboardHook = nullptr;
+        }
+        ShowWindow(g_flashWnd, SW_HIDE);
+        RestoreMonitorBrightness();
+        return;
+    }
+
+    SaveMonitorBrightness();
+
+    if (!g_flashWnd) {
+        WNDCLASS wc = {};
+        wc.lpfnWndProc = FlashProc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = FLASH_CLASS;
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+        RegisterClass(&wc);
+
+        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+        g_flashWnd = CreateWindowEx(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            FLASH_CLASS, L"",
+            WS_POPUP,
+            vx, vy, vw, vh,
+            NULL, NULL, GetModuleHandle(NULL), NULL);
+    } else {
+        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        SetWindowPos(g_flashWnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_NOACTIVATE);
+    }
+
+    ShowWindow(g_flashWnd, SW_SHOW);
+    SetForegroundWindow(g_flashWnd);
+    SetFocus(g_flashWnd);
+
+    g_flashKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, FlashKeyboardProc, GetModuleHandle(NULL), 0);
 }
 
 void ExecuteAction(int gestureIdx, HWND target) {
@@ -2038,7 +2958,13 @@ void ExecuteAction(int gestureIdx, HWND target) {
             if (finalParam[0]) {
                 wchar_t expanded[MAX_PATH];
                 ExpandEnvironmentStrings(finalParam, expanded, MAX_PATH);
-                ShellExecute(NULL, L"open", expanded, NULL, NULL, SW_SHOWNORMAL);
+                
+                std::wstring pathStr = expanded;
+                if (pathStr.size() >= 2 && pathStr.front() == L'"' && pathStr.back() == L'"') {
+                    pathStr = pathStr.substr(1, pathStr.size() - 2);
+                }
+                
+                ShellExecute(NULL, L"open", pathStr.c_str(), NULL, NULL, SW_SHOWNORMAL);
             }
             break;
 
@@ -2109,11 +3035,15 @@ void ExecuteAction(int gestureIdx, HWND target) {
         }
 
         case ACTION_DRAW:
-            ToggleDrawMode();
+            if (g_hookThreadId) {
+                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_DRAW, 0, 0);
+            }
             break;
 
         case ACTION_COLOR_PICKER:
-            StartColorPicker();
+            if (g_hookThreadId) {
+                PostThreadMessage(g_hookThreadId, WM_HOOK_START_PICKER, 0, 0);
+            }
             break;
 
         case ACTION_TOGGLE_DESKTOP_ICONS:
@@ -2128,19 +3058,27 @@ void ExecuteAction(int gestureIdx, HWND target) {
             if (target) {
                 WINDOWPLACEMENT wp = { sizeof(wp) };
                 if (GetWindowPlacement(target, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
-                    SendMessage(target, WM_SYSCOMMAND, SC_RESTORE, 0);
+                    DWORD_PTR dwResult;
+                    SendMessageTimeout(target, WM_SYSCOMMAND, SC_RESTORE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
                 } else {
-                    SendMessage(target, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+                    DWORD_PTR dwResult;
+                    SendMessageTimeout(target, WM_SYSCOMMAND, SC_MAXIMIZE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
                 }
             }
             break;
 
         case ACTION_MINIMIZE:
-            if (target) SendMessage(target, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+            if (target) {
+                DWORD_PTR dwResult;
+                SendMessageTimeout(target, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
+            }
             break;
 
         case ACTION_CLOSE:
-            if (target) SendMessage(target, WM_SYSCOMMAND, SC_CLOSE, 0);
+            if (target) {
+                DWORD_PTR dwResult;
+                SendMessageTimeout(target, WM_SYSCOMMAND, SC_CLOSE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
+            }
             break;
 
         case ACTION_SHOW_DESKTOP:
@@ -2149,6 +3087,11 @@ void ExecuteAction(int gestureIdx, HWND target) {
 
         case ACTION_LOCK:
             ShellExecute(NULL, L"open", L"rundll32.exe", L"user32.dll,LockWorkStation", NULL, SW_SHOWNORMAL);
+            break;
+
+        case ACTION_SLEEP_MONITOR:
+            Sleep(500);
+            SendNotifyMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
             break;
 
         case ACTION_SLEEP:
@@ -2161,6 +3104,12 @@ void ExecuteAction(int gestureIdx, HWND target) {
 
         case ACTION_SHUTDOWN:
             ShellExecute(NULL, L"open", L"shutdown.exe", L"/s /t 0", NULL, SW_SHOWNORMAL);
+            break;
+
+        case ACTION_EMPTY_RECYCLE_BIN:
+            if (HANDLE hThread = CreateThread(NULL, 0, EmptyRecycleBinThreadProc, NULL, 0, NULL)) {
+                CloseHandle(hThread);
+            }
             break;
 
         case ACTION_SNAP_LEFT:
@@ -2179,7 +3128,8 @@ void ExecuteAction(int gestureIdx, HWND target) {
 
             WINDOWPLACEMENT wp = { sizeof(wp) };
             if (GetWindowPlacement(target, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
-                SendMessage(target, WM_SYSCOMMAND, SC_RESTORE, 0);
+                DWORD_PTR dwResult;
+                SendMessageTimeout(target, WM_SYSCOMMAND, SC_RESTORE, 0, SMTO_ABORTIFHUNG, 500, &dwResult);
             }
 
             RECT wA = mi.rcWork;
@@ -2251,10 +3201,19 @@ void ExecuteAction(int gestureIdx, HWND target) {
         case ACTION_SEARCH_SELECTION: {
             std::wstring selected = GetSelectedText();
             if (!selected.empty()) {
-                std::wstring encoded = UrlEncode(selected);
-                std::wstring url = g_settings.searchEngineUrl + encoded;
-                ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                if (IsImageFile(selected)) {
+                    SearchImage(selected);
+                } else {
+                    std::wstring encoded = UrlEncode(selected);
+                    std::wstring url = g_settings.searchEngineUrl + encoded;
+                    ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                }
             }
+            break;
+        }
+
+        case ACTION_SCREENSHOT: {
+            TakeScreenshot(gc->actionParam);
             break;
         }
 
@@ -2263,7 +3222,9 @@ void ExecuteAction(int gestureIdx, HWND target) {
             if (g_spotlightState > 0) {
                 g_spotlightState = 3;
             } else {
-                StartSpotlight();
+                if (g_hookThreadId) {
+                    PostThreadMessage(g_hookThreadId, WM_HOOK_START_SPOTLIGHT, 0, 0);
+                }
             }
             break;
         }
@@ -2318,8 +3279,42 @@ void ExecuteAction(int gestureIdx, HWND target) {
                     safePath += c;
                 }
             }
-            std::wstring args = L"-NoExit -Command \"Set-Location -LiteralPath '" + safePath + L"'\"";
+            std::wstring args = L"-NoExit -Command \"Set-Location -LiteralPath '" + safePath + L"'";
+            if (gc->actionParam[0] != L'\0') {
+                args += L"; " + std::wstring(gc->actionParam);
+            }
+            args += L"\"";
             ShellExecuteW(NULL, L"runas", L"powershell.exe", args.c_str(), NULL, SW_SHOWNORMAL);
+            break;
+        }
+
+        case ACTION_STOPWATCH:
+            if (g_hookThreadId) {
+                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_STOPWATCH, 0, 0);
+            }
+            break;
+
+        case ACTION_TIMER:
+            if (g_hookThreadId) {
+                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_TIMER, 0, 0);
+            }
+            break;
+
+        case ACTION_FLASH:
+            if (g_hookThreadId) {
+                PostThreadMessage(g_hookThreadId, WM_HOOK_TOGGLE_FLASH, 0, 0);
+            }
+            break;
+
+        case ACTION_NEXT_VIRTUAL_DESKTOP: {
+            INPUT inputs[6] = {};
+            inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_LWIN;
+            inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = VK_LCONTROL;
+            inputs[2].type = INPUT_KEYBOARD; inputs[2].ki.wVk = VK_RIGHT;
+            inputs[3].type = INPUT_KEYBOARD; inputs[3].ki.wVk = VK_RIGHT;    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs[4].type = INPUT_KEYBOARD; inputs[4].ki.wVk = VK_LCONTROL; inputs[4].ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs[5].type = INPUT_KEYBOARD; inputs[5].ki.wVk = VK_LWIN;     inputs[5].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(6, inputs, sizeof(INPUT));
             break;
         }
 
@@ -2532,7 +3527,7 @@ void UpdateOverlay() {
 
     delete[] points;
 
-    if (g_settings.enableParticles) {
+    if (TRUE) {
         DrawParticles(*g_graphics, x, y, GetTickCount(), 255);
     }
 
@@ -2553,6 +3548,26 @@ void UpdateOverlay() {
 LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_EXECUTE_ACTION) {
         ExecuteAction(wParam, (HWND)lParam);
+        return 0;
+    }
+    if (msg == WM_POST_NOTE_CREATION) {
+        int x = (short)LOWORD(wParam);
+        int y = (short)HIWORD(wParam);
+        int w = (short)LOWORD(lParam);
+        int h = (short)HIWORD(lParam);
+
+        HWND hwndNotesMsg = g_mainMsgWnd;
+        if (!hwndNotesMsg) {
+            LaunchNotesProcess();
+            for (int i = 0; i < 20; i++) {
+                Sleep(50);
+                hwndNotesMsg = g_mainMsgWnd;
+                if (hwndNotesMsg) break;
+            }
+        }
+        if (hwndNotesMsg) {
+            PostMessage(hwndNotesMsg, WM_USER + 105, MAKEWPARAM(x, y), MAKELPARAM(w, h));
+        }
         return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -2592,7 +3607,7 @@ void UpdateOverlayFade() {
     DWORD elapsed = GetTickCount() - g_fadeStartTick;
     
     BOOL particlesAlive = FALSE;
-    if (g_settings.enableParticles) {
+    if (TRUE) {
         for (int i = 0; i < MAX_PARTICLES; i++) {
             if (g_particles[i].active) { particlesAlive = TRUE; break; }
         }
@@ -2643,7 +3658,7 @@ void UpdateOverlayFade() {
         delete[] points;
     }
 
-    if (g_settings.enableParticles) {
+    if (TRUE) {
         DrawParticles(*g_graphics, x, y, GetTickCount(), 255);
     }
 
@@ -2682,8 +3697,8 @@ void GenerateShapePoints(const wchar_t* shapeName) {
     }
     else if (wcscmp(shapeName, L"Letter C") == 0) {
         for (int i = 0; i <= 18; i++) {
-            addPoint((int)(50 + 50 * cos((i * 10 + 90) * 3.14159 / 180.0)),
-                     (int)(50 + 50 * sin((i * 10 + 90) * 3.14159 / 180.0)));
+            addPoint((int)(50 + 50 * cos((270 - i * 10) * 3.14159 / 180.0)),
+                     (int)(50 + 50 * sin((270 - i * 10) * 3.14159 / 180.0)));
         }
     }
     else if (wcscmp(shapeName, L"Letter M") == 0) { addPoint(0, 100); addPoint(0, 0); addPoint(50, 50); addPoint(100, 0); addPoint(100, 100); }
@@ -2730,7 +3745,7 @@ void GenerateShapePoints(const wchar_t* shapeName) {
     
     RECT rc;
     GetClientRect(g_canvasWnd, &rc);
-    RECT drawArea = { 20, 105, rc.right - 20, rc.bottom - 20 };
+    RECT drawArea = { 20, 105, rc.right - 20, rc.bottom - 60 };
     int canvasW = drawArea.right - drawArea.left;
     int canvasH = drawArea.bottom - drawArea.top;
 
@@ -2959,7 +3974,7 @@ LRESULT CALLBACK CanvasProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 HBRUSH startBrush = CreateSolidBrush(RGB(0, 255, 100));
                 HBRUSH oldB = (HBRUSH)SelectObject(memDC, startBrush);
                 HPEN startPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
-                SelectObject(memDC, startPen);
+                HPEN oldPen = (HPEN)SelectObject(memDC, startPen);
                 int sx = g_canvasPoints[0].x, sy = g_canvasPoints[0].y;
                 Ellipse(memDC, sx - 8, sy - 8, sx + 8, sy + 8);
                 
@@ -2985,6 +4000,7 @@ LRESULT CALLBACK CanvasProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
 
                 SelectObject(memDC, oldB);
+                SelectObject(memDC, oldPen);
                 DeleteObject(startBrush);
                 DeleteObject(endBrush);
                 DeleteObject(startPen);
@@ -3100,8 +4116,12 @@ LRESULT CALLBACK CanvasProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CTLCOLOREDIT: {
             SetTextColor((HDC)wParam, RGB(255, 255, 255));
             SetBkColor((HDC)wParam, RGB(25, 25, 30));
-            static HBRUSH s_br = CreateSolidBrush(RGB(25, 25, 30));
-            return (LRESULT)s_br;
+            HBRUSH hbr = (HBRUSH)GetProp(hwnd, L"EditBgBrush");
+            if (!hbr) {
+                hbr = CreateSolidBrush(RGB(25, 25, 30));
+                SetProp(hwnd, L"EditBgBrush", hbr);
+            }
+            return (LRESULT)hbr;
         }
 
         case WM_COMMAND: {
@@ -3219,8 +4239,14 @@ LRESULT CALLBACK CanvasProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            HBRUSH hbr = (HBRUSH)GetProp(hwnd, L"EditBgBrush");
+            if (hbr) {
+                DeleteObject(hbr);
+                RemoveProp(hwnd, L"EditBgBrush");
+            }
             return 0;
+        }
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -3389,7 +4415,7 @@ void EndGesture() {
         if (!target) target = g_gestureTarget;
         PostMessage(g_msgWnd, WM_EXECUTE_ACTION, match, (LPARAM)target);
         
-        if (g_pointCount > 0 && g_settings.enableParticles) {
+        if (g_pointCount > 0) {
             SpawnSplash(g_points[g_pointCount - 1]);
         }
 
@@ -3579,7 +4605,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 EndGesture();
                 return 1;
             }
-            if (g_settings.blockOtherClicks) {
+            if (TRUE) {
                 if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP ||
                     wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
                     wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONUP ||
@@ -3670,7 +4696,18 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (wParam == WM_MOUSEMOVE) {
                 g_pickerPos = ms->pt;
                 if (g_pickerWnd) {
-                    SetWindowPos(g_pickerWnd, HWND_TOPMOST, ms->pt.x + 15, ms->pt.y + 15, 160, 160, SWP_NOACTIVATE);
+                    HMONITOR hMonitor = MonitorFromPoint(ms->pt, MONITOR_DEFAULTTONEAREST);
+                    MONITORINFO mi = { sizeof(mi) };
+                    GetMonitorInfo(hMonitor, &mi);
+
+                    int wx = ms->pt.x + 15;
+                    int wy = ms->pt.y + 15;
+                    if (wx + 160 > mi.rcMonitor.right) wx = ms->pt.x - 160 - 15;
+                    if (wy + 160 > mi.rcMonitor.bottom) wy = ms->pt.y - 160 - 15;
+                    if (wx < mi.rcMonitor.left) wx = mi.rcMonitor.left;
+                    if (wy < mi.rcMonitor.top) wy = mi.rcMonitor.top;
+
+                    SetWindowPos(g_pickerWnd, HWND_TOPMOST, wx, wy, 160, 160, SWP_NOACTIVATE);
                     InvalidateRect(g_pickerWnd, NULL, FALSE);
                 }
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
@@ -3721,7 +4758,12 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     ToggleDrawMode();
                     return 1;
                 }
-                if (wParam == WM_LBUTTONDOWN) {
+                if (wParam == WM_LBUTTONDOWN || wParam == WM_MBUTTONDOWN) {
+                    if (wParam == WM_MBUTTONDOWN && !g_drawEraserMode) {
+                        g_drawEraserMode = TRUE;
+                        g_drawSavedColor = g_drawColor;
+                        g_drawColor = Gdiplus::Color(0, 0, 0, 0);
+                    }
                     if (g_drawStrokeCount < 200) {
                         HideAura();
                         g_drawDrawing = TRUE;
@@ -3735,7 +4777,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     }
                     return 1;
                 }
-                if (wParam == WM_LBUTTONUP && g_drawDrawing) {
+                if ((wParam == WM_LBUTTONUP || wParam == WM_MBUTTONUP) && g_drawDrawing) {
                     g_drawDrawing = FALSE;
                     int wndX = GetSystemMetrics(SM_XVIRTUALSCREEN);
                     int wndY = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -3745,10 +4787,16 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                         float localY = (float)(pt.y - wndY);
                         if (localX != last.x || localY != last.y) {
                             g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX, localY };
+                        } else {
+                            g_currentDrawStroke.points[g_currentDrawStroke.count++] = { localX + 0.01f, localY };
                         }
                     }
                     if (g_currentDrawStroke.count >= 2) {
                         g_drawStrokes[g_drawStrokeCount++] = g_currentDrawStroke;
+                    }
+                    if (wParam == WM_MBUTTONUP && g_drawEraserMode) {
+                        g_drawEraserMode = FALSE;
+                        g_drawColor = g_drawSavedColor;
                     }
                     InvalidateRect(g_drawModeWnd, NULL, FALSE);
                     return 1;
@@ -3795,6 +4843,11 @@ void ToggleDrawMode() {
             x, y, cx, cy,
             NULL, NULL, GetModuleHandle(NULL), NULL);
 
+        if (!g_drawModeWnd) {
+            g_drawModeActive = FALSE;
+            return;
+        }
+
         ShowWindow(g_drawModeWnd, SW_SHOWNOACTIVATE);
     }
 }
@@ -3807,12 +4860,28 @@ void StartColorPicker() {
     GetCursorPos(&pt);
     g_pickerPos = pt;
 
+    HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+
+    int wx = pt.x + 15;
+    int wy = pt.y + 15;
+    if (wx + 160 > mi.rcMonitor.right) wx = pt.x - 160 - 15;
+    if (wy + 160 > mi.rcMonitor.bottom) wy = pt.y - 160 - 15;
+    if (wx < mi.rcMonitor.left) wx = mi.rcMonitor.left;
+    if (wy < mi.rcMonitor.top) wy = mi.rcMonitor.top;
+
     g_pickerWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         PICKER_CLASS, L"",
         WS_POPUP,
-        pt.x + 15, pt.y + 15, 160, 160,
+        wx, wy, 160, 160,
         NULL, NULL, GetModuleHandle(NULL), NULL);
+
+    if (!g_pickerWnd) {
+        g_pickerActive = FALSE;
+        return;
+    }
 
     ShowWindow(g_pickerWnd, SW_SHOWNOACTIVATE);
 }
@@ -3965,9 +5034,9 @@ LRESULT CALLBACK DrawModeProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             bmi.bmiHeader.biCompression = BI_RGB;
             void* bits = nullptr;
             HBITMAP memBitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
-
-            memset(bits, 0, rc.right * rc.bottom * 4);
+            if (memBitmap && bits) {
+                HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
+                memset(bits, 0, rc.right * rc.bottom * 4);
 
             using namespace Gdiplus;
             Graphics graphics(memDC);
@@ -4155,10 +5224,11 @@ LRESULT CALLBACK DrawModeProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             blend.SourceConstantAlpha = 255;
             blend.AlphaFormat = AC_SRC_ALPHA;
 
-            UpdateLayeredWindow(hwnd, hdc, &ptDst, &sizeWnd, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
+                UpdateLayeredWindow(hwnd, hdc, &ptDst, &sizeWnd, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
 
-            SelectObject(memDC, oldBitmap);
-            DeleteObject(memBitmap);
+                SelectObject(memDC, oldBitmap);
+                DeleteObject(memBitmap);
+            }
             DeleteDC(memDC);
             EndPaint(hwnd, &ps);
             return 0;
@@ -4182,7 +5252,19 @@ LRESULT CALLBACK ColorPickerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 POINT pt;
                 GetCursorPos(&pt);
                 g_pickerPos = pt;
-                SetWindowPos(hwnd, HWND_TOPMOST, pt.x + 15, pt.y + 15, 160, 160, SWP_NOACTIVATE);
+                
+                HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = { sizeof(mi) };
+                GetMonitorInfo(hMonitor, &mi);
+
+                int wx = pt.x + 15;
+                int wy = pt.y + 15;
+                if (wx + 160 > mi.rcMonitor.right) wx = pt.x - 160 - 15;
+                if (wy + 160 > mi.rcMonitor.bottom) wy = pt.y - 160 - 15;
+                if (wx < mi.rcMonitor.left) wx = mi.rcMonitor.left;
+                if (wy < mi.rcMonitor.top) wy = mi.rcMonitor.top;
+
+                SetWindowPos(hwnd, HWND_TOPMOST, wx, wy, 160, 160, SWP_NOACTIVATE);
                 InvalidateRect(hwnd, NULL, FALSE);
             }
             return 0;
@@ -4203,9 +5285,9 @@ LRESULT CALLBACK ColorPickerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             bmi.bmiHeader.biCompression = BI_RGB;
             void* bits = nullptr;
             HBITMAP memBitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
-
-            memset(bits, 0, 160 * 160 * 4);
+            if (memBitmap && bits) {
+                HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
+                memset(bits, 0, 160 * 160 * 4);
 
             HDC hdcScreen = GetDC(NULL);
             HDC capDC = CreateCompatibleDC(hdcScreen);
@@ -4267,17 +5349,20 @@ LRESULT CALLBACK ColorPickerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             ReleaseDC(NULL, hdcScreen);
 
             POINT ptSrc = { 0, 0 };
-            POINT ptDst = { g_pickerPos.x + 15, g_pickerPos.y + 15 };
+            RECT rcWnd;
+            GetWindowRect(hwnd, &rcWnd);
+            POINT ptDst = { rcWnd.left, rcWnd.top };
             SIZE sizeWnd = { 160, 160 };
             BLENDFUNCTION blend = {};
             blend.BlendOp = AC_SRC_OVER;
             blend.SourceConstantAlpha = 255;
             blend.AlphaFormat = AC_SRC_ALPHA;
 
-            UpdateLayeredWindow(hwnd, hdc, &ptDst, &sizeWnd, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
+                UpdateLayeredWindow(hwnd, hdc, &ptDst, &sizeWnd, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
 
-            SelectObject(memDC, oldBitmap);
-            DeleteObject(memBitmap);
+                SelectObject(memDC, oldBitmap);
+                DeleteObject(memBitmap);
+            }
             DeleteDC(memDC);
             EndPaint(hwnd, &ps);
             return 0;
@@ -4301,6 +5386,38 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
             KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+
+            if (g_timerEditMode) {
+                if (kb->vkCode == VK_ESCAPE) {
+                    g_timerEditMode = FALSE;
+                    g_timerEditIndex = -1;
+                    PaintTimerPill(g_timerWnd);
+                    return 1;
+                } else if (kb->vkCode == VK_RETURN) {
+                    int val = _wtoi(g_timerEditBuf);
+                    if (val > 0 && val <= 999 && g_timerEditIndex >= 0 && g_timerEditIndex < 3) {
+                        g_timerPresets[g_timerEditIndex] = val * 60;
+                    }
+                    g_timerEditMode = FALSE;
+                    g_timerEditIndex = -1;
+                    PaintTimerPill(g_timerWnd);
+                    return 1;
+                } else if (kb->vkCode == VK_BACK) {
+                    int len = (int)wcslen(g_timerEditBuf);
+                    if (len > 0) g_timerEditBuf[len - 1] = 0;
+                    PaintTimerPill(g_timerWnd);
+                    return 1;
+                } else if ((kb->vkCode >= '0' && kb->vkCode <= '9') || (kb->vkCode >= VK_NUMPAD0 && kb->vkCode <= VK_NUMPAD9)) {
+                    int len = (int)wcslen(g_timerEditBuf);
+                    if (len < 3) {
+                        wchar_t c = (kb->vkCode >= VK_NUMPAD0 && kb->vkCode <= VK_NUMPAD9) ? (wchar_t)(kb->vkCode - VK_NUMPAD0 + L'0') : (wchar_t)kb->vkCode;
+                        g_timerEditBuf[len] = c;
+                        g_timerEditBuf[len + 1] = 0;
+                    }
+                    PaintTimerPill(g_timerWnd);
+                    return 1;
+                }
+            }
 
             if (kb->vkCode == VK_ESCAPE) {
                 if (g_pickerActive) {
@@ -4539,6 +5656,34 @@ void HideAura() {
     }
 }
 
+DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
+    OleInitialize(NULL);
+
+    WNDCLASS mwc = {};
+    mwc.lpfnWndProc = MsgWndProc;
+    mwc.hInstance = GetModuleHandle(NULL);
+    mwc.lpszClassName = MSG_WND_CLASS;
+    RegisterClass(&mwc);
+
+    g_msgWnd = CreateWindowEx(0, MSG_WND_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
+
+    MSG msg;
+    while (g_running.load() && GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_msgWnd) {
+        DestroyWindow(g_msgWnd);
+        g_msgWnd = nullptr;
+    }
+
+    UnregisterClass(MSG_WND_CLASS, GetModuleHandle(NULL));
+
+    OleUninitialize();
+    return 0;
+}
+
 DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     OleInitialize(NULL);
 
@@ -4588,13 +5733,7 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     twc.lpszClassName = TOAST_CLASS;
     RegisterClass(&twc);
 
-    WNDCLASS mwc = {};
-    mwc.lpfnWndProc = MsgWndProc;
-    mwc.hInstance = GetModuleHandle(NULL);
-    mwc.lpszClassName = MSG_WND_CLASS;
-    RegisterClass(&mwc);
 
-    g_msgWnd = CreateWindowEx(0, MSG_WND_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
 
     g_uiFont = CreateFont(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -4610,9 +5749,33 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     }
 
     MSG msg;
-    while (g_running && GetMessage(&msg, NULL, 0, 0)) {
+    while (g_running.load() && GetMessage(&msg, NULL, 0, 0)) {
         if (msg.message == WM_APP + 100) {
             ShowCanvas();
+            continue;
+        }
+        if (msg.message == WM_HOOK_TOGGLE_DRAW) {
+            ToggleDrawMode();
+            continue;
+        }
+        if (msg.message == WM_HOOK_START_PICKER) {
+            StartColorPicker();
+            continue;
+        }
+        if (msg.message == WM_HOOK_START_SPOTLIGHT) {
+            StartSpotlight();
+            continue;
+        }
+        if (msg.message == WM_HOOK_TOGGLE_STOPWATCH) {
+            ToggleStopwatch();
+            continue;
+        }
+        if (msg.message == WM_HOOK_TOGGLE_TIMER) {
+            ToggleTimer();
+            continue;
+        }
+        if (msg.message == WM_HOOK_TOGGLE_FLASH) {
+            ToggleFlash();
             continue;
         }
         TranslateMessage(&msg);
@@ -4622,15 +5785,18 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
     if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
 
-    if (g_msgWnd) {
-        DestroyWindow(g_msgWnd);
-        g_msgWnd = nullptr;
-    }
+
 
     HideCanvas();
     DestroyOverlay();
     if (g_drawModeActive) ToggleDrawMode();
     if (g_pickerActive) StopColorPicker();
+
+    if (g_flashKeyboardHook) { UnhookWindowsHookEx(g_flashKeyboardHook); g_flashKeyboardHook = nullptr; }
+    if (g_flashWnd && IsWindowVisible(g_flashWnd)) { RestoreMonitorBrightness(); }
+    if (g_flashWnd) { DestroyWindow(g_flashWnd); g_flashWnd = nullptr; }
+    if (g_stopwatchWnd) { KillTimer(g_stopwatchWnd, 1); DestroyWindow(g_stopwatchWnd); g_stopwatchWnd = nullptr; }
+    if (g_timerWnd) { KillTimer(g_timerWnd, 1); DestroyWindow(g_timerWnd); g_timerWnd = nullptr; }
 
     if (g_uiFont) { DeleteObject(g_uiFont); g_uiFont = nullptr; }
 
@@ -4640,7 +5806,10 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     UnregisterClass(PICKER_CLASS, GetModuleHandle(NULL));
     UnregisterClass(AURA_CLASS, GetModuleHandle(NULL));
     UnregisterClass(TOAST_CLASS, GetModuleHandle(NULL));
-    UnregisterClass(MSG_WND_CLASS, GetModuleHandle(NULL));
+
+    UnregisterClass(STOPWATCH_CLASS, GetModuleHandle(NULL));
+    UnregisterClass(TIMER_CLASS, GetModuleHandle(NULL));
+    UnregisterClass(FLASH_CLASS, GetModuleHandle(NULL));
 
     Gdiplus::GdiplusShutdown(gdiplusToken);
     OleUninitialize();
@@ -4688,13 +5857,10 @@ void LoadSettings() {
     if (g_settings.trailWidth < 1) g_settings.trailWidth = 1;
     if (g_settings.trailWidth > 20) g_settings.trailWidth = 20;
 
-    g_settings.enableParticles = TRUE;
-
     g_settings.armTimeout = Wh_GetIntSetting(L"ArmTimeout");
     if (g_settings.armTimeout < 0) g_settings.armTimeout = 0;
 
     g_settings.showAura = Wh_GetIntSetting(L"ShowAura");
-    g_settings.blockOtherClicks = TRUE;
 
     PCWSTR modBehaviorStr = Wh_GetStringSetting(L"ModifierBehavior");
     if (modBehaviorStr && wcscmp(modBehaviorStr, L"toggle") == 0) {
@@ -4803,11 +5969,35 @@ BOOL WhTool_ModInit() {
     extern void LaunchNotesProcess();
     LaunchNotesProcess();
 
-    g_running = TRUE;
+    g_running.store(true);
+
+    g_workerThread = CreateThread(NULL, 0, WorkerThreadProc, NULL, 0, &g_workerThreadId);
+    if (!g_workerThread) {
+        Wh_Log(L"Failed to create worker thread");
+        g_running.store(false);
+        return FALSE;
+    }
+
+    // Wait up to 1000ms for g_msgWnd to be initialized by the worker thread
+    for (int i = 0; i < 100; i++) {
+        if (g_msgWnd) break;
+        Sleep(10);
+    }
+
     g_hookThread = CreateThread(NULL, 0, HookThreadProc, NULL, 0, &g_hookThreadId);
 
     if (!g_hookThread) {
         Wh_Log(L"Failed to create hook thread");
+        g_running.store(false);
+        if (g_workerThreadId) {
+            PostThreadMessage(g_workerThreadId, WM_QUIT, 0, 0);
+        }
+        if (g_workerThread) {
+            WaitForSingleObject(g_workerThread, 3000);
+            CloseHandle(g_workerThread);
+            g_workerThread = nullptr;
+        }
+        g_workerThreadId = 0;
         return FALSE;
     }
 
@@ -4818,7 +6008,7 @@ BOOL WhTool_ModInit() {
 void WhTool_ModUninit() {
     Wh_Log(L"Mouse Gestures mod uninitializing...");
 
-    g_running = FALSE;
+    g_running.store(false);
 
     if (g_notesThreadId) {
         PostThreadMessage(g_notesThreadId, WM_QUIT, 0, 0);
@@ -4840,7 +6030,18 @@ void WhTool_ModUninit() {
         g_hookThread = nullptr;
     }
 
+    if (g_workerThreadId) {
+        PostThreadMessage(g_workerThreadId, WM_QUIT, 0, 0);
+    }
+
+    if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, 3000);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+    }
+
     g_hookThreadId = 0;
+    g_workerThreadId = 0;
     g_notesThreadId = 0;
     Wh_Log(L"Mouse Gestures mod uninitialized");
 }
