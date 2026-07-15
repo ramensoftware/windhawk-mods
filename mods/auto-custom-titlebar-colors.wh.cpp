@@ -9,6 +9,10 @@
 // @exclude         devenv.exe
 // @exclude         systemsettings.exe
 // @exclude         applicationframehost.exe
+// @exclude         StartMenuExperienceHost.exe
+// @exclude         ShellExperienceHost.exe
+// @exclude         SearchHost.exe
+// @exclude         SearchApp.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
 // ==/WindhawkMod==
 
@@ -217,43 +221,64 @@ static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
 // Settings helpers
 // -----------------------------------------------------------------------------
 
-static BOOL UseCustomColourForMode(BOOL isDarkMode)
+struct ModSettings {
+    BOOL useCustomLight;
+    BOOL useCustomDark;
+    COLORREF activeLight;
+    COLORREF inactiveLight;
+    COLORREF activeDark;
+    COLORREF inactiveDark;
+};
+static ModSettings g_settings;
+
+static void LoadSettings()
 {
-    return (BOOL)Wh_GetIntSetting(isDarkMode
-        ? L"customColours.dark"
-        : L"customColours.light");
-}
+    g_settings.useCustomLight = (BOOL)Wh_GetIntSetting(L"customColours.light");
+    g_settings.useCustomDark = (BOOL)Wh_GetIntSetting(L"customColours.dark");
 
-static COLORREF GetTitleBarColour(BOOL isDarkMode, BOOL isActive)
-{
-    const WCHAR* modePrefix  = isDarkMode ? L"darkMode"     : L"lightMode";
-    const WCHAR* statePrefix = isActive   ? L"activeColour" : L"inactiveColour";
+    BOOL useHexLight = (BOOL)Wh_GetIntSetting(L"lightMode.useHex");
+    if (useHexLight) {
+        PCWSTR hexActive = Wh_GetStringSetting(L"lightMode.activeColour.hex");
+        if (!HexToColorref(hexActive, &g_settings.activeLight)) g_settings.activeLight = RGB(255, 255, 255);
+        Wh_FreeStringSetting(hexActive);
 
-    WCHAR useHexKey[64], hexKey[64], rKey[64], gKey[64], bKey[64];
-    wsprintfW(useHexKey, L"%s.useHex",  modePrefix);
-    wsprintfW(hexKey,    L"%s.%s.hex",  modePrefix, statePrefix);
-    wsprintfW(rKey,      L"%s.%s.r",    modePrefix, statePrefix);
-    wsprintfW(gKey,      L"%s.%s.g",    modePrefix, statePrefix);
-    wsprintfW(bKey,      L"%s.%s.b",    modePrefix, statePrefix);
-
-    BOOL useHex = (BOOL)Wh_GetIntSetting(useHexKey);
-
-    if (useHex) {
-        PCWSTR hexVal = Wh_GetStringSetting(hexKey);
-        COLORREF colour = 0;
-        BOOL ok = HexToColorref(hexVal, &colour);
-        Wh_FreeStringSetting(hexVal);
-
-        if (ok) return colour;
-
-        // Invalid hex: log and fall through to RGB
-        Wh_Log(L"GetTitleBarColour: invalid hex for key '%s', falling back to RGB", hexKey);
+        PCWSTR hexInactive = Wh_GetStringSetting(L"lightMode.inactiveColour.hex");
+        if (!HexToColorref(hexInactive, &g_settings.inactiveLight)) g_settings.inactiveLight = RGB(230, 230, 230);
+        Wh_FreeStringSetting(hexInactive);
+    } else {
+        g_settings.activeLight = RGB(
+            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.r"),
+            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.g"),
+            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.b")
+        );
+        g_settings.inactiveLight = RGB(
+            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.r"),
+            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.g"),
+            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.b")
+        );
     }
 
-    BYTE r = (BYTE)Wh_GetIntSetting(rKey);
-    BYTE g = (BYTE)Wh_GetIntSetting(gKey);
-    BYTE b = (BYTE)Wh_GetIntSetting(bKey);
-    return RGB(r, g, b);
+    BOOL useHexDark = (BOOL)Wh_GetIntSetting(L"darkMode.useHex");
+    if (useHexDark) {
+        PCWSTR hexActive = Wh_GetStringSetting(L"darkMode.activeColour.hex");
+        if (!HexToColorref(hexActive, &g_settings.activeDark)) g_settings.activeDark = RGB(32, 32, 32);
+        Wh_FreeStringSetting(hexActive);
+
+        PCWSTR hexInactive = Wh_GetStringSetting(L"darkMode.inactiveColour.hex");
+        if (!HexToColorref(hexInactive, &g_settings.inactiveDark)) g_settings.inactiveDark = RGB(50, 50, 50);
+        Wh_FreeStringSetting(hexInactive);
+    } else {
+        g_settings.activeDark = RGB(
+            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.r"),
+            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.g"),
+            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.b")
+        );
+        g_settings.inactiveDark = RGB(
+            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.r"),
+            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.g"),
+            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.b")
+        );
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -268,8 +293,11 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
         &darkMode, sizeof(darkMode));
 
-    if (UseCustomColourForMode(g_isDarkMode)) {
-        COLORREF colour = GetTitleBarColour(g_isDarkMode, isActive);
+    BOOL useCustom = g_isDarkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
+    if (useCustom) {
+        COLORREF colour = g_isDarkMode 
+            ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
+            : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
             &colour, sizeof(colour));
         Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
@@ -500,6 +528,7 @@ BOOL Wh_ModInit()
     Wh_Log(L"=== Auto Custom Titlebar Colors - Init [PID %d] ===",
         GetCurrentProcessId());
 
+    LoadSettings();
     g_isDarkMode = IsSystemDarkMode();
     Wh_Log(L"Initial theme: %s", g_isDarkMode ? L"DARK" : L"LIGHT");
 
@@ -533,6 +562,7 @@ VOID Wh_ModAfterInit()
 VOID Wh_ModSettingsChanged()
 {
     Wh_Log(L"[PID %d] Settings changed - reapplying...", GetCurrentProcessId());
+    LoadSettings();
     g_isDarkMode = IsSystemDarkMode();
     ApplyToForegroundWindow();
     ApplyToAllWindows(FALSE);
