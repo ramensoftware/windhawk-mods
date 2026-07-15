@@ -29,7 +29,7 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 |:---:|:---:|
 | Control Panel | Registry Editor |
 
-| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![Tab pill animation](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill%20das%20Abas.gif) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Winver.gif) |
+| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![Tab pill animation](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill%20das%20Abas.gif) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif) |
 |:---:|:---:|:---:|
 | Navigation pane pill | Tab pill animation | About Windows |
 
@@ -3196,7 +3196,6 @@ struct CheckAnim {
     float   progress  = 1.f;  // 0=start (invisible), 1=complete
     DWORD   lastTick  = 0;
     int     fromState = -1;
-    WNDPROC origProc  = nullptr;
 };
 static std::unordered_map<ULONG_PTR, CheckAnim> g_checkAnims;
 // g_checkAnims is reachable from multiple threads: WH_CALLWNDPROC is
@@ -3225,18 +3224,18 @@ static std::atomic<bool> g_checkBoxAnimUnloading{ false };
 static thread_local HWND t_currentCheckHWND = nullptr;
 
 // Forward declaration
-static LRESULT CALLBACK CheckBoxSubclassProc(HWND, UINT, WPARAM, LPARAM);
+static LRESULT CALLBACK CheckBoxSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 
-static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
+static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
-    WNDPROC origProc = nullptr;
-    float   progress = 1.f;
+    bool  tracked  = false;
+    float progress = 1.f;
     {
         std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
         auto it = g_checkAnims.find((ULONG_PTR)hWnd);
-        if (it != g_checkAnims.end()) { origProc = it->second.origProc; progress = it->second.progress; }
+        if (it != g_checkAnims.end()) { tracked = true; progress = it->second.progress; }
     }
-    if (!origProc) return DefWindowProcW(hWnd, msg, wp, lp);
+    if (!tracked) return DefSubclassProc(hWnd, msg, wp, lp);
 
     if (msg == WM_TIMER && wp == kCheckTimerId)
     {
@@ -3291,7 +3290,7 @@ static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPA
 
     if (msg == WM_LBUTTONUP)
     {
-        LRESULT r = CallWindowProcW(origProc, hWnd, msg, wp, lp);
+        LRESULT r = DefSubclassProc(hWnd, msg, wp, lp);
         StartAnimIfChecked();
         return r;
     }
@@ -3301,7 +3300,7 @@ static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPA
         // WM_LBUTTONUP above (not WM_LBUTTONDOWN) -- querying on WM_KEYDOWN
         // would read BM_GETCHECK before the real toggle happens on key-up,
         // so the transition would never be observed.
-        LRESULT r = CallWindowProcW(origProc, hWnd, msg, wp, lp);
+        LRESULT r = DefSubclassProc(hWnd, msg, wp, lp);
         StartAnimIfChecked();
         return r;
     }
@@ -3312,10 +3311,10 @@ static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPA
     if (msg == WM_DESTROY)
     {
         KillTimer(hWnd, kCheckTimerId);
-        SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)origProc);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, CheckBoxSubclassProc);
         HWND prev2 = t_currentCheckHWND;
         t_currentCheckHWND = hWnd;
-        LRESULT r2 = CallWindowProcW(origProc, hWnd, msg, wp, lp);
+        LRESULT r2 = DefSubclassProc(hWnd, msg, wp, lp);
         t_currentCheckHWND = prev2;
         {
             std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
@@ -3326,7 +3325,7 @@ static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPA
 
     HWND prev = t_currentCheckHWND;
     t_currentCheckHWND = hWnd;
-    LRESULT r = CallWindowProcW(origProc, hWnd, msg, wp, lp);
+    LRESULT r = DefSubclassProc(hWnd, msg, wp, lp);
     t_currentCheckHWND = prev;
     return r;
 }
@@ -3339,8 +3338,7 @@ static void CheckAnims_Cleanup()
         HWND hw = (HWND)key;
         if (!IsWindow(hw)) continue;
         KillTimer(hw, kCheckTimerId);
-        if (anim.origProc)
-            SetWindowLongPtrW(hw, GWLP_WNDPROC, (LONG_PTR)anim.origProc);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hw, CheckBoxSubclassProc);
         // Force repaint so the window uses the restored WndProc immediately.
         // Without this, the control keeps the last frame drawn by our proc
         // until the next manual hover/click triggers a redraw.
@@ -3384,7 +3382,6 @@ static constexpr DWORD kGlyphAnimStaticPruneMs = 3500;
 // PillTree subclass (scroll detection + glyph timer)
 // ============================================================================
 
-static WNDPROC g_pillTreeOrigProc  = nullptr;
 static HWND    g_pillTreeSubclHWND = nullptr;
 
 // Forward declaration (PillDCompInit_Locked already forward-declared above)
@@ -3392,13 +3389,14 @@ static int  PillAnimStyle();
 static int  PillTreeContext();
 static void PillWakeThread();
 static bool PillDCompDrawFrame_Locked(float,float,float,float,bool,float,float,bool,bool,int,int,int,int,int,bool,bool);
+static LRESULT CALLBACK PillTreeSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 
 static void PillTreeSubclassRemove()
 {
-    if (g_pillTreeSubclHWND && g_pillTreeOrigProc && IsWindow(g_pillTreeSubclHWND))
+    if (g_pillTreeSubclHWND && IsWindow(g_pillTreeSubclHWND))
     {
         KillTimer(g_pillTreeSubclHWND, kGlyphTimerId);
-        SetWindowLongPtrW(g_pillTreeSubclHWND, GWLP_WNDPROC, (LONG_PTR)g_pillTreeOrigProc);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_pillTreeSubclHWND, PillTreeSubclassProc);
     }
     g_glyphAnims.clear();
     // NOTE: g_checkAnims is NOT cleared here -- checkbox subclasses are independent.
@@ -3406,7 +3404,6 @@ static void PillTreeSubclassRemove()
     g_glyphLastTick     = 0;
     g_glyphTreeHWND     = nullptr;
     g_pillTreeSubclHWND = nullptr;
-    g_pillTreeOrigProc  = nullptr;
 }
 
 // ── Fluent Pin Icon ──────────────────────────────────────────────────────────
@@ -5809,7 +5806,7 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 
     [[clang::musttail]] return SendMessageW_orig(hwnd, msg, wp, lp);
 }
-static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     // Glyph timer: intercept before original proc sees our timer ID
     if (msg == WM_TIMER && wp == kGlyphTimerId)
@@ -5892,7 +5889,7 @@ static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPA
         scrollBeforeH = GetScrollInfo(hwnd, SB_HORZ, &siH) ? siH.nPos : -1;
     }
 
-    LRESULT r = CallWindowProcW(g_pillTreeOrigProc, hwnd, msg, wp, lp);
+    LRESULT r = DefSubclassProc(hwnd, msg, wp, lp);
 
     if (isDComp && (scrollBeforeV >= 0 || scrollBeforeH >= 0))
     {
@@ -5961,10 +5958,10 @@ static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPA
     if (msg == WM_NCDESTROY)
     {
         KillTimer(hwnd, kGlyphTimerId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, PillTreeSubclassProc);
         g_glyphAnims.clear();
         g_glyphLastTick     = 0;
         g_glyphTreeHWND     = nullptr;
-        g_pillTreeOrigProc  = nullptr;
         g_pillTreeSubclHWND = nullptr;
         GlyphTreeOwnerCleanup(hwnd);
     }
@@ -6477,13 +6474,11 @@ static bool PaintTreeViewGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
 
                 // Install subclass if not done yet (safety: glyph-only repaint
                 // may fire before the selected item fires HandlePostDraw)
-                if (!g_pillTreeOrigProc && !g_pillTreeSubclHWND)
+                if (!g_pillTreeSubclHWND)
                 {
-                    WNDPROC prev = (WNDPROC)SetWindowLongPtrW(
-                        tvHwnd, GWLP_WNDPROC, (LONG_PTR)PillTreeSubclassProc);
-                    if (prev)
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            tvHwnd, PillTreeSubclassProc, 0))
                     {
-                        g_pillTreeOrigProc  = prev;
                         g_pillTreeSubclHWND = tvHwnd;
                     }
                 }
@@ -7325,7 +7320,7 @@ static bool PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         {
             std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
             auto it = g_checkAnims.find((ULONG_PTR)checkHwnd);
-            if (it != g_checkAnims.end() && it->second.origProc)
+            if (it != g_checkAnims.end())
                 progress = it->second.progress;
         }
     }
@@ -9305,26 +9300,25 @@ static LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                 wchar_t clsBuf[16] = {};
                 GetClassNameW(cwp->hwnd, clsBuf, ARRAYSIZE(clsBuf));
                 if (_wcsicmp(clsBuf, L"Button") != 0) goto next_callwnd;
-                // Use GetWindowLongPtrW (thread-safe) to check subclass state
-                // instead of g_checkAnims double-lookup (TOCTOU race).
                 // Also verify it is actually a "Button" window to avoid
                 // accidentally subclassing windows whose low style bits match.
-                bool hasSubclass = ((WNDPROC)GetWindowLongPtrW(
-                    cwp->hwnd, GWLP_WNDPROC) == CheckBoxSubclassProc);
+                bool hasSubclass;
+                {
+                    std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
+                    hasSubclass = g_checkAnims.find((ULONG_PTR)cwp->hwnd) != g_checkAnims.end();
+                }
                 if (!hasSubclass)
                 {
-                    // Query the real state through the ORIGINAL Button proc
-                    // before swapping WNDPROC -- querying after would dispatch
-                    // BM_GETCHECK through CheckBoxSubclassProc while
-                    // g_checkAnims still has no entry for this HWND, which
-                    // falls through to DefWindowProcW and always reads 0.
+                    // Query the real state before installing the subclass --
+                    // querying after would dispatch BM_GETCHECK through
+                    // CheckBoxSubclassProc while g_checkAnims still has no
+                    // entry for this HWND, which falls through to
+                    // DefSubclassProc and always reads 0.
                     int fromState = (int)SendMessageW(cwp->hwnd, BM_GETCHECK, 0, 0);
-                    WNDPROC prev = (WNDPROC)SetWindowLongPtrW(
-                        cwp->hwnd, GWLP_WNDPROC, (LONG_PTR)CheckBoxSubclassProc);
-                    if (prev && prev != CheckBoxSubclassProc)
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            cwp->hwnd, CheckBoxSubclassProc, 0))
                     {
                         CheckAnim ca;
-                        ca.origProc  = prev;
                         ca.fromState = fromState;
                         ca.progress  = 1.f;
                         ca.lastTick  = GetTickCount();
@@ -16120,19 +16114,15 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                               style == BS_3STATE      || style == BS_AUTO3STATE);
                 if (isChk && _wcsicmp(clsBuf, L"Button") == 0)
                 {
-                    WNDPROC origProc = (WNDPROC)GetWindowLongPtrW(hwndCB, GWLP_WNDPROC);
-                    if (origProc && origProc != CheckBoxSubclassProc)
+                    CheckAnim ca;
+                    ca.fromState = (int)SendMessageW(hwndCB, BM_GETCHECK, 0, 0);
+                    ca.progress  = 1.f;
+                    ca.lastTick  = GetTickCount();
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            hwndCB, CheckBoxSubclassProc, 0))
                     {
-                        CheckAnim ca;
-                        ca.origProc  = origProc;
-                        ca.fromState = (int)SendMessageW(hwndCB, BM_GETCHECK, 0, 0);
-                        ca.progress  = 1.f;
-                        ca.lastTick  = GetTickCount();
-                        {
-                            std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
-                            g_checkAnims[(ULONG_PTR)hwndCB] = ca;
-                        }
-                        SetWindowLongPtrW(hwndCB, GWLP_WNDPROC, (LONG_PTR)CheckBoxSubclassProc);
+                        std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
+                        g_checkAnims[(ULONG_PTR)hwndCB] = ca;
                     }
                 }
             }
@@ -16560,13 +16550,11 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                 TreeCursorTrySubclass(currentTree);
 
                 // Install subclass for DComp pill animation + glyph WM_TIMER
-                if ((isDCompStyle || animStyle != 0) && currentTree && !g_pillTreeOrigProc)
+                if ((isDCompStyle || animStyle != 0) && currentTree && !g_pillTreeSubclHWND)
                 {
-                    WNDPROC prev = (WNDPROC)SetWindowLongPtrW(
-                        currentTree, GWLP_WNDPROC, (LONG_PTR)PillTreeSubclassProc);
-                    if (prev)
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            currentTree, PillTreeSubclassProc, 0))
                     {
-                        g_pillTreeOrigProc  = prev;
                         g_pillTreeSubclHWND = currentTree;
                     }
                 }
@@ -18731,13 +18719,13 @@ static void ApDetachReplacementState(HWND hwnd)
     }
 }
 
+// Forward declaration: ApQuarantineOnOwnerThread below removes this subclass
+// by name before ApWndProc itself is defined.
+static LRESULT CALLBACK ApWndProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+
 static bool ApQuarantineOnOwnerThread(HWND hwnd)
 {
-    SetLastError(ERROR_SUCCESS);
-    const LONG_PTR oldProc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
-        reinterpret_cast<LONG_PTR>(DefWindowProcW));
-    if (!oldProc && GetLastError() != ERROR_SUCCESS)
-        return false;
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ApWndProc);
 
     ApDetachReplacementState(hwnd);
     ShowWindow(hwnd, SW_HIDE);
@@ -18746,7 +18734,7 @@ static bool ApQuarantineOnOwnerThread(HWND hwnd)
 }
 
 static LRESULT CALLBACK ApWndProc(HWND hwnd, UINT msg,
-                                  WPARAM wParam, LPARAM lParam) {
+                                  WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     ApWndProcGuard activeGuard;
     auto* s = reinterpret_cast<ApWndState*>(
         GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -18756,7 +18744,7 @@ static LRESULT CALLBACK ApWndProc(HWND hwnd, UINT msg,
 
     if (g_apUnloading.load(std::memory_order_acquire) &&
         msg != WM_CLOSE && msg != WM_DESTROY && msg != WM_NCDESTROY) {
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
     switch (msg) {
@@ -19099,6 +19087,7 @@ static LRESULT CALLBACK ApWndProc(HWND hwnd, UINT msg,
             ApStopAnimTimer(s);
             ReleaseCapture();
             if (s) { ApFreeRT(s); delete s; SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0); }
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ApWndProc);
             HWND expected = hwnd;
             if (g_apReplacement.compare_exchange_strong(expected, nullptr,
                     std::memory_order_acq_rel)) {
@@ -19106,7 +19095,7 @@ static LRESULT CALLBACK ApWndProc(HWND hwnd, UINT msg,
             }
             return 0;
     }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 // Both attributes are cosmetic (dark titlebar tint, rounded corners) --
@@ -19209,10 +19198,7 @@ static HWND ApCreateReplacementWindow(
         nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!hwnd) return nullptr;
 
-    SetLastError(ERROR_SUCCESS);
-    const LONG_PTR oldProc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
-        reinterpret_cast<LONG_PTR>(ApWndProc));
-    if (!oldProc && GetLastError() != ERROR_SUCCESS) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ApWndProc, 0)) {
         DestroyWindow(hwnd);
         return nullptr;
     }
@@ -25032,6 +25018,8 @@ static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
     RemoveWindowSubclass(hwnd, StatusBarSubclassProc, 0);
     RemoveWindowSubclass(hwnd, FontViewSubclassProc, kFontViewSubId);
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TabSubclassProc);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CheckBoxSubclassProc);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, PillTreeSubclassProc);
     return TRUE;
 }
 
