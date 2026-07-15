@@ -18626,6 +18626,15 @@ static bool ApUnionItemRect(ApWndState* s, int idx, RECT* inOut, bool* hasRect)
 
 static constexpr wchar_t kApWndClass[] = L"W32MAutoPlayReplacement";
 static constexpr UINT kApQuarantineMessage = WM_APP + 0x5A3;
+// Retries for the message-based quarantine before giving up on a clean
+// removal. Deliberately never falls back to a raw GWLP_WNDPROC overwrite --
+// by the time quarantine runs, the window has gone through
+// SetWindowSubclassFromAnyThread, and forcing the pointer out from under
+// comctl32's own subclass chain would leave its internal bookkeeping
+// inconsistent (RemoveWindowSubclass could later act on stale state, or
+// silently drop another subclass layer if one exists). A stuck window is a
+// contained failure; corrupting shared comctl32 state is not.
+static constexpr int kApQuarantineMaxAttempts = 4;
 
 // Last drive letter recorded from WM_DEVICECHANGE DBT_DEVICEARRIVAL.
 // Written by ApRecordDeviceArrival (called from DefWindowProcW_hook), read by
@@ -18638,13 +18647,7 @@ static wchar_t g_apLastArrivedRoot[4] = {};
 static std::atomic<HWND> g_apReplacement{nullptr};
 static std::atomic<int> g_apFlyoutState{0};
 static std::atomic<bool> g_apUnloading{false};
-static std::atomic<UINT> g_apWndProcActive{0};
 static std::atomic<UINT> g_apShowActive{0};
-
-struct ApWndProcGuard {
-    ApWndProcGuard() { g_apWndProcActive.fetch_add(1, std::memory_order_acq_rel); }
-    ~ApWndProcGuard() { g_apWndProcActive.fetch_sub(1, std::memory_order_acq_rel); }
-};
 
 struct ApShowGuard {
     ApShowGuard() { g_apShowActive.fetch_add(1, std::memory_order_acq_rel); }
@@ -18735,7 +18738,6 @@ static bool ApQuarantineOnOwnerThread(HWND hwnd)
 
 static LRESULT CALLBACK ApWndProc(HWND hwnd, UINT msg,
                                   WPARAM wParam, LPARAM lParam, DWORD_PTR) {
-    ApWndProcGuard activeGuard;
     auto* s = reinterpret_cast<ApWndState*>(
         GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 
@@ -19279,69 +19281,44 @@ static bool ApQuarantineReplacement(HWND hwnd)
     HMODULE safetyModule = HoldModuleReferenceForAddress(
         reinterpret_cast<LPCWSTR>(&ApWndProc));
 
-    DWORD_PTR quarantined = 0;
-    if (SendMessageTimeoutW(hwnd, kApQuarantineMessage, 0, 0,
-            SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &quarantined) &&
-        quarantined != 0) {
-        if (safetyModule)
-            FreeLibrary(safetyModule);
-        return true;
-    }
-    if (!IsWindow(hwnd)) {
-        if (safetyModule)
-            FreeLibrary(safetyModule);
-        return true;
-    }
-
-    SetLastError(ERROR_SUCCESS);
-    const LONG_PTR oldProc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
-        reinterpret_cast<LONG_PTR>(DefWindowProcW));
-    if (!oldProc && GetLastError() != ERROR_SUCCESS) {
-        const DWORD quarantineError = GetLastError();
-        BOOL pinned = FALSE;
-        if (!safetyModule) {
-            HMODULE pinnedModule = nullptr;
-            pinned = GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                    GET_MODULE_HANDLE_EX_FLAG_PIN,
-                reinterpret_cast<LPCWSTR>(&ApWndProc), &pinnedModule);
+    for (int attempt = 0; attempt < kApQuarantineMaxAttempts; ++attempt) {
+        DWORD_PTR quarantined = 0;
+        if (SendMessageTimeoutW(hwnd, kApQuarantineMessage, 0, 0,
+                SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &quarantined) &&
+            quarantined != 0) {
+            if (safetyModule)
+                FreeLibrary(safetyModule);
+            return true;
         }
-        Wh_Log(L"[AutoPlay] Failed to quarantine replacement WndProc error=%lu",
-            quarantineError);
-        // Keep safetyModule referenced: this valid window still owns ApWndProc.
-        if (!safetyModule && !pinned)
-            Wh_Log(L"[AutoPlay] Critical: replacement callback module could not be held");
-        return false;
-    }
-
-    const DWORD waitStart = GetTickCount();
-    while (g_apWndProcActive.load(std::memory_order_acquire) != 0 &&
-           GetTickCount() - waitStart < 2000) {
-        Sleep(1);
-    }
-    if (g_apWndProcActive.load(std::memory_order_acquire) != 0) {
-        // The instance already points at DefWindowProcW, so no new callbacks
-        // can enter. Keep the preventive loader reference while an existing
-        // callback is hung so it cannot resume into unloaded code.
-        BOOL pinned = FALSE;
-        if (!safetyModule) {
-            HMODULE pinnedModule = nullptr;
-            pinned = GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                    GET_MODULE_HANDLE_EX_FLAG_PIN,
-                reinterpret_cast<LPCWSTR>(&ApWndProc), &pinnedModule);
+        if (!IsWindow(hwnd)) {
+            if (safetyModule)
+                FreeLibrary(safetyModule);
+            return true;
         }
-        Wh_Log(L"[AutoPlay] Timed out draining replacement WndProc; moduleHeld=%d",
-            safetyModule != nullptr || pinned != FALSE);
-        return false;
     }
 
-    ApDetachReplacementState(hwnd);
+    // Still not quarantined after retrying the message-based path -- give up
+    // on a clean removal rather than risk it (see kApQuarantineMaxAttempts).
+    // ShowWindow/PostMessageW don't need the target thread's cooperation to
+    // return, unlike SendMessage, so this best-effort hide/close is safe even
+    // if that thread never resumes pumping messages.
     ShowWindow(hwnd, SW_HIDE);
     PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    if (safetyModule)
-        FreeLibrary(safetyModule);
-    return true;
+
+    // Permanently pin the module: the subclass is still live and pointing at
+    // our code, and may be invoked again whenever/if the window's thread
+    // resumes -- that code must never be unloaded out from under it.
+    BOOL pinned = FALSE;
+    if (!safetyModule) {
+        HMODULE pinnedModule = nullptr;
+        pinned = GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_PIN,
+            reinterpret_cast<LPCWSTR>(&ApWndProc), &pinnedModule);
+    }
+    Wh_Log(L"[AutoPlay] Could not quarantine replacement WndProc after %d attempts; moduleHeld=%d",
+        kApQuarantineMaxAttempts, safetyModule != nullptr || pinned != FALSE);
+    return false;
 }
 
 static bool ApDismissReplacement(bool waitForClose = false,
