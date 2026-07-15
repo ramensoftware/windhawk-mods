@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components.
-// @version        10.0.31
+// @version        10.0.32
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -1473,11 +1473,11 @@ static void InstallShell32Hooks() {
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) return;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[2];
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[2];
     int hookCount = 0;
 
     if (needDevices) {
-        hooks[hookCount] = {{
+        shell32_dll_hooks[hookCount] = {{
             L"bool "
 #ifdef _WIN64
             L"__cdecl"
@@ -1494,7 +1494,7 @@ static void InstallShell32Hooks() {
     }
 
     if (needLegacy) {
-        hooks[hookCount] = {{
+        shell32_dll_hooks[hookCount] = {{
             L"private: bool __cdecl COpenControlPanel::_MapLegacyName"
             L"(unsigned short const *,unsigned short *,unsigned int,bool *)"
         },
@@ -1505,7 +1505,7 @@ static void InstallShell32Hooks() {
     }
 
     if (hookCount > 0) {
-        if (WindhawkUtils::HookSymbols(hShell32, hooks, hookCount)) {
+        if (WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, hookCount)) {
             if (needDevices) g_shell32DevicesHookInstalled = true;
             if (needLegacy) g_legacyNameHookInstalled = true;
             Wh_Log(L"[SHELL32-HOOKS] Installed %d hook(s)", hookCount);
