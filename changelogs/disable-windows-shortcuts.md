@@ -1,3 +1,7 @@
+## 1.2.1 ([Jul 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bc9c9d57104d5081e9e70a507664872a0d4378e4/mods/disable-windows-shortcuts.wh.cpp))
+
+- Add `Win+F1` shortcut to block windows help from opening in default browser
+
 ## 1.2.0 ([May 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4960f73fdd2c7d829d7d160372887ad73b46f0be/mods/disable-windows-shortcuts.wh.cpp))
 
 - Fixed an annoying issue for users with PowerToys installed where it triggers the explorer restart prompt every time during startup. Addresses [#3973](https://github.com/ramensoftware/windhawk-mods/issues/3973)

@@ -3683,7 +3683,7 @@
           11
         ],
         "ratingUsers": 13,
-        "updated": 1779612626000,
+        "updated": 1784103428000,
         "users": 151
       },
       "metadata": {
@@ -3696,7 +3696,7 @@
           "dwm.exe"
         ],
         "name": "Disable Windows Shortcuts",
-        "version": "1.2.0"
+        "version": "1.2.1"
       }
     },
     "discord-balloon-notifs": {
@@ -15298,7 +15298,7 @@
           4
         ],
         "ratingUsers": 6,
-        "updated": 1783498092000,
+        "updated": 1784103365000,
         "users": 152
       },
       "metadata": {
@@ -15313,7 +15313,7 @@
           "WINWORD.EXE"
         ],
         "name": "Word Local AutoSave",
-        "version": "3.8"
+        "version": "4.0.0"
       }
     },
     "word-mathtype-dark-fix": {
