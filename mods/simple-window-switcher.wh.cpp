@@ -401,7 +401,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Maximum Height (percentage of screen height)
     - stretchThumbnailsToTaskWidth: true
       $name: Stretch Thumbnails to Task Width
-      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width. (Note: Has no effect if Row Width is set to 0).
+      $description: When enabled, custom row width also changes thumbnail width. Disable to keep thumbnail aspect sizing while row width controls only task tile width.
     - autoFitTasks: false
       $name: Shrink Tasks to Fit
       $description: Automatically shrink task tiles (thumbnails and icons) in discrete steps as the number of visible windows grows, so more tasks stay visible without being pushed off-screen. Your Row Height and Icon Size act as the maximum size.
