@@ -7,12 +7,6 @@
 // @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
-// @exclude         systemsettings.exe
-// @exclude         applicationframehost.exe
-// @exclude         StartMenuExperienceHost.exe
-// @exclude         ShellExperienceHost.exe
-// @exclude         SearchHost.exe
-// @exclude         SearchApp.exe
 // @compilerOptions -ldwmapi -luxtheme -luser32
 // ==/WindhawkMod==
 
@@ -115,6 +109,8 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <unordered_set>
+#include <mutex>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -127,6 +123,11 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
 static pShouldSystemUseDarkMode g_ShouldSystemUseDarkMode = nullptr;
 static BOOL g_isDarkMode = FALSE;
+
+// App-controlled window state tracking
+static std::unordered_set<HWND> g_appControlledWindows;
+static std::mutex g_appControlledMutex;
+thread_local bool g_inMod = false;
 
 // Debounce mechanism: track last SetWindowPos time per window to prevent
 // rapid successive redraws that can interfere with window managers
@@ -171,6 +172,24 @@ BOOL IsSystemDarkMode()
 // Window eligibility
 // -----------------------------------------------------------------------------
 
+struct XamlSearchContext {
+    BOOL hasXaml;
+};
+
+static BOOL CALLBACK CheckXamlChildProc(HWND hwnd, LPARAM lParam) {
+    WCHAR className[256];
+    if (GetClassNameW(hwnd, className, 256)) {
+        if (wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
+            wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
+            wcscmp(className, L"MozillaCompositorWindowClass") == 0) {
+            ((XamlSearchContext*)lParam)->hasXaml = TRUE;
+            return FALSE; // Stop enumerating, we found it!
+        }
+    }
+    return TRUE; // Continue enumerating
+}
+
 BOOL IsWindowEligible(HWND hWnd)
 {
     if (!hWnd || !IsWindow(hWnd)) return FALSE;
@@ -181,6 +200,22 @@ BOOL IsWindowEligible(HWND hWnd)
     if (!(style & WS_CAPTION))       return FALSE;
     if (styleEx & WS_EX_TOOLWINDOW)  return FALSE;
     if (style & WS_CHILD)            return FALSE;
+
+    // Fast top-level check for Mozilla/Gecko browsers (Firefox, Zen, Floorp)
+    WCHAR className[256];
+    if (GetClassNameW(hWnd, className, 256)) {
+        if (wcscmp(className, L"MozillaWindowClass") == 0) {
+            return FALSE;
+        }
+    }
+
+    // Detect WinUI 3 / UWP modern apps and complex composite windows
+    // These apps host their modern UI inside specific child bridge windows.
+    XamlSearchContext ctx = { FALSE };
+    EnumChildWindows(hWnd, CheckXamlChildProc, (LPARAM)&ctx);
+    if (ctx.hasXaml) {
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -285,29 +320,84 @@ static void LoadSettings()
 // Core: apply dark-mode attribute + caption colour to one window
 // -----------------------------------------------------------------------------
 
+using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
+static DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
+
+HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
+{
+    if (!g_inMod && dwAttribute == DWMWA_CAPTION_COLOR) {
+        std::lock_guard<std::mutex> lock(g_appControlledMutex);
+        g_appControlledWindows.insert(hwnd);
+        Wh_Log(L"App controls DWMWA_CAPTION_COLOR for hWnd=%p", hwnd);
+    }
+    return DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
+}
+
 static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
 {
     if (!IsWindowEligible(hWnd)) return;
 
-    BOOL darkMode = g_isDarkMode;
-    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-        &darkMode, sizeof(darkMode));
+    {
+        std::lock_guard<std::mutex> lock(g_appControlledMutex);
+        if (g_appControlledWindows.count(hWnd)) return;
 
-    BOOL useCustom = g_isDarkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
-    if (useCustom) {
-        COLORREF colour = g_isDarkMode 
-            ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
-            : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
-            &colour, sizeof(colour));
-        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
-            hWnd, g_isDarkMode, isActive, colour);
-    } else {
-        const COLORREF def = DWMWA_COLOR_DEFAULT;
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
-        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
-            hWnd, g_isDarkMode, isActive);
+        // Fallback: check if window already has a custom color applied before our mod touches it
+        static std::unordered_set<HWND> seenWindows;
+        if (seenWindows.find(hWnd) == seenWindows.end()) {
+            seenWindows.insert(hWnd);
+            COLORREF currentColor = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &currentColor, sizeof(currentColor)))) {
+                if (currentColor != DWMWA_COLOR_DEFAULT) { // 0xFFFFFFFF
+                    g_appControlledWindows.insert(hWnd);
+                    Wh_Log(L"ApplyTitleBar: Window %p already has custom DWMWA_CAPTION_COLOR %08X, ignoring", hWnd, currentColor);
+                    return;
+                }
+            }
+        }
     }
+
+    g_inMod = true;
+    BOOL darkMode = g_isDarkMode;
+    if (DwmSetWindowAttribute_orig) {
+        DwmSetWindowAttribute_orig(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &darkMode, sizeof(darkMode));
+
+        BOOL useCustom = g_isDarkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
+        if (useCustom) {
+            COLORREF colour = g_isDarkMode 
+                ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
+                : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
+            DwmSetWindowAttribute_orig(hWnd, DWMWA_CAPTION_COLOR,
+                &colour, sizeof(colour));
+            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
+                hWnd, g_isDarkMode, isActive, colour);
+        } else {
+            const COLORREF def = DWMWA_COLOR_DEFAULT;
+            DwmSetWindowAttribute_orig(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
+                hWnd, g_isDarkMode, isActive);
+        }
+    } else {
+        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &darkMode, sizeof(darkMode));
+
+        BOOL useCustom = g_isDarkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
+        if (useCustom) {
+            COLORREF colour = g_isDarkMode 
+                ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
+                : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
+            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
+                &colour, sizeof(colour));
+            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
+                hWnd, g_isDarkMode, isActive, colour);
+        } else {
+            const COLORREF def = DWMWA_COLOR_DEFAULT;
+            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
+                hWnd, g_isDarkMode, isActive);
+        }
+    }
+    g_inMod = false;
 
     // Debounce SetWindowPos calls to prevent interference with window managers.
     // Only allow redraws if enough time has passed since the last redraw.
@@ -545,6 +635,7 @@ BOOL Wh_ModInit()
     hook((void*)DefDlgProcA,     (void*)DefDlgProcA_hook,     (void**)&DefDlgProcA_orig,     L"DefDlgProcA");
     hook((void*)CreateWindowExW, (void*)CreateWindowExW_hook, (void**)&CreateWindowExW_orig, L"CreateWindowExW");
     hook((void*)CreateWindowExA, (void*)CreateWindowExA_hook, (void**)&CreateWindowExA_orig, L"CreateWindowExA");
+    hook((void*)DwmSetWindowAttribute, (void*)DwmSetWindowAttribute_hook, (void**)&DwmSetWindowAttribute_orig, L"DwmSetWindowAttribute");
 
     Wh_Log(L"=== Init complete ===");
     return TRUE;
