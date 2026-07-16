@@ -2,7 +2,7 @@
 // @id             settings-to-control-panel
 // @name           Redirect Settings to Control Panel
 // @description    This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components.
-// @version        10.0.33
+// @version        10.0.35
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -51,11 +51,11 @@ Panel pages, using only native Windows components.
 
 **Recommendation**: For a better experience on Windows 11 (and Windows 10 if necessary), it is recommended to pair this mod with Anixx's **[Restore the classic Personalization and other CPLs](https://windhawk.net/mods/restore-classic-cpls)** that re-enables some of the classic applets from older Windows versions. Some other suggested mods are:
 
-- **[Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)** – recreates the classic Windows 7/8.1 Action Center tray icon and flyout with real-time security status monitoring.
+- **[Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)** – recreates the classic Windows 7/8.1 Action Center tray icon and flyout with real-time security status monitoring along with a partial restore of a link inside the Action Center Control Panel page.
 - **[Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)** – recreates the classic Windows 7 "Taskbar and Start Menu Properties" dialog for Windows 10 and 11.
-- **[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)** – recreates the classic Windows 7 network flyout with Wi-Fi list, signal strength, and connection support.
+- **[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)** – recreates the classic Windows 7 network flyout with Wi-Fi list, signal strength, and connection support and, if enabled, partial restore of some links inside the classic "Network and Sharing Center" Contro Panel page.
 
-All of these mods are **reversible** and help make Windows 10 and 11 look more like Windows 7 and classic versions of Windows, without replacing system files.
+All of these mods are **reversible** and help make Windows 10 and 11 look more like Windows 7 and classic versions of Windows without replacing system files.
 
 ---
 
@@ -71,32 +71,32 @@ All of these mods are **reversible** and help make Windows 10 and 11 look more l
 /*
 - EnableRedirects: true
   $name: Enable Redirects
-  $description: "Turns the mod on or off. When disabled, Settings opens normally as usual."
+  $description: "This setting turns the mod on or off. When disabled, Settings opens normally as usual."
 - RedirectSystemTray: false
   $name: Redirect System Tray Audio/Network/Device & Printers (EXPERIMENTAL)
-  $description: "If enabled, right-clicking the Audio or Network or Device & Printers icon near the clock and choosing 'Open Sound settings' or 'Open Network settings' or 'Open devices and printers' should open the classic panel instead of the Settings app. Note: In some builds after explorer's restart the network redirect might not work."
+  $description: "If this setting is enabled, right-clicking the Audio, Network, or Devices & Printers icon near the clock and choosing 'Open Sound settings', 'Open Network settings', or 'Open devices and printers' will open the classic Control Panel instead of the Settings app. It is primarly recommended on Windows 10. Note: the network redirect may stop working after Explorer restarts on certain builds."
 - UIOnlyRedirects: false
   $name: Non-Invasive Mode
-  $description: "Only redirects clicks made in the UI. Doesn't touch programs that open Settings in other ways."
+  $description: "This setting changes the behavior of the mod by only redirecting Settings links clicked in the UI. Programs and background processes that open Settings directly are not affected. It is recommended on Windows 11 for safety. On Windows 10, leaving this off gives better coverage as it has more parts of the Control Panel compared to the successor."
 - FallbackMode: "2"
   $name: Behavior for Unmapped Links
-  $description: "What to do when a Settings page has no classic equivalent."
+  $description: "This setting changes the fallback method (what to do when a Settings page has no classic Control Panel equivalent). It is recommended to put 'Pass through' on both Windows 10 and 11, so unmapped pages still open normally instead of silently failing."
   $options:
   - "0": Ignore (silent fail)
   - "1": Open the Control Panel (control.exe)
-  - "2": Pass through to the modern Settings application (ms-settings.exe)"
+  - "2": Pass through to the modern Settings application (ms-settings.exe)
 - Win11CompatibilityMode: false
   $name: Windows 11 Compatibility Mode
-  $description: "This is a safer mode for Windows 11. When enabled, only uses proven redirects while everything else opens the standard Control Panel page as a fallback to avoid loops or other issues."
+  $description: "This is a safer mode for Windows 11. When enabled, only redirects pages that are known to work correctly, and opens the standard Control Panel as a fallback for everything else. Helps avoid redirect loops and blank pages. Recommended on Windows 11. Not needed on Windows 10."
 - MaxLaunchesPerUri: 3
   $name: Anti-Loop Limit (per window, every 5 seconds)
-  $description: "Safety measure: if the same window gets opened too many times within a few seconds, the mod stops reopening it. Set to 0 to disable this limit."
+  $description: "This is a safety measure: if the same window gets opened too many times within a few seconds, the mod stops reopening it. Do not set this to 0 — without this limit, a redirect loop can open windows endlessly and freeze Explorer."
 - ComActivationRedirect: true
   $name: COM-activation Redirect (EXPERIMENTAL)
-  $description: "This setting redirects modern Settings calls made through the COM interface to ensure they open correctly. This addresses compatibility issues with certain Windows 11 builds where Settings may fail to launch."
+  $description: "This setting intercepts Settings launches that happen through the COM interface rather than the normal shell. Recommended on Windows 10. On Windows 11, this affects all app launches process-wide, so only enable it if you have a specific issue it fixes (such as tray icons opening Settings instead of Control Panel on certain builds)."
 - LegacyNameMappingFix: true
   $name: Fix Legacy Name Mapping
-  $description: "This setting attempts to correct a mapping error that causes legacy Control Panel items to display as blank pages or automatically redirect to the modern Settings app. This should ensure that the classic system tools open and function as intended."
+  $description: "This option fixes a shell issue where certain classic Control Panel pages show up blank or silently redirect to the modern Settings app. Recommended on both Windows 10 and 11."
 */
 // ==/WindhawkModSettings==
 
@@ -141,17 +141,21 @@ static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 #endif
 
 using ICMH_CAODTM_t = bool(ICMH_CALL*)(HMENU, HWND);
+// CDevicesAndPrintersFolder::_HandleContextMenu has a different second parameter
+// (unsigned int, not HWND), so it gets its own correctly-typed function pointer type.
+using ICMH_HCM_t = bool(ICMH_CALL*)(HMENU, UINT);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
-static ICMH_CAODTM_t g_icmhOrig_Shell32Devices = nullptr;
+static ICMH_HCM_t g_icmhOrig_Shell32Devices = nullptr;
 static bool g_pniduiHookInstalled = false;
 static std::mutex g_pniduiHookMutex;
-static HANDLE g_pniduiRetryThread = nullptr;
 static HANDLE g_traySubclassWatchdogThread = nullptr;
 static HWND g_lastShellTrayWnd = nullptr;
 static HANDLE g_stopEvent = nullptr;
 
-static bool ICMH_CALL ICMH_CAODTM_hook(HMENU, HWND);
+static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w);
+static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w);
+static bool ICMH_CALL ICMH_hook_Shell32Devices(HMENU m, UINT u);
 
 // Constants
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
@@ -251,8 +255,21 @@ struct ModSettings {
 
 static ModSettings g_settings;
 
-static bool ICMH_CALL ICMH_CAODTM_hook(HMENU, HWND) {
-    if (!g_settings.enableRedirects || !g_settings.redirectSystemTray) return true;
+static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w) {
+    if (!g_settings.enableRedirects || !g_settings.redirectSystemTray)
+        return g_icmhOrig_SndVolSSO ? g_icmhOrig_SndVolSSO(m, w) : true;
+    return false;
+}
+
+static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w) {
+    if (!g_settings.enableRedirects || !g_settings.redirectSystemTray)
+        return g_icmhOrig_pnidui ? g_icmhOrig_pnidui(m, w) : true;
+    return false;
+}
+
+static bool ICMH_CALL ICMH_hook_Shell32Devices(HMENU m, UINT u) {
+    if (!g_settings.enableRedirects || !g_settings.redirectSystemTray)
+        return g_icmhOrig_Shell32Devices ? g_icmhOrig_Shell32Devices(m, u) : true;
     return false;
 }
 
@@ -562,26 +579,29 @@ static HWND FindTrayToolbar() {
 }
 
 static void SetupTraySubclass() {
-    std::lock_guard<std::mutex> lk(g_traySubclassMutex);
-
-    if (g_hTrayToolbar && IsWindow(g_hTrayToolbar)) return;
-    g_hTrayToolbar = nullptr;
-
-    HWND hToolbar = FindTrayToolbar();
-    if (!hToolbar) return;
-    if (!InitTrayDllInfo()) return;
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0)) {
+    HWND hToolbar;
+    {
+        std::lock_guard<std::mutex> lk(g_traySubclassMutex);
+        if (g_hTrayToolbar && IsWindow(g_hTrayToolbar)) return;
+        g_hTrayToolbar = nullptr;
+        hToolbar = FindTrayToolbar();
+    }
+    if (!hToolbar || !InitTrayDllInfo()) return;
+    BOOL ok = WindhawkUtils::SetWindowSubclassFromAnyThread(hToolbar, TrayToolbarSubclassProc, 0);
+    if (ok) {
+        std::lock_guard<std::mutex> lk(g_traySubclassMutex);
         g_hTrayToolbar = hToolbar;
     }
 }
 
 static void RemoveTraySubclass() {
-    std::lock_guard<std::mutex> lk(g_traySubclassMutex);
-
-    if (g_hTrayToolbar) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTrayToolbar, TrayToolbarSubclassProc);
+    HWND h;
+    {
+        std::lock_guard<std::mutex> lk(g_traySubclassMutex);
+        h = g_hTrayToolbar;
         g_hTrayToolbar = nullptr;
     }
+    if (h) WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, TrayToolbarSubclassProc);
 }
 static bool IsAddressInModule(void* address, const wchar_t* moduleName) {
     HMODULE hModule = nullptr;
@@ -1440,8 +1460,6 @@ BOOL WINAPI CreateProcessW_hook(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         bInheritHandles, dwCreationFlags, lpEnvironment, lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
 }
 
-static volatile bool g_pniduiRetryRunning = false;
-
 static bool TryInstallPniduiHook() {
     std::lock_guard<std::mutex> lk(g_pniduiHookMutex);
     
@@ -1469,7 +1487,7 @@ static bool TryInstallPniduiHook() {
             L"(struct HMENU__ *,struct HWND__ *)"
         },
         (void**)&g_icmhOrig_pnidui,
-        (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+        (void*)(ICMH_CAODTM_t)ICMH_hook_pnidui,
         false
     }};
 
@@ -1478,34 +1496,6 @@ static bool TryInstallPniduiHook() {
         g_pniduiHookInstalled = true;
     }
     return result;
-}
-
-static DWORD WINAPI PniduiRetryThread(LPVOID) {
-    if (g_pniduiRetryRunning) {
-        return 0;
-    }
-    g_pniduiRetryRunning = true;
-    
-    const int MAX_WAIT_CHECKS = 60;
-    const DWORD CHECK_INTERVAL = 500;
-    bool dllLoaded = false;
-    
-    for (int i = 0; i < MAX_WAIT_CHECKS; i++) {
-        if (WaitForSingleObject(g_stopEvent, CHECK_INTERVAL) == WAIT_OBJECT_0) break;
-        if (GetModuleHandleW(L"pnidui.dll") != nullptr) {
-            dllLoaded = true;
-            break;
-        }
-    }
-    
-    if (dllLoaded) {
-        if (TryInstallPniduiHook()) {
-            g_pniduiHookInstalled = true;
-        }
-    }
-    
-    g_pniduiRetryRunning = false;
-    return 0;
 }
 
 static bool g_sndVolSSOHookInstalled = false;
@@ -1530,7 +1520,7 @@ static void InstallImmersiveMenuHooks() {
                     L"(struct HMENU__ *,struct HWND__ *)"
                 },
                 (void**)&g_icmhOrig_SndVolSSO,
-                (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+                (void*)(ICMH_CAODTM_t)ICMH_hook_SndVolSSO,
                 false
             }};
 
@@ -1541,11 +1531,7 @@ static void InstallImmersiveMenuHooks() {
     }
 
     if (!g_pniduiHookInstalled) {
-        if (!TryInstallPniduiHook()) {
-            if (!g_pniduiRetryRunning && !g_pniduiRetryThread) {
-                g_pniduiRetryThread = CreateThread(nullptr, 0, PniduiRetryThread, nullptr, 0, nullptr);
-            }
-        }
+        TryInstallPniduiHook();
     }
 }
 
@@ -1576,7 +1562,7 @@ static void InstallShell32Hooks() {
                 L"(struct HMENU__ *,unsigned int)"
             },
             (void**)&g_icmhOrig_Shell32Devices,
-            (void*)(ICMH_CAODTM_t)ICMH_CAODTM_hook,
+            (void*)(ICMH_HCM_t)ICMH_hook_Shell32Devices,
             true
         },
         {
@@ -1786,12 +1772,6 @@ void Wh_ModUninit() {
         CloseHandle(g_traySubclassWatchdogThread);
         g_traySubclassWatchdogThread = nullptr;
     }
-    if (g_pniduiRetryThread) {
-        WaitForSingleObject(g_pniduiRetryThread, 3000);
-        CloseHandle(g_pniduiRetryThread);
-        g_pniduiRetryThread = nullptr;
-        g_pniduiRetryRunning = false;
-    }
     
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
@@ -1808,6 +1788,8 @@ void Wh_ModSettingsChanged() {
     if (IsShellProcess()) {
         if (g_settings.redirectSystemTray) {
             SetupTraySubclass();
+        } else {
+            RemoveTraySubclass();
         }
         PerformBackgroundInit(true);
     }
