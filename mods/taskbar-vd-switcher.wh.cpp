@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Virtual Desktop Switcher
+# Taskbar Virtual Desktop Switcher
 
 A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable buttons into the system tray — one per virtual desktop — for instant switching without opening Task View.
 
@@ -64,30 +64,30 @@ A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable but
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Position | After clock | Where to place the switcher: system tray positions, left/right of Start, or over Start |
-| Button width | 20 px | Width of each button |
-| Button height | 22 px | Height of each button |
-| Button spacing | 2 px | Gap between buttons in the grid |
 | Grid mode | Smart automatic | Smart, single row/column, fixed rows, fixed columns, or fixed grid |
 | Smart layout | Balanced | Balanced, pack vertical, or pack horizontal |
 | Fill order | Row-first | Row-first or column-first |
 | Rows | 0 (auto) | Fixed rows, or max rows for smart mode when set |
 | Columns | 0 (auto) | Fixed columns, or max columns for smart mode when set |
 | Short group alignment | Center | Align a shorter last row/column to start, center, or end |
-| Active color | `#4488FF` | Background for the current desktop |
-| Inactive color | *(system)* | Background for other desktops |
-| Opacity | 100 | 0–100; lower values let the taskbar show through |
-| Shine effect | Off | Gradient highlight on buttons with custom colors |
+| Button width | 20 px | Width of each button |
+| Button height | 22 px | Height of each button |
+| Button spacing | 2 px | Gap between buttons in the grid |
 | Label format | Numbers | Numbers · Roman numerals · Dots · Custom |
 | Custom labels | *(empty)* | Comma-separated, e.g. `H,W,M` |
-| Padding left | 0 px | Extra space to the left of the button grid |
-| Padding right | 2 px | Extra space to the right of the button grid |
+| Font size | 10 pt | Button label size |
+| Active color | `#4488FF` | Background for the current desktop; enter the exact word `accent` to use the Windows accent color |
+| Inactive color | *(system)* | Background for other desktops; enter the exact word `accent` to use the Windows accent color |
+| Opacity | 100 | 0–100; lower values let the taskbar show through |
+| Shine effect | Off | Gradient highlight on buttons with custom colors |
 | Active text color | *(system)* | Foreground color for the current-desktop button |
 | Inactive text color | *(system)* | Foreground color for other buttons |
-| Font size | 10 pt | Button label size |
 | Corner radius | 4 px | Rounded corners (0 = square, 4 = Windows default) |
 | Active bold | Off | Bold the current desktop's label |
 | Border thickness | 0 px | Button border width |
-| Border color | *(system)* | Button border color |
+| Border color | *(system)* | Button border color; enter the exact word `accent` to use the Windows accent color |
+| Padding left | 0 px | Extra space to the left of the button grid |
+| Padding right | 2 px | Extra space to the right of the button grid |
 | Hide when single | Off | Don't show the bar when only one desktop exists |
 | Task View button | Off | Optional button that opens Task View for previewing, creating, or closing desktops |
 | Task View button position | After | Column before/after desktop buttons, or sliver row above/below |
@@ -130,16 +130,6 @@ This mod builds directly on patterns established by several community mods:
   - "overStart": "Over Start button (experimental)"
   - "rightOfStart": "Right of Start button (experimental)"
 
-- buttonWidth: 20
-  $name: Button width (px)
-
-- buttonHeight: 22
-  $name: Button height (px)
-
-- buttonSpacing: 2
-  $name: Button spacing (px)
-  $description: Gap between buttons in the grid
-
 - gridMode: autoSmart
   $name: Grid mode
   $description: >-
@@ -172,14 +162,14 @@ This mod builds directly on patterns established by several community mods:
   - rowFirst: Row-first (left to right, then down)
   - columnFirst: Column-first (top to bottom, then right)
 
-- gridRows: 0
+- buttonRows: 0
   $name: Rows (0 = auto)
   $description: >-
     In Fixed rows and Fixed grid modes: sets the exact row count. In Smart
     automatic mode: acts as a maximum cap (0 = uncapped). Ignored in Single
     row and Single column modes.
 
-- gridColumns: 0
+- buttonColumns: 0
   $name: Columns (0 = auto)
   $description: >-
     In Fixed columns and Fixed grid modes: sets the exact column count. In Smart
@@ -187,19 +177,25 @@ This mod builds directly on patterns established by several community mods:
     no limit). Ignored in Single row and Single column modes. In row-first fill,
     3 columns with 4 desktops gives a 3+1 layout.
 
-- activeBackgroundColor: "#4488FF"
-  $name: Active desktop color (hex, empty = system default)
+- shortGroupAlign: "center"
+  $name: Short column/row alignment
+  $description: >-
+    When the last column (column-first) or last row (row-first) has fewer
+    buttons than the others, where to place those buttons within the available space.
+  $options:
+  - "start": "Start (top for columns, left for rows)"
+  - "center": "Center"
+  - "end": "End (bottom for columns, right for rows)"
 
-- inactiveBackgroundColor: ""
-  $name: Inactive button color (hex, empty = system default)
+- buttonWidth: 20
+  $name: Button width (px)
 
-- opacity: 100
-  $name: Button opacity (0–100)
-  $description: 100 = fully opaque; lower values let the taskbar show through
+- buttonHeight: 22
+  $name: Button height (px)
 
-- shineEffect: false
-  $name: Shine effect
-  $description: Adds a subtle gradient highlight. Applies when a custom color is set.
+- buttonSpacing: 2
+  $name: Button spacing (px)
+  $description: Gap between buttons in the grid
 
 - labelFormat: "number"
   $name: Label format
@@ -213,14 +209,30 @@ This mod builds directly on patterns established by several community mods:
   $name: Custom labels (comma-separated, e.g. "H,W,M")
   $description: Used when label format is Custom. Falls back to numbers if labels run out.
 
+- fontSize: 10
+  $name: Font size (pt)
+
+- activeColor: "#4488FF"
+  $name: Active desktop color
+  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
+
+- inactiveColor: ""
+  $name: Inactive button color
+  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
+
+- buttonOpacity: 100
+  $name: Button opacity (0–100)
+  $description: 100 = fully opaque; lower values let the taskbar show through
+
+- shineEffect: false
+  $name: Shine effect
+  $description: Adds a subtle gradient highlight. Applies when a custom color is set.
+
 - activeTextColor: ""
   $name: Active desktop text color (hex, empty = system default)
 
 - inactiveTextColor: ""
   $name: Inactive button text color (hex, empty = system default)
-
-- fontSize: 10
-  $name: Font size (pt)
 
 - cornerRadius: 4
   $name: Corner radius (px)
@@ -233,36 +245,27 @@ This mod builds directly on patterns established by several community mods:
   $name: Button border thickness (px)
 
 - borderColor: ""
-  $name: Button border color (hex, empty = system default)
+  $name: Button border color
+  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
 
-- hideWhenSingle: false
-  $name: Hide when only one desktop
-  $description: Don't show the button bar when there is only one virtual desktop
-
-- groupPaddingLeft: 0
+- paddingLeft: 0
   $name: Padding left (px)
   $description: Extra space to the left of the button grid
 
-- groupPaddingRight: 2
+- paddingRight: 2
   $name: Padding right (px)
   $description: Extra space to the right of the button grid
 
-- groupOffsetY: 0
+- gridVerticalOffset: 0
   $name: Vertical offset (px)
   $description: >-
     Nudge the entire button grid up (negative) or down (positive) from its
     centered position. 0 = auto-centered. Applies after automatic centering,
     so it works in combination with all grid and sliver settings.
 
-- shortGroupAlign: "center"
-  $name: Short column/row alignment
-  $description: >-
-    When the last column (column-first) or last row (row-first) has fewer
-    buttons than the others, where to place those buttons within the available space.
-  $options:
-  - "start": "Start (top for columns, left for rows)"
-  - "center": "Center"
-  - "end": "End (bottom for columns, right for rows)"
+- hideWhenSingle: false
+  $name: Hide when only one desktop
+  $description: Don't show the button bar when there is only one virtual desktop
 
 - showMasterButton: false
   $name: Show Task View button
@@ -313,6 +316,7 @@ This mod builds directly on patterns established by several community mods:
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -352,7 +356,7 @@ struct ModSettings {
     int buttonColumns          = 0;
     std::wstring activeColor   = L"#4488FF";
     std::wstring inactiveColor = L"";
-    int buttonOpacity          = 70;
+    int buttonOpacity          = 100;
     bool shineEffect           = false;
     std::wstring labelFormat      = L"number";
     std::wstring customLabels     = L"";
@@ -387,40 +391,15 @@ static void LoadSettings() {
         Wh_FreeStringSetting(p);
         return r;
     };
-    auto AliasedStr = [](const wchar_t* canonical, const wchar_t* legacy,
-                         const wchar_t* fallback) {
-        PCWSTR p = Wh_GetStringSetting(canonical);
-        if (p && *p) {
-            std::wstring r = p;
-            Wh_FreeStringSetting(p);
-            return r;
-        }
-        Wh_FreeStringSetting(p);
-
-        p = Wh_GetStringSetting(legacy);
-        std::wstring r = p ? p : fallback;
-        Wh_FreeStringSetting(p);
-        return r;
-    };
-    auto AliasedInt = [](const wchar_t* canonical, const wchar_t* legacy,
-                         int fallback) {
-        constexpr int kUnset = -2147483647;
-        int value = Wh_GetIntSetting(canonical, kUnset);
-        if (value == kUnset) {
-            value = Wh_GetIntSetting(legacy, fallback);
-        }
-        return value;
-    };
-
     g_settings.position       = Str(L"position",      L"afterClock");
     g_settings.buttonWidth    = Wh_GetIntSetting(L"buttonWidth",   20);
     g_settings.buttonHeight   = Wh_GetIntSetting(L"buttonHeight",  22);
     g_settings.buttonSpacing  = Wh_GetIntSetting(L"buttonSpacing", 2);
-    g_settings.buttonRows     = std::max(AliasedInt(L"gridRows", L"buttonRows", 0), 0);
-    g_settings.buttonColumns  = std::max(AliasedInt(L"gridColumns", L"buttonColumns", 0), 0);
-    g_settings.activeColor    = AliasedStr(L"activeBackgroundColor", L"activeColor", L"#4488FF");
-    g_settings.inactiveColor  = AliasedStr(L"inactiveBackgroundColor", L"inactiveColor", L"");
-    g_settings.buttonOpacity  = AliasedInt(L"opacity", L"buttonOpacity", 100);
+    g_settings.buttonRows     = std::max(Wh_GetIntSetting(L"buttonRows", 0), 0);
+    g_settings.buttonColumns  = std::max(Wh_GetIntSetting(L"buttonColumns", 0), 0);
+    g_settings.activeColor    = Str(L"activeColor",   L"#4488FF");
+    g_settings.inactiveColor  = Str(L"inactiveColor", L"");
+    g_settings.buttonOpacity  = Wh_GetIntSetting(L"buttonOpacity", 100);
     g_settings.shineEffect    = Wh_GetIntSetting(L"shineEffect",   0) != 0;
     g_settings.labelFormat       = Str(L"labelFormat",       L"number");
     g_settings.customLabels      = Str(L"customLabels",      L"");
@@ -432,8 +411,8 @@ static void LoadSettings() {
     g_settings.borderThickness   = Wh_GetIntSetting(L"borderThickness",   0);
     g_settings.borderColor       = Str(L"borderColor",       L"");
     g_settings.hideWhenSingle    = Wh_GetIntSetting(L"hideWhenSingle",    0) != 0;
-    g_settings.paddingLeft       = AliasedInt(L"groupPaddingLeft", L"paddingLeft", 0);
-    g_settings.paddingRight      = AliasedInt(L"groupPaddingRight", L"paddingRight", 2);
+    g_settings.paddingLeft       = Wh_GetIntSetting(L"paddingLeft",  0);
+    g_settings.paddingRight      = Wh_GetIntSetting(L"paddingRight", 2);
     g_settings.gridMode             = Str(L"gridMode",        L"autoSmart");
     g_settings.smartLayout          = Str(L"smartLayout",     L"balanced");
     g_settings.fillOrder            = Str(L"fillOrder",       L"rowFirst");
@@ -444,7 +423,7 @@ static void LoadSettings() {
     g_settings.masterButtonHeight   = std::max(1, Wh_GetIntSetting(L"masterButtonHeight", 6));
     g_settings.masterButtonWidth    = std::max(1, Wh_GetIntSetting(L"masterButtonWidth",  14));
     g_settings.masterButtonSpacing  = Wh_GetIntSetting(L"masterButtonSpacing", 0);
-    g_settings.gridVerticalOffset   = AliasedInt(L"groupOffsetY", L"gridVerticalOffset", 0);
+    g_settings.gridVerticalOffset   = Wh_GetIntSetting(L"gridVerticalOffset", 0);
 }
 
 // ============================================================
@@ -1059,9 +1038,23 @@ void SwitchToDesktop(int targetIndex) {
 // Button grid building
 // ============================================================
 
-static Brush ParseColorBrush(const std::wstring& hex) {
-    if (hex.empty() || hex[0] != L'#') return nullptr;
-    std::wstring h = hex.substr(1);
+static Brush ParseColorBrush(const std::wstring& value) {
+    if (_wcsicmp(value.c_str(), L"accent") == 0) {
+        try {
+            winrt::Windows::UI::ViewManagement::UISettings uiSettings;
+            auto color = uiSettings.GetColorValue(
+                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            SolidColorBrush brush;
+            brush.Color(color);
+            return brush;
+        } catch (...) {
+            Wh_Log(L"[Color] Failed to read the Windows accent color");
+            return nullptr;
+        }
+    }
+
+    if (value.empty() || value[0] != L'#') return nullptr;
+    std::wstring h = value.substr(1);
     if (h.size() == 6) h = L"FF" + h;
     if (h.size() != 8) return nullptr;
     UINT32 val = 0;
@@ -1349,8 +1342,11 @@ static void StyleButton(Button& btn, bool isActive,
     btn.HorizontalAlignment(HorizontalAlignment::Stretch);
     btn.VerticalAlignment(VerticalAlignment::Stretch);
 
-    if (isActive && activeBrush)        btn.Background(activeBrush);
-    else if (!isActive && inactiveBrush) btn.Background(inactiveBrush);
+    Brush background = isActive ? activeBrush : inactiveBrush;
+    if (background)
+        btn.Background(background);
+    else
+        btn.ClearValue(Control::BackgroundProperty());
 
     if (isActive && activeTextBrush)        btn.Foreground(activeTextBrush);
     else if (!isActive && inactiveTextBrush) btn.Foreground(inactiveTextBrush);
@@ -1610,7 +1606,16 @@ static void UpdateHighlights(int current) {
         if (g_settings.labelFormat == L"dot")
             btn.Content(winrt::box_value(std::wstring(isActive ? L"●" : L"○")));
         Brush bg = isActive ? activeBrush : inactiveBrush;
-        btn.Background(bg ? bg : nullptr);
+        if (bg) {
+            btn.Background(bg);
+        } else {
+            // A local nullptr overrides the native Button background. After the
+            // first desktop switch that left only the rendered content reliably
+            // hit-testable, so part of the inactive button stopped hovering and
+            // accepting clicks. Clearing the local value restores the complete
+            // native button surface and its visual states.
+            btn.ClearValue(Control::BackgroundProperty());
+        }
         if (activeTextBrush || inactiveTextBrush) {
             Brush fg = isActive ? activeTextBrush : inactiveTextBrush;
             if (fg)
@@ -2281,7 +2286,7 @@ static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileNam
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[Init] VD Switcher v1.5");
+    Wh_Log(L"[Init] VD Switcher v1.6");
     LoadSettings();
     DetectExplorerBuild();
 
