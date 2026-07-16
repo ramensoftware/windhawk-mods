@@ -1,3 +1,7 @@
+## 1.0.1 ([Jul 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e0125a09b95a04ca0c8d479b3b7526c0d1435760/mods/magic-mouse.wh.cpp))
+
+* Changed default settings only
+
 ## 1.0.0 ([Jul 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/641c1463a4a95f827ef1512ab7f4a3726d65dabd/mods/magic-mouse.wh.cpp))
 
 Initial release.

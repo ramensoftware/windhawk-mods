@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-16T19:20:26.000Z</updated>
+    <updated>2026-07-16T20:31:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magic Mouse 1.0.1]]></title>
+        <id>https://windhawk.net/mods/magic-mouse#e0125a09b95a04ca0c8d479b3b7526c0d1435760</id>
+        <link href="https://windhawk.net/mods/magic-mouse"/>
+        <updated>2026-07-16T20:31:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Changed default settings only</li>
+</ul>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magic Mouse 1.0.0]]></title>
         <id>https://windhawk.net/mods/magic-mouse#641c1463a4a95f827ef1512ab7f4a3726d65dabd</id>
@@ -855,19 +868,6 @@ and controlled sound-playback threads.</p>]]></content>
         <author>
             <name>usho</name>
             <uri>https://github.com/usho-lear</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Taskbar Transparency 0.3.9]]></title>
-        <id>https://windhawk.net/mods/dynamic-taskbar-transparency#0deea25526cac2db241eccee154f4f599a062eb6</id>
-        <link href="https://windhawk.net/mods/dynamic-taskbar-transparency"/>
-        <updated>2026-07-12T05:12:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Make disabled shell states fall through instead of overriding the current taskbar appearance</li>
-</ul>]]></content>
-        <author>
-            <name>11581</name>
-            <uri>https://github.com/r1file</uri>
         </author>
     </entry>
 </feed>

@@ -7516,7 +7516,7 @@
           0
         ],
         "ratingUsers": 0,
-        "updated": 1784229626000,
+        "updated": 1784233905000,
         "users": 0
       },
       "metadata": {
@@ -7528,7 +7528,7 @@
           "windhawk.exe"
         ],
         "name": "Magic Mouse",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "magnifier-headless": {
