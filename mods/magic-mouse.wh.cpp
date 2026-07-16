@@ -2,7 +2,7 @@
 // @id              magic-mouse
 // @name            Magic Mouse
 // @description     Draw custom mouse gestures to trigger actions like launching apps, toggling desktop icons, fullscreen, and more. Record gestures via an on-screen canvas, then replay them with a configurable modifier key.
-// @version         1.0.0
+// @version         1.0.1
 // @author          iMAboud
 // @github          https://github.com/iMAboud
 // @include         windhawk.exe
@@ -163,20 +163,20 @@ You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly lef
   - left: Left Click
   - mouse4: Mouse 4 (Back Button)
   - mouse5: Mouse 5 (Forward Button)
-- EnableWiggleToActivate: always
+- EnableWiggleToActivate: Disabled
   $name: Wiggle to Activate
   $options:
   - never: Disabled
   - always: Always (Wiggle alone activates Gesture Mode)
   - modifier: Only with Modifier (Must have modifier active AND wiggle)
-- WiggleStrength: 50
+- WiggleStrength: 10
   $name: Wiggle Strength (10-200)
   $description: How far you must move the mouse to register a wiggle stroke.
 
 - TrailColor: 00AAFF
   $name: Trail Color (Hex)
   $description: "6-digit hex code without #. Example: 00AAFF, FF0055"
-- TrailWidth: 3
+- TrailWidth: 15
   $name: Trail Width
 
 - ShowAura: true
