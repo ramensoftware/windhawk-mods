@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              flexible-explorer-toolbars-deluxe
-// @name            Flexible Explorer Toolbars Deluxe
+// @id              flexible-explorer-toolbars-deluxe-fork
+// @name            Flexible Explorer Toolbars Deluxe - Fork
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
 // @version         1.1
 // @author          Anixx
@@ -448,9 +448,6 @@ void ExpandShellTabToFillCabinet(HWND cab){
 
 // ---- Permanent, non-destructive suppression of the navigation bar container ----
 
-// Marks the window as permanently suppressed and makes it invisible/zero-sized
-// right away. The window is NOT destroyed -- only hidden -- so any internal
-// Explorer references/pointers to it remain valid.
 void ForceHideNavWorker(HWND w){
     if(!w||!IsWindow(w))return;
     MarkForceHidden(w);
@@ -462,9 +459,6 @@ void ForceHideNavWorker(HWND w){
         SWP_HIDEWINDOW|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOMOVE|SWP_FRAMECHANGED);
 }
 
-// Finds any navbar-style WorkerW that is a direct child of the cabinet and
-// force-hides it (without destroying it). This is where Explorer likes to
-// silently recreate/re-show the navigation bar.
 void SuppressStrayNavWorkers(HWND cab){
     if(!cab||!IsWindow(cab))return;
     for(HWND w=FindWindowEx(cab,NULL,L"WorkerW",NULL); w; w=FindWindowEx(cab,w,L"WorkerW",NULL)){
@@ -685,6 +679,17 @@ LRESULT CALLBACK MenuReBarParent_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARA
 }
 
 LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
+    if (msg == WM_APP + 105) {
+        if (!g_insideApply && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+            RECT rc;
+            if (GetClientRect(hwnd, &rc)) {
+                SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELONG(rc.right, rc.bottom));
+                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
+            }
+        }
+        return 0;
+    }
+
     if(msg==WM_CONTEXTMENU){
         POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
         bool isMovedBand = false;
@@ -735,7 +740,14 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
                 inf->cyIntegral=1;
             }
         }
+        
+        // Explorer triggers RB_SETBANDINFO during folder navigation.
+        // It fragments the layout, leaving gaps. Post a scheduled layout refresh to fix it.
+        if (!g_insideApply && !g_insideGripperSync) {
+            PostMessage(hwnd, WM_APP + 105, 0, 0);
+        }
     }
+    
     g_rebarLayoutDepth++;
     LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
     g_rebarLayoutDepth--;
@@ -977,10 +989,6 @@ void ProcessWindow(HWND hwnd){
     if(!wcscmp(cls,L"WorkerW")){
         HWND p=GetParent(hwnd);WCHAR pc[64];
         if(p&&GetClassName(p,pc,ARRAYSIZE(pc))&&wcscmp(pc,L"CabinetWClass")==0){
-            // Direct child WorkerW of the cabinet -- the slot Explorer uses
-            // exclusively for the navigation bar host. If the toolbars have
-            // already been moved out for this cabinet, hide it immediately
-            // (but never destroy it).
             HookWindow(hwnd,NavWorkerW_SubclassProc);
             if(WasAlreadyMoved(p)){
                 ForceHideNavWorker(hwnd);
