@@ -2,12 +2,120 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-14T20:58:29.000Z</updated>
+    <updated>2026-07-16T19:20:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magic Mouse 1.0.0]]></title>
+        <id>https://windhawk.net/mods/magic-mouse#641c1463a4a95f827ef1512ab7f4a3726d65dabd</id>
+        <link href="https://windhawk.net/mods/magic-mouse"/>
+        <updated>2026-07-16T19:20:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="magicmouse">Magic Mouse</h1>
+<p><img src="https://i.imgur.com/SdiMibo.gif" alt="Drawing Gesture" /></p>
+<p>Draw custom shapes with your mouse to trigger powerful actions like launching apps, toggling desktop icons, or controlling media.</p>
+<h2 id="howtoaddagesture">How To Add a Gesture</h2>
+<p><img src="https://i.imgur.com/Wee44Lo.png" alt="Gesture Window" /></p>
+<ol>
+<li><strong>Record the shape</strong>: Press the <strong>Record Canvas Hotkey</strong> (default: <code>Ctrl+Shift+G</code>) anywhere on your screen. The drawing canvas will appear.</li>
+<li><strong>Copy the code</strong>: Draw your desired shape on the canvas, then click the <strong>Copy to Clipboard</strong> button. This copies the generated gesture code.</li>
+<li><strong>Create the item</strong>: Open the Windhawk settings for this mod, scroll down to the <strong>Gestures</strong> list, and click the <code>+</code> button to add a new gesture.</li>
+<li><strong>Paste the code</strong>: Paste the code you copied into the <strong>Gesture Code (Direction Sequence)</strong> box.</li>
+<li><strong>Assign an action</strong>: Choose what happens when you draw this shape using the <strong>Action</strong> dropdown.</li>
+<li><strong>Set the Parameter (if needed)</strong>: Some actions require extra information in the <strong>Action Parameter</strong> box:</li>
+</ol>
+<ul>
+<li>For <code>Launch Application / URL</code>, type the path (e.g. <code>C:\Windows\notepad.exe</code>) or website (e.g. <code>https://google.com</code>).</li>
+<li>For <code>Run Command Line</code>, type the command (e.g. <code>shutdown /s /t 0</code>).</li>
+<li><em>Note: Simple actions like <code>Play / Pause Media</code> or <code>Toggle Desktop Icons</code> don't require any parameter.</em></li>
+</ul>
+<h2 id="activationmodes">Activation Modes</h2>
+<p>Magic Mouse has a robust activation system. You can mix and match modifier keys (or mouse buttons) and physical "mouse wiggles" to arm Gesture Mode.</p>
+<h3 id="1modifierkeys">1. Modifier Keys</h3>
+<p>Set the <code>Modifier Key / Button</code> to your preferred trigger (e.g. <code>Right Click</code>, <code>Mouse 4</code>, <code>Ctrl+Shift</code>). </p>
+<ul>
+<li><strong>Hold</strong>: You must physically hold the modifier down to arm Gesture Mode.</li>
+<li><strong>Toggle</strong>: Pressing the modifier acts like a light switch. Press it once to turn Gesture Mode ON (the Aura will appear around your cursor). Draw your gesture, or let it timeout.</li>
+</ul>
+<h3 id="2wiggletoactivate">2. Wiggle to Activate</h3>
+<p>You can trigger Gesture Mode simply by shaking (wiggling) your mouse rapidly left-and-right!</p>
+<ul>
+<li><strong>Always</strong>: Wiggling the mouse <em>always</em> arms Gesture Mode, completely ignoring any modifier keys.</li>
+<li><strong>Only with Modifier</strong>: You must be holding the Modifier Key (or have it toggled ON) <em>while</em> you wiggle the mouse. </li>
+<li><strong>Disabled</strong>: Wiggle is off. Gestures trigger solely based on your Modifier Keys.</li>
+</ul>
+<blockquote>
+  <p><strong>Note</strong>: When Gesture Mode is armed, a glowing Aura will appear on your cursor. If you don't draw a gesture within the <code>Armed Timeout</code> (default: 3 seconds), it will automatically turn off.</p>
+</blockquote>
+<h2 id="supportedactions">Supported Actions</h2>
+<p>| Action | Parameter? | Description &amp; Example Usage |
+| :--- | :---: | :--- |
+| <strong>Launch App / URL</strong> | Yes | Launches a file, program, folder, or website. (e.g. <code>notepad.exe</code>, <code>D:\MyFolder</code>, or <code>https://google.com</code>) |
+| <strong>Run Command Line</strong> | Yes | Executes a CMD/PowerShell command silently. (e.g. <code>shutdown /s /t 0</code>) |
+| <strong>Send Keyboard Shortcut</strong> | Yes | Simulates keystrokes. Use standard keys separated by <code>+</code>. (e.g. <code>ctrl+shift+esc</code> or <code>win+d</code>) |
+| <strong>Admin Terminal Here</strong> | Optional | Opens PowerShell as Administrator in the current Explorer folder. Parameter: Optional command to execute. |
+| <strong>Take Screenshot</strong> | Optional | Captures the monitor under your cursor. Copies to clipboard and saves to file. Parameter: custom save folder (defaults to <code>Pictures</code>). |
+| <strong>Window Controls</strong> | No | <code>Maximize</code>, <code>Minimize</code>, <code>Close</code>, <code>Fullscreen</code>, <code>Toggle Always-on-Top</code> for the active window. |
+| <strong>Window Snapping</strong> | No | Snaps the active window <code>Left</code>, <code>Right</code>, <code>Top</code>, <code>Bottom</code>, or to any of the 4 corners. |
+| <strong>Media Controls</strong> | No | <code>Play / Pause</code>, <code>Next Track</code>, <code>Prev Track</code>, <code>Mute / Unmute Volume</code>. |
+| <strong>System Controls</strong> | No | <code>Lock PC</code>, <code>Sleep Monitor</code>, <code>Sleep PC</code>, <code>Restart</code>, <code>Shut Down</code>, <code>Empty Recycle Bin</code>, <code>Show Desktop</code>, <code>Task Manager</code>, <code>Settings</code>. |
+| <strong>Utilities</strong> | No | <code>Stopwatch</code>, <code>Timer</code>, <code>Flash (Flashlight)</code>, <code>Next Virtual Desktop</code>. |
+| <strong>Explorer Navigation</strong> | No | <code>Explorer Back</code> and <code>Explorer Forward</code> to navigate folders. |
+| <strong>Special Tools</strong> | No | <code>Create Sticky Note</code>, <code>Search Selection</code>, <code>Trigger Spotlight</code>, <code>Toggle Draw Mode</code>, <code>Color Picker</code>. |</p>
+<h2 id="specialfeatures">Special Features</h2>
+<ul>
+<li><p><strong>Create Sticky Note</strong>: Trigger the action, and your cursor will become a crosshair. Click and drag to draw a sticky note anywhere on your screen. </p>
+<p><img src="https://i.imgur.com/dTBI6ws.gif" alt="Sticky Note Feature" /></p></li>
+<li><p>If you draw the note over an active application window, it will automatically start in "Always on Top" mode. If drawn over the empty desktop, it behaves as a normal window.</p></li>
+<li><p>Right-click the note to change its color, opacity, delete it, or manually toggle "Always on Top".</p></li>
+<li><p>The note will remember your last selected color and opacity for any future notes you create!</p></li>
+<li><p><strong>Search Selection</strong>: Highlight text anywhere and trigger this gesture to instantly search it in your default browser.</p>
+<p><img src="https://i.imgur.com/BKSHJyh.gif" alt="Search Selection" /></p></li>
+<li><p><strong>Spotlight</strong>: Darkens the rest of the screen and highlights the area around your cursor, perfect for presentations or focusing.</p>
+<p><img src="https://i.imgur.com/aFt2jvq.gif" alt="Spotlight Feature" /></p></li>
+<li><p><strong>Toggle Draw Mode & Color Picker</strong>: You can assign actions to draw freely on your screen or pick a color. To exit these modes, simply press the <code>ESC</code> key. (You can also press <code>ESC</code> to close the Gesture Recording Canvas).</p></li>
+<li><p><strong>Take Screenshot</strong>: Takes a full-quality screenshot of the specific monitor your cursor is currently hovering over. The image is instantly copied to your clipboard. It is also saved as a PNG file. By default, it saves to your user <code>Pictures</code> folder. You can customize this by entering a specific folder path (e.g., <code>C:\Screenshots</code>) into the Action Parameter field!</p></li>
+</ul>
+<h2 id="additionalsettings">Additional Settings</h2>
+<ul>
+<li><p><strong>Trail Color (Hex)</strong>: The HEX color of the gesture trail (e.g., <code>00AAFF</code> for Cyan, <code>FF0055</code> for Pink).</p></li>
+<li><p><strong>Trail Width</strong>: The thickness of the gesture trail in pixels.</p></li>
+<li><p><strong>Show Aura</strong>: Displays a glowing ring around your cursor to indicate when Gesture Mode is fully armed and ready to draw.</p></li>
+<li><p><strong>Armed Timeout (ms)</strong>: How long Gesture Mode stays active after being armed by a Wiggle or Toggle (in milliseconds). Set to <code>0</code> to disable the timeout.</p></li>
+<li><p><strong>Wiggle Strength (10-200)</strong>: How far you must physically move the mouse to register a single wiggle stroke. Lower numbers mean you don't have to shake as far.</p></li>
+<li><p><strong>Allow in Fullscreen Apps</strong>: If disabled, the mod will automatically ignore gestures while playing fullscreen games or using fullscreen apps to prevent accidental triggers.</p></li>
+</ul>
+<h2 id="examplesetups">Example Setups</h2>
+<p><strong>Setup 1: Right-Click Wiggle</strong></p>
+<ul>
+<li><code>Modifier Key</code>: Right Click</li>
+<li><code>Modifier Behavior</code>: Hold</li>
+<li><code>Draw Button</code>: Left Click</li>
+<li><code>Wiggle to Activate</code>: Only with Modifier
+<em>How it works</em>: Hold Right-Click and quickly shake the mouse left-and-right. The aura appears. Now Left-Click and draw your gesture!</li>
+</ul>
+<p><strong>Setup 2: Quick Side-Button Draw</strong></p>
+<ul>
+<li><code>Modifier Key</code>: Mouse 4</li>
+<li><code>Modifier Behavior</code>: Hold</li>
+<li><code>Draw Button</code>: Left Click</li>
+<li><code>Wiggle to Activate</code>: Disabled
+<em>How it works</em>: Simply hold Mouse 4 on the side of your mouse, and Left-Click to draw. </li>
+</ul>
+<p><strong>Setup 3: Pure Wiggle</strong></p>
+<ul>
+<li><code>Modifier Key</code>: None</li>
+<li><code>Wiggle to Activate</code>: Always
+<em>How it works</em>: Rapidly shake your mouse. The aura appears. Draw your gesture.</li>
+</ul>
+<p><img src="https://i.imgur.com/PBmCK6v.gif" alt="Wiggle" /></p>]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.0]]></title>
         <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#27e75a5c62a599cf56cb401dc1354c6d0d96ede6</id>
@@ -789,40 +897,6 @@ dinamico de forma inesperada.</p>]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact Start Menu 1.0.0]]></title>
-        <id>https://windhawk.net/mods/compact-start-menu#5b32bb24425ef9af3e7769665f667b8144352a20</id>
-        <link href="https://windhawk.net/mods/compact-start-menu"/>
-        <updated>2026-07-02T19:52:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="compactstartmenu">Compact Start Menu</h1>
-<p>This mod simplifies the Start Menu by directly adjusting All apps XAML sections.</p>
-<p>| All apps without header (default) | Pinned without header + Separator + All apps in List view |
-| :---: | :---: |
-| <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/1.png" alt="Default" /> | <img src="https://raw.githubusercontent.com/Asteski/windhawk-mods/main/img/compact-start-menu/2.png" alt="Pinned section and separator" /> |</p>
-<h3 id="features">Features:</h3>
-<ul>
-<li><strong>Shows "All apps":</strong> Keeps the app list visible.</li>
-<li><strong>Optional pinned section hiding:</strong> Can hide or show the section with pinned apps.</li>
-<li><strong>Optional recommended section hiding:</strong> Can hide or show the section with recent files.</li>
-<li><strong>Optional section separators:</strong> Can add thin separator lines between sections.</li>
-<li><strong>Optional section headers:</strong> Can hide pinned and recommended headers independently.</li>
-<li><strong>Hides group headers:</strong> Removes the visible All apps group headers in grid and list views.</li>
-<li><strong>Compacts grid view:</strong> Reduces group-header spacing in the All apps grid.</li>
-<li><strong>Optional top header:</strong> Can hide the All apps title/view row.</li>
-<li><strong>Optional category view hiding:</strong> Can hide the Category option from the view selector.</li>
-<li><strong>Hidden header icon gap:</strong> Can adjust the first icon row spacing when the top header is hidden.</li>
-<li><strong>Scrollbar modes:</strong> Can show, hide, or reveal the visual All apps scroll bar only while scrolling.</li>
-</ul>
-<h3 id="instructions">Instructions:</h3>
-<ul>
-<li>Enable the mod in Windhawk.</li>
-<li><strong>Restart StartMenuExperienceHost.exe</strong>, sign out/in, or restart your computer to apply changes.</li>
-</ul>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
         </author>
     </entry>
 </feed>

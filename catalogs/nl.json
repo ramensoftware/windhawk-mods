@@ -7496,6 +7496,34 @@
         "version": "3.1.1"
       }
     },
+    "magic-mouse": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784229626000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784229626000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "iMAboud",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -lole32 -loleaut32 -luuid -lcomctl32 -luxtheme -lgdiplus -ldxva2",
+        "description": "Draw custom mouse gestures to trigger actions like launching apps, toggling desktop icons, fullscreen, and more. Record gestures via an on-screen canvas, then replay them with a configurable modifier key.",
+        "github": "https://github.com/iMAboud",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Magic Mouse",
+        "version": "1.0.0"
+      }
+    },
     "magnifier-headless": {
       "details": {
         "defaultSorting": 1080,
