@@ -6,6 +6,7 @@
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
+// @architecture   x86-64
 // @compilerOptions -lcomctl32 -lpsapi -lole32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -45,7 +46,7 @@ Panel pages, using only native Windows components.
 
 - The system tray context menu redirect only supports the Win32 taskbar (the one from Windows 10). However, in some Windows 11 configurations if explorer is restarted the network system tray redirect might not work.
 - The device & printers system tray redirect may not work on some Windows 11 configurations, as Microsoft hardcoded the redirect to the Settings app in certain shell code paths. This could change in future if correct documentation is found.
-
+- The mod is not compatible with 32 bit based operating systems. It requires a 64-bit version of Windows (x64 or ARM64).
 
 ---
 
@@ -143,7 +144,7 @@ static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 using ICMH_CAODTM_t = bool(ICMH_CALL*)(HMENU, HWND);
 // CDevicesAndPrintersFolder::_HandleContextMenu has a different second parameter
 // (unsigned int, not HWND), so it gets its own correctly-typed function pointer type.
-using ICMH_HCM_t = bool(ICMH_CALL*)(HMENU, UINT);
+using ICMH_HCM_t = bool(ICMH_CALL*)(void* /*pThis*/, HMENU, UINT);
 static ICMH_CAODTM_t g_icmhOrig_SndVolSSO = nullptr;
 static ICMH_CAODTM_t g_icmhOrig_pnidui    = nullptr;
 static ICMH_HCM_t g_icmhOrig_Shell32Devices = nullptr;
@@ -155,7 +156,7 @@ static HANDLE g_stopEvent = nullptr;
 
 static bool ICMH_CALL ICMH_hook_SndVolSSO(HMENU m, HWND w);
 static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w);
-static bool ICMH_CALL ICMH_hook_Shell32Devices(HMENU m, UINT u);
+static bool ICMH_CALL ICMH_hook_Shell32Devices(void* pThis, HMENU m, UINT u);
 
 // Constants
 #define PERS_ROOT       L"explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}"
@@ -267,9 +268,9 @@ static bool ICMH_CALL ICMH_hook_pnidui(HMENU m, HWND w) {
     return false;
 }
 
-static bool ICMH_CALL ICMH_hook_Shell32Devices(HMENU m, UINT u) {
+static bool ICMH_CALL ICMH_hook_Shell32Devices(void* pThis, HMENU m, UINT u) {
     if (!g_settings.enableRedirects || !g_settings.redirectSystemTray)
-        return g_icmhOrig_Shell32Devices ? g_icmhOrig_Shell32Devices(m, u) : true;
+        return g_icmhOrig_Shell32Devices ? g_icmhOrig_Shell32Devices(pThis, m, u) : true;
     return false;
 }
 
