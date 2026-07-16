@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -174,6 +174,7 @@ play/pause, and next controls.
 #include <uiautomation.h>
 #include <shlwapi.h>
 #include <wincodec.h>
+#include <commctrl.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
 
@@ -618,7 +619,7 @@ int g_popupOverlayWgcPresentHeight = 0;
 
 hosting::DesktopWindowXamlSource g_popupXamlSource = nullptr;
 HWND g_popupXamlChild = nullptr;
-WNDPROC g_popupXamlChildOriginalWndProc = nullptr;
+bool g_popupXamlChildSubclassed = false;
 Grid g_popupXamlRoot = nullptr;
 controls::Canvas g_popupXamlCanvas = nullptr;
 Border g_popupXamlShadow = nullptr;
@@ -4333,10 +4334,14 @@ LRESULT PopupExpandedHitTest(LPARAM lParam) {
                : HTTRANSPARENT;
 }
 
-LRESULT CALLBACK PopupXamlChildWndProc(HWND hwnd,
-                                       UINT message,
-                                       WPARAM wParam,
-                                       LPARAM lParam) {
+constexpr UINT_PTR kPopupXamlChildSubclassId = 1;
+
+LRESULT CALLBACK PopupXamlChildSubclassProc(HWND hwnd,
+                                            UINT message,
+                                            WPARAM wParam,
+                                            LPARAM lParam,
+                                            UINT_PTR,
+                                            DWORD_PTR) {
     if (message == WM_NCHITTEST) {
         LRESULT hit = PopupExpandedHitTest(lParam);
         if (hit == HTTRANSPARENT) {
@@ -4345,38 +4350,38 @@ LRESULT CALLBACK PopupXamlChildWndProc(HWND hwnd,
     } else if (message == WM_MOUSEACTIVATE) {
         return MA_NOACTIVATE;
     } else if (message == WM_NCDESTROY) {
-        WNDPROC original = g_popupXamlChildOriginalWndProc;
+        RemoveWindowSubclass(hwnd,
+                             PopupXamlChildSubclassProc,
+                             kPopupXamlChildSubclassId);
         if (g_popupXamlChild == hwnd) {
             g_popupXamlChild = nullptr;
-            g_popupXamlChildOriginalWndProc = nullptr;
+            g_popupXamlChildSubclassed = false;
         }
-        return original ? CallWindowProcW(original, hwnd, message, wParam, lParam)
-                        : DefWindowProcW(hwnd, message, wParam, lParam);
     }
 
-    WNDPROC original = g_popupXamlChildOriginalWndProc;
-    return original ? CallWindowProcW(original, hwnd, message, wParam, lParam)
-                    : DefWindowProcW(hwnd, message, wParam, lParam);
+    return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 void SubclassPopupXamlChildWindow() {
-    if (!g_popupXamlChild || g_popupXamlChildOriginalWndProc) {
+    if (!g_popupXamlChild || g_popupXamlChildSubclassed) {
         return;
     }
-    g_popupXamlChildOriginalWndProc = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtrW(g_popupXamlChild,
-                          GWLP_WNDPROC,
-                          reinterpret_cast<LONG_PTR>(PopupXamlChildWndProc)));
+    if (SetWindowSubclass(g_popupXamlChild,
+                          PopupXamlChildSubclassProc,
+                          kPopupXamlChildSubclassId,
+                          0)) {
+        g_popupXamlChildSubclassed = true;
+    }
 }
 
 void UnsubclassPopupXamlChildWindow() {
-    if (!g_popupXamlChild || !g_popupXamlChildOriginalWndProc) {
+    if (!g_popupXamlChild || !g_popupXamlChildSubclassed) {
         return;
     }
-    SetWindowLongPtrW(g_popupXamlChild,
-                      GWLP_WNDPROC,
-                      reinterpret_cast<LONG_PTR>(g_popupXamlChildOriginalWndProc));
-    g_popupXamlChildOriginalWndProc = nullptr;
+    RemoveWindowSubclass(g_popupXamlChild,
+                         PopupXamlChildSubclassProc,
+                         kPopupXamlChildSubclassId);
+    g_popupXamlChildSubclassed = false;
 }
 
 constexpr int kPopupHiddenParkingX = -32000;
@@ -5197,7 +5202,7 @@ void ResetPopupXamlElementState() {
     UnsubclassPopupXamlChildWindow();
     g_popupXamlSource = nullptr;
     g_popupXamlChild = nullptr;
-    g_popupXamlChildOriginalWndProc = nullptr;
+    g_popupXamlChildSubclassed = false;
     g_popupXamlChildCaptureExcluded = false;
     g_popupXamlRoot = nullptr;
     g_popupXamlCanvas = nullptr;
@@ -10807,7 +10812,7 @@ void DestroyExpandedPopup() {
     }
     g_popupXamlSource = nullptr;
     g_popupXamlChild = nullptr;
-    g_popupXamlChildOriginalWndProc = nullptr;
+    g_popupXamlChildSubclassed = false;
     g_popupXamlChildCaptureExcluded = false;
     g_popupXamlRoot = nullptr;
     g_popupXamlCanvas = nullptr;
