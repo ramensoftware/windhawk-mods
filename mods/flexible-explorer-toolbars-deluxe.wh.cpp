@@ -683,8 +683,7 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
         if (!g_insideApply && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
             RECT rc;
             if (GetClientRect(hwnd, &rc)) {
-                SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELONG(rc.right, rc.bottom));
-                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
+             SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELONG(rc.right, rc.bottom));
             }
         }
         return 0;
@@ -740,12 +739,12 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
                 inf->cyIntegral=1;
             }
         }
-        
+     
         // Explorer triggers RB_SETBANDINFO during folder navigation.
         // It fragments the layout, leaving gaps. Post a scheduled layout refresh to fix it.
         if (!g_insideApply && !g_insideGripperSync) {
             PostMessage(hwnd, WM_APP + 105, 0, 0);
-        }
+        } 
     }
     
     g_rebarLayoutDepth++;
