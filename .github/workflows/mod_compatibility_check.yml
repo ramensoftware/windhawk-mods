@@ -89,14 +89,16 @@ jobs:
                 -oarm64 "${{ runner.temp }}\mod_arm64.dll"
             else
               # Compile via the CLI (--disabled builds the mod without activating
-              # it). Two passes: with WINDHAWK_ARM64_ENABLED=1 the CLI drops the
-              # x86-64 build for a mod whose targets are all common system
-              # processes, so the first pass (arm64 off) covers x86/x86-64 and the
-              # second (arm64 on) covers arm64.
+              # it). WINDHAWK_LOG_COMPILER_WARNINGS=1 surfaces clang warnings,
+              # which the CLI hides on a successful compile by default. Two passes:
+              # with WINDHAWK_ARM64_ENABLED=1 the CLI drops the x86-64 build for a
+              # mod whose targets are all common system processes, so the first
+              # pass (arm64 off) covers x86/x86-64 and the second (arm64 on) covers
+              # arm64.
               cli="$windhawk_path\windhawk-cli.exe"
-              MSYS_NO_PATHCONV=1 "$cli" --app-root "$windhawk_path" \
+              MSYS_NO_PATHCONV=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
                 mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
-              MSYS_NO_PATHCONV=1 WINDHAWK_ARM64_ENABLED=1 "$cli" --app-root "$windhawk_path" \
+              MSYS_NO_PATHCONV=1 WINDHAWK_ARM64_ENABLED=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
                 mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
             fi
           fi
