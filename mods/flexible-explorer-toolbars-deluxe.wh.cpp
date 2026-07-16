@@ -1,8 +1,9 @@
+
 // ==WindhawkMod==
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -81,6 +82,7 @@ constexpr int UP_BUTTON_ICON_SIZE  = 16;
 constexpr UINT LOCK_TOOLBARS_CMD_ID = 41484;
 
 UINT g_msgDoMove = 0;
+UINT g_msgSuppressNavbar = 0;
 
 struct Settings {
     bool moveSearchBand    = true;
@@ -204,7 +206,6 @@ bool HasChildFlag(HWND h,int f){
 void ClearAllChildFlags(HWND h){EnterCriticalSection(&g_mutex);g_childFlags.erase(h);LeaveCriticalSection(&g_mutex);}
 
 void CleanupCabinetState(HWND cab){
-    // Очистка всех карт при закрытии окна Cabinet
     UnmarkMoved(cab);
     
     HWND mr=GetCabinetMenuRebar(cab);
@@ -215,7 +216,6 @@ void CleanupCabinetState(HWND cab){
         g_applyAttempts.erase(mr);
         LeaveCriticalSection(&g_mutex);
         
-        // Очистка флагов детей
         int cnt=(int)SendMessage(mr,RB_GETBANDCOUNT,0,0);
         for(int i=0;i<cnt;i++){
             REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
@@ -228,32 +228,6 @@ void CleanupCabinetState(HWND cab){
         }
     }
     UnregisterCabinetMenuRebar(cab);
-    
-    // Очистка WorkerW и нейтрализованных окон
-    HWND navRebar=NULL;
-    HWND w=FindWindowEx(cab,NULL,L"WorkerW",NULL);
-    while(w){
-        WCHAR cls[64];
-        if(GetClassName(w,cls,ARRAYSIZE(cls))){
-            HWND r=FindWindowEx(w,NULL,L"ReBarWindow32",NULL);
-            if(r){navRebar=r;break;}
-        }
-        w=FindWindowEx(cab,w,L"WorkerW",NULL);
-    }
-    if(navRebar){
-        HWND navWorker=GetParent(navRebar);
-        if(navWorker){
-            UnmarkForceHidden(navWorker);
-        }
-        
-        int cnt=(int)SendMessage(navRebar,RB_GETBANDCOUNT,0,0);
-        for(int i=0;i<cnt;i++){
-            REBARBANDINFO rbi={sizeof(rbi)};rbi.fMask=RBBIM_CHILD;
-            if(SendMessage(navRebar,RB_GETBANDINFO,i,(LPARAM)&rbi)&&rbi.hwndChild){
-                UnmarkNeutered(rbi.hwndChild);
-            }
-        }
-    }
 }
 
 void GetEffectiveClassName(HWND child, wchar_t* out, size_t outCount) {
@@ -473,6 +447,34 @@ void ExpandShellTabToFillCabinet(HWND cab){
     SetWindowPos(s,NULL,0,0,rc.right,rc.bottom,SWP_NOZORDER|SWP_NOACTIVATE);
 }
 
+// ---- Permanent, non-destructive suppression of the navigation bar container ----
+
+// Marks the window as permanently suppressed and makes it invisible/zero-sized
+// right away. The window is NOT destroyed -- only hidden -- so any internal
+// Explorer references/pointers to it remain valid.
+void ForceHideNavWorker(HWND w){
+    if(!w||!IsWindow(w))return;
+    MarkForceHidden(w);
+    LONG_PTR style=GetWindowLongPtr(w,GWL_STYLE);
+    if(style & WS_VISIBLE)
+        SetWindowLongPtr(w,GWL_STYLE,style & ~WS_VISIBLE);
+    ShowWindow(w,SW_HIDE);
+    SetWindowPos(w,NULL,0,0,0,0,
+        SWP_HIDEWINDOW|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOMOVE|SWP_FRAMECHANGED);
+}
+
+// Finds any navbar-style WorkerW that is a direct child of the cabinet and
+// force-hides it (without destroying it). This is where Explorer likes to
+// silently recreate/re-show the navigation bar.
+void SuppressStrayNavWorkers(HWND cab){
+    if(!cab||!IsWindow(cab))return;
+    for(HWND w=FindWindowEx(cab,NULL,L"WorkerW",NULL); w; w=FindWindowEx(cab,w,L"WorkerW",NULL)){
+        if(FindWindowEx(w,NULL,L"ReBarWindow32",NULL)){
+            ForceHideNavWorker(w);
+        }
+    }
+}
+
 DWORD GetReferenceGripperStyle(HWND rebar){
     int cnt=(int)SendMessage(rebar,RB_GETBANDCOUNT,0,0);
     for(int i=0;i<cnt;i++){
@@ -565,7 +567,6 @@ void ShowToolbarContextMenu(HWND rebar, int x, int y) {
         workerW,
         NULL);
     
-    // Workaround для известного глюка Windows с паразитными сообщениями после popup
     PostMessage(workerW, WM_NULL, 0, 0);
 
     DestroyMenu(hMenu);
@@ -627,11 +628,33 @@ LRESULT CALLBACK AddressBandRoot_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARA
 
 LRESULT CALLBACK NavWorkerW_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
     if(IsForceHidden(hwnd)){
-        if(msg==WM_WINDOWPOSCHANGING){
-            auto*p=(WINDOWPOS*)lP;p->x=p->y=p->cx=p->cy=0;
-            p->flags=(p->flags&~SWP_SHOWWINDOW)|SWP_HIDEWINDOW|SWP_NOACTIVATE|SWP_NOZORDER;
+        switch(msg){
+            case WM_NCDESTROY:
+                UnmarkForceHidden(hwnd);
+                return DefWindowProc(hwnd,msg,wP,lP);
+            case WM_STYLECHANGING:
+                if(wP==GWL_STYLE){
+                    auto*ss=(STYLESTRUCT*)lP;
+                    ss->styleNew &= ~WS_VISIBLE;
+                }
+                return DefWindowProc(hwnd,msg,wP,lP);
+            case WM_WINDOWPOSCHANGING: {
+                auto*pos=(WINDOWPOS*)lP;
+                pos->flags &= ~SWP_SHOWWINDOW;
+                pos->flags |= SWP_HIDEWINDOW;
+                pos->cx = 0;
+                pos->cy = 0;
+                return DefWindowProc(hwnd,msg,wP,lP);
+            }
+            case WM_SHOWWINDOW:
+                if(wP) ShowWindow(hwnd, SW_HIDE);
+                return 0;
+            case WM_SIZE:
+            case WM_MOVE:
+                return 0;
+            default:
+                return DefWindowProc(hwnd,msg,wP,lP);
         }
-        if(msg==WM_SHOWWINDOW&&wP)return 0;
     }
     return DefSubclassProc(hwnd,msg,wP,lP);
 }
@@ -764,8 +787,16 @@ LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWO
         CleanupCabinetState(hwnd);
     }
     if(msg==g_msgDoMove){DoMoveSearchBandToMenuBar(hwnd);return 0;}
+    if(msg==g_msgSuppressNavbar){
+        if(WasAlreadyMoved(hwnd)){
+            SuppressStrayNavWorkers(hwnd);
+            ExpandShellTabToFillCabinet(hwnd);
+        }
+        return 0;
+    }
     if((msg==WM_SIZE||msg==WM_WINDOWPOSCHANGED)&&WasAlreadyMoved(hwnd)){
         LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
+        SuppressStrayNavWorkers(hwnd);
         ExpandShellTabToFillCabinet(hwnd);
         return r;
     }
@@ -775,7 +806,11 @@ LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWO
 }
 
 bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
-    if(WasAlreadyMoved(cabinetWnd)){ExpandShellTabToFillCabinet(cabinetWnd);return true;}
+    if(WasAlreadyMoved(cabinetWnd)){
+        ExpandShellTabToFillCabinet(cabinetWnd);
+        SuppressStrayNavWorkers(cabinetWnd);
+        return true;
+    }
     HWND menuRebar=FindMenuBarRebar(cabinetWnd);
     HWND navRebar=FindNavbarRebar(cabinetWnd);
     if(!menuRebar||!navRebar)return false;
@@ -903,7 +938,11 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
         RegisterCabinetMenuRebar(cabinetWnd,menuRebar);
     }
 
-    if(navWorker)MarkForceHidden(navWorker);
+    if(navWorker && IsWindow(navWorker)){
+        HookWindow(navWorker, NavWorkerW_SubclassProc);
+        ForceHideNavWorker(navWorker);
+    }
+    
     MarkMoved(cabinetWnd);
 
     if(!toMove.empty()){
@@ -912,6 +951,7 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
     }
 
     ExpandShellTabToFillCabinet(cabinetWnd);
+    SuppressStrayNavWorkers(cabinetWnd);
     RedrawWindow(cabinetWnd,NULL,NULL,
         RDW_INVALIDATE|RDW_ERASE|RDW_UPDATENOW|RDW_ALLCHILDREN|RDW_ERASENOW|RDW_FRAME);
     return true;
@@ -936,14 +976,31 @@ void ProcessWindow(HWND hwnd){
         return;
     }
     if(!wcscmp(cls,L"WorkerW")){
-        if(IsNavbarWorkerW(hwnd)){
+        HWND p=GetParent(hwnd);WCHAR pc[64];
+        if(p&&GetClassName(p,pc,ARRAYSIZE(pc))&&wcscmp(pc,L"CabinetWClass")==0){
+            // Direct child WorkerW of the cabinet -- the slot Explorer uses
+            // exclusively for the navigation bar host. If the toolbars have
+            // already been moved out for this cabinet, hide it immediately
+            // (but never destroy it).
             HookWindow(hwnd,NavWorkerW_SubclassProc);
-            SetWindowPos(hwnd,NULL,0,0,0,0,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW|SWP_HIDEWINDOW);
-            MarkForceHidden(hwnd);
+            if(WasAlreadyMoved(p)){
+                ForceHideNavWorker(hwnd);
+            }
             return;
         }
     }
-    if(!wcscmp(cls,L"ReBarWindow32")){HookWindow(hwnd,ReBar_SubclassProc);return;}
+    if(!wcscmp(cls,L"ReBarWindow32")){
+        HookWindow(hwnd,ReBar_SubclassProc);
+        HWND cab=GetCabinetAncestor(hwnd);
+        if(cab&&IsRebarChildOfDirectWorkerW(hwnd,cab)){
+            HWND worker=GetParent(hwnd);
+            HookWindow(worker,NavWorkerW_SubclassProc);
+            if(WasAlreadyMoved(cab)){
+                ForceHideNavWorker(worker);
+            }
+        }
+        return;
+    }
     if(!wcscmp(cls,L"Address Band Root")){HookWindow(hwnd,AddressBandRoot_SubclassProc);return;}
 }
 
@@ -970,6 +1027,8 @@ BOOL Wh_ModInit(){
 
     g_msgDoMove = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_DoMove");
     if(!g_msgDoMove){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
+    g_msgSuppressNavbar = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_SuppressNavbar");
+    if(!g_msgSuppressNavbar){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
 
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
     Wh_SetFunctionHook(
