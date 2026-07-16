@@ -1,4 +1,3 @@
-
 // ==WindhawkMod==
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
