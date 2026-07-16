@@ -10,6 +10,8 @@
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
+// @exclude         dwm.exe
+// @exclude         mmc.exe
 // @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lversion -lgdiplus
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -640,6 +642,7 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $description: Replaces the AutoPlay flyout (shown when inserting removable drives or discs) with a Direct2D window using dark/light acrylic, real shell icons, and the system accent color.
     $description:pt: Substitui o flyout de Reproducao Automatica (exibido ao inserir unidades removiveis ou discos) por uma janela Direct2D com acrilico escuro/claro, icones reais e a cor de destaque do sistema.
     $description:es: Reemplaza el flyout de Reproduccion Automatica (mostrado al insertar unidades extraibles o discos) por una ventana Direct2D con acrilico oscuro/claro, iconos reales y el color de acento del sistema.
+  $name: -- Explorer --
   $name:pt: -- Explorer --
   $name:es: -- Explorador --
   $description: Enable Explorer-specific modernizations
@@ -3757,14 +3760,20 @@ static HIMAGELIST BuildFluentPinList(HIMAGELIST src, int marginR)
     return dst;
 }
 
-static bool PinInstallCustomList(HWND hwnd, HIMAGELIST srcList)
+// outPrevList, when given, receives the imagelist TVM_SETIMAGELIST(TVSIL_STATE)
+// itself reports as previously installed -- the real per-message-contract
+// return value, for callers (the SendMessageW_hook swallow site) that need
+// to forward it instead of synthesizing a placeholder.
+static bool PinInstallCustomList(HWND hwnd, HIMAGELIST srcList, HIMAGELIST* outPrevList = nullptr)
 {
     if (!hwnd || !PinIsLikelyStateImageList(srcList))
         return false;
 
     HIMAGELIST ours = (HIMAGELIST)GetPropW(hwnd, kPropPinList);
-    if (srcList == ours)
+    if (srcList == ours) {
+        if (outPrevList) *outPrevList = ours;
         return true;
+    }
     HIMAGELIST previousOrig =
         (HIMAGELIST)GetPropW(hwnd, kPropPinOrigList);
 
@@ -3786,8 +3795,9 @@ static bool PinInstallCustomList(HWND hwnd, HIMAGELIST srcList)
         PinFontReleaseIfUnused();
         return false;
     }
-    SendMessageW_orig(hwnd, TVM_SETIMAGELIST,
+    LRESULT prev = SendMessageW_orig(hwnd, TVM_SETIMAGELIST,
         TVSIL_STATE, reinterpret_cast<LPARAM>(custom));
+    if (outPrevList) *outPrevList = reinterpret_cast<HIMAGELIST>(prev);
 
     {
         std::lock_guard<std::mutex> lock(g_pinFontMutex);
@@ -5398,8 +5408,9 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         && GlyphIsNavPaneTreeView(hwnd)
         && !PinIsDisabledDragDropTreeView(hwnd)) {
         HIMAGELIST srcList = reinterpret_cast<HIMAGELIST>(lp);
-        if (PinInstallCustomList(hwnd, srcList))
-            return 0;
+        HIMAGELIST prevList = nullptr;
+        if (PinInstallCustomList(hwnd, srcList, &prevList))
+            return reinterpret_cast<LRESULT>(prevList);
     }
     // ── Glyph Icons: track nav pane TreeViews ──────────────────────────────
     if (msg == TVM_SETIMAGELIST && wp == TVSIL_NORMAL) {
@@ -8720,7 +8731,7 @@ static bool IsInsideShellFolderView(HWND hwnd)
 
 static HWND           g_msgWnd    = nullptr;
 static DWORD          g_msgWndThreadId = 0;
-static const wchar_t* MSG_WND_CLS = L"WH_MW_MsgWnd";
+static const wchar_t* MSG_WND_CLS = L"W32MThemeMsgWnd";
 static bool           g_lastSeenSystemDark = false;
 static bool           g_lastSeenSystemDarkValid = false;
 
@@ -8883,7 +8894,7 @@ static BOOL CALLBACK ModeSwitchEnumProc(HWND hw, LPARAM) {
 static void ApplyDarkSysColors();
 static void RestoreDarkSysColors();
 
-static LRESULT CALLBACK ThemeMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK ThemeMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR)
 {
     if (uMsg == WM_CLOSE) {
         DestroyWindow(hWnd);
@@ -8955,30 +8966,61 @@ static LRESULT CALLBACK ThemeMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             EnumWindows(PinSettingsEnumProc, 0);
     }
     if (uMsg == WM_NCDESTROY) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ThemeMsgWndProc);
         if (g_msgWnd == hWnd)
             g_msgWnd = nullptr;
         g_msgWndThreadId = 0;
     }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Same reasoning as ApRegisterWndClass: keep the class itself independent of
+// the mod (DefWindowProcW, a system function) and attach ThemeMsgWndProc as
+// an instance subclass after creation instead. If a prior unload's
+// SendMessageTimeoutW below ever timed out and the window outlived teardown,
+// the class proc staying DefWindowProcW means it never points into unloaded
+// code -- unlike registering the class with ThemeMsgWndProc directly, which
+// would leave RegisterClassExW's ERROR_CLASS_ALREADY_EXISTS path silently
+// reusing a class whose lpfnWndProc is stale mod code on the next load.
+static bool RegisterMsgWndClass()
+{
+    WNDCLASSEXW wc = {};
+    wc.cbSize        = sizeof(wc);
+    wc.lpfnWndProc   = DefWindowProcW;
+    wc.hInstance     = (HINSTANCE)GetModuleHandleW(nullptr);
+    wc.lpszClassName = MSG_WND_CLS;
+    if (RegisterClassExW(&wc) != 0)
+        return true;
+    if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return false;
+
+    // A window from a previous unload that outlived teardown can keep this
+    // executable-scoped system-procedure class registered -- safe to reuse.
+    WNDCLASSEXW existing = {};
+    existing.cbSize = sizeof(existing);
+    return GetClassInfoExW(wc.hInstance, MSG_WND_CLS, &existing) &&
+           existing.lpfnWndProc == DefWindowProcW;
 }
 
 static void CreateMsgWindow()
 {
     if (g_msgWnd && IsWindow(g_msgWnd))
         return;
-    WNDCLASSEXW wc = {};
-    wc.cbSize        = sizeof(wc);
-    wc.lpfnWndProc   = ThemeMsgWndProc;
-    wc.hInstance     = (HINSTANCE)GetModuleHandleW(nullptr);
-    wc.lpszClassName = MSG_WND_CLS;
-    RegisterClassExW(&wc);
+    if (!RegisterMsgWndClass())
+        return;
     // Must be a real top-level window (WS_POPUP, parent=nullptr) so it
     // receives HWND_BROADCAST messages (WM_SETTINGCHANGE, WM_THEMECHANGED).
     // HWND_MESSAGE windows are excluded from all broadcasts by the kernel.
-    g_msgWnd = CreateWindowExW(0, MSG_WND_CLS, nullptr, WS_POPUP,
-        0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
-    if (g_msgWnd)
-        g_msgWndThreadId = GetCurrentThreadId();
+    HWND hwnd = CreateWindowExW(0, MSG_WND_CLS, nullptr, WS_POPUP,
+        0, 0, 0, 0, nullptr, nullptr, (HINSTANCE)GetModuleHandleW(nullptr), nullptr);
+    if (!hwnd)
+        return;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ThemeMsgWndProc, 0)) {
+        DestroyWindow(hwnd);
+        return;
+    }
+    g_msgWnd = hwnd;
+    g_msgWndThreadId = GetCurrentThreadId();
 }
 
 static void DestroyMsgWindow()
@@ -8995,7 +9037,9 @@ static void DestroyMsgWindow()
     }
     g_msgWnd = nullptr;
     g_msgWndThreadId = 0;
-    UnregisterClassW(MSG_WND_CLS, (HINSTANCE)GetModuleHandleW(nullptr));
+    // Deliberately no UnregisterClassW -- the class proc is DefWindowProcW,
+    // always safe to leave registered even if the window above outlived a
+    // timed-out SendMessageTimeoutW. See RegisterMsgWndClass's reuse path.
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -20273,8 +20317,15 @@ BOOL WINAPI DrawTextExW_hook(HDC hdc, LPWSTR lpchText, INT cchText,
     // pass a real DRAWTEXTPARAMS (mnemonic prefix handling).
     if (!(format & DT_CALCRECT)) {
         HWND paintHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-        if (WinverConsumeButtonTextDrawn(paintHwnd))
-            return TRUE;
+        if (WinverConsumeButtonTextDrawn(paintHwnd)) {
+            // DrawTextExW's real contract returns the text height in logical
+            // units, not a plain success flag -- a caller doing layout math
+            // on the result would get it wrong with a synthesized TRUE (1).
+            // DT_CALCRECT measures without drawing, so this still suppresses
+            // the actual native paint (already drawn by our own logic).
+            return DrawTextExW_orig(hdc, lpchText, cchText, lprc,
+                format | DT_CALCRECT, lpdtp);
+        }
     }
 
     if (!IsTextPipelineDisabled() && g_darkModeActive && !g_glowEntry &&
@@ -33603,6 +33654,13 @@ void Wh_ModUninit()
 
     // Restore system colors
     RestoreDarkSysColors();
+    // Revert the uxtheme app-mode preference too -- RestoreDarkSysColors only
+    // reverts the color table, so without this a long-lived host process
+    // (e.g. Explorer) keeps creating new standard controls in dark mode until
+    // it restarts. Guarded on g_darkModeActive so we don't clobber another
+    // dark-mode mod's own preference in a process where we never set it.
+    if (g_setAppMode && g_darkModeActive.load(std::memory_order_acquire))
+        g_setAppMode(0);
 
     // Release context menu D2D hover resources
 
