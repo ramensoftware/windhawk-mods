@@ -10,13 +10,6 @@
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
-// @exclude         WINWORD.EXE
-// @exclude         EXCEL.EXE
-// @exclude         POWERPNT.EXE
-// @exclude         OUTLOOK.EXE
-// @exclude         ONENOTE.EXE
-// @exclude         MSACCESS.EXE
-// @exclude         MSPUB.EXE
 // @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lversion -lgdiplus
 // @license         GPL-3.0
 // ==/WindhawkMod==
