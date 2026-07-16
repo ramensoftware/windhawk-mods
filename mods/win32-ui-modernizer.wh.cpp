@@ -10,6 +10,13 @@
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
+// @exclude         WINWORD.EXE
+// @exclude         EXCEL.EXE
+// @exclude         POWERPNT.EXE
+// @exclude         OUTLOOK.EXE
+// @exclude         ONENOTE.EXE
+// @exclude         MSACCESS.EXE
+// @exclude         MSPUB.EXE
 // @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lversion -lgdiplus
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -1670,28 +1677,6 @@ static void CALLBACK D2DThreadCacheCleanup(void* value)
     delete static_cast<D2DThreadCache*>(value);
 }
 
-static HMODULE HoldModuleReferenceForAddress(LPCWSTR address)
-{
-    HMODULE module = nullptr;
-    if (GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, address, &module)) {
-        return module;
-    }
-
-    // Loader-table lookup should normally be infallible for an executing
-    // address. VirtualQuery + LoadLibrary is a defensive second route that
-    // obtains the same extra reference without relying on that lookup path.
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (!VirtualQuery(address, &mbi, sizeof(mbi)) || !mbi.AllocationBase)
-        return nullptr;
-    wchar_t modulePath[MAX_PATH] = {};
-    if (!GetModuleFileNameW(static_cast<HMODULE>(mbi.AllocationBase),
-            modulePath, ARRAYSIZE(modulePath))) {
-        return nullptr;
-    }
-    return LoadLibraryW(modulePath);
-}
-
 static BOOL CALLBACK D2DThreadCachesInitOnce(PINIT_ONCE, PVOID, PVOID*)
 {
     DWORD index = FlsAlloc(D2DThreadCacheCleanup);
@@ -1737,38 +1722,31 @@ static bool D2DThreadCachesClear()
     if (index == FLS_OUT_OF_INDEXES)
         return true;
 
-    // Hold an extra loader reference before touching the FLS index. It is
-    // released on success; on an exceptional FlsFree failure it deliberately
-    // remains held so the registered callback can never point at unloaded code.
-    HMODULE safetyModule = HoldModuleReferenceForAddress(
-        reinterpret_cast<LPCWSTR>(&D2DThreadCacheCleanup));
-
+    // FlsFree only documents failure for an invalid index -- ours is a
+    // private static written once by a successful FlsAlloc and never touched
+    // elsewhere, so a failure here means real process-state corruption, not a
+    // transient condition a retry (bounded or not) would clear. Deliberately
+    // does not hold a module reference or pin the module on failure either:
+    // per m417z (Windhawk's author), Windhawk expects the module to actually
+    // unload once Wh_ModUninit returns, and both a leaked LoadLibrary/
+    // GetModuleHandleEx reference and an explicit pin equally violate that --
+    // the module never truly unloading is the same problem either way, just
+    // via a "supported" mechanism instead of an unsupported one. If this ever
+    // fires, the log below is the honest signal: something is already wrong
+    // with the process, and artificially keeping this DLL resident doesn't
+    // fix that.
     DWORD error = ERROR_SUCCESS;
     for (int attempt = 0; attempt < 3; ++attempt) {
         if (FlsFree(index)) {
             g_d2dThreadCacheFls.store(
                 FLS_OUT_OF_INDEXES, std::memory_order_release);
-            if (safetyModule)
-                FreeLibrary(safetyModule);
             return true;
         }
         error = GetLastError();
         SwitchToThread();
     }
 
-    // If acquiring the ordinary safety reference itself failed, make one last
-    // attempt to pin the module. Both APIs operate on a currently executing
-    // address, so either path should only fail under severe loader corruption.
-    BOOL pinned = FALSE;
-    if (!safetyModule) {
-        HMODULE pinnedModule = nullptr;
-        pinned = GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&D2DThreadCacheCleanup), &pinnedModule);
-    }
-    Wh_Log(L"D2D FLS cleanup failed error=%lu; moduleHeld=%d",
-        error, safetyModule != nullptr || pinned != FALSE);
+    Wh_Log(L"D2D FLS cleanup failed error=%lu", error);
     return false;
 }
 
@@ -18626,15 +18604,6 @@ static bool ApUnionItemRect(ApWndState* s, int idx, RECT* inOut, bool* hasRect)
 
 static constexpr wchar_t kApWndClass[] = L"W32MAutoPlayReplacement";
 static constexpr UINT kApQuarantineMessage = WM_APP + 0x5A3;
-// Retries for the message-based quarantine before giving up on a clean
-// removal. Deliberately never falls back to a raw GWLP_WNDPROC overwrite --
-// by the time quarantine runs, the window has gone through
-// SetWindowSubclassFromAnyThread, and forcing the pointer out from under
-// comctl32's own subclass chain would leave its internal bookkeeping
-// inconsistent (RemoveWindowSubclass could later act on stale state, or
-// silently drop another subclass layer if one exists). A stuck window is a
-// contained failure; corrupting shared comctl32 state is not.
-static constexpr int kApQuarantineMaxAttempts = 4;
 
 // Last drive letter recorded from WM_DEVICECHANGE DBT_DEVICEARRIVAL.
 // Written by ApRecordDeviceArrival (called from DefWindowProcW_hook), read by
@@ -19273,52 +19242,39 @@ static bool ApWaitForReplacementClose(HWND hwnd, DWORD timeoutMs)
     return true;
 }
 
+// Only ever called from Wh_ModUninit's real full-unload path (see the
+// quarantineOnFailure argument at ApDismissReplacement's call site) -- never
+// from the live "user toggled the setting off" path, which does not risk a
+// wait here at all. A full unload of an Explorer-hooking mod like this one
+// already means explorer.exe is being restarted, so waiting out a stuck
+// window's thread here does not freeze anything the user is actively using.
 static bool ApQuarantineReplacement(HWND hwnd)
 {
     if (!hwnd || !IsWindow(hwnd))
         return true;
 
-    HMODULE safetyModule = HoldModuleReferenceForAddress(
-        reinterpret_cast<LPCWSTR>(&ApWndProc));
-
-    for (int attempt = 0; attempt < kApQuarantineMaxAttempts; ++attempt) {
+    // Deliberately unbounded: per m417z (Windhawk's author), pinning the mod
+    // DLL to guard against a still-live subclass is unsupported and unsafe --
+    // Windhawk expects the module to actually unload once Wh_ModUninit
+    // returns, and a pinned module can crash on any Windhawk API call if
+    // Windhawk itself is later unloaded while the pin is still held. Windhawk
+    // already keeps the module loaded for as long as Wh_ModUninit hasn't
+    // returned, so simply not returning until quarantine succeeds needs no
+    // extra reference-holding at all. A raw GWLP_WNDPROC overwrite as an
+    // early-giveup fallback is also off the table -- see the "no raw WNDPROC
+    // after SetWindowSubclass" note above. If the window's thread is
+    // genuinely stuck, this loop -- and the mod's own unload -- just takes
+    // longer; Wh_Log below gives a visible signal of that while it's stuck.
+    while (IsWindow(hwnd)) {
         DWORD_PTR quarantined = 0;
         if (SendMessageTimeoutW(hwnd, kApQuarantineMessage, 0, 0,
                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &quarantined) &&
             quarantined != 0) {
-            if (safetyModule)
-                FreeLibrary(safetyModule);
             return true;
         }
-        if (!IsWindow(hwnd)) {
-            if (safetyModule)
-                FreeLibrary(safetyModule);
-            return true;
-        }
+        Wh_Log(L"[AutoPlay] Replacement window not responding yet; retrying quarantine");
     }
-
-    // Still not quarantined after retrying the message-based path -- give up
-    // on a clean removal rather than risk it (see kApQuarantineMaxAttempts).
-    // ShowWindow/PostMessageW don't need the target thread's cooperation to
-    // return, unlike SendMessage, so this best-effort hide/close is safe even
-    // if that thread never resumes pumping messages.
-    ShowWindow(hwnd, SW_HIDE);
-    PostMessageW(hwnd, WM_CLOSE, 0, 0);
-
-    // Permanently pin the module: the subclass is still live and pointing at
-    // our code, and may be invoked again whenever/if the window's thread
-    // resumes -- that code must never be unloaded out from under it.
-    BOOL pinned = FALSE;
-    if (!safetyModule) {
-        HMODULE pinnedModule = nullptr;
-        pinned = GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&ApWndProc), &pinnedModule);
-    }
-    Wh_Log(L"[AutoPlay] Could not quarantine replacement WndProc after %d attempts; moduleHeld=%d",
-        kApQuarantineMaxAttempts, safetyModule != nullptr || pinned != FALSE);
-    return false;
+    return true;  // window went away on its own while we were waiting
 }
 
 static bool ApDismissReplacement(bool waitForClose = false,
