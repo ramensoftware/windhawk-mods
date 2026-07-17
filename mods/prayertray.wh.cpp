@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.0.12
+// @version 2.1.2
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.0.12"
+#define WH_MOD_VERSION L"2.1.2"
 #endif
 
 #include <windhawk_utils.h>
@@ -157,6 +157,9 @@ constexpr double kClusterDistanceKm = 80.0;
 constexpr int kScheduleRefreshIntervalMs = 15 * 60 * 1000;
 constexpr int kGeoAccessTimeoutMs = 8000;
 constexpr int kRunFromWindowTimeoutMs = 3000;
+constexpr wchar_t kNotificationSoundUrl[] =
+    L"https://raw.githubusercontent.com/n0tmar/PrayerTray/main/windhawk/audio/allah-akbar.mp3";
+constexpr unsigned kNotificationSoundBytes = 85512;
 
 enum class PrayerName { Fajr, Dhuhr, Asr, Maghrib, Isha, Count };
 
@@ -277,9 +280,6 @@ int g_lastOverlayY = 0;
 int g_lastOverlayW = 0;
 int g_lastOverlayH = 0;
 bool g_lastOverlayShown = false;
-using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
-    IFrameworkElement, &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
-std::list<FrameworkElementLoadedEventRevoker> g_loadedRevokers;
 std::list<winrt::weak_ref<FrameworkElement>> g_observedElements;
 Controls::TextBlock g_topTextBlock{nullptr};
 Controls::TextBlock g_bottomTextBlock{nullptr};
@@ -300,7 +300,6 @@ std::wstring g_lastAppliedColor;
 constexpr int kCmdShowFlyout = 1;
 constexpr int kCmdShowMenu = 2;
 constexpr int kCmdRefreshLocation = 3;
-constexpr int kCmdToggleWidget = 4;
 constexpr UINT WM_PT_REFRESH = WM_APP + 1;
 constexpr UINT WM_PT_UI_TICK = WM_APP + 2;
 constexpr UINT WM_PT_HIDE_FLYOUT = WM_APP + 3;
@@ -1961,26 +1960,17 @@ DisplayContent FormatTaskbarDisplay() {
     return content;
 }
 
-// Notification sound is downloaded once to %APPDATA%\PrayerTray\audio\
-// from the GitHub repo (keeps this Windhawk single-file mod small).
-
-constexpr unsigned kNotificationSoundMinBytes = 1000;
-
 std::wstring GetNotificationSoundPath() {
-    auto base = GetAppDataPrayerTrayPath();
-    if (base.empty()) {
-        return L"";
-    }
-    return base + L"\\audio\\allah-akbar.mp3";
+    const auto base = GetAppDataPrayerTrayPath();
+    return base.empty() ? L"" : base + L"\\audio\\allah-akbar.mp3";
 }
 
 bool EnsureNotificationSoundFile() {
-    auto path = GetNotificationSoundPath();
+    const auto path = GetNotificationSoundPath();
     if (path.empty()) {
-        Wh_Log(L"Notification sound path unavailable");
         return false;
     }
-    auto base = GetAppDataPrayerTrayPath();
+    const auto base = GetAppDataPrayerTrayPath();
     CreateDirectoryW(base.c_str(), nullptr);
     CreateDirectoryW((base + L"\\audio").c_str(), nullptr);
 
@@ -1989,14 +1979,13 @@ bool EnsureNotificationSoundFile() {
         ULARGE_INTEGER size{};
         size.HighPart = attrs.nFileSizeHigh;
         size.LowPart = attrs.nFileSizeLow;
-        if (size.QuadPart >= kNotificationSoundMinBytes) {
+        if (size.QuadPart == kNotificationSoundBytes) {
             return true;
         }
     }
 
-    auto body = HttpGetUtf8(
-        L"https://raw.githubusercontent.com/n0tmar/PrayerTray/main/windhawk/audio/allah-akbar.mp3");
-    if (!body || body->size() < kNotificationSoundMinBytes) {
+    const auto body = HttpGetUtf8(kNotificationSoundUrl);
+    if (!body || body->size() != kNotificationSoundBytes) {
         Wh_Log(L"Notification sound download failed");
         return false;
     }
@@ -2007,11 +1996,7 @@ bool EnsureNotificationSoundFile() {
         return false;
     }
     out.write(body->data(), static_cast<std::streamsize>(body->size()));
-    if (!out) {
-        Wh_Log(L"Notification sound write incomplete");
-        return false;
-    }
-    return true;
+    return static_cast<bool>(out);
 }
 
 void PlayNotificationSound() {
@@ -2029,9 +2014,7 @@ void PlayNotificationSound() {
             return;
         }
     }
-    // MCI volume is 0–1000; match the old app's ~12% level.
-    mciSendStringW(L"setaudio prayertray_notify volume to 120", nullptr, 0,
-                   nullptr);
+    mciSendStringW(L"setaudio prayertray_notify volume to 120", nullptr, 0, nullptr);
     if (mciSendStringW(L"play prayertray_notify", nullptr, 0, nullptr) != 0) {
         Wh_Log(L"Notification sound play failed");
     }
@@ -3438,7 +3421,6 @@ void ClearWin11SlotOnUiThread(void*) {
         }
     } catch (...) {
     }
-    g_loadedRevokers.clear();
     g_observedElements.clear();
     g_slotRoot = nullptr;
     g_slotButton = nullptr;
