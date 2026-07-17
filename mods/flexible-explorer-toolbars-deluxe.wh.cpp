@@ -81,7 +81,7 @@ constexpr int UP_BUTTON_ICON_SIZE  = 16;
 constexpr UINT LOCK_TOOLBARS_CMD_ID = 41484;
 
 UINT g_msgDoMove = 0;
-UINT g_msgSuppressNavbar = 0;
+UINT g_msgRefreshLayout = 0;
 
 struct Settings {
     bool moveSearchBand    = true;
@@ -446,11 +446,11 @@ void ExpandShellTabToFillCabinet(HWND cab){
     SetWindowPos(s,NULL,0,0,rc.right,rc.bottom,SWP_NOZORDER|SWP_NOACTIVATE);
 }
 
-// ---- Permanent, non-destructive suppression of the navigation bar container ----
-
 void ForceHideNavWorker(HWND w){
     if(!w||!IsWindow(w))return;
+    bool alreadyHidden = IsForceHidden(w) && !(GetWindowLongPtr(w,GWL_STYLE) & WS_VISIBLE);
     MarkForceHidden(w);
+    if(alreadyHidden)return;
     LONG_PTR style=GetWindowLongPtr(w,GWL_STYLE);
     if(style & WS_VISIBLE)
         SetWindowLongPtr(w,GWL_STYLE,style & ~WS_VISIBLE);
@@ -520,7 +520,7 @@ void ShowToolbarContextMenu(HWND rebar, int x, int y) {
     HWND cab = rebar;
     while (cab) {
         WCHAR cls[64];
-        if (GetClassName(cab, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0)
+        if (GetClassName(cab, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"CabinetWClass"))
             break;
         cab = GetParent(cab);
     }
@@ -529,14 +529,14 @@ void ShowToolbarContextMenu(HWND rebar, int x, int y) {
     HWND workerW = FindMenuBarWorkerW(cab);
     if (!workerW) return;
 
-    HMODULE hMod = LoadLibraryW(L"explorerframe.dll");
+    HMODULE hMod = GetModuleHandleW(L"explorerframe.dll");
     if (!hMod) return;
 
     HMENU hMenu = LoadMenuW(hMod, MAKEINTRESOURCEW(264));
-    if (!hMenu) { FreeLibrary(hMod); return; }
+    if (!hMenu) return;
 
     HMENU hSubMenu = GetSubMenu(hMenu, 0);
-    if (!hSubMenu) { DestroyMenu(hMenu); FreeLibrary(hMod); return; }
+    if (!hSubMenu) { DestroyMenu(hMenu); return; }
 
     bool locked = AreToolbarsLockedByGripper(rebar);
     int itemCount = GetMenuItemCount(hSubMenu);
@@ -563,7 +563,6 @@ void ShowToolbarContextMenu(HWND rebar, int x, int y) {
     PostMessage(workerW, WM_NULL, 0, 0);
 
     DestroyMenu(hMenu);
-    FreeLibrary(hMod);
 }
 
 LRESULT CALLBACK UpButton_SubclassProc(HWND hwnd, UINT msg, WPARAM wP, LPARAM lP, DWORD_PTR) {
@@ -615,6 +614,12 @@ LRESULT CALLBACK BreadcrumbToolbar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPA
 }
 
 LRESULT CALLBACK AddressBandRoot_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
+    if(msg==WM_NCDESTROY){
+        // Self-clean the neutered set on destroy so entries don't leak across
+        // cabinet closes (mirrors the force-hidden worker cleanup below).
+        UnmarkNeutered(hwnd);
+        return DefSubclassProc(hwnd,msg,wP,lP);
+    }
     if(IsNeutered(hwnd))return DefWindowProc(hwnd,msg,wP,lP);
     return DefSubclassProc(hwnd,msg,wP,lP);
 }
@@ -624,20 +629,20 @@ LRESULT CALLBACK NavWorkerW_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,
         switch(msg){
             case WM_NCDESTROY:
                 UnmarkForceHidden(hwnd);
-                return DefWindowProc(hwnd,msg,wP,lP);
+                return DefSubclassProc(hwnd,msg,wP,lP);
             case WM_STYLECHANGING:
                 if(wP==GWL_STYLE){
                     auto*ss=(STYLESTRUCT*)lP;
                     ss->styleNew &= ~WS_VISIBLE;
                 }
-                return DefWindowProc(hwnd,msg,wP,lP);
+                return DefSubclassProc(hwnd,msg,wP,lP);
             case WM_WINDOWPOSCHANGING: {
                 auto*pos=(WINDOWPOS*)lP;
                 pos->flags &= ~SWP_SHOWWINDOW;
                 pos->flags |= SWP_HIDEWINDOW;
                 pos->cx = 0;
                 pos->cy = 0;
-                return DefWindowProc(hwnd,msg,wP,lP);
+                return DefSubclassProc(hwnd,msg,wP,lP);
             }
             case WM_SHOWWINDOW:
                 if(wP) ShowWindow(hwnd, SW_HIDE);
@@ -646,7 +651,7 @@ LRESULT CALLBACK NavWorkerW_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,
             case WM_MOVE:
                 return 0;
             default:
-                return DefWindowProc(hwnd,msg,wP,lP);
+                return DefSubclassProc(hwnd,msg,wP,lP);
         }
     }
     return DefSubclassProc(hwnd,msg,wP,lP);
@@ -679,15 +684,6 @@ LRESULT CALLBACK MenuReBarParent_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARA
 }
 
 LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
-    if (msg == WM_APP + 105) {
-        if (!g_insideApply && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-            RECT rc;
-            if (GetClientRect(hwnd, &rc)) {
-             SendMessage(hwnd, WM_SIZE, SIZE_RESTORED, MAKELONG(rc.right, rc.bottom));
-            }
-        }
-        return 0;
-    }
 
     if(msg==WM_CONTEXTMENU){
         POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
@@ -743,7 +739,7 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
         // Explorer triggers RB_SETBANDINFO during folder navigation.
         // It fragments the layout, leaving gaps. Post a scheduled layout refresh to fix it.
         if (!g_insideApply && !g_insideGripperSync) {
-            PostMessage(hwnd, WM_APP + 105, 0, 0);
+            PostMessage(hwnd, g_msgRefreshLayout, 0, 0);
         } 
     }
     
@@ -797,13 +793,6 @@ LRESULT CALLBACK Cabinet_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWO
         CleanupCabinetState(hwnd);
     }
     if(msg==g_msgDoMove){DoMoveSearchBandToMenuBar(hwnd);return 0;}
-    if(msg==g_msgSuppressNavbar){
-        if(WasAlreadyMoved(hwnd)){
-            SuppressStrayNavWorkers(hwnd);
-            ExpandShellTabToFillCabinet(hwnd);
-        }
-        return 0;
-    }
     if((msg==WM_SIZE||msg==WM_WINDOWPOSCHANGED)&&WasAlreadyMoved(hwnd)){
         LRESULT r=DefSubclassProc(hwnd,msg,wP,lP);
         SuppressStrayNavWorkers(hwnd);
@@ -914,7 +903,6 @@ bool DoMoveSearchBandToMenuBar(HWND cabinetWnd){
             rbi.fStyle=gripperStyle;
             if(hasSaved&&bs.brk)rbi.fStyle|=RBBS_BREAK;
             rbi.hwndChild=b.child;
-            rbi.cxMinChild = 80;
             rbi.cyMinChild = bandHeight;
             rbi.cyMaxChild = bandHeight;
             rbi.cyChild = bandHeight;
@@ -989,9 +977,7 @@ void ProcessWindow(HWND hwnd){
         HWND p=GetParent(hwnd);WCHAR pc[64];
         if(p&&GetClassName(p,pc,ARRAYSIZE(pc))&&wcscmp(pc,L"CabinetWClass")==0){
             HookWindow(hwnd,NavWorkerW_SubclassProc);
-            if(WasAlreadyMoved(p)){
-                ForceHideNavWorker(hwnd);
-            }
+            ForceHideNavWorker(hwnd);
             return;
         }
     }
@@ -1001,9 +987,7 @@ void ProcessWindow(HWND hwnd){
         if(cab&&IsRebarChildOfDirectWorkerW(hwnd,cab)){
             HWND worker=GetParent(hwnd);
             HookWindow(worker,NavWorkerW_SubclassProc);
-            if(WasAlreadyMoved(cab)){
-                ForceHideNavWorker(worker);
-            }
+            ForceHideNavWorker(worker);
         }
         return;
     }
@@ -1033,8 +1017,8 @@ BOOL Wh_ModInit(){
 
     g_msgDoMove = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_DoMove");
     if(!g_msgDoMove){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
-    g_msgSuppressNavbar = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_SuppressNavbar");
-    if(!g_msgSuppressNavbar){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
+    g_msgRefreshLayout = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_RefreshLayout");
+    if(!g_msgRefreshLayout){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
 
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
     Wh_SetFunctionHook(
