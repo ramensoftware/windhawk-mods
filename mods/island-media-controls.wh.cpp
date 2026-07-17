@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.207
+// @version         0.9.208
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -28,9 +28,10 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Liquid Glass refinements:** The material now uses an edge-following
-  refraction band with a real texture preview, reversed tangent direction, and
-  a faster-to-slower inner falloff for easier tuning.
+- **Liquid Glass refinements:** The material now uses a smoother edge-following
+  refraction band with a faster-to-slower inner falloff.
+- **Safer capture startup:** Borderless capture authorization is now bounded
+  and cleanly stopped before the mod unloads.
 - **Better light-mode visibility:** Liquid Glass now keeps the album-art
   background wash enabled in light mode so the expanded surface remains legible.
 - **Current tuned defaults:** New installs now default to the tuned Liquid
@@ -133,9 +134,6 @@ play/pause, and next controls.
   - AnimationSpeed: 100
     $name: Expanded animation speed (%)
     $description: 100 is normal speed. Use lower values such as 25 for slow-motion animation preview.
-  - DisplacementDebugPreview: false
-    $name: Preview liquid glass displacement map
-    $description: Shows the exact RG displacement texture used by Liquid Glass instead of the normal blur material.
   - Material: "liquid_glass"
     $name: Background material
     $options:
@@ -333,7 +331,6 @@ struct Settings {
     double hoverScale = 1.06;
     double hoverLerpSpeed = 28.0;
     double animationSpeed = 1.0;
-    bool displacementDebugPreview = false;
     std::wstring material = L"liquid_glass";
     int backdropInitialFrameSkip = 2;
     int backdropFallbackBlurPasses = 5;
@@ -421,6 +418,8 @@ constexpr auto kThumbnailAsyncTimeout = std::chrono::milliseconds(900);
 constexpr auto kMediaCommandAsyncTimeout = std::chrono::milliseconds(1500);
 constexpr auto kUiLocalAsyncTimeout = std::chrono::milliseconds(500);
 constexpr auto kMediaThreadStopTimeout = std::chrono::milliseconds(5000);
+constexpr auto kPopupOverlayWgcBorderlessAccessTimeout =
+    std::chrono::milliseconds(5000);
 
 template <typename AsyncOperation>
 bool WaitForAsyncWithTimeout(AsyncOperation const& operation,
@@ -556,6 +555,8 @@ bool g_popupOverlayWgcRunning = false;
 bool g_popupOverlayWgcFrameCallbackHooked = false;
 std::atomic<bool> g_popupOverlayWgcDirtyRegionsEnabled{false};
 std::atomic<int> g_popupOverlayWgcBorderlessAccessState{0};
+std::mutex g_popupOverlayWgcBorderlessAccessThreadMutex;
+std::thread* g_popupOverlayWgcBorderlessAccessThread = nullptr;
 RECT g_popupOverlayWgcCaptureRectPx{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 RECT g_popupOverlayWgcMonitorRectPx{};
 int g_popupOverlayWgcTargetWidthPx = 0;
@@ -577,7 +578,6 @@ bool g_popupOverlayDcompContentAttached = false;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Device> g_popupOverlayWgcD2dDevice;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1DeviceContext> g_popupOverlayWgcD2dContext;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Bitmap1> g_popupOverlayWgcLensDisplacementMap;
-[[clang::no_destroy]] winrt::com_ptr<ID2D1Bitmap1> g_popupOverlayWgcLensDisplacementDebugMap;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Bitmap1> g_popupOverlayWgcIntermediateBitmap;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Effect> g_popupOverlayWgcBlurEffect;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Effect> g_popupOverlayWgcRefractionBlurEffect;
@@ -1254,8 +1254,7 @@ Settings ReadSettings() {
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.HoverLerpSpeed"), 1, 80));
     settings.animationSpeed =
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.AnimationSpeed"), 10, 400)) / 100.0;
-    settings.displacementDebugPreview =
-        Wh_GetIntSetting(L"Main.DisplacementDebugPreview") != 0;
+
     settings.material = GetStringSetting(L"Main.Material", L"liquid_glass");
     if (settings.material != L"mica_like" &&
         settings.material != L"solid" &&
@@ -1520,7 +1519,7 @@ bool LooksLikeNativeMusicMediaSource(std::wstring const& source) {
     // path. Some providers use AppUserModelIds that contain generic substrings
     // which can otherwise be over-matched by the browser heuristics below.
     return lower.find(L"qqmusic") != std::wstring::npos ||
-           lower.find(L"qq闊充箰") != std::wstring::npos ||
+           lower.find(L"qq音乐") != std::wstring::npos ||
            lower.find(L"tencent.qqmusic") != std::wstring::npos ||
            lower.find(L"tencentmusic") != std::wstring::npos ||
            lower.find(L"spotify") != std::wstring::npos ||
@@ -5302,8 +5301,8 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Grid artHost;
         Image artFade;
         artFade.Stretch(mediax::Stretch::UniformToFill);
-    artFade.IsHitTestVisible(false);
-    artFade.Opacity(0.0);
+        artFade.IsHitTestVisible(false);
+        artFade.Opacity(0.0);
         Image art;
         art.Stretch(mediax::Stretch::UniformToFill);
         art.Opacity(1.0);
@@ -7703,7 +7702,6 @@ bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
 
 void ClearPopupOverlayWgcLensDisplacementMap() {
     g_popupOverlayWgcLensDisplacementMap = nullptr;
-    g_popupOverlayWgcLensDisplacementDebugMap = nullptr;
     g_popupOverlayWgcLensMapWidth = 0;
     g_popupOverlayWgcLensMapHeight = 0;
     g_popupOverlayWgcLensMapRadius = 0;
@@ -7837,7 +7835,6 @@ bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius)
 
     radius = Clamp(radius, 1, std::max(1, std::min(width, height) / 2));
     if (g_popupOverlayWgcLensDisplacementMap &&
-        g_popupOverlayWgcLensDisplacementDebugMap &&
         g_popupOverlayWgcLensMapWidth == width &&
         g_popupOverlayWgcLensMapHeight == height &&
         g_popupOverlayWgcLensMapRadius == radius) {
@@ -7982,10 +7979,6 @@ bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius)
         }
     }
 
-    // Debug preview now shows the exact RG displacement texture used by D2D.
-    // R encodes X displacement, G encodes Y displacement, and neutral gray
-    // (R=G=128, B=128) means no displacement.
-    std::vector<BYTE> debugPixels = pixels;
 
     D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_NONE,
@@ -8006,23 +7999,8 @@ bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius)
         return false;
     }
 
-    winrt::com_ptr<ID2D1Bitmap1> debugMap;
-    hr = g_popupOverlayWgcD2dContext->CreateBitmap(
-        D2D1::SizeU(static_cast<UINT32>(width), static_cast<UINT32>(height)),
-        debugPixels.data(),
-        static_cast<UINT32>(width * 4),
-        &props,
-        debugMap.put());
-    if (FAILED(hr)) {
-        g_popupOverlayWgcLastHr = hr;
-        Wh_Log(L"Island: overlay WGC lens debug map failed hr=0x%08X",
-               static_cast<unsigned>(hr));
-        ClearPopupOverlayWgcLensDisplacementMap();
-        return false;
-    }
 
     g_popupOverlayWgcLensDisplacementMap = std::move(map);
-    g_popupOverlayWgcLensDisplacementDebugMap = std::move(debugMap);
     g_popupOverlayWgcLensMapWidth = width;
     g_popupOverlayWgcLensMapHeight = height;
     g_popupOverlayWgcLensMapRadius = radius;
@@ -8065,15 +8043,6 @@ bool DrawLiquidGlassGpuLensWarp(ID2D1DeviceContext* context,
         return true;
     }
 
-    if (g_settings.displacementDebugPreview &&
-        g_popupOverlayWgcLensDisplacementDebugMap) {
-        context->DrawBitmap(g_popupOverlayWgcLensDisplacementDebugMap.get(),
-                            D2D1::RectF(0.0f, 0.0f, widthF, heightF),
-                            1.0f,
-                            D2D1_INTERPOLATION_MODE_LINEAR,
-                            D2D1::RectF(0.0f, 0.0f, widthF, heightF));
-        return true;
-    }
 
     if (!g_popupOverlayWgcDisplacementEffect) {
         HRESULT createHr = context->CreateEffect(
@@ -8494,38 +8463,79 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
         return;
     }
 
-    std::thread([]() {
-        try {
-            auto status = capture::GraphicsCaptureAccess::RequestAccessAsync(
-                              capture::GraphicsCaptureAccessKind::Borderless)
-                              .get();
-            bool allowed = status ==
-                           winrt::Windows::Security::Authorization::
-                               AppCapabilityAccess::AppCapabilityAccessStatus::Allowed;
-            g_popupOverlayWgcBorderlessAccessState.store(allowed ? 2 : 3,
-                                                         std::memory_order_release);
-            if (allowed) {
-                std::lock_guard lock(g_popupOverlayWgcMutex);
-                if (g_popupOverlayWgcSession) {
-                    try {
-                        g_popupOverlayWgcSession.IsBorderRequired(false);
-                    } catch (...) {
+    std::lock_guard threadLock(
+        g_popupOverlayWgcBorderlessAccessThreadMutex);
+    if (g_unloading.load()) {
+        g_popupOverlayWgcBorderlessAccessState.store(
+            4, std::memory_order_release);
+        return;
+    }
+
+    try {
+        g_popupOverlayWgcBorderlessAccessThread = new std::thread([]() {
+            try {
+                auto operation =
+                    capture::GraphicsCaptureAccess::RequestAccessAsync(
+                        capture::GraphicsCaptureAccessKind::Borderless);
+                auto status = GetAsyncResultWithTimeout(
+                    operation,
+                    kPopupOverlayWgcBorderlessAccessTimeout,
+                    L"WGC borderless access");
+                bool allowed =
+                    status ==
+                    winrt::Windows::Security::Authorization::
+                        AppCapabilityAccess::AppCapabilityAccessStatus::Allowed;
+                g_popupOverlayWgcBorderlessAccessState.store(
+                    allowed ? 2 : 3, std::memory_order_release);
+                if (allowed) {
+                    std::lock_guard lock(g_popupOverlayWgcMutex);
+                    if (g_popupOverlayWgcSession) {
+                        try {
+                            g_popupOverlayWgcSession.IsBorderRequired(false);
+                        } catch (...) {
+                        }
                     }
                 }
+                Wh_Log(L"Island: overlay WGC borderless access %s",
+                       allowed ? L"allowed" : L"denied");
+            } catch (winrt::hresult_error const& error) {
+                g_popupOverlayWgcBorderlessAccessState.store(
+                    4, std::memory_order_release);
+                Wh_Log(
+                    L"Island: overlay WGC borderless access failed hr=0x%08X",
+                    static_cast<unsigned>(error.code().value));
+            } catch (...) {
+                g_popupOverlayWgcBorderlessAccessState.store(
+                    4, std::memory_order_release);
+                Wh_Log(
+                    L"Island: overlay WGC borderless access failed unknown");
             }
-            Wh_Log(L"Island: overlay WGC borderless access %s",
-                   allowed ? L"allowed" : L"denied");
-        } catch (winrt::hresult_error const& error) {
-            g_popupOverlayWgcBorderlessAccessState.store(4,
-                                                         std::memory_order_release);
-            Wh_Log(L"Island: overlay WGC borderless access failed hr=0x%08X",
-                   static_cast<unsigned>(error.code().value));
-        } catch (...) {
-            g_popupOverlayWgcBorderlessAccessState.store(4,
-                                                         std::memory_order_release);
-            Wh_Log(L"Island: overlay WGC borderless access failed unknown");
-        }
-    }).detach();
+        });
+    } catch (...) {
+        g_popupOverlayWgcBorderlessAccessState.store(
+            4, std::memory_order_release);
+        g_popupOverlayWgcBorderlessAccessThread = nullptr;
+        Wh_Log(L"Island: failed to start overlay WGC access thread");
+    }
+}
+
+void StopPopupOverlayWgcBorderlessAccessThread() {
+    std::thread* thread = nullptr;
+    {
+        std::lock_guard threadLock(
+            g_popupOverlayWgcBorderlessAccessThreadMutex);
+        thread = g_popupOverlayWgcBorderlessAccessThread;
+        g_popupOverlayWgcBorderlessAccessThread = nullptr;
+    }
+
+    if (!thread) {
+        return;
+    }
+
+    if (thread->joinable()) {
+        thread->join();
+    }
+    delete thread;
 }
 
 bool PopupOverlayWgcDirtyRegionsSupported() {
@@ -8918,7 +8928,8 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
         }
         g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::VisibleFrame;
         g_popupOverlayWgcReadbackHadVisibleFrame = true;
-        g_popupOverlayWgcFallbackPainted = false;    } catch (winrt::hresult_error const& error) {
+        g_popupOverlayWgcFallbackPainted = false;
+    } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcLastHr = error.code().value;
         g_popupOverlayWgcDiagnosticHr = error.code().value;
         g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::RenderFailed;
@@ -9971,7 +9982,7 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
     double progress = PopupProgress();
     // Once the popup is visually at the end of the morph, snap the native
     // backdrop to the exact final XAML shell. This avoids a late 1-3 px WGC
-    // handoff offset caused by starting capture at progress鈮?.985.
+    // handoff offset caused by starting capture at progress≈0.985.
     if (!g_popupClosing && progress >= 0.995) {
         progress = 1.0;
     }
@@ -10592,8 +10603,8 @@ void ApplyExpandedState() {
 
     if (auto details = FindChildByName(g_playerGrid, L"Island_Details")) {
         details.Visibility(Visibility::Collapsed);
-    details.IsHitTestVisible(false);
-    details.Opacity(0.0);
+        details.IsHitTestVisible(false);
+        details.Opacity(0.0);
     }
     if (auto compactArtist = FindChildByName(g_playerGrid, L"Island_CompactArtist")) {
         compactArtist.Visibility(Visibility::Visible);
@@ -12401,6 +12412,7 @@ void Wh_ModUninit() {
         return;
     }
     g_modActive = false;
+    StopPopupOverlayWgcBorderlessAccessThread();
     ReleasePopupOverlayWgcDeviceResources();
     StopMediaThread();
 
