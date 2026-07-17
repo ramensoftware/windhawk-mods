@@ -10362,19 +10362,22 @@
           5
         ],
         "ratingUsers": 6,
-        "updated": 1783424497000,
+        "updated": 1784292238000,
         "users": 196
       },
       "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
         "author": "babamohammed",
-        "compilerOptions": "-lcomctl32 -lpsapi",
-        "description": "Forces classic Control Panel to open instead of Windows 10/11 Settings app using native components. Primarily designed for Windows 10; Windows 11 support is limited due to Microsoft's shell architecture changes.",
+        "compilerOptions": "-lcomctl32 -lpsapi -lole32",
+        "description": "This mod forces the classic Control Panel to open instead of Windows 10/11 Settings app using native components.",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe"
         ],
         "name": "Redirect Settings to Control Panel",
-        "version": "10.0.20"
+        "version": "10.0.35"
       }
     },
     "shadowplay-do-not-disable": {

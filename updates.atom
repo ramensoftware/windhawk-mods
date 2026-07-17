@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-17T11:33:43.000Z</updated>
+    <updated>2026-07-17T12:43:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.35]]></title>
+        <id>https://windhawk.net/mods/settings-to-control-panel#639e8f6b8bde4a0009f039b4aa3dafa7922d5c4b</id>
+        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
+        <updated>2026-07-17T12:43:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made system tray redirect more robust in some edge cases</li>
+<li>Enhanced Windows 11 compatibility</li>
+<li>Fixed menu items appearing blank in system tray context menus</li>
+<li>Enhanced stability</li>
+<li>Added Legacy Name Mapping Fix</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.1]]></title>
         <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#e6e6322957e02141338ec74bd7320b4b6537f205</id>
@@ -932,57 +949,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>Lockframe</name>
             <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Low Battery Alarm 1.0.0]]></title>
-        <id>https://windhawk.net/mods/low-battery-alarm#e0077ff36df5d27591e24a8f90f5e7434ba67217</id>
-        <link href="https://windhawk.net/mods/low-battery-alarm"/>
-        <updated>2026-07-12T18:23:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lowbatteryalarm">Low Battery Alarm</h1>
-<p>Low Battery Alarm plays a repeating, clearly audible alarm when a laptop is
-discharging and reaches a configured low or critical battery level. It is useful
-when the laptop is left performing a long-running task in another room and a
-normal desktop notification might not be noticed.</p>
-<p>By default, low-battery alerts begin at 10% and repeat every 120 seconds.
-Critical alerts begin at 5% and repeat every 30 seconds. Critical alerts continue
-below 5%; 5% is the entry threshold, not a lower cutoff. Alerts stop when external
-power is connected and can start again during a later discharge cycle. AC/DC
-changes are handled through Windows power notifications, so an active waveform is
-stopped immediately instead of waiting for the next polling interval.</p>
-<h2 id="customsoundandfallback">Custom sound and fallback</h2>
-<p>Enter the complete WAV path manually in <strong>WAV file path</strong>, or use <strong>Browse…</strong>
-in the custom configuration window to select it with Windows Explorer. A manual
-path change saved in Windhawk replaces a path previously selected in the custom
-window. To open the window, enable <strong>Open alarm configuration</strong> and save the
-settings. The topmost window also lists the Windows default output roles and
-every active Core Audio output device. It stores the selected device by its
-stable endpoint ID. To reopen the window, disable the option and save, then
-enable it and save again. An enabled request is handled only once, so saving
-unrelated settings does not reopen the window. It also opens automatically on
-the first run, before an output selection has been stored.</p>
-<p>WAV is the guaranteed supported custom format. If no file has been selected, or
-if the selected file is later removed, becomes inaccessible, is not a WAV file,
-or cannot be played, the mod logs the reason. When the fallback option is
-enabled, the Windows critical system sound is used instead. A short, clearly
-audible, and recognizable WAV file is recommended.</p>
-<h2 id="volumeandtesting">Volume and testing</h2>
-<p>The mod can temporarily change the selected output device's master volume and can
-temporarily unmute it while an alert is playing. The previous volume and mute
-state are normally restored afterward. If the user changes the volume during
-playback, the new value is preserved when the change can be detected by comparing
-it with the exact value applied by the mod.</p>
-<p>Enable <strong>Test sound after settings change</strong> and save the settings to request one
-test alert. The test uses the current sound and volume settings without changing
-the battery state machine. The option is evaluated only when settings are saved;
-it does not run during normal polling.</p>
-<p>Desktop computers without a system battery are ignored. The mod creates no
-persistent UI, console, tray icon, or external player. It runs in a dedicated
-Windhawk tool process and uses low-overhead battery-monitoring, power-notification,
-and controlled sound-playback threads.</p>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
