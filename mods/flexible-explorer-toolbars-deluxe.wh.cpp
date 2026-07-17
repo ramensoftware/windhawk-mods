@@ -81,7 +81,6 @@ constexpr int UP_BUTTON_ICON_SIZE  = 16;
 constexpr UINT LOCK_TOOLBARS_CMD_ID = 41484;
 
 UINT g_msgDoMove = 0;
-UINT g_msgRefreshLayout = 0;
 
 struct Settings {
     bool moveSearchBand    = true;
@@ -204,6 +203,13 @@ bool HasChildFlag(HWND h,int f){
 }
 void ClearAllChildFlags(HWND h){EnterCriticalSection(&g_mutex);g_childFlags.erase(h);LeaveCriticalSection(&g_mutex);}
 
+HWND GetCabinetAncestor(HWND hwnd){
+    for(HWND c=hwnd;c;c=GetParent(c)){
+        WCHAR cls[64];
+        if(GetClassName(c,cls,ARRAYSIZE(cls))&&wcscmp(cls,L"CabinetWClass")==0)return c;
+    }return NULL;
+}
+
 void CleanupCabinetState(HWND cab){
     UnmarkMoved(cab);
     
@@ -227,6 +233,20 @@ void CleanupCabinetState(HWND cab){
         }
     }
     UnregisterCabinetMenuRebar(cab);
+
+    // Explicitly clean up neutered leftovers (Breadcrumb Parent / UpBand).
+    // These windows are never hooked, so WM_NCDESTROY won't self-clean them.
+    EnterCriticalSection(&g_mutex);
+    auto it = g_neuteredAddressRoots.begin();
+    while (it != g_neuteredAddressRoots.end()) {
+        HWND h = *it;
+        if (!IsWindow(h) || GetCabinetAncestor(h) == cab) {
+            it = g_neuteredAddressRoots.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    LeaveCriticalSection(&g_mutex);
 }
 
 void GetEffectiveClassName(HWND child, wchar_t* out, size_t outCount) {
@@ -364,12 +384,6 @@ void ApplySavedLayout(HWND rebar){
     MarkPendingApply(rebar);
 }
 
-HWND GetCabinetAncestor(HWND hwnd){
-    for(HWND c=hwnd;c;c=GetParent(c)){
-        WCHAR cls[64];
-        if(GetClassName(c,cls,ARRAYSIZE(cls))&&wcscmp(cls,L"CabinetWClass")==0)return c;
-    }return NULL;
-}
 HWND FindMenuBarRebar(HWND c){
     HWND s=FindWindowEx(c,NULL,L"ShellTabWindowClass",NULL);if(!s)return NULL;
     HWND w=FindWindowEx(s,NULL,L"WorkerW",NULL);if(!w)return NULL;
@@ -411,13 +425,6 @@ bool IsRebarChildOfDirectWorkerW(HWND r,HWND cab){
     WCHAR cls[64];if(!GetClassName(p,cls,ARRAYSIZE(cls)))return false;
     if(wcscmp(cls,L"WorkerW")!=0)return false;
     return GetParent(p)==cab;
-}
-bool IsNavbarWorkerW(HWND h){
-    WCHAR cls[64];if(!GetClassName(h,cls,ARRAYSIZE(cls)))return false;
-    if(wcscmp(cls,L"WorkerW")!=0)return false;
-    HWND p=GetParent(h);if(!p)return false;
-    if(!GetClassName(p,cls,ARRAYSIZE(cls))||wcscmp(cls,L"CabinetWClass")!=0)return false;
-    return FindWindowEx(h,NULL,L"ReBarWindow32",NULL)!=NULL;
 }
 bool ContainsClass(HWND root,const wchar_t* target){
     WCHAR cls[256];if(!GetClassName(root,cls,ARRAYSIZE(cls)))return false;
@@ -614,12 +621,6 @@ LRESULT CALLBACK BreadcrumbToolbar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPA
 }
 
 LRESULT CALLBACK AddressBandRoot_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
-    if(msg==WM_NCDESTROY){
-        // Self-clean the neutered set on destroy so entries don't leak across
-        // cabinet closes (mirrors the force-hidden worker cleanup below).
-        UnmarkNeutered(hwnd);
-        return DefSubclassProc(hwnd,msg,wP,lP);
-    }
     if(IsNeutered(hwnd))return DefWindowProc(hwnd,msg,wP,lP);
     return DefSubclassProc(hwnd,msg,wP,lP);
 }
@@ -684,7 +685,6 @@ LRESULT CALLBACK MenuReBarParent_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARA
 }
 
 LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD_PTR){
-
     if(msg==WM_CONTEXTMENU){
         POINT pt = { GET_X_LPARAM(lP), GET_Y_LPARAM(lP) };
         bool isMovedBand = false;
@@ -735,12 +735,6 @@ LRESULT CALLBACK ReBar_SubclassProc(HWND hwnd,UINT msg,WPARAM wP,LPARAM lP,DWORD
                 inf->cyIntegral=1;
             }
         }
-     
-        // Explorer triggers RB_SETBANDINFO during folder navigation.
-        // It fragments the layout, leaving gaps. Post a scheduled layout refresh to fix it.
-        if (!g_insideApply && !g_insideGripperSync) {
-            PostMessage(hwnd, g_msgRefreshLayout, 0, 0);
-        } 
     }
     
     g_rebarLayoutDepth++;
@@ -1017,8 +1011,6 @@ BOOL Wh_ModInit(){
 
     g_msgDoMove = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_DoMove");
     if(!g_msgDoMove){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
-    g_msgRefreshLayout = RegisterWindowMessage(L"FlexibleExplorerToolbarsDeluxe_RefreshLayout");
-    if(!g_msgRefreshLayout){ Wh_Log(L"RegisterWindowMessage failed"); return FALSE; }
 
     Wh_SetFunctionHook((void*)CreateWindowExW,(void*)CreateWindowExW_Hook,(void**)&CreateWindowExW_Original);
     Wh_SetFunctionHook(
