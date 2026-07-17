@@ -54,7 +54,7 @@ Panel pages, using only native Windows components.
 
 - **[Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)** – recreates the classic Windows 7/8.1 Action Center tray icon and flyout with real-time security status monitoring along with a partial restore of a link inside the Action Center Control Panel page.
 - **[Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)** – recreates the classic Windows 7 "Taskbar and Start Menu Properties" dialog for Windows 10 and 11.
-- **[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)** – recreates the classic Windows 7 network flyout with Wi-Fi list, signal strength, and connection support and, if enabled, partial restore of some links inside the classic "Network and Sharing Center" Contro Panel page.
+- **[Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)** – recreates the classic Windows 7 network flyout with Wi-Fi list, signal strength, and connection support and, if enabled, partial restore of some links inside the classic "Network and Sharing Center" Control Panel page.
 
 All of these mods are **reversible** and help make Windows 10 and 11 look more like Windows 7 and classic versions of Windows without replacing system files.
 
@@ -75,7 +75,7 @@ All of these mods are **reversible** and help make Windows 10 and 11 look more l
   $description: "This setting turns the mod on or off. When disabled, Settings opens normally as usual."
 - RedirectSystemTray: false
   $name: Redirect System Tray Audio/Network/Device & Printers (EXPERIMENTAL)
-  $description: "If this setting is enabled, right-clicking the Audio, Network, or Devices & Printers icon near the clock and choosing 'Open Sound settings', 'Open Network settings', or 'Open devices and printers' will open the classic Control Panel instead of the Settings app. It is primarly recommended on Windows 10. Note: the network redirect may stop working after Explorer restarts on certain builds."
+  $description: "If this setting is enabled, right-clicking the Audio, Network, or Devices & Printers icon near the clock and choosing 'Open Sound settings', 'Open Network settings', or 'Open devices and printers' will open the classic Control Panel instead of the Settings app. It is primarily recommended on Windows 10. Note: the network redirect may stop working after Explorer restarts on certain builds."
 - UIOnlyRedirects: false
   $name: Non-Invasive Mode
   $description: "This setting changes the behavior of the mod by only redirecting Settings links clicked in the UI. Programs and background processes that open Settings directly are not affected. It is recommended on Windows 11 for safety. On Windows 10, leaving this off gives better coverage as it has more parts of the Control Panel compared to the successor."
@@ -92,9 +92,9 @@ All of these mods are **reversible** and help make Windows 10 and 11 look more l
 - MaxLaunchesPerUri: 3
   $name: Anti-Loop Limit (per window, every 5 seconds)
   $description: "This is a safety measure: if the same window gets opened too many times within a few seconds, the mod stops reopening it. Do not set this to 0 — without this limit, a redirect loop can open windows endlessly and freeze Explorer."
-- ComActivationRedirect: true
+- ComActivationRedirect: false
   $name: COM-activation Redirect (EXPERIMENTAL)
-  $description: "This setting intercepts Settings launches that happen through the COM interface rather than the normal shell. Recommended on Windows 10. On Windows 11, this affects all app launches process-wide, so only enable it if you have a specific issue it fixes (such as tray icons opening Settings instead of Control Panel on certain builds)."
+  $description: "This setting intercepts Settings launches that happen through the COM interface rather than the normal shell. On Windows 11, this affects all app launches process-wide, so only enable it if you have a specific issue it fixes (such as tray icons opening Settings instead of Control Panel on certain builds). On Windows 10 this setting has no effect."
 - LegacyNameMappingFix: true
   $name: Fix Legacy Name Mapping
   $description: "This option fixes a shell issue where certain classic Control Panel pages show up blank or silently redirect to the modern Settings app. Recommended on both Windows 10 and 11."
@@ -113,9 +113,6 @@ All of these mods are **reversible** and help make Windows 10 and 11 look more l
 #include <unordered_set>
 #include <vector>
 #include <mutex>
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
 
 // Manually defined GUIDs to avoid requiring -luuid / static ole32 linkage.
 // {45BA127D-10A8-46EA-8AB7-56EA9078943C} = CLSID_ApplicationActivationManager
@@ -135,11 +132,8 @@ static DWORD g_trayContextTick = 0;
 static std::mutex g_trayContextMutex;
 static constexpr DWORD TRAY_CONTEXT_MAX_AGE_MS = 1500;
 
-#ifdef _WIN64
+// x86-64 only (@architecture x86-64); _WIN64 is always defined.
 #define ICMH_CALL __cdecl
-#else
-#define ICMH_CALL __stdcall
-#endif
 
 using ICMH_CAODTM_t = bool(ICMH_CALL*)(HMENU, HWND);
 // CDevicesAndPrintersFolder::_HandleContextMenu has a different second parameter
@@ -250,7 +244,7 @@ struct ModSettings {
     int fallbackMode = 2;
     bool win11CompatibilityMode = false;
     int maxLaunchesPerUri = 3;
-    bool comActivationRedirect = true;
+    bool comActivationRedirect = false;
     bool legacyNameMappingFix = true;
 };
 
@@ -393,7 +387,7 @@ static const std::unordered_set<std::wstring> g_win11SafeClsids = {
     L"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}",
     L"shell:::{d555645e-d4f8-4c29-a827-d93c859c4f2a}",
     L"shell:::{d9ef8727-cac2-4e60-809e-86f80a666c91}",
-    L"shell:::{ecd0924-4208-451e-8ee0-373c0956de16}",
+    L"shell:::{ecdb0924-4208-451e-8ee0-373c0956de16}",
     L"shell:::{ed7ba470-8e54-465e-825c-99712043e01c}",
     L"shell:::{f02c1a0d-be21-4350-88b0-7367fc96ef3c}",
 };
@@ -732,13 +726,8 @@ static BOOL WINAPI CommonTrackPopupMenuEx_Hook(
 
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, const TPMPARAMS* lptpm) {
     // Capture the real caller before entering the shared implementation.
-    // Using _ReturnAddress here avoids depending on stack depth after this
-    // wrapper was introduced, which is especially important on 32-bit builds.
-#ifdef _MSC_VER
-    void* callerRetAddr = _ReturnAddress();
-#else
+    // Windhawk builds with Clang, so __builtin_return_address is always available.
     void* callerRetAddr = __builtin_return_address(0);
-#endif
     return CommonTrackPopupMenuEx_Hook(hMenu, uFlags, x, y, hWnd, lptpm, callerRetAddr, g_origTrackPopupMenuEx, L"TRAY-HOOK");
 }
 
@@ -1478,13 +1467,7 @@ static bool TryInstallPniduiHook() {
     
     WindhawkUtils::SYMBOL_HOOK pnidui_dll_hooks[] = {{
         {
-            L"bool "
-#ifdef _WIN64
-            L"__cdecl"
-#else
-            L"__stdcall"
-#endif
-            L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+            L"bool __cdecl ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
             L"(struct HMENU__ *,struct HWND__ *)"
         },
         (void**)&g_icmhOrig_pnidui,
@@ -1511,13 +1494,7 @@ static void InstallImmersiveMenuHooks() {
         if (hMod) {
             WindhawkUtils::SYMBOL_HOOK sndVolSSO_dll_hooks[] = {{
                 {
-                    L"bool "
-#ifdef _WIN64
-                    L"__cdecl"
-#else
-                    L"__stdcall"
-#endif
-                    L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
+                    L"bool __cdecl ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu"
                     L"(struct HMENU__ *,struct HWND__ *)"
                 },
                 (void**)&g_icmhOrig_SndVolSSO,
@@ -1553,13 +1530,7 @@ static void InstallShell32Hooks() {
     WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] = {
         {
             {
-                L"bool "
-#ifdef _WIN64
-                L"__cdecl"
-#else
-                L"__stdcall"
-#endif
-                L" CDevicesAndPrintersFolder::_HandleContextMenu"
+                L"bool __cdecl CDevicesAndPrintersFolder::_HandleContextMenu"
                 L"(struct HMENU__ *,unsigned int)"
             },
             (void**)&g_icmhOrig_Shell32Devices,
