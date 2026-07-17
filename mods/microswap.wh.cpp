@@ -64,36 +64,36 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 
 ## Changelog
 
-# 2.0.1
+### v2.0.1
 - **New:** Persistent Mute toggle in dashboard settings. When checked, mute state survives device cycles (USB replug, sleep/wake, driver resets).
 - **Fixed:** Persistent mute now survives device cycling — mute is re-applied to the newly defaulted device after switching.
 - **Fixed:** Tray icon red-dot overlay updates after persistent re-muting.
 - **Fixed:** "Persistent Mute" checkbox text now renders correctly on the dark dashboard.
 
-# 2.0.0
+### v2.0.0
 - **New:** Complete rebuild with full feature parity to AudioSwap — 6 device slots, configurable cycle order, native dark-themed settings dashboard, scroll-to-swap mode, push-to-mute, instant device-change updates, and Advanced Mode with priority routing.
 - **New:** Right-click → **Sound Settings...** opens Windows Sound dialog directly on the Recording tab.
 - **New:** Middle-click tray icon → compact volume slider popup with a custom dark design. Drag to adjust microphone volume; click outside or press Escape to close.
 - **New:** Scroll wheel over the tray icon (Click to Swap mode) adjusts microphone volume.
 
-# 1.4.0
+### v1.4.0
 - **New:** Context menu now follows your Windows dark/light theme.
 - **Improved:** Active device shown at the top of the right-click menu.
 
-# 1.3.0
+### v1.3.0
 - **Changed:** Renamed from MicroSwap to MicSwitch.
 - **New:** Donate button on the mod page.
 
-# 1.2.0
+### v1.2.0
 - **Fixed:** Rare crash when switching devices rapidly.
 - **Fixed:** Occasional hang when Windhawk unloads the mod.
 - **Fixed:** Tray window appeared in Alt+Tab.
 - **Fixed:** Tray icon failed to load on some Windows configurations.
 
-# 1.1.0
+### v1.1.0
 - **New:** Custom icon support — pick your own image for each device via Settings or right-click.
 
-# 1.0.0
+### v1.0.0
 - Initial release.
 */
 // ==/WindhawkModReadme==
@@ -194,8 +194,7 @@ static DWORD          g_lastReloadTime    = 0;
 static DWORD          g_lastScrollTime    = 0;
 static UINT           g_taskbarCreatedMsg = 0;
 
-// Safe reload guard — prevents double-init / double-uninit on DLL reload
-static LONG g_initComplete = FALSE;
+// ponytail: g_initComplete guard removed — tool mod runs exactly once per process
 
 // Tray icon position (used by Raw Input scroll handler)
 static RECT           g_trayIconRect      = {};
@@ -2666,18 +2665,18 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UnbindEndpointVolume();
         BindEndpointVolume();
 
-        // Unmute the previously-tracked device before muting the new one.
-        EnterCriticalSection(&g_stateLock);
+        // Snapshot all mute state under lock, then transfer the mute to the
+        // new default device in one atomic step.
+        bool persistent, muted;
         WCHAR oldMutedId[512] = {};
+        EnterCriticalSection(&g_stateLock);
+        persistent = g_persistentMute;
+        muted      = g_isMutedByUs;
         lstrcpynW(oldMutedId, g_mutedDeviceId, 512);
         LeaveCriticalSection(&g_stateLock);
-        if (oldMutedId[0]) {
-            ApplyMute(oldMutedId, FALSE);
-        }
 
-        // If persistent mute is on and we were muted, mute the new default device
-        // and update the tracked device ID.
-        if (g_persistentMute && g_isMutedByUs) {
+        if (persistent && muted) {
+            if (oldMutedId[0]) ApplyMute(oldMutedId, FALSE);
             IMMDevice* pNewDefault = nullptr;
             if (g_notifEnum && SUCCEEDED(g_notifEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewDefault))) {
                 LPWSTR newDevId = nullptr;
@@ -2699,7 +2698,10 @@ LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         // Picks up new device assignments, icon choices, device count, swap mode, and priority list.
         {
             WCHAR pmBuf[8] = {};
-            g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+            bool pm = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+            EnterCriticalSection(&g_stateLock);
+            g_persistentMute = pm;
+            LeaveCriticalSection(&g_stateLock);
         }
         LoadDeviceSelections();
         LoadPriorityList();
@@ -2785,9 +2787,8 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     }
     // Register Raw Input for scroll over the tray icon (bypasses WH_MOUSE_LL hook chain).
     // Always active: scroll-to-swap mode cycles devices; click mode adjusts volume.
+    // ponytail: no RIDEV_REMOVE before register — fresh process has no prior registration
     {
-        RAWINPUTDEVICE ridRemove = { 1, 2, RIDEV_REMOVE, nullptr };
-        RegisterRawInputDevices(&ridRemove, 1, sizeof(ridRemove));
         RAWINPUTDEVICE rid = { 1, 2, RIDEV_INPUTSINK, g_trayHwnd };
         RegisterRawInputDevices(&rid, 1, sizeof(rid));
     }
@@ -2819,10 +2820,6 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 // ─── Mod lifecycle ────────────────────────────────────────────────────────────
 
 BOOL WhTool_ModInit() {
-    // Safe-reload guard — skip if already initialized (prevents double-init on DLL reload).
-    if (InterlockedCompareExchange(&g_initComplete, TRUE, FALSE))
-        return TRUE;
-
     Wh_Log(L"MicSwitch Mod Init");
     InitializeCriticalSection(&g_stateLock);
 
@@ -2891,7 +2888,10 @@ BOOL WhTool_ModInit() {
     // Load persistent mute setting.
     {
         WCHAR pmBuf[8] = {};
-        g_persistentMute = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+        bool pm = (Wh_GetStringValue(L"persistentMute", pmBuf, 8) && pmBuf[0] == L'1');
+        EnterCriticalSection(&g_stateLock);
+        g_persistentMute = pm;
+        LeaveCriticalSection(&g_stateLock);
     }
 
     LoadUserIconsAndSettings();   // sets g_deviceSlotCount first
@@ -2913,10 +2913,6 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    // Safe-reload guard — skip if already uninitialized (prevents double-uninit on DLL reload).
-    if (!InterlockedCompareExchange(&g_initComplete, FALSE, TRUE))
-        return;
-
     Wh_Log(L"MicSwitch Mod Uninit");
     RestoreMuteExternal();
 
