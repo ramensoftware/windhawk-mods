@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.208
+// @version         0.9.209
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -32,6 +32,8 @@ play/pause, and next controls.
   refraction band with a faster-to-slower inner falloff.
 - **Safer capture startup:** Borderless capture authorization is now bounded
   and cleanly stopped before the mod unloads.
+- **Thread-safe live blur:** Capture rendering now uses a taskbar-thread
+  snapshot and serializes GPU presentation without blocking popup animation.
 - **Better light-mode visibility:** Liquid Glass now keeps the album-art
   background wash enabled in light mode so the expanded surface remains legible.
 - **Current tuned defaults:** New installs now default to the tuned Liquid
@@ -551,7 +553,17 @@ void ClearPopupBackdropOverlayHandoffCache() {
 
 std::mutex g_popupOverlayWgcMutex;
 std::atomic<bool> g_popupOverlayWgcRendering{false};
-bool g_popupOverlayWgcRunning = false;
+struct PopupOverlayWgcRenderParameters {
+    int targetRadiusPx = 1;
+    bool morphing = false;
+    bool allowScreenCapture = false;
+    bool useLiquidLensWarp = false;
+    float blurStdDev = 18.0f;
+    float refractionBlurStdDev = 2.0f;
+    float liquidRimAlpha = 0.38f;
+};
+PopupOverlayWgcRenderParameters g_popupOverlayWgcRenderParameters;
+std::atomic_bool g_popupOverlayWgcRunning = false;
 bool g_popupOverlayWgcFrameCallbackHooked = false;
 std::atomic<bool> g_popupOverlayWgcDirtyRegionsEnabled{false};
 std::atomic<int> g_popupOverlayWgcBorderlessAccessState{0};
@@ -6641,7 +6653,11 @@ void HidePopupBackdropOverlayWindowVisualOnly();
 void HidePopupBackdropOverlayWindow();
 void StopPopupOverlayWgcBackdrop();
 void ReleasePopupOverlayWgcDeviceResources();
-bool StartPopupOverlayWgcBackdrop(RECT const& captureRect, int widthPx, int heightPx);
+bool StartPopupOverlayWgcBackdrop(
+    RECT const& captureRect,
+    int widthPx,
+    int heightPx,
+    PopupOverlayWgcRenderParameters const& renderParameters);
 bool SetPopupWindowCaptureExclusion(HWND hwnd, bool exclude);
 bool SetExpandedPopupCaptureExclusion(bool exclude);
 void ClearPopupBackdropOverlayHandoffCache();
@@ -8012,9 +8028,9 @@ bool DrawLiquidGlassGpuLensWarp(ID2D1DeviceContext* context,
                                 ID2D1Image* refractImage,
                                 int width,
                                 int height,
-                                int radius) {
-    if (!IsLiquidGlassMaterial() || !context || !blurredImage ||
-        width <= 2 || height <= 2) {
+                                int radius,
+                                float rimAlpha) {
+    if (!context || !blurredImage || width <= 2 || height <= 2) {
         return false;
     }
     if (!refractImage) {
@@ -8096,7 +8112,7 @@ bool DrawLiquidGlassGpuLensWarp(ID2D1DeviceContext* context,
         D2D1::RectF(rimInset, rimInset, widthF - rimInset, heightF - rimInset),
         rimRadius,
         rimRadius);
-    float rimAlpha = IsDarkModeApprox() ? 0.38f : 0.52f;
+    rimAlpha = Clamp(rimAlpha, 0.0f, 1.0f);
     D2D1_COLOR_F rimColor = D2D1::ColorF(1.0f, 1.0f, 1.0f, rimAlpha);
     if (!g_popupOverlayWgcRimBrush) {
         context->CreateSolidColorBrush(rimColor,
@@ -8114,7 +8130,7 @@ bool DrawLiquidGlassGpuLensWarp(ID2D1DeviceContext* context,
     return true;
 }
 
-void UpdatePopupOverlayDcompVisualTransform(int widthPx, int heightPx) {
+void UpdatePopupOverlayDcompVisualTransformLocked(int widthPx, int heightPx) {
     if (!g_popupOverlayDcompVisual) {
         return;
     }
@@ -8150,6 +8166,15 @@ void UpdatePopupOverlayDcompVisualTransform(int widthPx, int heightPx) {
     if (g_popupOverlayDcompDevice) {
         g_popupOverlayDcompDevice->Commit();
     }
+}
+
+void UpdatePopupOverlayDcompVisualTransform(int widthPx, int heightPx) {
+    std::unique_lock lock(g_popupOverlayWgcMutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return;
+    }
+
+    UpdatePopupOverlayDcompVisualTransformLocked(widthPx, heightPx);
 }
 
 bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
@@ -8277,7 +8302,9 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
     g_popupOverlayWgcLastHr = S_OK;
     return true;
 }
-bool EnsurePopupOverlayWgcDeviceResources(HWND hwnd, int widthPx, int heightPx) {
+bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
+                                                int widthPx,
+                                                int heightPx) {
     if (!UseOverlayPopupBackdropMaterial() || !hwnd ||
         widthPx <= 0 || heightPx <= 0) {
         return false;
@@ -8592,31 +8619,22 @@ bool PopupOverlayWgcFrameTouchesCapture(
         return true;
     }
 }
-void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
+void RenderPopupOverlayWgcFrameLocked(
+    capture::Direct3D11CaptureFrame const& frame) {
     g_popupOverlayWgcHadFrame = true;
     ++g_popupOverlayWgcFrameCount;
-    g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::FrameArrived;
-    if (!g_expanded || !g_popupBackdropOverlay ||
-        !IsWindowVisible(g_popupBackdropOverlay)) {
-        return;
-    }
+    g_popupOverlayWgcDiagnosticState =
+        PopupOverlayWgcDiagnosticState::FrameArrived;
     if (!g_popupOverlayWgcRunning || !frame ||
         !g_popupOverlayWgcD2dContext ||
         !g_popupOverlayWgcSwapChain ||
-        !g_popupOverlayWgcSwapChainTargetBitmap ||
-        !g_popupBackdropOverlay) {
+        !g_popupOverlayWgcSwapChainTargetBitmap) {
         return;
     }
 
+    PopupOverlayWgcRenderParameters renderParameters =
+        g_popupOverlayWgcRenderParameters;
     RECT captureRect = g_popupOverlayWgcCaptureRectPx;
-    RECT latestCaptureRect{};
-    int latestCaptureRadius = 1;
-    if (CalculatePopupBackdropOverlayRect(latestCaptureRect, latestCaptureRadius) &&
-        latestCaptureRect.right > latestCaptureRect.left &&
-        latestCaptureRect.bottom > latestCaptureRect.top) {
-        captureRect = latestCaptureRect;
-        g_popupOverlayWgcCaptureRectPx = latestCaptureRect;
-    }
     RECT monitorRect = g_popupOverlayWgcMonitorRectPx;
     int targetWidth = g_popupOverlayWgcTargetWidthPx;
     int targetHeight = g_popupOverlayWgcTargetHeightPx;
@@ -8626,8 +8644,7 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
         return;
     }
 
-    bool morphing =
-        std::abs(g_popupAnimationTarget - g_popupAnimationProgress) >= 0.006;
+    bool morphing = renderParameters.morphing;
     if (!PopupOverlayWgcFrameTouchesCapture(frame,
                                             captureRect,
                                             monitorRect,
@@ -8663,7 +8680,8 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
 
     std::vector<BYTE> recordingCleanPixels;
     bool useRecordingCleanBackdrop = false;
-    if (g_settings.allowScreenCapture && IsLiquidGlassMaterial()) {
+    if (renderParameters.allowScreenCapture &&
+        renderParameters.useLiquidLensWarp) {
         std::lock_guard cacheLock(g_popupBackdropOverlayHandoffMutex);
         if (g_popupBackdropOverlayCleanPixelsValid &&
             g_popupBackdropOverlayCleanWidth == targetWidth &&
@@ -8712,18 +8730,7 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
             static_cast<float>(targetWidth),
             static_cast<float>(targetHeight));
 
-        int cornerRadiusPx = g_popupOverlayWgcTargetRadiusPx > 0
-                                 ? g_popupOverlayWgcTargetRadiusPx
-                                 : g_popupBackdropOverlayLastRadius;
-        if (cornerRadiusPx <= 0) {
-            cornerRadiusPx =
-                g_settings.compact
-                    ? static_cast<int>(std::lround(
-                          PopupG2CornerRadius(targetWidth, targetHeight)))
-                    : static_cast<int>(std::lround(
-                          kPopupUnifiedCornerRadius *
-                          PopupDpiScale(g_expandedPopup)));
-        }
+        int cornerRadiusPx = renderParameters.targetRadiusPx;
         cornerRadiusPx = Clamp(
             cornerRadiusPx, 1,
             std::max(1, std::min(targetWidth, targetHeight) / 2));
@@ -8747,7 +8754,7 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
                 &cleanMaskRect,
                 recordingCleanMaskGeometry.put()));
         }
-        bool useLiquidLensWarp = IsLiquidGlassMaterial();
+        bool useLiquidLensWarp = renderParameters.useLiquidLensWarp;
         D2D1_BITMAP_PROPERTIES1 intermediateProps = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -8812,7 +8819,7 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
         g_popupOverlayWgcBlurEffect->SetInput(0, intermediateBitmap.get());
         g_popupOverlayWgcBlurEffect->SetValue(
             D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
-            PopupBackdropWgcEffectiveBlurStdDev());
+            renderParameters.blurStdDev);
         winrt::com_ptr<ID2D1Image> blurredImage;
         g_popupOverlayWgcBlurEffect->GetOutput(blurredImage.put());
         if (!blurredImage) {
@@ -8831,7 +8838,7 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
                 0, intermediateBitmap.get());
             g_popupOverlayWgcRefractionBlurEffect->SetValue(
                 D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
-                PopupBackdropWgcLiquidRefractionBlurStdDev());
+                renderParameters.refractionBlurStdDev);
             g_popupOverlayWgcRefractionBlurEffect->GetOutput(
                 refractionEffectOutput.put());
             if (refractionEffectOutput) {
@@ -8881,7 +8888,8 @@ void RenderPopupOverlayWgcFrame(capture::Direct3D11CaptureFrame const& frame) {
                                        refractionImage,
                                        targetWidth,
                                        targetHeight,
-                                       cornerRadiusPx);
+                                       cornerRadiusPx,
+                                       renderParameters.liquidRimAlpha);
         if (!drewGpuLens) {
             g_popupOverlayWgcD2dContext->DrawImage(
                 renderImage,
@@ -8987,6 +8995,7 @@ void ResetPopupOverlayWgcDeviceResourcesLocked() {
     g_popupOverlayWgcTargetWidthPx = 0;
     g_popupOverlayWgcTargetHeightPx = 0;
     g_popupOverlayWgcTargetRadiusPx = 0;
+    g_popupOverlayWgcRenderParameters = {};
     g_popupOverlayWgcFrameIntervalMs = 1000.0 / 60.0;
     g_popupOverlayWgcMonitor = nullptr;
     g_popupOverlayWgcCaptureRectPx = {LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
@@ -9069,9 +9078,11 @@ void ReleasePopupOverlayWgcDeviceResources() {
     ResetPopupOverlayWgcDeviceResourcesLocked();
 }
 
-bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
-                                  int widthPx,
-                                  int heightPx) {
+bool StartPopupOverlayWgcBackdrop(
+    RECT const& captureRect,
+    int widthPx,
+    int heightPx,
+    PopupOverlayWgcRenderParameters const& renderParameters) {
     auto now = std::chrono::steady_clock::now();
     if (g_popupOverlayWgcCreateItemFailed &&
         g_popupOverlayWgcLastStartAttemptTime.time_since_epoch().count() != 0 &&
@@ -9107,42 +9118,58 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
         Wh_Log(L"Island: overlay WGC state no monitor");
         return false;
     }
-    g_popupOverlayWgcFrameIntervalMs =
+    double frameIntervalMs =
         PopupOverlayWgcFrameIntervalMsForMonitor(monitor);
 
-    if (g_popupOverlayWgcRunning &&
-        g_popupOverlayWgcSwapChain &&
-        g_popupOverlayWgcSwapChainTargetBitmap &&
-        g_popupOverlayWgcMonitor == monitor) {
-        // Keep the monitor capture session alive during the morph. Only the
-        // crop rectangle and layered-output size change frame to frame.
-        std::lock_guard lock(g_popupOverlayWgcMutex);
-        g_popupOverlayWgcCreateItemFailed = false;
-        bool sizeChanged =
-            g_popupOverlayWgcTargetWidthPx != widthPx ||
-            g_popupOverlayWgcTargetHeightPx != heightPx;
-        bool resizeDue =
-            g_popupOverlayWgcLastResizeTime.time_since_epoch().count() == 0 ||
-            now - g_popupOverlayWgcLastResizeTime >=
-                std::chrono::milliseconds(40);
-        bool morphing =
-            std::abs(g_popupAnimationTarget - g_popupAnimationProgress) >= 0.006;
-        if (sizeChanged && !morphing && resizeDue &&
-            !g_popupOverlayWgcRendering.load(std::memory_order_acquire)) {
-            if (!RecreatePopupOverlayWgcReadbackTextures(widthPx, heightPx)) {
-                g_popupOverlayWgcDiagnosticState =
-                    PopupOverlayWgcDiagnosticState::RenderFailed;
-                ++g_popupOverlayWgcRenderFailCount;
-                return false;
+    {
+        std::unique_lock lock(g_popupOverlayWgcMutex, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            // The GPU callback is presenting the current frame. Keep the
+            // previous snapshot for this tick instead of blocking the taskbar
+            // animation thread.
+            return true;
+        }
+
+        if (g_popupOverlayWgcRunning &&
+            g_popupOverlayWgcSwapChain &&
+            g_popupOverlayWgcSwapChainTargetBitmap &&
+            g_popupOverlayWgcMonitor == monitor) {
+            // Keep the monitor capture session alive during the morph. Only
+            // update its immutable-per-frame input snapshot.
+            g_popupOverlayWgcCreateItemFailed = false;
+            bool sizeChanged =
+                g_popupOverlayWgcTargetWidthPx != widthPx ||
+                g_popupOverlayWgcTargetHeightPx != heightPx;
+            bool resizeDue =
+                g_popupOverlayWgcLastResizeTime.time_since_epoch().count() == 0 ||
+                now - g_popupOverlayWgcLastResizeTime >=
+                    std::chrono::milliseconds(40);
+            if (sizeChanged && !renderParameters.morphing && resizeDue) {
+                if (!RecreatePopupOverlayWgcReadbackTextures(widthPx,
+                                                             heightPx)) {
+                    g_popupOverlayWgcDiagnosticState =
+                        PopupOverlayWgcDiagnosticState::RenderFailed;
+                    ++g_popupOverlayWgcRenderFailCount;
+                    return false;
+                }
+                g_popupOverlayWgcLastResizeTime = now;
             }
-            g_popupOverlayWgcLastResizeTime = now;
+            if (sizeChanged && renderParameters.morphing) {
+                UpdatePopupOverlayDcompVisualTransformLocked(widthPx,
+                                                             heightPx);
+            }
+            g_popupOverlayWgcCaptureRectPx = captureRect;
+            g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
+            g_popupOverlayWgcTargetRadiusPx =
+                Clamp(renderParameters.targetRadiusPx,
+                      1,
+                      std::max(1, std::min(widthPx, heightPx) / 2));
+            g_popupOverlayWgcRenderParameters = renderParameters;
+            g_popupOverlayWgcRenderParameters.targetRadiusPx =
+                g_popupOverlayWgcTargetRadiusPx;
+            g_popupOverlayWgcFrameIntervalMs = frameIntervalMs;
+            return true;
         }
-        if (sizeChanged && morphing) {
-            UpdatePopupOverlayDcompVisualTransform(widthPx, heightPx);
-        }
-        g_popupOverlayWgcCaptureRectPx = captureRect;
-        g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
-        return true;
     }
 
     StopPopupOverlayWgcBackdrop();
@@ -9162,13 +9189,17 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
         return false;
     }
 
-    if (!EnsurePopupOverlayWgcDeviceResources(g_popupBackdropOverlay,
-                                              widthPx,
-                                              heightPx)) {
-        g_popupOverlayWgcDiagnosticState = PopupOverlayWgcDiagnosticState::StartSkipped;
-        Wh_Log(L"Island: overlay WGC state Ensure resources failed hr=0x%08X",
-               static_cast<unsigned>(g_popupOverlayWgcLastHr));
-        return false;
+    {
+        std::lock_guard lock(g_popupOverlayWgcMutex);
+        if (!EnsurePopupOverlayWgcDeviceResourcesLocked(g_popupBackdropOverlay,
+                                                        widthPx,
+                                                        heightPx)) {
+            g_popupOverlayWgcDiagnosticState =
+                PopupOverlayWgcDiagnosticState::StartSkipped;
+            Wh_Log(L"Island: overlay WGC state Ensure resources failed hr=0x%08X",
+                   static_cast<unsigned>(g_popupOverlayWgcLastHr));
+            return false;
+        }
     }
 
     if (!CreatePopupOverlayWgcCaptureItemForMonitor(monitor,
@@ -9186,7 +9217,8 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
     // ready. Exclude the overlay from capture first; optionally keep the popup
     // capturable so users can record the expanded material effect.
     bool captureAffinityChanged =
-        SetExpandedPopupCaptureExclusion(!g_settings.allowScreenCapture);
+        SetExpandedPopupCaptureExclusion(
+            !renderParameters.allowScreenCapture);
     captureAffinityChanged =
         SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, true) ||
         captureAffinityChanged;
@@ -9198,6 +9230,14 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
     g_popupOverlayWgcCaptureRectPx = captureRect;
     g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
     g_popupOverlayWgcMonitor = monitor;
+    g_popupOverlayWgcTargetRadiusPx =
+        Clamp(renderParameters.targetRadiusPx,
+              1,
+              std::max(1, std::min(widthPx, heightPx) / 2));
+    g_popupOverlayWgcRenderParameters = renderParameters;
+    g_popupOverlayWgcRenderParameters.targetRadiusPx =
+        g_popupOverlayWgcTargetRadiusPx;
+    g_popupOverlayWgcFrameIntervalMs = frameIntervalMs;
     g_popupOverlayWgcRunning = true;
     g_popupOverlayWgcLastHr = S_OK;
     g_popupOverlayWgcDiagnosticHr = S_OK;
@@ -9208,7 +9248,7 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
     g_popupOverlayWgcDiagnosticStartTime = std::chrono::steady_clock::now();
     g_popupOverlayWgcLastResizeTime = g_popupOverlayWgcDiagnosticStartTime;
     g_popupOverlayWgcFramesToSkip =
-        PopupProgress() < 0.995 ? 0 : PopupBackdropInitialFrameSkip();
+        renderParameters.morphing ? 0 : PopupBackdropInitialFrameSkip();
 
     try {
         g_popupOverlayWgcFramePool = capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
@@ -9219,20 +9259,8 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
         g_popupOverlayWgcFrameArrivedToken = g_popupOverlayWgcFramePool.FrameArrived(
             [](capture::Direct3D11CaptureFramePool const& sender,
                winrt::Windows::Foundation::IInspectable const&) {
-                {
-                    std::lock_guard callbackLock(g_popupOverlayWgcMutex);
-                    if (!g_popupOverlayWgcRunning) {
-                        return;
-                    }
-                }
-
                 auto frame = sender.TryGetNextFrame();
                 if (!frame) {
-                    return;
-                }
-                if (!g_expanded || !g_popupBackdropOverlay ||
-                    !IsWindowVisible(g_popupBackdropOverlay)) {
-                    frame.Close();
                     return;
                 }
 
@@ -9244,11 +9272,13 @@ bool StartPopupOverlayWgcBackdrop(RECT const& captureRect,
                 }
 
                 try {
+                    std::lock_guard callbackLock(g_popupOverlayWgcMutex);
                     if (g_popupOverlayWgcRunning) {
-                        RenderPopupOverlayWgcFrame(frame);
+                        RenderPopupOverlayWgcFrameLocked(frame);
                     }
                 } catch (...) {
-                    Wh_Log(L"Island: overlay WGC callback render escaped exception");
+                    Wh_Log(
+                        L"Island: overlay WGC callback render escaped exception");
                 }
                 g_popupOverlayWgcRendering.store(false,
                                                  std::memory_order_release);
@@ -10177,7 +10207,17 @@ void UpdatePopupBackdropOverlayWindow() {
             renderRadiusPx = targetRadius;
         }
     }
-    g_popupOverlayWgcTargetRadiusPx = renderRadiusPx;
+
+    PopupOverlayWgcRenderParameters renderParameters;
+    renderParameters.targetRadiusPx = renderRadiusPx;
+    renderParameters.morphing = morphing;
+    renderParameters.allowScreenCapture = g_settings.allowScreenCapture;
+    renderParameters.useLiquidLensWarp = IsLiquidGlassMaterial();
+    renderParameters.blurStdDev = PopupBackdropWgcEffectiveBlurStdDev();
+    renderParameters.refractionBlurStdDev =
+        PopupBackdropWgcLiquidRefractionBlurStdDev();
+    renderParameters.liquidRimAlpha =
+        IsDarkModeApprox() ? 0.38f : 0.52f;
 
     if (!g_settings.allowScreenCapture) {
         SetExpandedPopupCaptureExclusion(true);
@@ -10254,7 +10294,10 @@ void UpdatePopupBackdropOverlayWindow() {
                           GWL_EXSTYLE,
                           dcompDesiredStyle);
     }
-    StartPopupOverlayWgcBackdrop(overlayRect, renderWidth, renderHeight);
+    StartPopupOverlayWgcBackdrop(overlayRect,
+                                 renderWidth,
+                                 renderHeight,
+                                 renderParameters);
     UpdatePopupOverlayDcompVisualTransform(width, height);
 }
 
