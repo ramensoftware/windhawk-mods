@@ -2,12 +2,230 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-16T19:20:26.000Z</updated>
+    <updated>2026-07-17T00:07:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win32-ui-modernizer#d9bb22b73df373844b864a87299693353035e34e</id>
+        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
+        <updated>2026-07-17T00:07:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="win32uimodernizer">Win32 UI Modernizer</h1>
+<p>Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / Fluent Design aesthetics.</p>
+<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Explorer.png" alt="File Explorer" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Janela%20Seletora.png" alt="File picker dialog" /> |
+|:---:|:---:|
+| File Explorer | File picker dialog |</p>
+<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Painel%20de%20Controle.png" alt="Control Panel" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Regedit.png" alt="Registry Editor" /> |
+|:---:|:---:|
+| Control Panel | Registry Editor |</p>
+<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif" alt="Navigation pane pill" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill%20das%20Abas.gif" alt="Tab pill animation" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif" alt="About Windows" /> |
+|:---:|:---:|:---:|
+| Navigation pane pill | Tab pill animation | About Windows |</p>
+<h3 id="features">Features</h3>
+<p><strong>General</strong></p>
+<ul>
+<li><strong>Modern tooltips</strong>: WinUI 3 style tooltips with rounded corners, dark mode support, and modern solid colors</li>
+<li><strong>Focus rectangle</strong>: Suppress the dotted focus rectangle for modern look</li>
+<li><strong>CheckBox reveal animation</strong>: Checkmark draws progressively when checked (WinUI-style)</li>
+<li><strong>Accent radio buttons</strong>: System accent color on radio button indicators</li>
+<li><strong>Modern progress bars</strong>: WinUI 3 style progress bars (rounded, solid accent, no gradient)</li>
+<li><strong>Rounded buttons</strong>: WinUI 3 style rounded push buttons; OK and Yes buttons use accent color fill</li>
+<li><strong>Edit focus accent line</strong>: WinUI 3 style accent-colored line at the bottom of focused Edit controls</li>
+<li><strong>Modern group box</strong>: Replaces the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style)</li>
+<li><strong>Modern separators</strong>: Replaces 3D embossed separators with a clean 1px semi-transparent line</li>
+<li><strong>Rounded tab content pane</strong>: Rounds the corners of the tab page content area with a subtle border</li>
+<li><strong>Modern light scrollbars</strong>: Optional modern scrollbar renderer in light mode with a white track background</li>
+<li><strong>Drag-drop normalizer</strong>: Replace the drag overlay with a clean anti-aliased rounded rectangle</li>
+</ul>
+<p><strong>Explorer</strong></p>
+<ul>
+<li><strong>Rounded selection</strong>: Rounded item backgrounds in Explorer nav pane and content area</li>
+<li><strong>Neutral selection color</strong>: Optional neutral gray instead of accent color for TreeView/ListView/Header selection backgrounds</li>
+<li><strong>Nav pane pill (DComp)</strong>: WinUI-style animated pill indicator on the navigation pane</li>
+<li><strong>File list pill indicator</strong>: Pill on selected items in file lists (details/list view)</li>
+<li><strong>Animated glyph arrows</strong>: Smooth rotation animation for expand/collapse arrows</li>
+<li><strong>Explorer nav divider</strong>: Remove the vertical separator line, or reveal a thin accent-colored handle on hover only (WinUI pane splitter style)</li>
+<li><strong>WinUI nav pane metrics</strong>: WinUI-like item height and margins in the navigation pane</li>
+<li><strong>Modern legacy ReBar controls</strong>: Modernizes the legacy Explorer/Control Panel address bar, search box, toolbar buttons and related dropdowns, with an optional Mica-like tint</li>
+<li><strong>Fluent pin icon</strong>: Replaces the Quick Access pin icon (navigation pane and content area) with a Segoe Fluent Icons glyph — outline or filled, normal or accent color</li>
+<li><strong>Nav pane glyph icons</strong>: Replaces nav pane folder icons with monochrome Segoe Fluent Icons glyphs, in Explorer and file picker dialogs</li>
+<li><strong>Modernize shell icons</strong>: Replaces selected legacy shell icons in classic file picker controls with modern adaptive SVG-style icons</li>
+<li><strong>Accent colorize</strong>: Shift system colors and theme bitmaps to accent color</li>
+<li><strong>Accent marquee</strong>: Use Windows accent color for drag-selection rectangles</li>
+<li><strong>Rounded drive bars</strong>: Accent-colored rounded drive usage bars</li>
+<li><strong>Rounded group headers</strong>: Fully rounded group header backgrounds</li>
+<li><strong>Disk chart accent color</strong>: Recolors the disk usage chart and legend swatches in drive Properties dialogs to the system accent color, with rounded swatch corners</li>
+<li><strong>AutoPlay replacement</strong>: Replaces the AutoPlay flyout (shown when inserting removable drives or discs) with a Direct2D popup using dark/light acrylic, real shell icons, and the system accent color</li>
+</ul>
+<p><strong>TreeView (all apps)</strong></p>
+<ul>
+<li><strong>TreeView insertion mark</strong>: Clean opaque line instead of legacy zigzag</li>
+<li><strong>TreeView dotted lines</strong>: Remove legacy dotted connecting lines</li>
+</ul>
+<p><strong>ComboBox (all apps)</strong></p>
+<ul>
+<li><strong>ComboBox DWM</strong>: Rounded corners and optional backdrop on dropdown lists</li>
+</ul>
+<p><strong>Property windows</strong></p>
+<ul>
+<li><strong>Property window tab pill</strong>: Animated DComp pill on selected tabs</li>
+<li><strong>Dark mode</strong>: Immersive dark title bars on property dialogs</li>
+<li><strong>DirectUI dark mode</strong>: Dark backgrounds for "Previous Versions" and similar DirectUI pages</li>
+</ul>
+<p><strong>Context menus</strong></p>
+<ul>
+<li><strong>Acrylic backdrop</strong>: Semi-transparent blur behind context menus (dark system mode)</li>
+<li><strong>Dark mode</strong>: Full dark context menus with correct alpha text rendering (DrawTextWithGlow)</li>
+<li><strong>Accent header hover</strong>: Semi-transparent accent overlay on column headers</li>
+</ul>
+<p><strong>Dark mode (manual toggle, off by default)</strong></p>
+<ul>
+<li>Off by default so Explorer/dialogs don't unexpectedly switch when Windows dark mode is on — enable via "Enable custom dark mode". Visual enhancements below (accent buttons, rounded controls, context menu acrylic) work independently and don't require it</li>
+<li><strong>Full Win32 dark mode</strong>: Dark backgrounds, menus, title bar, and controls for all Win32 dialogs</li>
+<li><strong>Text pipeline</strong>: DrawTextWithGlow for correct alpha on composited DCs</li>
+<li><strong>DirectUI</strong>: Dark Control Panel, Windows Tools, and property dialog backgrounds</li>
+<li><strong>Acrylic context menus</strong>: Semi-transparent blur behind context menus</li>
+<li>Uses SetSysColors (changes global system colors, may affect other applications)</li>
+</ul>
+<p><strong>About Windows dialog (winver.exe)</strong></p>
+<ul>
+<li><strong>Modernize Winver</strong>: Replaces the banner logo with an accent-colored version and adds a "Device Info" button next to OK</li>
+<li><strong>Background material</strong>: Solid, Mica, Mica Alt, or Acrylic background (backdrop materials require Windows 11)</li>
+</ul>
+<p><strong>Registry Editor</strong></p>
+<ul>
+<li><p><strong>Full dark mode</strong>: Dark backgrounds, menus, title bar, and controls</p></li>
+<li><p><strong>D2D TreeView</strong>: Anti-aliased rounded selection, animated accent pill, geometric chevron with rotation</p></li>
+<li><p><strong>Dark menu bar</strong>: UAH dark menu painting with NC bottom line fix</p></li>
+<li><p><strong>Modern search bar</strong>: Pill-shaped search with focus accent line</p></li>
+<li><p><strong>Dark ListView / Header / StatusBar / Toolbar</strong></p></li>
+<li><p>Automatic light/dark mode detection</p></li>
+</ul>
+<p><strong>Compatibility (Translucent Windows / other dark mode mods)</strong></p>
+<ul>
+<li>Dark mode is off by default (see above), so it doesn't conflict with other dark mode mods unless you explicitly enable it. If you do want it on but need specific processes handled by an external mod instead, list them in the dark mode process exclusion list.</li>
+<li><strong>Disable text rendering pipeline</strong>: Disables DrawThemeTextEx/DrawTextW compositing, letting external mods handle text alpha. Enable when using Translucent Windows to avoid transparent text.</li>
+</ul>
+<h3 id="requirements">Requirements</h3>
+<ul>
+<li>Windows 11 version 22000 (21H2) or later</li>
+</ul>
+<h3 id="knownlimitations">Known limitations</h3>
+<ul>
+<li>Some Win32 controls may retain stale colors after switching between light and dark mode multiple times. This is a Windows limitation (uxtheme/comctl32 internal caching). Restarting Explorer resolves it.</li>
+</ul>
+<h3 id="acknowledgments">Acknowledgments</h3>
+<ul>
+<li><strong>aubymori</strong> — "Disk Pie Chart" mod, which taught how to find and hook the drive Properties disk chart routines.</li>
+<li><strong>Undisputed00x</strong> — "Translucent Windows", whose source was a big help in understanding how to style Win32, including the per-process dark mode exclusion list technique used here.</li>
+<li><strong>krlvm</strong> — part of the logic behind the "Accent colorize system colors" option.</li>
+</ul>
+<h3 id="faq">F.A.Q</h3>
+<p><strong>Is this mod heavy?</strong>
+It shouldn't be noticeable in everyday use. The hooks used (themes, colors, text) are lightweight and cached to avoid repeated, expensive shell/COM calls, and most features only run extra code when the element actually needs to be modernized. Since the mod injects into every process, there's always a small amount of interception overhead, but animations (pill, icons, chevrons) run on their own threads that sit idle (no CPU use) when nothing is happening on screen. More elaborate features (custom glyph icons, animated pill, AutoPlay) only cost anything once you specifically enable those options.</p>
+<p><strong>Is this mod compatible with other mods? E.g. Translucent Windows:</strong>
+Partially. This mod has a transparency-mod compatibility toggle, but since it injects into every process just like mods such as Translucent Windows, some incompatibilities will show up. Don't enable this mod's dark mode alongside Translucent Windows, and also disable the text rendering pipeline. For both mods to work together, this mod needs to be enabled last.</p>
+<p><strong>A specific program has wrong colors in dark mode:</strong>
+Use the dark mode exclusion list, adding the program's executable.</p>
+<p><strong>Can I combine all the settings I want?</strong>
+Yes, this mod does almost nothing with everything disabled, and you can mix almost all of them. There's no automatic warning for conflicting combinations — some options already describe their own priority in their description text (e.g. the WinUI-style navigation divider takes priority over the two divider-removal options when enabled), so it's worth reading each setting's description before turning several on at once.</p>
+<p><strong>Found a bug? A program isn't working right? Something froze?</strong>
+Please open a GitHub issue. Show your settings and mention which program froze.</p>
+<p><strong>Some colors didn't change when switching from dark mode back to light mode:</strong>
+This is a limitation of Windows' own legacy programs (uxtheme/comctl32 internal caching). Restarting Explorer fixes it.</p>
+<p><strong>I noticed dark mode changes colors in non-native programs:</strong>
+That's expected — this mod uses SetSysColors to change system colors, which can't easily be excluded per-app, so any program that asks Windows for system colors will get the dark ones. For better exclusion, use the dark mode exclusion list in the settings.</p>
+<h3 id="recommendedmodstomodernizethesystem">Recommended mods to modernize the system</h3>
+<ul>
+<li><strong>WinUI Context Menu Animation</strong> by crazyboyybs</li>
+<li><strong>File Explorer WinUI-Like Content Animation</strong> by crazyboyybs</li>
+<li><strong>Smooth Scroll for Win32</strong> by crazyboyybs</li>
+<li><strong>Custom Menu Height</strong> by Kitsune</li>
+<li><strong>Translucent Windows</strong> by Undisputed00x</li>
+<li><strong>Window Border Customizer</strong> by Lockframe</li>
+</ul>
+<hr />
+<h1 id="modernizadordeinterfacewin32portugues">Modernizador de Interface Win32 (Portugues)</h1>
+<p>Moderniza elementos antigos da interface Win32 em todos os aplicativos para corresponder a estetica do WinUI 3 / Fluent Design.</p>
+<h3 id="requisitos">Requisitos</h3>
+<ul>
+<li>Windows 11 versao 22000 (21H2) ou posterior</li>
+</ul>
+<h3 id="agradecimentos">Agradecimentos</h3>
+<ul>
+<li><strong>aubymori</strong> — mod "Disk Pie Chart", que ensinou como encontrar e interceptar as rotinas do grafico de disco nas propriedades de unidade.</li>
+<li><strong>Undisputed00x</strong> — "Translucent Windows", cujo codigo ajudou bastante a entender como estilizar o Win32, incluindo a tecnica da lista de exclusao por processo no modo escuro usada aqui.</li>
+<li><strong>krlvm</strong> — parte da logica usada na opcao "Colorir cores do sistema com a cor de destaque".</li>
+</ul>
+<h3 id="faq-1">F.A.Q</h3>
+<p><strong>Esse mod e pesado?</strong>
+Nao deve ser perceptivel no uso do dia a dia. Os hooks usados (temas, cores, texto) sao leves e otimizados com cache para evitar chamadas repetidas e caras ao shell/COM, e a maioria dos recursos so executa codigo extra quando o elemento realmente precisa ser modernizado. Como o mod se injeta em todos os processos, sempre existe uma sobrecarga minima de interceptacao, mas as animacoes (pill, icones, chevrons) rodam em threads proprias que ficam paradas (sem consumir CPU) quando nao ha nada acontecendo na tela. Recursos mais elaborados (icones de glifo customizados, pill animada, AutoPlay) so custam algo quando voce ativa essas opcoes especificamente.</p>
+<p><strong>Esse mod e compativel com outros mods? Ex: Translucent Windows:</strong>
+Parcialmente. Esse mod possui um toggle de compatibilidade com mods de transparencia, mas como ele injeta em todos os processos assim como mods como o Translucent Windows, algumas incompatibilidades vao aparecer. Nao ative o modo escuro desse mod junto com o Translucent Windows, e tambem desative o pipeline de renderizacao de texto. Para ambos os mods funcionarem juntos e necessario que esse mod seja ativado por ultimo.</p>
+<p><strong>Certo programa tem cores erradas no modo escuro:</strong>
+Utilize a lista de exclusao de modo escuro, adicionando o executavel do programa.</p>
+<p><strong>Posso combinar todas as configuracoes que eu quiser?</strong>
+Sim, esse mod nao faz quase nada com todas desativadas, e voce pode misturar quase todas. Nao existe um aviso automatico para combinacoes conflitantes — algumas opcoes ja descrevem sua propria prioridade no texto (ex: o divisor de navegacao estilo WinUI tem prioridade sobre as duas opcoes de remocao de divisor quando ativado), entao vale ler a descricao de cada configuracao antes de ativar varias ao mesmo tempo.</p>
+<p><strong>Notou um bug? Um programa nao funciona direito? Algo travou?</strong>
+Por favor, crie um issue no GitHub. Mostre suas configuracoes e cite qual programa travou.</p>
+<p><strong>Ao sair do modo escuro para o modo claro algumas cores nao mudaram:</strong>
+Isso e uma limitacao dos proprios programas antigos do Windows (cache interno do uxtheme/comctl32). Reiniciar o Explorer resolve.</p>
+<p><strong>Notei que o modo escuro altera cores em programas que nao sao nativos:</strong>
+Isso e esperado — esse mod usa o SetSysColors para trocar as cores do sistema, algo que nao pode ser excluido facilmente, entao qualquer programa que peca ao Windows as cores do sistema recebera as cores escuras. Para melhor exclusao, use a lista de exclusao de modo escuro nas configuracoes.</p>
+<h3 id="modsrecomendadosparamodernizarosistema">Mods recomendados para modernizar o sistema</h3>
+<ul>
+<li><strong>WinUI Context Menu Animation</strong> por crazyboyybs</li>
+<li><strong>File Explorer WinUI-Like Content Animation</strong> por crazyboyybs</li>
+<li><strong>Smooth Scroll for Win32</strong> por crazyboyybs</li>
+<li><strong>Custom Menu Height</strong> por Kitsune</li>
+<li><strong>Translucent Windows</strong> por Undisputed00x</li>
+<li><strong>Window Border Customizer</strong> por Lockframe</li>
+</ul>
+<hr />
+<h1 id="modernizadordeinterfazwin32espanol">Modernizador de Interfaz Win32 (Espanol)</h1>
+<p>Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones para coincidir con la estetica de WinUI 3 / Fluent Design.</p>
+<h3 id="requisitos-1">Requisitos</h3>
+<ul>
+<li>Windows 11 version 22000 (21H2) o posterior</li>
+</ul>
+<h3 id="agradecimientos">Agradecimientos</h3>
+<ul>
+<li><strong>aubymori</strong> — mod "Disk Pie Chart", que enseno como encontrar e interceptar las rutinas del grafico de disco en las propiedades de unidad.</li>
+<li><strong>Undisputed00x</strong> — "Translucent Windows", cuyo codigo ayudo mucho a entender como estilizar Win32, incluyendo la tecnica de la lista de exclusion por proceso en modo oscuro usada aqui.</li>
+<li><strong>krlvm</strong> — parte de la logica usada en la opcion "Colorear colores del sistema con el color de acento".</li>
+</ul>
+<h3 id="faq-2">F.A.Q</h3>
+<p><strong>¿Este mod es pesado?</strong>
+No deberia notarse en el uso diario. Los hooks utilizados (temas, colores, texto) son livianos y usan cache para evitar llamadas repetidas y costosas al shell/COM, y la mayoria de las funciones solo ejecutan codigo extra cuando el elemento realmente necesita modernizarse. Como el mod se inyecta en todos los procesos, siempre existe una sobrecarga minima de interceptacion, pero las animaciones (pill, iconos, chevrones) se ejecutan en sus propios hilos que quedan inactivos (sin consumir CPU) cuando no pasa nada en pantalla. Las funciones mas elaboradas (iconos de glifo personalizados, pill animada, AutoPlay) solo tienen costo cuando activas esas opciones especificamente.</p>
+<p><strong>¿Este mod es compatible con otros mods? Ej: Translucent Windows:</strong>
+Parcialmente. Este mod tiene un interruptor de compatibilidad con mods de transparencia, pero como se inyecta en todos los procesos igual que mods como Translucent Windows, apareceran algunas incompatibilidades. No actives el modo oscuro de este mod junto con Translucent Windows, y desactiva tambien el pipeline de renderizado de texto. Para que ambos mods funcionen juntos, este mod debe activarse al final.</p>
+<p><strong>Cierto programa tiene colores incorrectos en modo oscuro:</strong>
+Usa la lista de exclusion de modo oscuro, agregando el ejecutable del programa.</p>
+<p><strong>¿Puedo combinar todas las configuraciones que quiera?</strong>
+Si, este mod casi no hace nada con todo desactivado, y puedes combinar casi todas. No existe un aviso automatico para combinaciones en conflicto — algunas opciones ya describen su propia prioridad en el texto (ej: el divisor de navegacion estilo WinUI tiene prioridad sobre las dos opciones de eliminacion de divisor cuando esta activado), asi que vale la pena leer la descripcion de cada configuracion antes de activar varias a la vez.</p>
+<p><strong>¿Notaste un error? ¿Un programa no funciona bien? ¿Algo se congelo?</strong>
+Por favor, crea un issue en GitHub. Muestra tu configuracion y menciona que programa se congelo.</p>
+<p><strong>Al pasar del modo oscuro al modo claro, algunos colores no cambiaron:</strong>
+Esto es una limitacion de los propios programas antiguos de Windows (cache interno de uxtheme/comctl32). Reiniciar el Explorador lo soluciona.</p>
+<p><strong>Note que el modo oscuro cambia colores en programas que no son nativos:</strong>
+Esto es esperado — este mod usa SetSysColors para cambiar los colores del sistema, algo que no se puede excluir facilmente por aplicacion, asi que cualquier programa que le pida a Windows los colores del sistema recibira los colores oscuros. Para una mejor exclusion, usa la lista de exclusion de modo oscuro en la configuracion.</p>
+<h3 id="modsrecomendadosparamodernizarelsistema">Mods recomendados para modernizar el sistema</h3>
+<ul>
+<li><strong>WinUI Context Menu Animation</strong> por crazyboyybs</li>
+<li><strong>File Explorer WinUI-Like Content Animation</strong> por crazyboyybs</li>
+<li><strong>Smooth Scroll for Win32</strong> por crazyboyybs</li>
+<li><strong>Custom Menu Height</strong> por Kitsune</li>
+<li><strong>Translucent Windows</strong> por Undisputed00x</li>
+<li><strong>Window Border Customizer</strong> por Lockframe</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magic Mouse 1.0.0]]></title>
         <id>https://windhawk.net/mods/magic-mouse#641c1463a4a95f827ef1512ab7f4a3726d65dabd</id>
@@ -758,145 +976,6 @@ a mesh gradient, or an energy-flame visual.</li>
         <author>
             <name>usho</name>
             <uri>https://github.com/usho-lear</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Monitor Rounded Edges 1.0]]></title>
-        <id>https://windhawk.net/mods/monitor-rounded-edges#9abd14f057189eb058eab8901042511d5cfef0d2</id>
-        <link href="https://windhawk.net/mods/monitor-rounded-edges"/>
-        <updated>2026-07-03T13:35:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="monitorroundededges">Monitor Rounded Edges</h1>
-<p>Applies smooth, anti-aliased rounded corners to all connected monitors using Direct2D.</p>
-<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Monitor%20Rounded%20Edges%201.png" alt="Monitor Rounded Edges" />
-<img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Monitor%20Rounded%20Edges%202.png" alt="Monitor Rounded Edges" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Two corner styles -- Circle (classic arc) and Squircle (smooth superellipse).</li>
-<li>Inner accent border -- optional outline with configurable thickness and alpha color (#AARRGGBB).</li>
-<li>Fullscreen awareness -- uses SHQueryUserNotificationState to reliably detect fullscreen games.</li>
-<li>Minimal CPU overhead -- a continuous polling timer (750 ms) is only active when "Hide in
-Fullscreen" is enabled. "Dynamic Inner Border" uses a brief transition timer (5 checks over
-1.5 s) after each foreground change to catch delayed fullscreen detection, then stops
-automatically. With neither feature active, only a lightweight WinEvent hook runs.</li>
-<li>Multi-monitor support -- each monitor gets its own independent set of corner overlays.</li>
-<li>Single tool process -- the rendering process is only created once; reopening Windhawk from the
-system tray does not spawn additional instances.</li>
-</ul>
-<h2 id="squirclestyle">Squircle style</h2>
-<p>The squircle uses a cubic Bezier with separate control points interpolated toward the inner arc
-center (k=0.70). This produces:</p>
-<ul>
-<li>Tangents parallel to the screen edges at both endpoints (no kink, smooth transition)</li>
-<li>Slightly more diagonal coverage than a circular arc at the same radius</li>
-<li>A softer, more organic corner appearance compared to a circle</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Description |
-|---|---|
-| Corner Radius | Rounding radius in pixels (1-500). |
-| Corner Style | circle = standard arc; squircle = smooth superellipse. |
-| Background Color | Hex fill color of the corners (#RRGGBB). |
-| Inner Border Thickness | Width of the inner accent line in pixels (0 = disabled). |
-| Inner Border Color | Hex color of the inner line, with alpha support (#AARRGGBB). |
-| Dynamic Inner Border | Hides only the inner border in fullscreen; keeps the rounding. |
-| Hide in Fullscreen | Hides everything in fullscreen apps and games. |</p>
-<h2 id="notes">Notes</h2>
-<p>The taskbar and Start menu may briefly appear above the corner overlays when they receive focus
-(e.g. opening Start, the Action Center, or right-clicking the desktop). The corners return to the
-top of the Z-order as soon as those elements lose focus.</p>
-<p>Fullscreen detection via <code>SHQueryUserNotificationState</code> is <strong>system-wide</strong>, not per-monitor: a
-fullscreen app on one monitor will affect the corners on all monitors. Additionally, <code>QUNS_BUSY</code>
-and <code>QUNS_PRESENTATION_MODE</code> can be set by non-game apps (e.g. Windows Presentation Mode or apps
-that request it), which may trigger hide/dynamic-border behavior unexpectedly.</p>
-<hr />
-<h1 id="bordasarredondadasdomonitor">Bordas Arredondadas do Monitor</h1>
-<p>Aplica cantos arredondados suaves em todos os monitores conectados via Direct2D.</p>
-<h2 id="recursos">Recursos</h2>
-<ul>
-<li>Dois estilos de canto -- Circulo (arco classico) e Squircle (superelipse suave).</li>
-<li>Borda interna de destaque -- contorno opcional com espessura e cor com alpha (#AARRGGBB).</li>
-<li>Deteccao de tela cheia -- usa SHQueryUserNotificationState para detectar jogos em fullscreen.</li>
-<li>Overhead minimo de CPU -- o timer de polling continuo (750 ms) so e ativado quando "Ocultar em
-Tela Cheia" esta ligado. "Borda Interna Dinamica" usa um timer de transicao curto (5 checks em
-1,5 s) apos cada troca de foco para capturar deteccoes atrasadas, e para automaticamente. Com
-nenhum recurso ativo, apenas o WinEvent hook leve permanece em execucao.</li>
-<li>Suporte a multiplos monitores -- cada monitor tem seu proprio conjunto independente de overlays.</li>
-<li>Processo unico -- o processo de renderizacao e criado uma unica vez; reabrir o Windhawk pela
-bandeja do sistema nao cria instancias adicionais.</li>
-</ul>
-<h2 id="estilosquircle">Estilo Squircle</h2>
-<p>O squircle usa uma curva de Bezier cubica com pontos de controle interpolados em direcao ao centro
-interno do arco (k=0,70). Isso produz:</p>
-<ul>
-<li>Tangentes paralelas as bordas da tela em ambos os extremos (sem kink, transicao suave)</li>
-<li>Cobertura diagonal ligeiramente maior do que um arco circular no mesmo raio</li>
-<li>Uma aparencia de canto mais suave e organica em comparacao ao circulo</li>
-</ul>
-<h2 id="configuracoes">Configuracoes</h2>
-<p>| Configuracao | Descricao |
-|---|---|
-| Raio do Arredondamento | Raio do arredondamento em pixels (1-500). |
-| Estilo do Canto | circle = arco padrao; squircle = superelipse suave. |
-| Cor do Fundo | Cor de preenchimento dos cantos em hex (#RRGGBB). |
-| Espessura da Linha Interna | Espessura da borda interna em pixels (0 para desativar). |
-| Cor da Linha Interna | Cor da linha interna em hex, com suporte a alpha (#AARRGGBB). |
-| Borda Interna Dinamica | Oculta apenas a borda interna em tela cheia, mantém o arredondamento. |
-| Ocultar em Tela Cheia | Oculta tudo em jogos e aplicativos em tela cheia. |</p>
-<h2 id="observacoes">Observacoes</h2>
-<p>A barra de tarefas e o menu Iniciar podem aparecer sobre as bordas arredondadas enquanto estao
-em foco (ex: ao abrir o Iniciar, a Central de Acoes ou ao clicar com o botao direito na area de
-trabalho). As bordas voltam ao topo da ordem Z assim que esses elementos perdem o foco.</p>
-<p>A deteccao de tela cheia via <code>SHQueryUserNotificationState</code> e <strong>global</strong> (nao por monitor): um
-app em fullscreen em um monitor afeta as bordas de todos os monitores. Alem disso, <code>QUNS_BUSY</code> e
-<code>QUNS_PRESENTATION_MODE</code> podem ser ativados por apps que nao sao jogos (ex: Modo de Apresentacao
-do Windows), o que pode disparar o comportamento de ocultar/borda dinamica inesperadamente.</p>
-<hr />
-<h1 id="bordesredondeadosdelmonitor">Bordes Redondeados del Monitor</h1>
-<p>Aplica esquinas redondeadas suaves en todos los monitores conectados via Direct2D.</p>
-<h2 id="caracteristicas">Caracteristicas</h2>
-<ul>
-<li>Dos estilos de esquina -- Circulo (arco clasico) y Squircle (superelipse suave).</li>
-<li>Borde interior de acento -- contorno opcional con grosor y color con alpha (#AARRGGBB).</li>
-<li>Deteccion de pantalla completa -- usa SHQueryUserNotificationState para detectar juegos en fullscreen.</li>
-<li>Overhead minimo de CPU -- el temporizador de polling continuo (750 ms) solo esta activo cuando
-"Ocultar en Pantalla Completa" esta habilitado. "Borde Interior Dinamico" usa un temporizador de
-transicion breve (5 verificaciones en 1,5 s) tras cada cambio de foco para detectar cambios
-tardios, y se detiene automaticamente. Sin ninguna funcion activa, solo el WinEvent hook ligero
-permanece en ejecucion.</li>
-<li>Soporte multi-monitor -- cada monitor tiene su propio conjunto independiente de overlays.</li>
-<li>Proceso unico -- el proceso de renderizado se crea una sola vez; reabrir Windhawk desde la
-bandeja del sistema no crea instancias adicionales.</li>
-</ul>
-<h2 id="estilosquircle-1">Estilo Squircle</h2>
-<p>El squircle usa una curva de Bezier cubica con puntos de control interpolados hacia el centro
-interno del arco (k=0,70). Esto produce:</p>
-<ul>
-<li>Tangentes paralelas a los bordes de la pantalla en ambos extremos (sin kink, transicion suave)</li>
-<li>Cobertura diagonal ligeramente mayor que un arco circular al mismo radio</li>
-<li>Una apariencia de esquina mas suave y organica comparada con el circulo</li>
-</ul>
-<h2 id="configuracion">Configuracion</h2>
-<p>| Configuracion | Descripcion |
-|---|---|
-| Radio de las Esquinas | Radio de redondeo en pixeles (1-500). |
-| Estilo de Esquina | circle = arco estandar; squircle = superelipse suave. |
-| Color de Fondo | Color de relleno de las esquinas en hex (#RRGGBB). |
-| Grosor del Borde Interior | Grosor del borde interior en pixeles (0 para desactivar). |
-| Color del Borde Interior | Color del borde interior en hex, con soporte de alpha (#AARRGGBB). |
-| Borde Interior Dinamico | Oculta solo el borde interior en pantalla completa, mantiene el redondeo. |
-| Ocultar en Pantalla Completa | Oculta todo en juegos y aplicaciones a pantalla completa. |</p>
-<h2 id="notas">Notas</h2>
-<p>La barra de tareas y el menu Inicio pueden aparecer sobre las esquinas redondeadas mientras
-reciben foco (ej: al abrir Inicio, el Centro de Notificaciones o al hacer clic derecho en el
-escritorio). Las esquinas vuelven al frente del orden Z en cuanto esos elementos pierden el foco.</p>
-<p>La deteccion de pantalla completa via <code>SHQueryUserNotificationState</code> es <strong>global</strong> (no por
-monitor): una app en pantalla completa en un monitor afecta las esquinas de todos los monitores.
-Ademas, <code>QUNS_BUSY</code> y <code>QUNS_PRESENTATION_MODE</code> pueden ser activados por apps que no son juegos
-(ej: Modo de Presentacion de Windows), lo que puede disparar el comportamiento de ocultar/borde
-dinamico de forma inesperada.</p>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
