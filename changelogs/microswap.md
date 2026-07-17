@@ -1,3 +1,10 @@
+## 2.0.1 ([Jul 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/99c8afb62c5af3264f20deea6408b8475a079c9d/mods/microswap.wh.cpp))
+
+- **New:** Persistent Mute toggle in dashboard settings. When checked, mute state survives device cycles (USB replug, sleep/wake, driver resets).
+- **Fixed:** Persistent mute now survives device cycling — mute is re-applied to the newly defaulted device after switching.
+- **Fixed:** Tray icon red-dot overlay updates after persistent re-muting.
+- **Fixed:** "Persistent Mute" checkbox text now renders correctly on the dark dashboard.
+
 ## 2.0.0 ([May 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9825ae7dfb1d78b8be7d98d2e8b2cc14547f3589/mods/microswap.wh.cpp))
 
 - **Complete rebuild.** Full feature sync with AudioSwap:

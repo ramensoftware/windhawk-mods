@@ -7726,7 +7726,7 @@
           1
         ],
         "ratingUsers": 2,
-        "updated": 1780167697000,
+        "updated": 1784249030000,
         "users": 50
       },
       "metadata": {
@@ -7738,8 +7738,9 @@
         "include": [
           "windhawk.exe"
         ],
+        "license": "MIT",
         "name": "MicSwitch",
-        "version": "2.0.0"
+        "version": "2.0.1"
       }
     },
     "modern-notepad-to-classic-editor": {

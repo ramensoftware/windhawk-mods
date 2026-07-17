@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-17T00:07:16.000Z</updated>
+    <updated>2026-07-17T00:43:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MicSwitch 2.0.1]]></title>
+        <id>https://windhawk.net/mods/microswap#99c8afb62c5af3264f20deea6408b8475a079c9d</id>
+        <link href="https://windhawk.net/mods/microswap"/>
+        <updated>2026-07-17T00:43:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>New:</strong> Persistent Mute toggle in dashboard settings. When checked, mute state survives device cycles (USB replug, sleep/wake, driver resets).</li>
+<li><strong>Fixed:</strong> Persistent mute now survives device cycling — mute is re-applied to the newly defaulted device after switching.</li>
+<li><strong>Fixed:</strong> Tray icon red-dot overlay updates after persistent re-muting.</li>
+<li><strong>Fixed:</strong> "Persistent Mute" checkbox text now renders correctly on the dark dashboard.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win32 UI Modernizer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win32-ui-modernizer#d9bb22b73df373844b864a87299693353035e34e</id>
@@ -999,17 +1015,6 @@ and controlled sound-playback threads.</p>]]></content>
         <author>
             <name>Ansh Raj</name>
             <uri>https://github.com/remixansh</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.2.7]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#3e2632c748381ea643ee5c3d4ef6f9eb62e69c28</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2026-07-12T05:16:12.000Z</updated>
-        <content type="html"><![CDATA[<p>add conflict dialog fix to the readme</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
