@@ -2,7 +2,7 @@
 // @id              accent-hl-color
 // @name            Accent Highlight Color
 // @description     Makes the highlight color use your system accent color in Win32 apps.
-// @version         1.0
+// @version         1.1
 // @author          FireBlade
 // @github          https://github.com/FireBlade211
 // @include         *
@@ -153,6 +153,30 @@ DWORD WINAPI GetSysColor_Hook(int nIndex)
 // anyone uses a window class with a highlight color
 // background anyway
 
+void ClampColorByTheme(BYTE& r, BYTE& g, BYTE& b)
+{
+    bool isDarkMode = false;
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD value = 1;
+        DWORD dwSize = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&value, &dwSize) == ERROR_SUCCESS) {
+            isDarkMode = (value == 0);
+        }
+        RegCloseKey(hKey);
+    }
+
+    if (isDarkMode) {
+        if (r < 50) r = 50;
+        if (g < 50) g = 50;
+        if (b < 50) b = 50;
+    } else {
+        if (r > 220) r = 220;
+        if (g > 220) g = 220;
+        if (b > 220) b = 220;
+    }
+}
+
 void UpdateAccentCache()
 {
     ULONGLONG now = GetTickCount64();
@@ -173,26 +197,27 @@ void UpdateAccentCache()
 
     g_lastArgb = argb;
 
-    HBRUSH newBg = CreateSolidBrush(RGB(
-        (argb >> 16) & 0xFF,
-        (argb >> 8)  & 0xFF,
-        argb & 0xFF
-    ));
+    BYTE r = (argb >> 16) & 0xFF;
+    BYTE g = (argb >> 8) & 0xFF;
+    BYTE b = argb & 0xFF;
 
+    // Apply color bounds directly based on dark/light mode
+    ClampColorByTheme(r, g, b);
+
+    argb = (argb & 0xFF000000) | (r << 16) | (g << 8) | b;
+
+    HBRUSH newBg = CreateSolidBrush(RGB(r, g, b));
     HBRUSH newText = CreateSolidBrush(GetTextColorForAccent(argb));
 
-    g_highlightBrush.store(newBg, std::memory_order_release);
-    g_highlightTextBrush.store(newText, std::memory_order_release);
-    g_cachedHighlight.store(RGB(
-        (argb >> 16) & 0xFF,
-        (argb >> 8)  & 0xFF,
-        argb & 0xFF
-    ), std::memory_order_release);
+    // Use exchange and delete old objects to clear memory leak and prevent explorer.exe crashing
+    HBRUSH oldBg = g_highlightBrush.exchange(newBg, std::memory_order_release);
+    HBRUSH oldText = g_highlightTextBrush.exchange(newText, std::memory_order_release);
+    
+    if (oldBg) DeleteObject(oldBg);
+    if (oldText) DeleteObject(oldText);
 
-    g_cachedText.store(
-        GetTextColorForAccent(argb),
-        std::memory_order_release
-    );
+    g_cachedHighlight.store(RGB(r, g, b), std::memory_order_release);
+    g_cachedText.store(GetTextColorForAccent(argb), std::memory_order_release);
 }
 
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
