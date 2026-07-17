@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.0.8
+// @version 2.0.9
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.0.8"
+#define WH_MOD_VERSION L"2.0.9"
 #endif
 
 #include <windhawk_utils.h>
@@ -154,6 +154,9 @@ constexpr int kNotificationLeadMinutes = 1;
 constexpr int kCurrentPrayerHighlightMinutes = 2;
 constexpr int kCacheStaleHours = 6;
 constexpr double kClusterDistanceKm = 80.0;
+constexpr int kScheduleRefreshIntervalMs = 15 * 60 * 1000;
+constexpr int kGeoAccessTimeoutMs = 8000;
+constexpr int kRunFromWindowTimeoutMs = 3000;
 
 enum class PrayerName { Fajr, Dhuhr, Asr, Maghrib, Isha, Count };
 
@@ -249,6 +252,7 @@ HWND g_messageHwnd = nullptr;
 UINT_PTR g_uiTimer = 0;
 UINT_PTR g_repositionTimer = 0;
 UINT_PTR g_fullscreenTimer = 0;
+UINT_PTR g_scheduleTimer = 0;
 HWND g_win10OverlayHwnd = nullptr;
 HWND g_flyoutHwnd = nullptr;
 bool g_flyoutVisible = false;
@@ -1402,10 +1406,41 @@ std::optional<LocationInfo> TryWindowsLocation() {
         } catch (winrt::hresult_error const&) {
         }
 
-        const auto access = Geolocator::RequestAccessAsync().get();
-        if (access != GeolocationAccessStatus::Allowed) {
+        // RequestAccessAsync has no built-in timeout and can block the refresh
+        // pipeline forever if the consent prompt never resolves.
+        auto accessPromise =
+            std::make_shared<std::promise<GeolocationAccessStatus>>();
+        auto accessFuture = accessPromise->get_future();
+        std::thread([accessPromise]() {
+            try {
+                try {
+                    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+                } catch (...) {
+                }
+                accessPromise->set_value(Geolocator::RequestAccessAsync().get());
+            } catch (...) {
+                try {
+                    accessPromise->set_exception(std::current_exception());
+                } catch (...) {
+                }
+            }
+        }).detach();
+
+        std::optional<GeolocationAccessStatus> access;
+        if (accessFuture.wait_for(std::chrono::milliseconds(kGeoAccessTimeoutMs)) !=
+            std::future_status::ready) {
+            Wh_Log(L"Windows Location access timed out");
+            return std::nullopt;
+        }
+        try {
+            access = accessFuture.get();
+        } catch (...) {
+            Wh_Log(L"Windows Location access failed");
+            return std::nullopt;
+        }
+        if (!access || *access != GeolocationAccessStatus::Allowed) {
             Wh_Log(L"Windows Location denied (%d)",
-                   static_cast<int>(access));
+                   access ? static_cast<int>(*access) : -1);
             return std::nullopt;
         }
 
@@ -7517,6 +7552,28 @@ void RequestRefresh(bool fullLocation = false) {
     std::thread(RefreshSchedulesWorker).detach();
 }
 
+void MaybeRequestScheduleRefresh() {
+    if (g_refreshRunning.load() || g_refreshRequested.load()) {
+        return;
+    }
+    SYSTEMTIME now = GetLocalNow();
+    const int todayKey = DateKey(now.wYear, now.wMonth, now.wDay);
+    bool needsRefresh = false;
+    {
+        std::lock_guard lock(g_scheduleMutex);
+        if (!g_hasCurrentSchedule) {
+            needsRefresh = g_lastRefreshFailed.load();
+        } else {
+            const int schedKey = DateKey(g_currentSchedule.year, g_currentSchedule.month,
+                                         g_currentSchedule.day);
+            needsRefresh = schedKey != todayKey;
+        }
+    }
+    if (needsRefresh) {
+        RequestRefresh(false);
+    }
+}
+
 void OpenWindhawkSettings() {
     ShellExecuteW(nullptr, L"open", L"windhawk:", nullptr, nullptr, SW_SHOWNORMAL);
 }
@@ -7611,8 +7668,6 @@ LRESULT CALLBACK FlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (!PtInRect(&rc, pt)) {
                     if (g_messageHwnd) {
                         PostMessageW(g_messageHwnd, WM_PT_HIDE_FLYOUT, 0, 0);
-                    } else {
-                        HideFlyout();
                     }
                 }
             }
@@ -8044,8 +8099,18 @@ FrameworkElement ResolveMainStack(FrameworkElement root) {
 bool IsSlotRootAlive() {
     if (!g_slotInjected) return false;
     try {
-        return g_slotRoot && winrt::get_abi(g_slotRoot) != nullptr;
+        if (!g_slotRoot || winrt::get_abi(g_slotRoot) == nullptr) {
+            g_slotInjected = false;
+            return false;
+        }
+        // Orphaned after tray XAML rebuild — demote so inject/backoff can recover.
+        if (!g_slotRoot.XamlRoot()) {
+            g_slotInjected = false;
+            return false;
+        }
+        return true;
     } catch (...) {
+        g_slotInjected = false;
         return false;
     }
 }
@@ -8100,6 +8165,7 @@ void ApplyWin11SlotContent(const DisplayContent& content) {
     top.FlowDirection(FlowDirection::LeftToRight);
     top.Foreground(brush);
     bottom.Text(content.bottom);
+    bottom.FlowDirection(FlowDirection::LeftToRight);
     bottom.Foreground(brush);
     g_hasAppliedContent = true;
     g_lastAppliedVisible = true;
@@ -8333,7 +8399,10 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* param)
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
-        proc(param);
+        try {
+            proc(param);
+        } catch (...) {
+        }
         return true;
     }
     HHOOK hook = SetWindowsHookExW(
@@ -8344,7 +8413,10 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* param)
                 static const UINT m = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == m) {
                     auto* p = reinterpret_cast<Param*>(cwp->lParam);
-                    p->proc(p->param);
+                    try {
+                        p->proc(p->param);
+                    } catch (...) {
+                    }
                 }
             }
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -8352,9 +8424,12 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* param)
         nullptr, tid);
     if (!hook) return false;
     Param p{proc, param};
-    SendMessageW(hWnd, msg, 0, reinterpret_cast<LPARAM>(&p));
+    DWORD_PTR result = 0;
+    const BOOL sent = SendMessageTimeoutW(
+        hWnd, msg, 0, reinterpret_cast<LPARAM>(&p),
+        SMTO_ABORTIFHUNG | SMTO_NORMAL, kRunFromWindowTimeoutMs, &result);
     UnhookWindowsHookEx(hook);
-    return true;
+    return sent != FALSE;
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -8377,38 +8452,50 @@ HWND FindCurrentProcessTaskbarWnd() {
 struct SlotApplyParam { DisplayContent content; };
 
 void ApplyWin11FromThread(SlotApplyParam* param) {
-    DisplayContent content = param ? param->content : FormatTaskbarDisplay();
-    if (IsSlotRootAlive()) {
-        ApplyWin11SlotContent(content);
-        g_injectRetryMs = 400;
-        return;
-    }
-    bool injected = false;
-    for (auto it = g_observedElements.begin(); it != g_observedElements.end();) {
-        auto element = it->get();
-        if (!element) {
-            it = g_observedElements.erase(it);
-            continue;
-        }
+    try {
+        DisplayContent content = param ? param->content : FormatTaskbarDisplay();
         try {
-            if (auto xr = element.XamlRoot()) {
-                if (ApplyWin11Style(xr, content)) {
-                    injected = true;
-                    break;
-                }
+            if (IsSlotRootAlive()) {
+                ApplyWin11SlotContent(content);
+                g_injectRetryMs = 400;
+                return;
             }
         } catch (...) {
+            g_slotInjected = false;
         }
-        ++it;
-    }
-    if (IsSlotRootAlive()) {
-        ApplyWin11SlotContent(content);
-        g_injectRetryMs = 400;
-        return;
-    }
-    if (!injected) {
-        const int next = std::min(3000, std::max(400, g_injectRetryMs.load() * 2));
-        g_injectRetryMs = next;
+        bool injected = false;
+        for (auto it = g_observedElements.begin(); it != g_observedElements.end();) {
+            auto element = it->get();
+            if (!element) {
+                it = g_observedElements.erase(it);
+                continue;
+            }
+            try {
+                if (auto xr = element.XamlRoot()) {
+                    if (ApplyWin11Style(xr, content)) {
+                        injected = true;
+                        break;
+                    }
+                }
+            } catch (...) {
+            }
+            ++it;
+        }
+        try {
+            if (IsSlotRootAlive()) {
+                ApplyWin11SlotContent(content);
+                g_injectRetryMs = 400;
+                return;
+            }
+        } catch (...) {
+            g_slotInjected = false;
+        }
+        if (!injected) {
+            const int next = std::min(3000, std::max(400, g_injectRetryMs.load() * 2));
+            g_injectRetryMs = next;
+        }
+    } catch (...) {
+        g_slotInjected = false;
     }
 }
 
@@ -8582,11 +8669,14 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     switch (msg) {
         case WM_TIMER:
             if (wParam == 1) {
+                MaybeRequestScheduleRefresh();
                 ApplyEngineToBackends();
                 CheckNotifications();
                 RestartUiTimer();
             } else if (wParam == 2) {
                 RepositionWin10Overlay();
+            } else if (wParam == 4) {
+                RequestRefresh(false);
             }
             return 0;
         case WM_PT_UI_TICK:
@@ -8635,20 +8725,44 @@ void StartTimers() {
     RestartUiTimer();
     g_repositionTimer = SetTimer(g_messageHwnd, 2, 2000, nullptr);
     g_fullscreenTimer = SetTimer(nullptr, 3, 500, FullscreenTimerProc);
+    g_scheduleTimer =
+        SetTimer(g_messageHwnd, 4, kScheduleRefreshIntervalMs, nullptr);
 }
 
 void StopTimers() {
     if (g_messageHwnd) {
         KillTimer(g_messageHwnd, 1);
         KillTimer(g_messageHwnd, 2);
+        KillTimer(g_messageHwnd, 4);
     }
     g_uiTimer = 0;
     g_repositionTimer = 0;
+    g_scheduleTimer = 0;
     g_lastUiTimerIntervalMs = -1;
     if (g_fullscreenTimer) {
         KillTimer(nullptr, g_fullscreenTimer);
         g_fullscreenTimer = 0;
     }
+}
+
+void ClearWin11SlotOnUiThread(void*) {
+    try {
+        if (g_slotParentGrid) {
+            RemovePrayerTraySlotFromGrid(g_slotParentGrid);
+        } else if (g_slotRoot) {
+            g_slotRoot.Visibility(Visibility::Collapsed);
+        }
+    } catch (...) {
+    }
+    g_loadedRevokers.clear();
+    g_observedElements.clear();
+    g_slotRoot = nullptr;
+    g_slotButton = nullptr;
+    g_topTextBlock = nullptr;
+    g_bottomTextBlock = nullptr;
+    g_slotParentGrid = nullptr;
+    g_slotInjected = false;
+    g_hasAppliedContent = false;
 }
 
 void ShutdownUi() {
@@ -8661,19 +8775,18 @@ void ShutdownUi() {
         DestroyMenu(g_contextMenu);
         g_contextMenu = nullptr;
     }
+    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(taskbar, ClearWin11SlotOnUiThread, nullptr);
+    } else {
+        try {
+            ClearWin11SlotOnUiThread(nullptr);
+        } catch (...) {
+        }
+    }
     if (g_messageHwnd) {
         DestroyWindow(g_messageHwnd);
         g_messageHwnd = nullptr;
     }
-    g_loadedRevokers.clear();
-    g_observedElements.clear();
-    if (auto root = g_slotRoot) {
-        try {
-            root.Visibility(Visibility::Collapsed);
-        } catch (...) {
-        }
-    }
-    g_slotButton = nullptr;
 }
 
 }  // namespace
