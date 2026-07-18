@@ -2,7 +2,7 @@
 // @id              taskbar-vd-switcher
 // @name            Taskbar Virtual Desktop Switcher
 // @description     Injects clickable buttons into the taskbar — one per virtual desktop — with configurable grid arrangement for direct switching.
-// @version         1.6
+// @version         1.7
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -58,6 +58,7 @@ A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable but
 - Per-state text color, font size, corner radius, bold, and border
 - Tooltip on each button shows the desktop's display name
 - Option to hide the bar entirely when only one desktop exists
+- Experimental option to also show the switcher on secondary monitors' taskbars
 
 ## Settings
 
@@ -76,27 +77,39 @@ A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable but
 | Label format | Numbers | Numbers · Roman numerals · Dots · Custom |
 | Custom labels | *(empty)* | Comma-separated, e.g. `H,W,M` |
 | Font size | 10 pt | Button label size |
-| Active color | `#4488FF` | Background for the current desktop; enter the exact word `accent` to use the Windows accent color |
-| Inactive color | *(system)* | Background for other desktops; enter the exact word `accent` to use the Windows accent color |
+| Active text color | *(native)* | Current desktop's label color |
+| Inactive text color | *(native)* | Other desktops' label color |
+| Active color | `accent` | Current desktop background; empty keeps the native surface |
+| Inactive color | *(native)* | Other desktop backgrounds; empty keeps the native button surface |
+| Hover background color | *(automatic)* | Forces one shared hover color; empty brightens each button's current background, native surfaces keep native hover |
+| Click background color | *(automatic)* | Forces one shared pressed color; empty darkens each button's current background, native surfaces keep native pressed |
+| Border color | *(native)* | Button border color |
+| Border thickness | 0 px | Button border width |
+| Corner radius | 4 px | Rounded corners (0 = square, 4 = Windows default) |
 | Opacity | 100 | 0–100; lower values let the taskbar show through |
 | Shine effect | Off | Gradient highlight on buttons with custom colors |
-| Active text color | *(system)* | Foreground color for the current-desktop button |
-| Inactive text color | *(system)* | Foreground color for other buttons |
-| Corner radius | 4 px | Rounded corners (0 = square, 4 = Windows default) |
 | Active bold | Off | Bold the current desktop's label |
-| Border thickness | 0 px | Button border width |
-| Border color | *(system)* | Button border color; enter the exact word `accent` to use the Windows accent color |
 | Padding left | 0 px | Extra space to the left of the button grid |
 | Padding right | 2 px | Extra space to the right of the button grid |
 | Hide when single | Off | Don't show the bar when only one desktop exists |
+| Show on all taskbars | Off | Experimental: also inject into secondary monitors' taskbars (tray positions only; may need an Explorer restart after enabling) |
 | Task View button | Off | Optional button that opens Task View for previewing, creating, or closing desktops |
+| Task View button label | ⊞ | Text shown on the Task View button |
 | Task View button position | After | Column before/after desktop buttons, or sliver row above/below |
 | Task View button sliver height | 6 px | Height of the Task View button when used as a sliver row |
 | Task View button column width | 14 px | Width of the Task View button when used as a side column |
 
+All color settings accept `#RRGGBB` or `#AARRGGBB` hex (the alpha byte is
+honored), the generics `accent`, `accentLight`, and `accentDark` for the
+Windows accent shades, or `transparent` for a fully transparent surface —
+nothing drawn, element still present and clickable. Leaving a color empty
+keeps the native behavior described for that setting — including the Active
+color, where empty means the current desktop's button keeps the plain native
+surface with no highlight at all.
+
 ## Known limitations
 
-- Only the primary taskbar is supported (multi-monitor requires hooking secondary taskbars)
+- Multi-monitor support is experimental and off by default: secondary taskbars use the tray positions only (Start positions stay on the primary taskbar), and they are discovered as their tray icons load — after enabling the option, an Explorer restart (or toggling the mod off and on) may be needed before the buttons appear on other monitors
 - Buttons may not appear until the mod injects on the first tray icon load; retry loop runs up to 5 times at 2-second intervals
 
 ## Credits and inspirations
@@ -212,13 +225,53 @@ This mod builds directly on patterns established by several community mods:
 - fontSize: 10
   $name: Font size (pt)
 
-- activeColor: "#4488FF"
+- activeTextColor: ""
+  $name: Active desktop text color
+  $description: Hex (#RRGGBB or #AARRGGBB), accent / accentLight / accentDark, or transparent. Empty uses the native text brush.
+
+- inactiveTextColor: ""
+  $name: Inactive button text color
+  $description: Hex (#RRGGBB or #AARRGGBB), accent / accentLight / accentDark, or transparent. Empty uses the native text brush.
+
+- activeColor: "accent"
   $name: Active desktop color
-  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
+  $description: >-
+    Background for the current desktop's button. Enter a hex color (e.g.
+    "#4488FF"), accent / accentLight / accentDark for the Windows accent
+    shades, or transparent. Empty keeps the native button surface, matching
+    the other buttons.
 
 - inactiveColor: ""
   $name: Inactive button color
-  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
+  $description: >-
+    Background for the other desktops' buttons. Hex, accent / accentLight /
+    accentDark, or transparent. Empty keeps the native button surface.
+
+- hoverBackgroundColor: ""
+  $name: Hover background color
+  $description: >-
+    Hex, accent / accentLight / accentDark, or transparent, to force one
+    shared hover color on all buttons. Empty brightens each button's current
+    background; buttons on the native surface keep the native hover behavior.
+
+- pressedBackgroundColor: ""
+  $name: Click background color
+  $description: >-
+    Hex, accent / accentLight / accentDark, or transparent, to force one
+    shared pressed color on all buttons. Empty darkens each button's current
+    background; buttons on the native surface keep the native pressed
+    behavior.
+
+- borderColor: ""
+  $name: Button border color
+  $description: Hex (#RRGGBB or #AARRGGBB), accent / accentLight / accentDark, or transparent. Empty uses the native border brush.
+
+- borderThickness: 0
+  $name: Button border thickness (px)
+
+- cornerRadius: 4
+  $name: Corner radius (px)
+  $description: Rounded corners on buttons (0 = square, 4 = Windows default)
 
 - buttonOpacity: 100
   $name: Button opacity (0–100)
@@ -228,25 +281,8 @@ This mod builds directly on patterns established by several community mods:
   $name: Shine effect
   $description: Adds a subtle gradient highlight. Applies when a custom color is set.
 
-- activeTextColor: ""
-  $name: Active desktop text color (hex, empty = system default)
-
-- inactiveTextColor: ""
-  $name: Inactive button text color (hex, empty = system default)
-
-- cornerRadius: 4
-  $name: Corner radius (px)
-  $description: Rounded corners on buttons (0 = square, 4 = Windows default)
-
 - activeBold: false
   $name: Bold active desktop label
-
-- borderThickness: 0
-  $name: Button border thickness (px)
-
-- borderColor: ""
-  $name: Button border color
-  $description: Enter a hex color, or enter the exact word accent to use the Windows accent color. Leave empty for the system default.
 
 - paddingLeft: 0
   $name: Padding left (px)
@@ -266,6 +302,15 @@ This mod builds directly on patterns established by several community mods:
 - hideWhenSingle: false
   $name: Hide when only one desktop
   $description: Don't show the button bar when there is only one virtual desktop
+
+- multiMonitor: false
+  $name: Show on all taskbars (experimental)
+  $description: >-
+    Also injects the switcher into secondary monitors' taskbars, in the same
+    tray position. Tray positions only - the Start positions stay on the
+    primary taskbar. Secondary taskbars are discovered as their tray icons
+    load, so after enabling this you may need to restart Explorer (or toggle
+    the mod off and on) before the buttons appear on other monitors.
 
 - showMasterButton: false
   $name: Show Task View button
@@ -354,8 +399,10 @@ struct ModSettings {
     int buttonSpacing          = 2;
     int buttonRows             = 0;
     int buttonColumns          = 0;
-    std::wstring activeColor   = L"#4488FF";
+    std::wstring activeColor   = L"accent";
     std::wstring inactiveColor = L"";
+    std::wstring hoverBackgroundColor;
+    std::wstring pressedBackgroundColor;
     int buttonOpacity          = 100;
     bool shineEffect           = false;
     std::wstring labelFormat      = L"number";
@@ -368,6 +415,7 @@ struct ModSettings {
     int borderThickness           = 0;
     std::wstring borderColor      = L"";
     bool hideWhenSingle           = false;
+    bool multiMonitor             = false;
     int paddingLeft               = 0;
     int paddingRight              = 2;
     std::wstring gridMode            = L"autoSmart";
@@ -385,45 +433,58 @@ struct ModSettings {
 ModSettings g_settings;
 
 static void LoadSettings() {
-    auto Str = [](const wchar_t* k, const wchar_t* d) {
+    auto Str = [](const wchar_t* k) {
         PCWSTR p = Wh_GetStringSetting(k);
-        std::wstring r = p ? p : d;
+        std::wstring r = p;
         Wh_FreeStringSetting(p);
         return r;
     };
-    g_settings.position       = Str(L"position",      L"afterClock");
-    g_settings.buttonWidth    = Wh_GetIntSetting(L"buttonWidth",   20);
-    g_settings.buttonHeight   = Wh_GetIntSetting(L"buttonHeight",  22);
-    g_settings.buttonSpacing  = Wh_GetIntSetting(L"buttonSpacing", 2);
-    g_settings.buttonRows     = std::max(Wh_GetIntSetting(L"buttonRows", 0), 0);
-    g_settings.buttonColumns  = std::max(Wh_GetIntSetting(L"buttonColumns", 0), 0);
-    g_settings.activeColor    = Str(L"activeColor",   L"#4488FF");
-    g_settings.inactiveColor  = Str(L"inactiveColor", L"");
-    g_settings.buttonOpacity  = Wh_GetIntSetting(L"buttonOpacity", 100);
-    g_settings.shineEffect    = Wh_GetIntSetting(L"shineEffect",   0) != 0;
-    g_settings.labelFormat       = Str(L"labelFormat",       L"number");
-    g_settings.customLabels      = Str(L"customLabels",      L"");
-    g_settings.activeTextColor   = Str(L"activeTextColor",   L"");
-    g_settings.inactiveTextColor = Str(L"inactiveTextColor", L"");
-    g_settings.fontSize          = Wh_GetIntSetting(L"fontSize",         10);
-    g_settings.cornerRadius      = Wh_GetIntSetting(L"cornerRadius",      4);
-    g_settings.activeBold        = Wh_GetIntSetting(L"activeBold",        0) != 0;
-    g_settings.borderThickness   = Wh_GetIntSetting(L"borderThickness",   0);
-    g_settings.borderColor       = Str(L"borderColor",       L"");
-    g_settings.hideWhenSingle    = Wh_GetIntSetting(L"hideWhenSingle",    0) != 0;
-    g_settings.paddingLeft       = Wh_GetIntSetting(L"paddingLeft",  0);
-    g_settings.paddingRight      = Wh_GetIntSetting(L"paddingRight", 2);
-    g_settings.gridMode             = Str(L"gridMode",        L"autoSmart");
-    g_settings.smartLayout          = Str(L"smartLayout",     L"balanced");
-    g_settings.fillOrder            = Str(L"fillOrder",       L"rowFirst");
-    g_settings.shortGroupAlign      = Str(L"shortGroupAlign",      L"center");
-    g_settings.showMasterButton     = Wh_GetIntSetting(L"showMasterButton",  0) != 0;
-    g_settings.masterButtonLabel    = Str(L"masterButtonLabel",    L"⊞");
-    g_settings.masterButtonPosition = Str(L"masterButtonPosition", L"after");
-    g_settings.masterButtonHeight   = std::max(1, Wh_GetIntSetting(L"masterButtonHeight", 6));
-    g_settings.masterButtonWidth    = std::max(1, Wh_GetIntSetting(L"masterButtonWidth",  14));
-    g_settings.masterButtonSpacing  = Wh_GetIntSetting(L"masterButtonSpacing", 0);
-    g_settings.gridVerticalOffset   = Wh_GetIntSetting(L"gridVerticalOffset", 0);
+    g_settings.position       = Str(L"position");
+    g_settings.buttonWidth    = Wh_GetIntSetting(L"buttonWidth");
+    g_settings.buttonHeight   = Wh_GetIntSetting(L"buttonHeight");
+    g_settings.buttonSpacing  = Wh_GetIntSetting(L"buttonSpacing");
+    g_settings.buttonRows     = std::max(Wh_GetIntSetting(L"buttonRows"), 0);
+    g_settings.buttonColumns  = std::max(Wh_GetIntSetting(L"buttonColumns"), 0);
+    g_settings.activeColor    = Str(L"activeColor");
+    g_settings.inactiveColor  = Str(L"inactiveColor");
+    g_settings.hoverBackgroundColor = Str(L"hoverBackgroundColor");
+    g_settings.pressedBackgroundColor = Str(L"pressedBackgroundColor");
+    g_settings.buttonOpacity  = Wh_GetIntSetting(L"buttonOpacity");
+    g_settings.shineEffect    = Wh_GetIntSetting(L"shineEffect") != 0;
+    g_settings.labelFormat       = Str(L"labelFormat");
+    g_settings.customLabels      = Str(L"customLabels");
+    g_settings.activeTextColor   = Str(L"activeTextColor");
+    g_settings.inactiveTextColor = Str(L"inactiveTextColor");
+    g_settings.fontSize          = Wh_GetIntSetting(L"fontSize");
+    g_settings.cornerRadius      = Wh_GetIntSetting(L"cornerRadius");
+    g_settings.activeBold        = Wh_GetIntSetting(L"activeBold") != 0;
+    g_settings.borderThickness   = Wh_GetIntSetting(L"borderThickness");
+    g_settings.borderColor       = Str(L"borderColor");
+    g_settings.hideWhenSingle    = Wh_GetIntSetting(L"hideWhenSingle") != 0;
+    g_settings.multiMonitor      = Wh_GetIntSetting(L"multiMonitor") != 0;
+    g_settings.paddingLeft       = Wh_GetIntSetting(L"paddingLeft");
+    g_settings.paddingRight      = Wh_GetIntSetting(L"paddingRight");
+    g_settings.gridMode             = Str(L"gridMode");
+    g_settings.smartLayout          = Str(L"smartLayout");
+    g_settings.fillOrder            = Str(L"fillOrder");
+    g_settings.shortGroupAlign      = Str(L"shortGroupAlign");
+    g_settings.showMasterButton     = Wh_GetIntSetting(L"showMasterButton") != 0;
+    g_settings.masterButtonLabel    = Str(L"masterButtonLabel");
+    g_settings.masterButtonPosition = Str(L"masterButtonPosition");
+    g_settings.masterButtonHeight   = std::max(1, Wh_GetIntSetting(L"masterButtonHeight"));
+    g_settings.masterButtonWidth    = std::max(1, Wh_GetIntSetting(L"masterButtonWidth"));
+    g_settings.masterButtonSpacing  = Wh_GetIntSetting(L"masterButtonSpacing");
+    g_settings.gridVerticalOffset   = Wh_GetIntSetting(L"gridVerticalOffset");
+
+    auto shownColor = [](std::wstring const& value) {
+        return value.empty() ? L"<empty/automatic>" : value.c_str();
+    };
+    Wh_Log(L"[Settings] colors active=%ls inactive=%ls hover=%ls pressed=%ls border=%ls",
+           shownColor(g_settings.activeColor),
+           shownColor(g_settings.inactiveColor),
+           shownColor(g_settings.hoverBackgroundColor),
+           shownColor(g_settings.pressedBackgroundColor),
+           shownColor(g_settings.borderColor));
 }
 
 // ============================================================
@@ -459,7 +520,7 @@ static std::list<FrameworkElement::Loaded_revoker> g_autoRevokerList;
 // Forward declarations
 static void ApplyAllSettings();
 static void ApplyAllSettingsOnWindowThread();
-static void RebuildOrUpdate(bool fullRebuild);
+static void RebuildButtonGrid();
 static void RemoveButtonGrid();
 static void StopNotificationThread();
 static void StopRetryThread();
@@ -597,7 +658,8 @@ static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     // Guard: symbols must be resolved before any dereference.
     if (!CTaskBand_GetTaskbarHost_Original || !TaskbarHost_FrameHeight_Original ||
-        !std__Ref_count_base__Decref_Original)
+        !std__Ref_count_base__Decref_Original ||
+        !CTaskBand_ITaskListWndSite_vftable)
         return nullptr;
 
     HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
@@ -612,7 +674,11 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     }
     void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForSite, taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) return nullptr;
+    if (!taskbarHostSharedPtr[0] || !taskbarHostSharedPtr[1]) {
+        if (taskbarHostSharedPtr[1])
+            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+        return nullptr;
+    }
     size_t offset = 0x10;
 #if defined(_M_X64)
     {
@@ -735,18 +801,18 @@ static ULONG STDMETHODCALLTYPE Notif_Release(NotifObject* p) {
     if (r == 0) { delete[] p->vtable; delete p; }
     return (ULONG)std::max(r, 0L);
 }
-static HRESULT STDMETHODCALLTYPE Notif_HandleUpdate(bool fullRebuild) {
+static HRESULT STDMETHODCALLTYPE Notif_HandleUpdate() {
     if (g_unloading || !g_taskbarWnd) return S_OK;
-    RunFromWindowThread(g_taskbarWnd, [](void* p) {
-        if (!g_unloading) RebuildOrUpdate((bool)(intptr_t)p);
-    }, (void*)fullRebuild);
+    RunFromWindowThread(g_taskbarWnd, [](void*) {
+        if (!g_unloading) RebuildButtonGrid();
+    }, nullptr);
     return S_OK;
 }
 static HRESULT STDMETHODCALLTYPE Notif_NoOp() { return S_OK; }
-static HRESULT STDMETHODCALLTYPE Notif_CountChanged(NotifObject*) { return Notif_HandleUpdate(true); }
-static HRESULT STDMETHODCALLTYPE Notif_CurrentChanged(NotifObject*) { return Notif_HandleUpdate(false); }
+static HRESULT STDMETHODCALLTYPE Notif_CountChanged(NotifObject*) { return Notif_HandleUpdate(); }
+static HRESULT STDMETHODCALLTYPE Notif_CurrentChanged(NotifObject*) { return Notif_HandleUpdate(); }
 static HRESULT STDMETHODCALLTYPE Notif_CurrentChangedWithMonitors(NotifObject*, void*, void*, void*) {
-    return Notif_HandleUpdate(false);
+    return Notif_HandleUpdate();
 }
 
 static NotifObject* CreateNotifObject() {
@@ -849,7 +915,15 @@ static void StopNotificationThread() {
 static void StopRetryThread() {
     if (g_retryStopEvent) SetEvent(g_retryStopEvent);
     if (g_retryThread) {
-        WaitForSingleObject(g_retryThread, 12000);
+        DWORD result;
+        do {
+            result = MsgWaitForMultipleObjects(
+                1, &g_retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
         CloseHandle(g_retryThread); g_retryThread = nullptr;
     }
     if (g_retryStopEvent) {
@@ -1038,22 +1112,49 @@ void SwitchToDesktop(int targetIndex) {
 // Button grid building
 // ============================================================
 
+static Brush GetWindowsAccentBrush(
+    winrt::Windows::UI::ViewManagement::UIColorType colorType) {
+    try {
+        winrt::Windows::UI::ViewManagement::UISettings uiSettings;
+        auto color = uiSettings.GetColorValue(colorType);
+        SolidColorBrush brush;
+        brush.Color(color);
+        return brush;
+    } catch (...) {
+        Wh_Log(L"[Color] Failed to read the Windows accent color");
+        return nullptr;
+    }
+}
+
 static Brush ParseColorBrush(const std::wstring& value) {
-    if (_wcsicmp(value.c_str(), L"accent") == 0) {
-        try {
-            winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-            auto color = uiSettings.GetColorValue(
-                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-            SolidColorBrush brush;
-            brush.Color(color);
-            return brush;
-        } catch (...) {
-            Wh_Log(L"[Color] Failed to read the Windows accent color");
-            return nullptr;
-        }
+    using winrt::Windows::UI::ViewManagement::UIColorType;
+
+    if (value.empty())
+        return nullptr;
+
+    if (_wcsicmp(value.c_str(), L"transparent") == 0) {
+        SolidColorBrush brush;
+        brush.Color(winrt::Windows::UI::Color{0, 0, 0, 0});
+        return brush;
     }
 
-    if (value.empty() || value[0] != L'#') return nullptr;
+    // Numbered Windows shades are accepted silently and stay undocumented.
+    static const struct { const wchar_t* token; UIColorType type; } kAccentTokens[] = {
+        {L"accent",       UIColorType::Accent},
+        {L"accentLight",  UIColorType::AccentLight2},
+        {L"accentDark",   UIColorType::AccentDark1},
+        {L"accentLight1", UIColorType::AccentLight1},
+        {L"accentLight2", UIColorType::AccentLight2},
+        {L"accentLight3", UIColorType::AccentLight3},
+        {L"accentDark1",  UIColorType::AccentDark1},
+        {L"accentDark2",  UIColorType::AccentDark2},
+        {L"accentDark3",  UIColorType::AccentDark3},
+    };
+    for (auto const& entry : kAccentTokens)
+        if (_wcsicmp(value.c_str(), entry.token) == 0)
+            return GetWindowsAccentBrush(entry.type);
+
+    if (value[0] != L'#') return nullptr;
     std::wstring h = value.substr(1);
     if (h.size() == 6) h = L"FF" + h;
     if (h.size() != 8) return nullptr;
@@ -1329,11 +1430,112 @@ static double EstimateButtonGridHeight(int count) {
                     gaps * g_settings.buttonSpacing);
 }
 
+static void SetButtonBrushResource(Button const& button,
+                                   wchar_t const* key,
+                                   Brush const& brush) {
+    auto resources = button.Resources();
+    auto boxedKey = winrt::box_value(key);
+    if (brush)
+        resources.Insert(boxedKey, brush);
+    else
+        resources.Remove(boxedKey);
+}
+
+static Brush AdjustSolidBrush(Brush const& base, double whiteBlend) {
+    auto solid = base ? base.try_as<SolidColorBrush>() : nullptr;
+    if (!solid)
+        return nullptr;
+
+    auto color = solid.Color();
+    auto blend = [whiteBlend](BYTE channel) {
+        double target = whiteBlend >= 0.0 ? 255.0 : 0.0;
+        double amount = std::abs(whiteBlend);
+        return (BYTE)std::clamp(
+            (int)std::lround(channel + (target - channel) * amount), 0, 255);
+    };
+
+    winrt::Windows::UI::Color adjustedColor{
+        color.A, blend(color.R), blend(color.G), blend(color.B)};
+    SolidColorBrush adjusted;
+    adjusted.Color(adjustedColor);
+    return adjusted;
+}
+
+struct ButtonSurfaceBrushes {
+    Brush normal;
+    Brush hover;
+    Brush pressed;
+};
+
+static ButtonSurfaceBrushes ResolveButtonSurface(
+    bool isActive,
+    Brush const& activeBrush,
+    Brush const& inactiveBrush,
+    Brush const& hoverOverride,
+    Brush const& pressedOverride) {
+    Brush normal = isActive ? activeBrush : inactiveBrush;
+
+    // A native inactive surface keeps the native XAML hover/pressed states.
+    // Colored surfaces derive their states from their own color unless the user
+    // supplied an explicit shared override.
+    Brush hover = hoverOverride;
+    if (!hover && normal)
+        hover = AdjustSolidBrush(normal, 0.18);
+
+    Brush pressed = pressedOverride;
+    if (!pressed && normal)
+        pressed = AdjustSolidBrush(normal, -0.12);
+
+    return {
+        MakeShineBrush(normal),
+        MakeShineBrush(hover),
+        MakeShineBrush(pressed),
+    };
+}
+
+static void ApplyButtonState(Button const& btn, bool isActive,
+    Brush activeBrush, Brush inactiveBrush,
+    Brush activeTextBrush, Brush inactiveTextBrush,
+    Brush hoverBrush, Brush pressedBrush, Brush borderBrush) {
+    auto surface = ResolveButtonSurface(isActive, activeBrush, inactiveBrush,
+                                        hoverBrush, pressedBrush);
+    Brush background = surface.normal;
+    if (background)
+        btn.Background(background);
+    else
+        btn.ClearValue(Control::BackgroundProperty());
+    SetButtonBrushResource(btn, L"ButtonBackground", background);
+    SetButtonBrushResource(btn, L"ButtonBackgroundPointerOver", surface.hover);
+    SetButtonBrushResource(btn, L"ButtonBackgroundPressed", surface.pressed);
+
+    Brush foreground = isActive ? activeTextBrush : inactiveTextBrush;
+    if (foreground)
+        btn.Foreground(foreground);
+    else
+        btn.ClearValue(Control::ForegroundProperty());
+    SetButtonBrushResource(btn, L"ButtonForeground", foreground);
+    SetButtonBrushResource(btn, L"ButtonForegroundPointerOver", foreground);
+    SetButtonBrushResource(btn, L"ButtonForegroundPressed", foreground);
+
+    if (borderBrush)
+        btn.BorderBrush(borderBrush);
+    else
+        btn.ClearValue(Control::BorderBrushProperty());
+    SetButtonBrushResource(btn, L"ButtonBorderBrush", borderBrush);
+    SetButtonBrushResource(btn, L"ButtonBorderBrushPointerOver", borderBrush);
+    SetButtonBrushResource(btn, L"ButtonBorderBrushPressed", borderBrush);
+
+    if (g_settings.activeBold)
+        btn.FontWeight(isActive
+            ? winrt::Windows::UI::Text::FontWeights::Bold()
+            : winrt::Windows::UI::Text::FontWeights::Normal());
+}
+
 // Apply shared visual style to a desktop button.
 static void StyleButton(Button& btn, bool isActive,
     Brush activeBrush, Brush inactiveBrush,
     Brush activeTextBrush, Brush inactiveTextBrush,
-    Brush borderBrush)
+    Brush hoverBrush, Brush pressedBrush, Brush borderBrush)
 {
     btn.MinWidth(0.0);
     btn.MinHeight(0.0);
@@ -1342,28 +1544,15 @@ static void StyleButton(Button& btn, bool isActive,
     btn.HorizontalAlignment(HorizontalAlignment::Stretch);
     btn.VerticalAlignment(VerticalAlignment::Stretch);
 
-    Brush background = isActive ? activeBrush : inactiveBrush;
-    if (background)
-        btn.Background(background);
-    else
-        btn.ClearValue(Control::BackgroundProperty());
-
-    if (isActive && activeTextBrush)        btn.Foreground(activeTextBrush);
-    else if (!isActive && inactiveTextBrush) btn.Foreground(inactiveTextBrush);
-
-    if (g_settings.activeBold)
-        btn.FontWeight(isActive
-            ? winrt::Windows::UI::Text::FontWeights::Bold()
-            : winrt::Windows::UI::Text::FontWeights::Normal());
+    ApplyButtonState(btn, isActive, activeBrush, inactiveBrush,
+                     activeTextBrush, inactiveTextBrush,
+                     hoverBrush, pressedBrush, borderBrush);
 
     { double r = (double)g_settings.cornerRadius; btn.CornerRadius({ r, r, r, r }); }
 
-    if (borderBrush) {
-        btn.BorderBrush(borderBrush);
-        if (g_settings.borderThickness > 0) {
-            double t = (double)g_settings.borderThickness;
-            btn.BorderThickness({ t, t, t, t });
-        }
+    if (g_settings.borderThickness >= 0) {
+        double t = (double)g_settings.borderThickness;
+        btn.BorderThickness({ t, t, t, t });
     }
 }
 
@@ -1441,10 +1630,12 @@ static Grid BuildButtonGrid(int count, int current) {
         grid.ColumnDefinitions().Append(cd);
     }
 
-    auto activeBrush       = MakeShineBrush(ParseColorBrush(g_settings.activeColor));
-    auto inactiveBrush     = MakeShineBrush(ParseColorBrush(g_settings.inactiveColor));
+    auto activeBrush       = ParseColorBrush(g_settings.activeColor);
+    auto inactiveBrush     = ParseColorBrush(g_settings.inactiveColor);
     auto activeTextBrush   = ParseColorBrush(g_settings.activeTextColor);
     auto inactiveTextBrush = ParseColorBrush(g_settings.inactiveTextColor);
+    auto hoverBrush        = ParseColorBrush(g_settings.hoverBackgroundColor);
+    auto pressedBrush      = ParseColorBrush(g_settings.pressedBackgroundColor);
     auto borderBrush       = ParseColorBrush(g_settings.borderColor);
     auto desktopNames      = ReadDesktopNames(count);
 
@@ -1458,7 +1649,8 @@ static Grid BuildButtonGrid(int count, int current) {
         btn.Name(L"VdBtn_" + std::to_wstring(i));
         btn.Content(winrt::box_value(GetButtonLabel(i, current)));
         StyleButton(btn, i == current, activeBrush, inactiveBrush,
-                    activeTextBrush, inactiveTextBrush, borderBrush);
+                    activeTextBrush, inactiveTextBrush,
+                    hoverBrush, pressedBrush, borderBrush);
         btn.Width((double)g_settings.buttonWidth);
         btn.Height((double)g_settings.buttonHeight);
         ToolTipService::SetToolTip(btn, winrt::box_value(winrt::hstring(desktopNames[i])));
@@ -1544,7 +1736,8 @@ static Grid BuildButtonGrid(int count, int current) {
         masterBtn.Name(L"VdMasterBtn");
         masterBtn.Content(winrt::box_value(winrt::hstring(g_settings.masterButtonLabel)));
         StyleButton(masterBtn, false, inactiveBrush, inactiveBrush,
-                    inactiveTextBrush, inactiveTextBrush, borderBrush);
+                    inactiveTextBrush, inactiveTextBrush,
+                    hoverBrush, pressedBrush, borderBrush);
         if (masterIsRow) {
             masterBtn.Height((double)g_settings.masterButtonHeight);
         } else {
@@ -1585,54 +1778,15 @@ static Grid BuildButtonGrid(int count, int current) {
     return grid;
 }
 
-// Update button highlights and labels in-place (no rebuild).
-static void UpdateHighlights(int current) {
-    if (!g_buttonGrid) return;
-    auto activeBrush       = MakeShineBrush(ParseColorBrush(g_settings.activeColor));
-    auto inactiveBrush     = MakeShineBrush(ParseColorBrush(g_settings.inactiveColor));
-    auto activeTextBrush   = ParseColorBrush(g_settings.activeTextColor);
-    auto inactiveTextBrush = ParseColorBrush(g_settings.inactiveTextColor);
-    static const std::wstring kPrefix = L"VdBtn_";
-    int n = (int)g_buttonGrid.Children().Size();
-    for (int i = 0; i < n; i++) {
-        auto btn = g_buttonGrid.Children().GetAt(i).try_as<Button>();
-        if (!btn) continue;
-        auto name = std::wstring(btn.Name());
-        // Skip master button and anything that isn't a desktop button.
-        if (name.size() <= kPrefix.size() || name.compare(0, kPrefix.size(), kPrefix) != 0)
-            continue;
-        int desktopIdx = _wtoi(name.c_str() + kPrefix.size());
-        bool isActive = (desktopIdx == current);
-        if (g_settings.labelFormat == L"dot")
-            btn.Content(winrt::box_value(std::wstring(isActive ? L"●" : L"○")));
-        Brush bg = isActive ? activeBrush : inactiveBrush;
-        if (bg) {
-            btn.Background(bg);
-        } else {
-            // A local nullptr overrides the native Button background. After the
-            // first desktop switch that left only the rendered content reliably
-            // hit-testable, so part of the inactive button stopped hovering and
-            // accepting clicks. Clearing the local value restores the complete
-            // native button surface and its visual states.
-            btn.ClearValue(Control::BackgroundProperty());
-        }
-        if (activeTextBrush || inactiveTextBrush) {
-            Brush fg = isActive ? activeTextBrush : inactiveTextBrush;
-            if (fg)
-                btn.Foreground(fg);
-            else
-                btn.ClearValue(Control::ForegroundProperty());
-        }
-        if (g_settings.activeBold)
-            btn.FontWeight(isActive
-                ? winrt::Windows::UI::Text::FontWeights::Bold()
-                : winrt::Windows::UI::Text::FontWeights::Normal());
-    }
-}
-
 // ============================================================
 // Injection into XAML tree
 // ============================================================
+
+static bool PositionIsStartMode() {
+    const auto& pos = g_settings.position;
+    return pos == L"nextToStart" || pos == L"aboveStart" || pos == L"overStart" ||
+           pos == L"belowStart"  || pos == L"rightOfStart";
+}
 
 static FrameworkElement FindStartButton(FrameworkElement root) {
     return FindChildRecursive(root, [](FrameworkElement fe) {
@@ -1878,52 +2032,11 @@ static bool InjectButtonGridNearStart(FrameworkElement root) {
     return true;
 }
 
-static bool InjectButtonGrid(FrameworkElement root) {
+// Map g_settings.position to a target column in a SystemTrayFrameGrid, insert
+// a new Auto-width column there, shift existing children to make room, and
+// append the grid. Returns the column index the grid was placed in.
+static int InsertGridIntoTrayColumns(Grid const& gridParent, Grid const& grid) {
     const auto& pos = g_settings.position;
-
-    if (pos == L"nextToStart" || pos == L"aboveStart" || pos == L"overStart" ||
-        pos == L"belowStart"  || pos == L"rightOfStart")
-        return InjectButtonGridNearStart(root);
-
-    FrameworkElement parent = FindChildRecursive(root, [](FrameworkElement fe) {
-        return fe.Name() == L"SystemTrayFrameGrid";
-    });
-    if (!parent) {
-        Wh_Log(L"[Inject] SystemTrayFrameGrid not found");
-        return false;
-    }
-
-    // SystemTrayFrameGrid is a Grid with column-based layout. We must insert a new
-    // ColumnDefinition and shift existing elements rather than relying on Children order.
-    auto gridParent = parent.try_as<Grid>();
-    if (!gridParent) { Wh_Log(L"[Inject] Parent is not a Grid"); return false; }
-
-    // Already injected?
-    for (auto child : gridParent.Children()) {
-        if (auto fe = child.try_as<FrameworkElement>(); fe && fe.Name() == L"VdSwitcherBar") {
-            // Re-acquire state in case it was lost (e.g., transient null from GetTaskbarXamlRoot
-            // during RebuildOrUpdate caused g_buttonGrid to be cleared while grid stayed in tree).
-            if (!g_buttonGrid) {
-                g_buttonGrid = fe.try_as<Grid>();
-                g_injectionParent = parent;
-                g_injectedColumn = Grid::GetColumn(fe);
-                Wh_Log(L"[Inject] Re-acquired existing VdSwitcherBar at col=%d", g_injectedColumn);
-            }
-            return true;
-        }
-    }
-
-    int count   = ReadDesktopCount();
-    int current = ReadCurrentDesktop();
-    g_desktopCount.store(count);
-    g_currentDesktop.store(current);
-
-    if (g_settings.hideWhenSingle && count <= 1) {
-        Wh_Log(L"[Inject] Skipping — hideWhenSingle, count=%d", count);
-        return true;  // notification thread will watch for desktop additions
-    }
-
-    auto grid = BuildButtonGrid(count, current);
 
     // Find a named direct child of the tray grid.
     auto findNamedDirect = [&](const wchar_t* name) -> FrameworkElement {
@@ -1935,6 +2048,8 @@ static bool InjectButtonGrid(FrameworkElement root) {
     };
 
     // Map position setting → reference element + whether to insert after it.
+    // Secondary taskbars may lack some of these elements; a missing reference
+    // falls through to column 0 (before icons).
     FrameworkElement refElem = nullptr;
     bool insertAfterRef = false;
 
@@ -1967,8 +2082,8 @@ static bool InjectButtonGrid(FrameworkElement root) {
         gridParent.ColumnDefinitions().Append(cd);
 
     // Shift every existing child whose column is >= insertCol to make room.
-    // Elements that start before insertCol but span through it get their span widened
-    // so they continue to cover the same original columns (plus the new one).
+    // Elements that start before insertCol but span through it get their span
+    // widened so they continue to cover the same original columns (plus the new one).
     for (auto child : gridParent.Children()) {
         auto fe = child.try_as<FrameworkElement>();
         if (!fe) continue;
@@ -1983,6 +2098,53 @@ static bool InjectButtonGrid(FrameworkElement root) {
     Grid::SetColumn(grid, insertCol);
     Canvas::SetZIndex(grid, 10000);
     gridParent.Children().Append(grid);
+    return insertCol;
+}
+
+static bool InjectButtonGrid(FrameworkElement root) {
+    if (PositionIsStartMode())
+        return InjectButtonGridNearStart(root);
+
+    FrameworkElement parent = FindChildRecursive(root, [](FrameworkElement fe) {
+        return fe.Name() == L"SystemTrayFrameGrid";
+    });
+    if (!parent) {
+        Wh_Log(L"[Inject] SystemTrayFrameGrid not found");
+        return false;
+    }
+
+    // SystemTrayFrameGrid is a Grid with column-based layout. We must insert a new
+    // ColumnDefinition and shift existing elements rather than relying on Children order.
+    auto gridParent = parent.try_as<Grid>();
+    if (!gridParent) { Wh_Log(L"[Inject] Parent is not a Grid"); return false; }
+
+    // Already injected?
+    for (auto child : gridParent.Children()) {
+        if (auto fe = child.try_as<FrameworkElement>(); fe && fe.Name() == L"VdSwitcherBar") {
+            // Re-acquire state in case it was lost (e.g., transient null from GetTaskbarXamlRoot
+            // during RebuildButtonGrid caused g_buttonGrid to be cleared while grid stayed in tree).
+            if (!g_buttonGrid) {
+                g_buttonGrid = fe.try_as<Grid>();
+                g_injectionParent = parent;
+                g_injectedColumn = Grid::GetColumn(fe);
+                Wh_Log(L"[Inject] Re-acquired existing VdSwitcherBar at col=%d", g_injectedColumn);
+            }
+            return true;
+        }
+    }
+
+    int count   = ReadDesktopCount();
+    int current = ReadCurrentDesktop();
+    g_desktopCount.store(count);
+    g_currentDesktop.store(current);
+
+    if (g_settings.hideWhenSingle && count <= 1) {
+        Wh_Log(L"[Inject] Skipping — hideWhenSingle, count=%d", count);
+        return true;  // notification thread will watch for desktop additions
+    }
+
+    auto grid = BuildButtonGrid(count, current);
+    int insertCol = InsertGridIntoTrayColumns(gridParent, grid);
     g_buttonGrid      = grid;
     g_injectionParent = parent;
     g_injectedColumn  = insertCol;
@@ -2085,13 +2247,136 @@ static void RemoveButtonGrid() {
     g_injectedColumn  = -1;
 }
 
-// Rebuild button grid (full or highlight-only) on the UI thread.
-static void RebuildOrUpdate(bool fullRebuild) {
+// ============================================================
+// Secondary taskbars (experimental multi-monitor)
+// ============================================================
+// GetTaskbarXamlRoot goes through the primary CTaskBand only, so secondary
+// taskbars (Shell_SecondaryTrayWnd) are discovered from IconView elements as
+// they load: an element's XamlRoot belongs to whichever taskbar hosts it.
+// Discovered tray grids stay registered while the toggle is off so enabling
+// it can reinject without waiting for new icons. All access is UI-thread only.
+
+struct SecondaryBar {
+    Grid trayGrid{nullptr};    // SystemTrayFrameGrid of a secondary taskbar
+    Grid buttonGrid{nullptr};  // injected VdSwitcherBar, null when not injected
+};
+static std::vector<SecondaryBar> g_secondaryBars;
+
+static bool IsTrayGridAlive(Grid const& trayGrid) {
+    try {
+        return trayGrid && trayGrid.XamlRoot() != nullptr;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool WantSecondaryBars() {
+    return g_settings.multiMonitor && !PositionIsStartMode() &&
+           !(g_settings.hideWhenSingle && g_desktopCount.load() <= 1);
+}
+
+// Remove injected grids from all secondary taskbars, keeping the tray-grid
+// registrations so the bars can be reinjected without rediscovery.
+static void RemoveSecondaryBars() {
+    for (auto& bar : g_secondaryBars) {
+        if (bar.buttonGrid && IsTrayGridAlive(bar.trayGrid))
+            RemoveButtonGridFrom(bar.trayGrid, -1);
+        bar.buttonGrid = nullptr;
+    }
+}
+
+// Remove and reinject the grid on every known secondary taskbar (or just
+// remove, when the toggle/settings no longer want them). Full rebuild for the
+// same reason as the primary grid — see RebuildButtonGrid.
+static void RefreshSecondaryBars() {
+    if (g_secondaryBars.empty())
+        return;
+    int count    = g_desktopCount.load();
+    int current  = g_currentDesktop.load();
+    bool wantBars = WantSecondaryBars();
+    for (auto it = g_secondaryBars.begin(); it != g_secondaryBars.end();) {
+        auto& bar = *it;
+        if (!IsTrayGridAlive(bar.trayGrid)) {
+            // Taskbar went away (monitor disconnected or tray rebuilt); a new
+            // IconView load on that taskbar will rediscover it.
+            it = g_secondaryBars.erase(it);
+            continue;
+        }
+        if (bar.buttonGrid) {
+            RemoveButtonGridFrom(bar.trayGrid, -1);
+            bar.buttonGrid = nullptr;
+        }
+        if (wantBars) {
+            auto grid = BuildButtonGrid(count, current);
+            InsertGridIntoTrayColumns(bar.trayGrid, grid);
+            bar.buttonGrid = grid;
+        }
+        ++it;
+    }
+}
+
+// Register the tray grid of the taskbar hosting this element and inject the
+// switcher into it when the toggle is on. The primary taskbar is excluded —
+// it is handled by the main injection path (including Start positions).
+static void RegisterSecondaryTrayFromElement(FrameworkElement const& element) {
+    if (g_unloading || !g_buttonGrid)  // wait until the primary bar exists
+        return;
+
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot) return;
+    auto root = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!root) return;
+
+    // Never treat the primary taskbar as secondary.
+    if (g_taskbarWnd) {
+        try {
+            if (auto primaryRoot = GetTaskbarXamlRoot(g_taskbarWnd))
+                if (primaryRoot.Content() == xamlRoot.Content())
+                    return;
+        } catch (...) {
+        }
+    }
+
+    auto trayGrid = FindChildRecursive(root, [](FrameworkElement fe) {
+        return fe.Name() == L"SystemTrayFrameGrid";
+    }).try_as<Grid>();
+    if (!trayGrid) return;
+
+    for (auto& bar : g_secondaryBars)
+        if (bar.trayGrid == trayGrid) return;  // already known
+
+    // Defensive: skip trays that somehow already contain our bar.
+    for (auto child : trayGrid.Children()) {
+        if (auto fe = child.try_as<FrameworkElement>(); fe && fe.Name() == L"VdSwitcherBar")
+            return;
+    }
+
+    SecondaryBar bar;
+    bar.trayGrid = trayGrid;
+    if (WantSecondaryBars()) {
+        auto grid = BuildButtonGrid(g_desktopCount.load(), g_currentDesktop.load());
+        InsertGridIntoTrayColumns(bar.trayGrid, grid);
+        bar.buttonGrid = grid;
+        Wh_Log(L"[Inject] VdSwitcherBar on secondary taskbar (%u registered)",
+               (unsigned)(g_secondaryBars.size() + 1));
+    }
+    g_secondaryBars.push_back(std::move(bar));
+}
+
+// Rebuild the button grid on the UI thread. Always a full rebuild: button
+// backgrounds use lightweight styling resources (ButtonBackground etc.), and
+// {ThemeResource} references resolve once at template application — swapping
+// the resources on a live button has no effect, so in-place highlight updates
+// can't work. Freshly built buttons resolve correctly.
+static void RebuildButtonGrid() {
     int count   = ReadDesktopCount();
     int current = ReadCurrentDesktop();
-    bool countChanged = (count != g_desktopCount.load());
     g_desktopCount.store(count);
     g_currentDesktop.store(current);
+
+    // Secondary bars first — RefreshSecondaryBars handles the hideWhenSingle
+    // and toggle-off cases internally, so it must run before the early returns.
+    RefreshSecondaryBars();
 
     if (g_settings.hideWhenSingle) {
         if (count <= 1) {
@@ -2104,62 +2389,58 @@ static void RebuildOrUpdate(bool fullRebuild) {
         }
     }
 
-    if (fullRebuild || countChanged) {
-        if (!g_buttonGrid) { ApplyAllSettings(); return; }
-        Grid gridParent{nullptr};
-        uint32_t idx;
-        if (g_startOverlayMode) {
-            if (!g_injectionParent) { ApplyAllSettings(); return; }
-            gridParent = g_injectionParent.try_as<Grid>();
-            if (!gridParent || !gridParent.Children().IndexOf(g_buttonGrid, idx)) {
-                g_buttonGrid = nullptr;
-                g_injectionParent = nullptr;
-                g_injectedColumn = -1;
-                ApplyAllSettings();
-                return;
-            }
-        } else {
-            // Use the live XAML tree — g_injectionParent may be stale if Windows
-            // rebuilt the tray after a desktop add/remove.
-            gridParent = FindLiveSystemTrayFrameGrid();
-            if (!gridParent) {
-                // XAML tree temporarily inaccessible (e.g., mid-rebuild by Windows).
-                // Do NOT null g_buttonGrid — the grid is still in the tree; we just
-                // can't reach it right now. The next notification will retry.
-                Wh_Log(L"[Rebuild] XAML tree not accessible, deferring");
-                return;
-            }
-            if (!gridParent.Children().IndexOf(g_buttonGrid, idx)) {
-                // Our grid is genuinely gone (tray was rebuilt). Reinject from scratch.
-                g_buttonGrid = nullptr;
-                g_injectionParent = nullptr;
-                g_injectedColumn = -1;
-                ApplyAllSettings();
-                return;
-            }
+    if (!g_buttonGrid) { ApplyAllSettings(); return; }
+    Grid gridParent{nullptr};
+    uint32_t idx;
+    if (g_startOverlayMode) {
+        if (!g_injectionParent) { ApplyAllSettings(); return; }
+        gridParent = g_injectionParent.try_as<Grid>();
+        if (!gridParent || !gridParent.Children().IndexOf(g_buttonGrid, idx)) {
+            g_buttonGrid = nullptr;
+            g_injectionParent = nullptr;
+            g_injectedColumn = -1;
+            ApplyAllSettings();
+            return;
         }
-        // Capture the live column BEFORE removing the old grid, so even if
-        // g_injectedColumn is stale (columns were renumbered by Windows), we
-        // reinsert at the correct position.
-        int liveColumn = g_startOverlayMode ? 0 : Grid::GetColumn(g_buttonGrid);
-        gridParent.Children().RemoveAt(idx);
-        g_buttonGrid = BuildButtonGrid(count, current);
-        if (g_startOverlayMode) {
-            Grid::SetColumn(g_buttonGrid, 0);
-            Grid::SetColumnSpan(g_buttonGrid, std::max(1, (int)gridParent.ColumnDefinitions().Size()));
-            Canvas::SetZIndex(g_buttonGrid, 1000);
-            g_buttonGrid.IsHitTestVisible(true);
-        } else if (liveColumn >= 0) {
-            Grid::SetColumn(g_buttonGrid, liveColumn);
-            g_injectedColumn = liveColumn;
-            Canvas::SetZIndex(g_buttonGrid, 10000);
-        }
-        gridParent.Children().InsertAt(idx, g_buttonGrid);
-        if (g_startOverlayMode)
-            PositionButtonGridNearStart();
     } else {
-        UpdateHighlights(current);
+        // Use the live XAML tree — g_injectionParent may be stale if Windows
+        // rebuilt the tray after a desktop add/remove.
+        gridParent = FindLiveSystemTrayFrameGrid();
+        if (!gridParent) {
+            // XAML tree temporarily inaccessible (e.g., mid-rebuild by Windows).
+            // Do NOT null g_buttonGrid — the grid is still in the tree; we just
+            // can't reach it right now. The next notification will retry.
+            Wh_Log(L"[Rebuild] XAML tree not accessible, deferring");
+            return;
+        }
+        if (!gridParent.Children().IndexOf(g_buttonGrid, idx)) {
+            // Our grid is genuinely gone (tray was rebuilt). Reinject from scratch.
+            g_buttonGrid = nullptr;
+            g_injectionParent = nullptr;
+            g_injectedColumn = -1;
+            ApplyAllSettings();
+            return;
+        }
     }
+    // Capture the live column BEFORE removing the old grid, so even if
+    // g_injectedColumn is stale (columns were renumbered by Windows), we
+    // reinsert at the correct position.
+    int liveColumn = g_startOverlayMode ? 0 : Grid::GetColumn(g_buttonGrid);
+    gridParent.Children().RemoveAt(idx);
+    g_buttonGrid = BuildButtonGrid(count, current);
+    if (g_startOverlayMode) {
+        Grid::SetColumn(g_buttonGrid, 0);
+        Grid::SetColumnSpan(g_buttonGrid, std::max(1, (int)gridParent.ColumnDefinitions().Size()));
+        Canvas::SetZIndex(g_buttonGrid, 1000);
+        g_buttonGrid.IsHitTestVisible(true);
+    } else if (liveColumn >= 0) {
+        Grid::SetColumn(g_buttonGrid, liveColumn);
+        g_injectedColumn = liveColumn;
+        Canvas::SetZIndex(g_buttonGrid, 10000);
+    }
+    gridParent.Children().InsertAt(idx, g_buttonGrid);
+    if (g_startOverlayMode)
+        PositionButtonGridNearStart();
 }
 
 // ============================================================
@@ -2201,7 +2482,10 @@ IconView_IconView_t IconView_IconView_Original;
 
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     auto result = IconView_IconView_Original(pThis);
-    if (g_unloading || g_buttonGrid) return result;
+    if (g_unloading) return result;
+    // Once the primary grid exists this hook is only needed to discover
+    // secondary taskbars, which only matters with the multi-monitor toggle on.
+    if (g_buttonGrid && !g_settings.multiMonitor) return result;
 
     // Defer until the element is live in the XAML tree. Calling ApplyAllSettings
     // immediately from the constructor fires before the XamlRoot is stable, causing
@@ -2220,10 +2504,19 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
     auto autoRevokerIt = std::prev(g_autoRevokerList.end());
     *autoRevokerIt = iconView.Loaded(
         winrt::auto_revoke_t{},
-        [autoRevokerIt](auto const&, auto const&) {
+        [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
+                        auto const&) {
             g_autoRevokerList.erase(autoRevokerIt);
-            if (!g_unloading && !g_buttonGrid)
+            if (g_unloading)
+                return;
+            if (!g_buttonGrid)
                 ApplyAllSettingsOnWindowThread();
+            // The sender's XamlRoot identifies the taskbar hosting this icon —
+            // register it if it is a secondary taskbar.
+            if (g_settings.multiMonitor) {
+                if (auto fe = sender.try_as<FrameworkElement>())
+                    RegisterSecondaryTrayFromElement(fe);
+            }
         });
 
     return result;
@@ -2286,7 +2579,7 @@ static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileNam
 // ============================================================
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[Init] VD Switcher v1.6");
+    Wh_Log(L"[Init] VD Switcher v1.7");
     LoadSettings();
     DetectExplorerBuild();
 
@@ -2304,9 +2597,9 @@ BOOL Wh_ModInit() {
             ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelbase, "LoadLibraryExW"))
             : nullptr;
         if (pLoadLibraryExW)
-            WindhawkUtils::Wh_SetFunctionHookT(pLoadLibraryExW,
-                                               LoadLibraryExW_Hook,
-                                               &LoadLibraryExW_Original);
+            WindhawkUtils::SetFunctionHook(pLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
     }
     return TRUE;
 }
@@ -2357,10 +2650,14 @@ void Wh_ModUninit() {
         RunFromWindowThread(g_taskbarWnd, [](void*) {
             g_autoRevokerList.clear();
             RemoveButtonGrid();
+            RemoveSecondaryBars();
+            g_secondaryBars.clear();  // release WinRT refs on the UI thread
         }, nullptr);
     } else {
         g_autoRevokerList.clear();
         RemoveButtonGrid();
+        RemoveSecondaryBars();
+        g_secondaryBars.clear();
     }
 }
 
@@ -2380,5 +2677,8 @@ void Wh_ModSettingsChanged() {
     RunFromWindowThread(hWnd, [](void*) {
         RemoveButtonGrid();
         ApplyAllSettings();
+        // Apply the new settings (including the multi-monitor toggle) to any
+        // secondary taskbars discovered earlier.
+        RefreshSecondaryBars();
     }, nullptr);
 }
