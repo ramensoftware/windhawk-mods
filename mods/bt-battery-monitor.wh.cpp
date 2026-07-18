@@ -1886,6 +1886,21 @@ void WhTool_ModUninit() {
     Wh_Log(L"BTBat: Uninitialized");
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+////////////////////////////////////////////////////////////////////////////////
+
 std::atomic<bool> g_isToolModProcessLauncher{false};
 HANDLE g_toolModProcessMutex;
 
