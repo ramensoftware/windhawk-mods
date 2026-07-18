@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.1.5
+// @version 2.1.6
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.1.5"
+#define WH_MOD_VERSION L"2.1.6"
 #endif
 
 #include <windhawk_utils.h>
@@ -157,6 +157,7 @@ constexpr double kClusterDistanceKm = 80.0;
 constexpr int kScheduleRefreshIntervalMs = 15 * 60 * 1000;
 constexpr int kGeoAccessTimeoutMs = 8000;
 constexpr int kRunFromWindowTimeoutMs = 3000;
+constexpr int kExplorerRestartCooldownSec = 20;
 constexpr wchar_t kNotificationSoundUrl[] =
     L"https://raw.githubusercontent.com/n0tmar/PrayerTray/main/windhawk/audio/allah-akbar.mp3";
 constexpr unsigned kNotificationSoundBytes = 85512;
@@ -2279,6 +2280,74 @@ void DestroyWin10Overlay();
 void RemoveTrayIcon();
 HWND FindCurrentProcessTaskbarWnd();
 
+bool SlotUiReady() {
+    if (g_backend.load() == TaskbarBackend::Win11Xaml) {
+        return g_slotInjected.load() && g_slotRoot;
+    }
+    return g_win10OverlayHwnd != nullptr;
+}
+
+bool ClaimExplorerRestart() {
+    const auto base = GetAppDataPrayerTrayPath();
+    if (base.empty()) {
+        return false;
+    }
+    CreateDirectoryW(base.c_str(), nullptr);
+    const std::wstring flag = base + L"\\explorer-restart.flag";
+
+    WIN32_FILE_ATTRIBUTE_DATA attrs{};
+    if (GetFileAttributesExW(flag.c_str(), GetFileExInfoStandard, &attrs)) {
+        FILETIME nowFt{};
+        GetSystemTimeAsFileTime(&nowFt);
+        ULARGE_INTEGER now{}, then{};
+        now.LowPart = nowFt.dwLowDateTime;
+        now.HighPart = nowFt.dwHighDateTime;
+        then.LowPart = attrs.ftLastWriteTime.dwLowDateTime;
+        then.HighPart = attrs.ftLastWriteTime.dwHighDateTime;
+        const ULONGLONG ageSec = (now.QuadPart - then.QuadPart) / 10000000ULL;
+        if (ageSec < static_cast<ULONGLONG>(kExplorerRestartCooldownSec)) {
+            Wh_Log(L"Explorer restart skipped (cooldown %llu s)", ageSec);
+            return false;
+        }
+    }
+
+    std::ofstream out(flag.c_str(), std::ios::trunc);
+    out << "1";
+    return static_cast<bool>(out);
+}
+
+void ScheduleExplorerRestart() {
+    // Detached helper so we don't kill this explorer mid-call.
+    wchar_t cmd[] =
+        L"cmd.exe /d /c \"ping -n 2 127.0.0.1 >nul & "
+        L"taskkill /f /im explorer.exe >nul 2>&1 & start explorer.exe\"";
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                        nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"Failed to schedule explorer restart (%u)", GetLastError());
+        return;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    Wh_Log(L"Scheduled explorer restart so the taskbar slot can inject");
+}
+
+void MaybeRestartExplorerForSlot() {
+    ApplyEngineToBackends();
+    if (SlotUiReady()) {
+        return;
+    }
+    if (!FindCurrentProcessTaskbarWnd()) {
+        // Folder explorers have no tray — don't kill the shell for them.
+        return;
+    }
+    if (!ClaimExplorerRestart()) {
+        return;
+    }
+    ScheduleExplorerRestart();
+}
 
 void EnsureContextMenu() {
     if (g_contextMenu) return;
@@ -3398,6 +3467,9 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 // One-shot startup inject retries.
                 KillTimer(hWnd, wParam);
                 ApplyEngineToBackends();
+            } else if (wParam == 8) {
+                KillTimer(hWnd, wParam);
+                MaybeRestartExplorerForSlot();
             }
             return 0;
         case WM_PT_UI_TICK:
@@ -3556,6 +3628,8 @@ void Wh_ModAfterInit() {
         SetTimer(g_messageHwnd, 5, 150, nullptr);
         SetTimer(g_messageHwnd, 6, 400, nullptr);
         SetTimer(g_messageHwnd, 7, 900, nullptr);
+        // If the slot still isn't there after retries, restart Explorer once.
+        SetTimer(g_messageHwnd, 8, 2500, nullptr);
     }
 }
 
