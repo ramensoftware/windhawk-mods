@@ -1,3 +1,14 @@
+## 1.5 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b00037cb502ab29dc6f0290861e1b776142118e4/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added the following themes: MicaTabless, OS26 Liquid Glass, ZEUSosX_044, Compact Explorer11.
+* Updated the LiquidGlass theme.
+* Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.
+* Added a way to match any number of intermediate parent controls, for example: `ParentClass > * > Class#Name`.
+* Added a way to match root controls, for example: `:root > Class#Name`.
+* Added `FallbackColor` property to `WindhawkBlur`.
+* Improved `ThemeResource` handling for `WindhawkBlur`.
+* Improved property matching which now works for more properties.
+
 ## 1.4 ([Mar 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9c7f3656e98a7ece5e213dae90a01b8b8fe4ed5a/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added the LiquidGlass theme.

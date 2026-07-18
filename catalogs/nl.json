@@ -15056,7 +15056,7 @@
           1538
         ],
         "ratingUsers": 2022,
-        "updated": 1774039824000,
+        "updated": 1784391746000,
         "users": 194730
       },
       "metadata": {
@@ -15064,7 +15064,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+        "compilerOptions": "-lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject",
         "description": "Customize the File Explorer with themes contributed by others or create your own",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -15073,7 +15073,7 @@
         ],
         "name": "Windows 11 File Explorer Styler",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.4"
+        "version": "1.5"
       }
     },
     "windows-11-notification-center-styler": {

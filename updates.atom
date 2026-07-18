@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T13:54:03.000Z</updated>
+    <updated>2026-07-18T16:22:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.5]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#b00037cb502ab29dc6f0290861e1b776142118e4</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2026-07-18T16:22:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: MicaTabless, OS26 Liquid Glass, ZEUSosX_044, Compact Explorer11.</li>
+<li>Updated the LiquidGlass theme.</li>
+<li>Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.</li>
+<li>Added a way to match any number of intermediate parent controls, for example: <code>ParentClass &gt; * &gt; Class#Name</code>.</li>
+<li>Added a way to match root controls, for example: <code>:root &gt; Class#Name</code>.</li>
+<li>Added <code>FallbackColor</code> property to <code>WindhawkBlur</code>.</li>
+<li>Improved <code>ThemeResource</code> handling for <code>WindhawkBlur</code>.</li>
+<li>Improved property matching which now works for more properties.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 3.5.0]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-properties#665c18c2b5496c14e8c8a6a935291cbe8a62c3f6</id>
@@ -905,17 +925,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Dock Animation Plus 2.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-dock-animation-plus#d8457487c989d6e919c16c2248291af2ae3aa338</id>
-        <link href="https://windhawk.net/mods/taskbar-dock-animation-plus"/>
-        <updated>2026-07-13T22:54:16.000Z</updated>
-        <content type="html"><![CDATA[<p>update mod description and added successor details</p>]]></content>
-        <author>
-            <name>incconutwo</name>
-            <uri>https://github.com/incconutwo</uri>
         </author>
     </entry>
 </feed>
