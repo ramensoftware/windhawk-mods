@@ -15063,7 +15063,7 @@
           2746
         ],
         "ratingUsers": 3222,
-        "updated": 1778340153000,
+        "updated": 1784376538000,
         "users": 424823
       },
       "metadata": {
@@ -15071,7 +15071,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
         "description": "Customize the Notification Center and Action Center with themes contributed by others or create your own",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -15081,7 +15081,7 @@
         ],
         "name": "Windows 11 Notification Center Styler",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.5"
+        "version": "1.6"
       }
     },
     "windows-11-settings-styler": {

@@ -1,3 +1,10 @@
+## 1.6 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fe719ff30cfa77714e643de3a28f103a9aa7950a/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added themes: Densy, FrostyGlass.
+* Updated the TranslucentShell theme.
+* Adjusted several themes to be compatible with recent notification changes in Windows 11.
+* Added string literals support for substitution expressions, for example: `` Text={{var == `a` ? `b` : `c`}} ``.
+
 ## 1.5 ([May 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bd2fbb3ba729988e29eee1dd1df1cabea135c144/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added themes: LiquidGlass, BetterControl11, LayerMicaUI, Borderless.
