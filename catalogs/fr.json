@@ -2104,7 +2104,7 @@
           6
         ],
         "ratingUsers": 6,
-        "updated": 1783442556000,
+        "updated": 1784382843000,
         "users": 369
       },
       "metadata": {
@@ -2116,7 +2116,7 @@
           "explorer.exe"
         ],
         "name": "Classic Taskbar and Start Menu Properties",
-        "version": "3.2.0"
+        "version": "3.5.0"
       }
     },
     "classic-taskdlg-fix": {
@@ -6832,7 +6832,7 @@
           28
         ],
         "ratingUsers": 44,
-        "updated": 1783833184000,
+        "updated": 1784382822000,
         "users": 801
       },
       "metadata": {
@@ -6840,7 +6840,7 @@
           "x86-64"
         ],
         "author": "usho",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp -lcomctl32",
         "description": "Dynamic island-like media controls for the Windows 11 taskbar.",
         "github": "https://github.com/usho-lear",
         "include": [
@@ -6848,7 +6848,7 @@
         ],
         "license": "MIT",
         "name": "Island Media Controls",
-        "version": "0.9.146"
+        "version": "0.9.211"
       }
     },
     "isretailready-false": {

@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T13:50:33.000Z</updated>
+    <updated>2026-07-18T13:54:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar and Start Menu Properties 3.5.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-properties#665c18c2b5496c14e8c8a6a935291cbe8a62c3f6</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-properties"/>
+        <updated>2026-07-18T13:54:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added multi monitor support</li>
+<li>Enhanced the interface to make it more similar to the original Windows 7 one</li>
+<li>Minor stability improvements</li>
+<li>Added German and Portoguese translations</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Island Media Controls 0.9.211]]></title>
+        <id>https://windhawk.net/mods/island-media-controls#427a0adad1078cb37b0f397ce82f77b39ed9bd3b</id>
+        <link href="https://windhawk.net/mods/island-media-controls"/>
+        <updated>2026-07-18T13:53:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a compact expanded layout that places the album cover beside the title and artist, reducing pointer travel to the playback controls.</li>
+<li>Add taskbar-position awareness, including support for Taskbar on top for Windows 11: the popup direction, component layout, and album wash adapt to the taskbar position.</li>
+<li>Refine expand and collapse animations so the compact island, artwork, progress bar, playback controls, text, corner radius, and live backdrop morph more cohesively.</li>
+<li>Restore display-refresh-rate-synchronized live blur without the temporary 60 FPS animation cap or 15 FPS settled-state cap.</li>
+<li>Optimize Acrylic and Liquid Glass with WGC dirty-region rendering, Direct2D effect-graph composition, cached GPU resources, and fewer full-size intermediate render passes.</li>
+<li>Serialize WGC frame rendering, DirectComposition updates, and live-blur render snapshots under the overlay mutex to avoid free-threaded capture races with UI-thread animation and settings updates.</li>
+<li>Improve Acrylic and Liquid Glass interaction stability, reducing flicker, self-sampling, invisible overlay hit-test issues, and repeated-toggle stalls.</li>
+<li>Refine the Liquid Glass edge refraction and strengthen the light-mode backdrop and playback-control tint for clearer surface shape.</li>
+<li>Increase the playback-control album-wash layer opacity so the control card reads as more strongly blurred.</li>
+<li>Improve light-mode visibility by keeping the album-art wash enabled for Liquid Glass.</li>
+<li>Remove obsolete CPU WGC presentation, native-blur handoff, diagnostic, and unused animation helper paths while preserving the recording-mode static blur fallback.</li>
+<li>Update the default settings to the currently tuned setup while keeping browser thumbnails as the default artwork mode.</li>
+<li>Refresh the README and What's new sections to focus on user-facing features.</li>
+<li>Use SetWindowSubclass/RemoveWindowSubclass for safe popup XAML child cleanup.</li>
+</ul>]]></content>
+        <author>
+            <name>usho</name>
+            <uri>https://github.com/usho-lear</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 1.7]]></title>
         <id>https://windhawk.net/mods/taskbar-vd-switcher#64411041fc07359947b0b6a3f85ff5b83361df57</id>
@@ -874,72 +916,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>incconutwo</name>
             <uri>https://github.com/incconutwo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always On Top Windows 1.1]]></title>
-        <id>https://windhawk.net/mods/always-on-top#c0198738db007d4c83236e726efb078bd8ab0e76</id>
-        <link href="https://windhawk.net/mods/always-on-top"/>
-        <updated>2026-07-13T18:50:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alwaysontopwindows">Always On Top Windows</h1>
-<p><img src="https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/gif.gif" alt="Screenrecord" /></p>
-<h2 id="english">English</h2>
-<p>Press <strong><code>Ctrl+Alt+T</code></strong> to pin/unpin the active window on top of all other windows.</p>
-<p>This mod helps you multitask by keeping important windows always visible.</p>
-<p><strong>Features:</strong></p>
-<ul>
-<li>🔊 Sound notifications to indicate pin/unpin actions.</li>
-<li>⚡ Event-driven hotkey using <code>RegisterHotKey</code> (no continuous polling).</li>
-<li>🧹 Lightweight: runs as a tool in a dedicated <code>windhawk.exe</code> process.</li>
-</ul>
-<p><strong>Requirements:</strong></p>
-<ul>
-<li>Windhawk (latest version recommended).</li>
-<li>Windows 7 → Works efficiently</li>
-<li>Windows 8 → Works efficiently</li>
-<li>Windows 8.1 → Works efficiently</li>
-<li>Windows 10/11 → Not tested yet (if it works well for you, please let me know in Issues on GitHub)</li>
-</ul>
-<p><strong>Contributing:</strong></p>
-<h2 id="wewelcomecontributorsfeelfreetoopenissuesorpullrequestsongithub">We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.</h2>
-<h2 id="">العربية</h2>
-<p>اضغط <strong><code>Ctrl+Alt+T</code></strong> لتثبيت/إلغاء تثبيت النافذة النشطة فوق جميع النوافذ الأخرى.</p>
-<p>هذا المود يساعدك في تعدد المهام عن طريق تثبيت النوافذ المهمة لتظل مرئية دائماً.</p>
-<p><strong>المميزات:</strong></p>
-<ul>
-<li>🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.</li>
-<li>⚡ اختصار يعتمد على الأحداث (<code>RegisterHotKey</code>) بدون استقصاء مستمر.</li>
-<li>🧹 خفيف الوزن: يعمل كأداة في عملية مخصصة لـ <code>windhawk.exe</code>.</li>
-</ul>
-<p><strong>متطلبات النظام:</strong></p>
-<ul>
-<li>Windhawk (يفضل الإصدار الأحدث).</li>
-<li>ويندوز 7 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 8 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 8.1 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 10\11 --&gt; لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)</li>
-</ul>
-<p><strong>المساهمة:</strong>
-نرحب بالمساهمين! يمكنكم فتح Issues أو Pull Requests على GitHub.</p>]]></content>
-        <author>
-            <name>AhmedAwad7</name>
-            <uri>https://github.com/AhmedAwad7</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#6a8862447e3495d146a8b444be27f71bb46fcaa0</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-13T13:48:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds a new <strong>Animation style</strong> setting with two options: <strong>Modern</strong> (the Direct2D genie engine, default since v3.0.0) and <strong>Classic</strong> (this mod's original v2.2.0 strip-based genie).</li>
-<li>Some users who tried v3.0.0 said they preferred the original look, so this brings it back as an opt-in instead of replacing it.</li>
-<li>Both styles share the exact same setup, capture, taskbar targeting, first-frame sync, and auto-hide teardown path - only the per-frame render thread differs (<code>MacGenieAnimThreadClassic</code> vs <code>MacGenieAnimThread</code>), so multi-monitor, launch animation, and auto-hide all behave identically under either style.</li>
-<li>Readme updated: new "Animation style" section, Credits clarifies Modern = Potassiumuncher's engine, Classic = the mod's original.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>

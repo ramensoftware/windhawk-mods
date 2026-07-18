@@ -1,3 +1,10 @@
+## 3.5.0 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/665c18c2b5496c14e8c8a6a935291cbe8a62c3f6/mods/classic-taskbar-properties.wh.cpp))
+
+- Added multi monitor support
+- Enhanced the interface to make it more similar to the original Windows 7 one
+- Minor stability improvements
+- Added German and Portoguese translations
+
 ## 3.2.0 ([Jul 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2ca19110ad59c57cadefbfbf5f82d5a8c4732299/mods/classic-taskbar-properties.wh.cpp))
 
 - Window should now use native system colors

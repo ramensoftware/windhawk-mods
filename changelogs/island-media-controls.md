@@ -1,3 +1,20 @@
+## 0.9.211 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/427a0adad1078cb37b0f397ce82f77b39ed9bd3b/mods/island-media-controls.wh.cpp))
+
+- Add a compact expanded layout that places the album cover beside the title and artist, reducing pointer travel to the playback controls.
+- Add taskbar-position awareness, including support for Taskbar on top for Windows 11: the popup direction, component layout, and album wash adapt to the taskbar position.
+- Refine expand and collapse animations so the compact island, artwork, progress bar, playback controls, text, corner radius, and live backdrop morph more cohesively.
+- Restore display-refresh-rate-synchronized live blur without the temporary 60 FPS animation cap or 15 FPS settled-state cap.
+- Optimize Acrylic and Liquid Glass with WGC dirty-region rendering, Direct2D effect-graph composition, cached GPU resources, and fewer full-size intermediate render passes.
+- Serialize WGC frame rendering, DirectComposition updates, and live-blur render snapshots under the overlay mutex to avoid free-threaded capture races with UI-thread animation and settings updates.
+- Improve Acrylic and Liquid Glass interaction stability, reducing flicker, self-sampling, invisible overlay hit-test issues, and repeated-toggle stalls.
+- Refine the Liquid Glass edge refraction and strengthen the light-mode backdrop and playback-control tint for clearer surface shape.
+- Increase the playback-control album-wash layer opacity so the control card reads as more strongly blurred.
+- Improve light-mode visibility by keeping the album-art wash enabled for Liquid Glass.
+- Remove obsolete CPU WGC presentation, native-blur handoff, diagnostic, and unused animation helper paths while preserving the recording-mode static blur fallback.
+- Update the default settings to the currently tuned setup while keeping browser thumbnails as the default artwork mode.
+- Refresh the README and What's new sections to focus on user-facing features.
+- Use SetWindowSubclass/RemoveWindowSubclass for safe popup XAML child cleanup.
+
 ## 0.9.146 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a9b7eaed62566ac6fbe2fe5ea8371af1f475cced/mods/island-media-controls.wh.cpp))
 
 ### Materials and defaults
