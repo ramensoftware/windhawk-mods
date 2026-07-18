@@ -79,6 +79,8 @@ Pick how often the mod checks for updates, from **every second** to **once an ho
 */
 // ==/WindhawkModReadme==
 
+// ─── Win32 / CRT Headers ────────────────────────────────────────────────────
+
 #define NOMINMAX
 #include <windows.h>
 #include <bluetoothapis.h>
@@ -100,6 +102,8 @@ Pick how often the mod checks for updates, from **every second** to **once an ho
 #include <propsys.h>
 #include <sddl.h>
 
+// ─── Message & Menu Constants ────────────────────────────────────────────────
+
 #define WM_TRAY_CALLBACK (WM_USER + 1)
 #define WM_UPDATE_DEVICES (WM_USER + 2)
 #define WM_RELOAD_ALL (WM_USER + 3)
@@ -111,21 +115,27 @@ Pick how often the mod checks for updates, from **every second** to **once an ho
 #define MENU_OPEN_SETTINGS 9001
 #define MENU_OPEN_WINDHAWK 9000
 
-static const DEVPROPKEY DEVPKEY_Bluetooth_BatteryLevel = { {0x104ea319, 0x6ee2, 0x4701, {0xbd, 0x47, 0x8d, 0xdb, 0xf4, 0x25, 0xbb, 0xe5}}, 2 };
+// ─── Bluetooth Device Property Keys ─────────────────────────────────────────
+
+static const DEVPROPKEY DEVPKEY_Bluetooth_BatteryLevel  = { {0x104ea319, 0x6ee2, 0x4701, {0xbd, 0x47, 0x8d, 0xdb, 0xf4, 0x25, 0xbb, 0xe5}}, 2 };
 static const DEVPROPKEY DEVPKEY_Bluetooth_DeviceAddress = { {0xE57A6B4A, 0x21B8, 0x4B8A, {0xB4, 0xB4, 0x73, 0xB9, 0xF3, 0x58, 0xED, 0x60}}, 1 };
-static const DEVPROPKEY DEVPKEY_Device_FriendlyName = { {0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14 };
+static const DEVPROPKEY DEVPKEY_Device_FriendlyName   = { {0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14 };
 static const DEVPROPKEY DEVPKEY_Device_BusReportedDeviceDesc = { {0x540b947e, 0x8b40, 0x45bc, {0xa8, 0xa2, 0x6a, 0x0b, 0x89, 0x4c, 0xbd, 0xa2}}, 4 };
 static const DEVPROPKEY DEVPKEY_Bluetooth_IsConnected = { {0x2bd67d8b, 0x8beb, 0x48d5, {0x87, 0xe0, 0x6c, 0xda, 0x34, 0x28, 0x04, 0x0a}}, 1 };
 
+// ─── Device Interface GUIDs ──────────────────────────────────────────────────
+
 static const WCHAR MEDIA_CLASS_GUID_STRING[] = L"{4d36e96c-e325-11ce-bfc1-08002be10318}";
 static const GUID GUID_BLUETOOTH_GATT_SERVICE_DEVICE_INTERFACE = {0x6E1BB058, 0x02B4, 0x4B0C, {0x9F, 0xDE, 0x6C, 0x9A, 0x04, 0xCE, 0xB7, 0x12}};
-
 static const GUID GUID_DEVINTERFACE_HID = {0x4d1e55b2, 0xf16f, 0x11cf, {0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}};
 
+// Stable GUID that gives our tray icon a process-independent identity.
 static const GUID GUID_BTBAT_TRAY =
     {0x7b1e9a3f, 0x2c5d, 0x4a8e, {0x9b, 0x6f, 0x1d, 0x3e, 0x5a, 0x7c, 0x8b, 0x4d}};
 
 static const GUID GUID_BTBAT_BTHPORT = {0x0850302A, 0xB344, 0x4fda, {0x9B, 0xE5, 0x22, 0x5C, 0x96, 0x69, 0x50, 0x20}};
+
+// ─── DeviceInfo ──────────────────────────────────────────────────────────────
 
 struct DeviceInfo {
     std::wstring name;
@@ -136,14 +146,19 @@ struct DeviceInfo {
     bool isKeyboard = false;
 };
 
-// --- Globals ---
+// ─── Globals ─────────────────────────────────────────────────────────────────
+
 static std::atomic<HWND> g_hwnd{nullptr};
 static std::vector<DeviceInfo> g_devices;
 static CRITICAL_SECTION g_devicesLock;
+
+// Thread sync
 static HANDLE g_shutdownEvent = NULL;
 static HANDLE g_rescanEvent = NULL;
 static HANDLE g_scannerThread = NULL;
 static HANDLE g_trayThread = NULL;
+
+// Cached icon handles (per device type)
 static HICON g_hIconDisconnected = NULL;
 static HICON g_hIconKeyboard = NULL;
 static HICON g_hIconMouse = NULL;
@@ -153,10 +168,14 @@ static HICON g_hIconMulti = NULL;
 static HICON g_hIconLowBatRed = NULL;
 static HICON g_hIconLowBatBlack = NULL;
 static HBITMAP g_hWindHawkBmp = nullptr;
+
 static WCHAR g_windhawkPath[MAX_PATH] = {};
 static UINT g_taskbarCreatedMsg = 0;
+
+// Settings (atomically readable from any thread)
 static std::atomic<LONG> g_refreshIntervalMs{10000};
 static std::atomic<int> g_warningThreshold{30};
+
 // Dashboard GUI thread
 static HANDLE g_guiThread = nullptr;
 static HWND g_dashboardHwnd = nullptr;
@@ -164,6 +183,7 @@ static LONG g_guiRunning = 0;
 
 static std::atomic<bool> g_iconsAvailable{true};
 
+// Device notification handles
 static HDEVNOTIFY g_hNotifyHid = nullptr;
 static HDEVNOTIFY g_hNotifyGatt = nullptr;
 static HDEVNOTIFY g_hNotifyBthPort = nullptr;
@@ -171,6 +191,8 @@ static HDEVNOTIFY g_hNotifyBthPort = nullptr;
 namespace BTBatGui {
     HANDLE LaunchDashboard(HWND hTrayHwnd);
 }
+
+// ─── Icon Helpers ────────────────────────────────────────────────────────────
 
 static int GetIconIndex(PCWSTR s) {
     if (!s) return 108; // default to controller
@@ -183,6 +205,7 @@ static int GetIconIndex(PCWSTR s) {
     return 108;
 }
 
+// Check a custom .ico path for basic sanity — no traversal, must end in .ico
 static bool IsValidIconPath(PCWSTR path) {
     if (!path || !path[0]) return false;
     if (wcsstr(path, L"..") != NULL) return false;
@@ -191,6 +214,7 @@ static bool IsValidIconPath(PCWSTR path) {
     return _wcsicmp(path + len - 4, L".ico") == 0;
 }
 
+// Generate a solid-color circle icon programmatically (used for low-battery flash states)
 static HICON CreateColorIcon(BYTE r, BYTE g, BYTE b, int size) {
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -250,6 +274,7 @@ static HICON CreateColorIcon(BYTE r, BYTE g, BYTE b, int size) {
     return hIcon;
 }
 
+// Generate a white X icon for the "no connected devices" state
 static HICON CreateXIcon(int size) {
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -304,6 +329,7 @@ static HICON CreateXIcon(int size) {
     return hIcon;
 }
 
+// Free all cached icon / GDI resources
 static void DestroyIcons() {
     if (g_hIconDisconnected) { DestroyIcon(g_hIconDisconnected); g_hIconDisconnected = NULL; }
     if (g_hIconKeyboard) { DestroyIcon(g_hIconKeyboard); g_hIconKeyboard = NULL; }
@@ -318,6 +344,7 @@ static void DestroyIcons() {
 
 static void LoadSettings();
 
+// Load or generate all tray icons — falls back to programmatic icons if ddores.dll unavailable
 static bool CreateIcons() {
     WCHAR sysPath[MAX_PATH];
     if (!GetSystemDirectoryW(sysPath, MAX_PATH)) return false;
@@ -355,6 +382,9 @@ static bool CreateIcons() {
     return true;
 }
 
+// ─── Bluetooth Battery Reading ────────────────────────────────────────────
+
+// Poll battery from Bluetooth media class device tree (most accurate source)
 static void GetBatteryFromMediaClass(std::vector<DeviceInfo>& devices) {
     ULONG listSize = 0;
     CONFIGRET cr = CM_Get_Device_ID_List_SizeW(&listSize, MEDIA_CLASS_GUID_STRING, CM_GETIDLIST_FILTER_PRESENT);
@@ -398,6 +428,7 @@ static void GetBatteryFromMediaClass(std::vector<DeviceInfo>& devices) {
     }
 }
 
+// Fallback: read battery from BTHLE registry DeviceBattery values
 static void GetBatteryFromRegistry(std::vector<DeviceInfo>& devices) {
     for (auto& dev : devices) {
         if (dev.batteryPercent >= 0) continue;
@@ -424,6 +455,7 @@ static void GetBatteryFromRegistry(std::vector<DeviceInfo>& devices) {
     }
 }
 
+// Walk the devnode tree to see if this device has a Keyboard-class child
 static bool IsKeyboardDevice(DEVINST devInst) {
     std::vector<DEVINST> stack;
     stack.push_back(devInst);
@@ -447,6 +479,9 @@ static bool IsKeyboardDevice(DEVINST devInst) {
     return false;
 }
 
+// ─── Utilities ────────────────────────────────────────────────────────────
+
+// RAII wrapper around CRITICAL_SECTION
 struct CsLock {
     CRITICAL_SECTION& cs;
     CsLock(CRITICAL_SECTION& c) : cs(c) { EnterCriticalSection(&cs); }
@@ -503,6 +538,7 @@ static bool HasActiveInterface(DEVINST devInst) {
 
 enum DeviceType { DEVICE_UNKNOWN, DEVICE_KEYBOARD, DEVICE_MOUSE, DEVICE_HEADPHONES, DEVICE_CONTROLLER };
 
+// Classify a device by its Class of Device and keyboard flag
 static DeviceType GetDeviceType(const DeviceInfo& d) {
     if (d.isKeyboard) return DEVICE_KEYBOARD;
     ULONG major = (d.classOfDevice & 0x1F00) >> 8;
@@ -520,6 +556,7 @@ static DeviceType GetDeviceType(const DeviceInfo& d) {
     return DEVICE_UNKNOWN;
 }
 
+// Enumerate BTHLE registry entries for BLE devices, read names + battery + connection
 static void EnumerateBthleDevices(std::vector<DeviceInfo>& devices, size_t maxCount) {
     HKEY hBthle;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Enum\\BTHLE", 0, KEY_READ, &hBthle) != ERROR_SUCCESS)
@@ -640,6 +677,7 @@ static void EnumerateBthleDevices(std::vector<DeviceInfo>& devices, size_t maxCo
     RegCloseKey(hBthle);
 }
 
+// Verify each device is still connected against the Bluetooth radio
 static void RefreshConnectedState(std::vector<DeviceInfo>& devices) {
     BLUETOOTH_FIND_RADIO_PARAMS params = {sizeof(params)};
     HANDLE hRadio;
@@ -663,6 +701,7 @@ static void RefreshConnectedState(std::vector<DeviceInfo>& devices) {
     BluetoothFindRadioClose(hFind);
 }
 
+// Check which BLE GATT interfaces are active right now
 static void RefreshBthleConnectedState(std::vector<DeviceInfo>& devices) {
     HDEVINFO hDevs = SetupDiGetClassDevsW(&GUID_BLUETOOTH_GATT_SERVICE_DEVICE_INTERFACE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (hDevs == INVALID_HANDLE_VALUE) return;
@@ -707,6 +746,9 @@ static void RefreshBthleConnectedState(std::vector<DeviceInfo>& devices) {
     SetupDiDestroyDeviceInfoList(hDevs);
 }
 
+// ─── Scanner Thread ──────────────────────────────────────────────────────────
+
+// Background polling thread — collects Bluetooth device data on interval or rescan signal
 static unsigned int __stdcall ScannerProc(void*) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
@@ -780,8 +822,12 @@ static unsigned int __stdcall ScannerProc(void*) {
     return 0;
 }
 
+// ─── Tray Icon ───────────────────────────────────────────────────────────
+
+// Mark icons as off-limits (during shutdown, before DestroyIcons)
 static void DisableIcons() { g_iconsAvailable.store(false); }
 
+// Refresh the shell tray icon to reflect the current lowest battery
 static void UpdateTrayIcon() {
     if (!g_iconsAvailable.load()) return;
     HWND hwnd = g_hwnd.load();
@@ -854,6 +900,7 @@ static void UpdateTrayIcon() {
     }
 }
 
+// Check Windows personalization setting for dark/light theme
 static bool IsSystemDarkMode() {
     DWORD value = 1, size = sizeof(value);
     RegGetValueW(HKEY_CURRENT_USER,
@@ -862,6 +909,7 @@ static bool IsSystemDarkMode() {
     return value == 0;
 }
 
+// Apply dark/light theme to the popup context menu via uxtheme ordinals
 static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
     HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
     if (!ux) return;
@@ -873,6 +921,7 @@ static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
     if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
 }
 
+// Build and show the right-click context menu with device list, rescan, and shortcuts
 static void ShowPopupMenu() {
     HWND hwnd = g_hwnd.load();
     if (!IsWindow(hwnd)) return;
@@ -955,6 +1004,9 @@ static void ShowPopupMenu() {
     }
 }
 
+// ─── Tray Window Proc ────────────────────────────────────────────────────────
+
+// Message handler for the hidden tray window — receives TaskbarCreated, timer, device change events
 static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (g_taskbarCreatedMsg != 0 && msg == g_taskbarCreatedMsg) {
         NOTIFYICONDATAW nid = {sizeof(nid)};
@@ -1015,6 +1067,9 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
+// ─── Settings Persistence ─────────────────────────────────────────────────
+
+// Load a device icon from storage (custom .ico path or ddores.dll preset)
 static HICON LoadCustomIcon(PCWSTR storageKey, PCWSTR defaultDll, int defaultIndex) {
     WCHAR iconKey[32] = {};
     HICON hIcon = nullptr;
@@ -1038,6 +1093,7 @@ static HICON LoadCustomIcon(PCWSTR storageKey, PCWSTR defaultDll, int defaultInd
     return hIcon;
 }
 
+// Read an integer setting from Windhawk string storage with a fallback default
 static int ReadIntStorage(PCWSTR storageKey, int defaultVal) {
     WCHAR buf[32] = {};
     if (Wh_GetStringValue(storageKey, buf, 32) && buf[0]) {
@@ -1046,6 +1102,7 @@ static int ReadIntStorage(PCWSTR storageKey, int defaultVal) {
     return defaultVal;
 }
 
+// Load all persisted settings from Windhawk storage and update cached globals + icon handles
 static void LoadSettings() {
     LONG val = ReadIntStorage(L"refreshIntervalMs", 10000);
     if (val < 1000) val = 1000;
@@ -1084,6 +1141,8 @@ static void LoadSettings() {
 }
 
 namespace BTBatGui {
+
+    // ─── Settings Dashboard (GUI) ──────────────────────────────────────────────
 
     // ── Palette ───────────────────────────────────────────────────────────────
     static const COLORREF kClrBg      = RGB(24, 24, 24);
@@ -1576,6 +1635,7 @@ namespace BTBatGui {
         return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
+    // Dashboard window thread — creates the Win32 GUI, runs message loop, cleans up on close
     static unsigned int __stdcall GuiThreadProc(void* lpParam) {
         HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
@@ -1641,6 +1701,7 @@ namespace BTBatGui {
         return 0;
     }
 
+    // Spawn the dashboard GUI thread (single-instance guarded by g_guiRunning)
     HANDLE LaunchDashboard(HWND hTrayHwnd) {
         if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0)
             return nullptr;
@@ -1652,6 +1713,9 @@ namespace BTBatGui {
 
 } // namespace BTBatGui
 
+// ─── Tray Thread ─────────────────────────────────────────────────────────
+
+// Hidden window thread — registers the tray icon, listens for events, runs message pump
 static unsigned int __stdcall TrayThreadProc(void*) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
@@ -1739,8 +1803,11 @@ static unsigned int __stdcall TrayThreadProc(void*) {
     return 0;
 }
 
+// ─── Mod Lifecycle ───────────────────────────────────────────────────────
+
 static LONG g_initComplete = FALSE;
 
+// Windhawk tool mod entry point — create threads, load icons, start scanning
 BOOL WhTool_ModInit() {
     if (InterlockedCompareExchange(&g_initComplete, TRUE, FALSE))
         return TRUE;
@@ -1807,6 +1874,7 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 
+// Reload settings and refresh all icons
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"BTBat: Settings changed");
     HWND hwnd = g_hwnd.load();
