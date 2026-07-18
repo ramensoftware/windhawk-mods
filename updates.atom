@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T13:29:22.000Z</updated>
+    <updated>2026-07-18T13:50:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 1.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-vd-switcher#64411041fc07359947b0b6a3f85ff5b83361df57</id>
+        <link href="https://windhawk.net/mods/taskbar-vd-switcher"/>
+        <updated>2026-07-18T13:50:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the active-desktop highlight sticking to the startup desktop: every desktop notification now fully rebuilds the button grid (lightweight-styling resources resolve once at template application, so in-place swaps never took effect). This may also resolve the hover/hit-test report in #4784</li>
+<li>Fixed inactive buttons becoming partially unclickable after switching desktops</li>
+<li>Windows accent color support: color settings accept <code>accent</code>, <code>accentLight</code>, <code>accentDark</code>, and <code>transparent</code> in addition to hex; the active desktop now uses the Windows accent color by default (empty = plain native surface)</li>
+<li>Experimental "Show on all taskbars" option: also injects the switcher into secondary monitors' taskbars (tray positions only; requested in a comment on #4785)</li>
+<li>Renamed "Master button" to "Task View button" in settings and readme</li>
+<li>Settings page reordered so color/state options follow a consistent order; expanded readme with screenshot gallery, feature summary, and full settings table</li>
+</ul>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Copy Queue 1.0]]></title>
         <id>https://windhawk.net/mods/copy-queue#889a5cd1a64c886634dd4db19e86334a59d7173a</id>
@@ -919,30 +937,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
 <li>Both styles share the exact same setup, capture, taskbar targeting, first-frame sync, and auto-hide teardown path - only the per-frame render thread differs (<code>MacGenieAnimThreadClassic</code> vs <code>MacGenieAnimThread</code>), so multi-monitor, launch animation, and auto-hide all behave identically under either style.</li>
 <li>Readme updated: new "Animation style" section, Credits clarifies Modern = Potassiumuncher's engine, Classic = the mod's original.</li>
 </ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.0.0]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#a5349ec77189b66033f27c0e3c0ac7119a2b2545</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-13T07:41:26.000Z</updated>
-        <content type="html"><![CDATA[<p>New Direct2D genie renderer</p>
-<p>This release replaces the previous CPU-warp animation with a proper <strong>Direct2D genie renderer</strong> (a 20×20 mesh warp driven by the macOS "lamp" curve). The rendering engine, the UI Automation taskbar-button targeting, and the taskbar auto-hide handling were contributed by <strong>Potassiumuncher</strong> (https://github.com/Potassiumuncher) — huge thanks. The animation that now plays is his engine, integrated into this mod's hardening (six-hook capture, flash-free DWM-cloak restore, worker-drain on unload, first-frame sync).</p>
-<h3 id="whatsnewfixed">What's new / fixed</h3>
-<ul>
-<li><strong>Direct2D genie mesh</strong> — the whole frame necks down and funnels into the taskbar instead of a coarse strip warp.</li>
-<li><strong>Accurate taskbar targeting</strong> — locates the app's actual taskbar button via UI Automation (with a per-window / per-process cache), falling back to the cursor/center.</li>
-<li><strong>Pixel-aligned capture</strong> — geometry now comes from <code>DWMWA_EXTENDED_FRAME_BOUNDS</code>, so keyboard / AutoHotkey minimizes are no longer spatially shifted (#4670).</li>
-<li><strong>Translucency fix</strong> — minimize snapshots are taken from the composited screen image, so acrylic/translucent windows no longer flash grey or opaque.</li>
-<li><strong>Taskbar auto-hide</strong> — optional: briefly reveals an auto-hidden taskbar so the genie has a dock to flow into, then defers the real minimize.</li>
-</ul>
-<h3 id="preservedhardening">Preserved hardening</h3>
-<p>Six minimize/restore entry-point hooks (<code>ShowWindow</code>, <code>ShowWindowAsync</code>, <code>SetWindowPlacement</code>, <code>CloseWindow</code>, <code>SetWindowPos</code>, <code>DefWindowProcW</code>), DWM-cloak flash-free restore, first-frame sync event, <code>DwmFlush</code> vsync pacing, one-genie-per-window guard, and worker-thread drain on unload.</p>
-<h3 id="knownissue">Known issue</h3>
-<p>On multi-monitor setups (especially the secondary display), the genie can briefly slide sideways / to the left for a frame or two at the start of a minimize or restore before it flows toward the taskbar. The animation still completes correctly. Documented in the readme; a fix is planned for a follow-up.</p>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>

@@ -12711,7 +12711,7 @@
           7
         ],
         "ratingUsers": 11,
-        "updated": 1781724626000,
+        "updated": 1784382633000,
         "users": 115
       },
       "metadata": {
@@ -12726,7 +12726,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Virtual Desktop Switcher",
-        "version": "1.5"
+        "version": "1.7"
       }
     },
     "taskbar-vertical": {
