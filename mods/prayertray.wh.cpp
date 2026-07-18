@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.1.4
+// @version 2.1.5
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.1.4"
+#define WH_MOD_VERSION L"2.1.5"
 #endif
 
 #include <windhawk_utils.h>
@@ -3513,13 +3513,6 @@ void ShutdownUi() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-    // Folder-window explorers also match @include explorer.exe but have no
-    // taskbar. Loading there races the shell explorer and delays the slot.
-    if (!FindCurrentProcessTaskbarWnd()) {
-        Wh_Log(L"No Shell_TrayWnd in this process — skipping (not shell explorer)");
-        return FALSE;
-    }
-
     LoadSettings();
     SelectBackend();
     EnsureMessageWindow();
@@ -3535,7 +3528,8 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Cache first so the slot has text immediately; network refresh is async.
+    // Never bail out of Wh_ModInit if Shell_TrayWnd is briefly missing (explorer
+    // restart / enable race). Slot inject already no-ops until the tray exists.
     BootstrapFromCache();
     g_injectRetryMs = 100;
     g_uiTimerIntervalMs = 100;
