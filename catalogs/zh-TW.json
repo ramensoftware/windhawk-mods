@@ -3255,6 +3255,35 @@
         "version": "1.1"
       }
     },
+    "desktop-marquee-fade": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784393367000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784393367000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "angel_lov",
+        "compilerOptions": "-luser32 -lgdi32",
+        "description": "Adds a smooth fade-out animation to the desktop selection rectangle when you release the mouse button.",
+        "github": "https://github.com/Twilight0Sparkle",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Marquee Fade",
+        "version": "1.0.0"
+      }
+    },
     "desktop-no-view-menu": {
       "details": {
         "defaultSorting": 666,

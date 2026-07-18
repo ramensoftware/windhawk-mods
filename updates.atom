@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T16:22:26.000Z</updated>
+    <updated>2026-07-18T16:49:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Marquee Fade 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-marquee-fade#9844dd6581b5594ed8a8a601388d96d6e293f23f</id>
+        <link href="https://windhawk.net/mods/desktop-marquee-fade"/>
+        <updated>2026-07-18T16:49:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopmarqueefade">Desktop Marquee Fade</h1>
+<p>Adds a smooth fade animation to the desktop selection rectangle.
+Instead of vanishing instantly when you release the mouse button, the
+selection area dissolves gracefully — making the Windows desktop feel
+more polished and modern.</p>
+<p><img src="https://i.imgur.com/oH4fh6O.gif" alt="preview" /></p>
+<hr />
+<h2 id="keyfeatures">Key Features</h2>
+<ul>
+<li><strong>Smooth Fade Effect</strong> — The selection rectangle fades out instead of
+disappearing instantly.</li>
+<li><strong>Highly Customizable</strong> — Adjust animation speed and duration via mod
+settings.</li>
+<li><strong>Smart Auto-Opacity</strong> — Automatically calculates the starting opacity to
+match your speed and duration so the animation always looks natural.</li>
+<li><strong>Smart Interrupt</strong> — If another window comes to the foreground while the
+animation is playing, the mod speeds it up 4x to stay out of your way.</li>
+<li><strong>Single Instance Mode</strong> — Prevents overlapping animations; only one
+selection rectangle fades at a time.</li>
+<li><strong>Custom Fade Colors</strong> — Override the fill and border colors used by the
+fade overlay. Only the fade overlay is affected — your system-wide
+selection colors are never touched.</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Click and drag on the desktop to draw a selection rectangle.</li>
+<li>Release the mouse button — the rectangle fades out smoothly.</li>
+</ol>
+<h2 id="configuration">Configuration</h2>
+<p>| Setting | Default | Description |
+|---|---|---|
+| Animation Speed (%) | 100 | Multiplier for how fast the animation runs (50–500). |
+| Animation Duration (ms) | 300 | Total time the fade lasts (100–2000 ms). |
+| Auto-calculate Opacity | Off | Scales starting opacity automatically to match speed/duration. |
+| Manual Initial Opacity | 90 | Starting alpha (1–255) when auto-calculate is off. |
+| Accelerate if Covered | On | Speeds up the fade 4× whenever another window is in the foreground. |
+| Single Instance Only | Off | Destroys any previous fade when a new drag starts. |
+| Use Custom Colors | Off | Overrides the fade overlay's fill and border colors with your custom hex values. The live drag rectangle is <strong>not</strong> affected. |
+| Custom Fill Color | 8C8C8C | Hex color for the overlay fill. |
+| Custom Border Color | B4B4B4 | Hex color for the overlay border. |</p>]]></content>
+        <author>
+            <name>angel_lov</name>
+            <uri>https://github.com/Twilight0Sparkle</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.5]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#b00037cb502ab29dc6f0290861e1b776142118e4</id>
@@ -912,19 +962,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota Bars 0.10.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#bb827ab3f6f8cd2dfa0348865e30cb50c3f99fdc</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-07-14T10:21:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix tooltip hover being inconsistent (occasionally not showing or not dismissing)</li>
-</ul>]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
         </author>
     </entry>
 </feed>
