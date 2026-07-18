@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.1.2
+// @version 2.1.4
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.1.2"
+#define WH_MOD_VERSION L"2.1.4"
 #endif
 
 #include <windhawk_utils.h>
@@ -271,7 +271,7 @@ int g_notificationActiveDateKey = 0;
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_slotInjected;
 std::atomic<int> g_applySlotAttempts;
-std::atomic<int> g_injectRetryMs{400};
+std::atomic<int> g_injectRetryMs{100};
 std::atomic<ULONGLONG> g_lastMeasureInjectAttemptMs{0};
 int g_lastUiTimerIntervalMs = -1;
 bool g_hasOverlayPlacement = false;
@@ -2213,8 +2213,56 @@ void MaybeRequestScheduleRefresh() {
     }
 }
 
+std::wstring FindWindhawkExePath() {
+    wchar_t buffer[MAX_PATH]{};
+
+    // Default install locations.
+    const wchar_t* candidates[] = {
+        L"%ProgramFiles%\\Windhawk\\windhawk.exe",
+        L"%ProgramFiles(x86)%\\Windhawk\\windhawk.exe",
+        L"%LocalAppData%\\Programs\\Windhawk\\windhawk.exe",
+    };
+    for (const wchar_t* pattern : candidates) {
+        DWORD n = ExpandEnvironmentStringsW(pattern, buffer, MAX_PATH);
+        if (n > 0 && n < MAX_PATH && GetFileAttributesW(buffer) != INVALID_FILE_ATTRIBUTES) {
+            return buffer;
+        }
+    }
+
+    // Uninstall registry key often has the install folder.
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Windhawk",
+                      0, KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+        DWORD type = 0;
+        DWORD size = sizeof(buffer);
+        if (RegQueryValueExW(key, L"InstallLocation", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(buffer), &size) == ERROR_SUCCESS &&
+            type == REG_SZ) {
+            std::wstring path = buffer;
+            if (!path.empty() && path.back() != L'\\') {
+                path += L'\\';
+            }
+            path += L"windhawk.exe";
+            if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                RegCloseKey(key);
+                return path;
+            }
+        }
+        RegCloseKey(key);
+    }
+    return L"";
+}
+
 void OpenWindhawkSettings() {
-    ShellExecuteW(nullptr, L"open", L"windhawk:", nullptr, nullptr, SW_SHOWNORMAL);
+    // Do NOT use windhawk: — that opens the code editor (VSCodium), not the
+    // mod manager. Launch Windhawk.exe for the real UI.
+    const auto exe = FindWindhawkExePath();
+    if (!exe.empty()) {
+        ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
+    Wh_Log(L"Windhawk.exe not found");
 }
 
 // Forward declarations
@@ -2980,7 +3028,7 @@ bool EnsurePrayerTraySlotInTrayGrid(Controls::Grid trayGrid) {
     g_slotParentGrid = trayGrid;
     g_slotInjected = true;
     g_hasAppliedContent = false;
-    g_injectRetryMs = 400;
+    g_injectRetryMs = 100;
     AttachSlotInteractions(slotElement);
     return true;
 }
@@ -3010,7 +3058,7 @@ bool EnsurePrayerTraySlot(FrameworkElement mainStack) {
     g_bottomTextBlock = FindTextBlockByName(slotButton, L"PrayerTrayBottom");
     g_slotInjected = true;
     g_hasAppliedContent = false;
-    g_injectRetryMs = 400;
+    g_injectRetryMs = 100;
     AttachSlotInteractions(slotButton);
     return true;
 }
@@ -3124,7 +3172,7 @@ void ApplyWin11FromThread(SlotApplyParam* param) {
         try {
             if (IsSlotRootAlive()) {
                 ApplyWin11SlotContent(content);
-                g_injectRetryMs = 400;
+                g_injectRetryMs = 100;
                 return;
             }
         } catch (...) {
@@ -3151,15 +3199,16 @@ void ApplyWin11FromThread(SlotApplyParam* param) {
         try {
             if (IsSlotRootAlive()) {
                 ApplyWin11SlotContent(content);
-                g_injectRetryMs = 400;
+                g_injectRetryMs = 100;
                 return;
             }
         } catch (...) {
             g_slotInjected = false;
         }
         if (!injected) {
-            const int next = std::min(3000, std::max(400, g_injectRetryMs.load() * 2));
-            g_injectRetryMs = next;
+            // Stay aggressive at first (100→200→400), then back off to 1.5s max.
+            const int cur = g_injectRetryMs.load();
+            g_injectRetryMs = std::min(1500, std::max(100, cur * 2));
         }
     } catch (...) {
         g_slotInjected = false;
@@ -3248,7 +3297,8 @@ winrt::Windows::Foundation::Size WINAPI SystemTrayFrame_MeasureOverride_Hook(
     }
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG last = g_lastMeasureInjectAttemptMs.load();
-    if (now - last < 1000) {
+    // Fast retries right after enable; still avoid fighting every layout pass.
+    if (now - last < 200) {
         return result;
     }
     g_lastMeasureInjectAttemptMs = now;
@@ -3344,6 +3394,10 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 RepositionWin10Overlay();
             } else if (wParam == 4) {
                 RequestRefresh(false);
+            } else if (wParam == 5 || wParam == 6 || wParam == 7) {
+                // One-shot startup inject retries.
+                KillTimer(hWnd, wParam);
+                ApplyEngineToBackends();
             }
             return 0;
         case WM_PT_UI_TICK:
@@ -3459,6 +3513,13 @@ void ShutdownUi() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+    // Folder-window explorers also match @include explorer.exe but have no
+    // taskbar. Loading there races the shell explorer and delays the slot.
+    if (!FindCurrentProcessTaskbarWnd()) {
+        Wh_Log(L"No Shell_TrayWnd in this process — skipping (not shell explorer)");
+        return FALSE;
+    }
+
     LoadSettings();
     SelectBackend();
     EnsureMessageWindow();
@@ -3473,13 +3534,15 @@ BOOL Wh_ModInit() {
             WindhawkUtils::SetFunctionHook(pLoad, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
         }
     }
+
+    // Cache first so the slot has text immediately; network refresh is async.
+    BootstrapFromCache();
+    g_injectRetryMs = 100;
+    g_uiTimerIntervalMs = 100;
     StartTimers();
     UpdateTrayIcon();
     ApplyEngineToBackends();
-    if (BootstrapFromCache()) {
-        ApplyEngineToBackends();
-    }
-    RequestRefresh();
+    RequestRefresh(false);
     return TRUE;
 }
 
@@ -3492,7 +3555,14 @@ void Wh_ModAfterInit() {
             }
         }
     }
+    // Burst a few applies after hooks settle — first appearance should be quick.
     ApplyEngineToBackends();
+    if (g_messageHwnd) {
+        PostMessageW(g_messageHwnd, WM_PT_UI_TICK, 0, 0);
+        SetTimer(g_messageHwnd, 5, 150, nullptr);
+        SetTimer(g_messageHwnd, 6, 400, nullptr);
+        SetTimer(g_messageHwnd, 7, 900, nullptr);
+    }
 }
 
 void Wh_ModBeforeUninit() {
