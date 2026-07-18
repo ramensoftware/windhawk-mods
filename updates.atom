@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T12:08:58.000Z</updated>
+    <updated>2026-07-18T13:29:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Copy Queue 1.0]]></title>
+        <id>https://windhawk.net/mods/copy-queue#889a5cd1a64c886634dd4db19e86334a59d7173a</id>
+        <link href="https://windhawk.net/mods/copy-queue"/>
+        <updated>2026-07-18T13:29:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="sequentialexplorercopyqueue">Sequential Explorer Copy Queue</h1>
+<p>Copy queues Windows Explorer copy operations and runs them one after another instead of in parallel. The next copy operation starts automatically when the previous one has finished.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://i.imgur.com/7Jmifwt.png" alt="Copy dialog" /></p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.6]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#fe719ff30cfa77714e643de3a28f103a9aa7950a</id>
@@ -932,24 +946,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MicroManager 1.1.0]]></title>
-        <id>https://windhawk.net/mods/micromanager#1588c9290e6c51a476e1ce0e1b399a0055d5e5ce</id>
-        <link href="https://windhawk.net/mods/micromanager"/>
-        <updated>2026-07-12T18:40:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Fixed:</strong> Tooltip now displays correctly when hovering the tray icon.</li>
-<li><strong>Fixed:</strong> Ghost window prevention — popup no longer flickers on rapid open/close.</li>
-<li><strong>Fixed:</strong> Data delay recovery — processes that take time to report usage are retried with exponential backoff.</li>
-<li><strong>Fixed:</strong> Safe mod reload — icon and window clean up properly without crashing.</li>
-<li><strong>Improved:</strong> Tray tooltip updates only when values change, reducing unnecessary CPU work.</li>
-<li><strong>Fixed:</strong> Popup window reference cleaned up on destroy.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

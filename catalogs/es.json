@@ -2794,6 +2794,39 @@
         "version": "1.0.1"
       }
     },
+    "copy-queue": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784381362000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784381362000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nerdworld",
+        "compilerOptions": "-lole32 -luuid",
+        "description": "Queues Explorer copy operations while keeping them visible in the normal copy dialog",
+        "github": "https://github.com/nerdworldDE",
+        "homepage": "https://nerdworld.de/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Copy Queue",
+        "version": "1.0"
+      }
+    },
     "cpl-classic-view-lite": {
       "details": {
         "defaultSorting": 1510,
