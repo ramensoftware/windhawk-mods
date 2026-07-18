@@ -14,10 +14,9 @@
 // ==WindhawkModReadme==
 /*
 # BT Battery Monitor
+See every connected Bluetooth device's battery level right in your system tray — no more digging into Bluetooth settings to find out which keyboard or mouse needs charging.
 
-Shows battery levels for all your connected Bluetooth devices right in your system tray — no digging into Bluetooth settings to see which keyboard or mouse needs charging.
-
-> Works great with **AudioSwap** and **MicSwitch** — the companion mods that bring the same tray experience to audio output and input control.
+> Works great alongside **[AudioSwap](https://windhawk.net/mods/audioswap)** and **[MicSwitch](https://windhawk.net/mods/microswap)** — companion mods that bring the same tray experience to audio output and microphone control.
 
 ![Controller connected](https://i.imgur.com/QDHrOTO.png)
 
@@ -30,47 +29,53 @@ Shows battery levels for all your connected Bluetooth devices right in your syst
 1. **Open Settings** — Right-click the tray icon and select **Mod Settings** to open the configuration dashboard.
 2. **Set Polling Interval** — Choose how often to scan for battery updates (default: 10 seconds).
 3. **Set Warning Threshold** — Pick the battery percentage that triggers the red/black flashing icon.
-4. **Choose Icons** — Select a preset icon per device type (keyboard, mouse, headphones, controller, multiple devices, no devices), or click **Browse...** to load a custom `.ico` file.
+4. **Choose Icons** — Pick a preset icon per device type, or click **Browse...** to load a custom `.ico` file.
 5. Click **Save and Apply** — the tray icon updates immediately, no restart needed.
 
-### Device Types
+### Left-click to check on your devices
 
-The mod detects six device categories automatically (keyboard, mouse, headphones, controller, multiple connected, no devices) and lets you assign a different icon to each:
-
-- **Keyboard** — default ddores.dll index 30
-- **Mouse** — default ddores.dll index 110
-- **Headphones** — default ddores.dll index 91
-- **Controller** — default ddores.dll index 108
-- **Multiple Devices** — default ddores.dll index 94
-- **No Connected Devices** — shows a white X mark icon
+Left-click the tray icon to open a neat flyout listing every paired device with its current battery percentage. At a glance you'll see which ones are doing fine and which ones need charging.
 
 ### Low Battery Warning
 
-When any connected device drops below the configured threshold (default 30%), the tray icon alternates between solid red and black every second. The tooltip shows the device name and exact percentage.
+When any connected device drops below the configured threshold (default 30%), the tray icon starts alternating between solid red and black every second. Hover over the icon to see which device is running low and exactly how much juice it has left.
 
-### Bluetooth Detection
+### Device Icons
 
-The mod polls battery data from three sources:
-- Bluetooth device interface properties (primary, via `CM_Get_DevNode_PropertyW`)
-- Windows Registry (`BTHLE\\Dev_*\\Device Parameters\\DeviceBattery`)
-- Bluetooth media class device tree
+The mod detects device types automatically and lets you pick a different icon for each:
+- **Keyboard**, **Mouse**, **Headphones**, **Controller** — each gets its own icon so you can tell them apart instantly.
+- **Multiple Devices** — shown when more than one device is connected.
+- **No Connected Devices** — a clear visual indicator that nothing's paired.
 
-Device connection state is verified by checking for active HID or BLE GATT interfaces — this prevents Xbox Wireless Controllers and other BLE HID devices from appearing as connected when powered off but still present in the device tree.
+### Right-Click Menu
+
+Right-click the tray icon to open **Bluetooth Settings** — handy for quickly pairing a new device without navigating through Windows menus.
+
+### Polling Interval
+
+Pick how often the mod checks for updates, from **every second** to **once an hour** (default: 10 seconds). Quick polling keeps the battery readout fresh, while slower polling saves a tiny bit of CPU.
+
+---
+
+## Known Bugs
+
+- **Bluetooth devices that don't report battery**: Some older Bluetooth peripherals simply don't broadcast battery info — the mod can't show what the hardware doesn't tell it. Check your device specs to see if battery reporting is supported.
 
 ---
 
 ## Changelog
 
-### v1.0.0
-- Initial release. Shows battery levels for all connected Bluetooth devices right in your system tray.
-- Per-device flyout menu lists every device with current battery percentage.
-- Low battery warning — tray icon flashes red/black when any device drops below threshold.
-- Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.
-- Choose preset ddores.dll icons per device type or browse for custom .ico files.
-- Configurable polling interval (1s–1h) and warning threshold (0–50%).
-- Bluetooth device arrival/removal detected automatically — rescan triggers on device change events.
-- Left-click tray icon to force-rescan; right-click for menu with Bluetooth Settings shortcut.
-- Companion tool mod — runs in its own windhawk.exe child process, no Explorer injection needed.
+# 1.0.0
+- **New:** Tray icon shows battery percentage for every connected Bluetooth device — keyboard, mouse, headphones, controller, you name it.
+- **New:** Left-click opens a per-device flyout menu listing each device with its current battery level.
+- **New:** Low battery warning — tray icon flashes red and black when any device drops below your threshold.
+- **New:** Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.
+- **New:** Configurable polling interval (1s–1h) and warning threshold (0–50%).
+- **New:** Automatic Bluetooth rescan on device arrival/removal — no manual refresh needed.
+- **New:** Right-click → Bluetooth Settings shortcut for quick pairing.
+- **New:** Choose preset icons from `ddores.dll` per device type or browse for custom `.ico` files.
+- **New:** Clean tray icon identity — independent from Windhawk, no taskbar grouping issues.
+- **New:** Safe tool mod — runs in a dedicated `windhawk.exe` child process, no Explorer injection needed.
 */
 // ==/WindhawkModReadme==
 
