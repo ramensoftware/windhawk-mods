@@ -2,7 +2,7 @@
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
 // @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
-// @version 3.4.0
+// @version 3.5.0
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
@@ -21,6 +21,8 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2 and
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7classictaskbar.png)
 ## Screenshot (with the Classic theme)
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/classichteme.PNG)
+## Screenshot (with a Windows 8-like theme)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81takbar4s.PNG)
 
 **IMPORTANT**: This mod is a best-effort recreation that works within the limitations of modern Windows.
 Some features may work partially or not at all depending on your system configuration,
@@ -33,7 +35,7 @@ Windows version, and installed modifications.
 - Configure taskbar button grouping (Always combine, Combine when full, Never combine) - applies to
   every taskbar on every monitor, not just the primary one
 - Configure Aero Peek
-- Address/Links/Tablet PC toolbars
+- Address/Links/Tablet PC toolbars (Desktop toolbar is currently not functional)
 - Vertical taskbar support: only **Top** and **Bottom** positions are functional (Left and right positions could be implemented in future)
 - Supports 5 languages (English, Italian, Spanish, French and Russian)
 
@@ -46,7 +48,7 @@ Windows version, and installed modifications.
 ## Known Issues
 - **Left/Right taskbar position**: currently disabled (greyed out, non-selectable) in the
   position combo box. Only Top and Bottom rotation is supported for now; Left/Right requires
-  more work due to the added complexity and may be added in a future version.
+  more work due to the added complexity and may be added in a future version. In addition, in some configurations the taskbar can't be moved to the top if using the ExplorerPatcher taskbar.
 - **Desktop toolbar**: The desktop toolbar is currently not available.
 - **Some Start Menu settings**: May not work on all Windows versions as it heavily depends on user's configuration (for example OpenShell, Explorer7, ExplorerPatcher and other).
 - **Tablet Input PC**: Works partially
@@ -54,20 +56,7 @@ Windows version, and installed modifications.
 - Anixx - Testing on Windows 11 23H2 with Classic Theme
 - sebastian08dm08-cpu - Testing on Windows 10 1809
 - SnowyCxmet - Fixed the Taskbar buttons combine setting (Always combine / Combine when full / Never combine) to make it apply to all monitors
-## Changelog
-- 3.5.0: Fixed Desktop toolbar activation. The previous implementation used
-  SHLoadInProc(), which is a no-op stub on Windows 10/11. The toolbar is now
-  activated via ITrayDeskBand::ShowDeskBand(CLSID_DesktopBand), the same COM
-  path used for the Address and Links bands. The mod also auto-registers
-  CLSID_DesktopBand under HKCU\Software\Classes\CLSID (no admin rights needed)
-  so that COM can load the IShellFolderBand object from shell32.dll on systems
-  where the key is missing or empty. HideDeskBand is now also called via
-  ITrayDeskBand for symmetry.
-- 3.4.0: Fixed the "Taskbar buttons" combine setting (Always combine / Combine when full /
-  Never combine) only applying to the taskbar on the primary monitor. Windows keeps this
-  setting in two separate registry values - `TaskbarGlomLevel` for the primary taskbar and
-  `MMTaskbarGlomLevel` for taskbars on secondary monitors - and the mod was only writing the
-  first one. Both are now kept in sync so the setting applies uniformly across all monitors.
+- m417z - Code review
 */
 // ==/WindhawkModReadme==
 
@@ -794,76 +783,6 @@ static void SetFontAllChildren(HWND hwnd, HFONT hf) {
 static const CLSID CLSID_DesktopBand =
     {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
 
-// Assicura che la CLSID {D82BE2B0...} (IShellFolderBand / Desktop toolbar) sia
-// registrata in HKCU\Software\Classes\CLSID, puntando a shell32.dll come
-// InProcServer32. Su Windows 10/11 questa chiave pu essere assente o vuota,
-// impedendo a ITrayDeskBand::ShowDeskBand di caricare l'oggetto COM.
-// Scriviamo sotto HKCU (non HKCR / HKLM) cos non servono diritti di admin.
-static bool EnsureDesktopBandClsidRegistered() {
-    // Percorso HKCU: ha precedenza su HKCR\CLSID per lo stesso CLSID.
-    static const WCHAR kClsidKey[] =
-        L"Software\\Classes\\CLSID\\{D82BE2B0-5764-11D0-A96E-00C04FD705A2}";
-    static const WCHAR kInprocKey[] =
-        L"Software\\Classes\\CLSID\\{D82BE2B0-5764-11D0-A96E-00C04FD705A2}\\InProcServer32";
-
-    // Controlla se esiste gi un valore di default nell'InProcServer32
-    {
-        RegKey rk;
-        if (rk.Open(HKEY_CURRENT_USER, kInprocKey)) {
-            DWORD sz = 0;
-            if (rk.QueryValue(NULL, NULL, &sz) && sz > 2) {
-                Wh_Log(L"[DesktopToolbar] CLSID gi registrato in HKCU");
-                return true; // gi presente
-            }
-        }
-    }
-
-    // Risolve il percorso assoluto di shell32.dll
-    WCHAR shell32Path[MAX_PATH] = {};
-    {
-        HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-        if (!hShell32 || !GetModuleFileNameW(hShell32, shell32Path, MAX_PATH)) {
-            // Fallback al percorso noto
-            ExpandEnvironmentStringsW(L"%SystemRoot%\\system32\\shell32.dll",
-                                      shell32Path, MAX_PATH);
-        }
-    }
-
-    // Crea/aggiorna HKCU\Software\Classes\CLSID\{...}
-    {
-        RegKey rk;
-        if (!rk.Create(HKEY_CURRENT_USER, kClsidKey)) {
-            Wh_Log(L"[DesktopToolbar] Impossibile creare chiave CLSID principale");
-            return false;
-        }
-        // Valore default = nome descrittivo
-        RegSetValueExW(rk.Get(), NULL, 0, REG_SZ,
-            (const BYTE*)L"IShellFolderBand",
-            (DWORD)((wcslen(L"IShellFolderBand") + 1) * sizeof(WCHAR)));
-    }
-
-    // Crea/aggiorna InProcServer32
-    {
-        RegKey rk;
-        if (!rk.Create(HKEY_CURRENT_USER, kInprocKey)) {
-            Wh_Log(L"[DesktopToolbar] Impossibile creare chiave InProcServer32");
-            return false;
-        }
-        // Valore default = percorso shell32.dll
-        RegSetValueExW(rk.Get(), NULL, 0, REG_SZ,
-            (const BYTE*)shell32Path,
-            (DWORD)((wcslen(shell32Path) + 1) * sizeof(WCHAR)));
-        // ThreadingModel richiesto da COM
-        static const WCHAR kApartment[] = L"Apartment";
-        RegSetValueExW(rk.Get(), L"ThreadingModel", 0, REG_SZ,
-            (const BYTE*)kApartment,
-            (DWORD)((wcslen(kApartment) + 1) * sizeof(WCHAR)));
-    }
-
-    Wh_Log(L"[DesktopToolbar] CLSID registrato in HKCU -> %s", shell32Path);
-    return true;
-}
-
 static bool IsNativeDesktopToolbarShown() {
     // Prima controlla se la finestra  gi presente nella gerarchia.
     HWND hBand = FindDesktopToolbarWindow();
@@ -980,11 +899,7 @@ static bool IsEdgeVertical(DWORD edge) {
 static bool ShowNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Show requested");
 
-    // Passo 1: assicura che la CLSID sia registrata (necessario su Win10/11
-    // dove InProcServer32 potrebbe mancare o essere vuota).
-    EnsureDesktopBandClsidRegistered();
-
-    // Passo 2: usa ITrayDeskBand::ShowDeskBand  esattamente lo stesso percorso
+    // Passo 1: usa ITrayDeskBand::ShowDeskBand  esattamente lo stesso percorso
     // usato per Address e Links. SHLoadInProc  uno stub su Win10/11 e non
     // attiva nulla; il percorso COM/ITrayDeskBand  quello ancora funzionante.
     bool result = NativeDeskBandOp(CLSID_DesktopBand, CTP_BAND_SHOW, NULL);
@@ -995,17 +910,17 @@ static bool ShowNativeDesktopToolbar() {
         Wh_Log(L"[DesktopToolbar] ShowDeskBand fallito, tento fallback registro");
     }
 
-    // Passo 3: aggiorna il registro (sia per lo stato che per il fallback).
+    // Passo 2: aggiorna il registro (sia per lo stato che per il fallback).
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
 
-    // Passo 4: notifica la taskbar.
+    // Passo 3: notifica la taskbar.
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray && IsWindow(hTray)) {
         SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
     }
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
 
-    // Passo 5: aspetta che la finestra appaia e applica il subclassing.
+    // Passo 4: aspetta che la finestra appaia e applica il subclassing.
     // La band potrebbe non essere ancora visibile subito dopo ShowDeskBand,
     // proviamo fino a 10 volte con 50 ms di intervallo.
     HWND hBand = NULL;
@@ -1054,8 +969,6 @@ static bool HideNativeDesktopToolbar() {
     return true;
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wtrigraphs"
 static void InitLocalization() {
     enum Lang { LANG_EN, LANG_IT, LANG_FR, LANG_ES, LANG_RU, LANG_DE, LANG_PT };
     Lang lang = LANG_EN;
@@ -1082,7 +995,7 @@ static void InitLocalization() {
         case LANG_IT: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra delle applicazioni"); StringCchCopyW(g_str.tab_start, 64, L"Menu Start"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barre degli strumenti"); break;
         case LANG_FR: StringCchCopyW(g_str.tab_taskbar, 64, L"Barre des t\u00e2ches"); StringCchCopyW(g_str.tab_start, 64, L"Menu D\u00e9marrer"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barres d'outils"); break;
         case LANG_ES: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra de tareas"); StringCchCopyW(g_str.tab_start, 64, L"Inicio"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barras de herramientas"); break;
-        case LANG_RU: StringCchCopyW(g_str.tab_taskbar, 64, L"?????? ?????"); StringCchCopyW(g_str.tab_start, 64, L"???? '????'"); StringCchCopyW(g_str.tab_toolbars, 64, L"?????? ????????????"); break;
+        case LANG_RU: StringCchCopyW(g_str.tab_taskbar, 64, L"\u041f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447"); StringCchCopyW(g_str.tab_start, 64, L"\u041c\u0435\u043d\u044e \u041f\u0443\u0441\u043a"); StringCchCopyW(g_str.tab_toolbars, 64, L"\u041f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432"); break;
         case LANG_DE: StringCchCopyW(g_str.tab_taskbar, 64, L"Taskleiste"); StringCchCopyW(g_str.tab_start, 64, L"Startmen\u00fc"); StringCchCopyW(g_str.tab_toolbars, 64, L"Symbolleisten"); break;
         case LANG_PT: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra de tarefas"); StringCchCopyW(g_str.tab_start, 64, L"Menu Iniciar"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barras de ferramentas"); break;
         default: StringCchCopyW(g_str.tab_taskbar, 64, L"Taskbar"); StringCchCopyW(g_str.tab_start, 64, L"Start Menu"); StringCchCopyW(g_str.tab_toolbars, 64, L"Toolbars");
@@ -1092,7 +1005,7 @@ static void InitLocalization() {
         case LANG_IT: StringCchCopyW(g_str.title, 128, L"Propriet\u00e0 della barra delle applicazioni e del menu Start"); break;
         case LANG_FR: StringCchCopyW(g_str.title, 128, L"Propri\u00e9t\u00e9s de la barre des t\u00e2ches et du menu D\u00e9marrer"); break;
         case LANG_ES: StringCchCopyW(g_str.title, 128, L"Propiedades de la barra de tareas e Inicio"); break;
-        case LANG_RU: StringCchCopyW(g_str.title, 128, L"???????? ?????? ????? ? ???? ????"); break;
+        case LANG_RU: StringCchCopyW(g_str.title, 128, L"\u0421\u0432\u043e\u0439\u0441\u0442\u0432\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447 \u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a"); break;
         case LANG_DE: StringCchCopyW(g_str.title, 128, L"Eigenschaften von Taskleiste und Startmen\u00fc"); break;
         case LANG_PT: StringCchCopyW(g_str.title, 128, L"Propriedades da Barra de Tarefas e do Menu Iniciar"); break;
         default: StringCchCopyW(g_str.title, 128, L"Taskbar and Start Menu Properties");
@@ -1102,7 +1015,7 @@ static void InitLocalization() {
         case LANG_IT: StringCchCopyW(g_str.btn_cancel, 32, L"Annulla"); StringCchCopyW(g_str.btn_apply, 32, L"Applica"); break;
         case LANG_FR: StringCchCopyW(g_str.btn_cancel, 32, L"Annuler"); StringCchCopyW(g_str.btn_apply, 32, L"Appliquer"); break;
         case LANG_ES: StringCchCopyW(g_str.btn_cancel, 32, L"Cancelar"); StringCchCopyW(g_str.btn_apply, 32, L"Aplicar"); break;
-        case LANG_RU: StringCchCopyW(g_str.btn_cancel, 32, L"??????"); StringCchCopyW(g_str.btn_apply, 32, L"?????????"); break;
+        case LANG_RU: StringCchCopyW(g_str.btn_cancel, 32, L"\u041e\u0442\u043c\u0435\u043d\u0430"); StringCchCopyW(g_str.btn_apply, 32, L"\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c"); break;
         case LANG_DE: StringCchCopyW(g_str.btn_cancel, 32, L"Abbrechen"); StringCchCopyW(g_str.btn_apply, 32, L"\u00dcbernehmen"); break;
         case LANG_PT: StringCchCopyW(g_str.btn_cancel, 32, L"Cancelar"); StringCchCopyW(g_str.btn_apply, 32, L"Aplicar"); break;
         default: StringCchCopyW(g_str.btn_cancel, 32, L"Cancel"); StringCchCopyW(g_str.btn_apply, 32, L"Apply");
@@ -1155,19 +1068,19 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_never_combine, 64, L"No combinar nunca");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_appearance, 64, L"??? ?????? ?????");
-            StringCchCopyW(g_str.chk_lock, 64, L"????????? ?????? ?????");
-            StringCchCopyW(g_str.chk_hide, 64, L"????????????? ???????? ??????");
-            StringCchCopyW(g_str.chk_small, 64, L"???????????? ?????? ??????");
-            StringCchCopyW(g_str.txt_location, 64, L"????????? ?????? ?? ??????:");
-            StringCchCopyW(g_str.txt_buttons, 64, L"?????? ??????\n?????:");
-            StringCchCopyW(g_str.pos_bottom, 32, L"?????");
-            StringCchCopyW(g_str.pos_left, 32, L"?????");
-            StringCchCopyW(g_str.pos_right, 32, L"??????");
-            StringCchCopyW(g_str.pos_top, 32, L"??????");
-            StringCchCopyW(g_str.btn_always_combine, 64, L"?????? ????????????, ???????? ?????");
-            StringCchCopyW(g_str.btn_combine_full, 64, L"???????????? ??? ??????????");
-            StringCchCopyW(g_str.btn_never_combine, 64, L"?? ????????????");
+            StringCchCopyW(g_str.grp_appearance, 64, L"\u0412\u0438\u0434 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.chk_lock, 64, L"\u0417\u0430\u043a\u0440\u0435\u043f\u0438\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.chk_hide, 64, L"\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u0441\u043a\u0440\u044b\u0432\u0430\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c");
+            StringCchCopyW(g_str.chk_small, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u043c\u0435\u043b\u043a\u0438\u0435 \u0437\u043d\u0430\u0447\u043a\u0438");
+            StringCchCopyW(g_str.txt_location, 64, L"\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u043d\u0430 \u044d\u043a\u0440\u0430\u043d\u0435:");
+            StringCchCopyW(g_str.txt_buttons, 64, L"\u041a\u043d\u043e\u043f\u043a\u0438 \u043f\u0430\u043d\u0435\u043b\u0438\n\u0437\u0430\u0434\u0430\u0447:");
+            StringCchCopyW(g_str.pos_bottom, 32, L"\u0421\u043d\u0438\u0437\u0443");
+            StringCchCopyW(g_str.pos_left, 32, L"\u0421\u043b\u0435\u0432\u0430");
+            StringCchCopyW(g_str.pos_right, 32, L"\u0421\u043f\u0440\u0430\u0432\u0430");
+            StringCchCopyW(g_str.pos_top, 32, L"\u0421\u0432\u0435\u0440\u0445\u0443");
+            StringCchCopyW(g_str.btn_always_combine, 64, L"\u0412\u0441\u0435\u0433\u0434\u0430 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c, \u0441\u043a\u0440\u044b\u0432\u0430\u0442\u044c \u043c\u0435\u0442\u043a\u0438");
+            StringCchCopyW(g_str.btn_combine_full, 64, L"\u0413\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043f\u0440\u0438 \u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0438");
+            StringCchCopyW(g_str.btn_never_combine, 64, L"\u041d\u0435 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.grp_appearance, 64, L"Erscheinungsbild der Taskleiste");
@@ -1232,9 +1145,9 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Personalizar...");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_notif, 64, L"??????? ???????????");
-            StringCchCopyW(g_str.txt_notif, 128, L"????????? ????????? ?????? ? ???????????, ???????????? ? ??????? ??????????? ?????? ?????.");
-            StringCchCopyW(g_str.btn_cust_notif, 32, L"?????????...");
+            StringCchCopyW(g_str.grp_notif, 64, L"\u041e\u0431\u043b\u0430\u0441\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439");
+            StringCchCopyW(g_str.txt_notif, 128, L"\u041f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u0437\u043d\u0430\u0447\u043a\u0438 \u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f, \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u043c\u044b\u0435 \u0432 \u043e\u0431\u043b\u0430\u0441\u0442\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.btn_cust_notif, 32, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c...");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.grp_notif, 64, L"Infobereich");
@@ -1262,7 +1175,7 @@ static void InitLocalization() {
         case LANG_FR:
             StringCchCopyW(g_str.grp_aero, 64, L"Aper\u00e7u du bureau avec Aero Peek");
             StringCchCopyW(g_str.txt_aero, 256, L"Permet d'afficher temporairement le bureau en pla\u00e7ant le pointeur de la souris sur le bouton Afficher le bureau \u00e0 l'extr\u00e9mit\u00e9 de la barre des t\u00e2ches.");
-            StringCchCopyW(g_str.chk_aero, 64, L"Utiliser Aero Peek pour afficher l'aper\u00e2u du bureau");
+            StringCchCopyW(g_str.chk_aero, 64, L"Utiliser Aero Peek pour afficher l'aper\u00e7u du bureau");
             StringCchCopyW(g_str.link_help, 128, L"<a>Comment personnaliser la barre des t\u00e2ches ?</a>");
             break;
         case LANG_ES:
@@ -1272,10 +1185,10 @@ static void InitLocalization() {
             StringCchCopyW(g_str.link_help, 128, L"<a>\u00bfC\u00f3mo personalizar la barra de tareas?</a>");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_aero, 64, L"???????????? ???????? ????? ? Aero Peek");
-            StringCchCopyW(g_str.txt_aero, 256, L"????????? ???????? ?????????? ??????? ???? ??? ????????? ????????? ???? ?? ?????? ???????? ??????? ???? ? ????? ?????? ?????.");
-            StringCchCopyW(g_str.chk_aero, 64, L"???????????? Aero Peek ??? ????????????? ???????? ?????");
-            StringCchCopyW(g_str.link_help, 128, L"<a>??? ????????? ?????? ??????</a>");
+            StringCchCopyW(g_str.grp_aero, 64, L"\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u0441\u0442\u043e\u043b\u0430 \u0441 Aero Peek");
+            StringCchCopyW(g_str.txt_aero, 256, L"\u041f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043e\u0431\u0440\u0430\u0437\u0438\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u043f\u0440\u0438 \u043d\u0430\u0432\u0435\u0434\u0435\u043d\u0438\u0438 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f \u043c\u044b\u0448\u0438 \u043d\u0430 \u043a\u043d\u043e\u043f\u043a\u0443 \u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u0432 \u043a\u043e\u043d\u0446\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.chk_aero, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c Aero Peek \u0434\u043b\u044f \u043f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u0441\u0442\u043e\u043b\u0430");
+            StringCchCopyW(g_str.link_help, 128, L"<a>\u041a\u0430\u043a \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447?</a>");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.grp_aero, 64, L"Desktopvorschau mit Aero Peek");
@@ -1319,7 +1232,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.power_switchuser, 32, L"Changer d'utilisateur");
             StringCchCopyW(g_str.grp_privacy, 32, L"Confidentialit\u00e9");
             StringCchCopyW(g_str.chk_mru_prog, 128, L"Stocker et afficher les programmes r\u00e9cemment ouverts dans le menu D\u00e9marrer");
-            StringCchCopyW(g_str.chk_mru_items, 128, L"Stocker et afficher les \u00e9l\u00e9ments r\u00e9cemment ouverts dans le menu D\u00e9marrer et la barra des t\u00e2ches");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"Stocker et afficher les \u00e9l\u00e9ments r\u00e9cemment ouverts dans le menu D\u00e9marrer et la barre des t\u00e2ches");
             break;
         case LANG_ES:
             StringCchCopyW(g_str.start_info, 256, L"Para personalizar el aspecto de los v\u00ednculos, iconos y men\u00fas en el men\u00fa Inicio, haga clic en Personalizar.");
@@ -1334,16 +1247,16 @@ static void InitLocalization() {
             StringCchCopyW(g_str.chk_mru_items, 128, L"Almacenar y mostrar elementos abiertos recientemente en el men\u00fa Inicio y la barra de tareas");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.start_info, 256, L"????? ????????? ??? ??????, ??????? ? ???? ? ???? ????, ??????? ?????????.");
-            StringCchCopyW(g_str.btn_start_cust, 32, L"?????????...");
-            StringCchCopyW(g_str.txt_power_label, 64, L"???????? ?????? ???????:");
-            StringCchCopyW(g_str.power_shutdown, 32, L"?????????? ??????"); StringCchCopyW(g_str.power_restart, 32, L"????????????");
-            StringCchCopyW(g_str.power_sleep, 32, L"???"); StringCchCopyW(g_str.power_hibernate, 32, L"??????????");
-            StringCchCopyW(g_str.power_logoff, 32, L"?????"); StringCchCopyW(g_str.power_lock, 32, L"??????????");
-            StringCchCopyW(g_str.power_switchuser, 32, L"????? ????????????");
-            StringCchCopyW(g_str.grp_privacy, 32, L"??????????????????");
-            StringCchCopyW(g_str.chk_mru_prog, 128, L"??????? ? ?????????? ??????? ???????? ????????? ? ???? ????");
-            StringCchCopyW(g_str.chk_mru_items, 128, L"??????? ? ?????????? ??????? ???????? ???????? ? ???? ???? ? ?? ?????? ?????");
+            StringCchCopyW(g_str.start_info, 256, L"\u0427\u0442\u043e\u0431\u044b \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u0432\u0438\u0434 \u0441\u0441\u044b\u043b\u043e\u043a, \u0437\u043d\u0430\u0447\u043a\u043e\u0432 \u0438 \u043c\u0435\u043d\u044e \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a, \u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c.");
+            StringCchCopyW(g_str.btn_start_cust, 32, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c...");
+            StringCchCopyW(g_str.txt_power_label, 64, L"\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043a\u043d\u043e\u043f\u043a\u0438 \u043f\u0438\u0442\u0430\u043d\u0438\u044f:");
+            StringCchCopyW(g_str.power_shutdown, 32, L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u0435 \u0440\u0430\u0431\u043e\u0442\u044b"); StringCchCopyW(g_str.power_restart, 32, L"\u041f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430");
+            StringCchCopyW(g_str.power_sleep, 32, L"\u0421\u043e\u043d"); StringCchCopyW(g_str.power_hibernate, 32, L"\u0413\u0438\u0431\u0435\u0440\u043d\u0430\u0446\u0438\u044f");
+            StringCchCopyW(g_str.power_logoff, 32, L"\u0412\u044b\u0445\u043e\u0434"); StringCchCopyW(g_str.power_lock, 32, L"\u0411\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430");
+            StringCchCopyW(g_str.power_switchuser, 32, L"\u0421\u043c\u0435\u043d\u0430 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f");
+            StringCchCopyW(g_str.grp_privacy, 32, L"\u041a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"\u0425\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u0435 \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"\u0425\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a \u0438 \u043d\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.start_info, 256, L"Um festzulegen, wie Links, Symbole und Men\u00fcs im Startmen\u00fc aussehen, klicken Sie auf Anpassen.");
@@ -1389,7 +1302,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Pannello input Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Desktop");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.toolbars_info, 128, L"S\u00e9lectionnez les barres d'outils \u00e0 ajouter \u00e0 la barra des t\u00e2ches.");
+            StringCchCopyW(g_str.toolbars_info, 128, L"S\u00e9lectionnez les barres d'outils \u00e0 ajouter \u00e0 la barre des t\u00e2ches.");
             StringCchCopyW(g_str.toolbar_address, 32, L"Adresse"); StringCchCopyW(g_str.toolbar_links, 32, L"Liens");
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Panneau de saisie Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Bureau");
             break;
@@ -1399,9 +1312,9 @@ static void InitLocalization() {
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Panel de entrada Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Escritorio");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.toolbars_info, 128, L"???????? ?????? ???????????? ??? ?????????? ?? ?????? ?????.");
-            StringCchCopyW(g_str.toolbar_address, 32, L"?????"); StringCchCopyW(g_str.toolbar_links, 32, L"??????");
-            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"?????? ????? ????????"); StringCchCopyW(g_str.toolbar_desktop, 32, L"??????? ????");
+            StringCchCopyW(g_str.toolbars_info, 128, L"\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 \u0434\u043b\u044f \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0430 \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.toolbar_address, 32, L"\u0410\u0434\u0440\u0435\u0441"); StringCchCopyW(g_str.toolbar_links, 32, L"\u0421\u0441\u044b\u043b\u043a\u0438");
+            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"\u041f\u0430\u043d\u0435\u043b\u044c \u0432\u0432\u043e\u0434\u0430 \u043f\u043b\u0430\u043d\u0448\u0435\u0442\u0430"); StringCchCopyW(g_str.toolbar_desktop, 32, L"\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.toolbars_info, 128, L"W\u00e4hlen Sie aus, welche Symbolleisten der Taskleiste hinzugef\u00fcgt werden sollen.");
@@ -1422,7 +1335,7 @@ static void InitLocalization() {
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.about_title, 64, L"Informazioni sulla mod");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nQuesta mod per Windhawk ricrea la classica finestra \"Propriet\u00e0 della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\nFunzionalit\u00e0 attualmente disponibili:\r\n- Blocca la barra delle applicazioni\r\n- Nascondi automaticamente la barra\r\n- Usa icone piccole\r\n- Configura la combinazione dei pulsanti\r\n- Configura Aero Peek\r\n- Accesso rapido alle impostazioni dell'area di notifica\r\n- Barre degli strumenti native (Indirizzo, Collegamenti, Tablet PC, Desktop)\r\n- Rotazione barra (solo Alto/Basso)\r\n\r\nLimitazioni note:\r\n- Posizioni Sinistra e Destra non supportate\r\n- Alcune impostazioni richiedono il riavvio di Explorer.");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nQuesta mod per Windhawk ricrea la classica finestra \"Propriet\u00e0 della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\nFunzionalit\u00e0 attualmente disponibili:\r\n- Blocca la barra delle applicazioni\r\n- Nascondi automaticamente la barra\r\n- Usa icone piccole\r\n- Configura la combinazione dei pulsanti\r\n- Configura Aero Peek\r\n- Accesso rapido alle impostazioni dell'area di notifica\r\n- Barre degli strumenti native (Indirizzo, Collegamenti, Tablet PC)\r\n- Rotazione barra (solo Alto/Basso)\r\n\r\nLimitazioni note:\r\n- Posizioni Sinistra e Destra non supportate\r\n- Barra degli strumenti Desktop non disponibile\r\n- Alcune impostazioni richiedono il riavvio di Explorer.");
             StringCchCopyW(g_str.warn_position_title, 64, L"Posizione barra delle applicazioni");
             StringCchCopyW(g_str.warn_position_text, 256, L"La modifica della posizione verr\u00e0 applicata al prossimo riavvio di Explorer.");
             StringCchCopyW(g_str.start_custom_title, 64, L"Personalizza menu Start");
@@ -1508,33 +1421,33 @@ static void InitLocalization() {
             StringCchCopyW(g_str.start_msg_saved_title, 64, L"Configuraci\u00f3n guardada");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.about_title, 64, L"? ?????? ???????????");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\n?????? ??????????? Windhawk ?????????? ???????????? ???? \"???????? ?????? ????? ? ???? \", ????????????? ????????????? ???????? Windows.\r\n\r\n????????? ???????????:\r\n- ??????????? ?????? ?????\r\n- ?????????????? ???????\r\n- ?????? ??????\r\n- ????????? ??????????? ??????\r\n- ????????? Aero Peek\r\n- ??????? ?????? ? ?????????? ??????? ???????????\r\n- ?????? ???????????? (?????, ??????, ???????)\r\n- ??????? ?????? (?????? ?????/????)\r\n\r\n????????? ???????????:\r\n- ????????? ????? ? ?????? ?? ??????????????\r\n- ?????? ??????? ???? ??????????\r\n- ????????? ????????? ??????? ??????????? Explorer.");
-            StringCchCopyW(g_str.warn_position_title, 64, L"????????? ?????? ?????");
-            StringCchCopyW(g_str.warn_position_text, 256, L"????????? ????????? ????? ??????????? Explorer.");
-            StringCchCopyW(g_str.start_custom_title, 64, L"????????? ???? ????");
-            StringCchCopyW(g_str.start_grp_tiles, 64, L"?????? ? ?????????");
-            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"?????????? ?????? ?????? ? ???? ????");
-            StringCchCopyW(g_str.start_chk_app_list, 64, L"?????????? ?????? ?????????? ? ???? ????");
-            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"?????????? ??????? ??????????? ??????????");
-            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"???????????? ???? ?? ???? ?????");
-            StringCchCopyW(g_str.start_chk_recent_items, 64, L"?????????? ???????? ???????? ? ??????? ?????????");
-            StringCchCopyW(g_str.start_chk_account_notif, 64, L"?????????? ??????????? ??????? ??????");
-            StringCchCopyW(g_str.start_grp_search, 64, L"?????");
-            StringCchCopyW(g_str.start_chk_search_programs, 64, L"???????? ????????? ? ?????????? ??????");
-            StringCchCopyW(g_str.start_chk_search_files, 64, L"???????? ????? ? ?????????? ??????");
-            StringCchCopyW(g_str.start_grp_folders, 64, L"????? ??? ??????????? ? ?????");
-            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"?????????");
-            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"?????????");
-            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"????????");
-            StringCchCopyW(g_str.start_chk_folder_music, 32, L"??????");
-            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"???????????");
-            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"?????");
-            StringCchCopyW(g_str.start_chk_folder_network, 32, L"????");
-            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"?????? ?????");
-            StringCchCopyW(g_str.start_info_restart, 256, L"??????????: ????????? ????????? ????? ??????????? ??????????? Explorer ??? ?????? ?? ??????? ??? ??????? ??????????.");
-            StringCchCopyW(g_str.start_msg_saved, 512, L"????????? ???? ???? ?????????.\n\n????????? ????????? ????? ??????????? ?????? ?? ??????? ??? ??????????? Explorer ??? ??????? ??????????.");
-            StringCchCopyW(g_str.start_msg_saved_title, 64, L"????????? ?????????");
+            StringCchCopyW(g_str.about_title, 64, L"\u041e \u0434\u0430\u043d\u043d\u043e\u0439 \u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\n\u0414\u0430\u043d\u043d\u0430\u044f \u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f Windhawk \u0432\u043e\u0441\u0441\u043e\u0437\u0434\u0430\u0435\u0442 \u043a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u043e\u043a\u043d\u043e \"\u0421\u0432\u043e\u0439\u0441\u0442\u0432\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447 \u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a\", \u0432\u0434\u043e\u0445\u043d\u043e\u0432\u043b\u0435\u043d\u043d\u043e\u0435 \u043a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u0438\u043c\u0438 \u0432\u0435\u0440\u0441\u0438\u044f\u043c\u0438 Windows.\r\n\r\n\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u0435 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u0438:\r\n- \u0417\u0430\u043a\u0440\u0435\u043f\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447\r\n- \u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0441\u043a\u0440\u044b\u0442\u0438\u0435\r\n- \u041c\u0435\u043b\u043a\u0438\u0435 \u0437\u043d\u0430\u0447\u043a\u0438\r\n- \u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u043a\u0438 \u043a\u043d\u043e\u043f\u043e\u043a\r\n- \u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 Aero Peek\r\n- \u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0434\u043e\u0441\u0442\u0443\u043f \u043a \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u043c \u043e\u0431\u043b\u0430\u0441\u0442\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439\r\n- \u041f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 (\u0410\u0434\u0440\u0435\u0441, \u0421\u0441\u044b\u043b\u043a\u0438, \u041f\u043b\u0430\u043d\u0448\u0435\u0442)\r\n- \u041f\u043e\u0432\u043e\u0440\u043e\u0442 \u043f\u0430\u043d\u0435\u043b\u0438 (\u0442\u043e\u043b\u044c\u043a\u043e \u0412\u0432\u0435\u0440\u0445/\u0412\u043d\u0438\u0437)\r\n\r\n\u0418\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0435 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f:\r\n- \u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0421\u043b\u0435\u0432\u0430 \u0438 \u0421\u043f\u0440\u0430\u0432\u0430 \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044e\u0442\u0441\u044f\r\n- \u041f\u0430\u043d\u0435\u043b\u044c \u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430\r\n- \u041d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0442\u0440\u0435\u0431\u0443\u044e\u0442 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer.");
+            StringCchCopyW(g_str.warn_position_title, 64, L"\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.warn_position_text, 256, L"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0431\u0443\u0434\u0435\u0442 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u043e \u043f\u043e\u0441\u043b\u0435 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_grp_tiles, 64, L"\u041f\u043b\u0438\u0442\u043a\u0438 \u0438 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u0435");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435 \u043f\u043b\u0438\u0442\u043e\u043a \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_app_list, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0439 \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043d\u044b\u0435 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f");
+            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u041f\u0443\u0441\u043a \u043d\u0430 \u0432\u0435\u0441\u044c \u044d\u043a\u0440\u0430\u043d");
+            StringCchCopyW(g_str.start_chk_recent_items, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0432 \u0441\u043f\u0438\u0441\u043a\u0430\u0445 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432");
+            StringCchCopyW(g_str.start_chk_account_notif, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u0443\u0447\u0435\u0442\u043d\u043e\u0439 \u0437\u0430\u043f\u0438\u0441\u0438");
+            StringCchCopyW(g_str.start_grp_search, 64, L"\u041f\u043e\u0438\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_search_programs, 64, L"\u0412\u043a\u043b\u044e\u0447\u0430\u0442\u044c \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430");
+            StringCchCopyW(g_str.start_chk_search_files, 64, L"\u0412\u043a\u043b\u044e\u0447\u0430\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430");
+            StringCchCopyW(g_str.start_grp_folders, 64, L"\u041f\u0430\u043f\u043a\u0438 \u0434\u043b\u044f \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0432 \u041f\u0443\u0441\u043a\u0435");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b");
+            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b");
+            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0438");
+            StringCchCopyW(g_str.start_chk_folder_music, 32, L"\u041c\u0443\u0437\u044b\u043a\u0430");
+            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"\u0412\u0438\u0434\u0435\u043e");
+            StringCchCopyW(g_str.start_chk_folder_network, 32, L"\u0421\u0435\u0442\u044c");
+            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"\u041b\u0438\u0447\u043d\u0430\u044f \u043f\u0430\u043f\u043a\u0430");
+            StringCchCopyW(g_str.start_info_restart, 256, L"\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435: \u043d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043c\u043e\u0433\u0443\u0442 \u043f\u043e\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u0442\u044c \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer \u0438\u043b\u0438 \u0432\u044b\u0445\u043e\u0434\u0430 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0434\u043b\u044f \u043f\u043e\u043b\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b.\n\n\u041d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043c\u043e\u0433\u0443\u0442 \u043f\u043e\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u0442\u044c \u0432\u044b\u0445\u043e\u0434\u0430 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer \u0434\u043b\u044f \u043f\u043e\u043b\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b");
             break;
         case LANG_DE:
             StringCchCopyW(g_str.about_title, 64, L"\u00dcber diese Mod");
@@ -1596,7 +1509,7 @@ static void InitLocalization() {
             break;
         default:
             StringCchCopyW(g_str.about_title, 64, L"About this mod");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nThis Windhawk mod recreates the classic \"Taskbar and Start Menu Properties\" dialog inspired by classic Windows versions.\r\n\r\nCurrently available features:\r\n- Lock the taskbar\r\n- Auto-hide the taskbar\r\n- Use small icons\r\n- Configure taskbar button grouping\r\n- Configure Aero Peek\r\n- Quick access to notification area settings\r\n- Native toolbars (Address, Links, Tablet PC, Desktop)\r\n- Taskbar rotation (Top/Bottom only)\r\n\r\nKnown limitations:\r\n- Left and Right positions not supported\r\n- Some settings require Explorer restart.");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nThis Windhawk mod recreates the classic \"Taskbar and Start Menu Properties\" dialog inspired by classic Windows versions.\r\n\r\nCurrently available features:\r\n- Lock the taskbar\r\n- Auto-hide the taskbar\r\n- Use small icons\r\n- Configure taskbar button grouping\r\n- Configure Aero Peek\r\n- Quick access to notification area settings\r\n- Native toolbars (Address, Links, Tablet PC)\r\n- Taskbar rotation (Top/Bottom only)\r\n\r\nKnown limitations:\r\n- Left and Right positions not supported\r\n- Desktop toolbar is currently not available\r\n- Some settings require Explorer restart.");
             StringCchCopyW(g_str.warn_position_title, 64, L"Taskbar position");
             StringCchCopyW(g_str.warn_position_text, 256, L"The taskbar position change will be applied after restarting Explorer.");
             StringCchCopyW(g_str.start_custom_title, 64, L"Customize Start Menu");
@@ -1625,7 +1538,6 @@ static void InitLocalization() {
             break;
     }
 }
-#pragma clang diagnostic pop
 
 static void LoadLanguageSetting() {
     LPCWSTR lang = Wh_GetStringSetting(L"language");
