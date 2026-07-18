@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.1.6
+// @version 2.1.7
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -99,7 +99,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.1.6"
+#define WH_MOD_VERSION L"2.1.7"
 #endif
 
 #include <windhawk_utils.h>
@@ -157,7 +157,6 @@ constexpr double kClusterDistanceKm = 80.0;
 constexpr int kScheduleRefreshIntervalMs = 15 * 60 * 1000;
 constexpr int kGeoAccessTimeoutMs = 8000;
 constexpr int kRunFromWindowTimeoutMs = 3000;
-constexpr int kExplorerRestartCooldownSec = 20;
 constexpr wchar_t kNotificationSoundUrl[] =
     L"https://raw.githubusercontent.com/n0tmar/PrayerTray/main/windhawk/audio/allah-akbar.mp3";
 constexpr unsigned kNotificationSoundBytes = 85512;
@@ -2287,7 +2286,7 @@ bool SlotUiReady() {
     return g_win10OverlayHwnd != nullptr;
 }
 
-bool ClaimExplorerRestart() {
+bool ClaimExplorerRestartOnce() {
     const auto base = GetAppDataPrayerTrayPath();
     if (base.empty()) {
         return false;
@@ -2295,25 +2294,26 @@ bool ClaimExplorerRestart() {
     CreateDirectoryW(base.c_str(), nullptr);
     const std::wstring flag = base + L"\\explorer-restart.flag";
 
-    WIN32_FILE_ATTRIBUTE_DATA attrs{};
-    if (GetFileAttributesExW(flag.c_str(), GetFileExInfoStandard, &attrs)) {
-        FILETIME nowFt{};
-        GetSystemTimeAsFileTime(&nowFt);
-        ULARGE_INTEGER now{}, then{};
-        now.LowPart = nowFt.dwLowDateTime;
-        now.HighPart = nowFt.dwHighDateTime;
-        then.LowPart = attrs.ftLastWriteTime.dwLowDateTime;
-        then.HighPart = attrs.ftLastWriteTime.dwHighDateTime;
-        const ULONGLONG ageSec = (now.QuadPart - then.QuadPart) / 10000000ULL;
-        if (ageSec < static_cast<ULONGLONG>(kExplorerRestartCooldownSec)) {
-            Wh_Log(L"Explorer restart skipped (cooldown %llu s)", ageSec);
-            return false;
-        }
+    // CREATE_NEW: atomic one-shot. If the flag already exists, never restart again
+    // until the mod is disabled (flag cleared in Wh_ModBeforeUninit).
+    HANDLE h = CreateFileW(flag.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Explorer restart skipped (already restarted once)");
+        return false;
     }
+    DWORD written = 0;
+    WriteFile(h, "1", 1, &written, nullptr);
+    CloseHandle(h);
+    return true;
+}
 
-    std::ofstream out(flag.c_str(), std::ios::trunc);
-    out << "1";
-    return static_cast<bool>(out);
+void ClearExplorerRestartFlag() {
+    const auto base = GetAppDataPrayerTrayPath();
+    if (base.empty()) {
+        return;
+    }
+    DeleteFileW((base + L"\\explorer-restart.flag").c_str());
 }
 
 void ScheduleExplorerRestart() {
@@ -2337,13 +2337,17 @@ void ScheduleExplorerRestart() {
 void MaybeRestartExplorerForSlot() {
     ApplyEngineToBackends();
     if (SlotUiReady()) {
+        // Slot worked — allow one restart again if the mod is later re-enabled
+        // and injection fails. Do not clear on unload: that would re-arm a loop
+        // when Explorer is killed for the restart itself.
+        ClearExplorerRestartFlag();
         return;
     }
     if (!FindCurrentProcessTaskbarWnd()) {
         // Folder explorers have no tray — don't kill the shell for them.
         return;
     }
-    if (!ClaimExplorerRestart()) {
+    if (!ClaimExplorerRestartOnce()) {
         return;
     }
     ScheduleExplorerRestart();
