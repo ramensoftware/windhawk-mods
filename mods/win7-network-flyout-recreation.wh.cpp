@@ -1,14 +1,16 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11
-// @version        2.8.7
+// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations
+// @version        3.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
+// @include        control.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi
+// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -loleaut32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi -lshlwapi
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Windows 7 Network Flyout Recreation
@@ -19,15 +21,13 @@ Screenshot of the light theme:
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/light.png)
 
-
 Screenshot of the dark theme:
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/dark.png)
 
-
 The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
-## Features
 
+## Features
 - **Wi-Fi network list**: Shows all available networks with live signal strength
 - **Connect/Disconnect**: Connect to secured and open networks with password support
 - **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
@@ -38,37 +38,34 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese or auto-detect
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
-- **Dual Theme Support (NEW)**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
-## Requirements
+- **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
+- **NEW: Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
+- **NEW: Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links, including their original custom 24×24 icons.
 
+### Network Center custom icons
+The two icon resources are embedded as a hardcoded resource-only PE. At process start it is written under `%TEMP%\Win7NetworkCenterLinks\`, kept for DirectUI for the process lifetime, and deleted on unload. If the temporary DLL cannot be created or loaded, the stock fallback icons are used.
+
+
+## Requirements
 - **Windows 10** with the native taskbar
-- **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher))
+- **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) or similar mods)
 - The network icon must be visible in the main system tray (overflow menu not supported)
 
-> **Note:** This mod is unlikely to work with other taskbar mods (e.g. Retrobar) or heavily customized configurations.
+> **Note:** This mod is unlikely to work with some taskbar mods (e.g. Retrobar because they don't use the ToolbarWindow32) or heavily customized and unstable configurations.
 
 ## Known limitations
-
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
 
 ## Hotkeys
-
 | Key | Action |
 |-----|--------|
 | **Ctrl+H** | Toggle network flyout (disabled by default) |
 
 ## Credits
-
 - **m417z** — Code review
 - **Anixx** — Testing on Windows 11 23H2 and feedback
 - **sebastian08dm08-cpu** — Testing on Windows 10 1809
-## Changelog (version 2.8.7)
-- Added custom dark theme for the entire flyout UI
-- Added support for German and Portuguese languages
-- Implemented dark theme for password dialog and context menus
-- Improved the UI layout with dynamic refresh button positioning
-- Enhanced visual consistency with Windows 7 original design
 
 If you encounter issues, please report them on the author of the mod.
 */
@@ -99,9 +96,12 @@ If you encounter issues, please report them on the author of the mod.
 - enableHotkey: false
   $name: Enable Ctrl+H hotkey
   $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts.
-- useRoundedCorners: false
+- useRoundedCorners: true
   $name: Rounded corners
   $description: Give the flyout window rounded corners. Looks better on Windows 11 or with the Aero theme enabled. Disabled by default for classic theme compatibility.
+- restoreClassicNetworkCenterLinks: true
+  $name: Restore classic Network Center links
+  $description: Add the Windows 7 “Connect to a network” and HomeGroup/sharing links to the ''Network and Sharing Center'' page in the Control Panel.
 - theme: light
   $name: Theme
   $description: Select the network flyout's theme
@@ -110,11 +110,37 @@ If you encounter issues, please report them on the author of the mod.
     - dark: Dark (Custom)
 */
 // ==/WindhawkModSettings==
+// This is a debug setting to add if necessary to simulate Ethernet 
+/* - debugEthernet: off
+  $name: Debug Ethernet Flyout
+  $description: Simulate an active Ethernet connection in the flyout (for testing on Wi-Fi only PCs).
+  $options:
+    - off: Disabled (Normal detection)
+    - ethernet_wifi: Simulate Ethernet + Wi-Fi available (Laptop style)
+    - ethernet_only: Simulate Ethernet only, no Wi-Fi (Desktop style, compact flyout matching original Windows 7 LAN UI) */
+// ## Changelog 
+// - Added full Ethernet / wired LAN connection detection and classic Windows 7 UI support
+// - Added compact flyout layout when no Wi-Fi networks are available (or Ethernet only), matching original Windows 7 LAN design
+// - Added debug option (`debugEthernet`) in settings to simulate Ethernet flyout layouts (both desktop LAN-only and laptop LAN+Wi-Fi styles) for testing on Wi-Fi only systems
+// - Enhanced system stability by supporting systems without Wi-Fi adapters
+// - Restored the 2 links inside the "Network and Sharing Center" control panel page like in Windows 7
 #ifndef UNICODE
 #define UNICODE
 #endif
+#define WIN32_LEAN_AND_MEAN
+#undef _WINSOCKAPI_
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-W#warnings"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcpp"
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
 #include <windows.h>
 #include <windowsx.h>
+#include <iphlpapi.h>
+#include <ipifcons.h>
 #include <wlanapi.h>
 #include <objbase.h>
 #include <uxtheme.h>
@@ -124,11 +150,12 @@ If you encounter issues, please report them on the author of the mod.
 #include <commctrl.h>
 #include <math.h>
 #include <windhawk_api.h>
-#include <iphlpapi.h>
 #include <netlistmgr.h>
 #include <windhawk_utils.h>
 #include <process.h>
 #include <psapi.h>
+#include <shlwapi.h>
+#include <string>
 
 // =========================================================
 // Dark context menu support (right-click menu only)
@@ -154,77 +181,7 @@ static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
 }
 
-
-void InitGlobalFonts();
-void FreeGlobalFonts();
-void InitRefreshButtonRect(void);
-void RecalcArrowRect();
-void ApplyNativeControlsTheme();
-
-void RecalcDpiMetrics(UINT dpi) {
-    g_dpi = dpi ? dpi : 96;
-
-    WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
-    WINDOW_HEIGHT       = ScaleDpi(WINDOW_HEIGHT_BASE);
-    HEADER_HEIGHT       = ScaleDpi(HEADER_HEIGHT_BASE);
-    FOOTER_HEIGHT       = ScaleDpi(FOOTER_HEIGHT_BASE);
-    LIST_Y_START        = HEADER_HEIGHT + 1;
-    LIST_Y_END          = WINDOW_HEIGHT - FOOTER_HEIGHT;
-    WIFI_LABEL_Y         = HEADER_HEIGHT - ScaleDpi(24);
-    ROW_HEIGHT_NORMAL    = ScaleDpi(ROW_HEIGHT_NORMAL_BASE);
-    ROW_HEIGHT_EXPANDED  = ScaleDpi(ROW_HEIGHT_EXPANDED_BASE);
-
-    InitGlobalFonts();
-    InitRefreshButtonRect();
-    RecalcArrowRect();
-}
-
-#define IDC_CONN_BUTTON     1002
-#define IDC_AUTO_CHECKBOX   1003
-#define HOTKEY_ID           9001
-#define WM_REFRESH_DATA     (WM_USER + 100)
-#define WM_SAFE_CLOSE       (WM_USER + 101)
-#define WM_SHOW_FLYOUT      (WM_USER + 102)
-#define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
-#define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
-
-
-static UINT g_uTaskbarCreated = 0;
-static DWORD g_dwFlyoutOwnerThreadId = 0;
-static HANDLE g_hConnectThread = NULL; 
-#define IDM_CONNECT         2001
-#define IDM_DISCONNECT      2002
-#define IDM_STATUS          2003
-#define IDM_PROPERTIES      2004
-#define IDM_TRAY_TROUBLESHOOT      5001
-#define IDM_TRAY_NETWORK_SETTINGS  5002
-
-#define CLICK_DEBOUNCE_MS 600
-#define CONNECTION_TIMEOUT_MS 18000
-#define DISCONNECTION_TIMEOUT_MS 4000
-#define WLAN_REASON_CODE_INVALID_PROFILE    0x00038001  // 229377
-
-// Base64 resources
-static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAN9JREFUOE9joAkw3nrrPwhDuaSB6Ree/zddcZVozUxQGg4WHn/OkKLAB+URBigGzDzy8D/j9z8MPEyMDNeuXVtx9epVMagUToBiwILDTxkYfv5hePr2O4OWllaEtrb2K6gUGFi2H8PwGiOIsKw/hNPPxxvtMNTAxEAAzrCs2IthyPEOZ4hmPHJwA0DAsnAHwpZ+D4hmJDF0AFODAiyzN2HV0LX8wn+QHC55ooB54rL/M9aeJ8+AqcuO/zcMmYKhGSMh4QJTF25nSPTRgPJIAIdPXFZXME/6D8JQoUEFGBgAn8daV7VTN5UAAAAASUVORK5CYII=////v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT07u7u9vb2+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABRUExURev0/TO12pfQ5zWo1TiXzpnI45nE4TmOyqfL5Orz/DmHxo663Dl/wkuKyESGxTl4vTlxuDlrsoqn0Ddhppitz5WmxzFUlCpHfpKgvMPI0yA3YglAoVgAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAFRJREFUKFN9yEkSgDAIRFHibJyIs7n/QS2goxvLt2h+Qd+cQ0CWI5KiREBVNy3SeN/Z1aVeDKOGfSbxHMHMOsI+QXcOdl/LioBtRyTHiTBXjKh/RDeDBAMcwXjgKAAAAABJRU5ErkJggg==//9T3qpBX7Ilk83uLCM4kMlo+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhGETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQAAAAASUVORK5CYII=";
-
-static HICON g_hIconRefreshNormal = NULL;
-static INetworkListManager* g_pNLM = NULL;
-// Custom network icon: left in code but disabled (stability issues).
-
-// -------------------------------------------------------
-// Connection state
-// -------------------------------------------------------
-typedef enum {
-    CONN_STATE_IDLE = 0,
-    CONN_STATE_CONNECTING,
-    CONN_STATE_CONNECTED,
-    CONN_STATE_DISCONNECTING,
-    CONN_STATE_ERROR
-} ConnectionState;
-
-// -------------------------------------------------------
-// Settings
-// -------------------------------------------------------
+// Define settings early so they are available to RecalcDpiMetrics and UI helpers
 struct ModSettings {
     BOOL interceptNativeFlyout;
     BOOL privacyMode;
@@ -232,8 +189,9 @@ struct ModSettings {
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
-    int  theme;  // 0=light, 1=dark
-} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, FALSE, 0 };
+    int  theme;          // 0=light, 1=dark
+    int  debugEthernet;  // 0=off, 1=ethernet_wifi, 2=ethernet_only
+} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, FALSE, 0, 0 };
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
@@ -253,7 +211,6 @@ void LoadSettings() {
     }
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
-
     LPCWSTR theme = Wh_GetStringSetting(L"theme");
     int raw_theme = 0;
     if (theme) {
@@ -261,25 +218,106 @@ void LoadSettings() {
         else raw_theme = 0;
         Wh_FreeStringSetting(theme);
     }
+    
+    LPCWSTR dbgEth = Wh_GetStringSetting(L"debugEthernet");
+    int raw_debugEthernet = 0;
+    if (dbgEth) {
+        if (_wcsicmp(dbgEth, L"ethernet_wifi") == 0) raw_debugEthernet = 1;
+        else if (_wcsicmp(dbgEth, L"ethernet_only") == 0) raw_debugEthernet = 2;
+        Wh_FreeStringSetting(dbgEth);
+    }
 
-    g_Settings.interceptNativeFlyout      = raw_intercept   != 0;
-    g_Settings.privacyMode               = raw_privacy     != 0;
-    g_Settings.refreshInterval            = raw_refresh;
-    g_Settings.language                  = raw_language;
-    g_Settings.enableHotkey              = raw_enableHotkey != 0;
-    g_Settings.useRoundedCorners         = raw_roundedCorners != 0;
-    g_Settings.theme                     = raw_theme;
+    g_Settings.interceptNativeFlyout     = raw_intercept   != 0;
+    g_Settings.privacyMode              = raw_privacy     != 0;
+    g_Settings.refreshInterval           = raw_refresh;
+    g_Settings.language                 = raw_language;
+    g_Settings.enableHotkey             = raw_enableHotkey != 0;
+    g_Settings.useRoundedCorners        = raw_roundedCorners != 0;
+    g_Settings.theme                    = raw_theme;
+    g_Settings.debugEthernet            = raw_debugEthernet;
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
         g_Settings.refreshInterval = 1000;
     }
 }
+
+// Global network count defined early for RecalcDpiMetrics
+int g_NetworkCount = 0;
+
+void InitGlobalFonts();
+void FreeGlobalFonts();
+void InitRefreshButtonRect(void);
+void RecalcArrowRect();
+void ApplyNativeControlsTheme();
+
+void RecalcDpiMetrics(UINT dpi) {
+    g_dpi = dpi ? dpi : 96;
+    WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
+    
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
+    int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
+    
+    WINDOW_HEIGHT       = ScaleDpi(targetWindowHeightBase);
+    HEADER_HEIGHT       = ScaleDpi(targetHeaderHeightBase);
+    FOOTER_HEIGHT       = ScaleDpi(FOOTER_HEIGHT_BASE);
+    LIST_Y_START        = HEADER_HEIGHT + 1;
+    LIST_Y_END          = WINDOW_HEIGHT - FOOTER_HEIGHT;
+    WIFI_LABEL_Y        = HEADER_HEIGHT - ScaleDpi(24);
+    ROW_HEIGHT_NORMAL   = ScaleDpi(ROW_HEIGHT_NORMAL_BASE);
+    ROW_HEIGHT_EXPANDED = ScaleDpi(ROW_HEIGHT_EXPANDED_BASE);
+
+    InitGlobalFonts();
+    InitRefreshButtonRect();
+    RecalcArrowRect();
+}
+
+#define IDC_CONN_BUTTON     1002
+#define IDC_AUTO_CHECKBOX   1003
+#define HOTKEY_ID           9001
+#define WM_REFRESH_DATA     (WM_USER + 100)
+#define WM_SAFE_CLOSE       (WM_USER + 101)
+#define WM_SHOW_FLYOUT      (WM_USER + 102)
+#define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
+#define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
+
+static UINT g_uTaskbarCreated = 0;
+static DWORD g_dwFlyoutOwnerThreadId = 0;
+static HANDLE g_hConnectThread = NULL; 
+
+#define IDM_CONNECT         2001
+#define IDM_DISCONNECT      2002
+#define IDM_STATUS          2003
+#define IDM_PROPERTIES      2004
+#define IDM_TRAY_TROUBLESHOOT      5001
+#define IDM_TRAY_NETWORK_SETTINGS  5002
+
+#define CLICK_DEBOUNCE_MS 600
+#define CONNECTION_TIMEOUT_MS 18000
+#define DISCONNECTION_TIMEOUT_MS 4000
+#define WLAN_REASON_CODE_INVALID_PROFILE    0x00038001  // 229377
+
+// Base64 resources
+static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAN9JREFUOE9joAkw3nrrPwhDuaSB6Ree/zddcZVozUxQGg4WHn/OkKLAB+URBigGzDzy8D/j9z8MPEyMDNeuXVtx9epVMagUToBiwILDTxkYfv5hePr2O4OWllaEtrb2K6gUGFi2H8PwGiOIsKw/hNPPxxvtMNTAxEAAzrCs2IthyPEOZ4hmPHJwA0DAsnAHwpZ+D4hmJDF0AFODAiyzN2HV0LX8wn+QHC55ooB54rL/M9aeJ8+AqcuO/zcMmYKhGSMh4QJTF25nSPTRgPJIAIdPXFZXME/6D8JQoUEFGBgAn8daV7VTN5UAAAAASUVORK5CYII=////v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT07u7u9vb2+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABRUExURev0/TO12pfQ5zWo1TiXzpnI45nE4TmOyqfL5Orz/DmHxo663Dl/wkuKyESGxTl4vTlxuDlrsoqn0Ddhppitz5WmxzFUlCpHfpKgvMPI0yA3YglAoVgAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAFRJREFUKFN9yEkSgDAIRFHibJyIs7n/QS2goxvLt2h+Qd+cQ0CWI5KiREBVNy3SeN/Z1aVeDKOGfSbxHMHMOsI+QXcOdl/LioBtRyTHiTBXjKh/RDeDBAMcwXjgKAAAAABJRU5ErkJggg==//9T3qpBX7Ilk83uLCM4kMlo+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhGETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQAAAAASUVORK5CYII=";
+
+static HICON g_hIconRefreshNormal = NULL;
+static INetworkListManager* g_pNLM = NULL;
+
+// -------------------------------------------------------
+// Connection state
+// -------------------------------------------------------
+typedef enum {
+    CONN_STATE_IDLE = 0,
+    CONN_STATE_CONNECTING,
+    CONN_STATE_CONNECTED,
+    CONN_STATE_DISCONNECTING,
+    CONN_STATE_ERROR
+} ConnectionState;
+
 // =========================================================
 // Dark context menu support (right-click only; light theme untouched).
 // =========================================================
 namespace DarkContextMenu {
-
-
 enum class AppMode {
     Default,
     AllowDark,
@@ -290,12 +328,10 @@ enum class AppMode {
 
 using FlushMenuThemes_T     = void(WINAPI*)();
 using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
-
 static HMODULE g_hUxtheme = NULL;
 static FlushMenuThemes_T     pFlushMenuThemes    = nullptr;
 static SetPreferredAppMode_T pSetPreferredAppMode = nullptr;
 
-// Apply (or restore) dark menu theme.
 void Apply(BOOL dark) {
     if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
     pFlushMenuThemes();
@@ -321,39 +357,47 @@ void Uninit() {
         g_hUxtheme = NULL;
     }
 }
-
 } // namespace DarkContextMenu
 
 // -------------------------------------------------------
 // Theme color helper functions
 // -------------------------------------------------------
 COLORREF GetHeaderBgColor() {
-    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(235, 244, 253);
+    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(255, 255, 255);
 }
+
 COLORREF GetContentBgColor() {
     return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
+
 COLORREF GetFooterBgColor() {
-    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(235, 244, 253);
+    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(241, 245, 253);
 }
+
 COLORREF GetTextColor() {
     return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(0, 0, 0);
 }
+
 COLORREF GetSecondaryTextColor() {
     return (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(110, 110, 110);
 }
+
 COLORREF GetLinkColor() {
     return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
 }
+
 COLORREF GetRowSelectedColor() {
     return (g_Settings.theme == 1) ? RGB(40, 40, 50) : RGB(228, 241, 252);
 }
+
 COLORREF GetRowHoverColor() {
     return (g_Settings.theme == 1) ? RGB(35, 35, 45) : RGB(242, 247, 253);
 }
+
 COLORREF GetRowSelectedBorderColor() {
     return (g_Settings.theme == 1) ? RGB(60, 80, 120) : RGB(174, 212, 243);
 }
+
 COLORREF GetRowHoverBorderColor() {
     return (g_Settings.theme == 1) ? RGB(50, 70, 100) : RGB(216, 231, 248);
 }
@@ -388,9 +432,8 @@ typedef struct {
     DOT11_MAC_ADDRESS bssid;
     BOOL  hasBssid;
     int   displaySuffix;
-
     ConnectionState connState;
-    DWORD operationStartTime;  // For timeout detection
+    DWORD operationStartTime;  
 } WifiNetworkItem;
 
 typedef struct {
@@ -406,11 +449,11 @@ typedef struct {
     DOT11_MAC_ADDRESS bssid;
     BOOL hasBssid;
 } AsyncConnectContext;
+
 // -------------------------------------------------------
 // Windows version detection
 // -------------------------------------------------------
 static bool g_isWin11 = false;
-
 static void DetectWindowsVersion() {
     OSVERSIONINFOEXW osvi = {};
     osvi.dwOSVersionInfoSize = sizeof(osvi);
@@ -424,14 +467,11 @@ static void DetectWindowsVersion() {
     Wh_Log(L"Detected %s (build %lu.%lu.%lu)", 
            g_isWin11 ? L"Windows 11" : L"Windows 10",
            osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
-
     if (g_isWin11) {
-
         HWND hTray    = FindWindowW(L"Shell_TrayWnd", NULL);
         HWND hNotify  = hTray   ? FindWindowExW(hTray,   NULL, L"TrayNotifyWnd",   NULL) : NULL;
         HWND hSysPager= hNotify ? FindWindowExW(hNotify, NULL, L"SysPager",        NULL) : NULL;
         HWND hToolbar = hSysPager? FindWindowExW(hSysPager,NULL,L"ToolbarWindow32", NULL) : NULL;
-
         if (hToolbar) {
             int btnCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
             Wh_Log(L"Win11: Win10 legacy taskbar detected (ToolbarWindow32 found, %d buttons)", btnCount);
@@ -444,8 +484,6 @@ static void DetectWindowsVersion() {
         } else {
             Wh_Log(L"Win11: Shell_TrayWnd not found — taskbar not ready yet");
         }
-
-
         WCHAR epPniduiPath[MAX_PATH];
         StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
                          L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
@@ -454,7 +492,6 @@ static void DetectWindowsVersion() {
         } else {
             Wh_Log(L"ExplorerPatcher not detected");
         }
-
         WCHAR sysPniduiPath[MAX_PATH];
         GetSystemDirectoryW(sysPniduiPath, ARRAYSIZE(sysPniduiPath));
         StringCchCatW(sysPniduiPath, ARRAYSIZE(sysPniduiPath), L"\\pnidui.dll");
@@ -465,25 +502,17 @@ static void DetectWindowsVersion() {
         }
     }
 }
+
 // -------------------------------------------------------
 // Global variables
 // -------------------------------------------------------
 static ModContext g_Ctx        = {0};
 static BOOL       g_Initialized = FALSE;
-
 HWND g_hWndFlyout          = NULL;
 HWND g_hWndButtonConnect   = NULL;
 HWND g_hWndCheckboxConnect = NULL;
-BOOL g_bListExpanded        = TRUE;
-
-// (WM_SETFONT) sia dal rendering owner-draw in tema scuro (WM_DRAWITEM).
-
-// serve gia' ad ApplyNativeControlsTheme, definita subito sotto.
-HFONT g_hFontButton    = NULL;
-
-
-// con cui g_hWndButtonConnect e' attualmente creato (owner-draw o nativo).
-// ricreare il bottone con il tipo giusto.
+BOOL g_bListExpanded       = TRUE;
+HFONT g_hFontButton        = NULL;
 int g_ButtonConnectIsOwnerDraw = -1;
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -495,7 +524,6 @@ static BOOL g_IsHoveringConnectButton = FALSE;
 void ApplyNativeControlsTheme() {
     LPCWSTR themeName = (g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer";
     
-
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         SetWindowTheme(g_hWndFlyout, themeName, NULL);
         BOOL useDark = (g_Settings.theme == 1);
@@ -504,26 +532,15 @@ void ApplyNativeControlsTheme() {
                      SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
     }
     
-
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
         SetWindowTheme(g_hWndCheckboxConnect, themeName, NULL);
-
-
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
-        // Se siamo in tema scuro, usa il tema DarkMode_Explorer
-        // che gestisce automaticamente hover, pressed, disabled
         if (g_Settings.theme == 1) {
             SetWindowTheme(g_hWndButtonConnect, L"DarkMode_Explorer", NULL);
-            // Rende il pulsante nativo ma con tema scuro
-            // Windows gestirà automaticamente hover, click, ecc.
         } else {
             SetWindowTheme(g_hWndButtonConnect, L"Explorer", NULL);
         }
     }
-
-
- 
-
 }
 
 HFONT g_hFontNormal    = NULL;
@@ -531,43 +548,38 @@ HFONT g_hFontBold      = NULL;
 HFONT g_hFontUnderline = NULL;
 HFONT g_hFontCheckbox  = NULL;
 HFONT g_hFontArrow     = NULL;
-
 WifiNetworkItem g_NetworkList[50];
-int  g_NetworkCount           = 0;
 BOOL g_IsHoveringLink         = FALSE;
 BOOL g_IsHoveringRefresh      = FALSE;
 BOOL g_IsHoveringArrow        = FALSE;
-int g_ScrollPos = 0;
+int  g_ScrollPos              = 0;
 int  g_SelectedRowIndex       = -1;
 int  g_HoveredRowIndex        = -1;
 int  g_KeyboardSelectedIndex  = -1;
 int  g_ContextMenuTargetIndex = -1;
-
 RECT g_rcRefreshButton = { 0 };
-RECT g_rcArrowButton = { 0 };
+RECT g_rcArrowButton   = { 0 };
 RECT g_rcCheckboxLabel = { 0 };
 BOOL g_bShowCheckboxLabel = FALSE;
-
 HICON g_hIconNetworkMap  = NULL;
 HICON g_hIconSignalBars[6] = { NULL };
 HICON g_hIconRefreshWin7 = NULL;
-
 int   g_PendingConnectIndex = -1;
 HWND  g_hTooltip = NULL;
-
 UINT_PTR g_RefreshTimer = 0;
-UINT_PTR g_TimeoutTimer = 0;  HWND G_hSubclassedToolbar = nullptr;
-
-
-
+UINT_PTR g_TimeoutTimer = 0;
+HWND G_hSubclassedToolbar = nullptr;
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
-
 static HANDLE g_hConnectMutex = NULL;
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
-
 static void* g_pBitmapSignalBars[6] = { NULL };
+
+// Ethernet status variables
+static BOOL  g_EthernetConnected = FALSE;
+static WCHAR g_EthernetNetworkName[64] = {0};
+static BOOL  g_EthernetHasInternet = FALSE;
 
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
@@ -590,11 +602,9 @@ static GdipSetPixelOffsetModeFunc pGdipSetPixelOffsetMode = NULL;
 static GdipGraphicsClearFunc pGdipGraphicsClear = NULL;
 static GdipCreateHBITMAPFromBitmapFunc pGdipCreateHBITMAPFromBitmap = NULL;
 static GdipDisposeImageFunc pGdipDisposeImage = NULL;
+
 static BOOL g_inPasswordPrompt = FALSE;
-
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
-
-
 static WCHAR g_TooltipBuffer[1024] = {0};
 
 // -------------------------------------------------------
@@ -1051,9 +1061,9 @@ void SetKeyboardFocus(int index);
 void ClearKeyboardFocus(void);
 BOOL IsInternetConnected(void);
 static BOOL AskForPasswordAndConnect(int index);
-void RecalcDpiMetrics(UINT dpi);
 static int GetTotalListHeight(void);  
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid);
+
 static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     if (!ssid || ssid[0] == L'\0') {
         Wh_Log(L"%s <empty>", prefix);
@@ -1067,16 +1077,14 @@ static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     }
     Wh_Log(L"%s %s", prefix, safe);
 }
-static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode function to create HICON
+
+static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) {
     static const WCHAR* tbl = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    
     int len = lstrlenW(base64Str);
     while (len > 0 && base64Str[len-1] == L'=') len--;
-    
     DWORD outLen = (len * 3) / 4;
     BYTE* data = (BYTE*)malloc(outLen);
     if (!data) return NULL;
-    
     DWORD val = 0;
     int bits = -8, pos = 0;
     for (int i = 0; i < len; i++) {
@@ -1086,17 +1094,14 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode 
         bits += 6;
         if (bits >= 0) { data[pos++] = (val >> bits) & 0xFF; bits -= 8; }
     }
-    
     HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, outLen);
     if (!hMem) { free(data); return NULL; }
     memcpy(GlobalLock(hMem), data, outLen);
     GlobalUnlock(hMem);
     free(data);
-    
     IStream* stream = NULL;
     CreateStreamOnHGlobal(hMem, TRUE, &stream);
     if (!stream) { GlobalFree(hMem); return NULL; }
-    
     HICON hIcon = NULL;
     HMODULE hGdi = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hGdi) {
@@ -1105,17 +1110,14 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode 
         typedef int (WINAPI *GdipCreateHICONFromBitmapFunc)(void*, HICON*);
         typedef int (WINAPI *GdipDisposeImageFunc)(void*);
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
-        
         GdiplusStartupFunc pStartup = (GdiplusStartupFunc)GetProcAddress(hGdi, "GdiplusStartup");
         GdipCreateBitmapFromStreamFunc pFromStream = (GdipCreateBitmapFromStreamFunc)GetProcAddress(hGdi, "GdipCreateBitmapFromStream");
         GdipCreateHICONFromBitmapFunc pToHICON = (GdipCreateHICONFromBitmapFunc)GetProcAddress(hGdi, "GdipCreateHICONFromBitmap");
         GdipDisposeImageFunc pDispose = (GdipDisposeImageFunc)GetProcAddress(hGdi, "GdipDisposeImage");
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(hGdi, "GdiplusShutdown");
-        
         if (pStartup && pFromStream && pToHICON && pDispose && pShutdown) {
             ULONG_PTR token = 0;
             struct { DWORD Version; void* Callback; BOOL Suppress; } input = {1, NULL, FALSE};
-            
             if (pStartup(&token, &input, NULL) == 0) {
                 void* bitmap = NULL;
                 if (pFromStream(stream, &bitmap) == 0) {
@@ -1130,38 +1132,30 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str) { // Base64 decode 
     stream->Release();
     return hIcon;
 }
+
 static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, int lineHeight) {
     if (!text || text[0] == L'\0') return;
-    
     int totalLen = lstrlenW(text);
     if (totalLen == 0) return;
-    
     SIZE size;
     GetTextExtentPoint32W(hdc, text, totalLen, &size);
-    
     if (size.cx <= maxWidth) {
         TextOutW(hdc, x, y, text, totalLen);
         return;
     }
-    
     WCHAR buffer[256];
     int lineStart = 0;
     int currentY = y;
-    
     while (lineStart < totalLen) {
         int lineLen = 0;
         int lastGoodBreak = 0;
-        
         for (int i = 0; lineStart + i < totalLen; i++) {
             buffer[i] = text[lineStart + i];
             buffer[i + 1] = L'\0';
-            
             GetTextExtentPoint32W(hdc, buffer, i + 1, &size);
-            
             if (text[lineStart + i] == L' ') {
                 lastGoodBreak = i;
             }
-            
             if (size.cx > maxWidth) {
                 if (lastGoodBreak > 0) {
                     lineLen = lastGoodBreak;
@@ -1172,19 +1166,16 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
             }
             lineLen = i + 1;
         }
-        
         TextOutW(hdc, x, currentY, text + lineStart, lineLen);
-        
         while (lineStart + lineLen < totalLen && text[lineStart + lineLen] == L' ') {
             lineLen++;
         }
-        
         lineStart += lineLen;
         currentY += lineHeight;
-        
         if (currentY > y + lineHeight * 5) break;
     }
 }
+
 // -------------------------------------------------------
 // Internet check
 // -------------------------------------------------------
@@ -1233,37 +1224,27 @@ void DrawFocusRectangle(HDC hdc, const RECT* rcRow) {
     SelectObject(hdc, hOldBrush);
     DeleteObject(hPen);
 }
+
 void InitRefreshButtonRect(void) {
-    // Dimensioni base del pulsante (in pixel a 96 DPI)
     const int buttonSize = ScaleDpi(16);
     const int margin = ScaleDpi(8);
-    
-    // Calcola se c'è una barra di scorrimento
     int totalListHeight = GetTotalListHeight();
     int availableHeight = LIST_Y_END - LIST_Y_START;
     BOOL hasScrollbar = (totalListHeight > availableHeight);
-    
-    // Posizione X di base (dal bordo destro)
     int baseX = WINDOW_WIDTH - margin - buttonSize;
-    
-    // Se NON c'è la barra di scorrimento, sposta il pulsante del 4% più a destra
-    // e poi dell'1.3% più a sinistra (netto: +2.7% verso destra)
     if (!hasScrollbar) {
-        baseX += (WINDOW_WIDTH * 4) / 100;     // +4% della larghezza finestra verso destra
-        baseX -= (WINDOW_WIDTH * 13) / 1000;   // -1.3% della larghezza finestra verso sinistra
+        baseX += (WINDOW_WIDTH * 4) / 100;     
+        baseX -= (WINDOW_WIDTH * 13) / 1000;   
     }
-    
-    // Limite di sicurezza per evitare che esca completamente dallo schermo a destra
     if (baseX + buttonSize > WINDOW_WIDTH) {
         baseX = WINDOW_WIDTH - buttonSize;
     }
-    
-    // Ripristinate le altezze originali esatte (altezza da terra precedente)
     g_rcRefreshButton.left   = baseX;
-    g_rcRefreshButton.top    = ScaleDpi(2);  // <--- Altezza originale di prima
+    g_rcRefreshButton.top    = ScaleDpi(2);
     g_rcRefreshButton.right  = baseX + buttonSize;
-    g_rcRefreshButton.bottom = ScaleDpi(24); // <--- Altezza originale di prima
+    g_rcRefreshButton.bottom = ScaleDpi(24);
 }
+
 // -------------------------------------------------------
 // SSID display helper
 // -------------------------------------------------------
@@ -1293,16 +1274,13 @@ void LoadSystemIcons() {
         ExtractIconExW(L"shell32.dll", 238, &g_hIconRefreshWin7, NULL, 1);
 }
 
-// Initialize GDI\+.
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
-    
     g_hGdiPlus = LoadLibraryW(L"gdiplus.dll");
     if (!g_hGdiPlus) {
         Wh_Log(L"GDI+: failed to load gdiplus.dll");
         return FALSE;
     }
-
     pGdipCreateBitmapFromHICON = (GdipCreateBitmapFromHICONFunc)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromHICON");
     pGdipSetInterpolationMode = (GdipSetInterpolationModeFunc)GetProcAddress(g_hGdiPlus, "GdipSetInterpolationMode");
     pGdipDrawImageRectI = (GdipDrawImageRectIFunc)GetProcAddress(g_hGdiPlus, "GdipDrawImageRectI");
@@ -1313,7 +1291,6 @@ static BOOL InitGdiPlusRendering() {
     pGdipGraphicsClear = (GdipGraphicsClearFunc)GetProcAddress(g_hGdiPlus, "GdipGraphicsClear");
     pGdipCreateHBITMAPFromBitmap = (GdipCreateHBITMAPFromBitmapFunc)GetProcAddress(g_hGdiPlus, "GdipCreateHBITMAPFromBitmap");
     pGdipDisposeImage = (GdipDisposeImageFunc)GetProcAddress(g_hGdiPlus, "GdipDisposeImage");
-
     if (!pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode || !pGdipDrawImageRectI ||
         !pGdipDeleteGraphics || !pGdipCreateBitmapFromScan0 || !pGdipGetImageGraphicsContext ||
         !pGdipSetPixelOffsetMode || !pGdipGraphicsClear || !pGdipCreateHBITMAPFromBitmap ||
@@ -1323,15 +1300,13 @@ static BOOL InitGdiPlusRendering() {
         g_hGdiPlus = NULL;
         return FALSE;
     }
-
-        typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
+    typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
     GdiplusStartupFunc pStartup = (GdiplusStartupFunc)GetProcAddress(g_hGdiPlus, "GdiplusStartup");
     if (!pStartup) {
         FreeLibrary(g_hGdiPlus);
         g_hGdiPlus = NULL;
         return FALSE;
     }
-
     struct { DWORD Version; void* Callback; BOOL Suppress; } si = {1, NULL, FALSE};
     if (pStartup(&g_gdiplusToken, &si, NULL) != 0) {
         Wh_Log(L"GDI+: GdiplusStartup failed");
@@ -1339,12 +1314,10 @@ static BOOL InitGdiPlusRendering() {
         g_hGdiPlus = NULL;
         return FALSE;
     }
-    
     Wh_Log(L"GDI+: initialized successfully");
     return TRUE;
 }
 
-// Shutdown GDI+ and free cached bitmaps
 static void ShutdownGdiPlusRendering() {
     for (int i = 0; i < 6; i++) {
         if (g_pBitmapSignalBars[i]) {
@@ -1352,7 +1325,6 @@ static void ShutdownGdiPlusRendering() {
             g_pBitmapSignalBars[i] = NULL;
         }
     }
-
     if (g_hGdiPlus) {
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
@@ -1364,7 +1336,6 @@ static void ShutdownGdiPlusRendering() {
 }
 
 void FreeSystemIcons() {
-    // Free cached GDI+ bitmaps
     if (g_hGdiPlus && pGdipDisposeImage) {
         for (int i = 0; i < 6; i++) {
             if (g_pBitmapSignalBars[i]) {
@@ -1373,7 +1344,6 @@ void FreeSystemIcons() {
             }
         }
     }
-
     if (g_hIconRefreshNormal) { DestroyIcon(g_hIconRefreshNormal); g_hIconRefreshNormal = NULL; }
     if (g_hIconNetworkMap) { DestroyIcon(g_hIconNetworkMap); g_hIconNetworkMap = NULL; }
     for (int i = 0; i < 6; i++)
@@ -1383,10 +1353,8 @@ void FreeSystemIcons() {
 
 void InitGlobalFonts() {
     FreeGlobalFonts(); 
-
     int sizeNormal = -ScaleDpi(12);
     int sizeSmall  = -ScaleDpi(11);
-
     g_hFontNormal    = CreateFontW(sizeNormal,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH|FF_DONTCARE,L"Segoe UI");
     g_hFontBold      = CreateFontW(sizeNormal,0,0,0,FW_BOLD,  0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH|FF_DONTCARE,L"Segoe UI");
     g_hFontUnderline = CreateFontW(sizeNormal,0,0,0,FW_NORMAL,0,1,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH|FF_DONTCARE,L"Segoe UI");
@@ -1422,31 +1390,57 @@ void PositionWindowNearTray(HWND hwnd) {
 }
 
 // -------------------------------------------------------
-// WLAN data refresh (now populates authAlgorithm & cipherAlgorithm)
+// Fallback flags for IP Helper & NLM in case SDK headers lack them
 // -------------------------------------------------------
+#ifndef GAA_FLAG_SKIP_UNICAST
+#define GAA_FLAG_SKIP_UNICAST 0x0001
+#endif
+#ifndef GAA_FLAG_SKIP_ANYCAST
+#define GAA_FLAG_SKIP_ANYCAST 0x0002
+#endif
+#ifndef GAA_FLAG_SKIP_MULTICAST
+#define GAA_FLAG_SKIP_MULTICAST 0x0004
+#endif
+#ifndef GAA_FLAG_SKIP_DNS_SERVER
+#define GAA_FLAG_SKIP_DNS_SERVER 0x0008
+#endif
+#ifndef IF_TYPE_ETHERNET_CSMACD
+#define IF_TYPE_ETHERNET_CSMACD 6
+#endif
+#ifndef NLM_ENUM_NETWORK_CONNECTED
+#define NLM_ENUM_NETWORK_CONNECTED ((NLM_ENUM_NETWORK)1)
+#endif
+
+// -------------------------------------------------------
+// WLAN data refresh
+// -------------------------------------------------------
+static GUID g_WlanInterfaceGuids[16];
+static int  g_WlanInterfaceCount = 0;
+
 void RefreshWifiData(HANDLE hClient) {
     if (!hClient) return;
     static DWORD lastValidRefresh = 0;
     DWORD now = GetTickCount();
-
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     if (WlanEnumInterfaces(hClient, NULL, &pIfList) != ERROR_SUCCESS) return;
-
+    
+    g_WlanInterfaceCount = 0;
+    if (pIfList) {
+        for (DWORD i = 0; i < pIfList->dwNumberOfItems && g_WlanInterfaceCount < 16; i++) {
+            g_WlanInterfaceGuids[g_WlanInterfaceCount++] = pIfList->InterfaceInfo[i].InterfaceGuid;
+        }
+    }
     WifiNetworkItem tempList[50];
     int tempCount = 0;
     ZeroMemory(tempList, sizeof(tempList));
-
     for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
         WLAN_INTERFACE_INFO IfInfo = pIfList->InterfaceInfo[i];
         PWLAN_AVAILABLE_NETWORK_LIST pBssList  = NULL;
         PWLAN_PROFILE_INFO_LIST      pProfList = NULL;
-
         WlanGetProfileList(hClient, &IfInfo.InterfaceGuid, NULL, &pProfList);
-
         if (WlanGetAvailableNetworkList(hClient, &IfInfo.InterfaceGuid,
                 WLAN_AVAILABLE_NETWORK_INCLUDE_ALL_MANUAL_HIDDEN_PROFILES,
                 NULL, &pBssList) == ERROR_SUCCESS) {
-
             for (DWORD j = 0; j < pBssList->dwNumberOfItems && tempCount < 50; j++) {
                 WLAN_AVAILABLE_NETWORK network = pBssList->Network[j];
                 size_t len = (size_t)network.dot11Ssid.uSSIDLength;
@@ -1459,29 +1453,24 @@ void RefreshWifiData(HANDLE hClient) {
                     for (size_t k = 0; k < cleanLen; k++)
                         cleanSsid[k] = (network.dot11Ssid.ucSSID[k] == 0) ? (BYTE)' ' : network.dot11Ssid.ucSSID[k];
                     cleanSsid[cleanLen] = 0;
-
                     int converted = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)cleanSsid, (int)cleanLen, tempList[tempCount].ssid, 32);
                     if (converted <= 0) {
-
                         for (size_t k = 0; k < cleanLen; k++)
                             tempList[tempCount].ssid[k] = (WCHAR)cleanSsid[k];
                         converted = (int)cleanLen;
                     }
                     tempList[tempCount].ssid[converted] = L'\0';
                 }
-
-                                BOOL duplicate = FALSE;
+                BOOL duplicate = FALSE;
                 int sameSsidVariants = 0;
                 for (int d = 0; d < tempCount; d++) {
                     BOOL sameSsid = (wcscmp(tempList[d].ssid, tempList[tempCount].ssid) == 0);
                     if (!sameSsid) continue;
-
                     BOOL sameSecurity =
                         (tempList[d].isSecured == (BOOL)network.bSecurityEnabled) &&
                         (tempList[d].dot11BssType == network.dot11BssType) &&
                         (tempList[d].authAlgorithm == network.dot11DefaultAuthAlgorithm) &&
                         (tempList[d].cipherAlgorithm == network.dot11DefaultCipherAlgorithm);
-
                     if (sameSecurity) {
                         if (network.wlanSignalQuality > tempList[d].signalQuality)
                             tempList[d].signalQuality = network.wlanSignalQuality;
@@ -1493,7 +1482,6 @@ void RefreshWifiData(HANDLE hClient) {
                     sameSsidVariants++;
                 }
                 if (duplicate) continue;
-
                 tempList[tempCount].isSecured = network.bSecurityEnabled;
                 tempList[tempCount].signalQuality = network.wlanSignalQuality;
                 tempList[tempCount].interfaceGuid = IfInfo.InterfaceGuid;
@@ -1502,14 +1490,11 @@ void RefreshWifiData(HANDLE hClient) {
                 tempList[tempCount].hasInternetAccess = FALSE;
                 tempList[tempCount].connState = (network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED) ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
                 tempList[tempCount].operationStartTime = 0;
-                                tempList[tempCount].authAlgorithm = network.dot11DefaultAuthAlgorithm;
+                tempList[tempCount].authAlgorithm = network.dot11DefaultAuthAlgorithm;
                 tempList[tempCount].cipherAlgorithm = network.dot11DefaultCipherAlgorithm;
-
                 tempList[tempCount].displaySuffix = (sameSsidVariants > 0) ? (sameSsidVariants + 1) : 0;
                 tempList[tempCount].hasBssid = FALSE;
                 ZeroMemory(tempList[tempCount].bssid, sizeof(tempList[tempCount].bssid));
-
-
                 {
                     PWLAN_BSS_LIST pBssDetailList = NULL;
                     if (WlanGetNetworkBssList(hClient, &IfInfo.InterfaceGuid,
@@ -1527,30 +1512,26 @@ void RefreshWifiData(HANDLE hClient) {
                         WlanFreeMemory(pBssDetailList);
                     }
                 }
-
                 if (pProfList) {
-    for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
-        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) != 0)
-            continue;
-
-        LPWSTR pProfileXml = NULL;
-        DWORD flags = 0;
-        if (WlanGetProfile(hClient, &IfInfo.InterfaceGuid,
-                            pProfList->ProfileInfo[p].strProfileName,
-                            NULL, &pProfileXml, &flags, NULL) == ERROR_SUCCESS) {
-            tempList[tempCount].hasProfile = ProfileSecurityMatches(
-                pProfileXml,
-                tempList[tempCount].authAlgorithm,
-                tempList[tempCount].cipherAlgorithm);
-            WlanFreeMemory(pProfileXml);
-        } else {
-            tempList[tempCount].hasProfile = FALSE;
-        }
-        break;
-    }
-}
-
-                // Move connected to top.
+                    for (DWORD p = 0; p < pProfList->dwNumberOfItems; p++) {
+                        if (wcscmp(pProfList->ProfileInfo[p].strProfileName, tempList[tempCount].ssid) != 0)
+                            continue;
+                        LPWSTR pProfileXml = NULL;
+                        DWORD flags = 0;
+                        if (WlanGetProfile(hClient, &IfInfo.InterfaceGuid,
+                                            pProfList->ProfileInfo[p].strProfileName,
+                                            NULL, &pProfileXml, &flags, NULL) == ERROR_SUCCESS) {
+                            tempList[tempCount].hasProfile = ProfileSecurityMatches(
+                                pProfileXml,
+                                tempList[tempCount].authAlgorithm,
+                                tempList[tempCount].cipherAlgorithm);
+                            WlanFreeMemory(pProfileXml);
+                        } else {
+                            tempList[tempCount].hasProfile = FALSE;
+                        }
+                        break;
+                    }
+                }
                 if (tempList[tempCount].connState == CONN_STATE_CONNECTED && tempCount > 0) {
                     WifiNetworkItem tmp;
                     CopyMemory(&tmp, &tempList[0], sizeof(WifiNetworkItem));
@@ -1563,42 +1544,36 @@ void RefreshWifiData(HANDLE hClient) {
         }
         if (pProfList) WlanFreeMemory(pProfList);
     }
-
-WlanFreeMemory(pIfList);
-
-       {
-    bool seenConnectedForInterface[64] = {false};
-    GUID seenGuids[64];
-    int seenCount = 0;
-
-    for (int t = 0; t < tempCount; t++) {
-        if (tempList[t].connState != CONN_STATE_CONNECTED) continue;
-
-        int guidIndex = -1;
-        for (int g = 0; g < seenCount; g++) {
-            if (IsEqualGUID(seenGuids[g], tempList[t].interfaceGuid)) {
-                guidIndex = g;
-                break;
+    WlanFreeMemory(pIfList);
+    {
+        bool seenConnectedForInterface[64] = {false};
+        GUID seenGuids[64];
+        int seenCount = 0;
+        for (int t = 0; t < tempCount; t++) {
+            if (tempList[t].connState != CONN_STATE_CONNECTED) continue;
+            int guidIndex = -1;
+            for (int g = 0; g < seenCount; g++) {
+                if (IsEqualGUID(seenGuids[g], tempList[t].interfaceGuid)) {
+                    guidIndex = g;
+                    break;
+                }
             }
-        }
-        if (guidIndex == -1 && seenCount < 64) {
-            seenGuids[seenCount] = tempList[t].interfaceGuid;
-            guidIndex = seenCount;
-            seenConnectedForInterface[seenCount] = false;
-            seenCount++;
-        }
-
-        if (guidIndex >= 0) {
-            if (seenConnectedForInterface[guidIndex]) {
-                tempList[t].connState = CONN_STATE_IDLE;
-            } else {
-                seenConnectedForInterface[guidIndex] = true;
+            if (guidIndex == -1 && seenCount < 64) {
+                seenGuids[seenCount] = tempList[t].interfaceGuid;
+                guidIndex = seenCount;
+                seenConnectedForInterface[seenCount] = false;
+                seenCount++;
+            }
+            if (guidIndex >= 0) {
+                if (seenConnectedForInterface[guidIndex]) {
+                    tempList[t].connState = CONN_STATE_IDLE;
+                } else {
+                    seenConnectedForInterface[guidIndex] = true;
+                }
             }
         }
     }
-}
-
-        EnterCriticalSection(&g_Ctx.csLock);
+    EnterCriticalSection(&g_Ctx.csLock);
     if (tempCount > 0 && tempCount <= 50) {
         WCHAR pendingSsid[33] = {0};
         BOOL hadPending = (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount);
@@ -1609,19 +1584,15 @@ WlanFreeMemory(pIfList);
                    g_NetworkList[g_PendingConnectIndex].hasProfile,
                    g_NetworkList[g_PendingConnectIndex].connState);
         }
-
-                for (int t = 0; t < tempCount; t++) {
+        for (int t = 0; t < tempCount; t++) {
             for (int e = 0; e < g_NetworkCount; e++) {
                 if (wcscmp(tempList[t].ssid, g_NetworkList[e].ssid) == 0) {
-                    // Preserva lo stato di connessione per le operazioni in corso
                     if (g_NetworkList[e].connState == CONN_STATE_CONNECTING ||
                         g_NetworkList[e].connState == CONN_STATE_DISCONNECTING ||
                         g_NetworkList[e].connState == CONN_STATE_ERROR) {
                         tempList[t].connState = g_NetworkList[e].connState;
                         tempList[t].operationStartTime = g_NetworkList[e].operationStartTime;
                     }
-                    // IMPORTANTE: preserva hasProfile dalla lista esistente
-
                     if (g_NetworkList[e].hasProfile) {
                         tempList[t].hasProfile = TRUE;
                     }
@@ -1631,7 +1602,6 @@ WlanFreeMemory(pIfList);
         }
         CopyMemory(g_NetworkList, tempList, sizeof(WifiNetworkItem) * tempCount);
         g_NetworkCount = tempCount;
-
         if (hadPending) {
             int newIndex = -1;
             for (int n = 0; n < g_NetworkCount; n++) {
@@ -1647,29 +1617,268 @@ WlanFreeMemory(pIfList);
                 g_PendingConnectIndex = -1;
             }
         }
-   } else if (tempCount == 0) {
-    if (now - lastValidRefresh > 30000) {
-        Wh_Log(L"RefreshWifiData: no networks for 30s, clearing all state");
-        ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
-        g_NetworkCount = 0;
-        g_PendingConnectIndex = -1;
+    } else if (tempCount == 0) {
+        if (now - lastValidRefresh > 30000) {
+            Wh_Log(L"RefreshWifiData: no networks for 30s, clearing all state");
+            ZeroMemory(g_NetworkList, sizeof(g_NetworkList));
+            g_NetworkCount = 0;
+            g_PendingConnectIndex = -1;
+        }
     }
-}
-if (tempCount > 0) {
-    lastValidRefresh = now;
-}
-        LeaveCriticalSection(&g_Ctx.csLock);
-
+    if (tempCount > 0) {
+        lastValidRefresh = now;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
     }
-
     Wh_Log(L"Refresh complete: %d network(s) found, connected: %s, g_PendingConnectIndex=%d",
            g_NetworkCount,
            (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
                ? L"yes" : L"no",
            g_PendingConnectIndex);
 }
+
+// -------------------------------------------------------
+// Ethernet detection & dynamic window sizing
+// -------------------------------------------------------
+typedef void (WINAPI *SysFreeStringFunc)(BSTR);
+static SysFreeStringFunc pSysFreeString = NULL;
+
+static void SafeSysFreeString(BSTR bstr) {
+    if (!bstr) return;
+    if (!pSysFreeString) {
+        HMODULE hOleAut32 = GetModuleHandleW(L"oleaut32.dll");
+        if (!hOleAut32) hOleAut32 = LoadLibraryW(L"oleaut32.dll");
+        if (hOleAut32) {
+            pSysFreeString = (SysFreeStringFunc)GetProcAddress(hOleAut32, "SysFreeString");
+        }
+    }
+    if (pSysFreeString) {
+        pSysFreeString(bstr);
+    }
+}
+
+static BOOL ContainsKeywordCI(LPCWSTR str, LPCWSTR keyword) {
+    if (!str || !keyword) return FALSE;
+    int strLen = lstrlenW(str);
+    int kwLen = lstrlenW(keyword);
+    if (kwLen > strLen || kwLen == 0) return FALSE;
+    for (int i = 0; i <= strLen - kwLen; i++) {
+        BOOL match = TRUE;
+        for (int j = 0; j < kwLen; j++) {
+            if (towlower(str[i + j]) != towlower(keyword[j])) {
+                match = FALSE;
+                break;
+            }
+        }
+        if (match) return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
+    if (!desc && !name) return FALSE;
+    const WCHAR* ignoreKeywords[] = {
+        L"vmware", L"virtualbox", L"virtual", L"hyper-v", L"vethernet",
+        L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth", L"wireguard",
+        L"tailscale", L"openvpn", L"warp", L"pseudo", L"miniport", L"wi-fi direct",
+        L"wireless", L"wlan", L"wi-fi", L"802.11"
+    };
+    for (size_t i = 0; i < ARRAYSIZE(ignoreKeywords); i++) {
+        if (desc && ContainsKeywordCI(desc, ignoreKeywords[i])) return TRUE;
+        if (name && ContainsKeywordCI(name, ignoreKeywords[i])) return TRUE;
+    }
+    return FALSE;
+}
+
+void UpdateEthernetStatus() {
+    if (g_Settings.debugEthernet > 0) {
+        g_EthernetConnected = TRUE;
+        StringCchPrintfW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), LOC(STR_NETWORK_PRIVACY_FMT), 2);
+        g_EthernetHasInternet = TRUE;
+        return;
+    }
+    
+    g_EthernetConnected = FALSE;
+    g_EthernetNetworkName[0] = L'\0';
+    g_EthernetHasInternet = FALSE;
+
+    // 1. Find physical operational Ethernet adapter GUID via GetAdaptersAddresses
+    BOOL foundPhysicalEthernet = FALSE;
+    GUID physicalEthernetGuid = {0};
+    WCHAR fallbackName[64] = L"Ethernet";
+    
+    ULONG outBufLen = 15000;
+    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+    if (pAddresses) {
+        ULONG res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, NULL, pAddresses, &outBufLen);
+        if (res == ERROR_BUFFER_OVERFLOW) {
+            free(pAddresses);
+            pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+            if (pAddresses) {
+                res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, NULL, pAddresses, &outBufLen);
+            }
+        }
+        if (res == NO_ERROR && pAddresses) {
+            for (PIP_ADAPTER_ADDRESSES pCurr = pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
+                if ((pCurr->IfType == IF_TYPE_ETHERNET_CSMACD || pCurr->IfType == 117 || pCurr->IfType == 62) &&
+                    pCurr->OperStatus == IfOperStatusUp &&
+                    pCurr->FirstUnicastAddress != NULL) {
+                    
+                    // Check if this adapter GUID belongs to a Wi-Fi card
+                    BOOL isWifiGuid = FALSE;
+                    for (int w = 0; w < g_WlanInterfaceCount; w++) {
+                        if (IsEqualGUID(pCurr->NetworkGuid, g_WlanInterfaceGuids[w])) {
+                            isWifiGuid = TRUE;
+                            break;
+                        }
+                    }
+                    if (isWifiGuid) continue;
+                    
+                    // Check if description or friendly name indicates a virtual/Bluetooth/wireless adapter
+                    if (IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName)) {
+                        continue;
+                    }
+                    
+                    // NOTE: pCurr->NetworkGuid is an NLM-internal network identifier and is
+                    // NOT the same GUID as INetworkConnection::GetAdapterId(). The adapter's
+                    // real device GUID is embedded (as a string, e.g. "{4D36E972-...}") in
+                    // pCurr->AdapterName. Parse that instead, or the COM name lookup below
+                    // will never match and we'll silently keep the generic fallback name.
+                    GUID parsedAdapterGuid = {0};
+                    BOOL haveParsedGuid = FALSE;
+                    if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
+                        WCHAR wAdapterName[128];
+                        int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
+                                                           wAdapterName, ARRAYSIZE(wAdapterName));
+                        if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
+                            haveParsedGuid = TRUE;
+                        }
+                    }
+
+                    foundPhysicalEthernet = TRUE;
+                    physicalEthernetGuid = haveParsedGuid ? parsedAdapterGuid : pCurr->NetworkGuid;
+                    if (pCurr->FriendlyName && pCurr->FriendlyName[0] != L'\0') {
+                        StringCchCopyW(fallbackName, ARRAYSIZE(fallbackName), pCurr->FriendlyName);
+                    }
+                    break;
+                }
+            }
+        }
+        if (pAddresses) free(pAddresses);
+    }
+
+    if (!foundPhysicalEthernet) {
+        // No real physical Ethernet cable connected!
+        return;
+    }
+
+    g_EthernetConnected = TRUE;
+    g_EthernetHasInternet = IsInternetConnected();
+    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), fallbackName);
+
+    // 2. Query COM INetworkListManager to get the exact friendly network name (e.g. "Rete 2")
+    if (!g_pNLM) {
+        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                         IID_INetworkListManager, (void**)&g_pNLM);
+    }
+    
+    if (g_pNLM) {
+        IEnumNetworks* pEnum = NULL;
+        if (SUCCEEDED(g_pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) && pEnum) {
+            INetwork* pNet = NULL;
+            ULONG fetched = 0;
+            BOOL matchedNlm = FALSE;
+            while (pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+                IEnumNetworkConnections* pEnumConn = NULL;
+                if (SUCCEEDED(pNet->GetNetworkConnections(&pEnumConn)) && pEnumConn) {
+                    INetworkConnection* pConn = NULL;
+                    ULONG fetchedConn = 0;
+                    while (pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+                        GUID connAdapterId = {0};
+                        if (SUCCEEDED(pConn->GetAdapterId(&connAdapterId))) {
+                            if (IsEqualGUID(connAdapterId, physicalEthernetGuid)) {
+                                BSTR bstrName = NULL;
+                                if (SUCCEEDED(pNet->GetName(&bstrName)) && bstrName) {
+                                    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), bstrName);
+                                    SafeSysFreeString(bstrName);
+                                    matchedNlm = TRUE;
+                                }
+                                NLM_CONNECTIVITY conn = NLM_CONNECTIVITY_DISCONNECTED;
+                                pNet->GetConnectivity(&conn);
+                                g_EthernetHasInternet = (conn & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
+                            }
+                        }
+                        pConn->Release();
+                        if (matchedNlm) break;
+                    }
+                    pEnumConn->Release();
+                }
+                pNet->Release();
+                if (matchedNlm) break;
+            }
+            pEnum->Release();
+        }
+    }
+}
+
+void UpdateFlyoutWindowSize(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
+    int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
+    
+    int newHeight = ScaleDpi(targetWindowHeightBase);
+    int newHeader = ScaleDpi(targetHeaderHeightBase);
+    
+    if (newHeight != WINDOW_HEIGHT || newHeader != HEADER_HEIGHT) {
+        WINDOW_HEIGHT = newHeight;
+        HEADER_HEIGHT = newHeader;
+        LIST_Y_START  = HEADER_HEIGHT + 1;
+        LIST_Y_END    = WINDOW_HEIGHT - FOOTER_HEIGHT;
+        WIFI_LABEL_Y  = HEADER_HEIGHT - ScaleDpi(24);
+        
+        InitRefreshButtonRect();
+        RecalcArrowRect();
+        
+        RECT rcWork;
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+        APPBARDATA abd = { sizeof(APPBARDATA) };
+        SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
+        
+        int x = rcWork.right - WINDOW_WIDTH - 8;
+        int y = rcWork.bottom - WINDOW_HEIGHT - 8;
+        if (abd.uEdge == ABE_TOP)   y = abd.rc.bottom + 8;
+        else if (abd.uEdge == ABE_LEFT)  x = abd.rc.right + 8;
+        else if (abd.uEdge == ABE_RIGHT) x = abd.rc.left - WINDOW_WIDTH - 8;
+        
+        RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
+        DWORD dwExStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        DWORD dwStyle   = GetWindowLongW(hwnd, GWL_STYLE);
+        AdjustWindowRectEx(&rcClient, dwStyle, FALSE, dwExStyle);
+        int winW = rcClient.right - rcClient.left;
+        int winH = rcClient.bottom - rcClient.top;
+        
+        SetWindowPos(hwnd, NULL, x, y, winW, winH, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+void RefreshNetworkData() {
+    if (g_Ctx.hWlanClient) {
+        RefreshWifiData(g_Ctx.hWlanClient);
+    } else {
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_NetworkCount = 0;
+        LeaveCriticalSection(&g_Ctx.csLock);
+    }
+    UpdateEthernetStatus();
+    if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        UpdateFlyoutWindowSize(g_hWndFlyout);
+    }
+}
+
 // -------------------------------------------------------
 // Password dialog
 // -------------------------------------------------------
@@ -1681,6 +1890,7 @@ typedef struct {
 
 static BOOL g_bPwdHoverOk     = FALSE;
 static BOOL g_bPwdHoverCancel = FALSE;
+
 LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PasswordDlgData* data = (PasswordDlgData*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     switch (uMsg) {
@@ -1692,16 +1902,11 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         GetClientRect(hwnd, &rc);
         FillRect(hdc, &rc, hBr);
         DeleteObject(hBr);
-
-        // MODIFICA: Bordo aggiornato per l'altezza di 20 pixel (50 + 20 + 1 = 71)
         if (g_Settings.theme == 1) {
             HPEN hPen = CreatePen(PS_SOLID, 1, RGB(75, 75, 85)); 
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            
-            // Racchiude l'Edit control posizionato a (145, 50) con la nuova altezza (245, 20)
             Rectangle(hdc, 144, 49, 145 + 245 + 1, 50 + 20 + 1);
-            
             SelectObject(hdc, hOldBr);
             SelectObject(hdc, hOldPen);
             DeleteObject(hPen);
@@ -1721,7 +1926,6 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             HWND hBtnCancel = GetDlgItem(hwnd, IDCANCEL);
             POINT pt = { LOWORD(lParam), HIWORD(lParam) };
             ClientToScreen(hwnd, &pt);
-
             BOOL wasHoverOk = g_bPwdHoverOk, wasHoverCancel = g_bPwdHoverCancel;
             RECT rcOk, rcCancel;
             g_bPwdHoverOk = FALSE;
@@ -1730,10 +1934,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 g_bPwdHoverOk = TRUE;
             if (hBtnCancel && GetWindowRect(hBtnCancel, &rcCancel) && PtInRect(&rcCancel, pt))
                 g_bPwdHoverCancel = TRUE;
-
             if (wasHoverOk != g_bPwdHoverOk && hBtnOk) InvalidateRect(hBtnOk, NULL, FALSE);
             if (wasHoverCancel != g_bPwdHoverCancel && hBtnCancel) InvalidateRect(hBtnCancel, NULL, FALSE);
-
             if (wasHoverOk != g_bPwdHoverOk || wasHoverCancel != g_bPwdHoverCancel) {
                 TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
                 TrackMouseEvent(&tme);
@@ -1764,7 +1966,6 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
             HICON hIconBig = (HICON)LoadImageW(hVanDll, MAKEINTRESOURCEW(100), IMAGE_ICON, 
                 GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
-
             if (hIconSmall) {
                 SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
             }
@@ -1772,7 +1973,6 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
             }
         }
-
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
@@ -1780,7 +1980,6 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         SendMessageW(hwnd, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
-
         HWND hInstr = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
             WS_CHILD|WS_VISIBLE, 15, 15, 380, 20, hwnd, (HMENU)200, cs->hInstance, NULL);
         SendMessageW(hInstr, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
@@ -1790,10 +1989,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
         BOOL bDarkPwd = (g_Settings.theme == 1);
-
         DWORD dwEditExStyle = bDarkPwd ? 0 : WS_EX_CLIENTEDGE;
         
-        // MODIFICA: Altezza ridotta da 22 a 20 pixel
         HWND hEdit = CreateWindowExW(dwEditExStyle, WC_EDITW, L"",
             WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,
             145, 50, 245, 20, hwnd, (HMENU)101, cs->hInstance, NULL);
@@ -1837,67 +2034,54 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (!pdis) break;
         if (pdis->CtlID != IDOK && pdis->CtlID != IDCANCEL) break;
         if (g_Settings.theme != 1) break;
-
         BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
         BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
         BOOL isFocused  = (pdis->itemState & ODS_FOCUS) != 0;
         BOOL isHovering = (pdis->CtlID == IDOK)     ? (g_bPwdHoverOk     && !isPressed && !isDisabled)
                         : (pdis->CtlID == IDCANCEL) ? (g_bPwdHoverCancel && !isPressed && !isDisabled)
                         : FALSE;
-
         HDC  hdcReal = pdis->hDC;
         RECT rc  = pdis->rcItem;
         int  w = rc.right - rc.left;
         int  h = rc.bottom - rc.top;
         if (w <= 0 || h <= 0) break;
-
         WCHAR szText[64];
         int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
-
         COLORREF bgColor;
         if (isDisabled) bgColor = RGB(50, 50, 58);
         else if (isPressed) bgColor = RGB(35, 35, 45);
         else if (isHovering) bgColor = RGB(70, 70, 85);
         else bgColor = RGB(60, 60, 72);
-
         COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
         COLORREF darkColor  = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45)  : RGB(25, 25, 32));
         COLORREF textColor  = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
         COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
-
         HDC hdcMem = CreateCompatibleDC(hdcReal);
         HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
         HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
         RECT rcLocal = {0, 0, w, h};
-
         HBRUSH hBrBg = CreateSolidBrush(bgColor);
         FillRect(hdcMem, &rcLocal, hBrBg);
         DeleteObject(hBrBg);
-
         HPEN hPenLight = CreatePen(PS_SOLID, 1, lightColor);
         HPEN hPenDark  = CreatePen(PS_SOLID, 1, darkColor);
         HPEN hPenHover = isHovering ? CreatePen(PS_SOLID, 1, hoverBorder) : NULL;
-
         HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPenLight);
         MoveToEx(hdcMem, 0, h - 1, NULL); LineTo(hdcMem, 0, 0); LineTo(hdcMem, w - 1, 0);
         SelectObject(hdcMem, hPenDark);
         MoveToEx(hdcMem, w - 1, 0, NULL); LineTo(hdcMem, w - 1, h - 1); LineTo(hdcMem, 0, h - 1);
-
         if (isHovering && hPenHover) {
             SelectObject(hdcMem, hPenHover);
             MoveToEx(hdcMem, 1, 1, NULL); LineTo(hdcMem, w - 2, 1); LineTo(hdcMem, w - 2, h - 2); LineTo(hdcMem, 1, h - 2); LineTo(hdcMem, 1, 1);
             DeleteObject(hPenHover);
         }
-
         SelectObject(hdcMem, hOldPen); DeleteObject(hPenLight); DeleteObject(hPenDark);
-
         if (isFocused) {
             RECT rcFocus = rcLocal; InflateRect(&rcFocus, -3, -3);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
             SetTextColor(hdcMem, RGB(150, 150, 165)); DrawFocusRect(hdcMem, &rcFocus);
             SelectObject(hdcMem, hOldBr);
         }
-
         SetBkMode(hdcMem, TRANSPARENT); SetTextColor(hdcMem, textColor);
         HFONT hOldFont = (HFONT)SelectObject(hdcMem, (HFONT)SendMessageW(pdis->hwndItem, WM_GETFONT, 0, 0));
         RECT rcText = rcLocal; if (isPressed) { rcText.left += 1; rcText.top += 1; }
@@ -2043,12 +2227,10 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
+
 BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize) {
     if (!SafeToAccessUI()) return FALSE;
-
-
     g_inPasswordPrompt = TRUE;
-
     HINSTANCE hInst = GetModuleHandle(NULL);
     WNDCLASSW wc = {0};
     wc.lpfnWndProc   = Win7PasswordWndProc;
@@ -2075,16 +2257,12 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
         g_inPasswordPrompt = FALSE;
         return FALSE;
     }
-
     if (g_Settings.theme == 1) {
-    BOOL useDark = TRUE;
-    DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
-    // NON applicare DarkMode_Explorer all'intero dialogo
-    // SetWindowTheme(hDlg, L"DarkMode_Explorer", NULL);  <-- RIMOSSO
-    SetWindowPos(hDlg, NULL, 0, 0, 0, 0,
-                 SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
-}
-
+        BOOL useDark = TRUE;
+        DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+        SetWindowPos(hDlg, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
+    }
     ShowWindow(hDlg, SW_SHOW);
     EnableWindow(hParent, FALSE);
     
@@ -2114,23 +2292,19 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
                 case L'&': StringCchCatW(dst, dstSize, L"&amp;"); d += 5; break;
                 case L'<': StringCchCatW(dst, dstSize, L"&lt;"); d += 4; break;
                 case L'>': StringCchCatW(dst, dstSize, L"&gt;"); d += 4; break;
-                case L'"': StringCchCatW(dst, dstSize, L"&quot;"); d += 6; break;
+                case L'\"': StringCchCatW(dst, dstSize, L"&quot;"); d += 6; break;
                 case L'\'': StringCchCatW(dst, dstSize, L"&apos;"); d += 6; break;
                 default: dst[d++] = src[i]; dst[d] = L'\0'; break;
             }
         }
     };
-
     EscapeXml(item->ssid, escapedSsid, ARRAYSIZE(escapedSsid));
     if (password) {
         EscapeXml(password, escapedPwd, ARRAYSIZE(escapedPwd));
     }
-
     const WCHAR* connMode = autoConnect ? L"auto" : L"manual";
-
-        const WCHAR* authStr = L"open";
+    const WCHAR* authStr = L"open";
     const WCHAR* encStr  = L"none";
-
     switch (item->authAlgorithm) {
         case DOT11_AUTH_ALGO_80211_OPEN:   authStr = L"open";    break;
         case DOT11_AUTH_ALGO_80211_SHARED_KEY: authStr = L"shared"; break;
@@ -2142,7 +2316,6 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
         case DOT11_AUTH_ALGO_RSNA_PSK:     authStr = L"WPA2PSK"; break;
         default:                           authStr = L"WPA2PSK"; break;
     }
-
     switch (item->cipherAlgorithm) {
         case DOT11_CIPHER_ALGO_NONE:       encStr = L"none"; break;
         case DOT11_CIPHER_ALGO_WEP:        encStr = L"WEP";  break;
@@ -2153,12 +2326,9 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
         case DOT11_CIPHER_ALGO_WPA_USE_GROUP: encStr = L"TKIP"; break;
         default:                           encStr = L"AES";  break;
     }
-
-    // Detect enterprise networks.
     BOOL isEnterprise = (item->authAlgorithm == DOT11_AUTH_ALGO_WPA ||
                          item->authAlgorithm == DOT11_AUTH_ALGO_WPA3 ||
                          item->authAlgorithm == DOT11_AUTH_ALGO_RSNA);
-
     if (item->isSecured) {
         if (!isEnterprise) {
             StringCchPrintfW(outXml, outSize,
@@ -2203,25 +2373,19 @@ void BuildWlanProfileXml(const WifiNetworkItem* item, const WCHAR* password, BOO
 
 static BOOL XmlTagEqualsCI(const WCHAR* xml, const WCHAR* tagName, const WCHAR* expectedValue) {
     if (!xml || !tagName || !expectedValue) return FALSE;
-
     WCHAR openTag[64] = {0};
     StringCchPrintfW(openTag, ARRAYSIZE(openTag), L"<%s>", tagName);
-
     const WCHAR* start = wcsstr(xml, openTag);
     if (!start) return FALSE;
     start += lstrlenW(openTag);
-
     WCHAR closeTag[64] = {0};
     StringCchPrintfW(closeTag, ARRAYSIZE(closeTag), L"</%s>", tagName);
     const WCHAR* end = wcsstr(start, closeTag);
     if (!end || end < start) return FALSE;
-
     size_t len = (size_t)(end - start);
     if (len == 0 || len >= 64) return FALSE;
-
     WCHAR value[64] = {0};
     StringCchCopyNW(value, ARRAYSIZE(value), start, len);
-
     return (_wcsicmp(value, expectedValue) == 0);
 }
 
@@ -2229,8 +2393,6 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
                                     DOT11_AUTH_ALGORITHM authAlgorithm,
                                     DOT11_CIPHER_ALGORITHM cipherAlgorithm) {
     if (!profileXml) return FALSE;
-
-
     const WCHAR* expectedAuth = L"open";
     switch (authAlgorithm) {
         case DOT11_AUTH_ALGO_80211_OPEN:       expectedAuth = L"open";    break;
@@ -2243,7 +2405,6 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
         case DOT11_AUTH_ALGO_RSNA_PSK:         expectedAuth = L"WPA2PSK"; break;
         default:                               expectedAuth = L"WPA2PSK"; break;
     }
-
     const WCHAR* expectedEnc = L"none";
     switch (cipherAlgorithm) {
         case DOT11_CIPHER_ALGO_NONE:          expectedEnc = L"none"; break;
@@ -2255,17 +2416,11 @@ static BOOL ProfileSecurityMatches(const WCHAR* profileXml,
         case DOT11_CIPHER_ALGO_WPA_USE_GROUP: expectedEnc = L"TKIP"; break;
         default:                              expectedEnc = L"AES";  break;
     }
-
-
-
-
     if (authAlgorithm == DOT11_AUTH_ALGO_80211_OPEN) {
         return XmlTagEqualsCI(profileXml, L"authentication", L"open");
     }
-
     BOOL authMatches = XmlTagEqualsCI(profileXml, L"authentication", expectedAuth);
     BOOL encMatches  = XmlTagEqualsCI(profileXml, L"encryption", expectedEnc);
-
     return authMatches && encMatches;
 }
 
@@ -2295,7 +2450,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         tempItem.isSecured = ctx->isSecured;
         tempItem.authAlgorithm = ctx->authAlgorithm;
         tempItem.cipherAlgorithm = ctx->cipherAlgorithm;
-
         BuildWlanProfileXml(&tempItem, ctx->password, autoConn, xmlProfile, ARRAYSIZE(xmlProfile));
         
         dwResult = WlanSetProfile(g_Ctx.hWlanClient, &ctx->interfaceGuid, 
@@ -2322,11 +2476,6 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     params.strProfile = ctx->ssid;
     params.dot11BssType = ctx->dot11BssType;
     params.dwFlags = 0;
-    // Se conosciamo il BSSID esatto (risolto in RefreshWifiData), lo passiamo
-
-
-
-    // facendo apparire la riconnessione come "non funzionante".
     DOT11_BSSID_LIST bssidList;
     if (ctx->hasBssid) {
         ZeroMemory(&bssidList, sizeof(bssidList));
@@ -2352,6 +2501,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     free(ctx);
     return 0;
 }
+
 static BOOL AskForPasswordAndConnect(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
@@ -2380,22 +2530,17 @@ static BOOL AskForPasswordAndConnect(int index) {
     if (item->hasBssid) {
         CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
     }
-
-
     BOOL needsPassword = (item->isSecured && !item->hasProfile);
-
     if (needsPassword) {
         WCHAR password[65] = {0};
-        
-    if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
-        LogSsidSafe(L"User cancelled password for", item->ssid);
-        g_PendingConnectIndex = -1;
-        SecureZeroMemory(ctx->password, sizeof(ctx->password));
-        free(ctx);
-        return FALSE;
-    }
+        if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
+            LogSsidSafe(L"User cancelled password for", item->ssid);
+            g_PendingConnectIndex = -1;
+            SecureZeroMemory(ctx->password, sizeof(ctx->password));
+            free(ctx);
+            return FALSE;
+        }
         StringCchCopyW(ctx->password, ARRAYSIZE(ctx->password), password);
-        
         BOOL isEmpty = TRUE;
         for (int i = 0; i < 64 && password[i]; i++) {
             if (password[i] != L' ' && password[i] != L'\t') {
@@ -2439,8 +2584,8 @@ static BOOL AskForPasswordAndConnect(int index) {
         return FALSE;
     }
     if (g_hConnectThread) {
-    WaitForSingleObject(g_hConnectThread, 5000);
-    CloseHandle(g_hConnectThread);
+        WaitForSingleObject(g_hConnectThread, 5000);
+        CloseHandle(g_hConnectThread);
     }
     g_hConnectThread = hThread;
     return TRUE;
@@ -2448,9 +2593,7 @@ static BOOL AskForPasswordAndConnect(int index) {
 
 void ConnectToNetwork(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    
     WifiNetworkItem* item = &g_NetworkList[index];
-    
     if (item->connState == CONN_STATE_CONNECTED) {
         DisconnectFromNetwork(index);
         return;
@@ -2459,13 +2602,6 @@ void ConnectToNetwork(int index) {
         LogSsidSafe(L"Already connecting to, ignoring", item->ssid);
         return;
     }
-    
-
-    // if (item->connState == CONN_STATE_ERROR) {
-    //     item->connState = CONN_STATE_IDLE;
-    // }
-    
-
     for (int i = 0; i < g_NetworkCount; i++) {
         if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
                            g_NetworkList[i].connState == CONN_STATE_ERROR)) {
@@ -2473,17 +2609,13 @@ void ConnectToNetwork(int index) {
             g_NetworkList[i].operationStartTime = 0;
         }
     }
-    
     AskForPasswordAndConnect(index);
 }
 
 void DisconnectFromNetwork(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    
     WifiNetworkItem* item = &g_NetworkList[index];
     if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
-    
-
     for (int i = 0; i < g_NetworkCount; i++) {
         if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
                            g_NetworkList[i].connState == CONN_STATE_ERROR)) {
@@ -2491,22 +2623,14 @@ void DisconnectFromNetwork(int index) {
             g_NetworkList[i].operationStartTime = 0;
         }
     }
-    
     item->connState = CONN_STATE_DISCONNECTING;
     item->operationStartTime = GetTickCount();
     g_PendingConnectIndex = index;
-    
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-
-        // (DISCONNECTION_TIMEOUT_MS) è molto più corto di quello di
-
-        // per non aggiungere un ritardo extra percepibile sopra ai 4s.
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 1000, NULL);
     }
-    
     UpdateLayoutGeometry();
     if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
-    
     DWORD res = WlanDisconnect(g_Ctx.hWlanClient, &item->interfaceGuid, NULL);
     if (res != ERROR_SUCCESS) {
         Wh_Log(L"WlanDisconnect failed: %lu", res);
@@ -2518,9 +2642,9 @@ void DisconnectFromNetwork(int index) {
         LogSsidSafe(L"WlanDisconnect request successful for", item->ssid);
     }
 }
+
 void CheckConnectionTimeouts() {
     if (!g_Ctx.hWlanClient) return;
-    
     if (g_PendingConnectIndex < 0 || g_PendingConnectIndex >= g_NetworkCount) {
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
@@ -2528,12 +2652,8 @@ void CheckConnectionTimeouts() {
         }
         return;
     }
-    
     WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-    
     if (item->operationStartTime == 0) return;
-    
-
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -2544,8 +2664,6 @@ void CheckConnectionTimeouts() {
         }
         return;
     }
-    
-
     if (item->connState == CONN_STATE_ERROR) {
         LogSsidSafe(L"Timeout check: connection already errored, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -2560,7 +2678,6 @@ void CheckConnectionTimeouts() {
         }
         return;
     }
-
     DWORD now = GetTickCount();
     if (item->connState == CONN_STATE_DISCONNECTING) {
         if ((now - item->operationStartTime) > DISCONNECTION_TIMEOUT_MS) {
@@ -2568,32 +2685,28 @@ void CheckConnectionTimeouts() {
             item->connState = CONN_STATE_IDLE;
             item->operationStartTime = 0;
             g_PendingConnectIndex = -1;
-
             if (g_TimeoutTimer && g_hWndFlyout) {
                 KillTimer(g_hWndFlyout, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
             }
             if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-                if (g_Ctx.hWlanClient) RefreshWifiData(g_Ctx.hWlanClient);
+                RefreshNetworkData();
                 InvalidateRect(g_hWndFlyout, NULL, TRUE);
                 UpdateLayoutGeometry();
             }
         }
         return;
     }
-
     if ((now - item->operationStartTime) > CONNECTION_TIMEOUT_MS) {
         LogSsidSafe(L"Timeout for", item->ssid);
         Wh_Log(L"  (state=%d)", item->connState);
         item->connState = CONN_STATE_ERROR;
         item->operationStartTime = 0;
         g_PendingConnectIndex = -1;
-        
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
-        
         if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             MessageBoxW(g_hWndFlyout, LOC(STR_CONNECTION_TIMEOUT_MSG), 
                        LOC(STR_TIMEOUT_ERROR), MB_OK | MB_ICONWARNING);
@@ -2606,63 +2719,45 @@ void CheckConnectionTimeouts() {
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
     ModContext* ctx = (ModContext*)context;
     if (!ctx || ctx->isUninitializing || !data) return;
-    
     if (data->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM) return;
-    
     HWND hFlyout = g_hWndFlyout;
     if (!hFlyout || !IsWindow(hFlyout)) return;
-    
     EnterCriticalSection(&ctx->csLock);
-    
     switch (data->NotificationCode) {
         case wlan_notification_acm_connection_start:
             Wh_Log(L"WLAN: Connection Start");
             break;
-            
         case wlan_notification_acm_connection_complete: {
-    PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
-        (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-    
-    Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
-           connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
-    
-    // Post to flyout thread.
-    PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 
-                 (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
-                 (LPARAM)connData->wlanReasonCode);
-    break;
-}
-            
+            PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
+                (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+            Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
+                   connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
+            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 
+                         (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
+                         (LPARAM)connData->wlanReasonCode);
+            break;
+        }
         case wlan_notification_acm_connection_attempt_fail: {
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Connection Attempt Failed (intermediate), Reason: %lu", 
                    connData->wlanReasonCode);
-            
             break;
         }
-            
         case wlan_notification_acm_disconnected: {
-    PWLAN_CONNECTION_NOTIFICATION_DATA discData = 
-        (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
-    Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
-           discData->wlanReasonCode, g_PendingConnectIndex);
-
-    // Post clean disconnect to flyout thread.
-    PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
-
-    if (g_TimeoutTimer && hFlyout) {
-        // Wake timeout loop immediately.
-        PostMessageW(hFlyout, WM_TIMER, 1002, 0);
-    }
-
-    break;
-}
-
+            PWLAN_CONNECTION_NOTIFICATION_DATA discData = 
+                (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+            Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
+                   discData->wlanReasonCode, g_PendingConnectIndex);
+            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
+            if (g_TimeoutTimer && hFlyout) {
+                PostMessageW(hFlyout, WM_TIMER, 1002, 0);
+            }
+            break;
+        }
         case wlan_notification_acm_scan_complete:
             Wh_Log(L"WLAN: Scan complete");
             break;
-
         case wlan_notification_acm_scan_fail: {
             DWORD scanFailReason = (data->pData && data->dwDataSize >= sizeof(DWORD))
                 ? *(DWORD*)data->pData : 0;
@@ -2670,23 +2765,16 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
         }
     }
-    
     LeaveCriticalSection(&ctx->csLock);
-    
     PostMessageW(hFlyout, WM_REFRESH_DATA, 0, 0);
 }
-// -------------------------------------------------------
-// Signal icon drawing
-// -------------------------------------------------------
 
-// Draw icon with bicubic interpolation.
 static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, void** ppCached) {
     if (!hIcon) return;
     if (!g_hGdiPlus || !pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode) {
         DrawIconEx(hdc, x, y, hIcon, w, h, 0, NULL, DI_NORMAL);
         return;
     }
-
     void* srcBitmap = ppCached ? *ppCached : NULL;
     if (!srcBitmap && ppCached) {
         if (pGdipCreateBitmapFromHICON(hIcon, &srcBitmap) == 0 && srcBitmap) {
@@ -2697,13 +2785,11 @@ static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, vo
         DrawIconEx(hdc, x, y, hIcon, w, h, 0, NULL, DI_NORMAL);
         return;
     }
-
     void* dstBitmap = NULL;
     if (pGdipCreateBitmapFromScan0(w, h, 0, 0x00E200B, NULL, &dstBitmap) != 0 || !dstBitmap) {
         DrawIconEx(hdc, x, y, hIcon, w, h, 0, NULL, DI_NORMAL);
         return;
     }
-
     void* gfx = NULL;
     if (pGdipGetImageGraphicsContext(dstBitmap, &gfx) == 0 && gfx) {
         pGdipSetInterpolationMode(gfx, 7); 
@@ -2711,7 +2797,6 @@ static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, vo
         pGdipGraphicsClear(gfx, 0);
         pGdipDrawImageRectI(gfx, srcBitmap, 0, 0, w, h);
         pGdipDeleteGraphics(gfx);
-
         HBITMAP hBmp = NULL;
         if (pGdipCreateHBITMAPFromBitmap(dstBitmap, &hBmp, 0) == 0 && hBmp) {
             HDC hdcMem = CreateCompatibleDC(hdc);
@@ -2746,30 +2831,23 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     else if (quality > 40) idx = 3;
     else if (quality > 20) idx = 2;
     else if (quality > 0)  idx = 1;
-    
     int iconSize = ScaleDpi(20);
     int xPos = right - iconSize - 4;
     int yPos = top + (ScaleDpi(26) - iconSize) / 2;
-    
     if (g_hIconSignalBars[idx]) {
         DrawIconBicubic(hdc, xPos, yPos, iconSize, iconSize,
                         g_hIconSignalBars[idx], &g_pBitmapSignalBars[idx]);
     }
 }
-// -------------------------------------------------------
-// Tooltip fade
-// -------------------------------------------------------
-#define TOOLTIP_FADE_TIMER_ID  9100
-#define TOOLTIP_FADE_STEP      40    // alpha increment per tick
-#define TOOLTIP_FADE_INTERVAL  20    // ms between ticks (~12 steps = ~240ms)
 
+#define TOOLTIP_FADE_TIMER_ID  9100
+#define TOOLTIP_FADE_STEP      40    
+#define TOOLTIP_FADE_INTERVAL  20    
 static BYTE  g_ttAlpha     = 255;
 static BOOL  g_ttFading    = FALSE;
 
-// Tooltip subclass: intercept WM_SHOWWINDOW to start fade-in.
 static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR) {
     if (uMsg == WM_SHOWWINDOW && wParam) {
-        // Start fade-in: set alpha to 0 and kick off a timer.
         g_ttAlpha  = 0;
         g_ttFading = TRUE;
         SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
@@ -2780,7 +2858,6 @@ static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             g_ttAlpha = (BYTE)(g_ttAlpha + TOOLTIP_FADE_STEP);
             SetLayeredWindowAttributes(hWnd, 0, g_ttAlpha, LWA_ALPHA);
         } else {
-            // Fully opaque: stop timer and remove layered flag.
             KillTimer(hWnd, TOOLTIP_FADE_TIMER_ID);
             g_ttAlpha  = 255;
             g_ttFading = FALSE;
@@ -2791,9 +2868,6 @@ static LRESULT CALLBACK TooltipSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// -------------------------------------------------------
-// Tooltip
-// -------------------------------------------------------
 void InitTooltip(HWND hwnd) {
     if (g_hTooltip) return;
     g_hTooltip = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED, TOOLTIPS_CLASS, NULL,
@@ -2823,11 +2897,9 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
         SendMessage(g_hTooltip, TTM_DELTOOL, 0, (LPARAM)&ti);
     }
     if (index < 0 || index >= g_NetworkCount) return;
-    
     WifiNetworkItem* item = &g_NetworkList[index];
     WCHAR ssidBuf[33];
     GetDisplaySSID(index, ssidBuf, 33);
-    
     const WCHAR* statusText;
     switch (item->connState) {
         case CONN_STATE_CONNECTED:    statusText = LOC(STR_STATUS_CONNECTED); break;
@@ -2835,17 +2907,14 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
         case CONN_STATE_DISCONNECTING: statusText = LOC(STR_DISCONNECTING); break;
         default:                      statusText = LOC(STR_STATUS_NOT_CONNECTED); break;
     }
-    
     StringCchPrintfW(g_TooltipBuffer, 1024,
         L"SSID: %s\n%s %s\n%s %s\n%s",
         ssidBuf,
         LOC(STR_SIGNAL_STRENGTH), SignalQualityToString(item->signalQuality),
         LOC(STR_SECURITY_TYPE), item->isSecured ? L"WPA2-PSK" : L"Open",
         statusText);
-    
     RECT rcRow;
     if (!GetRowRect(index, &rcRow)) return;
-    
     TOOLINFOW ti = {0};
     ti.cbSize   = sizeof(TOOLINFOW);
     ti.uFlags   = TTF_SUBCLASS;
@@ -2862,6 +2931,7 @@ static int GetTotalListHeight() {
         h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     return h;
 }
+
 static void ClampScrollPos() {
     int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -2869,20 +2939,17 @@ static void ClampScrollPos() {
     if (g_ScrollPos > maxScroll) g_ScrollPos = maxScroll;
     if (g_ScrollPos < 0) g_ScrollPos = 0;
 }
+
 BOOL GetRowRect(int index, RECT* rcRow) {
-    if (index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    if (!showWifiList || index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     y -= g_ScrollPos;
-    
     int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
-    
-
     if (y + rowHeight <= LIST_Y_START) return FALSE;
-
     if (y >= LIST_Y_END) return FALSE;
-    
     rcRow->left   = 10;
     rcRow->top    = y;
     rcRow->right  = WINDOW_WIDTH - 10;
@@ -2891,13 +2958,17 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     rcRow->bottom = bottom;
     return TRUE;
 }
+
 int HitTestRows(int x, int y) {
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    if (!showWifiList) return -1;
     for (int i = 0; i < g_NetworkCount; i++) {
         RECT rc;
         if (GetRowRect(i, &rc) && x>=rc.left && x<=rc.right && y>=rc.top && y<=rc.bottom) return i;
     }
     return -1;
 }
+
 typedef struct {
     int  buttonCount;
     int  networkId;
@@ -2905,16 +2976,12 @@ typedef struct {
 } ToolbarScanCache;
 
 static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
-
 static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
 }
 
-
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
-
-
     HMODULE hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
     if (!hPnidui) {
         hPnidui = GetModuleHandleW(L"pnidui.dll");
@@ -2923,13 +2990,11 @@ static bool InitPniduiInfo() {
         Wh_Log(L"pnidui.dll not loaded — network icon detection unavailable");
         return false;
     }
-
     MODULEINFO mi{};
     if (!GetModuleInformation(GetCurrentProcess(), hPnidui, &mi, sizeof(mi))) {
         Wh_Log(L"GetModuleInformation failed for pnidui.dll");
         return false;
     }
-
     g_pniduiBase = (BYTE*)mi.lpBaseOfDll;
     g_pniduiEnd  = g_pniduiBase + mi.SizeOfImage;
     Wh_Log(L"pnidui.dll found at %p-%p", g_pniduiBase, g_pniduiEnd);
@@ -2938,25 +3003,18 @@ static bool InitPniduiInfo() {
 
 static BOOL IsNetworkButton(HWND hToolbar, int buttonIndex) {
     if (buttonIndex < 0 || !g_pniduiBase) return FALSE;
-
     TBBUTTON tb{};
     if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)buttonIndex, (LPARAM)&tb)) {
         return FALSE;
     }
-
     if (!tb.dwData) return FALSE;
-
     HWND hIconWnd = *(HWND*)tb.dwData;
     if (!hIconWnd || !IsWindow(hIconWnd)) return FALSE;
-
     WCHAR className[256]{};
     if (!GetClassNameW(hIconWnd, className, ARRAYSIZE(className))) return FALSE;
-
     if (wcsncmp(className, L"ATL:", 4) != 0) return FALSE;
-
     const WCHAR* hexPart = className + 4;
     ULONG_PTR addr = 0;
-
     while (*hexPart) {
         WCHAR c = *hexPart;
         int digit = 0;
@@ -2967,27 +3025,26 @@ static BOOL IsNetworkButton(HWND hToolbar, int buttonIndex) {
         addr = (addr << 4) | digit;
         hexPart++;
     }
-
     return (addr >= (ULONG_PTR)g_pniduiBase && addr < (ULONG_PTR)g_pniduiEnd);
 }
+
 void RecalcArrowRect() {
     int labelMidY = WIFI_LABEL_Y + (HEADER_HEIGHT - WIFI_LABEL_Y) / 2;
     int btnH = ScaleDpi(16), btnW = ScaleDpi(22);
-    
-    int totalHeight = GetTotalListHeight(); // Scrollbar offset
+    int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(15) : 0;
-    
     int margineDestroFreccia = ScaleDpi(20) + scrollbarOffset;
     g_rcArrowButton.right  = WINDOW_WIDTH - margineDestroFreccia;
     g_rcArrowButton.left   = g_rcArrowButton.right - btnW;
     g_rcArrowButton.top    = labelMidY - btnH/2;
     g_rcArrowButton.bottom = labelMidY + btnH/2;
 }
+
 void UpdateLayoutGeometry(int scrollbarOffset) {
     if (!SafeToAccessUI()) return;
-    
-    if (g_SelectedRowIndex < 0 || g_SelectedRowIndex >= g_NetworkCount) {
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    if (!showWifiList || g_SelectedRowIndex < 0 || g_SelectedRowIndex >= g_NetworkCount) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
@@ -2995,21 +3052,16 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         g_bShowCheckboxLabel = FALSE;
         return;
     }
-    
-
     int rowY = LIST_Y_START;
     for (int i = 0; i < g_SelectedRowIndex; i++) {
         rowY += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     }
     int rowYRelative = rowY - g_ScrollPos;
-    int rowHeight = ROW_HEIGHT_EXPANDED;  // La riga selezionata è sempre espansa
-    
+    int rowHeight = ROW_HEIGHT_EXPANDED;
     WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
     BOOL isConnected = (item->connState == CONN_STATE_CONNECTED);
     BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
                          item->connState == CONN_STATE_DISCONNECTING);
-    
-
     if (rowYRelative + rowHeight <= LIST_Y_START || rowYRelative >= LIST_Y_END) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
@@ -3018,38 +3070,26 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         g_bShowCheckboxLabel = FALSE;
         return;
     }
-    
-    int btnX = WINDOW_WIDTH - 114 - scrollbarOffset;  // X position
+    int btnX = WINDOW_WIDTH - 114 - scrollbarOffset;  
     int chkX = 18;
     int chkYOffset = 0;
-    // Se la barra di scorrimento è attiva, sposta il checkbox "Connetti automaticamente"
-    // dell'1.9% + 0.5% più a sinistra e dell'1.3% più in alto (altrimenti resta come sta)
     if (scrollbarOffset > 0) {
-        chkX -= (WINDOW_WIDTH * 19) / 1000;   // -1.9% della larghezza finestra verso sinistra
-        chkX -= (WINDOW_WIDTH * 5) / 1000;    // -0.5% della larghezza finestra verso sinistra
-        chkYOffset -= (WINDOW_HEIGHT * 13) / 1000;  // -1.3% dell'altezza finestra verso l'alto
+        chkX -= (WINDOW_WIDTH * 19) / 1000;   
+        chkX -= (WINDOW_WIDTH * 5) / 1000;    
+        chkYOffset -= (WINDOW_HEIGHT * 13) / 1000;  
     }
     int btnY = rowYRelative + 35;  
     int chkY = rowYRelative + 36 + chkYOffset;
-    
     if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
     if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
     if (chkY < LIST_Y_START) chkY = LIST_Y_START + 2;
     if (chkY > LIST_Y_END - 22) chkY = LIST_Y_END - 22;
-    
-    // Checkbox
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) {
         if (!isConnected && !isConnecting) {
-
-            // largo 160px (come prima) il suo WM_CTLCOLORSTATIC riempie l'intera
-
             int boxSize = ScaleDpi(13);
             int chkNativeW = boxSize + ScaleDpi(4);
             MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, 20, TRUE);
             ShowWindow(g_hWndCheckboxConnect, SW_SHOW);
-
-            // nativo, cosi' il colore del testo non dipende dal rendering a tema
-
             g_rcCheckboxLabel.left   = chkX + boxSize + ScaleDpi(5);
             g_rcCheckboxLabel.top    = chkY;
             g_rcCheckboxLabel.right  = chkX + 160;
@@ -3060,8 +3100,6 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
             g_bShowCheckboxLabel = FALSE;
         }
     }
-    
-    // Pulsante Connect/Disconnect
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
         if (isConnecting) {
             MoveWindow(g_hWndButtonConnect, btnX + 50, btnY, 40, 22, TRUE);
@@ -3081,11 +3119,11 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         }
     }
 }
+
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     if (itemIndex < 0 || itemIndex >= g_NetworkCount) return;
     g_ContextMenuTargetIndex = itemIndex;
     WifiNetworkItem* item = &g_NetworkList[itemIndex];
-
     HMENU hMenu = CreatePopupMenu();
     if (item->connState == CONN_STATE_CONNECTED) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, LOC(STR_CTX_DISCONNECT));
@@ -3096,19 +3134,13 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, LOC(STR_CTX_CONNECT));
     }
     AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
-    
-
     if (g_Settings.theme == 1) {
         DarkContextMenu::Apply(TRUE);
     }
-    
     int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN|TPM_RIGHTBUTTON|TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, NULL);
-    
-
     if (g_Settings.theme == 1) {
         DarkContextMenu::Apply(FALSE);
     }
-    
     if (cmd > 0) {
         switch (cmd) {
         case IDM_CONNECT:
@@ -3131,38 +3163,31 @@ static RECT GetFooterRect() {
     RECT rc = { 0, WINDOW_HEIGHT - FOOTER_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT };
     return rc;
 }
-void EnsureRowVisible(int index) {
-    if (index < 0 || index >= g_NetworkCount) return;
 
+void EnsureRowVisible(int index) {
+    BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+    if (!showWifiList || index < 0 || index >= g_NetworkCount) return;
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int totalHeight = GetTotalListHeight();
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
-
-
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
-
     int rowTopRel = y - g_ScrollPos;
     int rowBottomRel = rowTopRel + rowHeight;
-
     if (rowBottomRel > visibleHeight) {
         g_ScrollPos += (rowBottomRel - visibleHeight);
     } else if (rowTopRel < 0) {
         g_ScrollPos += rowTopRel;
     }
-
     if (totalHeight > visibleHeight) {
         if (g_ScrollPos < maxScroll && rowBottomRel <= visibleHeight) {
-
-            // verifica se l'ultima riga è scoperta e in tal caso scrolla quel poco che serve
             int lastRowBottomAbs = totalHeight;
             int lastRowBottomRel = lastRowBottomAbs - g_ScrollPos;
             if (lastRowBottomRel < visibleHeight) {
                 int needed = visibleHeight - lastRowBottomRel;
                 int newScroll = g_ScrollPos + needed;
-
                 if (newScroll > maxScroll) newScroll = maxScroll;
                 int newRowTopRel = y - newScroll;
                 if (newRowTopRel >= 0) {
@@ -3171,12 +3196,11 @@ void EnsureRowVisible(int index) {
             }
         }
     }
-
     if (g_ScrollPos > maxScroll) g_ScrollPos = maxScroll;
     if (g_ScrollPos < 0) g_ScrollPos = 0;
-
     SetScrollPos(g_hWndFlyout, SB_VERT, g_ScrollPos, TRUE);
 }
+
 // -------------------------------------------------------
 // Flyout Window Procedure
 // -------------------------------------------------------
@@ -3220,7 +3244,6 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         SendMessageW(g_hWndCheckboxConnect, BM_SETCHECK, BST_CHECKED, 0);
         
         ApplyNativeControlsTheme();
-        
         RecalcArrowRect();
         InterlockedIncrement(&g_Ctx.refCount);
         InitTooltip(hwnd);
@@ -3230,14 +3253,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     }
-        case WM_TIMER:
-    if (wParam == 1000) {
-        if (g_Ctx.hWlanClient) {
-            RefreshWifiData(g_Ctx.hWlanClient);
+    case WM_TIMER:
+        if (wParam == 1000) {
+            RefreshNetworkData();
             ClampScrollPos();
             UpdateLayoutGeometry();
             InvalidateRect(hwnd, NULL, FALSE);
-        }
         } else if (wParam == 1002) {
             CheckConnectionTimeouts();
             UpdateLayoutGeometry();
@@ -3245,168 +3266,140 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     case WM_SHOW_FLYOUT:
-    ShowWindow(hwnd, SW_SHOW);
-    SetForegroundWindow(hwnd);
-    if (g_Ctx.hWlanClient) {
-        RefreshWifiData(g_Ctx.hWlanClient);
+        ShowWindow(hwnd, SW_SHOW);
+        SetForegroundWindow(hwnd);
+        RefreshNetworkData();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
-    }
-    break;
+        break;
     case WM_REFRESH_DATA: {
-    if (g_Ctx.hWlanClient) {
-        RefreshWifiData(g_Ctx.hWlanClient);
+        RefreshNetworkData();
         ClampScrollPos();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
-    }
-
         break;
     }
-        case WM_ASYNC_CONNECT_COMPLETE: {
-    BOOL opSuccess = (BOOL)wParam;
-    DWORD errorCode = (DWORD)lParam;
-    
-    Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)", 
-           opSuccess, errorCode, errorCode);
-
-    // A disconnect notification arrives as opSuccess=0, errorCode=ERROR_SUCCESS.
-    // Treat this as a confirmed clean disconnect rather than a connection failure.
-    if (!opSuccess && errorCode == ERROR_SUCCESS) {
-        // Disconnection confirmed by WLAN notification
-        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-            if (item->connState == CONN_STATE_DISCONNECTING) {
-                LogSsidSafe(L"Disconnection confirmed by notification for", item->ssid);
-                item->connState = CONN_STATE_IDLE;
-                item->operationStartTime = 0;
+    case WM_ASYNC_CONNECT_COMPLETE: {
+        BOOL opSuccess = (BOOL)wParam;
+        DWORD errorCode = (DWORD)lParam;
+        Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)", 
+               opSuccess, errorCode, errorCode);
+        if (!opSuccess && errorCode == ERROR_SUCCESS) {
+            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
+                if (item->connState == CONN_STATE_DISCONNECTING) {
+                    LogSsidSafe(L"Disconnection confirmed by notification for", item->ssid);
+                    item->connState = CONN_STATE_IDLE;
+                    item->operationStartTime = 0;
+                    g_PendingConnectIndex = -1;
+                }
+            }
+            for (int i = 0; i < g_NetworkCount; i++) {
+                if (i == g_PendingConnectIndex) continue;
+                if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
+                    g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
+                    g_NetworkList[i].connState = CONN_STATE_IDLE;
+                    g_NetworkList[i].operationStartTime = 0;
+                }
+            }
+            if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
+            RefreshNetworkData();
+            UpdateLayoutGeometry();
+            InvalidateRect(hwnd, NULL, TRUE);
+            break;
+        }
+        if (opSuccess) {
+            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
+                g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
                 g_PendingConnectIndex = -1;
             }
-        }
-                for (int i = 0; i < g_NetworkCount; i++) {
-            if (i == g_PendingConnectIndex) continue;
-            if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
-                g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
-                g_NetworkList[i].connState = CONN_STATE_IDLE;
-                g_NetworkList[i].operationStartTime = 0;
+            if (g_TimeoutTimer) {
+                KillTimer(hwnd, g_TimeoutTimer);
+                g_TimeoutTimer = 0;
+            }
+        } else {
+            if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
+                WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
+                static const DWORD authFailureCodes[] = {
+                    0x00038001,  
+                    0x00038002,  
+                    0x00028001,  
+                    0x00028002,  
+                    0x00030001,  
+                };
+                BOOL isAuthFailure = FALSE;
+                for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
+                    if (errorCode == authFailureCodes[i]) {
+                        isAuthFailure = TRUE;
+                        break;
+                    }
+                }
+                if (isAuthFailure && item->hasProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) — saved password likely wrong, resetting profile", 
+                           item->ssid, errorCode);
+                    item->hasProfile = FALSE;
+                    item->connState = CONN_STATE_ERROR;
+                    item->operationStartTime = 0;
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                               MB_OK | MB_ICONERROR);
+                } else if (isAuthFailure && !item->hasProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) — user-entered password was wrong", 
+                           item->ssid, errorCode);
+                    item->connState = CONN_STATE_ERROR;
+                    item->operationStartTime = 0;
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                               MB_OK | MB_ICONERROR);
+                } else {
+                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) — keeping profile intact", 
+                           item->ssid, errorCode);
+                    item->connState = CONN_STATE_ERROR;
+                    item->operationStartTime = 0;
+                    WCHAR errMsg[256];
+                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
+                                   LOC(STR_CONNECTION_ERROR), errorCode);
+                    MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
+                }
+                g_PendingConnectIndex = -1;
+            }
+            if (g_TimeoutTimer) {
+                KillTimer(hwnd, g_TimeoutTimer);
+                g_TimeoutTimer = 0;
             }
         }
-        if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
-        RefreshWifiData(g_Ctx.hWlanClient);
+        RefreshNetworkData();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
         break;
     }
-    
-    if (opSuccess) {
-
-        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
-            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-            g_PendingConnectIndex = -1;
-        }
-        if (g_TimeoutTimer) {
-            KillTimer(hwnd, g_TimeoutTimer);
-            g_TimeoutTimer = 0;
-        }
-    } else {
-
-        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-            
-
-
-            static const DWORD authFailureCodes[] = {
-                0x00038001,  // WLAN_REASON_CODE_INVALID_PROFILE
-                0x00038002,  // MSM_REASON_CODE_INVALID_PROFILE_SCHEMA
-                0x00028001,  // MSM_REASON_CODE_AUTH_FAILURE
-                0x00028002,  // MSM_REASON_CODE_ASSOC_FAILURE (spesso auth-related)
-                0x00030001,  // MSM_REASON_CODE_KEY_MISMATCH
-            };
-            
-            BOOL isAuthFailure = FALSE;
-            for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
-                if (errorCode == authFailureCodes[i]) {
-                    isAuthFailure = TRUE;
-                    break;
-                }
-            }
-            
-            if (isAuthFailure && item->hasProfile) {
-                Wh_Log(L"Auth failure for '%s' (code 0x%08X) — saved password likely wrong, resetting profile", 
-                       item->ssid, errorCode);
-                
-                item->hasProfile = FALSE;
-                item->connState = CONN_STATE_ERROR;
-                item->operationStartTime = 0;
-                
-                MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
-                           MB_OK | MB_ICONERROR);
-                
-            } else if (isAuthFailure && !item->hasProfile) {
-                Wh_Log(L"Auth failure for '%s' (code 0x%08X) — user-entered password was wrong", 
-                       item->ssid, errorCode);
-                
-                item->connState = CONN_STATE_ERROR;
-                item->operationStartTime = 0;
-                
-                MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
-                           MB_OK | MB_ICONERROR);
-                
-            } else {
-                Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) — keeping profile intact", 
-                       item->ssid, errorCode);
-                
-                item->connState = CONN_STATE_ERROR;
-                item->operationStartTime = 0;
-                
-                WCHAR errMsg[256];
-                StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
-                               LOC(STR_CONNECTION_ERROR), errorCode);
-                MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
-            }
-            
-            g_PendingConnectIndex = -1;
-        }
-        
-        if (g_TimeoutTimer) {
-            KillTimer(hwnd, g_TimeoutTimer);
-            g_TimeoutTimer = 0;
-        }
-    }
-    
-    RefreshWifiData(g_Ctx.hWlanClient);
-    UpdateLayoutGeometry();
-    InvalidateRect(hwnd, NULL, TRUE);
-    break;
-}
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS | DLGC_WANTCHARS;
     case WM_KEYDOWN: {
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
         switch (wParam) {
             case VK_UP:
-                if (g_bListExpanded && g_NetworkCount > 0) {
+                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
                     int newIndex = (g_KeyboardSelectedIndex > 0) ? g_KeyboardSelectedIndex - 1 : g_NetworkCount - 1;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_DOWN:
-                if (g_bListExpanded && g_NetworkCount > 0) {
+                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
                     int newIndex = (g_KeyboardSelectedIndex < g_NetworkCount - 1) ? g_KeyboardSelectedIndex + 1 : 0;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_RETURN:
-                if (g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount)
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount)
                     ConnectToNetwork(g_KeyboardSelectedIndex);
                 return 0;
             case VK_LEFT:
                 ShowWindow(hwnd, SW_HIDE);
                 return 0;
             case VK_RIGHT:
-                if (g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount) {
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount) {
                     RECT rcRow;
                     if (GetRowRect(g_KeyboardSelectedIndex, &rcRow)) {
                         POINT pt = {rcRow.left + 20, rcRow.top + 13};
@@ -3422,45 +3415,44 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_VSCROLL: {
-    int totalHeight = GetTotalListHeight();
-    int visibleHeight = LIST_Y_END - LIST_Y_START;
-    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
-    int newPos = g_ScrollPos;
-    
-    switch (LOWORD(wParam)) {
-        case SB_LINEUP:    newPos -= ROW_HEIGHT_NORMAL; break;
-        case SB_LINEDOWN:  newPos += ROW_HEIGHT_NORMAL; break;
-        case SB_PAGEUP:    newPos -= visibleHeight; break;
-        case SB_PAGEDOWN:  newPos += visibleHeight; break;
-        case SB_THUMBTRACK: newPos = HIWORD(wParam); break;
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        if (!showWifiList) break;
+        int totalHeight = GetTotalListHeight();
+        int visibleHeight = LIST_Y_END - LIST_Y_START;
+        int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+        int newPos = g_ScrollPos;
+        switch (LOWORD(wParam)) {
+            case SB_LINEUP:    newPos -= ROW_HEIGHT_NORMAL; break;
+            case SB_LINEDOWN:  newPos += ROW_HEIGHT_NORMAL; break;
+            case SB_PAGEUP:    newPos -= visibleHeight; break;
+            case SB_PAGEDOWN:  newPos += visibleHeight; break;
+            case SB_THUMBTRACK: newPos = HIWORD(wParam); break;
+        }
+        if (newPos < 0) newPos = 0;
+        if (newPos > maxScroll) newPos = maxScroll;
+        if (newPos != g_ScrollPos) {
+            g_ScrollPos = newPos;
+            SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        break;
     }
-    
-    if (newPos < 0) newPos = 0;
-    if (newPos > maxScroll) newPos = maxScroll;
-    
-    if (newPos != g_ScrollPos) {
-        g_ScrollPos = newPos;
-        SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
-        InvalidateRect(hwnd, NULL, FALSE);
+    case WM_MOUSEWHEEL: {
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        if (!showWifiList) break;
+        int totalHeight = GetTotalListHeight();
+        int visibleHeight = LIST_Y_END - LIST_Y_START;
+        int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
+        int newPos = g_ScrollPos - (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * ROW_HEIGHT_NORMAL;
+        if (newPos < 0) newPos = 0;
+        if (newPos > maxScroll) newPos = maxScroll;
+        if (newPos != g_ScrollPos) {
+            g_ScrollPos = newPos;
+            SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        break;
     }
-    break;
-}
-case WM_MOUSEWHEEL: {
-    int totalHeight = GetTotalListHeight();
-    int visibleHeight = LIST_Y_END - LIST_Y_START;
-    int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
-    int newPos = g_ScrollPos - (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * ROW_HEIGHT_NORMAL;
-    
-    if (newPos < 0) newPos = 0;
-    if (newPos > maxScroll) newPos = maxScroll;
-    
-    if (newPos != g_ScrollPos) {
-        g_ScrollPos = newPos;
-        SetScrollPos(hwnd, SB_VERT, g_ScrollPos, TRUE);
-        InvalidateRect(hwnd, NULL, FALSE);
-    }
-    break;
-}
     case WM_ERASEBKGND: {
         HDC hdcErase = (HDC)wParam;
         RECT rcClient;
@@ -3477,7 +3469,7 @@ case WM_MOUSEWHEEL: {
         HDC     hdc     = CreateCompatibleDC(hdcReal);
         HBITMAP hBmp    = CreateCompatibleBitmap(hdcReal, WINDOW_WIDTH, WINDOW_HEIGHT);
         HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
-
+        
         RECT rcHeader  = {0, 0, WINDOW_WIDTH, HEADER_HEIGHT};
         HBRUSH hBrH = CreateSolidBrush(GetHeaderBgColor()); FillRect(hdc, &rcHeader, hBrH); DeleteObject(hBrH);
         RECT rcContent = {0, HEADER_HEIGHT, WINDOW_WIDTH, LIST_Y_END};
@@ -3485,260 +3477,262 @@ case WM_MOUSEWHEEL: {
         RECT rcFooter = GetFooterRect();
         HBRUSH hBrF = CreateSolidBrush(GetFooterBgColor());
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
-int totalHeight = GetTotalListHeight();
-int visibleHeight = LIST_Y_END - LIST_Y_START;
 
-SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
-SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        
+        if (showWifiList) {
+            int totalHeight = GetTotalListHeight();
+            int visibleHeight = LIST_Y_END - LIST_Y_START;
+            SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
+            SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+        }
+
         HPEN hPenSep = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, HEADER_HEIGHT, NULL); LineTo(hdc, WINDOW_WIDTH, HEADER_HEIGHT);
         SelectObject(hdc, hOldPen); DeleteObject(hPenSep);
-
+        
         HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
         HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(80,80,85)  : RGB(255,255,255));
-
         SelectObject(hdc, hPenBevelDark);
         MoveToEx(hdc, 0, LIST_Y_END,     NULL); LineTo(hdc, WINDOW_WIDTH, LIST_Y_END);
         SelectObject(hdc, hPenBevelLight);
         MoveToEx(hdc, 0, LIST_Y_END + 1, NULL); LineTo(hdc, WINDOW_WIDTH, LIST_Y_END + 1);
-
         SelectObject(hdc, hOldPen);
         DeleteObject(hPenBevelDark);
         DeleteObject(hPenBevelLight);
 
-        BOOL isAnyConnected = (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
+        BOOL isWifiConnected = (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
+        BOOL isAnyConnected = (g_EthernetConnected || isWifiConnected);
         SetBkMode(hdc, TRANSPARENT);
-       if (isAnyConnected) {
-    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
-    TextOutW(hdc, 8, 8, LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
-    SelectObject(hdc, g_hFontBold);
-    SetTextColor(hdc, GetTextColor());
-    WCHAR displaySsid[33]; GetDisplaySSID(0, displaySsid, 33);
-    DrawTextWithWrap(hdc, displaySsid, 56, ScaleDpi(36), WINDOW_WIDTH - 70, 18);
-    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
-    TextOutW(hdc, 56, ScaleDpi(54), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
-} else {
-    SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
-    TextOutW(hdc, 8, 8, LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
-    SelectObject(hdc, g_hFontBold);
-    SetTextColor(hdc, GetTextColor());
-    TextOutW(hdc, 56, ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
-}
-        int iconSize = ScaleDpi(35*1.05); 
-HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
-if (hLargeIcon) DrawIconEx(hdc, 14, 37, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-{
-    int totalHeight = GetTotalListHeight();
-    int visibleHeight = LIST_Y_END - LIST_Y_START;
-    BOOL hasScrollbar = (totalHeight > visibleHeight);
-    int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
-    int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
-
-    // Se la barra di scorrimento NON è attiva, sposta il pulsante del 4% più a destra
-    // e poi dell'1.3% più a sinistra (netto: +2.7% verso destra)
-    int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH * 4) / 100) - ((WINDOW_WIDTH * 13) / 1000));
-
-    g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift;
-    g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
-
-    // Limite di sicurezza per evitare che esca completamente dallo schermo a destra
-    if (g_rcRefreshButton.right > WINDOW_WIDTH) {
-        int overflow = g_rcRefreshButton.right - WINDOW_WIDTH;
-        g_rcRefreshButton.right -= overflow;
-        g_rcRefreshButton.left  -= overflow;
-    }
-}
-        if (g_IsHoveringRefresh) {
-            RECT rcBtn = g_rcRefreshButton;
+        
+        if (isAnyConnected) {
+            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
+            TextOutW(hdc, 8, 8, LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
+            SelectObject(hdc, g_hFontBold);
+            SetTextColor(hdc, GetTextColor());
             
-            COLORREF refreshHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
-            COLORREF refreshHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
-            HBRUSH hBrBg = CreateSolidBrush(refreshHoverBg);
-            HPEN   hPenBorder = CreatePen(PS_SOLID, 1, refreshHoverBorder);
-            HPEN   hOldPen = (HPEN)SelectObject(hdc, hPenBorder);
-            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrBg);
-            RoundRect(hdc, rcBtn.left, rcBtn.top, rcBtn.right, rcBtn.bottom, 4, 4);
-            SelectObject(hdc, hOldPen);
-            SelectObject(hdc, hOldBrush);
-            DeleteObject(hBrBg);
-            DeleteObject(hPenBorder);
-        }
-        
-        // Disegna l'icona refresh dal base64, ricolorata per il tema scuro
-        if (!g_hIconRefreshNormal) g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64);
-        if (g_hIconRefreshNormal) {
-            if (g_Settings.theme == 0) {
-                // Tema chiaro: disegna direttamente
-                DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
-                           g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
+            WCHAR displayName[64] = {0};
+            BOOL showEthernetInHeader = g_EthernetConnected;
+            if (showEthernetInHeader) {
+                if (g_Settings.privacyMode) {
+                    StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 1);
+                } else {
+                    StringCchCopyW(displayName, ARRAYSIZE(displayName), g_EthernetNetworkName);
+                    if (displayName[0] == L'\0') {
+                        StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 2);
+                    }
+                }
             } else {
-                // Tema scuro: ricolora i pixel usando GDI
-                ICONINFO ii = {0};
-                GetIconInfo(g_hIconRefreshNormal, &ii);
-                BITMAP bm = {0};
-                GetObject(ii.hbmColor, sizeof(bm), &bm);
-                int iw = bm.bmWidth, ih = bm.bmHeight;
-
-                HDC hdcTmp = CreateCompatibleDC(hdc);
-                BITMAPINFO bmi = {{0}};
-                bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-                bmi.bmiHeader.biWidth       = iw;
-                bmi.bmiHeader.biHeight      = -ih;
-                bmi.bmiHeader.biPlanes      = 1;
-                bmi.bmiHeader.biBitCount    = 32;
-                bmi.bmiHeader.biCompression = BI_RGB;
-                DWORD* pixels = NULL;
-                HBITMAP hBmpTmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&pixels, NULL, 0);
-                HBITMAP hOldBmpTmp = (HBITMAP)SelectObject(hdcTmp, hBmpTmp);
-
-                COLORREF bgCol = GetHeaderBgColor();
-                BYTE bgR = GetRValue(bgCol), bgG = GetGValue(bgCol), bgB = GetBValue(bgCol);
-                HBRUSH hBrTmp = CreateSolidBrush(bgCol);
-                RECT rcTmp = {0, 0, iw, ih};
-                FillRect(hdcTmp, &rcTmp, hBrTmp);
-                DeleteObject(hBrTmp);
-
-                DrawIconEx(hdcTmp, 0, 0, g_hIconRefreshNormal, iw, ih, 0, NULL, DI_NORMAL);
-
-
-                for (int p = 0; p < iw * ih; p++) {
-                    BYTE pb = (pixels[p])       & 0xFF;
-                    BYTE pg = (pixels[p] >> 8)  & 0xFF;
-                    BYTE pr = (pixels[p] >> 16) & 0xFF;
-                    if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
-                        continue;
-                    // Luminosita: piu e scuro, piu l'azzurro e intenso
-                    int lum = ((int)pr * 299 + (int)pg * 587 + (int)pb * 114) / 1000;
-                    int t = 255 - lum; // t alto = pixel scuro = colore pieno
-                    BYTE nr = (BYTE)(100 * t / 255);
-                    BYTE ng = (BYTE)(200 * t / 255);
-                    BYTE nb = (BYTE)(255 * t / 255);
-                    pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
-                }
-
-                BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
-
-                SelectObject(hdcTmp, hOldBmpTmp);
-                DeleteObject(hBmpTmp);
-                DeleteDC(hdcTmp);
-                if (ii.hbmColor) DeleteObject(ii.hbmColor);
-                if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+                GetDisplaySSID(0, displayName, 33);
             }
+            
+            DrawTextWithWrap(hdc, displayName, 56, ScaleDpi(36), WINDOW_WIDTH - 70, 18);
+            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
+            TextOutW(hdc, 56, ScaleDpi(54), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
+        } else {
+            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
+            TextOutW(hdc, 8, 8, LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
+            SelectObject(hdc, g_hFontBold);
+            SetTextColor(hdc, GetTextColor());
+            TextOutW(hdc, 56, ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
         }
-
-        SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
-        TextOutW(hdc, 14, HEADER_HEIGHT - 24, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
         
-        if (g_IsHoveringArrow) {
-            COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
-            COLORREF arrowHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
-            HBRUSH hBrA  = CreateSolidBrush(arrowHoverBg);
-            HPEN   hPenA = CreatePen(PS_SOLID, 1, arrowHoverBorder);
-            HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
-            HBRUSH hOldBA = (HBRUSH)SelectObject(hdc, hBrA);
-            RoundRect(hdc, g_rcArrowButton.left, g_rcArrowButton.top,
-                      g_rcArrowButton.right, g_rcArrowButton.bottom, 2, 2);
-            SelectObject(hdc, hOldPA); SelectObject(hdc, hOldBA);
-            DeleteObject(hBrA); DeleteObject(hPenA);
-        }
-        RecalcArrowRect();
-        SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(180, 180, 180) : RGB(50, 50, 50));
-        LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
-        RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
-        DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
-        if (g_bListExpanded) {
-    // CLIPPING
-    HRGN hRgnClip = CreateRectRgn(0, LIST_Y_START, WINDOW_WIDTH, LIST_Y_END);
-    SelectClipRgn(hdc, hRgnClip);
-    DeleteObject(hRgnClip);
-    
-    int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
-    UpdateLayoutGeometry(scrollbarOffset);  
-    
-    for (int i = 0; i < g_NetworkCount; i++) {
-                RECT rcRow;
-                if (!GetRowRect(i, &rcRow)) continue;
-                BOOL isSelected = (i == g_SelectedRowIndex);
-                BOOL isHovered  = (i == g_HoveredRowIndex);
-                BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
-                
-                if (isSelected || isHovered) {
-                    RECT rcFullRow = rcRow; rcFullRow.left = 0; rcFullRow.right = WINDOW_WIDTH - 5;
-                    COLORREF bgColor = isSelected ? GetRowSelectedColor() : GetRowHoverColor();
-                    COLORREF borderColor = isSelected ? GetRowSelectedBorderColor() : GetRowHoverBorderColor();
-                    HBRUSH hBrBg  = CreateSolidBrush(bgColor);
-                    HPEN   hPenBg = CreatePen(PS_SOLID, 1, borderColor);
-                    HPEN   hOldP  = (HPEN)SelectObject(hdc, hPenBg);
-                    HBRUSH hOldB  = (HBRUSH)SelectObject(hdc, hBrBg);
-                    RoundRect(hdc, rcFullRow.left, rcFullRow.top, rcFullRow.right, rcFullRow.bottom, 3, 3);
-                    SelectObject(hdc, hOldP); SelectObject(hdc, hOldB);
-                    DeleteObject(hBrBg); DeleteObject(hPenBg);
+        int iconSize = ScaleDpi(35*1.05); 
+        HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
+        if (hLargeIcon) DrawIconEx(hdc, 14, 37, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+
+        if (showWifiList) {
+            int totalHeight = GetTotalListHeight();
+            int visibleHeight = LIST_Y_END - LIST_Y_START;
+            BOOL hasScrollbar = (totalHeight > visibleHeight);
+            int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
+            int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
+            int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH  *4) / 100) - ((WINDOW_WIDTH*  13) / 1000));
+            g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift;
+            g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
+            if (g_rcRefreshButton.right > WINDOW_WIDTH) {
+                int overflow = g_rcRefreshButton.right - WINDOW_WIDTH;
+                g_rcRefreshButton.right -= overflow;
+                g_rcRefreshButton.left  -= overflow;
+            }
+
+            if (g_IsHoveringRefresh) {
+                RECT rcBtn = g_rcRefreshButton;
+                COLORREF refreshHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
+                COLORREF refreshHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
+                HBRUSH hBrBg = CreateSolidBrush(refreshHoverBg);
+                HPEN   hPenBorder = CreatePen(PS_SOLID, 1, refreshHoverBorder);
+                HPEN   hOldPen = (HPEN)SelectObject(hdc, hPenBorder);
+                HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrBg);
+                RoundRect(hdc, rcBtn.left, rcBtn.top, rcBtn.right, rcBtn.bottom, 4, 4);
+                SelectObject(hdc, hOldPen);
+                SelectObject(hdc, hOldBrush);
+                DeleteObject(hBrBg);
+                DeleteObject(hPenBorder);
+            }
+            
+            if (!g_hIconRefreshNormal) g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64);
+            if (g_hIconRefreshNormal) {
+                if (g_Settings.theme == 0) {
+                    DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
+                               g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
+                } else {
+                    ICONINFO ii = {0};
+                    GetIconInfo(g_hIconRefreshNormal, &ii);
+                    BITMAP bm = {0};
+                    GetObject(ii.hbmColor, sizeof(bm), &bm);
+                    int iw = bm.bmWidth, ih = bm.bmHeight;
+                    HDC hdcTmp = CreateCompatibleDC(hdc);
+                    BITMAPINFO bmi = {{0}};
+                    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+                    bmi.bmiHeader.biWidth       = iw;
+                    bmi.bmiHeader.biHeight      = -ih;
+                    bmi.bmiHeader.biPlanes      = 1;
+                    bmi.bmiHeader.biBitCount    = 32;
+                    bmi.bmiHeader.biCompression = BI_RGB;
+                    DWORD* pixels = NULL;
+                    HBITMAP hBmpTmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&pixels, NULL, 0);
+                    HBITMAP hOldBmpTmp = (HBITMAP)SelectObject(hdcTmp, hBmpTmp);
+                    COLORREF bgCol = GetHeaderBgColor();
+                    BYTE bgR = GetRValue(bgCol), bgG = GetGValue(bgCol), bgB = GetBValue(bgCol);
+                    HBRUSH hBrTmp = CreateSolidBrush(bgCol);
+                    RECT rcTmp = {0, 0, iw, ih};
+                    FillRect(hdcTmp, &rcTmp, hBrTmp);
+                    DeleteObject(hBrTmp);
+                    DrawIconEx(hdcTmp, 0, 0, g_hIconRefreshNormal, iw, ih, 0, NULL, DI_NORMAL);
+                    for (int p = 0; p < iw * ih; p++) {
+                        BYTE pb = (pixels[p])       & 0xFF;
+                        BYTE pg = (pixels[p] >> 8)  & 0xFF;
+                        BYTE pr = (pixels[p] >> 16) & 0xFF;
+                        if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
+                            continue;
+                        int lum = ((int)pr  *299 + (int)pg*  587 + (int)pb * 114) / 1000;
+                        int t = 255 - lum; 
+                        BYTE nr = (BYTE)(100 * t / 255);
+                        BYTE ng = (BYTE)(200 * t / 255);
+                        BYTE nb = (BYTE)(255 * t / 255);
+                        pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
+                    }
+                    BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
+                    SelectObject(hdcTmp, hOldBmpTmp);
+                    DeleteObject(hBmpTmp);
+                    DeleteDC(hdcTmp);
+                    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+                    if (ii.hbmMask)  DeleteObject(ii.hbmMask);
                 }
-                if (hasKeyboardFocus && !isSelected)
-                    DrawFocusRectangle(hdc, &rcRow);
+            }
+            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
+            TextOutW(hdc, 14, HEADER_HEIGHT - 24, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
+            
+            if (g_IsHoveringArrow) {
+                COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
+                COLORREF arrowHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
+                HBRUSH hBrA  = CreateSolidBrush(arrowHoverBg);
+                HPEN   hPenA = CreatePen(PS_SOLID, 1, arrowHoverBorder);
+                HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
+                HBRUSH hOldBA = (HBRUSH)SelectObject(hdc, hBrA);
+                RoundRect(hdc, g_rcArrowButton.left, g_rcArrowButton.top,
+                          g_rcArrowButton.right, g_rcArrowButton.bottom, 2, 2);
+                SelectObject(hdc, hOldPA); SelectObject(hdc, hOldBA);
+                DeleteObject(hBrA); DeleteObject(hPenA);
+            }
+            RecalcArrowRect();
+            SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(180, 180, 180) : RGB(50, 50, 50));
+            LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
+            RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
+            DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+            
+            if (g_bListExpanded) {
+                HRGN hRgnClip = CreateRectRgn(0, LIST_Y_START, WINDOW_WIDTH, LIST_Y_END);
+                SelectClipRgn(hdc, hRgnClip);
+                DeleteObject(hRgnClip);
                 
-                WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
-                BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
-                SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
-                SetTextColor(hdc, GetNetworkNameColor());
-                DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top+6, 
-rcRow.right - rcRow.left - 10, 18);       
-WifiNetworkItem* item = &g_NetworkList[i];
-                BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
-                         item->connState == CONN_STATE_DISCONNECTING);
-
-if (item->connState == CONN_STATE_CONNECTED) {
-    SelectObject(hdc, g_hFontBold);
-    SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
-
-    RECT rcStatus;
-    rcStatus.right = rcRow.right - 39 - scrollbarOffset;
-    rcStatus.left   = rcRow.left + 80;
-    rcStatus.top    = rcRow.top + 6;
-    rcStatus.bottom = rcStatus.top + 18;
-
-    DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
-              DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-}
-else if (isTransitioning) {
-    // Stato di transizione: riga propria sotto il nome, tutta larghezza disponibile
-    SelectObject(hdc, g_hFontNormal);
-    SetTextColor(hdc, GetSecondaryTextColor());
-
-    const WCHAR* transitionText = (item->connState == CONN_STATE_CONNECTING)
-        ? LOC(STR_CONNECTING) : LOC(STR_DISCONNECTING);
-
-    RECT rcTransition;
-    rcTransition.left   = rcRow.left + 10;
-    rcTransition.right  = rcRow.right - 10;
-    rcTransition.top    = rcRow.top + 24;   // sotto il nome, che è a rcRow.top+6
-    rcTransition.bottom = rcTransition.top + 18;
-
-    DrawTextW(hdc, transitionText, -1, &rcTransition,
-              DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-}
+                int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
+                UpdateLayoutGeometry(scrollbarOffset);  
                 
-DrawNativeSignalIcon(hdc, rcRow.right - 10 - scrollbarOffset, rcRow.top+2, item->signalQuality);    }
-        }
+                for (int i = 0; i < g_NetworkCount; i++) {
+                    RECT rcRow;
+                    if (!GetRowRect(i, &rcRow)) continue;
+                    BOOL isSelected = (i == g_SelectedRowIndex);
+                    BOOL isHovered  = (i == g_HoveredRowIndex);
+                    BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
+                    
+                    if (isSelected || isHovered) {
+                        RECT rcFullRow = rcRow; rcFullRow.left = 0; rcFullRow.right = WINDOW_WIDTH - 5;
+                        COLORREF bgColor = isSelected ? GetRowSelectedColor() : GetRowHoverColor();
+                        COLORREF borderColor = isSelected ? GetRowSelectedBorderColor() : GetRowHoverBorderColor();
+                        HBRUSH hBrBg  = CreateSolidBrush(bgColor);
+                        HPEN   hPenBg = CreatePen(PS_SOLID, 1, borderColor);
+                        HPEN   hOldP  = (HPEN)SelectObject(hdc, hPenBg);
+                        HBRUSH hOldB  = (HBRUSH)SelectObject(hdc, hBrBg);
+                        RoundRect(hdc, rcFullRow.left, rcFullRow.top, rcFullRow.right, rcFullRow.bottom, 3, 3);
+                        SelectObject(hdc, hOldP); SelectObject(hdc, hOldB);
+                        DeleteObject(hBrBg); DeleteObject(hPenBg);
+                    }
+                    if (hasKeyboardFocus && !isSelected)
+                        DrawFocusRectangle(hdc, &rcRow);
+                    
+                    WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
+                    BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
+                    SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
+                    SetTextColor(hdc, GetNetworkNameColor());
+                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top+6, 
+                                     rcRow.right - rcRow.left - 10, 18);       
+                    WifiNetworkItem* item = &g_NetworkList[i];
+                    BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
+                                            item->connState == CONN_STATE_DISCONNECTING);
+                    if (item->connState == CONN_STATE_CONNECTED) {
+                        SelectObject(hdc, g_hFontBold);
+                        SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+                        RECT rcStatus;
+                        rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
+                        rcStatus.left   = rcRow.left + 80;
+                        rcStatus.top    = rcRow.top + 6;
+                        rcStatus.bottom = rcStatus.top + 18;
+                        DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
+                                  DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                    }
+                    else if (isTransitioning) {
+                        SelectObject(hdc, g_hFontNormal);
+                        SetTextColor(hdc, GetSecondaryTextColor());
+                        const WCHAR* transitionText = (item->connState == CONN_STATE_CONNECTING)
+                            ? LOC(STR_CONNECTING) : LOC(STR_DISCONNECTING);
+                        RECT rcTransition;
+                        rcTransition.left   = rcRow.left + 10;
+                        rcTransition.right  = rcRow.right - 10;
+                        rcTransition.top    = rcRow.top + 24;   
+                        rcTransition.bottom = rcTransition.top + 18;
+                        DrawTextW(hdc, transitionText, -1, &rcTransition,
+                                  DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                    }
+                    
+                    DrawNativeSignalIcon(hdc, rcRow.right - 10 - scrollbarOffset, rcRow.top+2, item->signalQuality);    
+                }
                 SelectClipRgn(hdc, NULL);
+            }
+        } else {
+            if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
+                ShowWindow(g_hWndButtonConnect, SW_HIDE);
+            if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
+                ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
+            g_bShowCheckboxLabel = FALSE;
+        }
+
         SelectObject(hdc, g_IsHoveringLink ? g_hFontUnderline : g_hFontNormal);
-SetTextColor(hdc, GetLinkColor());
-const wchar_t* footerText = LOC(STR_OPEN_SHARING_CENTER);
-SIZE textSize; GetTextExtentPoint32W(hdc, footerText, lstrlenW(footerText), &textSize);
-
-RECT rcClient;
-GetClientRect(hwnd, &rcClient);
-int footerTop = rcClient.bottom - FOOTER_HEIGHT;
-int centerX = (rcClient.right - textSize.cx) / 2;
-int footerTextYC = footerTop + (FOOTER_HEIGHT - textSize.cy) / 2;
-
-if (g_Settings.useRoundedCorners) {
-    footerTextYC += (FOOTER_HEIGHT * 15) / 100;
-}
-
-TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
-
+        SetTextColor(hdc, GetLinkColor());
+        const wchar_t* footerText = LOC(STR_OPEN_SHARING_CENTER);
+        SIZE textSize; GetTextExtentPoint32W(hdc, footerText, lstrlenW(footerText), &textSize);
+        RECT rcClient;
+        GetClientRect(hwnd, &rcClient);
+        int footerTop = rcClient.bottom - FOOTER_HEIGHT;
+        int centerX = (rcClient.right - textSize.cx) / 2;
+        int footerTextYC = footerTop + (FOOTER_HEIGHT - textSize.cy) / 2;
+        if (g_Settings.useRoundedCorners) {
+            footerTextYC += (FOOTER_HEIGHT * 15) / 100;
+        }
+        TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
+        
         if (g_bShowCheckboxLabel) {
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(255,255,255) : RGB(0,0,0));
@@ -3746,221 +3740,187 @@ TextOutW(hdc, centerX, footerTextYC, footerText, lstrlenW(footerText));
             DrawTextW(hdc, LOC(STR_CHK_CONNECT_AUTO), -1, &g_rcCheckboxLabel, DT_LEFT|DT_VCENTER|DT_SINGLELINE);
             SelectObject(hdc, hOldFontChk);
         }
-
         BitBlt(hdcReal, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, hdc, 0, 0, SRCCOPY);
         SelectObject(hdc, hOldBmp); DeleteObject(hBmp); DeleteDC(hdc);
         EndPaint(hwnd, &ps);
         break;
     }
-case WM_DRAWITEM: {
-    LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
-    if (!pdis || pdis->CtlID != IDC_CONN_BUTTON) break;
-
-    // Solo per tema scuro
-    if (g_Settings.theme != 1) break;
-
-    BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
-    BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
-    
-
-    BOOL isHovering = g_IsHoveringConnectButton && !isPressed && !isDisabled;
-    
-    HDC  hdcReal = pdis->hDC;
-    RECT rc  = pdis->rcItem;
-    int  w = rc.right - rc.left;
-    int  h = rc.bottom - rc.top;
-    if (w <= 0 || h <= 0) break;
-
-    WCHAR szText[64];
-    int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
-
-    COLORREF bgColor;
-    if (isDisabled) {
-        bgColor = RGB(50, 50, 58);
-    } else if (isPressed) {
-        bgColor = RGB(35, 35, 45);
-    } else if (isHovering) {
-        bgColor = RGB(70, 70, 85);  
-    } else {
-        bgColor = RGB(60, 60, 72);
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
+        if (!pdis || pdis->CtlID != IDC_CONN_BUTTON) break;
+        if (g_Settings.theme != 1) break;
+        BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
+        BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
+        BOOL isHovering = g_IsHoveringConnectButton && !isPressed && !isDisabled;
+        
+        HDC  hdcReal = pdis->hDC;
+        RECT rc  = pdis->rcItem;
+        int  w = rc.right - rc.left;
+        int  h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) break;
+        WCHAR szText[64];
+        int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
+        COLORREF bgColor;
+        if (isDisabled) {
+            bgColor = RGB(50, 50, 58);
+        } else if (isPressed) {
+            bgColor = RGB(35, 35, 45);
+        } else if (isHovering) {
+            bgColor = RGB(70, 70, 85);  
+        } else {
+            bgColor = RGB(60, 60, 72);
+        }
+        
+        COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
+        COLORREF darkColor = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
+        COLORREF textColor = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
+        COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0,0,0);
+        
+        HDC hdcMem = CreateCompatibleDC(hdcReal);
+        HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
+        HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
+        RECT rcLocal = {0, 0, w, h};
+        HBRUSH hBrBg = CreateSolidBrush(bgColor);
+        FillRect(hdcMem, &rcLocal, hBrBg);
+        DeleteObject(hBrBg);
+        HPEN hPenLight = CreatePen(PS_SOLID, 1, lightColor);
+        HPEN hPenDark = CreatePen(PS_SOLID, 1, darkColor);
+        HPEN hPenHover = isHovering ? CreatePen(PS_SOLID, 1, hoverBorder) : NULL;
+        
+        HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPenLight);
+        MoveToEx(hdcMem, 0, h - 1, NULL);
+        LineTo(hdcMem, 0, 0);
+        LineTo(hdcMem, w - 1, 0);
+        
+        SelectObject(hdcMem, hPenDark);
+        MoveToEx(hdcMem, w - 1, 0, NULL);
+        LineTo(hdcMem, w - 1, h - 1);
+        LineTo(hdcMem, 0, h - 1);
+        
+        if (isHovering && hPenHover) {
+            SelectObject(hdcMem, hPenHover);
+            MoveToEx(hdcMem, 1, 1, NULL);
+            LineTo(hdcMem, w - 2, 1);
+            LineTo(hdcMem, w - 2, h - 2);
+            LineTo(hdcMem, 1, h - 2);
+            LineTo(hdcMem, 1, 1);
+            DeleteObject(hPenHover);
+        }
+        
+        SelectObject(hdcMem, hOldPen);
+        DeleteObject(hPenLight);
+        DeleteObject(hPenDark);
+        
+        SetBkMode(hdcMem, TRANSPARENT);
+        SetTextColor(hdcMem, textColor);
+        HFONT hOldFont = (HFONT)SelectObject(hdcMem, g_hFontButton);
+        RECT rcText = rcLocal;
+        if (isPressed) { rcText.left += 1; rcText.top += 1; }
+        DrawTextW(hdcMem, szText, textLen, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(hdcMem, hOldFont);
+        BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hOldBmpMem);
+        DeleteObject(hBmpMem);
+        DeleteDC(hdcMem);
+        break;
     }
-    
-    COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
-    COLORREF darkColor = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
-    COLORREF textColor = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
-    
-
-    COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0,0,0);
-
-    // Disegna su un bitmap di memoria
-    HDC hdcMem = CreateCompatibleDC(hdcReal);
-    HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
-    HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
-    RECT rcLocal = {0, 0, w, h};
-
-
-    HBRUSH hBrBg = CreateSolidBrush(bgColor);
-    FillRect(hdcMem, &rcLocal, hBrBg);
-    DeleteObject(hBrBg);
-
-
-    HPEN hPenLight = CreatePen(PS_SOLID, 1, lightColor);
-    HPEN hPenDark = CreatePen(PS_SOLID, 1, darkColor);
-    HPEN hPenHover = isHovering ? CreatePen(PS_SOLID, 1, hoverBorder) : NULL;
-    
-
-    HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPenLight);
-    MoveToEx(hdcMem, 0, h - 1, NULL);
-    LineTo(hdcMem, 0, 0);
-    LineTo(hdcMem, w - 1, 0);
-    
-
-    SelectObject(hdcMem, hPenDark);
-    MoveToEx(hdcMem, w - 1, 0, NULL);
-    LineTo(hdcMem, w - 1, h - 1);
-    LineTo(hdcMem, 0, h - 1);
-    
-
-    if (isHovering && hPenHover) {
-        SelectObject(hdcMem, hPenHover);
-        MoveToEx(hdcMem, 1, 1, NULL);
-        LineTo(hdcMem, w - 2, 1);
-        LineTo(hdcMem, w - 2, h - 2);
-        LineTo(hdcMem, 1, h - 2);
-        LineTo(hdcMem, 1, 1);
-        DeleteObject(hPenHover);
-    }
-    
-    SelectObject(hdcMem, hOldPen);
-    DeleteObject(hPenLight);
-    DeleteObject(hPenDark);
-
-    // Testo
-    SetBkMode(hdcMem, TRANSPARENT);
-    SetTextColor(hdcMem, textColor);
-    HFONT hOldFont = (HFONT)SelectObject(hdcMem, g_hFontButton);
-    RECT rcText = rcLocal;
-    if (isPressed) { rcText.left += 1; rcText.top += 1; }
-    DrawTextW(hdcMem, szText, textLen, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    SelectObject(hdcMem, hOldFont);
-
-
-    BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
-
-    SelectObject(hdcMem, hOldBmpMem);
-    DeleteObject(hBmpMem);
-    DeleteDC(hdcMem);
-    break;
-}
     case WM_CTLCOLORSTATIC: {
-    HDC hdc = (HDC)wParam;
-    HWND hwndCtrl = (HWND)lParam;
-    
-    if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
-        WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-        
-        if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
-            COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-            COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
-            SetBkColor(hdc, chkBg);
-            SetBkMode(hdc, OPAQUE);
-            SetTextColor(hdc, chkText);
-            
-            static HBRUSH hBrushCheckbox = NULL;
-            static COLORREF lastChkBg = (COLORREF)-1;
-            if (!hBrushCheckbox || lastChkBg != chkBg) {
-                if (hBrushCheckbox) DeleteObject(hBrushCheckbox);
-                hBrushCheckbox = CreateSolidBrush(chkBg);
-                lastChkBg = chkBg;
+        HDC hdc = (HDC)wParam;
+        HWND hwndCtrl = (HWND)lParam;
+        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                SetBkColor(hdc, chkBg);
+                SetBkMode(hdc, OPAQUE);
+                SetTextColor(hdc, chkText);
+                static HBRUSH hBrushCheckbox = NULL;
+                static COLORREF lastChkBg = (COLORREF)-1;
+                if (!hBrushCheckbox || lastChkBg != chkBg) {
+                    if (hBrushCheckbox) DeleteObject(hBrushCheckbox);
+                    hBrushCheckbox = CreateSolidBrush(chkBg);
+                    lastChkBg = chkBg;
+                }
+                return (INT_PTR)hBrushCheckbox;
+            } else if (g_Settings.theme == 1) {
+                COLORREF chkBg = GetFooterBgColor();
+                SetBkColor(hdc, chkBg);
+                SetBkMode(hdc, OPAQUE);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                static HBRUSH hBrushCheckboxDark = NULL;
+                static COLORREF lastChkBgDark = (COLORREF)-1;
+                if (!hBrushCheckboxDark || lastChkBgDark != chkBg) {
+                    if (hBrushCheckboxDark) DeleteObject(hBrushCheckboxDark);
+                    hBrushCheckboxDark = CreateSolidBrush(chkBg);
+                    lastChkBgDark = chkBg;
+                }
+                return (INT_PTR)hBrushCheckboxDark;
+            } else {
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
             }
-            return (INT_PTR)hBrushCheckbox;
-        } else if (g_Settings.theme == 1) {
-            COLORREF chkBg = GetFooterBgColor();
-            SetBkColor(hdc, chkBg);
+        }
+        if (g_Settings.theme == 1) {
+            SetBkColor(hdc, RGB(20, 20, 20));
+            SetTextColor(hdc, RGB(100, 200, 255));
             SetBkMode(hdc, OPAQUE);
-            SetTextColor(hdc, RGB(255, 255, 255));
-
-            static HBRUSH hBrushCheckboxDark = NULL;
-            static COLORREF lastChkBgDark = (COLORREF)-1;
-            if (!hBrushCheckboxDark || lastChkBgDark != chkBg) {
-                if (hBrushCheckboxDark) DeleteObject(hBrushCheckboxDark);
-                hBrushCheckboxDark = CreateSolidBrush(chkBg);
-                lastChkBgDark = chkBg;
+            static HBRUSH hBrPwdStatic = NULL;
+            static COLORREF lastBg = (COLORREF)-1;
+            COLORREF bg = RGB(20, 20, 20);
+            if (!hBrPwdStatic || lastBg != bg) {
+                if (hBrPwdStatic) DeleteObject(hBrPwdStatic);
+                hBrPwdStatic = CreateSolidBrush(bg);
+                lastBg = bg;
             }
-            return (INT_PTR)hBrushCheckboxDark;
+            return (INT_PTR)hBrPwdStatic;
         } else {
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));
-            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
+            SetTextColor(hdc, RGB(14, 75, 184));
+            return (INT_PTR)GetStockObject(NULL_BRUSH);
         }
     }
-    
-    // Gestione label del dialogo password: azzurre per entrambi i temi
-    if (g_Settings.theme == 1) {
-        SetBkColor(hdc, RGB(20, 20, 20));
-        SetTextColor(hdc, RGB(100, 200, 255));
-        SetBkMode(hdc, OPAQUE);
-        static HBRUSH hBrPwdStatic = NULL;
-        static COLORREF lastBg = (COLORREF)-1;
-        COLORREF bg = RGB(20, 20, 20);
-        if (!hBrPwdStatic || lastBg != bg) {
-            if (hBrPwdStatic) DeleteObject(hBrPwdStatic);
-            hBrPwdStatic = CreateSolidBrush(bg);
-            lastBg = bg;
-        }
-        return (INT_PTR)hBrPwdStatic;
-    } else {
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(14, 75, 184));
-        return (INT_PTR)GetStockObject(NULL_BRUSH);
-    }
-}
     case WM_CTLCOLORBTN: {
-    HDC hdc = (HDC)wParam;
-    HWND hwndBtn = (HWND)lParam;
-    
-    if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
-        WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-        
-        if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
-            COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-            COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
-            SetBkColor(hdc, chkBg);
-            SetBkMode(hdc, OPAQUE);
-            SetTextColor(hdc, chkText);
-            
-            static HBRUSH hBrushCheckboxBtn = NULL;
-            static COLORREF lastChkBtnBg = (COLORREF)-1;
-            if (!hBrushCheckboxBtn || lastChkBtnBg != chkBg) {
-                if (hBrushCheckboxBtn) DeleteObject(hBrushCheckboxBtn);
-                hBrushCheckboxBtn = CreateSolidBrush(chkBg);
-                lastChkBtnBg = chkBg;
+        HDC hdc = (HDC)wParam;
+        HWND hwndBtn = (HWND)lParam;
+        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
+            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                SetBkColor(hdc, chkBg);
+                SetBkMode(hdc, OPAQUE);
+                SetTextColor(hdc, chkText);
+                static HBRUSH hBrushCheckboxBtn = NULL;
+                static COLORREF lastChkBtnBg = (COLORREF)-1;
+                if (!hBrushCheckboxBtn || lastChkBtnBg != chkBg) {
+                    if (hBrushCheckboxBtn) DeleteObject(hBrushCheckboxBtn);
+                    hBrushCheckboxBtn = CreateSolidBrush(chkBg);
+                    lastChkBtnBg = chkBg;
+                }
+                return (INT_PTR)hBrushCheckboxBtn;
+            } else if (g_Settings.theme == 1) {
+                COLORREF chkBg = GetFooterBgColor();
+                SetBkColor(hdc, chkBg);
+                SetBkMode(hdc, OPAQUE);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                static HBRUSH hBrushCheckboxBtnDark = NULL;
+                static COLORREF lastChkBtnBgDark = (COLORREF)-1;
+                if (!hBrushCheckboxBtnDark || lastChkBtnBgDark != chkBg) {
+                    if (hBrushCheckboxBtnDark) DeleteObject(hBrushCheckboxBtnDark);
+                    hBrushCheckboxBtnDark = CreateSolidBrush(chkBg);
+                    lastChkBtnBgDark = chkBg;
+                }
+                return (INT_PTR)hBrushCheckboxBtnDark;
+            } else {
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
             }
-            return (INT_PTR)hBrushCheckboxBtn;
-        } else if (g_Settings.theme == 1) {
-
-            COLORREF chkBg = GetFooterBgColor();
-            SetBkColor(hdc, chkBg);
-            SetBkMode(hdc, OPAQUE);
-            SetTextColor(hdc, RGB(255, 255, 255));
-
-            static HBRUSH hBrushCheckboxBtnDark = NULL;
-            static COLORREF lastChkBtnBgDark = (COLORREF)-1;
-            if (!hBrushCheckboxBtnDark || lastChkBtnBgDark != chkBg) {
-                if (hBrushCheckboxBtnDark) DeleteObject(hBrushCheckboxBtnDark);
-                hBrushCheckboxBtnDark = CreateSolidBrush(chkBg);
-                lastChkBtnBgDark = chkBg;
-            }
-            return (INT_PTR)hBrushCheckboxBtnDark;
-        } else {
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));
-            return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
         }
+        return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
-    
-    return (INT_PTR)DefWindowProcW(hwnd, uMsg, wParam, lParam);
-}
     case WM_MOUSEMOVE: {
         int mx = LOWORD(lParam), my = HIWORD(lParam);
         POINT pt = {mx,my};
@@ -3969,13 +3929,13 @@ case WM_DRAWITEM: {
         BOOL wasRefresh = g_IsHoveringRefresh;
         BOOL wasArrow   = g_IsHoveringArrow;
         int  wasHov     = g_HoveredRowIndex;
-        
-
         BOOL wasConnectHover = g_IsHoveringConnectButton;
         
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        
         g_IsHoveringLink    = PtInRect(&rcF, pt) != 0;
-        g_IsHoveringRefresh = PtInRect(&g_rcRefreshButton, pt) != 0;
-        g_IsHoveringArrow   = PtInRect(&g_rcArrowButton,   pt) != 0;
+        g_IsHoveringRefresh = showWifiList && PtInRect(&g_rcRefreshButton, pt) != 0;
+        g_IsHoveringArrow   = showWifiList && PtInRect(&g_rcArrowButton,   pt) != 0;
         
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect) && IsWindowVisible(g_hWndButtonConnect)) {
             RECT rcConnect;
@@ -3987,7 +3947,7 @@ case WM_DRAWITEM: {
             g_IsHoveringConnectButton = FALSE;
         }
         
-        int newHovered = (my >= LIST_Y_START && my < LIST_Y_END) ? HitTestRows(mx,my) : -1;
+        int newHovered = (showWifiList && my >= LIST_Y_START && my < LIST_Y_END) ? HitTestRows(mx,my) : -1;
         g_HoveredRowIndex = newHovered;
         if (newHovered != wasHov)
             UpdateTooltipForRow(hwnd, newHovered);
@@ -4015,28 +3975,30 @@ case WM_DRAWITEM: {
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
-        if (PtInRect(&g_rcRefreshButton,pt)) {
-    Wh_Log(L"Manual refresh requested");
-    if (g_Ctx.hWlanClient) {
-        PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
-        if (WlanEnumInterfaces(g_Ctx.hWlanClient, NULL, &pIfList) == ERROR_SUCCESS) {
-            for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
-                DWORD scanResult = WlanScan(g_Ctx.hWlanClient, &pIfList->InterfaceInfo[i].InterfaceGuid, NULL, NULL, NULL);
-                Wh_Log(L"WlanScan requested on interface %lu: %lu", i, scanResult);
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        
+        if (showWifiList && PtInRect(&g_rcRefreshButton,pt)) {
+            Wh_Log(L"Manual refresh requested");
+            if (g_Ctx.hWlanClient) {
+                PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
+                if (WlanEnumInterfaces(g_Ctx.hWlanClient, NULL, &pIfList) == ERROR_SUCCESS) {
+                    for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
+                        DWORD scanResult = WlanScan(g_Ctx.hWlanClient, &pIfList->InterfaceInfo[i].InterfaceGuid, NULL, NULL, NULL);
+                        Wh_Log(L"WlanScan requested on interface %lu: %lu", i, scanResult);
+                    }
+                    WlanFreeMemory(pIfList);
+                }
+            } else {
+                Wh_Log(L"Manual refresh skipped: WLAN client not available");
             }
-            WlanFreeMemory(pIfList);
+            RefreshNetworkData();
+            ClampScrollPos();
+            UpdateLayoutGeometry();
+            InvalidateRect(hwnd, NULL, TRUE);
+            UpdateWindow(hwnd);
+            break;
         }
-        RefreshWifiData(g_Ctx.hWlanClient);
-        ClampScrollPos();
-        UpdateLayoutGeometry();
-        InvalidateRect(hwnd, NULL, TRUE);
-        UpdateWindow(hwnd);
-    } else {
-        Wh_Log(L"Manual refresh skipped: WLAN client not available");
-    }
-    break;
-}
-        if (PtInRect(&g_rcArrowButton,pt)) {
+        if (showWifiList && PtInRect(&g_rcArrowButton,pt)) {
             g_bListExpanded = !g_bListExpanded;
             if (!g_bListExpanded) {
                 if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))
@@ -4056,7 +4018,7 @@ case WM_DRAWITEM: {
             ShowWindow(hwnd,SW_HIDE);
             break;
         }
-        if (g_bListExpanded && ly >= LIST_Y_START && ly < LIST_Y_END) {
+        if (showWifiList && g_bListExpanded && ly >= LIST_Y_START && ly < LIST_Y_END) {
             int ci = HitTestRows(lx,ly);
             if (ci != -1) {
                 if (g_SelectedRowIndex == ci) {
@@ -4084,7 +4046,8 @@ case WM_DRAWITEM: {
     }
     case WM_RBUTTONDOWN: {
         int rx = LOWORD(lParam), ry = HIWORD(lParam);
-        if (g_bListExpanded && ry >= LIST_Y_START && ry < LIST_Y_END) {
+        BOOL showWifiList = (g_NetworkCount > 0) && (g_Settings.debugEthernet != 2);
+        if (showWifiList && g_bListExpanded && ry >= LIST_Y_START && ry < LIST_Y_END) {
             int ci = HitTestRows(rx,ry);
             if (ci != -1) {
                 POINT ptM={rx,ry}; ClientToScreen(hwnd,&ptM);
@@ -4093,7 +4056,6 @@ case WM_DRAWITEM: {
         }
         break;
     }
-   
     case WM_COMMAND: {
         int wid = LOWORD(wParam);
         if (wid == IDC_CONN_BUTTON && g_SelectedRowIndex != -1) {
@@ -4104,7 +4066,6 @@ case WM_DRAWITEM: {
     }
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) {
-
             if (!g_inPasswordPrompt) {
                 ClearKeyboardFocus();
                 ShowWindow(hwnd, SW_HIDE);
@@ -4130,33 +4091,31 @@ case WM_DRAWITEM: {
         break;
     }
     return DefWindowProcW(hwnd,uMsg,wParam,lParam);
-} // =====================================================================
-// Network icon detection via pnidui.dll
-// =====================================================================
+}
 
+// =====================================================================
+// Network icon detection via pnidui.dll & toolbar subclassing
+// =====================================================================
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
     *outButtonId = -1;
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"[Discovery] Toolbar has %d buttons", count);
-
     for (int i = 0; i < count; i++) {
         TBBUTTON tb{};
         if (!SendMessageW(hToolbar, TB_GETBUTTON, (WPARAM)i, (LPARAM)&tb)) continue;
         if (tb.fsState & TBSTATE_HIDDEN) continue;
         if (tb.fsStyle & TBSTYLE_SEP) continue;
-
         if (IsNetworkButton(hToolbar, i)) {
             *outButtonId = tb.idCommand;
-
             WCHAR text[128] = {0};
             SendMessageW(hToolbar, TB_GETBUTTONTEXT, tb.idCommand, (LPARAM)text);
             Wh_Log(L"[Discovery] Network found: btn[%d] id=%d text='%s'", i, tb.idCommand, text);
             return;
         }
     }
-
     Wh_Log(L"[Discovery] Network button NOT found via pnidui.dll range");
 }
+
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (g_Settings.interceptNativeFlyout) {
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || msg == WM_MOUSEACTIVATE) {
@@ -4178,7 +4137,6 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (currentCount != g_ToolbarCache.buttonCount) {
                         g_ToolbarCache.valid = FALSE;
                     }
-                    
                     if (!g_ToolbarCache.valid) {
                         int detectedId = -1;
                         DetectNetworkButtonId(hWnd, &detectedId);
@@ -4186,7 +4144,6 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         g_ToolbarCache.buttonCount = currentCount;
                         g_ToolbarCache.valid = TRUE;
                     }
-                    
                     if (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId) {
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
@@ -4218,43 +4175,38 @@ static bool IsExplorerProcess() {
     name = name ? name + 1 : exePath;
     return _wcsicmp(name, L"explorer.exe") == 0;
 }
+
 static BOOL InstallTrayInterceptionInternal() {
     if (!IsExplorerProcess()) return TRUE;
     InitPniduiInfo();
-
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-
     if (!hTray) {
         Wh_Log(L"Shell_TrayWnd not found");
         return FALSE;
     }
-    
     HWND hNotify  = FindWindowExW(hTray,    NULL, L"TrayNotifyWnd",   NULL);
     HWND hSysPager= hNotify ? FindWindowExW(hNotify,  NULL, L"SysPager",        NULL) : NULL;
     HWND hToolbar = hSysPager ? FindWindowExW(hSysPager,NULL, L"ToolbarWindow32", NULL) : NULL;
     if (!hToolbar) {
-    Wh_Log(L"No ToolbarWindow32 found, cannot install tray interception");
-    return FALSE;
-}
-HWND hTarget = hToolbar;
-    
-    
+        Wh_Log(L"No ToolbarWindow32 found, cannot install tray interception");
+        return FALSE;
+    }
+    HWND hTarget = hToolbar;
     G_hSubclassedToolbar = hTarget;
     Wh_Log(L"Subclassing %s (0x%p)", 
            hToolbar ? L"ToolbarWindow32" : L"TrayNotifyWnd", hTarget);
-    
-WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, 0);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hTarget, ToolbarWndProc, 0);
     if (hToolbar) {
-    int detectedId = -1;
-    DetectNetworkButtonId(hToolbar, &detectedId);
-    g_ToolbarCache.networkId = detectedId;
-    g_ToolbarCache.buttonCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
-    g_ToolbarCache.valid = (detectedId != -1);
-}
+        int detectedId = -1;
+        DetectNetworkButtonId(hToolbar, &detectedId);
+        g_ToolbarCache.networkId = detectedId;
+        g_ToolbarCache.buttonCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
+        g_ToolbarCache.valid = (detectedId != -1);
+    }
     return TRUE;
 }
-BOOL InstallTrayInterception() {
 
+BOOL InstallTrayInterception() {
     return InstallTrayInterceptionInternal();
 }
 
@@ -4263,12 +4215,9 @@ void RemoveTrayInterception() {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(G_hSubclassedToolbar, ToolbarWndProc);
         G_hSubclassedToolbar = nullptr;
     }
-
-
     g_pniduiBase = NULL;
     g_pniduiEnd  = NULL;
 }
-
 
 // -------------------------------------------------------
 // Toggle flyout
@@ -4313,7 +4262,6 @@ void ToggleFlyoutWindow() {
             ClearKeyboardFocus();
             ShowWindow(g_hWndFlyout, SW_HIDE);
         } else {
-            // Lazy WLAN open on first show.
             if (!g_Ctx.hWlanClient) {
                 DWORD dwMaxClient = 2, dwCurVer = 0;
                 if (WlanOpenHandle(dwMaxClient, NULL, &dwCurVer, &g_Ctx.hWlanClient) == ERROR_SUCCESS) {
@@ -4338,7 +4286,8 @@ void ToggleFlyoutWindow() {
                 ShowWindow(g_hWndButtonConnect, SW_HIDE);
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
-            if (g_Ctx.hWlanClient) RefreshWifiData(g_Ctx.hWlanClient);
+            
+            RefreshNetworkData();
             RecalcArrowRect();
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
@@ -4350,12 +4299,10 @@ void ToggleFlyoutWindow() {
     LeaveCriticalSection(&g_Ctx.csLock);
 }
 
-
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
-        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    // Open WLAN handle off the init path to avoid blocking explorer.exe.
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -4373,7 +4320,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             Wh_Log(L"WLAN service unavailable — will retry lazily on first flyout open");
         }
     }
-
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
         UnregisterHotKey(NULL, HOTKEY_ID);
         if (shouldRegister) RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H');
@@ -4381,7 +4327,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     
     UpdateHotkeyRegistration(g_Settings.enableHotkey);
     UINT uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-
     BOOL trayAlreadyHooked = (G_hSubclassedToolbar != NULL);
     UINT_PTR trayRetryTimer = trayAlreadyHooked ? 0 : SetTimer(NULL, 0, 1500, NULL);
     MSG msg = {0};
@@ -4392,7 +4337,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 trayRetryTimer = 0;
             }
         }
-
         if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID && !ctx->isUninitializing)
             ToggleFlyoutWindow();
         if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
@@ -4413,8 +4357,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     if (trayRetryTimer) KillTimer(NULL, trayRetryTimer);
     UnregisterHotKey(NULL, HOTKEY_ID);
     if (g_pNLM) {
-    g_pNLM->Release();
-    g_pNLM = NULL;
+        g_pNLM->Release();
+        g_pNLM = NULL;
     }
     CoUninitialize();
     return 0;
@@ -4457,55 +4401,918 @@ void SafeCleanup() {
 }
 
 
+// ============================================================================
+// Integrated Win7 Network Center Links v10.3.0
+// Includes the original hardcoded icon resource DLL and temporary-file lifecycle.
+// ============================================================================
+namespace Win7NetworkCenterLinks {
+
+// GROUP_ICON 1=Connect, 2=Homegroup (24px)
+static const unsigned char kIconsDll[] = {
+    0x4D,0x5A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x80,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x50,0x45,0x00,0x00,0x64,0x86,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xF0,0x00,0x22,0x20,0x0B,0x02,0x0E,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x80,0x01,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x02,0x00,0x00,
+    0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x30,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x60,0x01,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,0x00,0x38,0x14,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x2E,0x72,0x73,0x72,0x63,0x00,0x00,0x00,
+    0x38,0x14,0x00,0x00,0x00,0x10,0x00,0x00,0x00,0x16,0x00,0x00,0x00,0x02,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x40,0x00,0x00,0x40,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,
+    0x03,0x00,0x00,0x00,0x20,0x00,0x00,0x80,0x0E,0x00,0x00,0x00,0x90,0x00,0x00,0x80,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,
+    0x01,0x00,0x00,0x00,0x40,0x00,0x00,0x80,0x02,0x00,0x00,0x00,0x68,0x00,0x00,0x80,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,
+    0x09,0x04,0x00,0x00,0x58,0x00,0x00,0x00,0x00,0x11,0x00,0x00,0x88,0x09,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x09,0x04,0x00,0x00,0x80,0x00,0x00,0x00,
+    0x88,0x1A,0x00,0x00,0x88,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,
+    0x01,0x00,0x00,0x00,0xB0,0x00,0x00,0x80,0x02,0x00,0x00,0x00,0xD8,0x00,0x00,0x80,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,
+    0x09,0x04,0x00,0x00,0xC8,0x00,0x00,0x00,0x10,0x24,0x00,0x00,0x14,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x09,0x04,0x00,0x00,0xF0,0x00,0x00,0x00,
+    0x24,0x24,0x00,0x00,0x14,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x28,0x00,0x00,0x00,0x18,0x00,0x00,0x00,0x30,0x00,0x00,0x00,0x01,0x00,0x20,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x01,0x7F,0x7F,0x7F,0x02,0x55,0xAA,0x55,0x03,0x55,0xAA,0x55,0x03,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x69,0x69,0x52,0x22,
+    0x8E,0x87,0x74,0x4F,0xAB,0xA7,0x92,0x52,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0xFF,0xFF,0x00,0x01,0x7F,0x7F,0x00,0x02,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0x7F,0xFF,0x04,0xA5,0x9D,0x9D,0x22,0x6C,0x8A,0x5A,0x55,0x74,0x93,0x5F,0x53,
+    0xAB,0xA0,0x9D,0x49,0xAF,0xAA,0x99,0x76,0xB7,0xB3,0xA1,0x8E,0xBC,0xB7,0xA6,0x95,
+    0xBD,0xB9,0xA9,0x8C,0xC0,0xBC,0xAE,0x7F,0xC4,0xBA,0xA6,0x1A,0x00,0x00,0x00,0x00,
+    0xFF,0xFF,0xFF,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x7F,0x7F,0x7F,0x02,
+    0xFF,0xFF,0xFF,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x66,0x4C,0x66,0x0A,0x61,0x77,0x51,0x2F,0x5E,0x7B,0x46,0x61,0x55,0x79,0x3A,0x99,
+    0x52,0x79,0x36,0xCD,0x48,0x72,0x2B,0xF3,0x50,0x83,0x29,0xFF,0x7A,0x9A,0x51,0xFF,
+    0xC6,0xBA,0xAB,0x95,0xD5,0xD5,0xD1,0x75,0xDD,0xE0,0xDA,0x5B,0xDF,0xDF,0xDF,0x59,
+    0xDD,0xDA,0xD6,0x6A,0xC5,0xC4,0xB4,0x86,0xAF,0xAA,0x93,0x2D,0x00,0x00,0x00,0x00,
+    0x7F,0x7F,0x7F,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x50,0x50,0x43,0x26,0x43,0x67,0x2A,0x97,
+    0x43,0x70,0x22,0xD8,0x3C,0x6E,0x16,0xF9,0x39,0x73,0x0B,0xFF,0x36,0x75,0x00,0xFF,
+    0x3A,0x7B,0x00,0xFF,0x42,0x85,0x01,0xFF,0x57,0x91,0x13,0xFC,0x89,0x8C,0x58,0xFE,
+    0xC4,0xA8,0x92,0xBA,0xD2,0xCA,0xC5,0xA1,0xC8,0xC8,0xBC,0x96,0xCD,0xCA,0xBC,0x82,
+    0xD9,0xD7,0xC5,0x66,0xC6,0xC3,0xAC,0x44,0x9F,0x9F,0x7F,0x08,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x62,0x4E,0x3A,0x0D,0x6E,0x67,0x51,0x51,
+    0x91,0x8C,0x78,0x7B,0xB4,0xAB,0x9E,0x8F,0xA2,0xA6,0x86,0xA5,0x3F,0x7E,0x06,0xFF,
+    0x46,0x88,0x03,0xFF,0x55,0x9A,0x0B,0xFF,0x6B,0xB3,0x1A,0xFF,0x7E,0xC7,0x28,0xFF,
+    0x8A,0xD2,0x34,0xFB,0x91,0xE3,0x3B,0xFB,0x7B,0xDA,0x23,0xFD,0x6A,0x8F,0x3E,0xFE,
+    0x7E,0x7A,0x6C,0x8D,0x7F,0x7A,0x70,0x32,0x55,0x55,0x45,0x21,0x00,0x00,0x00,0x07,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xAC,0xA7,0x8F,0x57,0xB2,0xAF,0x9D,0x90,
+    0xDC,0xDA,0xCF,0x77,0xF3,0xF1,0xEF,0x71,0xCE,0xC2,0xB4,0x8F,0x7C,0xCA,0x2A,0xFE,
+    0x91,0xF5,0x30,0xFF,0x90,0xEF,0x33,0xFF,0x8D,0xF0,0x33,0xEA,0x85,0xEE,0x2C,0xDF,
+    0x7E,0xF1,0x24,0xFF,0x63,0xCC,0x15,0xFF,0x39,0x80,0x06,0xFF,0x18,0x4D,0x00,0xFF,
+    0x53,0x6E,0x37,0xB2,0xCB,0xB3,0xB3,0x40,0x00,0x00,0x00,0x0C,0x00,0x00,0x00,0x00,
+    0x11,0x11,0x11,0x0F,0x12,0x12,0x12,0x1B,0x00,0x00,0x00,0x19,0x00,0x00,0x00,0x04,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xD6,0xD6,0xC6,0x32,0xE9,0xE6,0xDE,0x74,
+    0xE2,0xE0,0xD5,0x75,0xDE,0xDE,0xCD,0x66,0xD5,0xC1,0xCB,0x4F,0x80,0xC2,0x41,0x59,
+    0x70,0xEE,0x0E,0x6B,0x66,0xED,0x04,0x39,0x2A,0xFF,0x00,0x0C,0x00,0x00,0x00,0x00,
+    0x69,0xED,0x00,0x3A,0x81,0xE0,0x34,0xA5,0x77,0xC8,0x35,0xF4,0x53,0x99,0x23,0xFD,
+    0x92,0xAA,0x8A,0xC0,0xC9,0xD0,0xD3,0xD7,0xBB,0xC6,0xC5,0xDF,0xA8,0xA8,0xA8,0xB6,
+    0x1E,0x1E,0x26,0x21,0x0C,0x0C,0x0C,0x14,0x27,0x27,0x27,0x0D,0x7F,0x7F,0x7F,0x04,
+    0xFF,0xFF,0xFF,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xC2,0xC2,0xAA,0x15,
+    0xCC,0xCC,0x99,0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x88,0x66,0xBB,0x0F,0x8F,0xA1,0xAA,0x39,
+    0x8C,0x8E,0xAF,0x66,0x92,0x98,0xAE,0xA4,0x9B,0xA7,0xA3,0xF2,0xAB,0xAA,0xA7,0xFE,
+    0xB7,0xA1,0xA2,0xFF,0xBC,0x8A,0x86,0xFF,0xC7,0x88,0x80,0xFF,0xC6,0xC5,0xC4,0xFF,
+    0xB4,0xB1,0xA8,0x55,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0x02,0x99,0x88,0x90,0x1E,0x8F,0xA4,0xA2,0x60,
+    0x8E,0xA6,0xA0,0x95,0x9E,0xA7,0xA9,0xC7,0x9F,0x9E,0xA0,0xED,0x9A,0x89,0x8C,0xFF,
+    0xA0,0x79,0x77,0xFF,0xA2,0x5F,0x59,0xFF,0xA2,0x3F,0x39,0xFF,0xAE,0x35,0x28,0xFF,
+    0xB0,0x26,0x14,0xFE,0xAE,0x15,0x02,0xFE,0xB2,0x28,0x17,0xFB,0xC4,0xBF,0xBE,0xFD,
+    0xA5,0xA1,0x9D,0x3F,0x00,0x00,0x00,0x00,0xB6,0xD3,0xD3,0x23,0xBE,0xC9,0xCC,0x47,
+    0xB6,0xAA,0xAA,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0x01,
+    0x7F,0x7F,0x7F,0x04,0x00,0x00,0x00,0x00,0x97,0x9A,0xA1,0x65,0xA0,0x86,0x86,0xFF,
+    0x93,0x5A,0x57,0xFF,0x98,0x43,0x3F,0xFF,0x8E,0x23,0x1D,0xFF,0x8A,0x0F,0x05,0xFE,
+    0x92,0x06,0x00,0xFB,0x99,0x03,0x00,0xFC,0xA9,0x1C,0x09,0xFE,0xB7,0x35,0x22,0xFF,
+    0xBD,0x3A,0x27,0xFF,0xC5,0x40,0x2C,0xFF,0xCA,0x48,0x33,0xFE,0xC5,0xB4,0xB1,0xFF,
+    0xA3,0xAF,0xB2,0xC4,0xAF,0xB2,0xB4,0xD3,0xBE,0xAE,0xAE,0xF6,0xD5,0xC7,0xC5,0xFF,
+    0xB0,0xB4,0xB4,0x7E,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xAA,0xAA,0xAA,0x03,0x00,0x00,0x00,0x00,0xB3,0xD3,0xD7,0x40,0x96,0x46,0x43,0xFC,
+    0x88,0x02,0x00,0xF9,0x86,0x0B,0x02,0xFC,0x84,0x08,0x00,0xFE,0x8F,0x0C,0x00,0xFF,
+    0x9D,0x13,0x02,0xFF,0xA7,0x12,0x02,0xFF,0xBF,0x3E,0x2C,0xFF,0xD1,0x5E,0x4B,0xFF,
+    0xD6,0x5C,0x48,0xFF,0xDB,0x61,0x4D,0xFF,0xDF,0x5C,0x45,0xFF,0xCC,0xB6,0xB2,0xFF,
+    0xB5,0x89,0x85,0xFF,0xBA,0x43,0x35,0xFF,0xB1,0x1F,0x11,0xFD,0xC6,0x75,0x6B,0xFD,
+    0xB6,0xC7,0xC9,0xA1,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x7F,0x7F,0x7F,0x02,0x00,0x00,0x00,0x00,0xC2,0xFF,0xFF,0x26,0xA4,0x6A,0x64,0xFD,
+    0x95,0x28,0x21,0xFF,0x95,0x30,0x29,0xFE,0x92,0x15,0x09,0xFF,0x9C,0x0F,0x00,0xFF,
+    0xA9,0x14,0x01,0xFF,0xB4,0x14,0x00,0xFF,0xD4,0x5C,0x49,0xFF,0xE3,0x7E,0x6C,0xFF,
+    0xE6,0x7B,0x68,0xFF,0xEA,0x81,0x6E,0xFF,0xEF,0x79,0x63,0xFF,0xD7,0xBB,0xB5,0xFF,
+    0xAE,0x78,0x70,0xFD,0xBA,0x25,0x10,0xFD,0xC0,0x2F,0x19,0xFC,0xD1,0x75,0x67,0xFF,
+    0xB6,0xC1,0xC2,0xBF,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0xFF,0xFF,0x01,0x00,0x00,0x00,0x00,0xEE,0xFF,0xFF,0x0F,0x7C,0x65,0x7A,0xEC,
+    0xA2,0x3F,0x32,0xFF,0xA6,0x40,0x36,0xFE,0x96,0x0F,0x02,0xFF,0xA7,0x13,0x00,0xFF,
+    0xB3,0x15,0x00,0xFF,0xC3,0x1E,0x03,0xFF,0xE4,0x80,0x6F,0xFF,0xEE,0x9A,0x8B,0xFF,
+    0xF2,0x99,0x88,0xFF,0xF6,0x9E,0x8E,0xFF,0xFB,0x97,0x83,0xFF,0xE1,0xB8,0xAF,0xFF,
+    0xB9,0x9E,0x9A,0xFF,0xD7,0x59,0x44,0xFF,0xDD,0x5E,0x48,0xFD,0xE4,0x7F,0x6E,0xFF,
+    0xBB,0xBE,0xBF,0xD5,0x00,0x00,0x00,0x02,0x7F,0x7F,0xFF,0x02,0xFF,0xFF,0xFF,0x01,
+    0x7F,0xFF,0xFF,0x02,0xFF,0xFF,0xFF,0x01,0xFF,0xFF,0xFF,0x02,0x1B,0x57,0xDD,0xD4,
+    0x48,0x52,0xA2,0xFF,0x9D,0x2C,0x17,0xFD,0xA4,0x0B,0x00,0xFF,0xAD,0x18,0x05,0xFF,
+    0xC0,0x16,0x00,0xFF,0xD5,0x2F,0x13,0xFF,0xF3,0xA6,0x98,0xFF,0xF9,0xB3,0xA6,0xFF,
+    0xFB,0xB4,0xA5,0xFF,0xFD,0xB9,0xA9,0xFF,0xFF,0xB5,0xA2,0xFF,0xEC,0xC1,0xB5,0xFF,
+    0xBE,0xAF,0xAE,0xFF,0xE7,0x7D,0x6A,0xFF,0xEE,0x84,0x70,0xFE,0xF2,0x91,0x7F,0xFF,
+    0xC0,0xBC,0xBC,0xEC,0x79,0x85,0x85,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x1F,0x60,0xE1,0xC1,
+    0x11,0x58,0xFD,0xFF,0x29,0x39,0x9D,0xFC,0x96,0x18,0x10,0xFF,0xCF,0x1A,0x00,0xFF,
+    0xD6,0x1A,0x02,0xFF,0xEE,0x4F,0x30,0xFF,0xFF,0xCA,0xBE,0xFF,0xFF,0xCA,0xBC,0xFF,
+    0xFF,0xCD,0xBD,0xFF,0xFE,0xD1,0xC0,0xFF,0xFF,0xD1,0xBE,0xFF,0xF2,0xCB,0xBA,0xFF,
+    0xBF,0xB9,0xB9,0xFF,0xEE,0x9D,0x8E,0xFF,0xFB,0xA7,0x96,0xFF,0xFC,0xA5,0x94,0xFF,
+    0xC8,0xBD,0xBA,0xFC,0x8A,0x9B,0xA0,0x2E,0x2D,0x6C,0xCF,0x65,0x3A,0x7E,0xD8,0xBF,
+    0x2B,0x75,0xDA,0xBD,0x26,0x74,0xDA,0xBF,0x27,0x73,0xDD,0xBC,0x28,0x72,0xED,0xEF,
+    0x26,0x66,0xEE,0xFF,0x12,0x55,0xF1,0xFE,0x1C,0x44,0xC2,0xFF,0x93,0x28,0x2E,0xFF,
+    0xEF,0x16,0x00,0xFF,0xF9,0x76,0x5D,0xFF,0xFE,0xE2,0xDA,0xFF,0xFE,0xD9,0xCD,0xFF,
+    0xFE,0xDE,0xD2,0xFF,0xFF,0xE1,0xD5,0xFF,0xFF,0xE5,0xD9,0xFF,0xFA,0xD9,0xCB,0xFF,
+    0xC7,0xC4,0xC3,0xFF,0xEF,0xB9,0xAA,0xFF,0xFF,0xC8,0xB6,0xFF,0xFF,0xC1,0xAC,0xFE,
+    0xD6,0xC8,0xC3,0xFF,0x96,0xA4,0xA7,0x49,0x38,0x77,0xE5,0xBC,0x56,0x9D,0xFF,0xFF,
+    0x51,0x9E,0xFF,0xFF,0x46,0x9C,0xFF,0xFF,0x3A,0x94,0xFF,0xFF,0x31,0x85,0xFF,0xFF,
+    0x2B,0x77,0xF6,0xFF,0x26,0x66,0xEA,0xFF,0x16,0x55,0xED,0xFF,0x0D,0x49,0xDC,0xFD,
+    0x78,0x23,0x4A,0xFB,0xF6,0xA2,0x8E,0xFC,0xFF,0xF1,0xEC,0xFF,0xFF,0xE2,0xD9,0xFF,
+    0xFF,0xE6,0xDA,0xFF,0xFF,0xE7,0xDC,0xFF,0xFD,0xE5,0xDA,0xFF,0xF9,0xD5,0xC5,0xFF,
+    0xCD,0xCD,0xCC,0xFF,0xE5,0xC7,0xBC,0xFE,0xFF,0xE0,0xD2,0xFE,0xFF,0xDB,0xC8,0xFA,
+    0xE4,0xD3,0xCC,0xFC,0x9F,0xAA,0xAF,0x63,0x34,0x6B,0xDD,0xB0,0x48,0x84,0xFC,0xF9,
+    0x4C,0x8B,0xF7,0xF6,0x53,0x98,0xFC,0xF9,0x4F,0x9B,0xFF,0xF9,0x42,0x93,0xFF,0xFE,
+    0x35,0x87,0xFE,0xFF,0x2A,0x78,0xF8,0xFF,0x25,0x67,0xEB,0xFC,0x16,0x5A,0xF8,0xFF,
+    0x31,0x5B,0xD9,0xFF,0xE7,0xB4,0xAC,0xFF,0xF0,0xD4,0xC9,0xFE,0xE9,0xCD,0xC1,0xFD,
+    0xE5,0xC8,0xBC,0xFC,0xE4,0xBB,0xAF,0xFB,0xE9,0xC5,0xB9,0xFB,0xF4,0xE5,0xE0,0xFB,
+    0xEE,0xE4,0xE1,0xFD,0xF8,0xDF,0xD5,0xFF,0xFF,0xED,0xE2,0xFF,0xFF,0xE5,0xD7,0xFF,
+    0xFF,0xEA,0xE1,0xFF,0xAE,0xB5,0xB6,0x91,0x2C,0x61,0xD5,0xB2,0x43,0x7D,0xFF,0xFF,
+    0x45,0x81,0xF9,0xFF,0x4B,0x8E,0xFF,0xFF,0x53,0x9B,0xFF,0xFF,0x57,0xA0,0xFF,0xFF,
+    0x51,0x9C,0xFF,0xFE,0x48,0x93,0xFD,0xFD,0x39,0x89,0xFF,0xFF,0x2C,0x70,0xE7,0xCE,
+    0xB0,0xAE,0xBC,0x95,0xD0,0xCB,0xC7,0xA4,0xB5,0x6E,0x68,0xFF,0xBB,0x38,0x2F,0xFF,
+    0xD2,0x40,0x2A,0xFF,0xEA,0x36,0x21,0xFF,0xFF,0x8D,0x77,0xFF,0xFF,0xE6,0xDE,0xFF,
+    0xFA,0xD2,0xC5,0xFF,0xEC,0xCE,0xC2,0xFF,0xE8,0xCF,0xC4,0xF0,0xEB,0xD4,0xCA,0xDA,
+    0xF4,0xE8,0xE4,0xC4,0xBE,0xC3,0xC3,0x5F,0x15,0x50,0xC4,0x23,0x25,0x61,0xD9,0x51,
+    0x29,0x66,0xD8,0x50,0x2E,0x6F,0xDC,0x52,0x2F,0x75,0xE2,0x50,0x44,0x8A,0xF1,0xD2,
+    0x5B,0xA6,0xFF,0xFF,0x58,0xA5,0xFF,0xFF,0x40,0x8B,0xEF,0x92,0x66,0x99,0x66,0x05,
+    0x00,0x00,0x00,0x00,0xA7,0xD0,0xE4,0x26,0xAA,0x7D,0x79,0xE9,0xB1,0x63,0x5F,0xD0,
+    0xBC,0x80,0x78,0xB8,0xC8,0x9C,0x95,0x9B,0xCE,0xBA,0xB6,0x7E,0xCF,0xC1,0xBF,0x60,
+    0xC7,0xC7,0xC7,0x45,0xC2,0xCE,0xD4,0x2A,0xC2,0xE6,0xF2,0x15,0xBF,0xFF,0xFF,0x04,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x3E,0x7C,0xEA,0xC8,
+    0x4E,0x96,0xF7,0xFE,0x33,0x7E,0xE2,0x63,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x01,
+    0x7F,0x7F,0xBF,0x04,0xD4,0xAA,0x7F,0x06,0xDA,0xFF,0xFF,0x0E,0x00,0x0D,0x0D,0x00,
+    0x00,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x7F,0x7F,0x7F,0x02,0x7F,0x7F,0x7F,0x02,0x00,0x7F,0x7F,0x02,0x55,0x55,0xFF,0x03,
+    0x55,0x55,0xFF,0x03,0x33,0x66,0xCC,0x05,0x3F,0x7F,0xFF,0x04,0x2C,0x6A,0xD7,0xA1,
+    0x23,0x60,0xD0,0x47,0x00,0x00,0x00,0x00,0x3F,0x7F,0xFF,0x04,0x00,0x00,0xFF,0x01,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0x00,0x00,0x02,0xBF,0x7F,0x7F,0x04,0xBF,0xBF,0xBF,0x04,0xBF,0xBF,0xBF,0x04,
+    0xFF,0xFF,0xFF,0x03,0xFF,0xFF,0xFF,0x02,0xFF,0xFF,0xFF,0x01,0xFF,0xFF,0xFF,0x01,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x55,0xAA,0xFF,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0x01,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x01,0x00,
+    0x55,0x55,0xAA,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x28,0x00,0x00,0x00,0x18,0x00,0x00,0x00,
+    0x30,0x00,0x00,0x00,0x01,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x09,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x7F,0x00,0x00,0x02,0xAA,0x55,0x00,0x03,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x7F,0x3F,0x00,0x04,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x7F,0x19,0x33,0x0A,0x7F,0x19,0x26,0x14,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0xAA,0x42,0x2F,0x1B,0xA5,0x33,0x25,0x9D,
+    0x9F,0x36,0x19,0xE0,0x9D,0x3A,0x14,0xE9,0x97,0x33,0x13,0xCE,0x8B,0x29,0x16,0x68,
+    0x00,0x00,0x00,0x00,0x7F,0x00,0x00,0x02,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0xFF,0xFF,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
+    0x7F,0x7F,0x00,0x02,0xC8,0x51,0x3F,0x1C,0xBA,0x42,0x2F,0xDB,0xB6,0x3B,0x28,0xFF,
+    0xA7,0x3A,0x1E,0xFC,0xA5,0x3F,0x17,0xFA,0xA8,0x47,0x13,0xFF,0xA7,0x3F,0x13,0xFF,
+    0x8C,0x29,0x13,0x8E,0x00,0x00,0x00,0x00,0x7F,0x00,0x00,0x02,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xD4,0xAA,0x7F,0x06,0xD4,0x99,0x66,0x1E,0xD9,0x9D,0x66,0x37,
+    0xDD,0xA1,0x6A,0x3C,0xDC,0xA2,0x6E,0x2C,0xD6,0xA3,0x66,0x19,0x99,0x7F,0x4C,0x0A,
+    0x00,0x00,0x00,0x01,0xCF,0x58,0x42,0xA1,0xD9,0x5D,0x41,0xFF,0xCC,0x5E,0x41,0xF0,
+    0xBE,0x56,0x3C,0xF6,0xAC,0x42,0x2D,0xF6,0xA0,0x3A,0x1D,0xF4,0xAB,0x49,0x12,0xF3,
+    0x9F,0x3A,0x13,0xFF,0x87,0x23,0x13,0x40,0x00,0x00,0x00,0x00,0xAA,0x55,0x00,0x03,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xC9,0x7F,0x4A,0x18,0xC8,0x85,0x52,0x50,0xCC,0x88,0x55,0x74,0xCD,0x8D,0x59,0x58,
+    0xD5,0x94,0x62,0x1F,0xCC,0x99,0x66,0x0F,0xDC,0xA2,0x68,0x16,0xFF,0xE7,0xD0,0x0B,
+    0xFF,0xFF,0xFF,0x06,0xDE,0x75,0x55,0xE3,0xE5,0x83,0x60,0xFA,0xE8,0x91,0x6F,0xF6,
+    0xE2,0x8B,0x6A,0xF7,0xCE,0x71,0x52,0xF7,0xAF,0x4A,0x33,0xF7,0xA2,0x3C,0x1C,0xF3,
+    0xA9,0x44,0x13,0xFE,0x8F,0x30,0x14,0x99,0x00,0x00,0x00,0x00,0xAA,0x55,0x00,0x03,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xB6,0x66,0x3A,0x23,
+    0xB5,0x6D,0x3C,0x72,0xB8,0x71,0x3E,0xA2,0xBC,0x75,0x42,0x86,0xC1,0x7B,0x45,0x21,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0x5F,0x07,0x43,
+    0x56,0x73,0x2E,0x90,0xE3,0x99,0x6D,0xF6,0xEF,0xA9,0x8A,0xFB,0xF1,0xB9,0x9F,0xF8,
+    0xF1,0xB3,0x99,0xF7,0xE8,0x9A,0x7A,0xF7,0xCC,0x6D,0x4E,0xF7,0xAA,0x41,0x28,0xF5,
+    0xA6,0x3E,0x16,0xFF,0x96,0x39,0x16,0xBF,0x9C,0x62,0x27,0x0D,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x01,0xFF,0x00,0x00,0x01,0xA7,0x4F,0x23,0x1D,0xA6,0x56,0x27,0x7C,
+    0xA2,0x53,0x24,0xC4,0xA5,0x58,0x28,0xC5,0xAE,0x60,0x31,0x6C,0x8D,0x55,0x38,0x09,
+    0x00,0x00,0x00,0x00,0x20,0x73,0x10,0x1F,0x1C,0x6E,0x0C,0xBB,0x18,0x69,0x0C,0xFD,
+    0x34,0x7A,0x28,0xFF,0xD5,0xA4,0x75,0xFE,0xF7,0xD1,0xB6,0xFF,0xF5,0xDE,0xD3,0xFF,
+    0xF2,0xCA,0xB8,0xFC,0xEF,0xAE,0x94,0xF8,0xDD,0x83,0x63,0xF7,0xBB,0x4F,0x37,0xF5,
+    0xA5,0x3F,0x21,0xFE,0x9B,0x48,0x1F,0xCD,0x9F,0x53,0x27,0x40,0x7F,0x7F,0x00,0x02,
+    0xFF,0x00,0x00,0x01,0xAA,0x55,0x00,0x03,0x97,0x42,0x13,0x67,0x97,0x43,0x18,0xCF,
+    0x96,0x42,0x18,0xEE,0x9B,0x49,0x1B,0xCA,0x9E,0x4F,0x1F,0x5A,0x7F,0x7F,0x00,0x02,
+    0x1A,0x86,0x0D,0x13,0x20,0x7E,0x10,0xD4,0x21,0x7D,0x11,0xFF,0x21,0x78,0x12,0xEE,
+    0x26,0x83,0x1E,0xEE,0xA4,0xA6,0x65,0xF9,0xFF,0xD2,0xBA,0xFF,0xF7,0xEF,0xE2,0xFF,
+    0xF3,0xD5,0xBE,0xFF,0xEC,0xB5,0x93,0xFB,0xE1,0x91,0x69,0xF5,0xC5,0x64,0x3E,0xF5,
+    0xA3,0x49,0x25,0xFB,0x9D,0x4E,0x25,0xD2,0xA9,0x60,0x34,0x74,0xB4,0x69,0x3C,0x11,
+    0x00,0x00,0x00,0x00,0x93,0x30,0x0C,0x55,0x94,0x36,0x10,0xE6,0x96,0x3D,0x14,0xFB,
+    0x96,0x40,0x16,0xFC,0x93,0x3B,0x13,0xE4,0x90,0x42,0x12,0x55,0x00,0x00,0x00,0x00,
+    0x2A,0x8B,0x16,0x8B,0x32,0x98,0x20,0xFF,0x39,0x9A,0x28,0xEB,0x37,0x94,0x28,0xF2,
+    0x3B,0x98,0x2A,0xF2,0x65,0xAD,0x41,0xF2,0xCD,0xB5,0x7A,0xFB,0xFA,0xC7,0xAB,0xFF,
+    0xF7,0xC1,0x9E,0xFF,0xEF,0xA8,0x7C,0xFF,0xE1,0x88,0x5A,0xFF,0xBC,0x5F,0x35,0xFC,
+    0x9A,0x46,0x1F,0xEE,0xA0,0x51,0x28,0xD7,0xB2,0x6C,0x41,0x8F,0xB7,0x77,0x4F,0x20,
+    0xB0,0x35,0x1D,0x34,0xAC,0x39,0x1E,0xF1,0xA9,0x3B,0x21,0xFB,0xA1,0x38,0x1E,0xF2,
+    0x9E,0x3C,0x15,0xF1,0x9F,0x3F,0x0F,0xFF,0x91,0x2D,0x0D,0xA7,0x00,0xCC,0x33,0x05,
+    0x3B,0x9F,0x2A,0xD9,0x4F,0xAC,0x3E,0xF8,0x5E,0xB7,0x50,0xF1,0x5F,0xB7,0x52,0xF2,
+    0x58,0xAF,0x49,0xF2,0x56,0xAB,0x3D,0xF2,0x6D,0xA8,0x39,0xF2,0x9E,0x9F,0x4F,0xF6,
+    0xBD,0x9E,0x63,0xF9,0xB3,0x8E,0x56,0xFF,0xA6,0x6E,0x3D,0xC4,0xAD,0x59,0x31,0x9A,
+    0xA3,0x5B,0x30,0xC1,0xAA,0x60,0x37,0xC6,0xB8,0x77,0x4F,0x91,0xC5,0x83,0x5A,0x1F,
+    0xC7,0x52,0x35,0xAB,0xD4,0x66,0x47,0xFF,0xD7,0x75,0x56,0xED,0xC2,0x63,0x47,0xF2,
+    0xA6,0x41,0x2B,0xF1,0xA0,0x3E,0x15,0xF4,0x9E,0x36,0x0E,0xF0,0x62,0x5B,0x1D,0x46,
+    0x53,0xC0,0x51,0xE2,0x73,0xC1,0x63,0xF6,0x81,0xCB,0x75,0xF1,0x87,0xCE,0x7C,0xF2,
+    0x7C,0xC7,0x70,0xF2,0x64,0xB7,0x56,0xF2,0x4D,0xA1,0x35,0xF2,0x3B,0x88,0x1B,0xF1,
+    0x3A,0x82,0x20,0xED,0x2C,0x79,0x1F,0xFF,0x08,0x58,0x06,0x7C,0xFF,0x75,0x62,0x0D,
+    0xAF,0x72,0x48,0x74,0xBA,0x7B,0x51,0xAA,0xC1,0x86,0x5B,0x7D,0xC8,0x91,0x6D,0x0E,
+    0xDC,0x80,0x58,0xD0,0xE8,0x99,0x7A,0xF7,0xEB,0xAB,0x92,0xF1,0xE5,0x9E,0x81,0xF2,
+    0xC8,0x6F,0x53,0xF2,0xA5,0x3F,0x25,0xF0,0xA2,0x37,0x13,0xFA,0x7A,0x47,0x19,0x64,
+    0x63,0xD6,0x69,0xD7,0x95,0xD7,0x8D,0xF9,0xBC,0xE4,0xB4,0xF1,0xAC,0xDF,0xA4,0xF2,
+    0x9B,0xD8,0x92,0xF2,0x7E,0xC8,0x72,0xF2,0x58,0xAF,0x4A,0xF2,0x31,0x8B,0x22,0xF2,
+    0x20,0x74,0x13,0xEE,0x26,0x74,0x1B,0xFF,0x1F,0x66,0x14,0x7A,0x00,0x00,0x00,0x00,
+    0xAA,0x7B,0x4D,0x21,0xC3,0x8A,0x60,0x97,0xCF,0x95,0x6F,0x50,0x00,0x00,0x00,0x00,
+    0xE5,0x97,0x67,0xB3,0xF2,0xC9,0xB0,0xFD,0xF7,0xDC,0xD5,0xED,0xF0,0xBB,0xA8,0xF2,
+    0xDF,0x8D,0x70,0xF1,0xB8,0x51,0x37,0xEF,0xA0,0x3C,0x1F,0xFC,0x92,0x2C,0x0C,0x28,
+    0x67,0xD8,0x6C,0xB3,0xA7,0xE5,0xA5,0xFE,0xF7,0xFB,0xF6,0xEF,0xCF,0xED,0xCA,0xF2,
+    0xAE,0xDF,0xA6,0xF2,0x8D,0xCF,0x81,0xF2,0x66,0xB8,0x57,0xF2,0x3F,0x98,0x2E,0xF2,
+    0x2A,0x7F,0x1C,0xF0,0x23,0x76,0x1D,0xFF,0x14,0x6C,0x14,0x3D,0x00,0x00,0x00,0x00,
+    0xC0,0x90,0x65,0x35,0xD1,0x9C,0x74,0x65,0xDF,0xAF,0x7F,0x10,0x00,0x00,0x00,0x00,
+    0xE2,0x91,0x61,0x3F,0xF1,0xC3,0xA5,0xF8,0xF7,0xE4,0xD6,0xFD,0xEF,0xC0,0xA5,0xF2,
+    0xE1,0x98,0x70,0xF3,0xCB,0x66,0x3E,0xFF,0xA4,0x47,0x25,0xAC,0x00,0x00,0x00,0x00,
+    0x61,0xCC,0x5D,0x4C,0x9B,0xE5,0x99,0xFF,0xEC,0xF9,0xEB,0xEF,0xF0,0xF9,0xF0,0xEF,
+    0xAF,0xE5,0xAC,0xF1,0x8F,0xD6,0x8A,0xF2,0x6A,0xC4,0x64,0xF1,0x46,0xA8,0x3E,0xEF,
+    0x21,0x8D,0x24,0xFC,0x13,0x7F,0x1B,0xAA,0xFF,0x66,0x66,0x05,0xCC,0x99,0x6E,0x1E,
+    0xD1,0x9F,0x76,0x38,0xDA,0xB6,0x91,0x0E,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xEA,0x9D,0x6E,0x4C,0xED,0xAE,0x87,0xD1,0xE6,0xA1,0x76,0xEF,
+    0xD6,0x80,0x52,0xE9,0xC2,0x5D,0x34,0x9C,0xB6,0x48,0x24,0x0E,0x7F,0x7F,0x3F,0x04,
+    0x00,0x00,0x00,0x00,0x79,0xD3,0x73,0x7C,0xA0,0xE6,0x9D,0xFF,0xBE,0xEB,0xBD,0xFD,
+    0x9A,0xDF,0x97,0xF5,0x7A,0xD3,0x78,0xF3,0x57,0xC1,0x58,0xF5,0x32,0xAA,0x37,0xF9,
+    0x42,0x80,0x22,0xFE,0x7E,0x47,0x1D,0x67,0xFF,0xFF,0xFF,0x01,0xBF,0x8F,0x5F,0x10,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0xFF,0x7F,0x7F,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0xDB,0x78,0x46,0x24,
+    0xC7,0x63,0x37,0x17,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,
+    0xFF,0xFF,0xFF,0x01,0xFF,0x00,0x00,0x01,0x6C,0xCF,0x66,0x50,0x71,0xD2,0x6E,0xBD,
+    0x6F,0xCF,0x6D,0xE5,0x60,0xBE,0x5A,0xEE,0x59,0xA0,0x3F,0xFD,0x6C,0x73,0x2D,0xF9,
+    0x9E,0x3E,0x19,0xF2,0xA4,0x3A,0x11,0xFA,0x8A,0x2E,0x11,0x48,0x00,0x00,0x00,0x00,
+    0x55,0x55,0x00,0x03,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xAA,0xAA,0x55,0x03,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0xFF,0x7F,0x7F,0x02,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0x7F,0x7F,0x7F,0x02,0xD4,0xAA,0x6A,0x18,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x22,0xDD,0x55,0x0F,0xB3,0x70,0x40,0x9E,0xD5,0x7A,0x5A,0xFE,0xE1,0x7E,0x67,0xEE,
+    0xBB,0x58,0x41,0xEE,0xA3,0x3C,0x17,0xFF,0x9C,0x36,0x11,0xAD,0x00,0x00,0x00,0x00,
+    0xAA,0x55,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,0xFF,0x7F,0x7F,0x02,
+    0xFF,0xFF,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0xFF,0xFF,0xFF,0x01,0xE2,0xA2,0x71,0x24,0x9F,0x9F,0x5F,0x08,0xFF,0xFF,0xFF,0x01,
+    0xAC,0x46,0x1F,0x28,0xCB,0x74,0x49,0xBC,0xF1,0xC2,0xAE,0xFA,0xED,0xC8,0xBA,0xED,
+    0xDC,0x8D,0x72,0xEA,0xB1,0x45,0x2A,0xFF,0x9D,0x38,0x18,0xA8,0x00,0x00,0x00,0x00,
+    0xAA,0x55,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0x00,0x01,
+    0x00,0x00,0x00,0x00,0xE2,0xA8,0x73,0x2C,0xD8,0x9C,0x66,0x55,0xC7,0x84,0x4F,0x60,
+    0xAE,0x63,0x34,0xA1,0xA2,0x50,0x23,0xDA,0xE1,0xB2,0x97,0xF7,0xF0,0xCB,0xB7,0xFD,
+    0xDF,0x92,0x6B,0xFF,0xBB,0x57,0x31,0xF6,0x9A,0x3E,0x1D,0x3D,0x00,0x00,0x00,0x00,
+    0xAA,0x55,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,
+    0x00,0x00,0x00,0x00,0xEB,0xB0,0x75,0x0D,0xDA,0x9C,0x67,0x5B,0xC9,0x87,0x55,0x8F,
+    0xB6,0x6D,0x3C,0xA8,0xA1,0x52,0x23,0xB4,0xA4,0x4F,0x21,0xAE,0xC8,0x7B,0x4F,0xAD,
+    0xCA,0x72,0x44,0x98,0xBB,0x56,0x2B,0x35,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xE5,0xB2,0x66,0x0A,0xCF,0x8E,0x58,0x2B,
+    0xBE,0x7D,0x49,0x3B,0xB3,0x67,0x38,0x36,0x9C,0x4A,0x18,0x1F,0x00,0x00,0x00,0x04,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x02,0x00,
+    0xFF,0xAA,0x55,0x03,0xFF,0x7F,0x00,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0x00,0x00,0x01,0xFF,0xFF,0x00,0x01,
+    0xFF,0xFF,0x00,0x01,0xFF,0x00,0x00,0x01,0xFF,0x00,0x00,0x01,0x00,0x00,0x00,0x01,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x01,0x00,0x18,0x18,0x00,0x00,0x01,0x00,0x20,0x00,0x88,0x09,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x18,0x18,0x00,0x00,0x01,0x00,
+    0x20,0x00,0x88,0x09,0x00,0x00,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+};
+static const unsigned kIconsDll_len = sizeof(kIconsDll);
+
+static const wchar_t kDllName[] = L"win7ncl_icons.dll";
+static const wchar_t kTempSubdir[] = L"Win7NetworkCenterLinks";
+
+static bool g_addConnect = true;
+static bool g_addHomegroup = true;
+static bool g_dllReady = false;
+static std::wstring g_dllPath;   // full path for this process
+static std::wstring g_tempDir;   // %TEMP%\Win7NetworkCenterLinks
+
+// ---------------------------------------------------------------------------
+// Temp icon file — create on init, keep while process lives, delete on uninit
+// ---------------------------------------------------------------------------
+static bool WriteBytes(const std::wstring& path, const void* p, DWORD n) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD w = 0;
+    BOOL ok = WriteFile(h, p, n, &w, nullptr);
+    CloseHandle(h);
+    return ok && w == n;
+}
+
+static bool IconsLoadable(const std::wstring& path) {
+    HMODULE m = LoadLibraryExW(path.c_str(), nullptr,
+                               LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    if (!m)
+        return false;
+    bool ok = FindResourceW(m, MAKEINTRESOURCEW(1), RT_GROUP_ICON) &&
+              FindResourceW(m, MAKEINTRESOURCEW(2), RT_GROUP_ICON);
+    FreeLibrary(m);
+    return ok;
+}
+
+static bool FileMatchesEmbedded(const std::wstring& path) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+        return false;
+    LARGE_INTEGER li{};
+    if (!GetFileSizeEx(h, &li) || li.QuadPart != (LONGLONG)kIconsDll_len) {
+        CloseHandle(h);
+        return false;
+    }
+    std::string buf((size_t)li.QuadPart, '\0');
+    DWORD rd = 0;
+    BOOL ok = ReadFile(h, buf.data(), (DWORD)buf.size(), &rd, nullptr);
+    CloseHandle(h);
+    return ok && rd == buf.size() &&
+           memcmp(buf.data(), kIconsDll, kIconsDll_len) == 0;
+}
+
+static bool EnsureIconsDll() {
+    g_dllReady = false;
+    g_dllPath.clear();
+    g_tempDir.clear();
+
+    wchar_t tempRoot[MAX_PATH] = {};
+    DWORD n = GetTempPathW(MAX_PATH, tempRoot);
+    if (!n || n >= MAX_PATH)
+        return false;
+
+    g_tempDir = std::wstring(tempRoot) + kTempSubdir;
+    CreateDirectoryW(g_tempDir.c_str(), nullptr);
+
+    // Per-process file so multiple explorer.exe hosts do not fight over one lock
+    wchar_t pathBuf[MAX_PATH];
+    swprintf_s(pathBuf, L"%s\\%s_%lu.dll", g_tempDir.c_str(), L"win7ncl_icons",
+               GetCurrentProcessId());
+    std::wstring path = pathBuf;
+
+    // Reuse if already exact for this process (e.g. settings reload)
+    if (FileMatchesEmbedded(path) && IconsLoadable(path)) {
+        g_dllPath = path;
+        g_dllReady = true;
+        return true;
+    }
+
+    DeleteFileW(path.c_str());
+    if (!WriteBytes(path, kIconsDll, kIconsDll_len) || !IconsLoadable(path)) {
+        // Fallback: shared name in same temp dir
+        std::wstring shared = g_tempDir + L"\\" + kDllName;
+        if (FileMatchesEmbedded(shared) && IconsLoadable(shared)) {
+            g_dllPath = shared;
+            g_dllReady = true;
+            return true;
+        }
+        DeleteFileW(shared.c_str());
+        if (!WriteBytes(shared, kIconsDll, kIconsDll_len) || !IconsLoadable(shared))
+            return false;
+        g_dllPath = shared;
+        g_dllReady = true;
+        return true;
+    }
+
+    g_dllPath = path;
+    g_dllReady = true;
+    return true;
+}
+
+static void CleanupIconsDll() {
+    // Best-effort: only after DUI is done with this process.
+    // Do NOT delete immediately after LoadLibrary — DUI re-opens the path.
+    if (!g_dllPath.empty())
+        DeleteFileW(g_dllPath.c_str());
+    if (!g_tempDir.empty())
+        RemoveDirectoryW(g_tempDir.c_str());  // succeeds only if empty
+    g_dllPath.clear();
+    g_tempDir.clear();
+    g_dllReady = false;
+}
+
+// ---------------------------------------------------------------------------
+// LoadLibrary redirect
+// ---------------------------------------------------------------------------
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+static LoadLibraryExW_t LoadLibraryExW_Orig = nullptr;
+
+static bool IsOurDll(LPCWSTR name) {
+    if (!name || !g_dllReady || g_dllPath.empty())
+        return false;
+    if (_wcsicmp(name, g_dllPath.c_str()) == 0)
+        return true;
+    LPCWSTR base = PathFindFileNameW(name);
+    if (!base)
+        return false;
+    // XML always uses short name win7ncl_icons.dll
+    if (_wcsicmp(base, kDllName) == 0)
+        return true;
+    LPCWSTR ourBase = PathFindFileNameW(g_dllPath.c_str());
+    return ourBase && _wcsicmp(base, ourBase) == 0;
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE h, DWORD flags) {
+    // Pass caller's flags (same as last known-good builds)
+    if (IsOurDll(name))
+        return LoadLibraryExW_Orig(g_dllPath.c_str(), h, flags);
+    return LoadLibraryExW_Orig(name, h, flags);
+}
+
+// ---------------------------------------------------------------------------
+// Strings / XML
+// ---------------------------------------------------------------------------
+struct LangPack {
+    WORD lang;
+    const wchar_t *cTitle, *cDesc, *hTitle, *hDesc;
+};
+
+static const LangPack kLang[] = {
+    {0x09, L"Connect to a Network",
+     L"Connect to an available wireless, VPN, or dial-up network.",
+     L"Choose Homegroup and Sharing Options",
+     L"View or change your homegroup settings and network sharing preferences."},
+    {0x10, L"Connessione a una rete",
+     L"Connettere o riconnettere una rete wireless, VPN o di accesso remoto disponibile.",
+     L"Selezione delle opzioni del gruppo home e della condivisione",
+     L"Accedere alle impostazioni del gruppo home e configurare le opzioni di condivisione della rete."},
+    {0x0c, L"Se connecter \u00e0 un r\u00e9seau",
+     L"Connectez-vous aux r\u00e9seaux sans fil, VPN ou distants disponibles.",
+     L"Choisir les options de groupe r\u00e9sidentiel et de partage",
+     L"Affichez ou modifiez les param\u00e8tres de groupe r\u00e9sidentiel et de partage."},
+    {0x0a, L"Conectar a una red",
+     L"Con\u00e9ctese a redes inal\u00e1mbricas, VPN o de acceso telef\u00f3nico disponibles.",
+     L"Elegir opciones de grupo en el hogar y uso compartido",
+     L"Vea o cambie la configuraci\u00f3n del grupo en el hogar y uso compartido de red."},
+    {0x19, L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0441\u0435\u0442\u0438",
+     L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u043c \u0431\u0435\u0441\u043f\u0440\u043e\u0432\u043e\u0434\u043d\u044b\u043c \u0441\u0435\u0442\u044f\u043c, VPN \u0438\u043b\u0438 \u0441\u0435\u0442\u044f\u043c \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
+     L"\u0412\u044b\u0431\u043e\u0440 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
+     L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0441\u0435\u0442\u0438."},
+    {0x07, L"Mit einem Netzwerk verbinden",
+     L"Verbindung mit verf\u00fcgbaren Drahtlos-, VPN- oder DF\u00dc-Netzwerken herstellen.",
+     L"Heimnetzgruppen- und Freigabeoptionen ausw\u00e4hlen",
+     L"Einstellungen f\u00fcr Heimnetzgruppen und Netzwerkfreigaben anzeigen oder \u00e4ndern."},
+    {0x16, L"Ligar a uma rede",
+     L"Ligue-se a redes sem fios, VPN ou de acesso telef\u00f3nico dispon\u00edveis.",
+     L"Escolher op\u00e7\u00f5es de Grupo Dom\u00e9stico e partilha",
+     L"Veja ou altere as defini\u00e7\u00f5es do Grupo Dom\u00e9stico e da partilha de rede."},
+};
+
+static const LangPack* GetLang() {
+    WORD ui;
+    switch (g_Settings.language) {
+        case 1: ui = 0x09; break;  // English
+        case 2: ui = 0x10; break;  // Italian
+        case 3: ui = 0x0a; break;  // Spanish
+        case 4: ui = 0x0c; break;  // French
+        case 5: ui = 0x19; break;  // Russian
+        case 6: ui = 0x07; break;  // German
+        case 7: ui = 0x16; break;  // Portuguese
+        default: ui = PRIMARYLANGID(GetUserDefaultUILanguage()); break;
+    }
+    for (const auto& p : kLang)
+        if (p.lang == ui)
+            return &p;
+    return &kLang[0];
+}
+
+static std::wstring Esc(const wchar_t* s) {
+    std::wstring o;
+    for (; s && *s; ++s) {
+        switch (*s) {
+            case L'&': o += L"&amp;"; break;
+            case L'"': o += L"&quot;"; break;
+            case L'<': o += L"&lt;"; break;
+            case L'>': o += L"&gt;"; break;
+            default: o.push_back(*s); break;
+        }
+    }
+    return o;
+}
+
+static std::wstring LoadUifile(HMODULE m, PCWSTR n, PCWSTR t) {
+    HRSRC r = FindResourceW(m, n, t);
+    if (!r)
+        return {};
+    HGLOBAL g = LoadResource(m, r);
+    if (!g)
+        return {};
+    DWORD sz = SizeofResource(m, r);
+    const char* d = (const char*)LockResource(g);
+    if (!d || !sz)
+        return {};
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, d, (int)sz, nullptr, 0);
+    UINT cp = CP_UTF8;
+    if (wlen <= 0) {
+        wlen = MultiByteToWideChar(CP_ACP, 0, d, (int)sz, nullptr, 0);
+        cp = CP_ACP;
+    }
+    if (wlen <= 0)
+        return {};
+    std::wstring xml(wlen, 0);
+    MultiByteToWideChar(cp, 0, d, (int)sz, &xml[0], wlen);
+    while (!xml.empty() && (xml.back() == 0 || xml.back() == L'\n' || xml.back() == L'\r'))
+        xml.pop_back();
+    return xml;
+}
+
+static std::wstring IconAttr(int groupId, int fallbackId) {
+    wchar_t b[160];
+    if (g_dllReady)
+        swprintf_s(b, L" content=\"icon(%d,24rp,24rp,library(%s))\"", groupId, kDllName);
+    else
+        swprintf_s(b, L" content=\"icon(%d,24rp,24rp)\"", fallbackId);
+    return b;
+}
+
+static std::wstring Link(const wchar_t* title, const wchar_t* desc, const wchar_t* exe,
+                         const wchar_t* params, int groupId, int fallbackId) {
+    return L"<NavigateButton layout=\"borderlayout()\" layoutpos=\"top\" "
+           L"padding=\"rect(0rp,10rp,0rp,10rp)\" "
+           L"shellexecute=\"" +
+           std::wstring(exe) + L"\" shellexecuteparams=\"" + params +
+           L"\">"
+           L"<button layoutpos=\"left\" cursor=\"hand\" active=\"mouse\" "
+           L"accessible=\"true\" accrole=\"graphic\"" +
+           IconAttr(groupId, fallbackId) +
+           L"/>"
+           L"<element layoutpos=\"top\" layout=\"borderlayout()\" "
+           L"padding=\"rect(10rp,0rp,0rp,0rp)\">"
+           L"<element layoutpos=\"top\" layout=\"flowlayout()\">"
+           L"<button sheet=\"cp_style\" class=\"cp_content_link\" content=\"" + Esc(title) +
+           L"\"/>"
+           L"</element>"
+           L"<element layoutpos=\"top\" layout=\"flowlayout()\">"
+           L"<element sheet=\"cp_style\" class=\"cp_content_text\" "
+           L"padding=\"rect(0rp,5rp,0rp,0rp)\" content=\"" +
+           Esc(desc) +
+           L"\"/>"
+           L"</element>"
+           L"</element>"
+           L"</NavigateButton>";
+}
+
+static bool FindOuterElement(const std::wstring& xml, size_t markerPos, size_t& outStart,
+                             size_t& outEnd) {
+    size_t start = xml.rfind(L"<element", markerPos);
+    if (start == std::wstring::npos)
+        return false;
+    int depth = 0;
+    size_t i = start;
+    size_t steps = 0;
+    while (i < xml.size() && ++steps < 200000) {
+        if (xml.compare(i, 8, L"<element") == 0) {
+            size_t gt = xml.find(L'>', i);
+            if (gt == std::wstring::npos)
+                return false;
+            if (gt > i && xml[gt - 1] == L'/') {
+                i = gt + 1;
+                continue;
+            }
+            ++depth;
+            i = gt + 1;
+            continue;
+        }
+        if (xml.compare(i, 10, L"</element>") == 0) {
+            --depth;
+            i += 10;
+            if (depth == 0) {
+                outStart = start;
+                outEnd = i;
+                return true;
+            }
+            continue;
+        }
+        ++i;
+    }
+    return false;
+}
+
+static std::wstring Patch(const std::wstring& in) {
+    if (!g_addConnect && !g_addHomegroup)
+        return in;
+    std::wstring xml = in;
+    size_t createMark = xml.find(L"atom(createnewbtn)");
+    size_t diagMark = xml.find(L"atom(diagnosebtn)");
+    if (createMark == std::wstring::npos || diagMark == std::wstring::npos)
+        return in;
+
+    size_t c0 = 0, c1 = 0, d0 = 0, d1 = 0;
+    if (!FindOuterElement(xml, createMark, c0, c1) || !FindOuterElement(xml, diagMark, d0, d1))
+        return in;
+    if (c1 <= c0 || d1 <= d0 || !(c1 <= d0 || d1 <= c0))
+        return in;
+
+    std::wstring createBlock = xml.substr(c0, c1 - c0);
+    std::wstring diagBlock = xml.substr(d0, d1 - d0);
+
+    if (d0 > c0) {
+        xml.erase(d0, d1 - d0);
+        xml.erase(c0, c1 - c0);
+    } else {
+        xml.erase(c0, c1 - c0);
+        xml.erase(d0, d1 - d0);
+    }
+    size_t insertAt = (c0 < d0) ? c0 : d0;
+
+    const LangPack* L = GetLang();
+    std::wstring mid;
+    if (g_addConnect)
+        mid += Link(L->cTitle, L->cDesc, L"%SystemRoot%\\explorer.exe",
+                    L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", 1, 22);
+    if (g_addHomegroup)
+        mid += Link(L->hTitle, L->hDesc, L"%SystemRoot%\\explorer.exe",
+                    L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 2, 27);
+
+    xml.insert(insertAt, createBlock + mid + diagBlock);
+    return xml;
+}
+
+// ---------------------------------------------------------------------------
+// DUI hooks
+// ---------------------------------------------------------------------------
+#ifdef _WIN64
+#define NCL_THISCALL __cdecl
+#else
+#define NCL_THISCALL __thiscall
+#endif
+
+using SetXML_t = HRESULT(NCL_THISCALL*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
+using SetXMLFromResource_t =
+    HRESULT(NCL_THISCALL*)(void*, PCWSTR, PCWSTR, HMODULE, HINSTANCE, HINSTANCE);
+
+static SetXML_t SetXML_Orig = nullptr;
+static SetXMLFromResource_t SetXMLFromResource_Orig = nullptr;
+static thread_local int g_inHook = 0;
+
+static bool IsNetCenter(HMODULE h) {
+    if (!h)
+        return false;
+    wchar_t path[MAX_PATH];
+    if (!GetModuleFileNameW(h, path, MAX_PATH))
+        return false;
+    return _wcsicmp(PathFindFileNameW(path), L"netcenter.dll") == 0;
+}
+
+static HRESULT NCL_THISCALL SetXML_Hook(void* t, const WCHAR* x, HINSTANCE r, HINSTANCE h) {
+    return SetXML_Orig(t, x, r, h);
+}
+
+static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp, HMODULE m,
+                                                HINSTANCE p4, HINSTANCE p5) {
+    if (!SetXMLFromResource_Orig || !SetXML_Orig || g_inHook)
+        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
+        (UINT)(UINT_PTR)n != 110)
+        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    std::wstring xml = LoadUifile(m, n, tp);
+    if (xml.empty() || xml.find(L"atom(NetworkCenter)") == std::wstring::npos ||
+        xml.find(L"atom(diagnosebtn)") == std::wstring::npos)
+        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    std::wstring patched = Patch(xml);
+    if (patched == xml)
+        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    g_inHook++;
+    HRESULT hr = SetXML_Orig(t, patched.c_str(), m, p4);
+    g_inHook--;
+    return FAILED(hr) ? SetXMLFromResource_Orig(t, n, tp, m, p4, p5) : hr;
+}
+
+static bool HookAll() {
+    HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    HMODULE src = kb ? kb : k32;
+    FARPROC pLL = src ? GetProcAddress(src, "LoadLibraryExW") : nullptr;
+    if (!pLL && k32)
+        pLL = GetProcAddress(k32, "LoadLibraryExW");
+    if (!pLL)
+        return false;
+    Wh_SetFunctionHook((void*)pLL, (void*)LoadLibraryExW_Hook, (void**)&LoadLibraryExW_Orig);
+
+    HMODULE dui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dui)
+        return false;
+
+    for (auto n : {"?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
+                   "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z"}) {
+        if (FARPROC p = GetProcAddress(dui, n)) {
+            Wh_SetFunctionHook((void*)p, (void*)SetXML_Hook, (void**)&SetXML_Orig);
+            break;
+        }
+    }
+    for (auto n : {
+#ifdef _WIN64
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
+#endif
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z"}) {
+        if (FARPROC p = GetProcAddress(dui, n)) {
+            Wh_SetFunctionHook((void*)p, (void*)SetXMLFromResource_Hook,
+                               (void**)&SetXMLFromResource_Orig);
+            break;
+        }
+    }
+    return SetXML_Orig && SetXMLFromResource_Orig;
+}
+
+static bool Init() {
+    bool enabled = Wh_GetIntSetting(L"restoreClassicNetworkCenterLinks") != 0;
+    g_addConnect = enabled;
+    g_addHomegroup = enabled;
+
+    // Recreate the embedded icon resource DLL for this process.
+    EnsureIconsDll();
+
+    if (!HookAll()) {
+        CleanupIconsDll();
+        return false;
+    }
+    return true;
+}
+
+static void SettingsChanged() {
+    bool enabled = Wh_GetIntSetting(L"restoreClassicNetworkCenterLinks") != 0;
+    g_addConnect = enabled;
+    g_addHomegroup = enabled;
+    EnsureIconsDll();
+}
+
+static void Uninit() {
+    // Safe to delete now; the next Explorer/control.exe process recreates it.
+    CleanupIconsDll();
+}
+
+#undef NCL_THISCALL
+
+}  // namespace Win7NetworkCenterLinks
+
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v2.8.7 ===");
+    Win7NetworkCenterLinks::Init();
+    Wh_Log(L"=== Wh_ModInit v3.0.0 ===");
     DetectWindowsVersion();
     LoadSettings();
-
     DarkContextMenu::Init();
-
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
-
     g_hConnectMutex = CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex");
     DetermineLocale();
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
     InitGdiPlusRendering();
-
     if (!IsExplorerProcess()) {
         g_Initialized = TRUE;
         return TRUE;
     }
-
     InitGlobalFonts();
     InitRefreshButtonRect();
     RecalcArrowRect();
     InstallTrayInterceptionInternal();
-
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
         if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
-
-    // WlanOpenHandle is done on the hotkey thread (see HotkeyThreadProc).
     g_Initialized = TRUE;
     return TRUE;
 }
+
 void Wh_ModSettingsChanged() {
+    Win7NetworkCenterLinks::SettingsChanged();
     BOOL oldRoundedCorners = g_Settings.useRoundedCorners;
     int  oldTheme          = g_Settings.theme;
+    int  oldDebug          = g_Settings.debugEthernet;
+    
     LoadSettings();
     DetermineLocale();
-
-    // Sync context menu dark/light state with theme setting.
     DarkContextMenu::OnSettingsChanged();
-
+    
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
-                     || (oldTheme          != g_Settings.theme);
-
+                     || (oldTheme          != g_Settings.theme)
+                     || (oldDebug          != g_Settings.debugEthernet);
+                     
     if (needRecreate) {
         if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             BOOL wasVisible = IsWindowVisible(g_hWndFlyout);
@@ -4514,9 +5321,6 @@ void Wh_ModSettingsChanged() {
         }
         return;
     }
-
-
-
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_RefreshTimer) {
             KillTimer(g_hWndFlyout, g_RefreshTimer);
@@ -4529,12 +5333,12 @@ void Wh_ModSettingsChanged() {
         InvalidateRect(g_hWndFlyout, NULL, TRUE);
     }
 }
+
 void Wh_ModUninit() {
+    Win7NetworkCenterLinks::Uninit();
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
-
     DarkContextMenu::Uninit();
-
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetFlyoutHidden", GetModuleHandle(NULL));
