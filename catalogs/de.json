@@ -1,7 +1,8 @@
 {
   "app": {
     "version": "1.7.3",
-    "versionBleedingEdge": "1.7.3"
+    "versionBleedingEdge": "1.7.3",
+    "versionPreRelease": "2.0.0-alpha.1"
   },
   "mods": {
     "accent-color-sync": {
