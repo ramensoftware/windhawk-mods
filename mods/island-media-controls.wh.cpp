@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.210
+// @version         0.9.211
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -29,7 +29,7 @@ play/pause, and next controls.
 ## What's new
 
 - **Liquid Glass refinements:** The material now uses a smoother edge-following
-  refraction band and a softer light-mode backdrop tint.
+  refraction band and stronger light-mode backdrop/control tint.
 - **Safer capture startup:** Borderless capture authorization is now bounded
   and cleanly stopped before the mod unloads.
 - **Thread-safe live blur:** Capture rendering now uses a taskbar-thread
@@ -3846,8 +3846,8 @@ int PopupCompactFinalHeight() {
 winrt::Windows::UI::Color PopupControlCardColor() {
     bool dark = IsDarkModeApprox();
     if (IsLiquidGlassMaterial()) {
-        return dark ? Color(0x32, 0x12, 0x14, 0x1A)
-                    : Color(0x56, 0xFB, 0xFC, 0xFF);
+        return dark ? Color(0x3A, 0x12, 0x14, 0x1A)
+                    : Color(0x68, 0xFB, 0xFC, 0xFF);
     }
 
     // Keep light and dark tint strengths independent. Light mode keeps the
@@ -3954,8 +3954,8 @@ mediax::Brush PopupTextEdgeFadeBrush(bool leftEdge) {
     auto bg = PopupControlCardColor();
     if (IsLiquidGlassMaterial()) {
         bool dark = IsDarkModeApprox();
-        bg = dark ? Color(0x20, 0x12, 0x14, 0x1A)
-                  : Color(0x3C, 0xFB, 0xFC, 0xFF);
+        bg = dark ? Color(0x28, 0x12, 0x14, 0x1A)
+                  : Color(0x50, 0xFB, 0xFC, 0xFF);
     }
     auto clear = bg;
     clear.A = 0x00;
@@ -4055,9 +4055,9 @@ mediax::Brush PopupBackdropCardTintBrush() {
                     stops.Append(stop);
                 };
 
-                addStop(0.00, preserveCompactWash ? 0x34 : 0x4A);
-                addStop(0.24, preserveCompactWash ? 0x24 : 0x34);
-                addStop(0.58, preserveCompactWash ? 0x10 : 0x18);
+                addStop(0.00, preserveCompactWash ? 0x42 : 0x5C);
+                addStop(0.24, preserveCompactWash ? 0x30 : 0x42);
+                addStop(0.58, preserveCompactWash ? 0x16 : 0x22);
                 addStop(1.00, 0x00);
                 brush.GradientStops(stops);
                 return brush;
@@ -4087,7 +4087,7 @@ mediax::Brush PopupBackdropCardTintBrush() {
 
 double PopupPanelCoverOpacityFactor() {
     if (IsLiquidGlassMaterial()) {
-        return IsDarkModeApprox() ? 0.22 : 0.26;
+        return IsDarkModeApprox() ? 0.30 : 0.36;
     }
 
     // The stronger light-mode white tint can hide the album color wash too much.
