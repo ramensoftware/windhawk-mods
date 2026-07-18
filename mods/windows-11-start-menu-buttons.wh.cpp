@@ -10,7 +10,7 @@
 // @include             StartMenuExperienceHost.exe
 // @include             explorer.exe
 // @architecture        x86-64
-// @compilerOptions     -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore -lcrypt32
+// @compilerOptions     -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -161,7 +161,7 @@ If you encounter any issues or have a feature suggestion, please open a report o
 // ==WindhawkModSettings==
 /*
 - preset_language: en
-  $name: Preset language    
+  $name: Preset language
   $description: Language for the tooltip names of preset buttons.
   $options:
     - en: English
@@ -262,7 +262,7 @@ If you encounter any issues or have a feature suggestion, please open a report o
                       $name: Item action
                   $name: Level 3 submenu
               $name: Level 2 submenu
-        $name: Left-click submenu 
+        $name: Left-click submenu
         $description: "Each item can have nested submenus up to 3 levels deep total."
       - rightClickSubmenu:
           - - name: ""
@@ -310,7 +310,7 @@ If you encounter any issues or have a feature suggestion, please open a report o
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <shcore.h>
-#include <wincrypt.h>
+#include <unordered_map>
 
 #undef GetCurrentTime
 
@@ -358,11 +358,20 @@ static std::atomic<bool> g_monitoringActive{false};
 static std::atomic<bool> g_forceRebuild{false};
 static std::atomic<bool> g_closeStartMenu{true};
 static std::atomic<bool> g_invertIconsSubmenus{false};
+static std::atomic<int>  g_activeActionThreads{0};
+
+struct ActiveThreadGuard {
+    ActiveThreadGuard()  { g_activeActionThreads.fetch_add(1, std::memory_order_relaxed); }
+    ~ActiveThreadGuard() { g_activeActionThreads.fetch_sub(1, std::memory_order_relaxed); }
+};
 
 static std::mutex g_settingsMutex;
 
 static ULONG_PTR g_gdiplusToken = 0;
 static std::mutex g_gdipMutex;
+
+static std::mutex g_iconCacheMutex;
+static std::unordered_map<std::wstring, std::wstring> g_iconPngCache;
 
 enum class AccountButtonMode { Left, Center, Right, Hide };
 
@@ -381,7 +390,7 @@ struct Settings {
 struct ActionItem {
     std::wstring name;
     std::wstring icon;
-    std::wstring action;
+    std::vector<std::wstring> actionArray;
     std::vector<ActionItem> submenu;
     std::vector<ActionItem> rightClickSubmenu;
 };
@@ -786,20 +795,38 @@ static wuxc::IconElement MakeMenuIcon(const std::wstring& iconStr) {
 
     if (IsExePath(iconStr)) {
         if (GetFileAttributesW(iconStr.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            HICON hIcon = LoadIconFromExe(iconStr, 16);
-            if (hIcon) {
-                std::wstring pngPath = SaveIconToPng(hIcon);
-                DestroyIcon(hIcon);
+            std::wstring pngPath;
+            bool haveCached = false;
+            {
+                std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+                auto it = g_iconPngCache.find(iconStr);
+                if (it != g_iconPngCache.end() &&
+                    GetFileAttributesW(it->second.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    pngPath = it->second;
+                    haveCached = true;
+                }
+            }
 
-                if (!pngPath.empty()) {
-                    try {
-                        wuxc::BitmapIcon bi;
-                        bi.UriSource(winrt::Windows::Foundation::Uri(MakeFileUri(pngPath)));
-                        bi.ShowAsMonochrome(false);
-                        return bi;
-                    } catch (...) {
-                        Wh_Log(L"Exception creating menu icon from exe: %s", iconStr.c_str());
+            if (!haveCached) {
+                HICON hIcon = LoadIconFromExe(iconStr, 16);
+                if (hIcon) {
+                    pngPath = SaveIconToPng(hIcon);
+                    DestroyIcon(hIcon);
+                    if (!pngPath.empty()) {
+                        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+                        g_iconPngCache[iconStr] = pngPath;
                     }
+                }
+            }
+
+            if (!pngPath.empty()) {
+                try {
+                    wuxc::BitmapIcon bi;
+                    bi.UriSource(winrt::Windows::Foundation::Uri(MakeFileUri(pngPath)));
+                    bi.ShowAsMonochrome(false);
+                    return bi;
+                } catch (...) {
+                    Wh_Log(L"Exception creating menu icon from exe: %s", iconStr.c_str());
                 }
             }
         }
@@ -1102,189 +1129,95 @@ static bool ExecuteProcess(const std::wstring& cmd, bool useCmdExe, bool showWin
     return true;
 }
 
-static std::vector<std::wstring> ParseMultipleCommands(const std::wstring& raw) {
-    std::vector<std::wstring> commands;
-    
-    if (raw.find(L'[') == std::wstring::npos) {
-        return commands;
-    }
-    
-    std::wstring current;
-    bool inQuotes = false;
-    bool inBrackets = false;
-    
-    for (size_t i = 0; i < raw.size(); ++i) {
-        wchar_t c = raw[i];
-        
-        if (c == L'[' && !inQuotes) {
-            if (inBrackets) {
-                if (!Trim(current).empty()) {
-                    commands.push_back(Trim(current));
-                }
-                current.clear();
-            }
-            inBrackets = true;
-        }
-        else if (c == L']' && !inQuotes && inBrackets) {
-            inBrackets = false;
-            if (!Trim(current).empty()) {
-                commands.push_back(Trim(current));
-            }
-            current.clear();
-        }
-        else if (c == L'"') {
-            inQuotes = !inQuotes;
-            current += c;
-        }
-        else if (inBrackets) {
-            current += c;
-        }
-    }
-    
-    return commands;
-}
+static void ExecuteSingleCommand(const std::wstring& cmd) {
+    auto [action, runas, showWindow] = ParseActionSigns(cmd);
+    const LPCWSTR verb = runas ? L"runas" : L"open";
 
-static void ExecuteActionText(const std::wstring& raw) {
-    std::wstring a = Trim(raw);
-    if (a.empty()) return;
-
-    auto commands = ParseMultipleCommands(a);
-
-    if (!commands.empty()) {
-        for (const auto& cmd : commands) {
-            if (PerformPresetAction(cmd)) continue;
-            
-            std::thread([cmd]() {
-                auto [action, runas, showWindow] = ParseActionSigns(cmd);
-                const LPCWSTR verb = runas ? L"runas" : L"open";
-
-                if (StartsWithCI(action, L"press:")) {
-                    Sleep(150);
-                    SendVirtualKeypress(action.substr(6));
-                    return;
-                }
-
-                if (StartsWithCI(action, L"cmd:")) {
-                    std::wstring command = Trim(action.substr(4));
-                    if (showWindow)
-                        ShellExecuteW(nullptr, verb, L"cmd.exe",
-                                      (L"/K " + command).c_str(), nullptr, SW_NORMAL);
-                    else
-                        ShellExecuteW(nullptr, verb, L"cmd.exe",
-                                      (L"/C " + command).c_str(), nullptr, SW_HIDE);
-                    return;
-                }
-
-                if (StartsWithCI(action, L"shell:")) {
-                    std::wstring ps = Trim(action.substr(6));
-                    std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
-                    if (showWindow) args = L"-NoExit " + args;
-                    ShellExecuteW(nullptr, verb, L"powershell.exe",
-                                  args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
-                    return;
-                }
-
-                if (StartsWithCI(action, L"ms-settings:")) {
-                    ShellExecuteW(nullptr, verb, action.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                    return;
-                }
-
-                if (StartsWithCI(action, L"web:")) {
-                    ShellExecuteW(nullptr, verb, Trim(action.substr(4)).c_str(),
-                                  nullptr, nullptr, SW_SHOWNORMAL);
-                    return;
-                }
-
-                if (!action.empty() && action.front() == L'"') {
-                    ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
-                                  nullptr, nullptr, SW_SHOWNORMAL);
-                    return;
-                }
-
-                if (!action.empty() && action.front() == L'~') {
-                    std::wstring tgt = Trim(action.substr(1));
-                    if (tgt.empty()) { Wh_Log(L"~search: empty target"); return; }
-                    std::wstring resolved;
-                    if (GetKnownFolderPath(tgt.c_str(), resolved) ||
-                        SearchByName(tgt, resolved))
-                        ShellExecuteW(nullptr, verb, resolved.c_str(),
-                                      nullptr, nullptr, SW_SHOWNORMAL);
-                    else
-                        Wh_Log(L"~search: '%s' not found", tgt.c_str());
-                    return;
-                }
-
-                ExecuteProcess(action, false, showWindow);
-            }).detach();
-            
-            Sleep(50);
-        }
+    if (StartsWithCI(action, L"press:")) {
+        Sleep(150);
+        SendVirtualKeypress(action.substr(6));
         return;
     }
 
-    if (PerformPresetAction(a)) return;
+    if (StartsWithCI(action, L"cmd:")) {
+        std::wstring command = Trim(action.substr(4));
+        if (showWindow)
+            ShellExecuteW(nullptr, verb, L"cmd.exe",
+                          (L"/K " + command).c_str(), nullptr, SW_NORMAL);
+        else
+            ShellExecuteW(nullptr, verb, L"cmd.exe",
+                          (L"/C " + command).c_str(), nullptr, SW_HIDE);
+        return;
+    }
 
-    std::thread([a]() {
-        auto [action, runas, showWindow] = ParseActionSigns(a);
-        const LPCWSTR verb = runas ? L"runas" : L"open";
+    if (StartsWithCI(action, L"shell:")) {
+        std::wstring ps = Trim(action.substr(6));
+        std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
+        if (showWindow) args = L"-NoExit " + args;
+        ShellExecuteW(nullptr, verb, L"powershell.exe",
+                      args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
+        return;
+    }
 
-        if (StartsWithCI(action, L"press:")) {
-            Sleep(150);
-            SendVirtualKeypress(action.substr(6));
-            return;
-        }
+    if (StartsWithCI(action, L"ms-settings:")) {
+        ShellExecuteW(nullptr, verb, action.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"cmd:")) {
-            std::wstring cmd = Trim(action.substr(4));
-            if (showWindow)
-                ShellExecuteW(nullptr, verb, L"cmd.exe",
-                              (L"/K " + cmd).c_str(), nullptr, SW_NORMAL);
-            else
-                ShellExecuteW(nullptr, verb, L"cmd.exe",
-                              (L"/C " + cmd).c_str(), nullptr, SW_HIDE);
-            return;
-        }
+    if (StartsWithCI(action, L"web:")) {
+        ShellExecuteW(nullptr, verb, Trim(action.substr(4)).c_str(),
+                      nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"shell:")) {
-            std::wstring ps = Trim(action.substr(6));
-            std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -Command " + ps;
-            if (showWindow) args = L"-NoExit " + args;
-            ShellExecuteW(nullptr, verb, L"powershell.exe",
-                          args.c_str(), nullptr, showWindow ? SW_NORMAL : SW_HIDE);
-            return;
-        }
+    if (!action.empty() && action.front() == L'"') {
+        ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
+                      nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
 
-        if (StartsWithCI(action, L"ms-settings:")) {
-            ShellExecuteW(nullptr, verb, action.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
-
-        if (StartsWithCI(action, L"web:")) {
-            ShellExecuteW(nullptr, verb, Trim(action.substr(4)).c_str(),
+    if (!action.empty() && action.front() == L'~') {
+        std::wstring tgt = Trim(action.substr(1));
+        if (tgt.empty()) { Wh_Log(L"~search: empty target"); return; }
+        std::wstring resolved;
+        if (GetKnownFolderPath(tgt.c_str(), resolved) ||
+            SearchByName(tgt, resolved))
+            ShellExecuteW(nullptr, verb, resolved.c_str(),
                           nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
+        else
+            Wh_Log(L"~search: '%s' not found", tgt.c_str());
+        return;
+    }
 
-        if (!action.empty() && action.front() == L'"') {
-            ShellExecuteW(nullptr, verb, StripOuterQuotes(action).c_str(),
-                          nullptr, nullptr, SW_SHOWNORMAL);
-            return;
-        }
+    ExecuteProcess(action, false, showWindow);
+}
 
-        if (!action.empty() && action.front() == L'~') {
-            std::wstring tgt = Trim(action.substr(1));
-            if (tgt.empty()) { Wh_Log(L"~search: empty target"); return; }
-            std::wstring resolved;
-            if (GetKnownFolderPath(tgt.c_str(), resolved) ||
-                SearchByName(tgt, resolved))
-                ShellExecuteW(nullptr, verb, resolved.c_str(),
-                              nullptr, nullptr, SW_SHOWNORMAL);
-            else
-                Wh_Log(L"~search: '%s' not found", tgt.c_str());
-            return;
-        }
+static void ExecuteActionText(const std::vector<std::wstring>& commands) {
+    std::vector<std::wstring> cmds;
+    cmds.reserve(commands.size());
+    for (const auto& c : commands) {
+        std::wstring t = Trim(c);
+        if (!t.empty()) cmds.push_back(std::move(t));
+    }
+    if (cmds.empty()) return;
 
-        ExecuteProcess(action, false, showWindow);
+    if (cmds.size() == 1) {
+        if (PerformPresetAction(cmds[0])) return;
+        std::thread([cmd = std::move(cmds[0])]() {
+            ActiveThreadGuard guard;
+            ExecuteSingleCommand(cmd);
+        }).detach();
+        return;
+    }
+
+    std::thread([cmds = std::move(cmds)]() {
+        ActiveThreadGuard guard;
+        for (size_t i = 0; i < cmds.size(); ++i) {
+            if (!PerformPresetAction(cmds[i]))
+                ExecuteSingleCommand(cmds[i]);
+            if (i + 1 < cmds.size())
+                Sleep(50);
+        }
     }).detach();
 }
 
@@ -1298,7 +1231,7 @@ static void SendEscapeKey() {
 
 static void ScheduleEscapeKeypress(DWORD delayMs = 100) {
     auto fire = [delayMs]() {
-        std::thread([delayMs] { Sleep(delayMs); SendEscapeKey(); }).detach();
+        std::thread([delayMs] { ActiveThreadGuard guard; Sleep(delayMs); SendEscapeKey(); }).detach();
     };
     try {
         auto dq = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
@@ -1324,7 +1257,7 @@ static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT msg,
             int idx = *static_cast<const int*>(cds->lpData);
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             if (idx >= 0 && idx < static_cast<int>(g_buttons.size()))
-                ExecuteActionText(g_buttons[idx].action);
+                ExecuteActionText(g_buttons[idx].actionArray);
         }
         return 0;
     }
@@ -1383,7 +1316,7 @@ static bool SendActionToProxy(int idx) {
     if (!hw) {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         if (idx >= 0 && idx < static_cast<int>(g_buttons.size()))
-            ExecuteActionText(g_buttons[idx].action);
+            ExecuteActionText(g_buttons[idx].actionArray);
         return false;
     }
     COPYDATASTRUCT cds{ kCopyDataMagic, sizeof(int), &idx };
@@ -1432,6 +1365,7 @@ static void LoadSettings() {
 
 static std::vector<ActionItem> LoadSubmenuRecursive(const std::wstring& basePath, int depth = 0) {
     std::vector<ActionItem> items;
+    if (depth >= 3) return items;
 
     for (int j = 0; j < 64; ++j) {
         std::wstring namePath   = basePath + L"[" + std::to_wstring(j) + L"].name";
@@ -1448,7 +1382,7 @@ static std::vector<ActionItem> LoadSubmenuRecursive(const std::wstring& basePath
 
         if (Trim(name).empty()) break;
 
-        std::wstring action;
+        std::vector<std::wstring> actionArray;
         for (int k = 0; k < 64; ++k) {
             std::wstring cmdPath = actionPath + L"[" + std::to_wstring(k) + L"]";
             PCWSTR cmd = Wh_GetStringSetting(cmdPath.c_str());
@@ -1460,18 +1394,14 @@ static std::vector<ActionItem> LoadSubmenuRecursive(const std::wstring& basePath
             SafeFreeString(cmd);
             cmdStr = Trim(cmdStr);
             if (cmdStr.empty()) break;
-            
-            if (!action.empty()) {
-                action += L"[" + cmdStr + L"]";
-            } else {
-                action = cmdStr;
-            }
+
+            actionArray.push_back(std::move(cmdStr));
         }
 
         ActionItem item;
-        item.name   = Trim(name);
-        item.icon   = Trim(icon);
-        item.action = action;
+        item.name        = Trim(name);
+        item.icon        = Trim(icon);
+        item.actionArray = std::move(actionArray);
 
         std::wstring submenuPath = basePath + L"[" + std::to_wstring(j) + L"].submenu";
         item.submenu = LoadSubmenuRecursive(submenuPath, depth + 1);
@@ -1525,22 +1455,16 @@ static void BuildButtons() {
             SafeFreeString(cmd);
             cmdStr = Trim(cmdStr);
             if (cmdStr.empty()) break;
-            actionArray.push_back(cmdStr);
+            actionArray.push_back(std::move(cmdStr));
         }
-        
-        std::wstring rawAction;
+
         if (actionArray.empty()) {
             PCWSTR oldAction = Wh_GetStringSetting(L"buttons[%d].Action", i);
             if (oldAction && wcslen(oldAction) > 0) {
-                rawAction = oldAction;
+                std::wstring old = Trim(oldAction);
+                if (!old.empty()) actionArray.push_back(std::move(old));
             }
             SafeFreeString(oldAction);
-        } else if (actionArray.size() == 1) {
-            rawAction = actionArray[0];
-        } else {
-            for (const auto& cmd : actionArray) {
-                rawAction += L"[" + cmd + L"]";
-            }
         }
 
         std::wstring presetKey = ToLower(Trim(preset));
@@ -1549,7 +1473,7 @@ static void BuildButtons() {
         if (isCustom) {
             bool allEmpty = Trim(rawName).empty() &&
                             Trim(rawIcon).empty() &&
-                            rawAction.empty();
+                            actionArray.empty();
             if (presetKey.empty() && allEmpty) break;
             if (allEmpty) continue;
         }
@@ -1565,22 +1489,22 @@ static void BuildButtons() {
             item.icon = Trim(rawIcon).empty()  ? pd->icon               : Trim(rawIcon);
 
             if (pd->action) {
-                item.action = pd->action;
+                item.actionArray = { pd->action };
             } else {
                 for (const wchar_t* key : { L"lock", L"sleep", L"shutdown", L"restart" }) {
                     const PresetDef* sp = FindPreset(key);
                     if (!sp) continue;
                     ActionItem si;
-                    si.name   = PresetName(*sp, ruLang);
-                    si.icon   = sp->icon;
-                    si.action = sp->action;
+                    si.name        = PresetName(*sp, ruLang);
+                    si.icon        = sp->icon;
+                    si.actionArray = { sp->action };
                     item.submenu.push_back(std::move(si));
                 }
             }
         } else {
             item.name   = Trim(rawName);
             item.icon   = Trim(rawIcon).empty() ? FALLBACK_ICON : Trim(rawIcon);
-            item.action = rawAction;
+            item.actionArray = std::move(actionArray);
             if (!userSub.empty()) item.submenu = std::move(userSub);
             if (!userRightSub.empty()) item.rightClickSubmenu = std::move(userRightSub);
         }
@@ -1637,9 +1561,9 @@ static void AddMenuItems(wuxc::MenuFlyout flyout,
             if (invertIcons)
                 mi.FlowDirection(wux::FlowDirection::RightToLeft);
 
-            std::wstring act = item.action;
+            std::vector<std::wstring> act = item.actionArray;
             mi.Click([act](auto&&, auto&&) {
-                if (StartsWithCI(act, L"press:"))
+                if (!act.empty() && StartsWithCI(act[0], L"press:"))
                     CloseStartMenuForPress();
                 else
                     CloseStartMenuAfterClick();
@@ -1671,9 +1595,9 @@ static void AddSubMenuItems(wuxc::MenuFlyoutSubItem parentItem,
             if (invertIcons)
                 mi.FlowDirection(wux::FlowDirection::RightToLeft);
 
-            std::wstring act = item.action;
+            std::vector<std::wstring> act = item.actionArray;
             mi.Click([act](auto&&, auto&&) {
-                if (StartsWithCI(act, L"press:"))
+                if (!act.empty() && StartsWithCI(act[0], L"press:"))
                     CloseStartMenuForPress();
                 else
                     CloseStartMenuAfterClick();
@@ -1848,12 +1772,12 @@ static void InjectButtons(wuxc::Panel parentPanel,
                     });
                 }
             } else {
-                std::wstring act = def.action;
+                std::vector<std::wstring> act = def.actionArray;
                 auto rightSub = def.rightClickSubmenu;
                 bool invertIcons = cur.invertIconsSubmenus;
                 
                 btn.Click([act, btnIdx](auto&&, auto&&) {
-                    if (StartsWithCI(act, L"press:"))
+                    if (!act.empty() && StartsWithCI(act[0], L"press:"))
                         CloseStartMenuForPress();
                     else
                         CloseStartMenuAfterClick();
@@ -2136,6 +2060,16 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit");
     g_unloading = true;
+
+    for (int waited = 0; waited < 2000 && g_activeActionThreads.load(std::memory_order_relaxed) > 0; waited += 20)
+        Sleep(20);
+
+    {
+        std::lock_guard<std::mutex> lk(g_iconCacheMutex);
+        for (const auto& [key, pngPath] : g_iconPngCache)
+            DeleteFileW(pngPath.c_str());
+        g_iconPngCache.clear();
+    }
 
     if (IsExplorerProcess()) {
         if (g_proxyWindow)
