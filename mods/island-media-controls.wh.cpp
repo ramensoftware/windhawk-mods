@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.209
+// @version         0.9.210
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -29,7 +29,7 @@ play/pause, and next controls.
 ## What's new
 
 - **Liquid Glass refinements:** The material now uses a smoother edge-following
-  refraction band with a faster-to-slower inner falloff.
+  refraction band and a softer light-mode backdrop tint.
 - **Safer capture startup:** Borderless capture authorization is now bounded
   and cleanly stopped before the mod unloads.
 - **Thread-safe live blur:** Capture rendering now uses a taskbar-thread
@@ -4043,10 +4043,27 @@ mediax::Brush PopupBackdropCardTintBrush() {
 
     if (UseOverlayPopupBackdropMaterial()) {
         if (IsLiquidGlassMaterial()) {
-            return Brush(dark ? Color(preserveCompactWash ? 0x00 : 0x04,
-                                      0xFF, 0xFF, 0xFF)
-                              : Color(preserveCompactWash ? 0x24 : 0x38,
-                                      0xFF, 0xFF, 0xFF));
+            if (!dark) {
+                mediax::LinearGradientBrush brush;
+                brush.StartPoint({0.0f, 1.0f});
+                brush.EndPoint({0.0f, 0.0f});
+                mediax::GradientStopCollection stops;
+                auto addStop = [&](double offset, BYTE alpha) {
+                    mediax::GradientStop stop;
+                    stop.Offset(offset);
+                    stop.Color(Color(alpha, 0xF6, 0xF8, 0xFC));
+                    stops.Append(stop);
+                };
+
+                addStop(0.00, preserveCompactWash ? 0x34 : 0x4A);
+                addStop(0.24, preserveCompactWash ? 0x24 : 0x34);
+                addStop(0.58, preserveCompactWash ? 0x10 : 0x18);
+                addStop(1.00, 0x00);
+                brush.GradientStops(stops);
+                return brush;
+            }
+            return Brush(Color(preserveCompactWash ? 0x00 : 0x04,
+                               0xFF, 0xFF, 0xFF));
         }
 
         // Native blur comes from the overlay window itself. Add only a clean
@@ -5248,6 +5265,11 @@ bool InitializePopupXamlHost(HWND hwnd) {
         Border backdropTint;
         backdropTint.Background(PopupBackdropCardTintBrush());
         backdropTint.BorderThickness({0, 0, 0, 0});
+        backdropTint.CornerRadius({kPopupUnifiedCornerRadius,
+                                   kPopupUnifiedCornerRadius,
+                                   kPopupUnifiedCornerRadius,
+                                   kPopupUnifiedCornerRadius});
+        backdropTint.IsHitTestVisible(false);
         backdropCoverHost.Children().Append(backdropTint);
         Border backdropSurfaceHighlight;
         backdropSurfaceHighlight.Background(LiquidGlassSurfaceHighlightBrush());
@@ -5845,6 +5867,10 @@ void UpdatePopupXamlVisuals() {
         if (g_popupXamlBackdropCoverFade) {
             g_popupXamlBackdropCoverFade.Stretch(mediax::Stretch::UniformToFill);
             g_popupXamlBackdropCoverFade.Opacity(0.0);
+        }
+        if (g_popupXamlBackdropTint) {
+            g_popupXamlBackdropTint.CornerRadius(
+                {shellRadius, shellRadius, shellRadius, shellRadius});
         }
         double liquidHighlightOpacity = IsLiquidGlassMaterial() ? backdropOpacity : 0.0;
         double liquidSurfaceHighlightOpacity =
