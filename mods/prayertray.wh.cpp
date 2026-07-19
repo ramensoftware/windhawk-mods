@@ -2,7 +2,7 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 3.1.1
+// @version 3.1.4
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
@@ -16,7 +16,7 @@
 # PrayerTray
 
 Shows the next Islamic prayer on the Windows taskbar so you can see it while
-you work, without opening another app. Left-click opens today's times
+you work, without opening another app. Left-click toggles today's times
 (Fajr, Dhuhr, Asr, Maghrib, Isha). Works on Windows 10 and 11.
 
 ## Location
@@ -41,9 +41,6 @@ https://www.patreon.com/n0tmar
 - showOnTaskbar: true
   $name: Show on taskbar
   $description: Show prayer text beside the clock
-- showNotificationIcon: false
-  $name: Notification icon
-  $description: Optional icon in the notification area
 - playPrayerNotification: false
   $name: Prayer notification sound
   $description: Soft Allahu Akbar clip 1 minute before prayer time; plays a preview when enabled
@@ -65,12 +62,6 @@ https://www.patreon.com/n0tmar
 - calculationMethod: 0
   $name: Calculation method
   $description: Leave at 0 for your country's default. Advanced users can set an Aladhan method number.
-- asrSchool: standard
-  $name: Asr calculation
-  $description: Standard is used by Shafi, Maliki and Hanbali schools. Choose Hanafi for the later Asr time.
-  $options:
-  - standard: Standard
-  - hanafi: Hanafi
 - taskbarContentMode: smart
   $name: Taskbar text
   $description: Countdown, prayer clock time, or auto
@@ -105,7 +96,7 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"3.1.1"
+#define WH_MOD_VERSION L"3.1.4"
 #endif
 
 #include <windhawk_utils.h>
@@ -159,7 +150,10 @@ using namespace winrt::Windows::UI::Xaml;
 
 namespace {
 
-constexpr wchar_t kColonRatio = L'\u2236';
+// A normal colon has the Unicode bidi class needed to keep hour:minute in
+// order inside Arabic and Urdu text. U+2236 (ratio) is visually similar but
+// can be reordered as a neutral character by GDI.
+constexpr wchar_t kTimeColon = L':';
 constexpr wchar_t kLre = L'\u202A';
 constexpr wchar_t kPdf = L'\u202C';
 constexpr int kNotificationLeadMinutes = 1;
@@ -182,7 +176,6 @@ enum class ContentMode { Countdown, Time, Smart };
 
 struct ModSettings {
     bool showOnTaskbar = true;
-    bool showNotificationIcon = false;
     bool playPrayerNotification = false;
     bool useManualLocation = false;
     std::wstring manualCity;
@@ -190,7 +183,6 @@ struct ModSettings {
     std::wstring manualLatitude;
     std::wstring manualLongitude;
     int calculationMethod = 0;
-    bool hanafiAsr = false;
     ContentMode contentMode = ContentMode::Smart;
     bool use24Hour = false;
     std::wstring language = L"en";
@@ -282,10 +274,10 @@ UINT_PTR g_fullscreenTimer = 0;
 HWND g_win10OverlayHwnd = nullptr;
 HWND g_flyoutHwnd = nullptr;
 bool g_flyoutVisible = false;
+RECT g_flyoutAnchorRect{};
+bool g_hasFlyoutAnchor = false;
 HHOOK g_flyoutMouseHook = nullptr;
 ULONGLONG g_flyoutSuppressDismissUntil = 0;
-NOTIFYICONDATAW g_trayIcon{};
-bool g_trayIconAdded = false;
 HMENU g_contextMenu = nullptr;
 bool g_messageClassRegistered = false;
 bool g_flyoutClassRegistered = false;
@@ -562,7 +554,6 @@ void LoadSettings() {
 
     ModSettings s;
     s.showOnTaskbar = Wh_GetIntSetting(L"showOnTaskbar") != 0;
-    s.showNotificationIcon = Wh_GetIntSetting(L"showNotificationIcon") != 0;
     s.playPrayerNotification = Wh_GetIntSetting(L"playPrayerNotification") != 0;
     s.useManualLocation = Wh_GetIntSetting(L"useManualLocation") != 0;
     s.manualCity = takeString(L"manualCity");
@@ -570,7 +561,6 @@ void LoadSettings() {
     s.manualLatitude = takeString(L"manualLatitude");
     s.manualLongitude = takeString(L"manualLongitude");
     s.calculationMethod = static_cast<int>(Wh_GetIntSetting(L"calculationMethod"));
-    s.hanafiAsr = takeString(L"asrSchool") == L"hanafi";
     s.contentMode = ParseContentMode(takeString(L"taskbarContentMode"));
     s.use24Hour = takeString(L"timeFormat") == L"24h";
     s.language = takeString(L"language");
@@ -892,11 +882,11 @@ std::wstring StabilizeCompactText(const std::wstring& text) {
 
 std::wstring FormatTime(const SYSTEMTIME& time) {
     const auto settings = GetSettingsSnapshot();
-    std::wstring text;
+    std::wstring numericTime;
     if (settings.use24Hour) {
         wchar_t buf[16];
-        swprintf(buf, 16, L"%02u%c%02u", time.wHour, kColonRatio, time.wMinute);
-        text = buf;
+        swprintf(buf, 16, L"%02u%c%02u", time.wHour, kTimeColon, time.wMinute);
+        numericTime = buf;
     } else {
         int hour = time.wHour % 12;
         if (hour == 0) {
@@ -904,18 +894,19 @@ std::wstring FormatTime(const SYSTEMTIME& time) {
         }
         const std::wstring period =
             time.wHour < 12 ? Loc(L"TimePeriod_AM") : Loc(L"TimePeriod_PM");
-        wchar_t buf[32];
-        // Arabic/Urdu: period on the left of the digits (ص 4:21), not 4:21 ص.
+        wchar_t buf[16];
+        swprintf(buf, 16, L"%d%c%02u", hour, kTimeColon, time.wMinute);
+        numericTime = buf;
         if (IsRtlLanguage()) {
-            swprintf(buf, 32, L"%s %d%c%02u", period.c_str(), hour, kColonRatio,
-                     time.wMinute);
-        } else {
-            swprintf(buf, 32, L"%d%c%02u %s", hour, kColonRatio, time.wMinute,
-                     period.c_str());
+            // Isolate only hour:minute as LTR. Keeping the Arabic/Urdu period
+            // outside the embedding prevents GDI from reversing 4:23 to 23:4.
+            return std::wstring(1, kLre) + numericTime + kPdf + L" " + period;
         }
-        text = buf;
+        return numericTime + L" " + period;
     }
-    return StabilizeCompactText(text);
+    return IsRtlLanguage()
+               ? std::wstring(1, kLre) + numericTime + kPdf
+               : numericTime;
 }
 
 std::wstring FormatCountdown(ULONGLONG seconds) {
@@ -990,7 +981,7 @@ std::optional<std::string> HttpGetUtf8(const std::wstring& url,
         return std::nullopt;
     }
     WinHttpHandle session(WinHttpOpen(
-        L"PrayerTray/3.1.1 (+https://github.com/n0tmar/PrayerTray)",
+        L"PrayerTray/3.1.4 (+https://github.com/n0tmar/PrayerTray)",
         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
         WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session) {
@@ -1783,7 +1774,7 @@ bool IsCompleteSchedule(const PrayerSchedule& schedule) {
 }
 
 std::wstring BuildCachePath(int year, int month, int day, const LocationInfo& loc,
-                            int method, int school) {
+                            int method) {
     std::wstring key;
     if (loc.latitude != 0 || loc.longitude != 0) {
         wchar_t buf[64];
@@ -1794,14 +1785,14 @@ std::wstring BuildCachePath(int year, int month, int day, const LocationInfo& lo
     }
     key = SanitizeCachePart(key);
     wchar_t path[512];
-    swprintf(path, 512, L"%04d-%02d-%02d_%s_m%d_s%d.json", year, month,
-             day, key.c_str(), method, school);
+    swprintf(path, 512, L"%04d-%02d-%02d_%s_m%d.json", year, month, day,
+             key.c_str(), method);
     const auto folder = GetCacheFolder();
     return folder.empty() ? L"" : folder + L"\\" + path;
 }
 
 std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo& loc,
-                                int method, int school) {
+                                int method) {
     SYSTEMTIME now = GetLocalNow();
     std::wstring dateSegment;
     if (year == now.wYear && month == now.wMonth && day == now.wDay) {
@@ -1815,11 +1806,11 @@ std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo
     if (loc.source == L"manual-city") {
         auto cc = GetCountryCode(loc.country);
         url += L"city=" + UrlEncode(loc.city) + L"&country=" + cc + L"&method=" +
-               std::to_wstring(method) + L"&school=" + std::to_wstring(school);
+               std::to_wstring(method);
     } else {
         url += L"latitude=" + std::to_wstring(loc.latitude) + L"&longitude=" +
-               std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method) +
-               L"&school=" + std::to_wstring(school);
+               std::to_wstring(loc.longitude) + L"&method=" +
+               std::to_wstring(method);
         if (!loc.timezone.empty()) {
             url += L"&timezone=" + UrlEncode(loc.timezone);
         }
@@ -1828,20 +1819,19 @@ std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo
 }
 
 std::wstring BuildAladhanUrl(int year, int month, int day, const LocationInfo& loc,
-                             int method, int school) {
+                             int method) {
     wchar_t dateSeg[16];
     swprintf(dateSeg, 16, L"%02d-%02d-%04d", day, month, year);
     std::wstring url;
     if (loc.source == L"manual-city") {
         url = L"https://api.aladhan.com/v1/timingsByCity/" + std::wstring(dateSeg) +
               L"?city=" + UrlEncode(loc.city) + L"&country=" + UrlEncode(loc.country) +
-              L"&method=" + std::to_wstring(method) + L"&school=" +
-              std::to_wstring(school);
+              L"&method=" + std::to_wstring(method);
     } else {
         url = L"https://api.aladhan.com/v1/timings/" + std::wstring(dateSeg) +
               L"?latitude=" + std::to_wstring(loc.latitude) + L"&longitude=" +
-              std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method) +
-              L"&school=" + std::to_wstring(school);
+              std::to_wstring(loc.longitude) + L"&method=" +
+              std::to_wstring(method);
         if (!loc.timezone.empty()) {
             url += L"&timezonestring=" + UrlEncode(loc.timezone);
         }
@@ -1850,8 +1840,7 @@ std::wstring BuildAladhanUrl(int year, int month, int day, const LocationInfo& l
 }
 
 PrayerSchedule FetchScheduleFromApi(int year, int month, int day,
-                                    LocationInfo loc, int method,
-                                    int school) {
+                                    LocationInfo loc, int method) {
     auto parseResponse = [&](const std::string& body) -> PrayerSchedule {
         auto data = JsonFindObject(body, "data");
         if (!data) throw std::runtime_error("no data");
@@ -1870,13 +1859,13 @@ PrayerSchedule FetchScheduleFromApi(int year, int month, int day,
         return schedule;
     };
     try {
-        auto url = BuildIslamicAppUrl(year, month, day, loc, method, school);
+        auto url = BuildIslamicAppUrl(year, month, day, loc, method);
         auto body = HttpGetUtf8(url);
         if (!body) throw std::runtime_error("islamic.app failed");
         return parseResponse(*body);
     } catch (...) {
         Wh_Log(L"Primary prayer API failed; trying Aladhan");
-        auto url = BuildAladhanUrl(year, month, day, loc, method, school);
+        auto url = BuildAladhanUrl(year, month, day, loc, method);
         auto body = HttpGetUtf8(url);
         if (!body) throw std::runtime_error("aladhan failed");
         return parseResponse(*body);
@@ -1899,9 +1888,8 @@ bool IsCacheStale(const PrayerSchedule& schedule, int y, int m, int d,
 }
 
 std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
-                                        const LocationInfo& loc, int method,
-                                        int school) {
-    auto path = BuildCachePath(year, month, day, loc, method, school);
+                                        const LocationInfo& loc, int method) {
+    auto path = BuildCachePath(year, month, day, loc, method);
     auto contents = ReadTextFile(path, 256 * 1024);
     if (!contents) return std::nullopt;
     const std::string& json = *contents;
@@ -1998,10 +1986,10 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
     return schedule;
 }
 
-void SaveCache(const PrayerSchedule& schedule, int method, int school,
+void SaveCache(const PrayerSchedule& schedule, int method,
                const LocationInfo& cacheLocation) {
     auto path = BuildCachePath(schedule.year, schedule.month, schedule.day,
-                              cacheLocation, method, school);
+                              cacheLocation, method);
     if (path.empty()) return;
     std::ostringstream out;
     out << std::setprecision(15);
@@ -2032,17 +2020,16 @@ void SaveCache(const PrayerSchedule& schedule, int method, int school,
 }
 
 PrayerSchedule GetScheduleForDate(int year, int month, int day,
-                                  LocationInfo loc, int method, int school) {
-    auto cached = LoadCache(year, month, day, loc, method, school);
+                                  LocationInfo loc, int method) {
+    auto cached = LoadCache(year, month, day, loc, method);
     if (cached) {
         if (!IsCacheStale(*cached, year, month, day, loc)) {
             return *cached;
         }
     }
     try {
-        auto schedule =
-            FetchScheduleFromApi(year, month, day, loc, method, school);
-        SaveCache(schedule, method, school, loc);
+        auto schedule = FetchScheduleFromApi(year, month, day, loc, method);
+        SaveCache(schedule, method, loc);
         return schedule;
     } catch (...) {
         if (cached && IsCompleteSchedule(*cached)) {
@@ -2366,9 +2353,7 @@ bool BootstrapFromCache() {
     }
     SYSTEMTIME now = GetLocalNow();
     const int method = ResolveCalculationMethod(loc, settings);
-    const int school = settings.hanafiAsr ? 1 : 0;
-    auto today =
-        LoadCache(now.wYear, now.wMonth, now.wDay, loc, method, school);
+    auto today = LoadCache(now.wYear, now.wMonth, now.wDay, loc, method);
     if (!today || today->prayers.empty()) {
         return false;
     }
@@ -2376,7 +2361,7 @@ bool BootstrapFromCache() {
     SYSTEMTIME tomorrow = now;
     AddDays(tomorrow, 1);
     auto nextDay = LoadCache(tomorrow.wYear, tomorrow.wMonth, tomorrow.wDay,
-                             loc, method, school);
+                             loc, method);
 
     {
         std::lock_guard lock(g_scheduleMutex);
@@ -2423,15 +2408,14 @@ bool RefreshSchedulesOnce(bool fullLocation) {
 
         SYSTEMTIME now = GetLocalNow();
         const int method = ResolveCalculationMethod(loc, settings);
-        const int school = settings.hanafiAsr ? 1 : 0;
         auto today = GetScheduleForDate(now.wYear, now.wMonth, now.wDay, loc,
-                                        method, school);
+                                        method);
         SYSTEMTIME tomorrow = now;
         AddDays(tomorrow, 1);
         PrayerSchedule nextDay;
         try {
             nextDay = GetScheduleForDate(tomorrow.wYear, tomorrow.wMonth,
-                                         tomorrow.wDay, loc, method, school);
+                                         tomorrow.wDay, loc, method);
         } catch (...) {
         }
         {
@@ -2481,19 +2465,24 @@ DWORD WINAPI RefreshThreadProc(void*) {
         do {
             g_refreshRequested = false;
             const bool fullLocation = g_forceLocationRefresh.exchange(false);
-            g_refreshRunning = true;
-            success = RefreshSchedulesOnce(fullLocation);
-            g_refreshRunning = false;
 
+            // Handle an enable-preview before any location or prayer API work.
+            // A cached clip therefore plays immediately after Apply, while a
+            // first-time download isn't delayed by the schedule refresh.
             const auto settings = GetSettingsSnapshot();
+            const bool previewRequested =
+                g_soundPreviewRequested.exchange(false);
             bool soundReady = true;
             if (settings.playPrayerNotification) {
                 soundReady = EnsureNotificationSoundFile();
             }
-            if (g_soundPreviewRequested.exchange(false) && soundReady &&
-                g_messageHwnd) {
+            if (previewRequested && soundReady && g_messageHwnd) {
                 PostMessageW(g_messageHwnd, WM_PT_PLAY_SOUND, 0, 0);
             }
+
+            g_refreshRunning = true;
+            success = RefreshSchedulesOnce(fullLocation);
+            g_refreshRunning = false;
         } while (!StopRequested() &&
                  (g_refreshRequested.exchange(false) ||
                   g_forceLocationRefresh.load()));
@@ -2639,10 +2628,8 @@ void ShowContextMenu(HWND anchor);
 void ApplyEngineToBackends();
 void EnsureWin10Overlay();
 void RepositionWin10Overlay();
-void UpdateTrayIcon();
 void DestroyFlyout();
 void DestroyWin10Overlay();
-void RemoveTrayIcon();
 void StopTimers();
 
 void EnsureContextMenu() {
@@ -2690,14 +2677,20 @@ void DispatchCommand(int commandId) {
         return;
     }
     const auto now = GetTickCount64();
-    if (g_lastCommandId.load() == commandId && now - g_lastCommandTick.load() < 250) {
+    if (commandId != kCmdShowFlyout &&
+        g_lastCommandId.load() == commandId &&
+        now - g_lastCommandTick.load() < 250) {
         return;
     }
     g_lastCommandId = commandId;
     g_lastCommandTick = now;
     switch (commandId) {
         case kCmdShowFlyout:
-            ShowFlyout();
+            if (g_flyoutVisible) {
+                HideFlyout();
+            } else {
+                ShowFlyout();
+            }
             break;
         case kCmdShowMenu:
             ShowContextMenu(g_win10OverlayHwnd ? g_win10OverlayHwnd
@@ -2736,6 +2729,16 @@ LRESULT CALLBACK FlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (GetWindowRect(g_flyoutHwnd, &rc)) {
                 POINT pt{info->pt.x, info->pt.y};
                 if (!PtInRect(&rc, pt)) {
+                    // A slot click is handled by DispatchCommand as a native
+                    // toggle. Don't enqueue an outside-dismiss first, which
+                    // would otherwise hide and immediately reopen the flyout.
+                    if ((wParam == WM_LBUTTONDOWN ||
+                         wParam == WM_NCLBUTTONDOWN) &&
+                        g_hasFlyoutAnchor &&
+                        PtInRect(&g_flyoutAnchorRect, pt)) {
+                        return CallNextHookEx(g_flyoutMouseHook, nCode, wParam,
+                                              lParam);
+                    }
                     if (g_messageHwnd) {
                         PostMessageW(g_messageHwnd, WM_PT_HIDE_FLYOUT, 0, 0);
                     }
@@ -2770,6 +2773,12 @@ void InstallFlyoutDismissHook() {
 
 LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT) {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                return TRUE;
+            }
+            break;
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
                 HideFlyout();
@@ -2848,6 +2857,7 @@ void EnsureFlyoutWindow() {
         wc.hInstance = g_moduleInstance;
         wc.lpszClassName = kFlyoutClass;
         wc.hbrBackground = nullptr;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
             Wh_Log(L"Flyout class registration failed (%u)", GetLastError());
             return;
@@ -2952,6 +2962,9 @@ void ShowFlyout() {
     MONITORINFO mi{sizeof(mi)};
     if (!GetMonitorInfo(mon, &mi)) return;
 
+    g_flyoutAnchorRect = anchor;
+    g_hasFlyoutAnchor = true;
+
     constexpr int gap = 8;
     constexpr int margin = 8;
     const int centerX = anchor.left + (anchor.right - anchor.left) / 2;
@@ -2992,6 +3005,7 @@ void HideFlyout() {
         ShowWindow(g_flyoutHwnd, SW_HIDE);
         g_flyoutVisible = false;
     }
+    g_hasFlyoutAnchor = false;
     UninstallFlyoutDismissHook();
 }
 
@@ -3004,40 +3018,6 @@ void DestroyFlyout() {
     if (g_flyoutClassRegistered) {
         UnregisterClassW(kFlyoutClass, g_moduleInstance);
         g_flyoutClassRegistered = false;
-    }
-}
-
-
-void UpdateTrayIcon() {
-    if (!g_messageHwnd) return;
-    const auto settings = GetSettingsSnapshot();
-    if (settings.showNotificationIcon) {
-        if (!g_trayIconAdded) {
-            ZeroMemory(&g_trayIcon, sizeof(g_trayIcon));
-            g_trayIcon.cbSize = sizeof(g_trayIcon);
-            g_trayIcon.hWnd = g_messageHwnd;
-            g_trayIcon.uID = 1;
-            g_trayIcon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-            g_trayIcon.uCallbackMessage = WM_APP + 10;
-            g_trayIcon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-            wcscpy_s(g_trayIcon.szTip, L"PrayerTray");
-            if (Shell_NotifyIconW(NIM_ADD, &g_trayIcon)) {
-                g_trayIcon.uVersion = NOTIFYICON_VERSION_4;
-                Shell_NotifyIconW(NIM_SETVERSION, &g_trayIcon);
-                g_trayIconAdded = true;
-            } else {
-                Wh_Log(L"Notification icon add failed (%u)", GetLastError());
-            }
-        }
-    } else {
-        RemoveTrayIcon();
-    }
-}
-
-void RemoveTrayIcon() {
-    if (g_trayIconAdded) {
-        Shell_NotifyIconW(NIM_DELETE, &g_trayIcon);
-        g_trayIconAdded = false;
     }
 }
 
@@ -4024,7 +4004,6 @@ void ShutdownOwnedUiResources() {
     HideFlyout();
     DestroyFlyout();
     DestroyWin10Overlay();
-    RemoveTrayIcon();
     if (g_contextMenu) {
         DestroyMenu(g_contextMenu);
         g_contextMenu = nullptr;
@@ -4070,6 +4049,9 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             PlayNotificationSound();
             return 0;
         case WM_PT_SETTINGS_CHANGED: {
+            // Settings can rebuild the tray XAML. Close the transient flyout
+            // first so it never presents a stale or apparently busy surface.
+            HideFlyout();
             const auto oldBackend = static_cast<TaskbarBackend>(wParam);
             const auto newBackend = g_backend.load();
             if (oldBackend != newBackend) {
@@ -4094,7 +4076,6 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     DestroyWin10Overlay();
                 }
             }
-            UpdateTrayIcon();
             ApplyEngineToBackends();
             return 0;
         }
@@ -4103,16 +4084,6 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_messageHwnd = nullptr;
             DestroyWindow(hWnd);
             PostQuitMessage(0);
-            return 0;
-        case WM_APP + 10:
-            switch (LOWORD(lParam)) {
-                case WM_LBUTTONUP:
-                    DispatchCommand(kCmdShowFlyout);
-                    break;
-                case WM_RBUTTONUP:
-                    DispatchCommand(kCmdShowMenu);
-                    break;
-            }
             return 0;
         case WM_COMMAND:
             DispatchCommand(static_cast<int>(LOWORD(wParam)));
@@ -4181,7 +4152,6 @@ DWORD WINAPI UiThreadProc(void*) {
     const bool ready = EnsureMessageWindow();
     if (ready) {
         StartTimers();
-        UpdateTrayIcon();
         ApplyEngineToBackends();
     }
     if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
@@ -4271,7 +4241,7 @@ bool IsShellExplorerProcess() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"PrayerTray 3.1.1 initializing");
+    Wh_Log(L"PrayerTray 3.1.4 initializing");
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       reinterpret_cast<LPCWSTR>(&UiThreadProc),
@@ -4374,13 +4344,13 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
-    const auto oldSettings = GetSettingsSnapshot();
     const auto oldBackend = g_backend.load();
     LoadSettings();
     SelectBackend();
     const auto newSettings = GetSettingsSnapshot();
-    if (!oldSettings.playPrayerNotification &&
-        newSettings.playPrayerNotification) {
+    // Windhawk invokes this callback after Save settings. Preview on every
+    // save while the option is enabled, not only on a false -> true change.
+    if (newSettings.playPrayerNotification) {
         g_soundPreviewRequested = true;
     }
     RequestRefresh(true);
