@@ -2,7 +2,7 @@
 // @id              micromanager
 // @name            MicroManager
 // @description     Mini task manager tray icon showing CPU, GPU and RAM usage with top consumers.
-// @version         1.0.0
+// @version         1.1.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
@@ -14,7 +14,7 @@
 /*
 # MicroManager
 
-![Screenshot](https://i.imgur.com/yDHoq9N.png)
+![Screenshot](https://i.imgur.com/V83qvSc.png)
 
 A lightweight tray icon that shows a mini task manager popup with live CPU, GPU
 and RAM usage, plus the single top-consuming process for each.
@@ -35,7 +35,15 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 
 ## Changelog
 
-### v1.0.0
+# 1.1.0
+- **Fixed:** Tooltip now displays correctly when hovering the tray icon.
+- **Fixed:** Ghost window prevention — popup no longer flickers on rapid open/close.
+- **Fixed:** Removed stale exponential backoff in process enumeration retry — STATUS_INFO_LENGTH_MISMATCH only needs a larger buffer.
+- **Fixed:** Safe mod reload — icon and window clean up properly without crashing.
+- **Improved:** Tray tooltip updates only when values change, reducing unnecessary CPU work.
+- **Fixed:** Popup no longer leaves a ghost window behind.
+
+# 1.0.0
 - Initial release.
 - Left-click to see live CPU and GPU usage with the top process for each.
 - Right-click for options. Update interval adjustable in Settings.
@@ -49,7 +57,6 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #include <propkey.h>
 #include <dwmapi.h>
 #include <pdh.h>
-#include <tlhelp32.h>
 #include <stdlib.h>
 #include <stdio.h>
 // PDH constants that may not be defined in all SDK versions
@@ -158,7 +165,7 @@ typedef NTSTATUS (WINAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULON
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
 static HANDLE              g_trayThread   = nullptr;
-static volatile HWND       g_trayHwnd     = nullptr;
+static HWND       g_trayHwnd     = nullptr;
 static HWND                g_popupHwnd    = nullptr;
 static ULONGLONG           g_lastPopupCloseTime = 0;
 static HINSTANCE           g_hInstance    = nullptr;
@@ -242,24 +249,27 @@ static int CollectProcessInfo(MY_SYSTEM_PROCESS_INFO** outBuf) {
     NtQuerySystemInformation_t NtQuery = GetNtQuery();
     if (!NtQuery) return 0;
 
-    ULONG bufSize = PROCESS_BUF_SIZE;
-    *outBuf = (MY_SYSTEM_PROCESS_INFO*)malloc(bufSize);
-    if (!*outBuf) return 0;
+    *outBuf = nullptr;
 
-    NTSTATUS status = NtQuery(SystemProcessInformation, *outBuf, bufSize, &bufSize);
-    if (status == STATUS_INFO_LENGTH_MISMATCH) {
-        free(*outBuf);
-        bufSize *= 2;
-        *outBuf = (MY_SYSTEM_PROCESS_INFO*)malloc(bufSize);
-        if (!*outBuf) return 0;
-        status = NtQuery(SystemProcessInformation, *outBuf, bufSize, &bufSize);
+    for (int retry = 0; retry < 5; retry++) {
+        ULONG bufSize = PROCESS_BUF_SIZE * (retry + 2);
+        MY_SYSTEM_PROCESS_INFO* newBuf = (MY_SYSTEM_PROCESS_INFO*)realloc(*outBuf, bufSize);
+        if (!newBuf) { free(*outBuf); *outBuf = nullptr; return 0; }
+        *outBuf = newBuf;
+        NTSTATUS status = NtQuery(SystemProcessInformation, *outBuf, bufSize, nullptr);
+        if (status != STATUS_INFO_LENGTH_MISMATCH) {
+            if (status < 0) {
+                free(*outBuf);
+                *outBuf = nullptr;
+                return 0;
+            }
+            return 1;
+        }
     }
-    if (status < 0) {
-        free(*outBuf);
-        *outBuf = nullptr;
-        return 0;
-    }
-    return 1;
+    // All 5 attempts failed with STATUS_INFO_LENGTH_MISMATCH
+    free(*outBuf);
+    *outBuf = nullptr;
+    return 0;
 }
 
 // ─── GPU Sampling (PDH) ───────────────────────────────────────────────────────
@@ -511,7 +521,7 @@ static void RefreshData() {
             NOTIFYICONDATAW nid = {sizeof(nid)};
             nid.hWnd     = (HWND)g_trayHwnd;
             nid.uID      = TRAY_ICON_ID;
-            nid.uFlags   = NIF_TIP | NIF_GUID;
+            nid.uFlags   = NIF_TIP | NIF_GUID | NIF_SHOWTIP;
             nid.guidItem = MICROMANAGER_TRAY_GUID;
             lstrcpynW(nid.szTip, tip, 128);
             Shell_NotifyIconW(NIM_MODIFY, &nid);
@@ -525,8 +535,13 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
     switch (msg) {
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
-                ShowWindow(hWnd, SW_HIDE);
-                g_lastPopupCloseTime = GetTickCount64();
+                static DWORD lastDeactivateTick = 0;
+                DWORD now = GetTickCount();
+                if (now - lastDeactivateTick > 200) {
+                    lastDeactivateTick = now;
+                    ShowWindow(hWnd, SW_HIDE);
+                    g_lastPopupCloseTime = GetTickCount64();
+                }
             }
             return 0;
 
@@ -611,6 +626,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             break;
 
         case WM_DESTROY:
+            InterlockedExchangePointer((PVOID*)&g_popupHwnd, nullptr);
             break;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -651,8 +667,8 @@ static void ShowPopup(HWND hTrayWnd) {
     EnsureFont();
 
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
-    nii.hWnd = hTrayWnd;
-    nii.uID = TRAY_ICON_ID;
+    nii.hWnd = nullptr;
+    nii.uID = 0;
     nii.guidItem = MICROMANAGER_TRAY_GUID;  // icon is registered with NIF_GUID
     RECT iconRect;
     int w = Sc(POPUP_WIDTH), h = Sc(POPUP_HEIGHT);
@@ -828,7 +844,7 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         NOTIFYICONDATAW nid = {sizeof(nid)};
         nid.hWnd            = hWnd;
         nid.uID             = TRAY_ICON_ID;
-        nid.uFlags          = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
+        nid.uFlags          = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
         nid.guidItem        = MICROMANAGER_TRAY_GUID;
         nid.uCallbackMessage = WM_TRAY_CALLBACK;
         lstrcpynW(nid.szTip, L"MicroManager", 128);
@@ -874,11 +890,11 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
         return 1;
     }
 
-    g_trayHwnd = CreateWindowExW(
+    InterlockedExchangePointer((PVOID*)&g_trayHwnd, CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"MicroManager",
         WS_POPUP,
-        0, 0, 1, 1, nullptr, nullptr, g_hInstance, nullptr);
+        0, 0, 1, 1, nullptr, nullptr, g_hInstance, nullptr));
     if (!g_trayHwnd) {
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
@@ -903,7 +919,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd            = g_trayHwnd;
     nid.uID             = TRAY_ICON_ID;
-    nid.uFlags          = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
+    nid.uFlags          = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
     nid.guidItem        = MICROMANAGER_TRAY_GUID;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
     lstrcpynW(nid.szTip, L"MicroManager", 128);
@@ -924,7 +940,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    g_trayHwnd = nullptr;
+    InterlockedExchangePointer((PVOID*)&g_trayHwnd, nullptr);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
@@ -940,7 +956,12 @@ BOOL WhTool_ModInit() {
     if (GlobalMemoryStatusEx(&mem)) g_totalPhys = mem.ullTotalPhys;
 
     g_hInstance = GetModuleHandleW(nullptr);
-    GetModuleFileNameW(g_hInstance, g_windhawkPath, MAX_PATH);
+    switch (GetModuleFileNameW(g_hInstance, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+        case 0:
+        case ARRAYSIZE(g_windhawkPath):
+            Wh_Log(L"GetModuleFileNameW failed");
+            break;
+    }
 
     // Full path for ddores.dll — ExtractIconExW handles the .mun redirect on Win11
     UINT sysLen = GetSystemDirectoryW(g_ddoresDllPath, MAX_PATH);
@@ -990,7 +1011,8 @@ void WhTool_ModUninit() {
 
     // WM_CLOSE handler on the tray thread destroys g_popupHwnd before the tray
     // window itself — no cross-thread DestroyWindow needed here
-    if (g_trayHwnd) PostMessageW((HWND)g_trayHwnd, WM_CLOSE, 0, 0);
+    HWND hwndClose = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_trayHwnd, nullptr, nullptr);
+    if (hwndClose && IsWindow(hwndClose)) PostMessageW(hwndClose, WM_CLOSE, 0, 0);
     if (g_trayThread) {
         WaitForSingleObject(g_trayThread, 3000);
         CloseHandle(g_trayThread);
@@ -1000,6 +1022,7 @@ void WhTool_ModUninit() {
     // Unregister popup class after the tray thread has fully exited so a
     // subsequent mod reload can re-register it cleanly
     UnregisterClassW(L"MicroManagerPopupClass", g_hInstance);
+    UnregisterClassW(L"MicroManagerTrayClass", g_hInstance);
 
     if (g_iconEnabled) { DestroyIcon(g_iconEnabled); g_iconEnabled = nullptr; }
     if (g_hPopupFont) { DeleteObject(g_hPopupFont); g_hPopupFont = nullptr; }
