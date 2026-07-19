@@ -307,10 +307,14 @@ FrameworkElement EnumChildElements(
     return nullptr;
 }
 
-FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
-    return EnumChildElements(element, [name](FrameworkElement child) {
-        return child.Name() == name;
-    });
+FrameworkElement FindChildByName(FrameworkElement element,
+                                 PCWSTR name,
+                                 bool matchFromStart = false) {
+    return EnumChildElements(
+        element, [name, matchFromStart](FrameworkElement child) {
+            return matchFromStart ? child.Name().starts_with(name)
+                                  : child.Name() == name;
+        });
 }
 
 FrameworkElement FindChildByClassName(FrameworkElement element,
@@ -737,7 +741,7 @@ void UpdateAnimationDirectionStyle() {
         }
 
         FrameworkElement revealGrid2 =
-            FindChildByName(mainGrid, L"RevealGrid2");
+            FindChildByName(mainGrid, L"RevealGrid", true);
         if (!revealGrid2) {
             return false;  // continue enumeration
         }
