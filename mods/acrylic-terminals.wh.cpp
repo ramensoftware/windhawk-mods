@@ -4,7 +4,7 @@
 // @description     Beautiful transparent acrylic glass effect for CMD, PowerShell, and Windows Terminal
 // @version         1.2
 // @author          adrianzgoated
-// @github          https://github.com/adrianzgoated
+// @github          https://github.com/adriantips
 // @include         conhost.exe
 // @include         WindowsTerminal.exe
 // @compilerOptions -ldwmapi
