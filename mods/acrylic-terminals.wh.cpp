@@ -2,7 +2,7 @@
 // @id              acrylic-terminals
 // @name            Acrylic Terminals (CMD & PowerShell)
 // @description     Beautiful transparent acrylic glass effect for CMD, PowerShell, and Windows Terminal
-// @version         1.0
+// @version         1.2
 // @author          adrianzgoated
 // @github          https://github.com/adrianzgoated
 // @include         conhost.exe
@@ -13,16 +13,16 @@
 
 // ==WindhawkModSettings==
 /*
-- Alpha: 0xB0
+- Alpha: 0x80
   $name: Transparency Level
-  $description: Opacity of the acrylic effect (0x00 = invisible, 0xFF = fully opaque)
-- TintR: 12
+  $description: Opacity of the acrylic effect (0x00 = fully transparent, 0xFF = fully opaque)
+- TintR: 10
   $name: Tint Red
   $description: Red component of the tint color (0-255)
-- TintG: 0
+- TintG: 10
   $name: Tint Green
   $description: Green component of the tint color (0-255)
-- TintB: 30
+- TintB: 25
   $name: Tint Blue
   $description: Blue component of the tint color (0-255)
 - ExtendFrame: TRUE
@@ -97,13 +97,13 @@ static void ApplyAcrylic(HWND hwnd) {
     if (!pSWCA) return;
     if (!IsWindowVisible(hwnd)) return;
 
-    int alpha   = Wh_GetIntSetting(L"Alpha");
-    int tintR   = Wh_GetIntSetting(L"TintR");
-    int tintG   = Wh_GetIntSetting(L"TintG");
-    int tintB   = Wh_GetIntSetting(L"TintB");
+    int alpha = Wh_GetIntSetting(L"Alpha");
+    int tintR = Wh_GetIntSetting(L"TintR");
+    int tintG = Wh_GetIntSetting(L"TintG");
+    int tintB = Wh_GetIntSetting(L"TintB");
 
     ACCENT_POLICY accent = {};
-    accent.AccentState   = 4; // ACCENT_ENABLE_ACRYLICBLURBEHIND
+    accent.AccentState   = 2;
     accent.AccentFlags   = 2;
     accent.GradientColor = (alpha << 24) | ((tintB & 0xFF) << 16) | ((tintG & 0xFF) << 8) | (tintR & 0xFF);
 
@@ -129,7 +129,7 @@ static void RemoveAcrylic(HWND hwnd) {
     if (!pSWCA) return;
 
     ACCENT_POLICY accent = {};
-    accent.AccentState = 0; // ACCENT_DISABLED
+    accent.AccentState = 0;
 
     WINDOWCOMPOSITIONATTRIBDATA data = {};
     data.Attribute  = WCA_ACCENT_POLICY;
@@ -147,16 +147,23 @@ static void RemoveAcrylic(HWND hwnd) {
 static BOOL CALLBACK EnumApplyProc(HWND hwnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == (DWORD)lParam)
-        ApplyAcrylic(hwnd);
+    if (pid != (DWORD)lParam)
+        return TRUE;
+    if (!IsWindowVisible(hwnd))
+        return TRUE;
+    LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW)
+        return TRUE;
+    ApplyAcrylic(hwnd);
     return TRUE;
 }
 
 static BOOL CALLBACK EnumRemoveProc(HWND hwnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == (DWORD)lParam)
-        RemoveAcrylic(hwnd);
+    if (pid != (DWORD)lParam)
+        return TRUE;
+    RemoveAcrylic(hwnd);
     return TRUE;
 }
 
@@ -178,5 +185,3 @@ void Wh_ModUninit() {
     DWORD myPid = GetCurrentProcessId();
     EnumWindows(EnumRemoveProc, myPid);
 }
-
-
