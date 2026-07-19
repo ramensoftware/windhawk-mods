@@ -2,13 +2,13 @@
 // @id prayertray
 // @name PrayerTray
 // @description Islamic prayer times on the taskbar, next to the clock.
-// @version 2.1.7
+// @version 3.1.1
 // @author Omar Alhami (mar)
 // @github https://github.com/n0tmar
 // @homepage https://github.com/n0tmar/PrayerTray
 // @include explorer.exe
 // @architecture x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshlwapi -lwinhttp -lwinmm -lversion -lcomctl32 -lgdi32 -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lshlwapi -lshell32 -ladvapi32 -luser32 -lwinhttp -lwinmm -lversion -lcomctl32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,9 +21,9 @@ you work, without opening another app. Left-click opens today's times
 
 ## Location
 
-Uses Windows Location when it is allowed, otherwise IP geolocation.
-You can also set city or coordinates in the mod settings.
-Privacy > Location > allow desktop apps if you want Windows Location.
+Uses HTTPS IP geolocation with a cached offline fallback. IP location can be
+affected by VPNs and ISP routing; manual coordinates are the reliable option
+when an exact city is required.
 
 ## Source
 
@@ -58,13 +58,19 @@ https://www.patreon.com/n0tmar
   $description: Used when manual location is on
 - manualLatitude: ""
   $name: Latitude
-  $description: Optional decimals; more precise than city alone
+  $description: Decimal degrees; enter both latitude and longitude
 - manualLongitude: ""
   $name: Longitude
-  $description: Optional decimals; more precise than city alone
+  $description: Decimal degrees; enter both latitude and longitude
 - calculationMethod: 0
   $name: Calculation method
   $description: Leave at 0 for your country's default. Advanced users can set an Aladhan method number.
+- asrSchool: standard
+  $name: Asr calculation
+  $description: Standard is used by Shafi, Maliki and Hanbali schools. Choose Hanafi for the later Asr time.
+  $options:
+  - standard: Standard
+  - hanafi: Hanafi
 - taskbarContentMode: smart
   $name: Taskbar text
   $description: Countdown, prayer clock time, or auto
@@ -99,29 +105,35 @@ https://www.patreon.com/n0tmar
 #endif
 
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"2.1.7"
+#define WH_MOD_VERSION L"3.1.1"
 #endif
 
 #include <windhawk_utils.h>
 
 #include <atomic>
 #include <algorithm>
-#include <chrono>
+#include <cerrno>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
-#include <cstring>
-#include <fstream>
+#include <cwchar>
+#include <cwctype>
 #include <future>
+#include <functional>
+#include <iomanip>
+#include <initializer_list>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <dwmapi.h>
@@ -131,7 +143,7 @@ https://www.patreon.com/n0tmar
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.Devices.Geolocation.h>
+#include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Input.h>
@@ -153,13 +165,14 @@ constexpr wchar_t kPdf = L'\u202C';
 constexpr int kNotificationLeadMinutes = 1;
 constexpr int kCurrentPrayerHighlightMinutes = 2;
 constexpr int kCacheStaleHours = 6;
+constexpr int kLocationRefreshHours = 24;
 constexpr double kClusterDistanceKm = 80.0;
 constexpr int kScheduleRefreshIntervalMs = 15 * 60 * 1000;
-constexpr int kGeoAccessTimeoutMs = 8000;
 constexpr int kRunFromWindowTimeoutMs = 3000;
 constexpr wchar_t kNotificationSoundUrl[] =
     L"https://raw.githubusercontent.com/n0tmar/PrayerTray/main/windhawk/audio/allah-akbar.mp3";
-constexpr unsigned kNotificationSoundBytes = 85512;
+constexpr size_t kNotificationSoundMinBytes = 4096;
+constexpr size_t kNotificationSoundMaxBytes = 1024 * 1024;
 
 enum class PrayerName { Fajr, Dhuhr, Asr, Maghrib, Isha, Count };
 
@@ -177,6 +190,7 @@ struct ModSettings {
     std::wstring manualLatitude;
     std::wstring manualLongitude;
     int calculationMethod = 0;
+    bool hanafiAsr = false;
     ContentMode contentMode = ContentMode::Smart;
     bool use24Hour = false;
     std::wstring language = L"en";
@@ -235,6 +249,7 @@ struct IpCandidate {
 };
 
 ModSettings g_settings;
+std::mutex g_settingsMutex;
 std::mutex g_scheduleMutex;
 LocationInfo g_location;
 PrayerSchedule g_currentSchedule;
@@ -242,7 +257,7 @@ PrayerSchedule g_nextSchedule;
 bool g_hasCurrentSchedule = false;
 bool g_hasNextSchedule = false;
 std::atomic<bool> g_unloading{false};
-std::atomic<bool> g_refreshRequested{true};
+std::atomic<bool> g_refreshRequested{false};
 std::atomic<bool> g_refreshRunning{false};
 std::atomic<bool> g_forceLocationRefresh{false};
 std::atomic<bool> g_lastRefreshFailed{false};
@@ -251,11 +266,19 @@ std::atomic<TaskbarBackend> g_backend{TaskbarBackend::Win11Xaml};
 std::atomic<bool> g_isWin11{false};
 std::atomic<int> g_uiTimerIntervalMs{500};
 
+HANDLE g_stopEvent = nullptr;
+HANDLE g_refreshWakeEvent = nullptr;
+HANDLE g_refreshThread = nullptr;
+HANDLE g_uiReadyEvent = nullptr;
+HANDLE g_uiThread = nullptr;
+DWORD g_uiThreadId = 0;
+HMODULE g_moduleInstance = nullptr;
+std::atomic<bool> g_soundPreviewRequested{false};
+
 HWND g_messageHwnd = nullptr;
 UINT_PTR g_uiTimer = 0;
 UINT_PTR g_repositionTimer = 0;
 UINT_PTR g_fullscreenTimer = 0;
-UINT_PTR g_scheduleTimer = 0;
 HWND g_win10OverlayHwnd = nullptr;
 HWND g_flyoutHwnd = nullptr;
 bool g_flyoutVisible = false;
@@ -264,15 +287,18 @@ ULONGLONG g_flyoutSuppressDismissUntil = 0;
 NOTIFYICONDATAW g_trayIcon{};
 bool g_trayIconAdded = false;
 HMENU g_contextMenu = nullptr;
+bool g_messageClassRegistered = false;
+bool g_flyoutClassRegistered = false;
+bool g_overlayClassRegistered = false;
 
 std::unordered_set<std::wstring> g_playedNotificationKeys;
 int g_notificationActiveDateKey = 0;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked{false};
 std::atomic<bool> g_slotInjected;
 std::atomic<int> g_applySlotAttempts;
 std::atomic<int> g_injectRetryMs{100};
-std::atomic<ULONGLONG> g_lastMeasureInjectAttemptMs{0};
+std::atomic<ULONGLONG> g_nextInjectionFailureLogMs{0};
 int g_lastUiTimerIntervalMs = -1;
 bool g_hasOverlayPlacement = false;
 int g_lastOverlayX = 0;
@@ -300,9 +326,17 @@ std::wstring g_lastAppliedColor;
 constexpr int kCmdShowFlyout = 1;
 constexpr int kCmdShowMenu = 2;
 constexpr int kCmdRefreshLocation = 3;
-constexpr UINT WM_PT_REFRESH = WM_APP + 1;
-constexpr UINT WM_PT_UI_TICK = WM_APP + 2;
-constexpr UINT WM_PT_HIDE_FLYOUT = WM_APP + 3;
+constexpr UINT WM_PT_UI_TICK = WM_APP + 1;
+constexpr UINT WM_PT_HIDE_FLYOUT = WM_APP + 2;
+constexpr UINT WM_PT_SETTINGS_CHANGED = WM_APP + 3;
+constexpr UINT WM_PT_AFTER_INIT = WM_APP + 4;
+constexpr UINT WM_PT_PLAY_SOUND = WM_APP + 5;
+
+using WindowThreadAction = std::function<void()>;
+bool RunFromWindowThread(HWND hWnd, WindowThreadAction action,
+                         DWORD timeoutMs = kRunFromWindowTimeoutMs);
+HWND FindCurrentProcessTaskbarWnd();
+constexpr UINT WM_PT_SHUTDOWN = WM_APP + 6;
 
 
 typedef LONG(WINAPI* RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
@@ -356,13 +390,15 @@ bool SameDate(const SYSTEMTIME& a, int y, int m, int d) {
 
 ULONGLONG SystemTimeToUnixSeconds(const SYSTEMTIME& st) {
     SYSTEMTIME utc{};
-    TzSpecificLocalTimeToSystemTime(nullptr, &st, &utc);
+    if (!TzSpecificLocalTimeToSystemTime(nullptr, &st, &utc)) return 0;
     FILETIME ft{};
-    SystemTimeToFileTime(&utc, &ft);
+    if (!SystemTimeToFileTime(&utc, &ft)) return 0;
     ULARGE_INTEGER uli{};
     uli.LowPart = ft.dwLowDateTime;
     uli.HighPart = ft.dwHighDateTime;
-    return (uli.QuadPart - 116444736000000000ULL) / 10000000ULL;
+    constexpr ULONGLONG epoch = 116444736000000000ULL;
+    if (uli.QuadPart < epoch) return 0;
+    return (uli.QuadPart - epoch) / 10000000ULL;
 }
 
 ULONGLONG LocalNowUnixSeconds() {
@@ -493,9 +529,15 @@ std::wstring UrlEncode(const std::wstring& value) {
 }
 
 bool ParseDouble(const std::wstring& text, double& out) {
+    const std::wstring clean = Trim(text);
+    if (clean.empty()) {
+        return false;
+    }
     wchar_t* end = nullptr;
-    out = wcstod(text.c_str(), &end);
-    return end && end != text.c_str();
+    errno = 0;
+    out = wcstod(clean.c_str(), &end);
+    return errno != ERANGE && end && end != clean.c_str() && *end == L'\0' &&
+           std::isfinite(out);
 }
 
 ContentMode ParseContentMode(const std::wstring& mode) {
@@ -528,6 +570,7 @@ void LoadSettings() {
     s.manualLatitude = takeString(L"manualLatitude");
     s.manualLongitude = takeString(L"manualLongitude");
     s.calculationMethod = static_cast<int>(Wh_GetIntSetting(L"calculationMethod"));
+    s.hanafiAsr = takeString(L"asrSchool") == L"hanafi";
     s.contentMode = ParseContentMode(takeString(L"taskbarContentMode"));
     s.use24Hour = takeString(L"timeFormat") == L"24h";
     s.language = takeString(L"language");
@@ -535,11 +578,18 @@ void LoadSettings() {
         s.language = L"en";
     }
     s.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11") != 0;
+    std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(s);
 }
 
+ModSettings GetSettingsSnapshot() {
+    std::lock_guard lock(g_settingsMutex);
+    return g_settings;
+}
+
 bool IsRtlLanguage() {
-    return g_settings.language == L"ar" || g_settings.language == L"ur";
+    const auto settings = GetSettingsSnapshot();
+    return settings.language == L"ar" || settings.language == L"ur";
 }
 
 bool IsLightTheme() {
@@ -551,13 +601,123 @@ bool IsLightTheme() {
     }
     DWORD value = 0;
     DWORD size = sizeof(value);
-    RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr,
-                     reinterpret_cast<LPBYTE>(&value), &size);
+    LSTATUS status = RegQueryValueExW(
+        key, L"SystemUsesLightTheme", nullptr, nullptr,
+        reinterpret_cast<LPBYTE>(&value), &size);
+    if (status != ERROR_SUCCESS) {
+        size = sizeof(value);
+        RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr,
+                         reinterpret_cast<LPBYTE>(&value), &size);
+    }
     RegCloseKey(key);
     return value == 1;
 }
 
+struct TaskbarPalette {
+    COLORREF background = RGB(32, 32, 32);
+    COLORREF foreground = RGB(255, 255, 255);
+    COLORREF secondary = RGB(180, 180, 180);
+    COLORREF highlight = RGB(50, 50, 50);
+    COLORREF border = RGB(96, 96, 96);
+};
+
+int ColorLuminance(COLORREF color) {
+    return (299 * GetRValue(color) + 587 * GetGValue(color) +
+            114 * GetBValue(color)) /
+           1000;
+}
+
+COLORREF BlendColor(COLORREF from, COLORREF to, double amount) {
+    auto blend = [amount](BYTE a, BYTE b) {
+        return static_cast<BYTE>(std::clamp(
+            std::lround(a + (b - a) * amount), 0L, 255L));
+    };
+    return RGB(blend(GetRValue(from), GetRValue(to)),
+               blend(GetGValue(from), GetGValue(to)),
+               blend(GetBValue(from), GetBValue(to)));
+}
+
+std::optional<COLORREF> SampleTaskbarBackground() {
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    RECT rect{};
+    if (!taskbar || !GetWindowRect(taskbar, &rect) ||
+        rect.right <= rect.left || rect.bottom <= rect.top) {
+        return std::nullopt;
+    }
+
+    HDC screen = GetDC(nullptr);
+    if (!screen) return std::nullopt;
+
+    std::vector<int> reds;
+    std::vector<int> greens;
+    std::vector<int> blues;
+    auto sample = [&](int x, int y) {
+        x = std::clamp(x, static_cast<int>(rect.left) + 2,
+                       static_cast<int>(rect.right) - 3);
+        y = std::clamp(y, static_cast<int>(rect.top) + 2,
+                       static_cast<int>(rect.bottom) - 3);
+        const COLORREF color = GetPixel(screen, x, y);
+        if (color != CLR_INVALID) {
+            reds.push_back(GetRValue(color));
+            greens.push_back(GetGValue(color));
+            blues.push_back(GetBValue(color));
+        }
+    };
+
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
+    if (width >= height) {
+        for (int xPercent : {3, 12, 25, 40, 60, 75, 88, 97}) {
+            for (int yPercent : {25, 50, 75}) {
+                sample(rect.left + width * xPercent / 100,
+                       rect.top + height * yPercent / 100);
+            }
+        }
+    } else {
+        for (int yPercent : {3, 12, 25, 40, 60, 75, 88, 97}) {
+            for (int xPercent : {25, 50, 75}) {
+                sample(rect.left + width * xPercent / 100,
+                       rect.top + height * yPercent / 100);
+            }
+        }
+    }
+    ReleaseDC(nullptr, screen);
+    if (reds.empty()) return std::nullopt;
+
+    auto median = [](std::vector<int>& values) {
+        const auto middle = values.begin() + values.size() / 2;
+        std::nth_element(values.begin(), middle, values.end());
+        return *middle;
+    };
+    return RGB(median(reds), median(greens), median(blues));
+}
+
+TaskbarPalette GetTaskbarPalette() {
+    static std::mutex cacheMutex;
+    static TaskbarPalette cached;
+    static ULONGLONG sampledAt = 0;
+    std::lock_guard lock(cacheMutex);
+    const ULONGLONG now = GetTickCount64();
+    if (sampledAt && now - sampledAt < 750) return cached;
+
+    TaskbarPalette palette;
+    palette.background = SampleTaskbarBackground().value_or(
+        IsLightTheme() ? RGB(252, 252, 252) : RGB(32, 32, 32));
+    const bool light = ColorLuminance(palette.background) >= 150;
+    palette.foreground = light ? RGB(26, 26, 26) : RGB(255, 255, 255);
+    palette.secondary = BlendColor(palette.background, palette.foreground, 0.65);
+    palette.highlight = BlendColor(palette.background, palette.foreground,
+                                   light ? 0.09 : 0.18);
+    palette.border = BlendColor(palette.background, palette.foreground,
+                                light ? 0.22 : 0.30);
+    cached = palette;
+    sampledAt = now;
+    return cached;
+}
+
 std::wstring TaskbarTextColorHex() {
+    // Keep screen capture out of Explorer's startup and taskbar render loop.
+    // The flyout samples the taskbar only after the user explicitly opens it.
     return IsLightTheme() ? L"1A1A1A" : L"FFFFFF";
 }
 
@@ -653,7 +813,7 @@ const LocTable& GetLocTable() {
           {L"Countdown_Seconds", L"{0} d"}, {L"Countdown_Minutes", L"{0} m"},
           {L"Countdown_Hours", L"{0} j"}, {L"Countdown_HoursMinutes", L"{0} j {1} m"}}},
     };
-    std::wstring lang = g_settings.language;
+    std::wstring lang = GetSettingsSnapshot().language;
     for (auto& ch : lang) {
         if (ch >= L'A' && ch <= L'Z') {
             ch = static_cast<wchar_t>(ch - L'A' + L'a');
@@ -731,8 +891,9 @@ std::wstring StabilizeCompactText(const std::wstring& text) {
 }
 
 std::wstring FormatTime(const SYSTEMTIME& time) {
+    const auto settings = GetSettingsSnapshot();
     std::wstring text;
-    if (g_settings.use24Hour) {
+    if (settings.use24Hour) {
         wchar_t buf[16];
         swprintf(buf, 16, L"%02u%c%02u", time.wHour, kColonRatio, time.wMinute);
         text = buf;
@@ -790,7 +951,26 @@ std::wstring LocationDisplayName(const LocationInfo& loc) {
 }
 
 
-std::optional<std::string> HttpGetUtf8(const std::wstring& url, bool useHttps = true) {
+struct WinHttpHandle {
+    HINTERNET value = nullptr;
+    WinHttpHandle() = default;
+    explicit WinHttpHandle(HINTERNET value) : value(value) {}
+    ~WinHttpHandle() {
+        if (value) WinHttpCloseHandle(value);
+    }
+    WinHttpHandle(const WinHttpHandle&) = delete;
+    WinHttpHandle& operator=(const WinHttpHandle&) = delete;
+    operator HINTERNET() const { return value; }
+};
+
+bool StopRequested() {
+    return g_unloading.load() ||
+           (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0);
+}
+
+std::optional<std::string> HttpGetUtf8(const std::wstring& url,
+                                       size_t maxBytes = 1024 * 1024) {
+    if (StopRequested()) return std::nullopt;
     URL_COMPONENTS uc{};
     uc.dwStructSize = sizeof(uc);
     wchar_t host[256]{};
@@ -805,139 +985,147 @@ std::optional<std::string> HttpGetUtf8(const std::wstring& url, bool useHttps = 
     if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) {
         return std::nullopt;
     }
-    const bool https = useHttps || uc.nScheme == INTERNET_SCHEME_HTTPS;
-    HINTERNET session =
-        WinHttpOpen(L"PrayerTray/2.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (uc.nScheme != INTERNET_SCHEME_HTTPS) {
+        Wh_Log(L"Blocked non-HTTPS request");
+        return std::nullopt;
+    }
+    WinHttpHandle session(WinHttpOpen(
+        L"PrayerTray/3.1.1 (+https://github.com/n0tmar/PrayerTray)",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session) {
         return std::nullopt;
     }
-    WinHttpSetTimeouts(session, 2000, 2000, 4000, 4000);
-    HINTERNET connect = WinHttpConnect(session, host, uc.nPort, 0);
+    WinHttpSetTimeouts(session, 1500, 1500, 3000, 3000);
+    WinHttpHandle connect(WinHttpConnect(session, host, uc.nPort, 0));
     if (!connect) {
-        WinHttpCloseHandle(session);
         return std::nullopt;
     }
     std::wstring objectName = std::wstring(path) + extra;
-    DWORD flags = https ? WINHTTP_FLAG_SECURE : 0;
-    HINTERNET request = WinHttpOpenRequest(
+    WinHttpHandle request(WinHttpOpenRequest(
         connect, L"GET", objectName.c_str(), nullptr, WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+        WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE));
     if (!request) {
-        WinHttpCloseHandle(connect);
-        WinHttpCloseHandle(session);
         return std::nullopt;
     }
-    if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+    const wchar_t headers[] = L"Accept: */*\r\n";
+    if (!WinHttpSendRequest(request, headers, static_cast<DWORD>(-1L),
                             WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
         !WinHttpReceiveResponse(request, nullptr)) {
-        WinHttpCloseHandle(request);
-        WinHttpCloseHandle(connect);
-        WinHttpCloseHandle(session);
+        Wh_Log(L"HTTPS request failed for %s (%u)", host, GetLastError());
+        return std::nullopt;
+    }
+    DWORD status = 0;
+    DWORD statusSize = sizeof(status);
+    if (!WinHttpQueryHeaders(request,
+                             WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize,
+                             WINHTTP_NO_HEADER_INDEX) ||
+        status < 200 || status >= 300) {
+        Wh_Log(L"HTTP %u for %s", status, host);
         return std::nullopt;
     }
     std::string body;
     DWORD available = 0;
     do {
         if (!WinHttpQueryDataAvailable(request, &available)) {
-            break;
+            return std::nullopt;
         }
         if (available == 0) {
             break;
+        }
+        if (available > maxBytes || body.size() > maxBytes - available) {
+            Wh_Log(L"HTTP response too large from %s", host);
+            return std::nullopt;
         }
         size_t offset = body.size();
         body.resize(offset + available);
         DWORD read = 0;
         if (!WinHttpReadData(request, body.data() + offset, available, &read)) {
             body.resize(offset);
-            break;
+            return std::nullopt;
         }
         body.resize(offset + read);
     } while (available > 0);
-    WinHttpCloseHandle(request);
-    WinHttpCloseHandle(connect);
-    WinHttpCloseHandle(session);
     return body.empty() ? std::nullopt : std::optional<std::string>{std::move(body)};
 }
 
-std::optional<std::string_view> JsonFindValue(std::string_view json,
-                                              std::string_view key) {
-    std::string needle = std::string("\"") + std::string(key) + "\":";
-    size_t pos = json.find(needle);
-    if (pos == std::string_view::npos) {
+std::optional<winrt::Windows::Data::Json::JsonObject> ParseJsonObject(
+    std::string_view json) {
+    try {
+        return winrt::Windows::Data::Json::JsonObject::Parse(Utf8ToWide(json));
+    } catch (...) {
         return std::nullopt;
     }
-    pos += needle.size();
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) {
-        ++pos;
-    }
-    if (pos >= json.size()) {
-        return std::nullopt;
-    }
-    if (json[pos] == '"') {
-        ++pos;
-        size_t end = pos;
-        while (end < json.size() && json[end] != '"') {
-            if (json[end] == '\\' && end + 1 < json.size()) {
-                end += 2;
-            } else {
-                ++end;
-            }
-        }
-        return json.substr(pos, end - pos);
-    }
-    size_t end = pos;
-    while (end < json.size() && json[end] != ',' && json[end] != '}' &&
-           json[end] != ']') {
-        ++end;
-    }
-    return json.substr(pos, end - pos);
 }
 
 std::optional<double> JsonGetDouble(std::string_view json, std::string_view key) {
-    if (auto val = JsonFindValue(json, key)) {
-        try {
-            return std::stod(std::string(*val));
-        } catch (...) {
+    auto object = ParseJsonObject(json);
+    if (!object) return std::nullopt;
+    try {
+        const auto name = Utf8ToWide(key);
+        auto value = object->GetNamedValue(name);
+        if (value.ValueType() == winrt::Windows::Data::Json::JsonValueType::Number)
+            return value.GetNumber();
+        if (value.ValueType() == winrt::Windows::Data::Json::JsonValueType::String) {
+            double parsed = 0;
+            if (ParseDouble(value.GetString().c_str(), parsed)) return parsed;
         }
+    } catch (...) {
     }
     return std::nullopt;
 }
 
 std::wstring JsonGetStringW(std::string_view json, std::string_view key) {
-    if (auto val = JsonFindValue(json, key)) {
-        return Utf8ToWide(*val);
+    auto object = ParseJsonObject(json);
+    if (!object) return L"";
+    try {
+        auto value = object->GetNamedValue(Utf8ToWide(key));
+        if (value.ValueType() == winrt::Windows::Data::Json::JsonValueType::String)
+            return value.GetString().c_str();
+    } catch (...) {
     }
     return L"";
 }
 
-std::optional<std::string_view> JsonFindObject(std::string_view json,
-                                               std::string_view key) {
-    std::string needle = std::string("\"") + std::string(key) + "\":";
-    size_t pos = json.find(needle);
-    if (pos == std::string_view::npos) {
-        return std::nullopt;
-    }
-    pos += needle.size();
-    while (pos < json.size() && json[pos] != '{') {
-        ++pos;
-    }
-    if (pos >= json.size()) {
-        return std::nullopt;
-    }
-    int depth = 0;
-    size_t start = pos;
-    for (; pos < json.size(); ++pos) {
-        if (json[pos] == '{') {
-            ++depth;
-        } else if (json[pos] == '}') {
-            --depth;
-            if (depth == 0) {
-                return json.substr(start, pos - start + 1);
-            }
-        }
+std::optional<bool> JsonGetBool(std::string_view json, std::string_view key) {
+    auto object = ParseJsonObject(json);
+    if (!object) return std::nullopt;
+    try {
+        auto value = object->GetNamedValue(Utf8ToWide(key));
+        if (value.ValueType() == winrt::Windows::Data::Json::JsonValueType::Boolean)
+            return value.GetBoolean();
+    } catch (...) {
     }
     return std::nullopt;
+}
+
+std::optional<std::string> JsonFindObject(std::string_view json,
+                                          std::string_view key) {
+    auto object = ParseJsonObject(json);
+    if (!object) return std::nullopt;
+    try {
+        auto child = object->GetNamedObject(Utf8ToWide(key));
+        return WideToUtf8(child.Stringify().c_str());
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::wstring JsonGetFirstArrayString(std::string_view json,
+                                     std::string_view key) {
+    auto object = ParseJsonObject(json);
+    if (!object) return L"";
+    try {
+        auto array = object->GetNamedArray(Utf8ToWide(key));
+        if (array.Size() &&
+            array.GetAt(0).ValueType() ==
+                winrt::Windows::Data::Json::JsonValueType::String) {
+            return array.GetStringAt(0).c_str();
+        }
+    } catch (...) {
+    }
+    return L"";
 }
 
 int GetDefaultMethodForCountry(const std::wstring& country) {
@@ -971,6 +1159,8 @@ std::wstring GetCountryCode(const std::wstring& country) {
     if (n == L"KUWAIT") return L"KW";
     if (n == L"QATAR") return L"QA";
     if (n == L"CANADA") return L"CA";
+    if (n == L"BANGLADESH") return L"BD";
+    if (n == L"IRAN") return L"IR";
     return L"";
 }
 
@@ -986,12 +1176,15 @@ std::wstring GetDefaultTimezoneForCountry(const std::wstring& country) {
     if (n == L"MALAYSIA") return L"Asia/Kuala_Lumpur";
     if (n == L"PAKISTAN") return L"Asia/Karachi";
     if (n == L"INDIA") return L"Asia/Kolkata";
+    if (n == L"BANGLADESH") return L"Asia/Dhaka";
+    if (n == L"IRAN") return L"Asia/Tehran";
     return L"";
 }
 
-int ResolveCalculationMethod(const LocationInfo& loc) {
-    if (g_settings.calculationMethod > 0) {
-        return g_settings.calculationMethod;
+int ResolveCalculationMethod(const LocationInfo& loc,
+                             const ModSettings& settings) {
+    if (settings.calculationMethod > 0) {
+        return settings.calculationMethod;
     }
     return GetDefaultMethodForCountry(loc.country);
 }
@@ -1006,23 +1199,21 @@ double DistanceKm(const IpCandidate& a, const IpCandidate& b) {
     double sinLat = sin(dLat / 2);
     double sinLon = sin(dLon / 2);
     double h = sinLat * sinLat + cos(lat1) * cos(lat2) * sinLon * sinLon;
+    h = (std::clamp)(h, 0.0, 1.0);
     return earthRadiusKm * 2 * atan2(sqrt(h), sqrt(1 - h));
 }
 
-std::optional<IpCandidate> TryFetchIpApi() {
-    auto body = HttpGetUtf8(L"http://ip-api.com/json/?fields=status,message,lat,lon,city,regionName,country,timezone", false);
-    if (!body) return std::nullopt;
-    if (JsonGetStringW(*body, "status") != L"success") return std::nullopt;
-    IpCandidate c;
-    c.provider = L"ip-api";
-    c.weight = 2;
-    c.latitude = JsonGetDouble(*body, "lat").value_or(0);
-    c.longitude = JsonGetDouble(*body, "lon").value_or(0);
-    c.city = JsonGetStringW(*body, "city");
-    c.region = JsonGetStringW(*body, "regionName");
-    c.country = JsonGetStringW(*body, "country");
-    c.timezone = JsonGetStringW(*body, "timezone");
-    return c;
+bool IsValidCoordinate(double latitude, double longitude) {
+    return std::isfinite(latitude) && std::isfinite(longitude) &&
+           latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 &&
+           longitude <= 180.0 && !(latitude == 0.0 && longitude == 0.0);
+}
+
+std::optional<IpCandidate> ValidateCandidate(IpCandidate candidate) {
+    if (!IsValidCoordinate(candidate.latitude, candidate.longitude)) {
+        return std::nullopt;
+    }
+    return candidate;
 }
 
 std::wstring ReadCountryNameFromCode(const std::wstring& code) {
@@ -1037,6 +1228,11 @@ std::wstring ReadCountryNameFromCode(const std::wstring& code) {
     if (c == L"TR") return L"Turkey";
     if (c == L"ID") return L"Indonesia";
     if (c == L"MY") return L"Malaysia";
+    if (c == L"KW") return L"Kuwait";
+    if (c == L"QA") return L"Qatar";
+    if (c == L"CA") return L"Canada";
+    if (c == L"BD") return L"Bangladesh";
+    if (c == L"IR") return L"Iran";
     return code;
 }
 
@@ -1050,20 +1246,21 @@ std::optional<IpCandidate> TryFetchIpInfo() {
     IpCandidate c;
     c.provider = L"ipinfo";
     c.weight = 3;
-    c.latitude = wcstod(loc.c_str(), nullptr);
-    c.longitude = wcstod(loc.substr(comma + 1).c_str(), nullptr);
+    if (!ParseDouble(loc.substr(0, comma), c.latitude) ||
+        !ParseDouble(loc.substr(comma + 1), c.longitude)) {
+        return std::nullopt;
+    }
     c.city = JsonGetStringW(*body, "city");
     c.region = JsonGetStringW(*body, "region");
     c.country = ReadCountryNameFromCode(JsonGetStringW(*body, "country"));
     c.timezone = JsonGetStringW(*body, "timezone");
-    return c;
+    return ValidateCandidate(std::move(c));
 }
 
 std::optional<IpCandidate> TryFetchIpWho() {
     auto body = HttpGetUtf8(L"https://ipwho.is/");
     if (!body) return std::nullopt;
-    auto success = JsonFindValue(*body, "success");
-    if (!success || *success != "true") return std::nullopt;
+    if (!JsonGetBool(*body, "success").value_or(false)) return std::nullopt;
     IpCandidate c;
     c.provider = L"ipwho";
     c.weight = 1;
@@ -1075,7 +1272,7 @@ std::optional<IpCandidate> TryFetchIpWho() {
     if (auto tzObj = JsonFindObject(*body, "timezone")) {
         c.timezone = JsonGetStringW(*tzObj, "id");
     }
-    return c;
+    return ValidateCandidate(std::move(c));
 }
 
 IpCandidate SelectBestCandidate(std::vector<IpCandidate>& candidates) {
@@ -1150,8 +1347,8 @@ IpCandidate SelectBestCandidate(std::vector<IpCandidate>& candidates) {
     result.weight = weight;
     result.latitude = lat;
     result.longitude = lon;
-    // Prefer reverse-geocode city over IP label.
-    result.city.clear();
+    // FillFromCoords prefers reverse-geocode names and retains this as fallback.
+    result.city = bestNamed->city;
     result.region = bestNamed->region;
     result.country = bestNamed->country;
     result.timezone = bestNamed->timezone;
@@ -1170,24 +1367,8 @@ std::optional<IpCandidate> TryFetchFreeIpApi() {
     c.city = JsonGetStringW(*body, "cityName");
     c.region = JsonGetStringW(*body, "regionName");
     c.country = JsonGetStringW(*body, "countryName");
-    c.timezone = JsonGetStringW(*body, "timeZones");
-    if (c.timezone.empty()) {
-        if (auto zones = JsonFindObject(*body, "timeZones")) {
-            (void)zones;
-        }
-        // freeipapi may return timeZones as an array; first quoted value is enough.
-        auto pos = body->find("\"timeZones\"");
-        if (pos != std::string::npos) {
-            auto q1 = body->find('"', body->find('[', pos));
-            if (q1 != std::string::npos) {
-                auto q2 = body->find('"', q1 + 1);
-                if (q2 != std::string::npos) {
-                    c.timezone = Utf8ToWide(body->substr(q1 + 1, q2 - q1 - 1));
-                }
-            }
-        }
-    }
-    return c;
+    c.timezone = JsonGetFirstArrayString(*body, "timeZones");
+    return ValidateCandidate(std::move(c));
 }
 
 std::optional<IpCandidate> TryFetchGeoJs() {
@@ -1210,7 +1391,7 @@ std::optional<IpCandidate> TryFetchGeoJs() {
     c.city = JsonGetStringW(*body, "city");
     c.region = JsonGetStringW(*body, "region");
     c.country = JsonGetStringW(*body, "country");
-    return c;
+    return ValidateCandidate(std::move(c));
 }
 
 struct ReverseGeocodeResult {
@@ -1224,7 +1405,7 @@ std::wstring FixCityName(std::wstring city) {
     auto upper = ToUpper(city);
     if (upper == L"MAKKAH" || upper == L"MAKKAH AL MUKARRAMAH" ||
         upper == L"MECCA" || upper == L"MEKKAH") {
-        return L"Mecca";
+        return L"Makkah";
     }
     if (upper == L"AL TAIF" || upper == L"AT TAIF" || upper == L"TA'IF") {
         return L"Taif";
@@ -1248,10 +1429,6 @@ std::optional<ReverseGeocodeResult> TryReverseGeocode(double latitude, double lo
     result.region = JsonGetStringW(*body, "principalSubdivision");
     result.country = JsonGetStringW(*body, "countryName");
     result.timezone = JsonGetStringW(*body, "ianaTimeId");
-    if (result.timezone.empty()) {
-        result.timezone = JsonGetStringW(*body, "localityInfo");  // ignored if wrong shape
-        result.timezone.clear();
-    }
     if (result.city.empty() && result.country.empty()) {
         return std::nullopt;
     }
@@ -1269,15 +1446,22 @@ std::wstring FirstNonEmpty(std::initializer_list<std::wstring> values) {
 }
 
 LocationInfo ResolveManualLocation() {
+    const auto settings = GetSettingsSnapshot();
     LocationInfo loc;
     loc.source = L"manual";
     loc.resolvedAtUtcMs = GetUtcNowMs();
-    loc.city = FixCityName(Trim(g_settings.manualCity));
-    loc.country = Trim(g_settings.manualCountry);
+    loc.city = FixCityName(Trim(settings.manualCity));
+    loc.country = Trim(settings.manualCountry);
     loc.timezone = GetDefaultTimezoneForCountry(loc.country);
     double lat = 0, lon = 0;
-    if (ParseDouble(g_settings.manualLatitude, lat) &&
-        ParseDouble(g_settings.manualLongitude, lon)) {
+    const bool hasLatitude = !Trim(settings.manualLatitude).empty();
+    const bool hasLongitude = !Trim(settings.manualLongitude).empty();
+    if (hasLatitude || hasLongitude) {
+        if (!ParseDouble(settings.manualLatitude, lat) ||
+            !ParseDouble(settings.manualLongitude, lon) || lat < -90.0 ||
+            lat > 90.0 || lon < -180.0 || lon > 180.0) {
+            throw std::runtime_error("manual coordinates are invalid");
+        }
         loc.latitude = lat;
         loc.longitude = lon;
         return loc;
@@ -1286,21 +1470,31 @@ LocationInfo ResolveManualLocation() {
         loc.source = L"manual-city";
         return loc;
     }
-    loc.country = L"Unknown";
-    return loc;
+    throw std::runtime_error("manual city and country are required");
 }
 
 std::wstring JsonEscape(const std::wstring& value) {
     std::wstring out;
     out.reserve(value.size());
     for (wchar_t ch : value) {
-        if (ch == L'\\' || ch == L'"') {
-            out.push_back(L'\\');
-            out.push_back(ch);
-        } else if (ch == L'\n') {
-            out += L"\\n";
-        } else {
-            out.push_back(ch);
+        switch (ch) {
+            case L'\\': out += L"\\\\"; break;
+            case L'"': out += L"\\\""; break;
+            case L'\b': out += L"\\b"; break;
+            case L'\f': out += L"\\f"; break;
+            case L'\n': out += L"\\n"; break;
+            case L'\r': out += L"\\r"; break;
+            case L'\t': out += L"\\t"; break;
+            default:
+                if (ch < 0x20) {
+                    wchar_t escaped[7];
+                    swprintf(escaped, ARRAYSIZE(escaped), L"\\u%04X",
+                             static_cast<unsigned>(ch));
+                    out += escaped;
+                } else {
+                    out.push_back(ch);
+                }
+                break;
         }
     }
     return out;
@@ -1315,15 +1509,63 @@ std::wstring GetLastLocationPath() {
     return base + L"\\last-location.json";
 }
 
+bool WriteTextFileAtomically(const std::wstring& path, const std::string& content) {
+    if (path.empty()) return false;
+    const std::wstring temp = path + L".tmp." + std::to_wstring(GetCurrentProcessId()) +
+                              L"." + std::to_wstring(GetCurrentThreadId());
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool wrote = content.size() <= MAXDWORD &&
+                       WriteFile(file, content.data(),
+                                 static_cast<DWORD>(content.size()), &written,
+                                 nullptr) &&
+                       written == content.size() && FlushFileBuffers(file);
+    CloseHandle(file);
+    if (!wrote || !MoveFileExW(temp.c_str(), path.c_str(),
+                               MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(temp.c_str());
+        return false;
+    }
+    return true;
+}
+
+std::optional<std::string> ReadTextFile(const std::wstring& path,
+                                        size_t maxBytes = 1024 * 1024) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE |
+                                  FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+    if (file == INVALID_HANDLE_VALUE) return std::nullopt;
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart <= 0 ||
+        static_cast<ULONGLONG>(size.QuadPart) > maxBytes ||
+        size.QuadPart > MAXDWORD) {
+        CloseHandle(file);
+        return std::nullopt;
+    }
+    std::string data(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD bytesRead = 0;
+    const bool read = ReadFile(file, data.data(),
+                               static_cast<DWORD>(data.size()), &bytesRead,
+                               nullptr) &&
+                      bytesRead == data.size();
+    CloseHandle(file);
+    if (!read) {
+        return std::nullopt;
+    }
+    return data;
+}
+
 void SaveLastLocation(const LocationInfo& loc) {
     const auto path = GetLastLocationPath();
     if (path.empty() || (loc.latitude == 0 && loc.longitude == 0 && loc.city.empty())) {
         return;
     }
-    std::ofstream out(path.c_str(), std::ios::binary | std::ios::trunc);
-    if (!out) {
-        return;
-    }
+    std::ostringstream out;
+    out << std::setprecision(15);
     out << "{\n";
     out << "  \"Latitude\": " << loc.latitude << ",\n";
     out << "  \"Longitude\": " << loc.longitude << ",\n";
@@ -1334,6 +1576,9 @@ void SaveLastLocation(const LocationInfo& loc) {
     out << "  \"Source\": \"" << WideToUtf8(JsonEscape(loc.source)) << "\",\n";
     out << "  \"ResolvedAtUtcMs\": " << loc.resolvedAtUtcMs << "\n";
     out << "}\n";
+    if (!WriteTextFileAtomically(path, out.str())) {
+        Wh_Log(L"Failed to save location cache");
+    }
 }
 
 std::optional<LocationInfo> LoadLastLocation() {
@@ -1341,14 +1586,9 @@ std::optional<LocationInfo> LoadLastLocation() {
     if (path.empty()) {
         return std::nullopt;
     }
-    std::ifstream in(path.c_str(), std::ios::binary);
-    if (!in) {
-        return std::nullopt;
-    }
-    std::string json((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (json.empty()) {
-        return std::nullopt;
-    }
+    auto contents = ReadTextFile(path, 64 * 1024);
+    if (!contents) return std::nullopt;
+    const std::string& json = *contents;
     LocationInfo loc;
     loc.latitude = JsonGetDouble(json, "Latitude").value_or(0);
     loc.longitude = JsonGetDouble(json, "Longitude").value_or(0);
@@ -1356,8 +1596,10 @@ std::optional<LocationInfo> LoadLastLocation() {
     loc.region = JsonGetStringW(json, "Region");
     loc.country = JsonGetStringW(json, "Country");
     loc.timezone = JsonGetStringW(json, "Timezone");
-    loc.source = L"last-known";
-    loc.resolvedAtUtcMs = GetUtcNowMs();
+    loc.source = JsonGetStringW(json, "Source");
+    if (loc.source.empty()) loc.source = L"last-known";
+    loc.resolvedAtUtcMs = static_cast<ULONGLONG>(
+        JsonGetDouble(json, "ResolvedAtUtcMs").value_or(0));
     if (loc.latitude == 0 && loc.longitude == 0 && loc.city.empty()) {
         return std::nullopt;
     }
@@ -1395,102 +1637,9 @@ LocationInfo FillFromCoords(LocationInfo loc,
     return loc;
 }
 
-std::optional<LocationInfo> TryWindowsLocation() {
-    try {
-        using namespace winrt::Windows::Devices::Geolocation;
-        using namespace winrt::Windows::Foundation;
-        using namespace std::chrono_literals;
-
-        try {
-            winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        } catch (winrt::hresult_error const&) {
-        }
-
-        // RequestAccessAsync has no built-in timeout and can block the refresh
-        // pipeline forever if the consent prompt never resolves.
-        auto accessPromise =
-            std::make_shared<std::promise<GeolocationAccessStatus>>();
-        auto accessFuture = accessPromise->get_future();
-        std::thread([accessPromise]() {
-            try {
-                try {
-                    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-                } catch (...) {
-                }
-                accessPromise->set_value(Geolocator::RequestAccessAsync().get());
-            } catch (...) {
-                try {
-                    accessPromise->set_exception(std::current_exception());
-                } catch (...) {
-                }
-            }
-        }).detach();
-
-        std::optional<GeolocationAccessStatus> access;
-        if (accessFuture.wait_for(std::chrono::milliseconds(kGeoAccessTimeoutMs)) !=
-            std::future_status::ready) {
-            Wh_Log(L"Windows Location access timed out");
-            return std::nullopt;
-        }
-        try {
-            access = accessFuture.get();
-        } catch (...) {
-            Wh_Log(L"Windows Location access failed");
-            return std::nullopt;
-        }
-        if (!access || *access != GeolocationAccessStatus::Allowed) {
-            Wh_Log(L"Windows Location denied (%d)",
-                   access ? static_cast<int>(*access) : -1);
-            return std::nullopt;
-        }
-
-        Geolocator locator;
-        const auto status = locator.LocationStatus();
-        if (status == PositionStatus::Disabled ||
-            status == PositionStatus::NotAvailable) {
-            Wh_Log(L"Windows Location off (%d)",
-                   static_cast<int>(status));
-            return std::nullopt;
-        }
-
-        locator.DesiredAccuracy(PositionAccuracy::Default);
-        try {
-            locator.DesiredAccuracyInMeters(1000);
-        } catch (...) {
-        }
-
-        const auto position =
-            locator.GetGeopositionAsync(TimeSpan{30s}, TimeSpan{3s}).get();
-        if (!position) {
-            Wh_Log(L"Windows Location: no fix");
-            return std::nullopt;
-        }
-
-        const auto coord = position.Coordinate().Point().Position();
-        if (coord.Latitude == 0 && coord.Longitude == 0) {
-            Wh_Log(L"Windows Location: empty coords");
-            return std::nullopt;
-        }
-
-        LocationInfo loc =
-            FillFromCoords({}, coord.Latitude, coord.Longitude, L"windows");
-        Wh_Log(L"Location (windows): %s, %s (%.5f, %.5f)",
-               loc.city.c_str(), loc.country.c_str(), loc.latitude, loc.longitude);
-        return loc;
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Windows Location failed: 0x%08X %s",
-               static_cast<unsigned>(ex.code()), ex.message().c_str());
-        return std::nullopt;
-    } catch (...) {
-        Wh_Log(L"Windows Location failed");
-        return std::nullopt;
-    }
-}
-
 LocationInfo TryIpLocation() {
     Wh_Log(L"Trying IP location");
     std::vector<std::future<std::optional<IpCandidate>>> jobs;
-    jobs.push_back(std::async(std::launch::async, TryFetchIpApi));
     jobs.push_back(std::async(std::launch::async, TryFetchIpInfo));
     jobs.push_back(std::async(std::launch::async, TryFetchIpWho));
     jobs.push_back(std::async(std::launch::async, TryFetchFreeIpApi));
@@ -1512,14 +1661,14 @@ LocationInfo TryIpLocation() {
     LocationInfo loc = FillFromCoords(
         {}, winner.latitude, winner.longitude, L"ip", winner.city, winner.region,
         winner.country, winner.timezone);
-    Wh_Log(L"Location (ip): %s, %s (%.4f, %.4f) [%s]",
-           loc.city.c_str(), loc.country.c_str(), loc.latitude, loc.longitude,
-           winner.provider.c_str());
+    Wh_Log(L"Location (ip): %s, %s [%s]", loc.city.c_str(),
+           loc.country.c_str(), winner.provider.c_str());
     return loc;
 }
 
 LocationInfo ResolveLocation() {
-    if (g_settings.useManualLocation) {
+    const auto settings = GetSettingsSnapshot();
+    if (settings.useManualLocation) {
         auto loc = ResolveManualLocation();
         SaveLastLocation(loc);
         return loc;
@@ -1527,10 +1676,8 @@ LocationInfo ResolveLocation() {
 
     // Prefer a known location immediately; refresh can replace it later.
     auto cachedLoc = LoadLastLocation();
-
-    if (auto loc = TryWindowsLocation()) {
-        SaveLastLocation(*loc);
-        return *loc;
+    if (cachedLoc && cachedLoc->source.starts_with(L"manual")) {
+        cachedLoc.reset();
     }
 
     try {
@@ -1560,9 +1707,30 @@ bool ParseTimeOnly(const std::wstring& text, SYSTEMTIME& outDate, SYSTEMTIME& ou
     }
     auto colon = clean.find(L':');
     if (colon == std::wstring::npos) return false;
+    const auto secondColon = clean.find(L':', colon + 1);
+    const std::wstring minuteText =
+        secondColon == std::wstring::npos
+            ? clean.substr(colon + 1)
+            : clean.substr(colon + 1, secondColon - colon - 1);
+    double hourValue = 0;
+    double minuteValue = 0;
+    if (!ParseDouble(clean.substr(0, colon), hourValue) ||
+        !ParseDouble(minuteText, minuteValue) ||
+        std::floor(hourValue) != hourValue ||
+        std::floor(minuteValue) != minuteValue || hourValue < 0 ||
+        hourValue > 23 || minuteValue < 0 || minuteValue > 59) {
+        return false;
+    }
+    if (secondColon != std::wstring::npos) {
+        double seconds = 0;
+        if (!ParseDouble(clean.substr(secondColon + 1), seconds) ||
+            std::floor(seconds) != seconds || seconds < 0 || seconds > 59) {
+            return false;
+        }
+    }
     outTime = outDate;
-    outTime.wHour = static_cast<WORD>(wcstoul(clean.substr(0, colon).c_str(), nullptr, 10));
-    outTime.wMinute = static_cast<WORD>(wcstoul(clean.substr(colon + 1).c_str(), nullptr, 10));
+    outTime.wHour = static_cast<WORD>(hourValue);
+    outTime.wMinute = static_cast<WORD>(minuteValue);
     outTime.wSecond = 0;
     outTime.wMilliseconds = 0;
     return true;
@@ -1588,19 +1756,34 @@ PrayerSchedule BuildScheduleFromTimingsJson(std::string_view timingsJson,
     for (int i = 0; i < static_cast<int>(PrayerName::Count); ++i) {
         auto name = static_cast<PrayerName>(i);
         std::string key = WideToUtf8(PrayerApiKey(name));
-        auto val = JsonFindValue(timingsJson, key);
-        if (!val) continue;
+        auto value = JsonGetStringW(timingsJson, key);
+        if (value.empty()) continue;
         PrayerEntry entry;
         entry.name = name;
-        if (ParseTimeOnly(Utf8ToWide(*val), date, entry.time)) {
+        if (ParseTimeOnly(value, date, entry.time)) {
             schedule.prayers.push_back(entry);
         }
     }
     return schedule;
 }
 
+bool IsCompleteSchedule(const PrayerSchedule& schedule) {
+    if (schedule.prayers.size() != static_cast<size_t>(PrayerName::Count)) {
+        return false;
+    }
+    bool seen[static_cast<size_t>(PrayerName::Count)]{};
+    for (const auto& prayer : schedule.prayers) {
+        const auto index = static_cast<size_t>(prayer.name);
+        if (index >= static_cast<size_t>(PrayerName::Count) || seen[index]) {
+            return false;
+        }
+        seen[index] = true;
+    }
+    return true;
+}
+
 std::wstring BuildCachePath(int year, int month, int day, const LocationInfo& loc,
-                            int method) {
+                            int method, int school) {
     std::wstring key;
     if (loc.latitude != 0 || loc.longitude != 0) {
         wchar_t buf[64];
@@ -1610,15 +1793,15 @@ std::wstring BuildCachePath(int year, int month, int day, const LocationInfo& lo
         key = loc.city + L"_" + loc.country;
     }
     key = SanitizeCachePart(key);
-    std::wstring tz = loc.timezone.empty() ? L"notz" : SanitizeCachePart(loc.timezone);
     wchar_t path[512];
-    swprintf(path, 512, L"%04d-%02d-%02d_%s_m%d_%s.json", year, month, day,
-             key.c_str(), method, tz.c_str());
-    return GetCacheFolder() + L"\\" + path;
+    swprintf(path, 512, L"%04d-%02d-%02d_%s_m%d_s%d.json", year, month,
+             day, key.c_str(), method, school);
+    const auto folder = GetCacheFolder();
+    return folder.empty() ? L"" : folder + L"\\" + path;
 }
 
 std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo& loc,
-                                int method) {
+                                int method, int school) {
     SYSTEMTIME now = GetLocalNow();
     std::wstring dateSegment;
     if (year == now.wYear && month == now.wMonth && day == now.wDay) {
@@ -1632,10 +1815,11 @@ std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo
     if (loc.source == L"manual-city") {
         auto cc = GetCountryCode(loc.country);
         url += L"city=" + UrlEncode(loc.city) + L"&country=" + cc + L"&method=" +
-               std::to_wstring(method);
+               std::to_wstring(method) + L"&school=" + std::to_wstring(school);
     } else {
         url += L"latitude=" + std::to_wstring(loc.latitude) + L"&longitude=" +
-               std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method);
+               std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method) +
+               L"&school=" + std::to_wstring(school);
         if (!loc.timezone.empty()) {
             url += L"&timezone=" + UrlEncode(loc.timezone);
         }
@@ -1644,18 +1828,20 @@ std::wstring BuildIslamicAppUrl(int year, int month, int day, const LocationInfo
 }
 
 std::wstring BuildAladhanUrl(int year, int month, int day, const LocationInfo& loc,
-                             int method) {
+                             int method, int school) {
     wchar_t dateSeg[16];
     swprintf(dateSeg, 16, L"%02d-%02d-%04d", day, month, year);
     std::wstring url;
     if (loc.source == L"manual-city") {
         url = L"https://api.aladhan.com/v1/timingsByCity/" + std::wstring(dateSeg) +
               L"?city=" + UrlEncode(loc.city) + L"&country=" + UrlEncode(loc.country) +
-              L"&method=" + std::to_wstring(method);
+              L"&method=" + std::to_wstring(method) + L"&school=" +
+              std::to_wstring(school);
     } else {
         url = L"https://api.aladhan.com/v1/timings/" + std::wstring(dateSeg) +
               L"?latitude=" + std::to_wstring(loc.latitude) + L"&longitude=" +
-              std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method);
+              std::to_wstring(loc.longitude) + L"&method=" + std::to_wstring(method) +
+              L"&school=" + std::to_wstring(school);
         if (!loc.timezone.empty()) {
             url += L"&timezonestring=" + UrlEncode(loc.timezone);
         }
@@ -1663,8 +1849,9 @@ std::wstring BuildAladhanUrl(int year, int month, int day, const LocationInfo& l
     return url;
 }
 
-PrayerSchedule FetchScheduleFromApi(int year, int month, int day, LocationInfo loc) {
-    int method = ResolveCalculationMethod(loc);
+PrayerSchedule FetchScheduleFromApi(int year, int month, int day,
+                                    LocationInfo loc, int method,
+                                    int school) {
     auto parseResponse = [&](const std::string& body) -> PrayerSchedule {
         auto data = JsonFindObject(body, "data");
         if (!data) throw std::runtime_error("no data");
@@ -1675,15 +1862,21 @@ PrayerSchedule FetchScheduleFromApi(int year, int month, int day, LocationInfo l
             auto tzVal = JsonGetStringW(*meta, "timezone");
             if (!tzVal.empty()) tz = tzVal;
         }
-        return BuildScheduleFromTimingsJson(*timings, year, month, day, loc, tz);
+        auto schedule =
+            BuildScheduleFromTimingsJson(*timings, year, month, day, loc, tz);
+        if (!IsCompleteSchedule(schedule)) {
+            throw std::runtime_error("incomplete prayer timings");
+        }
+        return schedule;
     };
     try {
-        auto url = BuildIslamicAppUrl(year, month, day, loc, method);
+        auto url = BuildIslamicAppUrl(year, month, day, loc, method, school);
         auto body = HttpGetUtf8(url);
         if (!body) throw std::runtime_error("islamic.app failed");
         return parseResponse(*body);
     } catch (...) {
-        auto url = BuildAladhanUrl(year, month, day, loc, method);
+        Wh_Log(L"Primary prayer API failed; trying Aladhan");
+        auto url = BuildAladhanUrl(year, month, day, loc, method, school);
         auto body = HttpGetUtf8(url);
         if (!body) throw std::runtime_error("aladhan failed");
         return parseResponse(*body);
@@ -1706,15 +1899,19 @@ bool IsCacheStale(const PrayerSchedule& schedule, int y, int m, int d,
 }
 
 std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
-                                        const LocationInfo& loc, int method) {
-    auto path = BuildCachePath(year, month, day, loc, method);
-    std::ifstream in(path.c_str(), std::ios::binary);
-    if (!in) return std::nullopt;
-    std::string json((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (json.empty()) return std::nullopt;
+                                        const LocationInfo& loc, int method,
+                                        int school) {
+    auto path = BuildCachePath(year, month, day, loc, method, school);
+    auto contents = ReadTextFile(path, 256 * 1024);
+    if (!contents) return std::nullopt;
+    const std::string& json = *contents;
     PrayerSchedule schedule;
     auto dateStr = JsonGetStringW(json, "Date");
     if (!dateStr.empty()) {
+        if (dateStr.size() < 10 || dateStr[4] != L'-' ||
+            dateStr[7] != L'-') {
+            return std::nullopt;
+        }
         schedule.year = _wtoi(dateStr.substr(0, 4).c_str());
         schedule.month = _wtoi(dateStr.substr(5, 2).c_str());
         schedule.day = _wtoi(dateStr.substr(8, 2).c_str());
@@ -1724,7 +1921,12 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
         schedule.day = day;
     }
     schedule.location = loc;
-    schedule.fetchedAtUtcMs = GetUtcNowMs();
+    schedule.fetchedAtUtcMs = static_cast<ULONGLONG>(
+        JsonGetDouble(json, "FetchedAtUtcMs").value_or(0));
+    if (!schedule.fetchedAtUtcMs) {
+        // Old cache format: force a refresh instead of pretending it is new.
+        schedule.fetchedAtUtcMs = 1;
+    }
     if (auto locObj = JsonFindObject(json, "Location")) {
         schedule.location.city = JsonGetStringW(*locObj, "City");
         schedule.location.country = JsonGetStringW(*locObj, "Country");
@@ -1732,26 +1934,29 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
         schedule.location.latitude = JsonGetDouble(*locObj, "Latitude").value_or(loc.latitude);
         schedule.location.longitude = JsonGetDouble(*locObj, "Longitude").value_or(loc.longitude);
     }
-    if (auto prayersArr = json.find("\"Prayers\""); prayersArr != std::string::npos) {
-        SYSTEMTIME date{};
-        date.wYear = static_cast<WORD>(schedule.year);
-        date.wMonth = static_cast<WORD>(schedule.month);
-        date.wDay = static_cast<WORD>(schedule.day);
-        for (int i = 0; i < static_cast<int>(PrayerName::Count); ++i) {
-            auto name = static_cast<PrayerName>(i);
-            std::string key = "\"Name\":" + std::to_string(static_cast<int>(name));
-            (void)key;
-        }
-    }
     auto timings = JsonFindObject(json, "timings");
     if (timings) {
-        return BuildScheduleFromTimingsJson(*timings, year, month, day, loc, loc.timezone);
+        auto parsed = BuildScheduleFromTimingsJson(*timings, year, month, day,
+                                                   schedule.location,
+                                                   schedule.location.timezone);
+        if (!IsCompleteSchedule(parsed)) {
+            return std::nullopt;
+        }
+        parsed.fetchedAtUtcMs = schedule.fetchedAtUtcMs;
+        return parsed;
     }
     for (int i = 0; i < static_cast<int>(PrayerName::Count); ++i) {
         auto name = static_cast<PrayerName>(i);
         std::string search = std::string("\"") + WideToUtf8(PrayerApiKey(name)) + "\"";
         if (json.find(search) != std::string::npos) {
-            return BuildScheduleFromTimingsJson(json, year, month, day, loc, loc.timezone);
+            auto parsed = BuildScheduleFromTimingsJson(
+                json, year, month, day, schedule.location,
+                schedule.location.timezone);
+            if (!IsCompleteSchedule(parsed)) {
+                return std::nullopt;
+            }
+            parsed.fetchedAtUtcMs = schedule.fetchedAtUtcMs;
+            return parsed;
         }
     }
     SYSTEMTIME date{};
@@ -1763,6 +1968,9 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
         pos += 7;
         while (pos < json.size() && (json[pos] == ' ' || json[pos] == '"')) ++pos;
         int nameIdx = atoi(json.c_str() + pos);
+        if (nameIdx < 0 || nameIdx >= static_cast<int>(PrayerName::Count)) {
+            return std::nullopt;
+        }
         pos = json.find("\"Time\":", pos);
         if (pos == std::string::npos) break;
         pos += 7;
@@ -1774,9 +1982,9 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
         std::wstring timeText = Utf8ToWide(json.substr(pos, end - pos));
         if (timeText.size() >= 16) {
             SYSTEMTIME st = date;
-            st.wHour = static_cast<WORD>(_wtoi(timeText.substr(11, 2).c_str()));
-            st.wMinute = static_cast<WORD>(_wtoi(timeText.substr(14, 2).c_str()));
-            st.wSecond = 0;
+            if (!ParseTimeOnly(timeText.substr(11), date, st)) {
+                return std::nullopt;
+            }
             PrayerEntry entry;
             entry.name = static_cast<PrayerName>(nameIdx);
             entry.time = st;
@@ -1784,26 +1992,30 @@ std::optional<PrayerSchedule> LoadCache(int year, int month, int day,
         }
         pos = end;
     }
-    if (schedule.prayers.empty()) return std::nullopt;
+    if (!IsCompleteSchedule(schedule)) {
+        return std::nullopt;
+    }
     return schedule;
 }
 
-void SaveCache(const PrayerSchedule& schedule, int method) {
+void SaveCache(const PrayerSchedule& schedule, int method, int school,
+               const LocationInfo& cacheLocation) {
     auto path = BuildCachePath(schedule.year, schedule.month, schedule.day,
-                              schedule.location, method);
-    std::ofstream out(path.c_str(), std::ios::binary | std::ios::trunc);
-    if (!out) return;
+                              cacheLocation, method, school);
+    if (path.empty()) return;
+    std::ostringstream out;
+    out << std::setprecision(15);
     out << "{\n";
     wchar_t dateBuf[16];
     swprintf(dateBuf, 16, L"%04d-%02d-%02d", schedule.year, schedule.month, schedule.day);
     out << "  \"Date\": \"" << WideToUtf8(dateBuf) << "\",\n";
-    out << "  \"FetchedAtUtc\": \"" << WideToUtf8(std::to_wstring(schedule.fetchedAtUtcMs)) << "\",\n";
+    out << "  \"FetchedAtUtcMs\": " << schedule.fetchedAtUtcMs << ",\n";
     out << "  \"Location\": {\n";
     out << "    \"Latitude\": " << schedule.location.latitude << ",\n";
     out << "    \"Longitude\": " << schedule.location.longitude << ",\n";
-    out << "    \"City\": \"" << WideToUtf8(schedule.location.city) << "\",\n";
-    out << "    \"Country\": \"" << WideToUtf8(schedule.location.country) << "\",\n";
-    out << "    \"Timezone\": \"" << WideToUtf8(schedule.location.timezone) << "\"\n";
+    out << "    \"City\": \"" << WideToUtf8(JsonEscape(schedule.location.city)) << "\",\n";
+    out << "    \"Country\": \"" << WideToUtf8(JsonEscape(schedule.location.country)) << "\",\n";
+    out << "    \"Timezone\": \"" << WideToUtf8(JsonEscape(schedule.location.timezone)) << "\"\n";
     out << "  },\n  \"timings\": {\n";
     for (size_t i = 0; i < schedule.prayers.size(); ++i) {
         const auto& p = schedule.prayers[i];
@@ -1814,18 +2026,32 @@ void SaveCache(const PrayerSchedule& schedule, int method) {
         out << "\n";
     }
     out << "  }\n}\n";
+    if (!WriteTextFileAtomically(path, out.str())) {
+        Wh_Log(L"Failed to save prayer cache");
+    }
 }
 
-PrayerSchedule GetScheduleForDate(int year, int month, int day, LocationInfo loc) {
-    int method = ResolveCalculationMethod(loc);
-    if (auto cached = LoadCache(year, month, day, loc, method)) {
+PrayerSchedule GetScheduleForDate(int year, int month, int day,
+                                  LocationInfo loc, int method, int school) {
+    auto cached = LoadCache(year, month, day, loc, method, school);
+    if (cached) {
         if (!IsCacheStale(*cached, year, month, day, loc)) {
             return *cached;
         }
     }
-    auto schedule = FetchScheduleFromApi(year, month, day, loc);
-    SaveCache(schedule, method);
-    return schedule;
+    try {
+        auto schedule =
+            FetchScheduleFromApi(year, month, day, loc, method, school);
+        SaveCache(schedule, method, school, loc);
+        return schedule;
+    } catch (...) {
+        if (cached && IsCompleteSchedule(*cached)) {
+            Wh_Log(L"Using stale prayer cache for %04d-%02d-%02d", year,
+                   month, day);
+            return *cached;
+        }
+        throw;
+    }
 }
 
 void AddDays(SYSTEMTIME& st, int days) {
@@ -1850,6 +2076,7 @@ std::optional<NextPrayerInfo> GetNextPrayer() {
     auto consider = [&](const PrayerSchedule& sched) {
         for (const auto& p : sched.prayers) {
             ULONGLONG t = PrayerUnixSeconds(p);
+            if (!t) continue;
             if (t >= nowSec) {
                 if (!found || t < bestSec) {
                     best.name = p.name;
@@ -1874,6 +2101,7 @@ std::vector<PrayerEntry> GetTodayEntriesWithStatus() {
     const PrayerEntry* current = nullptr;
     for (const auto& p : g_currentSchedule.prayers) {
         ULONGLONG t = PrayerUnixSeconds(p);
+        if (!t) continue;
         if (nowSec >= t &&
             nowSec < t + kCurrentPrayerHighlightMinutes * 60) {
             current = &p;
@@ -1885,6 +2113,7 @@ std::vector<PrayerEntry> GetTodayEntriesWithStatus() {
     auto considerNext = [&](const PrayerSchedule& sched) {
         for (const auto& p : sched.prayers) {
             ULONGLONG t = PrayerUnixSeconds(p);
+            if (!t) continue;
             if (t >= nowSec) {
                 if (!hasNext || t < SystemTimeToUnixSeconds(nextInfo.time)) {
                     nextInfo.name = p.name;
@@ -1912,9 +2141,10 @@ std::vector<PrayerEntry> GetTodayEntriesWithStatus() {
 }
 
 DisplayContent FormatTaskbarDisplay() {
+    const auto settings = GetSettingsSnapshot();
     DisplayContent content;
     content.color = TaskbarTextColorHex();
-    if (!g_settings.showOnTaskbar || g_isFullscreen.load()) {
+    if (!settings.showOnTaskbar || g_isFullscreen.load()) {
         content.visible = false;
         return content;
     }
@@ -1924,18 +2154,18 @@ DisplayContent FormatTaskbarDisplay() {
     if (!next) {
         content.visible = true;
         if (g_lastRefreshFailed.load() && !g_refreshRunning.load()) {
-            content.top = StabilizeCompactText(Loc(L"Unavailable"));
+            content.top = StabilizeCompactText(L"--");
             content.bottom = Loc(L"Prayer");
         } else {
             content.top = StabilizeCompactText(L"...");
-            content.bottom = Loc(L"Detecting");
+            content.bottom = Loc(L"Prayer");
         }
         g_uiTimerIntervalMs = slotReady ? 2000 : g_injectRetryMs.load();
         return content;
     }
     content.visible = true;
     content.bottom = GetPrayerName(next->name);
-    switch (g_settings.contentMode) {
+    switch (settings.contentMode) {
         case ContentMode::Time:
             content.top = FormatTime(next->time);
             break;
@@ -1965,6 +2195,20 @@ std::wstring GetNotificationSoundPath() {
     return base.empty() ? L"" : base + L"\\audio\\allah-akbar.mp3";
 }
 
+bool LooksLikeMp3(std::string_view data) {
+    if (data.size() < kNotificationSoundMinBytes ||
+        data.size() > kNotificationSoundMaxBytes) {
+        return false;
+    }
+    if (data.size() >= 3 && data[0] == 'I' && data[1] == 'D' &&
+        data[2] == '3') {
+        return true;
+    }
+    const auto b0 = static_cast<unsigned char>(data[0]);
+    const auto b1 = static_cast<unsigned char>(data[1]);
+    return b0 == 0xFF && (b1 & 0xE0) == 0xE0;
+}
+
 bool EnsureNotificationSoundFile() {
     const auto path = GetNotificationSoundPath();
     if (path.empty()) {
@@ -1979,31 +2223,33 @@ bool EnsureNotificationSoundFile() {
         ULARGE_INTEGER size{};
         size.HighPart = attrs.nFileSizeHigh;
         size.LowPart = attrs.nFileSizeLow;
-        if (size.QuadPart == kNotificationSoundBytes) {
-            return true;
+        if (size.QuadPart >= kNotificationSoundMinBytes &&
+            size.QuadPart <= kNotificationSoundMaxBytes) {
+            auto existing =
+                ReadTextFile(path, kNotificationSoundMaxBytes);
+            if (existing && LooksLikeMp3(*existing)) return true;
         }
     }
 
-    const auto body = HttpGetUtf8(kNotificationSoundUrl);
-    if (!body || body->size() != kNotificationSoundBytes) {
+    const auto body =
+        HttpGetUtf8(kNotificationSoundUrl, kNotificationSoundMaxBytes);
+    if (!body || !LooksLikeMp3(*body)) {
         Wh_Log(L"Notification sound download failed");
         return false;
     }
 
-    std::ofstream out(path.c_str(), std::ios::binary | std::ios::trunc);
-    if (!out) {
+    if (!WriteTextFileAtomically(path, *body)) {
         Wh_Log(L"Notification sound write failed");
         return false;
     }
-    out.write(body->data(), static_cast<std::streamsize>(body->size()));
-    return static_cast<bool>(out);
+    return true;
 }
 
 void PlayNotificationSound() {
-    if (!EnsureNotificationSoundFile()) {
+    const auto path = GetNotificationSoundPath();
+    if (path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         return;
     }
-    const auto path = GetNotificationSoundPath();
     mciSendStringW(L"close prayertray_notify", nullptr, 0, nullptr);
     std::wstring openCmd =
         L"open \"" + path + L"\" type mpegvideo alias prayertray_notify";
@@ -2021,36 +2267,39 @@ void PlayNotificationSound() {
 }
 
 void CheckNotifications() {
-    if (!g_settings.playPrayerNotification) return;
-    std::lock_guard lock(g_scheduleMutex);
-    if (!g_hasCurrentSchedule) return;
-    int dateKey = DateKey(g_currentSchedule.year, g_currentSchedule.month,
-                          g_currentSchedule.day);
-    if (g_notificationActiveDateKey != dateKey) {
-        g_notificationActiveDateKey = dateKey;
-        g_playedNotificationKeys.clear();
-    }
-    ULONGLONG nowSec = LocalNowUnixSeconds();
-    const ULONGLONG leadSec =
-        static_cast<ULONGLONG>(kNotificationLeadMinutes * 60);
-    auto consider = [&](const PrayerSchedule& sched) {
-        const int schedKey =
-            DateKey(sched.year, sched.month, sched.day);
-        for (const auto& p : sched.prayers) {
-            ULONGLONG t = PrayerUnixSeconds(p);
-            if (nowSec + leadSec < t) continue;
-            if (nowSec >= t) continue;
-            wchar_t key[64];
-            swprintf(key, 64, L"%d:%d", schedKey, static_cast<int>(p.name));
-            if (g_playedNotificationKeys.insert(key).second) {
-                PlayNotificationSound();
-                return true;
-            }
+    if (!GetSettingsSnapshot().playPrayerNotification) return;
+    bool shouldPlay = false;
+    {
+        std::lock_guard lock(g_scheduleMutex);
+        if (!g_hasCurrentSchedule) return;
+        int dateKey = DateKey(g_currentSchedule.year, g_currentSchedule.month,
+                              g_currentSchedule.day);
+        if (g_notificationActiveDateKey != dateKey) {
+            g_notificationActiveDateKey = dateKey;
+            g_playedNotificationKeys.clear();
         }
-        return false;
-    };
-    if (consider(g_currentSchedule)) return;
-    if (g_hasNextSchedule) consider(g_nextSchedule);
+        ULONGLONG nowSec = LocalNowUnixSeconds();
+        const ULONGLONG leadSec =
+            static_cast<ULONGLONG>(kNotificationLeadMinutes * 60);
+        auto consider = [&](const PrayerSchedule& sched) {
+            const int schedKey = DateKey(sched.year, sched.month, sched.day);
+            for (const auto& p : sched.prayers) {
+                ULONGLONG t = PrayerUnixSeconds(p);
+                if (!t) continue;
+                if (nowSec + leadSec < t || nowSec >= t) continue;
+                wchar_t key[64];
+                swprintf(key, 64, L"%d:%d", schedKey,
+                         static_cast<int>(p.name));
+                if (g_playedNotificationKeys.insert(key).second) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        shouldPlay = consider(g_currentSchedule) ||
+                     (g_hasNextSchedule && consider(g_nextSchedule));
+    }
+    if (shouldPlay) PlayNotificationSound();
 }
 
 bool IsForegroundWindowFullscreen() {
@@ -2105,16 +2354,29 @@ bool BootstrapFromCache() {
     }
 
     LocationInfo loc = *locOpt;
+    const auto settings = GetSettingsSnapshot();
+    if (settings.useManualLocation) {
+        try {
+            loc = ResolveManualLocation();
+        } catch (...) {
+            return false;
+        }
+    } else if (loc.source.starts_with(L"manual")) {
+        return false;
+    }
     SYSTEMTIME now = GetLocalNow();
-    const int method = ResolveCalculationMethod(loc);
-    auto today = LoadCache(now.wYear, now.wMonth, now.wDay, loc, method);
+    const int method = ResolveCalculationMethod(loc, settings);
+    const int school = settings.hanafiAsr ? 1 : 0;
+    auto today =
+        LoadCache(now.wYear, now.wMonth, now.wDay, loc, method, school);
     if (!today || today->prayers.empty()) {
         return false;
     }
 
     SYSTEMTIME tomorrow = now;
     AddDays(tomorrow, 1);
-    auto nextDay = LoadCache(tomorrow.wYear, tomorrow.wMonth, tomorrow.wDay, loc, method);
+    auto nextDay = LoadCache(tomorrow.wYear, tomorrow.wMonth, tomorrow.wDay,
+                             loc, method, school);
 
     {
         std::lock_guard lock(g_scheduleMutex);
@@ -2132,18 +2394,26 @@ bool BootstrapFromCache() {
     return true;
 }
 
-void RefreshSchedulesWorker() {
-    if (g_refreshRunning.exchange(true)) return;
+bool RefreshSchedulesOnce(bool fullLocation) {
+    bool success = false;
     try {
         LocationInfo loc;
-        const bool fullLocation = g_forceLocationRefresh.exchange(false);
-
-        if (g_settings.useManualLocation) {
+        const auto settings = GetSettingsSnapshot();
+        if (settings.useManualLocation) {
             loc = ResolveManualLocation();
             SaveLastLocation(loc);
         } else if (!fullLocation) {
             if (auto last = LoadLastLocation()) {
-                loc = *last;
+                const ULONGLONG now = GetUtcNowMs();
+                const ULONGLONG maxAge =
+                    static_cast<ULONGLONG>(kLocationRefreshHours) * 3600000ULL;
+                if (!last->source.starts_with(L"manual") &&
+                    last->resolvedAtUtcMs && now >= last->resolvedAtUtcMs &&
+                    now - last->resolvedAtUtcMs <= maxAge) {
+                    loc = *last;
+                } else {
+                    loc = ResolveLocation();
+                }
             } else {
                 loc = ResolveLocation();
             }
@@ -2152,12 +2422,16 @@ void RefreshSchedulesWorker() {
         }
 
         SYSTEMTIME now = GetLocalNow();
-        auto today = GetScheduleForDate(now.wYear, now.wMonth, now.wDay, loc);
+        const int method = ResolveCalculationMethod(loc, settings);
+        const int school = settings.hanafiAsr ? 1 : 0;
+        auto today = GetScheduleForDate(now.wYear, now.wMonth, now.wDay, loc,
+                                        method, school);
         SYSTEMTIME tomorrow = now;
         AddDays(tomorrow, 1);
         PrayerSchedule nextDay;
         try {
-            nextDay = GetScheduleForDate(tomorrow.wYear, tomorrow.wMonth, tomorrow.wDay, loc);
+            nextDay = GetScheduleForDate(tomorrow.wYear, tomorrow.wMonth,
+                                         tomorrow.wDay, loc, method, school);
         } catch (...) {
         }
         {
@@ -2169,6 +2443,7 @@ void RefreshSchedulesWorker() {
             g_hasNextSchedule = !nextDay.prayers.empty();
         }
         g_lastRefreshFailed = !g_hasCurrentSchedule;
+        success = g_hasCurrentSchedule;
     } catch (const std::exception& ex) {
         Wh_Log(L"Refresh failed: %S", ex.what());
         g_lastRefreshFailed = true;
@@ -2176,10 +2451,103 @@ void RefreshSchedulesWorker() {
         Wh_Log(L"Refresh failed");
         g_lastRefreshFailed = true;
     }
-    g_refreshRunning = false;
-    g_refreshRequested = false;
     if (g_messageHwnd) {
         PostMessageW(g_messageHwnd, WM_PT_UI_TICK, 0, 0);
+    }
+    return success;
+}
+
+DWORD WINAPI RefreshThreadProc(void*) {
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+    } catch (...) {
+    }
+
+    DWORD waitMs = INFINITE;
+    DWORD failureDelayMs = 60000;
+    HANDLE handles[] = {g_stopEvent, g_refreshWakeEvent};
+    while (!StopRequested()) {
+        DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles, FALSE,
+                                            waitMs);
+        if (wait == WAIT_OBJECT_0 || StopRequested()) break;
+        if (wait != WAIT_OBJECT_0 + 1 && wait != WAIT_TIMEOUT) {
+            Wh_Log(L"Refresh worker wait failed (%u)", GetLastError());
+            break;
+        }
+
+        bool success = false;
+        do {
+            g_refreshRequested = false;
+            const bool fullLocation = g_forceLocationRefresh.exchange(false);
+            g_refreshRunning = true;
+            success = RefreshSchedulesOnce(fullLocation);
+            g_refreshRunning = false;
+
+            const auto settings = GetSettingsSnapshot();
+            bool soundReady = true;
+            if (settings.playPrayerNotification) {
+                soundReady = EnsureNotificationSoundFile();
+            }
+            if (g_soundPreviewRequested.exchange(false) && soundReady &&
+                g_messageHwnd) {
+                PostMessageW(g_messageHwnd, WM_PT_PLAY_SOUND, 0, 0);
+            }
+        } while (!StopRequested() &&
+                 (g_refreshRequested.exchange(false) ||
+                  g_forceLocationRefresh.load()));
+
+        if (success) {
+            failureDelayMs = 60000;
+            waitMs = kScheduleRefreshIntervalMs;
+        } else {
+            waitMs = failureDelayMs;
+            failureDelayMs = (std::min)(failureDelayMs * 2, 15UL * 60UL * 1000UL);
+        }
+    }
+    g_refreshRunning = false;
+    if (apartmentInitialized) winrt::uninit_apartment();
+    return 0;
+}
+
+bool StartRefreshWorker() {
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_refreshWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_refreshWakeEvent) {
+        if (g_refreshWakeEvent) CloseHandle(g_refreshWakeEvent);
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        g_refreshWakeEvent = nullptr;
+        g_stopEvent = nullptr;
+        return false;
+    }
+    g_refreshThread =
+        CreateThread(nullptr, 0, RefreshThreadProc, nullptr, 0, nullptr);
+    if (!g_refreshThread) {
+        CloseHandle(g_refreshWakeEvent);
+        CloseHandle(g_stopEvent);
+        g_refreshWakeEvent = nullptr;
+        g_stopEvent = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void StopRefreshWorker() {
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (g_refreshWakeEvent) SetEvent(g_refreshWakeEvent);
+    if (g_refreshThread) {
+        WaitForSingleObject(g_refreshThread, INFINITE);
+        CloseHandle(g_refreshThread);
+        g_refreshThread = nullptr;
+    }
+    if (g_refreshWakeEvent) {
+        CloseHandle(g_refreshWakeEvent);
+        g_refreshWakeEvent = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
     }
 }
 
@@ -2188,7 +2556,7 @@ void RequestRefresh(bool fullLocation = false) {
         g_forceLocationRefresh = true;
     }
     g_refreshRequested = true;
-    std::thread(RefreshSchedulesWorker).detach();
+    if (g_refreshWakeEvent) SetEvent(g_refreshWakeEvent);
 }
 
 void MaybeRequestScheduleRefresh() {
@@ -2200,9 +2568,7 @@ void MaybeRequestScheduleRefresh() {
     bool needsRefresh = false;
     {
         std::lock_guard lock(g_scheduleMutex);
-        if (!g_hasCurrentSchedule) {
-            needsRefresh = g_lastRefreshFailed.load();
-        } else {
+        if (g_hasCurrentSchedule) {
             const int schedKey = DateKey(g_currentSchedule.year, g_currentSchedule.month,
                                          g_currentSchedule.day);
             needsRefresh = schedKey != todayKey;
@@ -2277,81 +2643,7 @@ void UpdateTrayIcon();
 void DestroyFlyout();
 void DestroyWin10Overlay();
 void RemoveTrayIcon();
-HWND FindCurrentProcessTaskbarWnd();
-
-bool SlotUiReady() {
-    if (g_backend.load() == TaskbarBackend::Win11Xaml) {
-        return g_slotInjected.load() && g_slotRoot;
-    }
-    return g_win10OverlayHwnd != nullptr;
-}
-
-bool ClaimExplorerRestartOnce() {
-    const auto base = GetAppDataPrayerTrayPath();
-    if (base.empty()) {
-        return false;
-    }
-    CreateDirectoryW(base.c_str(), nullptr);
-    const std::wstring flag = base + L"\\explorer-restart.flag";
-
-    // CREATE_NEW: atomic one-shot. If the flag already exists, never restart again
-    // until the mod is disabled (flag cleared in Wh_ModBeforeUninit).
-    HANDLE h = CreateFileW(flag.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
-                           FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"Explorer restart skipped (already restarted once)");
-        return false;
-    }
-    DWORD written = 0;
-    WriteFile(h, "1", 1, &written, nullptr);
-    CloseHandle(h);
-    return true;
-}
-
-void ClearExplorerRestartFlag() {
-    const auto base = GetAppDataPrayerTrayPath();
-    if (base.empty()) {
-        return;
-    }
-    DeleteFileW((base + L"\\explorer-restart.flag").c_str());
-}
-
-void ScheduleExplorerRestart() {
-    // Detached helper so we don't kill this explorer mid-call.
-    wchar_t cmd[] =
-        L"cmd.exe /d /c \"ping -n 2 127.0.0.1 >nul & "
-        L"taskkill /f /im explorer.exe >nul 2>&1 & start explorer.exe\"";
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                        nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"Failed to schedule explorer restart (%u)", GetLastError());
-        return;
-    }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    Wh_Log(L"Scheduled explorer restart so the taskbar slot can inject");
-}
-
-void MaybeRestartExplorerForSlot() {
-    ApplyEngineToBackends();
-    if (SlotUiReady()) {
-        // Slot worked — allow one restart again if the mod is later re-enabled
-        // and injection fails. Do not clear on unload: that would re-arm a loop
-        // when Explorer is killed for the restart itself.
-        ClearExplorerRestartFlag();
-        return;
-    }
-    if (!FindCurrentProcessTaskbarWnd()) {
-        // Folder explorers have no tray — don't kill the shell for them.
-        return;
-    }
-    if (!ClaimExplorerRestartOnce()) {
-        return;
-    }
-    ScheduleExplorerRestart();
-}
+void StopTimers();
 
 void EnsureContextMenu() {
     if (g_contextMenu) return;
@@ -2390,6 +2682,13 @@ void ShowContextMenu(HWND anchor) {
 }
 
 void DispatchCommand(int commandId) {
+    if (g_uiThreadId && GetCurrentThreadId() != g_uiThreadId) {
+        if (g_messageHwnd) {
+            PostMessageW(g_messageHwnd, WM_COMMAND,
+                         static_cast<WPARAM>(commandId), 0);
+        }
+        return;
+    }
     const auto now = GetTickCount64();
     if (g_lastCommandId.load() == commandId && now - g_lastCommandTick.load() < 250) {
         return;
@@ -2487,12 +2786,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             HDC hdc = BeginPaint(hWnd, &ps);
             RECT rc{};
             GetClientRect(hWnd, &rc);
-            bool light = IsLightTheme();
-            HBRUSH bg = CreateSolidBrush(light ? RGB(252, 252, 252) : RGB(32, 32, 32));
+            const TaskbarPalette palette = GetTaskbarPalette();
+            HBRUSH bg = CreateSolidBrush(palette.background);
             FillRect(hdc, &rc, bg);
             DeleteObject(bg);
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, light ? RGB(26, 26, 26) : RGB(255, 255, 255));
+            SetTextColor(hdc, palette.foreground);
             HFONT font = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                      CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
@@ -2508,19 +2807,19 @@ LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             RECT titleRc{12, 8, rc.right - 12, 28};
             DrawTextW(hdc, title.c_str(), -1, &titleRc, DT_LEFT | DT_SINGLELINE);
             RECT subRc{12, 28, rc.right - 12, 48};
-            SetTextColor(hdc, light ? RGB(100, 100, 100) : RGB(180, 180, 180));
+            SetTextColor(hdc, palette.secondary);
             DrawTextW(hdc, subtitle.c_str(), -1, &subRc, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             auto entries = GetTodayEntriesWithStatus();
             int y = kFlyoutHeaderHeight;
             for (const auto& e : entries) {
                 RECT rowRc{12, y, rc.right - 12, y + kFlyoutRowHeight};
                 if (e.isCurrent || e.isNext) {
-                    HBRUSH hl = CreateSolidBrush(light ? RGB(230, 240, 255) : RGB(50, 60, 80));
+                    HBRUSH hl = CreateSolidBrush(palette.highlight);
                     RECT fillRc{0, y, rc.right, y + kFlyoutRowHeight};
                     FillRect(hdc, &fillRc, hl);
                     DeleteObject(hl);
                 }
-                SetTextColor(hdc, light ? RGB(26, 26, 26) : RGB(255, 255, 255));
+                SetTextColor(hdc, palette.foreground);
                 std::wstring name = GetPrayerName(e.name);
                 std::wstring time = FormatTime(e.time);
                 RECT nameRc{16, y + 4, rc.right / 2, y + kFlyoutRowHeight};
@@ -2529,6 +2828,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
                 DrawTextW(hdc, time.c_str(), -1, &timeRc, DT_RIGHT | DT_SINGLELINE);
                 y += kFlyoutRowHeight;
             }
+            HBRUSH border = CreateSolidBrush(palette.border);
+            FrameRect(hdc, &rc, border);
+            DeleteObject(border);
             SelectObject(hdc, oldFont);
             DeleteObject(font);
             EndPaint(hWnd, &ps);
@@ -2540,27 +2842,84 @@ LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 void EnsureFlyoutWindow() {
     if (g_flyoutHwnd) return;
-    static bool registered = false;
-    if (!registered) {
+    if (!g_flyoutClassRegistered) {
         WNDCLASSW wc{};
         wc.lpfnWndProc = FlyoutWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = g_moduleInstance;
         wc.lpszClassName = kFlyoutClass;
         wc.hbrBackground = nullptr;
-        RegisterClassW(&wc);
-        registered = true;
+        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"Flyout class registration failed (%u)", GetLastError());
+            return;
+        }
+        g_flyoutClassRegistered = true;
     }
     g_flyoutHwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kFlyoutClass, L"",
-        WS_POPUP | WS_BORDER, 0, 0, kFlyoutWidth,
+        WS_POPUP, 0, 0, kFlyoutWidth,
         kFlyoutHeaderHeight + kFlyoutRowHeight * 5 + 8, g_messageHwnd, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+        g_moduleInstance, nullptr);
+    if (!g_flyoutHwnd) {
+        Wh_Log(L"Flyout window creation failed (%u)", GetLastError());
+    }
 }
 
 bool TryGetSlotAnchor(RECT& anchor) {
+    if (g_backend.load() == TaskbarBackend::Win10Overlay &&
+        g_win10OverlayHwnd && GetWindowRect(g_win10OverlayHwnd, &anchor)) {
+        return true;
+    }
+
     const int slotW = 60, slotH = 40, gap = 4;
     HWND shell = FindCurrentProcessTaskbarWnd();
     if (!shell) return false;
+
+    if (g_backend.load() == TaskbarBackend::Win11Xaml && g_slotInjected.load()) {
+        struct AnchorState {
+            RECT rect{};
+            std::atomic<bool> valid{false};
+        };
+        auto state = std::make_shared<AnchorState>();
+        const bool ran = RunFromWindowThread(shell, [state, shell]() {
+            try {
+                auto slot = g_slotRoot;
+                if (!slot) return;
+                auto xamlRoot = slot.XamlRoot();
+                auto content = xamlRoot
+                                   ? xamlRoot.Content().try_as<UIElement>()
+                                   : nullptr;
+                if (!content || slot.ActualWidth() <= 0 ||
+                    slot.ActualHeight() <= 0) {
+                    return;
+                }
+                const auto transform = slot.TransformToVisual(content);
+                const auto topLeft = transform.TransformPoint({0, 0});
+                const auto bottomRight = transform.TransformPoint(
+                    {static_cast<float>(slot.ActualWidth()),
+                     static_cast<float>(slot.ActualHeight())});
+                const double scale = xamlRoot.RasterizationScale();
+                POINT origin{0, 0};
+                if (!ClientToScreen(shell, &origin)) return;
+                RECT measured{
+                    origin.x + static_cast<LONG>(std::lround(topLeft.X * scale)),
+                    origin.y + static_cast<LONG>(std::lround(topLeft.Y * scale)),
+                    origin.x + static_cast<LONG>(std::lround(bottomRight.X * scale)),
+                    origin.y + static_cast<LONG>(std::lround(bottomRight.Y * scale))};
+                if (measured.right > measured.left &&
+                    measured.bottom > measured.top) {
+                    state->rect = measured;
+                    state->valid.store(true, std::memory_order_release);
+                }
+            } catch (...) {
+            }
+        });
+        if (ran && state->valid.load(std::memory_order_acquire)) {
+            anchor = state->rect;
+            return true;
+        }
+    }
+
+    // Compatibility fallback for classic taskbars or a tray that is rebuilding.
     HWND trayNotify = FindWindowExW(shell, nullptr, L"TrayNotifyWnd", nullptr);
     RECT notifyRect{};
     if (trayNotify && GetWindowRect(trayNotify, &notifyRect)) {
@@ -2589,13 +2948,37 @@ void ShowFlyout() {
         anchor.bottom = anchor.top + 40;
     }
     int height = kFlyoutHeaderHeight + kFlyoutRowHeight * 5 + 8;
-    int left = anchor.right - kFlyoutWidth;
-    int top = anchor.top - height - 8;
     HMONITOR mon = MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(mon, &mi);
-    if (left < mi.rcWork.left + 8) left = mi.rcWork.left + 8;
-    if (top < mi.rcWork.top + 8) top = mi.rcWork.top + 8;
+    if (!GetMonitorInfo(mon, &mi)) return;
+
+    constexpr int gap = 8;
+    constexpr int margin = 8;
+    const int centerX = anchor.left + (anchor.right - anchor.left) / 2;
+    const int centerY = anchor.top + (anchor.bottom - anchor.top) / 2;
+    const int distanceTop = centerY - mi.rcMonitor.top;
+    const int distanceBottom = mi.rcMonitor.bottom - centerY;
+    const int distanceLeft = centerX - mi.rcMonitor.left;
+    const int distanceRight = mi.rcMonitor.right - centerX;
+    const int nearestEdge = (std::min)({distanceTop, distanceBottom,
+                                       distanceLeft, distanceRight});
+
+    int left = centerX - kFlyoutWidth / 2;
+    int top = anchor.top - height - gap;
+    if (nearestEdge == distanceTop) {
+        top = anchor.bottom + gap;
+    } else if (nearestEdge == distanceLeft) {
+        left = anchor.right + gap;
+        top = centerY - height / 2;
+    } else if (nearestEdge == distanceRight) {
+        left = anchor.left - kFlyoutWidth - gap;
+        top = centerY - height / 2;
+    }
+
+    left = std::clamp(left, static_cast<int>(mi.rcWork.left) + margin,
+                      static_cast<int>(mi.rcWork.right) - kFlyoutWidth - margin);
+    top = std::clamp(top, static_cast<int>(mi.rcWork.top) + margin,
+                     static_cast<int>(mi.rcWork.bottom) - height - margin);
     SetWindowPos(g_flyoutHwnd, HWND_TOPMOST, left, top, kFlyoutWidth, height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     InvalidateRect(g_flyoutHwnd, nullptr, TRUE);
@@ -2618,12 +3001,17 @@ void DestroyFlyout() {
         DestroyWindow(g_flyoutHwnd);
         g_flyoutHwnd = nullptr;
     }
+    if (g_flyoutClassRegistered) {
+        UnregisterClassW(kFlyoutClass, g_moduleInstance);
+        g_flyoutClassRegistered = false;
+    }
 }
 
 
 void UpdateTrayIcon() {
     if (!g_messageHwnd) return;
-    if (g_settings.showNotificationIcon) {
+    const auto settings = GetSettingsSnapshot();
+    if (settings.showNotificationIcon) {
         if (!g_trayIconAdded) {
             ZeroMemory(&g_trayIcon, sizeof(g_trayIcon));
             g_trayIcon.cbSize = sizeof(g_trayIcon);
@@ -2633,8 +3021,13 @@ void UpdateTrayIcon() {
             g_trayIcon.uCallbackMessage = WM_APP + 10;
             g_trayIcon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
             wcscpy_s(g_trayIcon.szTip, L"PrayerTray");
-            Shell_NotifyIconW(NIM_ADD, &g_trayIcon);
-            g_trayIconAdded = true;
+            if (Shell_NotifyIconW(NIM_ADD, &g_trayIcon)) {
+                g_trayIcon.uVersion = NOTIFYICON_VERSION_4;
+                Shell_NotifyIconW(NIM_SETVERSION, &g_trayIcon);
+                g_trayIconAdded = true;
+            } else {
+                Wh_Log(L"Notification icon add failed (%u)", GetLastError());
+            }
         }
     } else {
         RemoveTrayIcon();
@@ -2696,22 +3089,28 @@ LRESULT CALLBACK Win10OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 
 void EnsureWin10Overlay() {
     if (g_backend.load() != TaskbarBackend::Win10Overlay) return;
-    static bool registered = false;
-    if (!registered) {
+    if (!g_overlayClassRegistered) {
         WNDCLASSW wc{};
         wc.lpfnWndProc = Win10OverlayProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = g_moduleInstance;
         wc.lpszClassName = kOverlayClass;
         wc.hCursor = LoadCursorW(nullptr, IDC_HAND);
-        RegisterClassW(&wc);
-        registered = true;
+        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"Overlay class registration failed (%u)", GetLastError());
+            return;
+        }
+        g_overlayClassRegistered = true;
     }
     HWND shell = FindCurrentProcessTaskbarWnd();
     if (!shell) return;
     if (!g_win10OverlayHwnd) {
         g_win10OverlayHwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW, kOverlayClass, L"", WS_CHILD | WS_VISIBLE, 0, 0, 60,
-            40, shell, nullptr, GetModuleHandleW(nullptr), nullptr);
+            40, shell, nullptr, g_moduleInstance, nullptr);
+        if (!g_win10OverlayHwnd) {
+            Wh_Log(L"Overlay window creation failed (%u)", GetLastError());
+            return;
+        }
     }
     RepositionWin10Overlay();
 }
@@ -2738,6 +3137,10 @@ void RepositionWin10Overlay() {
         ScreenToClient(shell, &pt);
         cx = pt.x;
         cy = pt.y;
+    } else {
+        ShowWindow(g_win10OverlayHwnd, SW_HIDE);
+        g_lastOverlayShown = false;
+        return;
     }
     const bool show = g_win10Visible;
     if (g_hasOverlayPlacement && g_lastOverlayShown == show &&
@@ -2761,6 +3164,10 @@ void DestroyWin10Overlay() {
         g_win10OverlayHwnd = nullptr;
     }
     g_hasOverlayPlacement = false;
+    if (g_overlayClassRegistered) {
+        UnregisterClassW(kOverlayClass, g_moduleInstance);
+        g_overlayClassRegistered = false;
+    }
 }
 
 void ApplyWin10Content(const DisplayContent& content) {
@@ -2874,8 +3281,17 @@ bool IsSlotRootAlive() {
             g_slotInjected = false;
             return false;
         }
-        // Do not require XamlRoot() here — it can be null for a moment after
-        // inject / during tray rebuild, and demoting then removes a live slot.
+        if (!g_slotRoot.XamlRoot() ||
+            !Media::VisualTreeHelper::GetParent(g_slotRoot)) {
+            g_slotRoot = nullptr;
+            g_slotButton = nullptr;
+            g_topTextBlock = nullptr;
+            g_bottomTextBlock = nullptr;
+            g_slotParentGrid = nullptr;
+            g_slotInjected = false;
+            g_hasAppliedContent = false;
+            return false;
+        }
         return true;
     } catch (...) {
         g_slotInjected = false;
@@ -2889,7 +3305,8 @@ void ApplySlotButtonVisualState() {
     uint8_t alpha = 0;
     if (g_slotPointerPressed.load()) alpha = 0x3A;
     else if (g_slotPointerOver.load()) alpha = 0x26;
-    button.Background(Brush(alpha, 255, 255, 255));
+    const uint8_t channel = IsLightTheme() ? 0 : 255;
+    button.Background(Brush(alpha, channel, channel, channel));
 }
 
 void ResetSlotButtonVisualState() {
@@ -3016,7 +3433,12 @@ void RemovePrayerTraySlotFromGrid(Controls::Grid trayGrid) {
             auto child = children.GetAt(i).try_as<FrameworkElement>();
             if (!child) continue;
             int col = Controls::Grid::GetColumn(child);
-            if (col > slotColumn) Controls::Grid::SetColumn(child, col - 1);
+            int span = Controls::Grid::GetColumnSpan(child);
+            if (col > slotColumn) {
+                Controls::Grid::SetColumn(child, col - 1);
+            } else if (col < slotColumn && col + span > slotColumn && span > 1) {
+                Controls::Grid::SetColumnSpan(child, span - 1);
+            }
         }
         trayGrid.ColumnDefinitions().RemoveAt(slotColumn);
     }
@@ -3071,11 +3493,15 @@ bool EnsurePrayerTraySlotInTrayGrid(Controls::Grid trayGrid) {
     topText.FontSize(11.5);
     topText.FlowDirection(FlowDirection::LeftToRight);
     topText.TextAlignment(TextAlignment::Center);
+    topText.MaxWidth(92);
+    topText.TextTrimming(TextTrimming::CharacterEllipsis);
     Controls::TextBlock bottomText;
     bottomText.Name(L"PrayerTrayBottom");
     bottomText.FontFamily(Media::FontFamily(L"Segoe UI Variable Text"));
     bottomText.FontSize(11.5);
     bottomText.TextAlignment(TextAlignment::Center);
+    bottomText.MaxWidth(92);
+    bottomText.TextTrimming(TextTrimming::CharacterEllipsis);
     slotStack.Children().Append(topText);
     slotStack.Children().Append(bottomText);
     slotButton.Content(slotStack);
@@ -3090,7 +3516,12 @@ bool EnsurePrayerTraySlotInTrayGrid(Controls::Grid trayGrid) {
             auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
             if (!child) continue;
             int col = Controls::Grid::GetColumn(child);
-            if (col >= slotColumn) Controls::Grid::SetColumn(child, col + 1);
+            int span = Controls::Grid::GetColumnSpan(child);
+            if (col >= slotColumn) {
+                Controls::Grid::SetColumn(child, col + 1);
+            } else if (col < slotColumn && col + span > slotColumn) {
+                Controls::Grid::SetColumnSpan(child, span + 1);
+            }
         }
     }
     Controls::Grid::SetColumn(slotElement, slotColumn);
@@ -3120,8 +3551,9 @@ bool EnsurePrayerTraySlot(FrameworkElement mainStack) {
         Padding="4,0,6,0" Margin="4,0,6,0" VerticalAlignment="Center">
         <StackPanel Orientation="Vertical"><TextBlock Name="PrayerTrayTop"
         FontFamily="Segoe UI Variable Text" FontSize="12" FlowDirection="LeftToRight"
-        TextAlignment="Center"/><TextBlock Name="PrayerTrayBottom"
-        FontFamily="Segoe UI Variable Text" FontSize="12" TextAlignment="Center"/>
+        MaxWidth="92" TextTrimming="CharacterEllipsis" TextAlignment="Center"/><TextBlock Name="PrayerTrayBottom"
+        FontFamily="Segoe UI Variable Text" FontSize="12" MaxWidth="92"
+        TextTrimming="CharacterEllipsis" TextAlignment="Center"/>
         </StackPanel></Button>)";
     auto slotButton = Markup::XamlReader::Load(xaml).try_as<Controls::Button>();
     if (!slotButton) return false;
@@ -3177,47 +3609,69 @@ bool ApplyWin11Style(XamlRoot xamlRoot, const DisplayContent& content) {
     return false;
 }
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(void*);
+bool RunFromWindowThread(HWND hWnd, WindowThreadAction action,
+                         DWORD timeoutMs) {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    struct Payload {
+        WindowThreadAction action;
+        std::atomic<bool> ran{false};
+        explicit Payload(WindowThreadAction value) : action(std::move(value)) {}
+    };
+    using PayloadRef = std::shared_ptr<Payload>;
 
-bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* param) {
-    static const UINT msg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct Param { RunFromWindowThreadProc_t proc; void* param; };
-    DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
-    if (!tid) return false;
-    if (tid == GetCurrentThreadId()) {
+    const DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!threadId || !action) return false;
+    if (threadId == GetCurrentThreadId()) {
         try {
-            proc(param);
+            action();
+            return true;
         } catch (...) {
+            return false;
         }
-        return true;
     }
+
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                static const UINT m = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-                if (cwp->message == m) {
-                    auto* p = reinterpret_cast<Param*>(cwp->lParam);
+        [](int code, WPARAM wParam, LPARAM lParam) CALLBACK -> LRESULT {
+            if (code == HC_ACTION) {
+                const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                static const UINT runMessage = RegisterWindowMessageW(
+                    L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+                if (cwp->message == runMessage) {
+                    std::unique_ptr<PayloadRef> holder(
+                        reinterpret_cast<PayloadRef*>(cwp->lParam));
+                    PayloadRef payload = *holder;
                     try {
-                        p->proc(p->param);
+                        payload->action();
                     } catch (...) {
                     }
+                    payload->ran.store(true, std::memory_order_release);
                 }
             }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            return CallNextHookEx(nullptr, code, wParam, lParam);
         },
-        nullptr, tid);
+        nullptr, threadId);
     if (!hook) return false;
-    Param p{proc, param};
-    DWORD_PTR result = 0;
-    // Do not use SMTO_ABORTIFHUNG — tray layout often looks busy and aborted updates.
-    if (!SendMessageTimeoutW(hWnd, msg, 0, reinterpret_cast<LPARAM>(&p), SMTO_NORMAL,
-                             kRunFromWindowTimeoutMs, &result)) {
-        SendMessageW(hWnd, msg, 0, reinterpret_cast<LPARAM>(&p));
+
+    PayloadRef payload = std::make_shared<Payload>(std::move(action));
+    auto* holder = new PayloadRef(payload);
+    DWORD_PTR ignored = 0;
+    const bool sent =
+        SendMessageTimeoutW(hWnd, message, 0,
+                            reinterpret_cast<LPARAM>(holder),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs,
+                            &ignored) != 0;
+    const bool ran = payload->ran.load(std::memory_order_acquire);
+    if (!sent) {
+        // A timed-out send can still be consumed by Windows. The hook owns the
+        // heap holder in that case, which avoids a use-after-free during unload.
+        UnhookWindowsHookEx(hook);
+        return false;
     }
+    if (!ran) delete holder;
     UnhookWindowsHookEx(hook);
-    return true;
+    return ran;
 }
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -3237,11 +3691,94 @@ HWND FindCurrentProcessTaskbarWnd() {
     return result;
 }
 
-struct SlotApplyParam { DisplayContent content; };
+void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void*);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original = nullptr;
 
-void ApplyWin11FromThread(SlotApplyParam* param) {
+HRESULT TryGetTaskbarElementAbi(HWND taskbar, void** result) {
+    if (!result) return E_POINTER;
+    *result = nullptr;
+    if (!taskbar || !CTaskBand_ITaskListWndSite_vftable ||
+        !CTaskBand_GetTaskbarHost_Original ||
+        !TaskbarHost_FrameHeight_Original ||
+        !std__Ref_count_base__Decref_Original) {
+        return E_NOINTERFACE;
+    }
+
+    HWND taskSwitch =
+        reinterpret_cast<HWND>(GetPropW(taskbar, L"TaskbandHWND"));
+    if (!taskSwitch) return E_HANDLE;
+    void* taskBand =
+        reinterpret_cast<void*>(GetWindowLongPtrW(taskSwitch, 0));
+    if (!taskBand) return E_POINTER;
+
+    void* taskBandSite = taskBand;
+    for (int index = 0;
+         *reinterpret_cast<void**>(taskBandSite) !=
+         CTaskBand_ITaskListWndSite_vftable;
+         ++index) {
+        if (index == 20) return E_NOINTERFACE;
+        taskBandSite = reinterpret_cast<void**>(taskBandSite) + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandSite, taskbarHostSharedPtr);
+    auto cleanup = [&]() {
+        if (taskbarHostSharedPtr[1]) {
+            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+            taskbarHostSharedPtr[1] = nullptr;
+        }
+    };
+    if (!taskbarHostSharedPtr[0]) {
+        cleanup();
+        return E_POINTER;
+    }
+
+    const BYTE* bytes =
+        reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
+    if (bytes[0] != 0x48 || bytes[1] != 0x83 || bytes[2] != 0xEC ||
+        bytes[4] != 0x48 || bytes[5] != 0x83 || bytes[6] != 0xC1 ||
+        bytes[7] > 0x7F) {
+        cleanup();
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+    const size_t elementOffset = bytes[7];
+    auto* elementUnknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + elementOffset);
+    if (!elementUnknown) {
+        cleanup();
+        return E_POINTER;
+    }
+
+    const HRESULT hr = elementUnknown->QueryInterface(
+        winrt::guid_of<FrameworkElement>(), result);
+    cleanup();
+    return hr;
+}
+
+XamlRoot GetTaskbarXamlRoot(HWND taskbar) {
+    void* elementAbi = nullptr;
+    if (FAILED(TryGetTaskbarElementAbi(taskbar, &elementAbi)) ||
+        !elementAbi) {
+        return nullptr;
+    }
+    FrameworkElement element{nullptr};
+    winrt::attach_abi(element, elementAbi);
+    return element ? element.XamlRoot() : nullptr;
+}
+
+struct SlotApplyParam {
+    HWND taskbar = nullptr;
+    DisplayContent content;
+};
+
+void ApplyWin11FromThread(const SlotApplyParam& param) {
     try {
-        DisplayContent content = param ? param->content : FormatTaskbarDisplay();
+        const DisplayContent& content = param.content;
         try {
             if (IsSlotRootAlive()) {
                 ApplyWin11SlotContent(content);
@@ -3252,7 +3789,14 @@ void ApplyWin11FromThread(SlotApplyParam* param) {
             g_slotInjected = false;
         }
         bool injected = false;
+        try {
+            if (auto xamlRoot = GetTaskbarXamlRoot(param.taskbar)) {
+                injected = ApplyWin11Style(xamlRoot, content);
+            }
+        } catch (...) {
+        }
         for (auto it = g_observedElements.begin(); it != g_observedElements.end();) {
+            if (injected) break;
             auto element = it->get();
             if (!element) {
                 it = g_observedElements.erase(it);
@@ -3260,10 +3804,8 @@ void ApplyWin11FromThread(SlotApplyParam* param) {
             }
             try {
                 if (auto xr = element.XamlRoot()) {
-                    if (ApplyWin11Style(xr, content)) {
-                        injected = true;
-                        break;
-                    }
+                    injected = ApplyWin11Style(xr, content);
+                    break;
                 }
             } catch (...) {
             }
@@ -3282,6 +3824,14 @@ void ApplyWin11FromThread(SlotApplyParam* param) {
             // Stay aggressive at first (100→200→400), then back off to 1.5s max.
             const int cur = g_injectRetryMs.load();
             g_injectRetryMs = std::min(1500, std::max(100, cur * 2));
+            const ULONGLONG now = GetTickCount64();
+            ULONGLONG next = g_nextInjectionFailureLogMs.load();
+            if (now >= next &&
+                g_nextInjectionFailureLogMs.compare_exchange_strong(
+                    next, now + 30000)) {
+                Wh_Log(L"Win11 tray slot not ready (attempt %d, observed %zu)",
+                       g_applySlotAttempts.load(), g_observedElements.size());
+            }
         }
     } catch (...) {
         g_slotInjected = false;
@@ -3294,8 +3844,12 @@ void TryApplyWin11Slot() {
     HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar) return;
     DisplayContent content = FormatTaskbarDisplay();
-    SlotApplyParam param{content};
-    RunFromWindowThread(taskbar, [](void* p) { ApplyWin11FromThread(static_cast<SlotApplyParam*>(p)); }, &param);
+    SlotApplyParam param{taskbar, content};
+    if (!RunFromWindowThread(taskbar,
+                             [param]() { ApplyWin11FromThread(param); })) {
+        const int current = g_injectRetryMs.load();
+        g_injectRetryMs = (std::min)(1500, (std::max)(100, current * 2));
+    }
 }
 
 void ApplyEngineToBackends() {
@@ -3306,22 +3860,10 @@ void ApplyEngineToBackends() {
     }
 }
 
-void* CTaskBand_ITaskListWndSite_vftable;
-using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void**);
-CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
-void* TaskbarHost_FrameHeight_Original;
-using std__Ref_count_base__Decref_t = void(WINAPI*)(void*);
-std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
-
 using IconView_IconView_t = void*(WINAPI*)(void*);
-IconView_IconView_t IconView_IconView_Original;
-using SystemTrayFrame_OnApplyTemplate_t = void(WINAPI*)(void*);
-SystemTrayFrame_OnApplyTemplate_t SystemTrayFrame_OnApplyTemplate_Original;
-using SystemTrayFrame_MeasureOverride_t =
-    winrt::Windows::Foundation::Size(WINAPI*)(void*, winrt::Windows::Foundation::Size const&);
-SystemTrayFrame_MeasureOverride_t SystemTrayFrame_MeasureOverride_Original;
+IconView_IconView_t IconView_IconView_Original = nullptr;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
+LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
 FrameworkElement TryGetFrameworkElementFromImplementation(void* pThis) {
     if (!pThis) return nullptr;
@@ -3336,100 +3878,102 @@ FrameworkElement TryGetFrameworkElementFromImplementation(void* pThis) {
     return element;
 }
 
-void TryApplySlotFromElement(FrameworkElement element) {
-    if (g_unloading || !element || g_backend.load() != TaskbarBackend::Win11Xaml) return;
-    try {
-        TrackObservedElement(element);
-        if (IsSlotRootAlive()) {
-            ApplyWin11SlotContent(FormatTaskbarDisplay());
-            return;
-        }
-        if (auto xr = element.XamlRoot()) ApplyWin11Style(xr, FormatTaskbarDisplay());
-    } catch (...) {
-    }
-}
-
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     void* ret = IconView_IconView_Original(pThis);
-    if (!g_unloading) TryApplySlotFromElement(TryGetFrameworkElementFromImplementation(pThis));
+    if (!g_unloading.load()) {
+        // Constructors run before the visual tree is ready. Keep only a weak
+        // reference and let the owned UI retry loop apply after layout settles.
+        if (auto element = TryGetFrameworkElementFromImplementation(pThis)) {
+            TrackObservedElement(element);
+        }
+        if (g_messageHwnd) {
+            PostMessageW(g_messageHwnd, WM_PT_UI_TICK, 0, 0);
+        }
+    }
     return ret;
 }
 
-void WINAPI SystemTrayFrame_OnApplyTemplate_Hook(void* pThis) {
-    SystemTrayFrame_OnApplyTemplate_Original(pThis);
-    if (!g_unloading) TryApplySlotFromElement(TryGetFrameworkElementFromImplementation(pThis));
-}
-
-winrt::Windows::Foundation::Size WINAPI SystemTrayFrame_MeasureOverride_Hook(
-    void* pThis, winrt::Windows::Foundation::Size const& availableSize) {
-    auto result = SystemTrayFrame_MeasureOverride_Original(pThis, availableSize);
-    // Measure runs constantly during tray layout. Never touch an already-injected
-    // slot here, and debounce inject attempts so we don't fight layout.
-    if (g_unloading || IsSlotRootAlive()) {
-        return result;
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
+    void* fixedInfo = nullptr;
+    UINT length = 0;
+    HRSRC resource =
+        FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (!resource) return nullptr;
+    HGLOBAL loaded = LoadResource(module, resource);
+    if (!loaded) return nullptr;
+    void* data = LockResource(loaded);
+    if (!data || !VerQueryValueW(data, L"\\", &fixedInfo, &length) ||
+        length < sizeof(VS_FIXEDFILEINFO)) {
+        return nullptr;
     }
-    const ULONGLONG now = GetTickCount64();
-    const ULONGLONG last = g_lastMeasureInjectAttemptMs.load();
-    // Fast retries right after enable; still avoid fighting every layout pass.
-    if (now - last < 200) {
-        return result;
+    return static_cast<VS_FIXEDFILEINFO*>(fixedInfo);
+}
+
+HMODULE GetSystemTrayModuleHandle() {
+    if (HMODULE module = GetModuleHandleW(L"SystemTray.dll")) {
+        return module;
     }
-    g_lastMeasureInjectAttemptMs = now;
-    TryApplySlotFromElement(TryGetFrameworkElementFromImplementation(pThis));
-    return result;
+    if (HMODULE module = GetModuleHandleW(L"Taskbar.View.dll")) {
+        const auto* version = GetModuleVersionInfo(module);
+        const WORD major = version ? HIWORD(version->dwFileVersionMS) : 0;
+        if (major && major < 2604) return module;
+        return nullptr;
+    }
+    return GetModuleHandleW(L"ExplorerExtensions.dll");
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE m = GetModuleHandleW(L"Taskbar.View.dll");
-    if (!m) m = GetModuleHandleW(L"ExplorerExtensions.dll");
-    return m;
-}
-
-bool HookTaskbarViewDllSymbols(HMODULE module) {
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
-         &IconView_IconView_Original, IconView_IconView_Hook, true},
-        {{LR"(protected: virtual void __cdecl winrt::SystemTray::implementation::SystemTrayFrame::OnApplyTemplate(void))",
-          LR"(public: virtual void __cdecl winrt::SystemTray::implementation::SystemTrayFrame::OnApplyTemplate(void))"},
-         &SystemTrayFrame_OnApplyTemplate_Original, SystemTrayFrame_OnApplyTemplate_Hook, true},
-        {{LR"(protected: virtual struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::SystemTrayFrame::MeasureOverride(struct winrt::Windows::Foundation::Size const &))",
-          LR"(public: virtual struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::SystemTrayFrame::MeasureOverride(struct winrt::Windows::Foundation::Size const &))"},
-         &SystemTrayFrame_MeasureOverride_Original, SystemTrayFrame_MeasureOverride_Hook, true},
+         &IconView_IconView_Original, IconView_IconView_Hook},
     };
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    if (!HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"System tray symbol hook failed");
+        return false;
+    }
+    return true;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR name) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        Wh_Log(L"Loaded %s", name);
-        if (HookTaskbarViewDllSymbols(module)) Wh_ApplyHookOperations();
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR name) {
+    if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
+        Wh_Log(L"Loaded system tray module: %s", name ? name : L"(unknown)");
+        if (HookSystemTraySymbols(module)) {
+            Wh_ApplyHookOperations();
+        } else {
+            g_systemTrayModuleHooked = false;
+        }
     }
 }
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(name, file, flags);
-    if (module) HandleLoadedModuleIfTaskbarView(module, name);
+    if (module) HandleLoadedModuleIfSystemTray(module, name);
     return module;
 }
 
 bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    if (!module) {
+        Wh_Log(L"taskbar.dll load failed (%u)", GetLastError());
+        return false;
+    }
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &CTaskBand_GetTaskbarHost_Original},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &std__Ref_count_base__Decref_Original},
     };
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 void SelectBackend() {
-    bool win11 = DetectWin11();
+    const bool win11 = DetectWin11();
+    const auto settings = GetSettingsSnapshot();
     g_isWin11 = win11;
-    if (win11 && !g_settings.oldTaskbarOnWin11) {
+    if (win11 && !settings.oldTaskbarOnWin11) {
         g_backend = TaskbarBackend::Win11Xaml;
     } else {
         g_backend = TaskbarBackend::Win10Overlay;
@@ -3439,6 +3983,7 @@ void SelectBackend() {
 
 
 void RestartUiTimer() {
+    if (!g_messageHwnd) return;
     const int intervalMs = g_uiTimerIntervalMs.load();
     if (g_uiTimer && g_lastUiTimerIntervalMs == intervalMs) {
         return;
@@ -3455,6 +4000,44 @@ VOID CALLBACK FullscreenTimerProc(HWND, UINT, UINT_PTR, DWORD) {
     }
 }
 
+void ClearWin11Slot() {
+    try {
+        if (g_slotParentGrid) {
+            RemovePrayerTraySlotFromGrid(g_slotParentGrid);
+        } else if (g_slotRoot) {
+            g_slotRoot.Visibility(Visibility::Collapsed);
+        }
+    } catch (...) {
+    }
+    g_observedElements.clear();
+    g_slotRoot = nullptr;
+    g_slotButton = nullptr;
+    g_topTextBlock = nullptr;
+    g_bottomTextBlock = nullptr;
+    g_slotParentGrid = nullptr;
+    g_slotInjected = false;
+    g_hasAppliedContent = false;
+}
+
+void ShutdownOwnedUiResources() {
+    StopTimers();
+    HideFlyout();
+    DestroyFlyout();
+    DestroyWin10Overlay();
+    RemoveTrayIcon();
+    if (g_contextMenu) {
+        DestroyMenu(g_contextMenu);
+        g_contextMenu = nullptr;
+    }
+    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
+        if (!RunFromWindowThread(taskbar, ClearWin11Slot, 10000)) {
+            Wh_Log(L"Timed out while removing the Win11 taskbar slot");
+        }
+    } else {
+        ClearWin11Slot();
+    }
+}
+
 LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_TIMER:
@@ -3465,23 +4048,61 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 RestartUiTimer();
             } else if (wParam == 2) {
                 RepositionWin10Overlay();
-            } else if (wParam == 4) {
-                RequestRefresh(false);
             } else if (wParam == 5 || wParam == 6 || wParam == 7) {
                 // One-shot startup inject retries.
                 KillTimer(hWnd, wParam);
                 ApplyEngineToBackends();
-            } else if (wParam == 8) {
-                KillTimer(hWnd, wParam);
-                MaybeRestartExplorerForSlot();
             }
             return 0;
         case WM_PT_UI_TICK:
-        case WM_PT_REFRESH:
             ApplyEngineToBackends();
             return 0;
         case WM_PT_HIDE_FLYOUT:
             HideFlyout();
+            return 0;
+        case WM_PT_AFTER_INIT:
+            ApplyEngineToBackends();
+            SetTimer(hWnd, 5, 150, nullptr);
+            SetTimer(hWnd, 6, 400, nullptr);
+            SetTimer(hWnd, 7, 900, nullptr);
+            return 0;
+        case WM_PT_PLAY_SOUND:
+            PlayNotificationSound();
+            return 0;
+        case WM_PT_SETTINGS_CHANGED: {
+            const auto oldBackend = static_cast<TaskbarBackend>(wParam);
+            const auto newBackend = g_backend.load();
+            if (oldBackend != newBackend) {
+                if (newBackend == TaskbarBackend::Win10Overlay) {
+                    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
+                        RunFromWindowThread(
+                            taskbar,
+                            []() {
+                                try {
+                                    if (g_slotParentGrid) {
+                                        RemovePrayerTraySlotFromGrid(
+                                            g_slotParentGrid);
+                                    } else if (g_slotRoot) {
+                                        g_slotRoot.Visibility(
+                                            Visibility::Collapsed);
+                                    }
+                                } catch (...) {
+                                }
+                            });
+                    }
+                } else {
+                    DestroyWin10Overlay();
+                }
+            }
+            UpdateTrayIcon();
+            ApplyEngineToBackends();
+            return 0;
+        }
+        case WM_PT_SHUTDOWN:
+            ShutdownOwnedUiResources();
+            g_messageHwnd = nullptr;
+            DestroyWindow(hWnd);
+            PostQuitMessage(0);
             return 0;
         case WM_APP + 10:
             switch (LOWORD(lParam)) {
@@ -3502,39 +4123,46 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-void EnsureMessageWindow() {
-    if (g_messageHwnd) return;
-    static bool reg = false;
-    if (!reg) {
+bool EnsureMessageWindow() {
+    if (g_messageHwnd) return true;
+    if (!g_messageClassRegistered) {
         WNDCLASSW wc{};
         wc.lpfnWndProc = MessageWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = g_moduleInstance;
         wc.lpszClassName = L"PrayerTrayMessageWnd";
-        RegisterClassW(&wc);
-        reg = true;
+        if (!RegisterClassW(&wc) &&
+            GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            Wh_Log(L"Message window class registration failed (%u)",
+                   GetLastError());
+            return false;
+        }
+        g_messageClassRegistered = true;
     }
     g_messageHwnd = CreateWindowExW(0, L"PrayerTrayMessageWnd", L"PrayerTray", 0, 0, 0, 0, 0,
-                                    HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
+                                    HWND_MESSAGE, nullptr, g_moduleInstance, nullptr);
+    if (!g_messageHwnd) {
+        Wh_Log(L"Message window creation failed (%u)", GetLastError());
+        return false;
+    }
+    return true;
 }
 
 void StartTimers() {
-    EnsureMessageWindow();
     RestartUiTimer();
     g_repositionTimer = SetTimer(g_messageHwnd, 2, 2000, nullptr);
     g_fullscreenTimer = SetTimer(nullptr, 3, 500, FullscreenTimerProc);
-    g_scheduleTimer =
-        SetTimer(g_messageHwnd, 4, kScheduleRefreshIntervalMs, nullptr);
 }
 
 void StopTimers() {
     if (g_messageHwnd) {
         KillTimer(g_messageHwnd, 1);
         KillTimer(g_messageHwnd, 2);
-        KillTimer(g_messageHwnd, 4);
+        KillTimer(g_messageHwnd, 5);
+        KillTimer(g_messageHwnd, 6);
+        KillTimer(g_messageHwnd, 7);
     }
     g_uiTimer = 0;
     g_repositionTimer = 0;
-    g_scheduleTimer = 0;
     g_lastUiTimerIntervalMs = -1;
     if (g_fullscreenTimer) {
         KillTimer(nullptr, g_fullscreenTimer);
@@ -3542,104 +4170,202 @@ void StopTimers() {
     }
 }
 
-void ClearWin11SlotOnUiThread(void*) {
+DWORD WINAPI UiThreadProc(void*) {
+    bool apartmentInitialized = false;
     try {
-        if (g_slotParentGrid) {
-            RemovePrayerTraySlotFromGrid(g_slotParentGrid);
-        } else if (g_slotRoot) {
-            g_slotRoot.Visibility(Visibility::Collapsed);
-        }
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
     } catch (...) {
     }
-    g_observedElements.clear();
-    g_slotRoot = nullptr;
-    g_slotButton = nullptr;
-    g_topTextBlock = nullptr;
-    g_bottomTextBlock = nullptr;
-    g_slotParentGrid = nullptr;
-    g_slotInjected = false;
-    g_hasAppliedContent = false;
-}
-
-void ShutdownUi() {
-    StopTimers();
-    HideFlyout();
-    DestroyFlyout();
-    DestroyWin10Overlay();
-    RemoveTrayIcon();
-    if (g_contextMenu) {
-        DestroyMenu(g_contextMenu);
-        g_contextMenu = nullptr;
+    g_uiThreadId = GetCurrentThreadId();
+    const bool ready = EnsureMessageWindow();
+    if (ready) {
+        StartTimers();
+        UpdateTrayIcon();
+        ApplyEngineToBackends();
     }
-    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
-        RunFromWindowThread(taskbar, ClearWin11SlotOnUiThread, nullptr);
-    } else {
-        try {
-            ClearWin11SlotOnUiThread(nullptr);
-        } catch (...) {
+    if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
+    if (!ready) {
+        if (g_messageClassRegistered) {
+            UnregisterClassW(L"PrayerTrayMessageWnd", g_moduleInstance);
+            g_messageClassRegistered = false;
         }
+        g_uiThreadId = 0;
+        if (apartmentInitialized) winrt::uninit_apartment();
+        return 1;
     }
+
+    MSG message{};
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
     if (g_messageHwnd) {
+        ShutdownOwnedUiResources();
         DestroyWindow(g_messageHwnd);
         g_messageHwnd = nullptr;
     }
+    if (g_messageClassRegistered) {
+        UnregisterClassW(L"PrayerTrayMessageWnd", g_moduleInstance);
+        g_messageClassRegistered = false;
+    }
+    g_uiThreadId = 0;
+    if (apartmentInitialized) winrt::uninit_apartment();
+    return 0;
+}
+
+bool StartUiThread() {
+    g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_uiReadyEvent) return false;
+    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
+    if (!g_uiThread) {
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+        return false;
+    }
+    if (WaitForSingleObject(g_uiReadyEvent, INFINITE) != WAIT_OBJECT_0 ||
+        !g_messageHwnd) {
+        if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        CloseHandle(g_uiReadyEvent);
+        g_uiThread = nullptr;
+        g_uiReadyEvent = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void StopUiThread() {
+    if (g_messageHwnd) {
+        if (!PostMessageW(g_messageHwnd, WM_PT_SHUTDOWN, 0, 0) &&
+            g_uiThreadId) {
+            PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+        }
+    } else if (g_uiThreadId) {
+        PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_uiThread) {
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+    }
+    if (g_uiReadyEvent) {
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+    }
+}
+
+bool IsShellExplorerProcess() {
+    const HWND shellWindow = GetShellWindow();
+    if (!shellWindow) {
+        // Explorer can create the shell window slightly after process startup.
+        return true;
+    }
+    DWORD shellProcessId = 0;
+    GetWindowThreadProcessId(shellWindow, &shellProcessId);
+    return shellProcessId == GetCurrentProcessId();
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
-    Wh_Log(L">");
+    Wh_Log(L"PrayerTray 3.1.1 initializing");
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      reinterpret_cast<LPCWSTR>(&UiThreadProc),
+                      &g_moduleInstance);
+    if (!g_moduleInstance || !IsShellExplorerProcess()) {
+        Wh_Log(L"Skipping non-shell explorer.exe process");
+        return FALSE;
+    }
+
     LoadSettings();
     SelectBackend();
-    EnsureMessageWindow();
-    if (g_backend.load() == TaskbarBackend::Win11Xaml) {
-        HookTaskbarDllSymbols();
-        if (HMODULE m = GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded = true;
-            HookTaskbarViewDllSymbols(m);
-        } else {
-            HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
-            auto pLoad = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kb, "LoadLibraryExW"));
-            WindhawkUtils::SetFunctionHook(pLoad, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
+
+    // Install Win11 hooks even when the compatibility overlay is currently
+    // selected, so changing that setting doesn't require restarting Explorer.
+    if (g_isWin11.load()) {
+        if (!HookTaskbarDllSymbols()) {
+            Wh_Log(L"taskbar.dll symbols unavailable; using IconView fallback");
+        }
+        bool systemTrayHookReady = false;
+        if (HMODULE module = GetSystemTrayModuleHandle()) {
+            systemTrayHookReady = HookSystemTraySymbols(module);
+            g_systemTrayModuleHooked = systemTrayHookReady;
+            if (!systemTrayHookReady) {
+                Wh_Log(L"System tray hooks unavailable; watching for the current module");
+            }
+        }
+        if (!systemTrayHookReady) {
+            HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+            auto loadLibraryEx = kernelBase
+                                     ? reinterpret_cast<LoadLibraryExW_t>(
+                                           GetProcAddress(kernelBase,
+                                                          "LoadLibraryExW"))
+                                     : nullptr;
+            if (loadLibraryEx) {
+                WindhawkUtils::SetFunctionHook(loadLibraryEx,
+                                               LoadLibraryExW_Hook,
+                                               &LoadLibraryExW_Original);
+            } else {
+                Wh_Log(L"LoadLibraryExW hook unavailable");
+            }
         }
     }
 
-    // Never bail out of Wh_ModInit if Shell_TrayWnd is briefly missing (explorer
-    // restart / enable race). Slot inject already no-ops until the tray exists.
-    BootstrapFromCache();
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+    } catch (...) {
+        // Explorer may already own this thread's COM apartment.
+    }
+    try {
+        BootstrapFromCache();
+    } catch (...) {
+        Wh_Log(L"Cache bootstrap failed");
+    }
+    if (apartmentInitialized) winrt::uninit_apartment();
     g_injectRetryMs = 100;
     g_uiTimerIntervalMs = 100;
-    StartTimers();
-    UpdateTrayIcon();
-    ApplyEngineToBackends();
+    if (!StartUiThread()) {
+        Wh_Log(L"UI thread startup failed");
+        return FALSE;
+    }
+    if (!StartRefreshWorker()) {
+        Wh_Log(L"Refresh worker startup failed");
+        StopUiThread();
+        return FALSE;
+    }
     RequestRefresh(false);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
-    if (g_backend.load() == TaskbarBackend::Win11Xaml && !g_taskbarViewDllLoaded) {
-        if (HMODULE m = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                if (HookTaskbarViewDllSymbols(m)) Wh_ApplyHookOperations();
+    if (g_isWin11.load() && !g_systemTrayModuleHooked.load()) {
+        if (HMODULE module = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                if (HookSystemTraySymbols(module)) {
+                    Wh_ApplyHookOperations();
+                } else {
+                    g_systemTrayModuleHooked = false;
+                }
             }
         }
     }
-    // Burst a few applies after hooks settle — first appearance should be quick.
-    ApplyEngineToBackends();
     if (g_messageHwnd) {
-        PostMessageW(g_messageHwnd, WM_PT_UI_TICK, 0, 0);
-        SetTimer(g_messageHwnd, 5, 150, nullptr);
-        SetTimer(g_messageHwnd, 6, 400, nullptr);
-        SetTimer(g_messageHwnd, 7, 900, nullptr);
-        // If the slot still isn't there after retries, restart Explorer once.
-        SetTimer(g_messageHwnd, 8, 2500, nullptr);
+        PostMessageW(g_messageHwnd, WM_PT_AFTER_INIT, 0, 0);
     }
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    ShutdownUi();
+    StopRefreshWorker();
+    StopUiThread();
+    mciSendStringW(L"close prayertray_notify", nullptr, 0, nullptr);
 }
 
 void Wh_ModUninit() {
@@ -3648,27 +4374,18 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
-    const bool wasSoundEnabled = g_settings.playPrayerNotification;
-    auto oldBackend = g_backend.load();
+    const auto oldSettings = GetSettingsSnapshot();
+    const auto oldBackend = g_backend.load();
     LoadSettings();
     SelectBackend();
-    if (oldBackend != g_backend.load()) {
-        if (g_backend.load() == TaskbarBackend::Win10Overlay) {
-            if (auto root = g_slotRoot) {
-                try {
-                    root.Visibility(Visibility::Collapsed);
-                } catch (...) {
-                }
-            }
-        } else {
-            DestroyWin10Overlay();
-        }
+    const auto newSettings = GetSettingsSnapshot();
+    if (!oldSettings.playPrayerNotification &&
+        newSettings.playPrayerNotification) {
+        g_soundPreviewRequested = true;
     }
-    if (!wasSoundEnabled && g_settings.playPrayerNotification) {
-        PlayNotificationSound();
-    }
-    UpdateTrayIcon();
-    g_refreshRequested = true;
     RequestRefresh(true);
-    ApplyEngineToBackends();
+    if (g_messageHwnd) {
+        PostMessageW(g_messageHwnd, WM_PT_SETTINGS_CHANGED,
+                     static_cast<WPARAM>(oldBackend), 0);
+    }
 }
