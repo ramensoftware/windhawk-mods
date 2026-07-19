@@ -6,7 +6,7 @@
 // @author          ernisn
 // @github          https://github.com/ernisn
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0A00 -lole32 -lshell32 -lpropsys -lcomctl32
+// @compilerOptions -lole32 -lshell32 -lpropsys -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -93,6 +93,13 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 #include <windhawk_utils.h>
 
 using Microsoft::WRL::ComPtr;
+
+// Not declared with the default WINVER
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
+WINUSERAPI UINT WINAPI GetDpiForSystem(VOID);
+#ifndef WM_DPICHANGED_AFTERPARENT
+#define WM_DPICHANGED_AFTERPARENT 0x02E3
+#endif
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -371,7 +378,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
                 L"public: virtual long __cdecl CDefView::UIActivate(unsigned int)",
@@ -394,7 +401,8 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(shell32, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
+                                    ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"Failed to hook CDefView symbols");
         return FALSE;
     }
