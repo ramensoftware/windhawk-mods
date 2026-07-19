@@ -36,7 +36,18 @@ jobs:
         run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
-          git clone --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+          # The deployed content has image paths that are derived from URLs,
+          # which are case-sensitive, but CI runs on Windows, which is
+          # case-insensitive by default. Enable case-sensitive paths for the
+          # target folder before checking out into it, as subdirectories inherit
+          # the setting.
+          mkdir -p "${{ runner.temp }}/last_deploy"
+          fsutil.exe file setCaseSensitiveInfo "${{ runner.temp }}/last_deploy" enable
+          # Also tell git itself to treat paths case-sensitively, so it doesn't
+          # collapse image paths that differ only by case during checkout or,
+          # later, when staging the updated content for deployment. The setting
+          # persists in the clone's config and is reused by the deploy step.
+          git clone -c core.ignorecase=false --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v5
@@ -64,8 +75,14 @@ jobs:
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
       - name: Archive mod images
         run: |
+          # Image paths are derived from URLs, which are case-sensitive, but CI
+          # runs on Windows, which is case-insensitive by default. Enable
+          # case-sensitive paths for the images folder before creating anything
+          # inside it, as subdirectories inherit the setting.
+          mkdir -p images
+          fsutil.exe file setCaseSensitiveInfo images enable
           # Copy last deployed images.
-          cp -R "${{ runner.temp }}/last_deploy/images" images
+          cp -R "${{ runner.temp }}/last_deploy/images/." images
           # Archive new images.
           python scripts/archive_mod_images.py
       - name: Deploy

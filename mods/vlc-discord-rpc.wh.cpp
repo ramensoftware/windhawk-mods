@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              vlc-discord-rpc
 // @name            VLC Discord Rich Presence
-// @description     Shows your playing status, quality tags (4K/HDR), and interactive buttons on Discord.
-// @version         1.1.4
+// @description     Shows your currently playing media on Discord — with cover art, quality tags, and a search button.
+// @version         1.1.5
 // @author          ciizerr
 // @github          https://github.com/ciizerr
 // @homepage        https://vlc-rpc.vercel.app/
@@ -10,126 +10,186 @@
 // @compilerOptions -lwinhttp -lshell32 -lgdiplus -lole32
 // @architecture    x86
 // @architecture    x86-64
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # VLC Discord Rich Presence
 
-Seamlessly integrates VLC Media Player with Discord to display playback status, media metadata, resolution tags, and **Album Artwork**.
+Shows what you're watching or listening to on your Discord profile — including cover art, quality tags, and a search button.
 
 ## Features
-* **Smart Cover Art Engine:** Automatically uploads local album art to (~~`0x0.st`~~) `Uguu.se`. If local art is missing, it intelligently scrapes high-res posters and album covers directly from the web(accuracy depends on how well filename matches the title).
-* **Metadata Cleaner:** Intelligently strips piracy site URLs, promotional phrases, bracketed tags, and scene release technical info to guarantee perfect Discord display titles.
-* **Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
-* **Smart Activity Status:** Dynamically switches between "Listening to **Song**", "Watching **Movie**", or "Playing **Video**" based on the file type.
-* **Clean Metadata:** * **Music:** Displays Song Title, Artist, and Album.
-    * **Video:** Displays Title, Season/Episode, Chapter, and Audio Language.
-* **Quality Tags:** Displays resolution and format tags (4K, HDR, 1080p, 10-bit) based on the media file.
-* **Interactive Buttons:** Adds a "Search This" button to your status, redirecting to Google, IMDb, or YouTube.
-* **Visual Themes & Layouts:** Includes options for Default/Dark Mode icon sets, and a Minimal toggle to hide small badges.
+
+| Feature | Description |
+|---|---|
+| 🖼️ **Cover Art** | Uploads local album art automatically. Fallbacks to searching the web for a matching poster. |
+| 🧹 **Smart Title Cleaning** | Strips scene tags, piracy site URLs, and release info from filenames so titles look clean. |
+| 🎮 **Activity Type** | Automatically shows "Listening to", "Watching", or "Playing" based on the file type. |
+| 🎵 **Rich Metadata** | Music shows artist/album. Video shows season, episode, chapter, and audio language. |
+| 📺 **Quality Tags** | Displays resolution and format badges like 4K, HDR, or 1080p. |
+| 🔍 **Search Button** | Adds an interactive button linking to Google, IMDb, YouTube, or a custom URL. |
+| 🎨 **Themes** | Choose between a classic Default or sleek Dark icon set. |
+| 📉 **Minimal Mode** | Hides the small play/pause badge so your cover art takes center stage. |
 
 ## Icon Themes
-Users can customize the appearance of the Rich Presence icons via the Mod Settings.
 
-* **Default:** The standard orange VLC cone.
+- **Default** — The classic orange VLC cone.
 ![default theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/default.gif)
 
-* **Dark:** A dark-mode variant for low-light aesthetics.
+- **Dark** — A dark variant for low-light setups.
 ![dark theme](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/themes/dark_.gif)
 
-**Submissions:** We are accepting community designs for new icon themes. If you have created a set (vlc, play, pause, stop), please contact `ciizerr` on Discord.
+Community icon submissions are welcome — reach out to `ciizerr` on Discord with a set of four icons (vlc, play, pause, stop).
 
-## Setup Instructions (First Run Only)
-For this mod to retrieve data from VLC, the Web Interface must be enabled.
+## First-Time Setup
 
-1.  Open VLC Media Player.
-2.  Go to **Tools** > **Preferences** (or press `Ctrl+P`).
-3.  In the bottom-left corner, under *Show settings*, select **All**.
-4.  Navigate to **Interface** > **Main interfaces**.
-5.  On the right panel, check the box for **Web**.
+This mod reads playback data from VLC's built-in HTTP interface. You only need to do this once.
 
-    ![Enable Web Interface](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/web-interface.png)
+1. Open VLC and go to **Tools → Preferences** (`Ctrl+P`).
+2. In the bottom-left, switch *Show settings* to **All**.
+3. Go to **Interface → Main interfaces** and check **Web**.
 
-6.  In the left sidebar, expand *Main interfaces* and click on **Lua**.
-7.  Under *Lua HTTP*, set the **Password** to `1234` and **Port** to `8080`.
+   ![Enable Web Interface](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/web-interface.png)
 
-    ![Lua Password Setup](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/password.png)
+4. Expand *Main interfaces* in the sidebar and click **Lua**.
+5. Under *Lua HTTP*, set the **Password** to `1234`. Leave the port to default.
 
-8.  Click **Save** and restart VLC.
+   ![Lua Password Setup](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/screenshots/setup/password.png)
 
-## Configuration
-**Show Cover Art:** Toggle to enable/disable the fetching and uploading of cover art. If disabled, the mod will use the standard VLC icon.
+6. Click **Save** and restart VLC.
 
-**Show Chapter / Audio Language:** You can independently hide the current chapter number or audio language if you prefer a cleaner layout that only shows Season and Episode.
+## Settings Overview
 
-**Custom Junk Filter:** Define your own list of annoying tags or site names to automatically remove from media titles.
+| Setting | What it does |
+|---|---|
+| **Cover Art** | Fetches and shows artwork on your status |
+| **Quality Tags** | Shows 4K / HDR / 1080p badges |
+| **Minimal Mode** | Hides the small play/pause corner badge |
+| **Clean Titles** | Removes scene tags and URLs from filenames |
+| **Title Filters** | Choose between live community filters or local-only |
+| **Custom Filter Words** | Add your own words to strip from titles |
+| **Notifications** | Shows a Windows toast when a new track starts |
+| **Search Button** | Picks which site the status button links to |
+| **"Listening to..." label** | Controls what shows in the activity name for music |
 
-**Strict Local Filters (Transparency):** To keep the metadata cleaner accurate against new piracy tags, the mod fetches a tiny text file [`filters.txt`](https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/filters.txt) from the GitHub repository if the file is older than 6 hours. If you prefer **zero** external network requests, enable `Strict Local Filters Only`. This will restrict the metadata cleaner to only use the built-in hardcoded dictionary + your custom words.
+## Filter List
 
-**Search Provider:** You can change the destination of the search button (Google, Bing, IMDb) in the mod settings.
+To keep title cleaning accurate, the mod can download a small community‑maintained filter list from GitHub.  
+This list is refreshed every 6 hours.  
 
-**Custom Client ID:** Power users who wish to upload their own assets can provide a custom Application ID in the settings.
+If you enable **Local Filters Only** in settings, the mod will stop downloading the online filter list and instead use:  
+- The built‑in word list  
+- Any custom filters you’ve added yourself  
 
-## Feedback & Support
-For bug reports, feature suggestions, or general feedback, please reach out via:
-* **Discord:** `ciizerr`
-* **GitHub:** [vlc-discord-rpc-archive](https://github.com/ciizerr/vlc-discord-rpc-archive) (contains cross-platform resources of vlc-discord-rpc)
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| **Before trying fixes** | Check the Windhawk mod logs first to identify the issue. |
+| **Not showing on Discord** | Enable **Display current activity** in Discord. In VLC, enable **Web** interface and set Lua HTTP password to `1234`. Restart VLC afterward. |
+| **Connection still fails (rare)** | Open `%APPDATA%\vlc\vlcrc`, change `#http-port=8080` to `http-port=8080`, save, and restart VLC. |
+| **Could not reach VLC** | VLC may be using another port. Open **Resource Monitor** → **Network** → **Listening Ports**, find `vlc.exe`, and use that port in the mod settings. |
+| **Logs show "401 Unauthorized"** | Wrong VLC password. Ensure Lua HTTP password is exactly `1234`. Restart VLC afterward. |
+| **Wrong poster/artwork** | Enable **Clean Titles** for better filename cleanup and poster matching. |
+
+## External Requests
+
+The mod makes a few external requests for certain features:
+
+- **`www.bing.com`** — used to search for poster and artwork URLs (`FindExternalArtwork`)  
+- **`uguu.se`** — used to upload local album art (`UploadToUguu`), with files auto‑deleted after 3 hours.  
+- **`raw.githubusercontent.com`** — used to download `vlc-discord-icon.ico` and `filters.txt` for notifications and media title cleaning  
+
+These requests are only used for artwork, uploads, notifications, and media title cleaning.
+
+## Support & Feedback
+
+Found a bug, have a suggestion, or need help?
+
+- **Discord:** `ciizerr` ([Windhawk Server](https://discord.com/servers/windhawk-923944342991818753))
+- **GitHub:** [vlc-discord-rpc-archive](https://github.com/ciizerr/vlc-discord-rpc-archive)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- ClientId: "1465711556418474148"
-  $name: Discord Client ID
-  $description: "The Application ID from the Discord Developer Portal. Leave default to use the official one."
 - ShowCoverArt: true
-  $name: Show Cover Art
-  $description: "If enabled, attempts to upload local art or fetch online posters via smart web search. Disable to use the standard VLC icon."
+  $name: Cover Art
+  $description: "Fetches and displays artwork on your Discord status. Uses local album art if available, otherwise searches the web for a matching poster."
+
 - ShowQualityTags: true
-  $name: Show Quality Tags
-  $description: "If enabled, displays resolution and format tags (4K, HDR, 1080p). Disable for a cleaner status layout."
-- ShowChapter: true
-  $name: Show Chapter
-  $description: "If enabled, displays the current chapter number."
-- ShowAudioLanguage: true
-  $name: Show Audio Language
-  $description: "If enabled, displays the audio language (e.g., EN, JP)."
-- EnableMetadataCleaner: true
-  $name: Clean Media Titles
-  $description: "Automatically removes common scene tags (e.g., WEB-DL, 1080p) and URLs from filenames so they look clean on Discord."
-- StrictLocalMode: true
-  $name: Strict Local Filters Only
-  $description: "If enabled, stops downloading community filter updates from GitHub and only relies on the built-in hardcoded filters and your custom words. See README."
-- CustomJunkWords: ""
-  $name: Additional Words to Remove (Optional)
-  $description: "Add your own custom words to remove, separated by commas (e.g., toonworld4all.com, custom-tag). Note: 'Clean Media Titles' must be enabled above for this to work."
+  $name: Quality Tags
+  $description: "Shows resolution and format badges like 4K, HDR, or 1080p next to the title."
+
 - MinimalMode: false
   $name: Minimal Mode
-  $description: "Hide the small play/pause/stop badges in the corner to let the cover art shine."
+  $description: "Hides the small play/pause/stop badge in the corner of your status image."
+
+- EnableMetadataCleaner: true
+  $name: Clean Media Titles
+  $description: "Strips scene release tags (e.g. WEB-DL, x265), piracy site URLs, and other clutter from filenames before showing them on Discord."
+
+- StrictLocalMode: true
+  $name: Local Filters Only
+  $description: "Keeps title cleaning offline. When off, the mod downloads an updated community filter list from GitHub every 6 hours. When on, it only uses the built-in filters and your custom words below."
+
+- CustomJunkWords: ""
+  $name: Custom Words to Remove
+  $description: "Extra words or site names to strip from titles, separated by commas. Example: toonworld4all.com, mytag. Requires 'Clean Media Titles' to be enabled."
+
 - ShowNotifications: false
-  $name: Enable Toast Notifications
-  $description: "If enabled, shows a Windows toast notification when a new media file starts playing."
-- Theme: ""
-  $name: Icon Theme
-  $description: "Choose the visual style of the primary icons on your Discord status."
+  $name: Toast Notifications
+  $description: "Shows a Windows notification when a new file starts playing."
+
+- ShowChapter: true
+  $name: Show Chapter Number
+  $description: "Displays the current chapter alongside the episode or track info."
+
+- ShowAudioLanguage: true
+  $name: Show Audio Language
+  $description: "Shows the active audio track language (e.g. EN, JP) in your status."
+
+- MusicActivityName: "Title"
+  $name: "'Listening to...' Label"
+  $description: "What to show in the Discord activity name when playing music."
   $options:
-    - "": Default (vlc_icon)
-    - "dark_": Dark Mode (dark_vlc_icon)
+    - Title: Song Title
+    - Artist: Artist Name
+    - Album: Album Name
+
 - Provider: Google
-  $name: Search Provider
+  $name: Search Button
+  $description: "The site your Discord status button links to when clicked."
   $options:
     - Google: Google
     - Bing: Bing
     - IMDb: IMDb
     - YouTube: YouTube
     - Custom: Custom URL
+
 - CustomUrl: ""
-  $name: Custom URL
-  $description: "For other sites (Yahoo, MyAnimeList), enter their search URL here. Example: https://myanimelist.net/search/all?q="
+  $name: Custom Search URL
+  $description: "Only used when Search Button is set to Custom. Paste the base search URL here. Example: https://myanimelist.net/search/all?q="
+
 - ButtonLabel: "Search This"
   $name: Button Label
-  $description: "The text displayed on the Discord button (Max 30 chars)."
+  $description: "The text shown on the Discord status button. Maximum 30 characters."
+
+- Theme: ""
+  $name: Icon Theme
+  $description: "Visual style of the main icon on your Discord status."
+  $options:
+    - "": Default
+    - "dark_": Dark Mode
+
+- CustomPort: 0
+  $name: Custom VLC Port
+  $description: "Only needed if VLC is running on a non-standard HTTP port. Leave at 0 to detect automatically."
+
+- ClientId: "1465711556418474148"
+  $name: Discord Application ID
+  $description: "The Client ID from the Discord Developer Portal. Only change this if you've set up your own Discord application with custom assets."
 */
 // ==/WindhawkModSettings==
 
@@ -160,7 +220,6 @@ For bug reports, feature suggestions, or general feedback, please reach out via:
 ULONG_PTR g_gdiplusToken = 0;
 std::atomic<bool> g_stopThread{false};
 std::thread g_workerThread;
-const std::wstring VLC_PASS_BASE64 = L"OjEyMzQ="; 
 const std::string SEP = " \xE2\x97\x8F ";
 
 std::map<std::string, std::string> g_imageCache;
@@ -181,6 +240,22 @@ bool g_filtersLoaded = false;
 // 1. STRING & METADATA HELPERS
 // =============================================================
 
+std::string Base64Encode(const std::string& in) {
+    std::string out;
+    int val = 0, valb = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+
 std::string WStrToStr(const std::wstring& wstr) {
     if (wstr.empty()) return "";
     int size = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
@@ -195,6 +270,43 @@ std::wstring StrToWStr(const std::string& str) {
     std::wstring wstr(size, 0);
     MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstr[0], size);
     return wstr;
+}
+
+void ReadVlcConfig(int& port, std::wstring& authBase64, std::string& rawPassword) {
+    port = 0;
+    std::string password = "";
+    
+    char appDataPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
+        std::string vlcrcPath = std::string(appDataPath) + "\\vlc\\vlcrc";
+        std::ifstream file(vlcrcPath);
+        if (file.is_open()) {
+            std::string line;
+            while (std::getline(file, line)) {
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                
+                if (line.find("http-port=") == 0) {
+                    try { port = std::stoi(line.substr(10)); } catch(...) {}
+                }
+                else if (line.find("http-password=") == 0) {
+                    password = line.substr(14);
+                }
+            }
+        } else {
+            Wh_Log(L"[VLC-RPC] Could not open vlcrc at %S — using defaults.", vlcrcPath.c_str());
+        }
+    } else {
+        Wh_Log(L"[VLC-RPC] Could not resolve %%APPDATA%% path.");
+    }
+    
+    if (password.empty()) {
+        password = "1234";
+    }
+    
+    std::string authStr = ":" + password;
+    std::string b64 = Base64Encode(authStr);
+    authBase64 = StrToWStr(b64);
+    rawPassword = password;
 }
 
 std::string UrlEncode(const std::string &value) {
@@ -484,19 +596,31 @@ std::string FindExternalArtwork(int type, const std::string& queryTitle, const s
     std::string suffix = (type == 2) ? " song cover art" : (isTvShow ? " show poster" : " movie poster");
     std::string term = UrlEncode(queryTitle + " " + querySub + suffix);
     std::wstring host = L"www.bing.com";
-    std::wstring path = StrToWStr("/images/search?q=" + term);
+    std::wstring path = StrToWStr("/images/async?q=" + term + "&first=0&count=1&adlt=off");
     std::string html = FetchHttps(host, path);
-    std::string searchToken = "id=OIP.";
+    
+    std::string searchToken = "&quot;turl&quot;:&quot;";
     size_t start = html.find(searchToken);
     
+    if (start == std::string::npos) {
+        searchToken = "\"turl\":\"";
+        start = html.find(searchToken);
+    }
+    
     if (start != std::string::npos) {
-        start += 3; 
-        size_t endQuote = html.find("\"", start);
-        size_t endAmp = html.find("&", start);
-        size_t end = std::min(endQuote, endAmp);
-        if (end != std::string::npos) {
-            std::string imageId = html.substr(start, end - start);
-            finalUrl = "https://tse1.mm.bing.net/th?id=" + imageId;
+        std::string idToken = "id=OIP.";
+        size_t idStart = html.find(idToken, start);
+        
+        if (idStart != std::string::npos && idStart < start + 500) {
+            idStart += 3; 
+            size_t endAmp = html.find("&", idStart);
+            size_t endQuote = html.find("\"", idStart);
+            size_t end = std::min(endAmp, endQuote);
+            if (end != std::string::npos) {
+                std::string imageId = html.substr(idStart, end - idStart);
+                finalUrl = "https://tse1.mm.bing.net/th?id=" + imageId;
+                Wh_Log(L"[VLC-RPC] Found external artwork via async: %S", finalUrl.c_str());
+            }
         }
     }
     return finalUrl;
@@ -513,7 +637,6 @@ bool ReadFileBytes(const std::wstring& path, std::vector<char>& data) {
     return true;
 }
 
-// 🔥 V1.1.4: ASYNC UGUU UPLOAD ENGINE 🔥
 std::string UploadToUguu(const std::string& fileUrl) {
     std::string pathStr = UrlDecode(fileUrl);
     size_t filePrefix = pathStr.find("file:///");
@@ -596,6 +719,7 @@ std::string UploadToUguu(const std::string& fileUrl) {
     if (success) {
         std::string finalCleanUrl;
         for (char c : resultUrl) { if (c != '\\') finalCleanUrl += c; }
+        Wh_Log(L"[VLC-RPC] Uploaded local cover art to Uguu: %S", finalCleanUrl.c_str());
         return finalCleanUrl;
     }
     return "";
@@ -810,6 +934,7 @@ void FetchRemoteFilters(bool strictLocalMode) {
             g_truncateTags = localData.tags;
             g_junkWords = localData.words;
             g_filtersLoaded = true;
+            Wh_Log(L"[VLC-RPC] Loaded filter cache from disk (%s).", cachePath.c_str());
             return;
         }
     }
@@ -835,6 +960,7 @@ void FetchRemoteFilters(bool strictLocalMode) {
             g_truncateTags = remoteData.tags;
             g_junkWords = remoteData.words;
             g_filtersLoaded = true;
+            Wh_Log(L"[VLC-RPC] Downloaded and applied updated filters from GitHub.");
             return;
         }
     }
@@ -856,28 +982,12 @@ void FetchRemoteFilters(bool strictLocalMode) {
 // 5. NOTIFICATIONS
 // =============================================================
 
-void ShowSystemToast(const std::wstring& title, const std::wstring& message, const std::string& cacheKey) {
-    std::thread([title, message, cacheKey]() {
+void ShowSystemToast(const std::wstring& title, const std::wstring& message, const std::string& imageUrl) {
+    std::thread([title, message, imageUrl]() {
         HICON hDynamicIcon = NULL;
 
-        // Poll for up to 3 seconds for the HTTP URL to resolve
-        std::string resolvedUrl = "";
-        if (!cacheKey.empty()) {
-            for(int i=0; i<30; i++) {
-                {
-                    std::lock_guard<std::mutex> lock(g_cacheMutex);
-                    std::string cand = g_imageCache[cacheKey];
-                    if (!cand.empty() && cand.find("http") == 0) {
-                        resolvedUrl = cand;
-                        break;
-                    }
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        }
-
-        if (!resolvedUrl.empty()) {
-            std::wstring wideUrl = StrToWStr(resolvedUrl);
+        if (!imageUrl.empty() && imageUrl.find("http") == 0) {
+            std::wstring wideUrl = StrToWStr(imageUrl);
             const WH_URL_CONTENT* content = Wh_GetUrlContent(wideUrl.c_str(), nullptr);
             if (content && content->length > 0) {
                 IStream* pStream = nullptr;
@@ -922,10 +1032,10 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
         WCHAR storagePath[MAX_PATH];
         std::wstring defaultIconPath = L"";
         if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
-            defaultIconPath = std::wstring(storagePath) + L"\\vlc-rpc-toast.ico";
+            defaultIconPath = std::wstring(storagePath) + L"\\vlc-discord-icon.ico";
             struct _stat result;
             if (_wstat(defaultIconPath.c_str(), &result) != 0) {
-                const WH_URL_CONTENT* content = Wh_GetUrlContent(L"https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/refs/heads/main/assets/vlc-discord-icon.ico", nullptr);
+                const WH_URL_CONTENT* content = Wh_GetUrlContent(L"https://raw.githubusercontent.com/ciizerr/vlc-discord-rpc-archive/main/assets/vlc-discord-icon.ico", nullptr);
                 if (content && content->length > 0) {
                     std::ofstream out(defaultIconPath.c_str(), std::ios::binary | std::ios::trunc);
                     if (out.is_open()) {
@@ -937,29 +1047,37 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
             }
         }
         
-        HWND hwnd = CreateWindowExW(0, L"STATIC", L"DummyTrayWnd", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+        HWND hwnd = CreateWindowExW(0, L"STATIC", L"VLC-RPC-Toast", WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL, NULL, NULL);
         if (!hwnd) {
             if (hDynamicIcon) DestroyIcon(hDynamicIcon);
             return;
         }
 
-        HICON hIcon = hDynamicIcon;
-        if (!hIcon && !defaultIconPath.empty()) {
-            hIcon = (HICON)LoadImageW(NULL, defaultIconPath.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+        HICON hAppIcon = NULL;
+        if (!defaultIconPath.empty()) {
+            hAppIcon = (HICON)LoadImageW(NULL, defaultIconPath.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
         }
-        if (!hIcon) hIcon = LoadIcon(NULL, IDI_INFORMATION);
+        if (!hAppIcon) hAppIcon = LoadIcon(NULL, IDI_INFORMATION);
+
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hAppIcon);
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hAppIcon);
 
         NOTIFYICONDATAW nid = {0};
         nid.cbSize = sizeof(NOTIFYICONDATAW);
         nid.hWnd = hwnd;
         nid.uID = 1338;
         nid.uFlags = NIF_ICON | NIF_TIP | NIF_INFO;
-        nid.hIcon = hIcon;
+        nid.hIcon = hAppIcon;
         wcscpy_s(nid.szTip, L"VLC Discord RPC");
         wcsncpy_s(nid.szInfoTitle, title.c_str(), 63);
         wcsncpy_s(nid.szInfo, message.c_str(), 255);
-        nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME;
-        nid.hBalloonIcon = hIcon;
+        
+        if (hDynamicIcon) {
+            nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON | NIIF_RESPECT_QUIET_TIME;
+            nid.hBalloonIcon = hDynamicIcon;
+        } else {
+            nid.dwInfoFlags = NIIF_USER | NIIF_RESPECT_QUIET_TIME;
+        }
         
         Shell_NotifyIconW(NIM_ADD, &nid);
         
@@ -975,7 +1093,7 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
         }
         
         Shell_NotifyIconW(NIM_DELETE, &nid);
-        if (hIcon && hIcon != hDynamicIcon) DestroyIcon(hIcon); 
+        if (hAppIcon) DestroyIcon(hAppIcon); 
         if (hDynamicIcon) DestroyIcon(hDynamicIcon);
         DestroyWindow(hwnd);
     }).detach();
@@ -1001,8 +1119,6 @@ void Worker() {
     bool bShowChapter = Wh_GetIntSetting(L"ShowChapter");
     bool bShowAudioLanguage = Wh_GetIntSetting(L"ShowAudioLanguage");
     bool bEnableMetadataCleaner = Wh_GetIntSetting(L"EnableMetadataCleaner");
-    
-    // 🔥 NEW MINIMAL TOGGLE SETTING 🔥
     bool bMinimalMode = Wh_GetIntSetting(L"MinimalMode");
     bool bShowNotifications = Wh_GetIntSetting(L"ShowNotifications");
 
@@ -1044,6 +1160,31 @@ void Worker() {
     Wh_FreeStringSetting(sLbl);
     myBtnLabel = SanitizeString(myBtnLabel);
 
+    PCWSTR sMusicName = Wh_GetStringSetting(L"MusicActivityName");
+    std::string myMusicNameSetting = sMusicName ? WStrToStr(sMusicName) : "Title";
+    Wh_FreeStringSetting(sMusicName);
+
+    int vlcPort = 0;
+    std::wstring vlcAuthBase64 = L"OjEyMzQ=";
+    std::string vlcRawPassword = "";
+    ReadVlcConfig(vlcPort, vlcAuthBase64, vlcRawPassword);
+
+    int customPortSetting = Wh_GetIntSetting(L"CustomPort");
+    
+    std::vector<int> candidatePorts;
+    if (customPortSetting > 0) candidatePorts.push_back(customPortSetting);
+    if (vlcPort > 0 && std::find(candidatePorts.begin(), candidatePorts.end(), vlcPort) == candidatePorts.end()) candidatePorts.push_back(vlcPort);
+    
+    int fallbacks[] = {8080, 9080, 9090, 7080, 4212, 8081, 8088};
+    for (int p : fallbacks) {
+        if (std::find(candidatePorts.begin(), candidatePorts.end(), p) == candidatePorts.end()) {
+            candidatePorts.push_back(p);
+        }
+    }
+    int currentPortIndex = 0;
+
+    Wh_Log(L"[VLC-RPC] Worker started. Port=%d, Password=%S", vlcPort, vlcRawPassword.c_str());
+
     HINTERNET hSession = WinHttpOpen(L"VLC-RPC/1.5", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     HINTERNET hConnect = NULL;
     HINTERNET hRequest = NULL;
@@ -1066,15 +1207,42 @@ void Worker() {
     std::string cachedArtist = "";
     std::string cachedShowName = "";
 
+    std::string lastToastMediaKey = "";
+    int toastTimer = 0;
+    bool toastFired = false;
+
+    bool logged401 = false;
+    bool logged200 = false;
+    bool loggedFailure = false;
+
     while (!g_stopThread.load()) {
-        if (hSession && !hConnect) hConnect = WinHttpConnect(hSession, L"127.0.0.1", 8080, 0);
+        int activePort = candidatePorts[currentPortIndex];
+        if (hSession && !hConnect) {
+            hConnect = WinHttpConnect(hSession, L"127.0.0.1", activePort, 0);
+        }
         if (hConnect) hRequest = WinHttpOpenRequest(hConnect, L"GET", L"/requests/status.json", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
 
         bool requestSuccess = false;
         if (hRequest) {
-            std::wstring headers = L"Authorization: Basic " + VLC_PASS_BASE64;
+            std::wstring headers = L"Authorization: Basic " + vlcAuthBase64;
             if (WinHttpSendRequest(hRequest, headers.c_str(), headers.length(), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
                 WinHttpReceiveResponse(hRequest, NULL)) {
+                
+                DWORD statusCode = 0;
+                DWORD dwSizeStatus = sizeof(statusCode);
+                WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &dwSizeStatus, WINHTTP_NO_HEADER_INDEX);
+                
+                if (statusCode == 401) {
+                    if (!logged401) {
+                        Wh_Log(L"[VLC-RPC] Auth failed (401). Check the Lua HTTP password in %%APPDATA%%\\vlc\\vlcrc.");
+                        logged401 = true;
+                    }
+                } else if (statusCode == 200) {
+                    if (!logged200) {
+                        Wh_Log(L"[VLC-RPC] Connected to VLC on port %d.", activePort);
+                        logged200 = true;
+                    }
+                }
                 
                 requestSuccess = true;
                 std::string json; DWORD dwSize = 0, dwDownloaded = 0;
@@ -1096,19 +1264,27 @@ void Worker() {
                                 for (int i=0; i<10; i++) {
                                     std::string name = "\\\\.\\pipe\\discord-ipc-" + std::to_string(i);
                                     hPipe = CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-                                    if (hPipe != INVALID_HANDLE_VALUE) break;
+                                    if (hPipe != INVALID_HANDLE_VALUE) {
+                                        Wh_Log(L"[VLC-RPC] Connected to Discord IPC (pipe %d).", i);
+                                        break;
+                                    }
                                 }
                                 if (hPipe != INVALID_HANDLE_VALUE) {
                                     std::string hs = "{\"v\":1,\"client_id\":\"" + myClientId + "\"}";
                                     int op=0; int l=(int)hs.length(); DWORD w; WriteFile(hPipe,&op,4,&w,NULL); WriteFile(hPipe,&l,4,&w,NULL); WriteFile(hPipe,hs.c_str(),l,&w,NULL);
                                     isConnected = true;
+                                } else {
+                                    static bool loggedIpcFail1 = false;
+                                    if (!loggedIpcFail1) {
+                                        Wh_Log(L"[VLC-RPC] Could not connect to Discord IPC. Is Discord running?");
+                                        loggedIpcFail1 = true;
+                                    }
                                 }
                             }
                             if (isConnected) {
                                 std::string js = "{\"cmd\":\"SET_ACTIVITY\",\"args\":{\"pid\":" + NumToStr(GetCurrentProcessId()) + ",\"activity\":{";
                                 js += "\"details\":\"Idling\",\"state\":\"Waiting for media...\",\"type\":0,";
                                 
-                                // Omit small image if Minimal mode is enabled
                                 js += "\"assets\":{\"large_image\":\"" + assetLarge + "\",\"large_text\":\"VLC Media Player\"";
                                 if (!bMinimalMode) {
                                     js += ",\"small_image\":\"" + assetStop + "\",\"small_text\":\"Stopped\"";
@@ -1123,6 +1299,17 @@ void Worker() {
                     }
                     else if (stateStr == "playing" || stateStr == "paused") {
                         std::string rawFilename = CleanString(ExtractString(json, "filename"));
+                        
+                        if (rawFilename != lastToastMediaKey) {
+                            lastToastMediaKey = rawFilename;
+                            toastTimer = 0;
+                            toastFired = false;
+                        }
+                        
+                        if (stateStr == "playing" && !toastFired) {
+                            toastTimer++;
+                        }
+                        
                         std::string rawTitle = ExtractString(json, "title");
                         std::string showName = ExtractString(json, "showName");
                         std::string season = ExtractString(json, "seasonNumber");
@@ -1145,6 +1332,7 @@ void Worker() {
                         int activityType = DetectActivityType(rawFilename, quality);
 
                         if (rawFilename != lastRawFilename || rawTitle != lastRawTitle || rawArtist != lastRawArtist || showName != lastShowName) {
+                            Wh_Log(L"[VLC-RPC] Media changed: %S", rawFilename.c_str());
                             
                             std::string filenameClean = bEnableMetadataCleaner ? CleanMetadata(rawFilename, customJunkList) : rawFilename;
                             cachedFilename = filenameClean.empty() ? rawFilename : filenameClean;
@@ -1173,9 +1361,16 @@ void Worker() {
                         std::string largeText = "VLC Media Player";
 
                         if (activityType == 2) { 
-                            activityName = title.empty() ? filename : title;
-                            top = activityName; 
-                            query = activityName + " " + artist;
+                            std::string defaultName = title.empty() ? filename : title;
+                            if (myMusicNameSetting == "Artist" && !artist.empty()) {
+                                activityName = artist;
+                            } else if (myMusicNameSetting == "Album" && !album.empty()) {
+                                activityName = album;
+                            } else {
+                                activityName = defaultName;
+                            }
+                            top = defaultName; 
+                            query = defaultName + " " + artist;
 
                             if (!artist.empty()) {
                                 bot = "by " + artist;
@@ -1305,12 +1500,21 @@ void Worker() {
                                 for (int i=0; i<10; i++) {
                                     std::string name = "\\\\.\\pipe\\discord-ipc-" + std::to_string(i);
                                     hPipe = CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-                                    if (hPipe != INVALID_HANDLE_VALUE) break;
+                                    if (hPipe != INVALID_HANDLE_VALUE) {
+                                        Wh_Log(L"[VLC-RPC] Connected to Discord IPC (pipe %d).", i);
+                                        break;
+                                    }
                                 }
                                 if (hPipe != INVALID_HANDLE_VALUE) {
                                     std::string hs = "{\"v\":1,\"client_id\":\"" + myClientId + "\"}";
                                     int op=0; int l=(int)hs.length(); DWORD w; WriteFile(hPipe,&op,4,&w,NULL); WriteFile(hPipe,&l,4,&w,NULL); WriteFile(hPipe,hs.c_str(),l,&w,NULL);
                                     isConnected = true;
+                                } else {
+                                    static bool loggedIpcFail2 = false;
+                                    if (!loggedIpcFail2) {
+                                        Wh_Log(L"[VLC-RPC] Could not connect to Discord IPC. Is Discord running?");
+                                        loggedIpcFail2 = true;
+                                    }
                                 }
                             }
 
@@ -1329,7 +1533,6 @@ void Worker() {
                                 js += "\"type\":" + NumToStr(activityType) + ",";
                                 js += "\"name\":\"" + SanitizeString(activityName) + "\","; 
                                 
-                                // Omit small image if Minimal mode is enabled
                                 js += "\"assets\":{\"large_image\":\"" + displayImage + "\",\"large_text\":\"" + SanitizeString(largeText) + "\"";
                                 if (!bMinimalMode) {
                                     js += ",\"small_image\":\"" + (isPlaying ? assetPlay : assetPause) + "\",\"small_text\":\"" + state + "\"";
@@ -1347,15 +1550,17 @@ void Worker() {
                                 bool s1 = WriteFile(hPipe,&op,4,&w,NULL);
                                 bool s2 = WriteFile(hPipe,&l,4,&w,NULL);
                                 bool s3 = WriteFile(hPipe,js.c_str(),l,&w,NULL);
-                                if (!s1 || !s2 || !s3) { CloseHandle(hPipe); hPipe = INVALID_HANDLE_VALUE; isConnected = false; }
                                 
-                                if (isConnected && bShowNotifications) {
-                                    if (isPlaying && !top.empty() && top != lastTop) {
-                                        ShowSystemToast(StrToWStr(top), StrToWStr(bot), targetCacheKey);
-                                    }
-                                }
+                                if (!s1 || !s2 || !s3) { CloseHandle(hPipe); hPipe = INVALID_HANDLE_VALUE; isConnected = false; }
                             }
-
+                            
+                            if (bShowNotifications && isPlaying && !toastFired && toastTimer >= 3) {
+                                if (!top.empty()) {
+                                    ShowSystemToast(StrToWStr(top), StrToWStr(bot), displayImage);
+                                }
+                                toastFired = true;
+                            }
+                            
                             lastTop = top; lastBot = bot; lastPlaying = isPlaying; lastActivityType = activityType; 
                             lastDisplayImage = displayImage; 
                             heartbeat = 0; lastState = stateStr;
@@ -1369,9 +1574,15 @@ void Worker() {
         }
 
         if (!requestSuccess) {
+            if (!loggedFailure) {
+                Wh_Log(L"[VLC-RPC] Could not reach VLC. Trying fallback ports...");
+                loggedFailure = true;
+            }
             if (hConnect) { WinHttpCloseHandle(hConnect); hConnect = NULL; }
+            currentPortIndex = (currentPortIndex + 1) % candidatePorts.size();
             std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         } else {
+            loggedFailure = false;
             for(int k=0; k<10; k++) {
                 if (g_stopThread.load()) break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));

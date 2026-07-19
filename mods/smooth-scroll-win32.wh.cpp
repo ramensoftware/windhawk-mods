@@ -6,7 +6,7 @@
 // @description     Adds smooth scrolling with spring physics to legacy Win32 apps
 // @description:pt  Adiciona rolagem suave com fisica de mola a aplicativos Win32 antigos
 // @description:es  Anade desplazamiento suave con fisica de resorte a aplicaciones Win32
-// @version         1.0.2
+// @version         1.0.3
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -14,6 +14,7 @@
 // @include         mmc.exe
 // @include         control.exe
 // @include         wordpad.exe
+// @include         taskmgr.exe
 // @compilerOptions -luser32 -lcomctl32 -lole32 -loleaut32
 // ==/WindhawkMod==
 
@@ -25,6 +26,31 @@
 
 Adds smooth scrolling with spring physics to legacy Win32 applications.
 Only modifies legacy controls — modern WinUI windows are not affected.
+
+### What's new in 1.0.3
+
+- **Consistent scroll speed across folder sizes** — the UIA percent-per-line
+  estimate now uses a multi-range curve (quadratic for view sizes 25–70,
+  power-5 for 70–92, power-20 for 92–100) that keeps scroll distance
+  consistent regardless of how many items a folder contains.
+  Credit: **JTFA** (github.com/JTFA).
+- **Smooth-only mode** — a new setting disables spring physics entirely.
+  Scrolling uses linear easing like a touchscreen: no bounce, no overshoot,
+  just a clean deceleration. Tune the speed with **Smooth Speed**.
+- **Improved spring physics** — progressive damping near the target
+  eliminates micro-oscillation at rest without affecting the feel of
+  the main animation.
+- **Control Panel scroll no longer blocked** — legacy `DirectUIHWND` containers
+  (Control Panel) are now correctly identified via the root window's WndProc
+  module and passed through to the native scroll handler. Detection is stable
+  from the first scroll, eliminating the intermittent first-open failure.
+- **Overshoot** — new setting that underdamps the spring for a subtle
+  mobile-like bounce. The progressive near-target damping still prevents
+  endless oscillation. No effect in Smooth-only mode.
+- **Automatic refresh rate** — Animation Interval and V-Sync settings removed.
+  The timer interval is now detected per window from the actual monitor's
+  refresh rate and updates automatically when the window moves to another
+  display.
 
 ### Scroll modes (auto-detected per window)
 
@@ -48,6 +74,12 @@ inside any included process are automatically skipped.
   which bypasses the Win32 message queue. These cannot be smoothed.
 - WinUI/XAML tabs in apps like Task Manager (Processes, Performance)
   are not affected. Classic tabs (Details, Services) work normally.
+- Scrolling the modern Explorer content area (`DirectUIHWND`) while the
+  window is in the background will bring it to the foreground. This is
+  an inherent behaviour of `IUIAutomationScrollPattern::SetScrollPercent`,
+  which activates the target window as part of the UI Automation
+  accessibility model. There is no public API to scroll this control
+  without activating it.
 
 ---
 
@@ -55,6 +87,31 @@ inside any included process are automatically skipped.
 
 Adiciona rolagem suave com física de mola a aplicativos Win32 antigos.
 Só modifica controles legados. Janelas WinUI não são afetadas.
+
+### Novidades na 1.0.3
+
+- **Velocidade de scroll consistente entre pastas** — o cálculo de
+  percent-per-line via UIA agora usa uma curva multi-faixa (quadrática
+  para viewSize 25–70, potência-5 para 70–92, potência-20 para 92–100)
+  que mantém a distância de scroll consistente independente do número de
+  itens na pasta. Crédito: **JTFA** (github.com/JTFA).
+- **Modo apenas suave** — novo setting que desativa a física de mola.
+  A rolagem usa suavização linear como tela de toque: sem bounce, sem
+  ultrapassagem, só desaceleração limpa. Ajuste a velocidade com
+  **Velocidade Suave**.
+- **Física de mola melhorada** — amortecimento progressivo próximo ao
+  alvo elimina micro-oscilação em repouso sem afetar o comportamento
+  da animação principal.
+- **Rolagem do Painel de Controle corrigida** — containers `DirectUIHWND`
+  legados (Painel de Controle) agora são corretamente identificados pelo
+  módulo WndProc da janela raiz e repassados ao handler nativo. A detecção
+  é estável desde o primeiro scroll, eliminando a falha intermitente.
+- **Ultrapassagem** — novo setting que sub-amorte a mola para um leve bounce
+  estilo mobile. O amortecimento progressivo próximo ao alvo ainda impede
+  oscilação infinita. Sem efeito no modo Apenas Suave.
+- **Taxa de atualização automática** — os settings Intervalo de Animação e
+  V-Sync foram removidos. O intervalo do timer agora é detectado por janela
+  a partir do monitor real e atualiza automaticamente ao mover para outro display.
 
 ### Adicionando mais programas
 
@@ -69,6 +126,11 @@ controles roláveis em qualquer aplicativo Win32.
 - Abas WinUI/XAML em apps como o Gerenciador de Tarefas (Processos,
   Desempenho) não são afetadas. Abas clássicas (Detalhes, Serviços)
   funcionam normalmente.
+- Rolar a área de conteúdo moderna do Explorer (`DirectUIHWND`) com a
+  janela em segundo plano fará ela vir para a frente. Isso é um
+  comportamento inerente de `IUIAutomationScrollPattern::SetScrollPercent`,
+  que ativa a janela alvo como parte do modelo de acessibilidade da UI
+  Automation. Não há API pública para scrollar esse controle sem ativá-lo.
 
 ---
 
@@ -76,6 +138,31 @@ controles roláveis em qualquer aplicativo Win32.
 
 Añade desplazamiento suave con física de resorte a las aplicaciones Win32 antiguas.
 Solo modifica los controles antiguos. Las ventanas de WinUI no se ven afectadas.
+
+### Novedades en 1.0.3
+
+- **Velocidad de desplazamiento consistente entre carpetas** — el cálculo
+  de porcentaje por línea via UIA ahora usa una curva de múltiples rangos
+  (cuadrática para viewSize 25–70, potencia-5 para 70–92, potencia-20 para
+  92–100) que mantiene la distancia de desplazamiento consistente
+  independientemente del número de elementos en la carpeta.
+  Crédito: **JTFA** (github.com/JTFA).
+- **Modo solo suave** — nuevo ajuste que desactiva la física de resorte.
+  El desplazamiento usa suavizado lineal como una pantalla táctil: sin
+  rebote, sin sobreimpulso, solo deceleración limpia. Ajusta la velocidad
+  con **Velocidad Suave**.
+- **Física de resorte mejorada** — amortiguación progresiva cerca del
+  objetivo elimina micro-oscilaciones en reposo sin afectar el
+  comportamiento de la animación principal.
+- **Desplazamiento del Panel de Control corregido** — los contenedores
+  `DirectUIHWND` legacy (Panel de Control) ahora se identifican correctamente
+  por el módulo WndProc de la ventana raíz y se pasan al controlador nativo.
+- **Rebote** — nuevo ajuste que sub-amortigua el resorte para un leve rebote
+  estilo móvil. La amortiguación progresiva cerca del objetivo aún previene
+  oscilaciones. Sin efecto en modo Solo Suave.
+- **Tasa de actualización automática** — los ajustes Intervalo de Animación y
+  V-Sync fueron eliminados. El intervalo del temporizador ahora se detecta por
+  ventana desde el monitor real y se actualiza al moverla a otra pantalla.
 
 ### Agregar mas programas
 
@@ -90,26 +177,42 @@ los controles desplazables en cualquier aplicación Win32.
 - Las pestañas WinUI/XAML en apps como el Administrador de Tareas
   (Procesos, Rendimiento) no se ven afectadas. Las pestañas clasicas
   (Detalles, Servicios) funcionan normalmente.
+- Desplazar el área de contenido moderna del Explorador (`DirectUIHWND`)
+  con la ventana en segundo plano la traerá al frente. Es un comportamiento
+  inherente de `IUIAutomationScrollPattern::SetScrollPercent`, que activa
+  la ventana objetivo como parte del modelo de accesibilidad de UI
+  Automation. No existe API pública para desplazar este control sin
+  activarlo.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- springConstant: 700
-  $name: Spring Constant
-  $name:pt: Constante da Mola
-  $name:es: Constante del Resorte
-  $description: Animation speed. Higher is snappier, lower is smoother. 50 to 1000
-  $description:pt: Velocidade da animação. Quanto maior, mais rápida; quanto menor, mais suave. 50 a 1000
-  $description:es: Velocidad de la animación. Cuanto mayor, más rápida; cuanto menor, más suave. 50 a 1000
-
-- dampingX10: 12
-  $name: Damping x10
-  $name:pt: Amortecimento x10
-  $name:es: Amortiguación x10
-  $description: Damping ratio times 10. 10 is critical, 11 prevents bounce, 8 slight bounce
-  $description:pt: Proporção de amortecimento vezes 10. 10 é crítico, 11 evita bounce, 8 permite leve bounce
-  $description:es: Relación de amortiguación por 10. 10 es crítico, 11 evita el rebote, 8 permite un leve rebote
+- spring:
+    - springConstant: 700
+      $name: Spring Constant
+      $name:pt: Constante da Mola
+      $name:es: Constante del Resorte
+      $description: Animation speed. Higher is snappier, lower is smoother. 50 to 1000
+      $description:pt: Velocidade da animação. Quanto maior, mais rápida; quanto menor, mais suave. 50 a 1000
+      $description:es: Velocidad de la animación. Cuanto mayor, más rápida; cuanto menor, más suave. 50 a 1000
+    - dampingX10: 12
+      $name: Damping x10
+      $name:pt: Amortecimento x10
+      $name:es: Amortiguación x10
+      $description: Damping ratio times 10. 10 is critical, 12 prevents bounce, 8 slight bounce
+      $description:pt: Proporção de amortecimento vezes 10. 10 é crítico, 12 evita bounce, 8 permite leve bounce
+      $description:es: Relación de amortiguación por 10. 10 es crítico, 12 evita el rebote, 8 permite un leve rebote
+    - overshoot: false
+      $name: Overshoot
+      $name:pt: Ultrapassagem
+      $name:es: Rebote
+      $description: Underdamps the spring for a subtle mobile-like bounce. No effect in Smooth Only mode.
+      $description:pt: Sub-amorte a mola para um leve bounce estilo mobile. Sem efeito no modo Apenas Suave.
+      $description:es: Sub-amortigua el resorte para un leve rebote estilo móvil. Sin efecto en modo Solo Suave.
+  $name: Spring Physics
+  $name:pt: Física da Mola
+  $name:es: Física del Resorte
 
 - scrollMultiplierX10: 20
   $name: Scroll Multiplier x10
@@ -119,21 +222,21 @@ los controles desplazables en cualquier aplicación Win32.
   $description:pt: Quantidade de rolagem vezes 10. 10 é o padrão, 20 dobra o valor
   $description:es: Cantidad de desplazamiento por 10. 10 es el valor predeterminado, 20 lo duplica
 
-- animationIntervalMs: 8
-  $name: Animation Interval
-  $name:pt: Intervalo da Animação
-  $name:es: Intervalo de Animación
-  $description: Timer in ms. 8 for 120hz+, 16 for 60hz
-  $description:pt: Intervalo em ms. 8 para 120 Hz ou mais, 16 para 60 Hz
-  $description:es: Intervalo en ms. 8 para 120 Hz o más, 16 para 60 Hz
+- smoothOnly: false
+  $name: Smooth Only (no spring)
+  $name:pt: Apenas Suave (sem mola)
+  $name:es: Solo Suave (sin resorte)
+  $description: Disables spring physics. Scrolling uses linear easing like a touchscreen — no bounce, no overshoot
+  $description:pt: Desativa a fisica de mola. A rolagem usa suavizacao linear como uma tela de toque — sem bounce, sem ultrapassagem
+  $description:es: Desactiva la fisica de resorte. El desplazamiento usa suavizado lineal como una pantalla tactil — sin rebote, sin sobreimpulso
 
-- vsync: false
-  $name: V-Sync
-  $name:pt: V-Sync
-  $name:es: V-Sync
-  $description: Match animation interval to display refresh rate. Overrides Animation Interval
-  $description:pt: Ajustar intervalo ao refresh do monitor. Substitui o Intervalo de Animacao
-  $description:es: Ajustar intervalo al refresco del monitor. Reemplaza el Intervalo de Animacion
+- smoothSpeedX10: 3
+  $name: Smooth Speed x10 (smooth only)
+  $name:pt: Velocidade Suave x10 (apenas suave)
+  $name:es: Velocidad Suave x10 (solo suave)
+  $description: Easing speed when Smooth Only is on. 1=very smooth, 3=responsive, 5=fast. 1 to 8
+  $description:pt: Velocidade de suavizacao quando Apenas Suave esta ativo. 1=muito suave, 3=responsivo, 5=rapido. 1 a 8
+  $description:es: Velocidad de suavizado cuando Solo Suave esta activo. 1=muy suave, 3=responsivo, 5=rapido. 1 a 8
 
 */
 // ==/WindhawkModSettings==
@@ -158,15 +261,44 @@ struct {
     double springK;
     double damping;
     double multiplier;
-    int intervalMs;
-    bool vsync;
+    bool smoothOnly;
+    double smoothSpeed;  // 0.1 to 0.8
+    bool overshoot;      // underdamp the spring for a subtle bounce
 } g_cfg;
 
+// Protects g_cfg and g_sysLines against concurrent reads (Tick thread)
+// and writes (LoadSettings called from Wh_ModSettingsChanged).
+static SRWLOCK g_cfgLock = SRWLOCK_INIT;
+static UINT g_sysLines_g = 3; // renamed to avoid collision with local in LoadSettings
+
+// Snapshot of settings read atomically under shared lock.
+// Tick and Handle call this once per invocation to avoid repeated lock acquires.
+struct CfgSnap {
+    double springK, damping, multiplier, smoothSpeed;
+    bool smoothOnly;
+    bool overshoot;
+    UINT sysLines;
+};
+
+static CfgSnap SnapCfg() {
+    AcquireSRWLockShared(&g_cfgLock);
+    CfgSnap s;
+    s.springK    = g_cfg.springK;
+    s.damping    = g_cfg.damping;
+    s.multiplier = g_cfg.multiplier;
+    s.smoothSpeed= g_cfg.smoothSpeed;
+    s.smoothOnly = g_cfg.smoothOnly;
+    s.overshoot  = g_cfg.overshoot;
+    s.sysLines   = g_sysLines_g;
+    ReleaseSRWLockShared(&g_cfgLock);
+    return s;
+}
+
 // ---------------------------------------------------------------------------
-// Spring physics (mass-spring-damper)
+// Spring physics — touch-screen style
 //
-// Uses semi-implicit Euler integration with an initial velocity boost
-// for immediate response on the first frame (no sluggish start).
+// High velocity boost for immediate response, overdamped to prevent
+// bounce, minimal progressive damping for quick clean stop.
 // ---------------------------------------------------------------------------
 
 struct Spring {
@@ -174,19 +306,20 @@ struct Spring {
     double pos = 0;
     double vel = 0;
 
-    // Advance one step, return position delta.
-    double Step(double dt, double k, double dr) {
+    // Spring mode: mass-spring-damper with progressive damping.
+    // When overshoot=true the damping ratio is reduced to ~0.65 of its
+    // configured value, making the spring underdamped. The progressive
+    // extra-damping near the target still ensures a clean stop without
+    // endless oscillation -- the result is one subtle overshoot that
+    // snaps back cleanly, similar to a mobile scroll bounce.
+    double StepSpring(double dt, double k, double dr, bool overshoot) {
+        if (overshoot) dr *= 0.65;
         double disp = pos - target;
 
-        // Progressive damping: as the spring approaches the target,
-        // increase damping to kill trailing drift smoothly.
-        // Far from target (|disp| > 3): no effect (normal scrolling).
-        // Close to target (|disp| -> 0): extra damping ramps up,
-        // making the final approach quick without a visible snap.
         double absDisp = std::abs(disp);
         double extraDamp = 0;
-        if (absDisp < 3.0) {
-            extraDamp = (3.0 - absDisp) / 3.0 * 12.0;
+        if (absDisp < 1.0) {
+            extraDamp = (1.0 - absDisp) / 1.0 * 3.0;
         }
 
         double c = dr * 2.0 * std::sqrt(k) + extraDamp;
@@ -197,12 +330,21 @@ struct Spring {
         return pos - old;
     }
 
-    // Add scroll target with velocity boost for instant response.
-    void Push(double delta, double k) {
+    // Smooth-only mode: linear easing, no physics.
+    // Each frame moves a fraction of remaining distance.
+    double StepSmooth(double factor) {
+        double old = pos;
+        pos += (target - pos) * factor;
+        vel = 0;
+        return pos - old;
+    }
+
+    void Push(double delta, double k, bool smoothOnly) {
         target += delta;
-        // Gentle kick to avoid sluggish start.  Lower values = smoother
-        // onset, higher = more immediate but more "springy".
-        vel += delta * std::sqrt(k) * 0.20;
+        if (!smoothOnly) {
+            vel += delta * std::sqrt(k) * 0.40;
+        }
+        // smoothOnly: no velocity boost — easing handles it.
     }
 
     void Snap() { pos = target; vel = 0; }
@@ -219,6 +361,24 @@ enum class Method {
     Pass        = 3,   // Don't touch
 };
 
+// ---------------------------------------------------------------------------
+// Per-monitor refresh rate detection
+// ---------------------------------------------------------------------------
+static int CalcFrameMsFromMonitor(HMONITOR hmon) {
+    if (!hmon) return 8;
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(hmon, &mi)) return 8;
+    DEVMODEW dm{};
+    dm.dmSize = sizeof(dm);
+    if (!EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) ||
+        dm.dmDisplayFrequency == 0)
+        return 8;
+    int ms = 1000 / (int)dm.dmDisplayFrequency;
+    return ms < 1 ? 1 : ms;
+}
+
+
 static Method Detect(HWND h) {
     WCHAR c[64] = {};
     if (!GetClassNameW(h, c, ARRAYSIZE(c)))
@@ -228,17 +388,39 @@ static Method Detect(HWND h) {
 
     if (_wcsicmp(c, L"DirectUIHWND") == 0) {
         // DirectUIHWND inside NativeHWNDHost is a WinUI-hosted container
-        // (e.g. Task Manager) that doesn't respond to UIA scroll.
-        // Pass through so native scrolling works.
+        // (e.g. Task Manager tabs) — pass through.
         WCHAR pc[64] = {};
         HWND parent = GetParent(h);
         if (parent) GetClassNameW(parent, pc, ARRAYSIZE(pc));
         if (_wcsicmp(pc, L"NativeHWNDHost") == 0)
             return Method::Pass;
+        // Control Panel detection: parent==DUIViewWndClassName but SetScrollPercent
+        // is silently ignored by the legacy DirectUI container.
+        // We check the ROOT window's WndProc module rather than the DirectUIHWND's
+        // own WndProc to avoid an initialization race condition: when Control Panel
+        // first opens, the DirectUIHWND's WndProc may not yet be registered by
+        // COMCTL32, causing intermittent detection failures on the first scroll.
+        // The root CabinetWClass WndProc is assigned at window creation and is
+        // stable from the start: COMCTL32.dll for Control Panel, atlthunk.dll for
+        // File Explorer (confirmed via window chain diagnostic logging).
+        if (_wcsicmp(pc, L"DUIViewWndClassName") == 0) {
+            HWND root = GetAncestor(h, GA_ROOT);
+            WNDPROC rootWp = root ? (WNDPROC)GetWindowLongPtrW(root, GWLP_WNDPROC) : nullptr;
+            HMODULE hmod = nullptr;
+            if (rootWp && GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    (LPCWSTR)rootWp, &hmod)) {
+                WCHAR path[MAX_PATH] = {};
+                GetModuleFileNameW(hmod, path, ARRAYSIZE(path));
+                const WCHAR* sep = wcsrchr(path, L'\\');
+                if (sep && _wcsicmp(sep + 1, L"comctl32.dll") == 0)
+                    return Method::Pass;
+            }
+        }
         return Method::UIAPercent;
     }
 
-    // Known scrollable Win32 classes.
     if (_wcsicmp(c, L"SysTreeView32") == 0 ||
         _wcsicmp(c, L"Edit") == 0 ||
         _wcsicmp(c, L"ListBox") == 0 ||
@@ -248,7 +430,6 @@ static Method Detect(HWND h) {
         _wcsicmp(c, L"RichEdit20A") == 0)
         return Method::LineScroll;
 
-    // Any window with a standard scrollbar.
     SCROLLINFO si = { sizeof(si), SIF_RANGE };
     if (GetScrollInfo(h, SB_VERT, &si) && si.nMax > si.nMin)
         return Method::LineScroll;
@@ -260,7 +441,7 @@ static Method Detect(HWND h) {
 }
 
 // ---------------------------------------------------------------------------
-// Find scrollable child under cursor (for container windows)
+// Find scrollable child under cursor
 // ---------------------------------------------------------------------------
 
 struct FindCtx { POINT pt; HWND out; };
@@ -298,13 +479,7 @@ static int LVLineH(HWND h) {
 }
 
 // ---------------------------------------------------------------------------
-// UI Automation (lazy init + pattern caching)
-//
-// g_uia is per-thread (thread_local) because COM STA objects should not
-// be shared across apartment threads.  COM is initialized once per thread
-// and kept alive for the lifetime of the thread — CoUninitialize is not
-// called, which is acceptable:
-// https://github.com/microsoft/windows-rs/issues/1169#issuecomment-925107412
+// UI Automation
 // ---------------------------------------------------------------------------
 
 static thread_local IUIAutomation* g_uia = nullptr;
@@ -349,31 +524,51 @@ static bool UIAScroll(IUIAutomationScrollPattern* p, double dV, double dH) {
     return SUCCEEDED(p->SetScrollPercent(nH, nV));
 }
 
-// Estimate percent-per-line using the window height to approximate
-// how many rows are visible.  This scales correctly regardless of
-// total item count — a folder with 30 or 3000 items scrolls the
-// same visual distance per wheel notch.
-static double EstimatePPL(IUIAutomationScrollPattern* p, HWND hwnd) {
-    double vs = 0;
-    p->get_CurrentVerticalViewSize(&vs);
-    if (vs <= 0 || vs >= 100) return 1.0;
+// Estimate percent-per-line for vertical and horizontal axes.
 
+static void EstimatePPL(IUIAutomationScrollPattern* p, HWND hwnd,
+                         double* outV, double* outH) {
     RECT rc = {};
     GetClientRect(hwnd, &rc);
     int wh = rc.bottom - rc.top;
+    int ww = rc.right - rc.left;
     if (wh < 1) wh = 400;
+    if (ww < 1) ww = 600;
 
-    // Approximate visible rows.  24px is a middle-ground row height
-    // that works reasonably for both Details (~20px) and Icon views
-    // (~80-120px per row).  The key insight: this only affects the
-    // *visual distance* per notch, and users can tune with multiplier.
-    double approxRows = wh / 24.0;
-    if (approxRows < 3) approxRows = 3;
+    // Precompute expensive pow bases once per call (not per-frame — this
+    // function is only called on first scroll and on view-mode changes).
+    static const double pow70_5  = std::pow(70.0,  5.0);
+    static const double pow92_20 = std::pow(92.0, 20.0);
+    // Value of power-5 curve at vs=92 — anchor for power-20 curve.
+    static const double anchor92 = std::pow(92.0, 5.0) * 196.0 / pow70_5;
 
-    double ppl = vs / approxRows;
-    if (ppl < 0.05) ppl = 0.05;
-    if (ppl > 5.0) ppl = 5.0;
-    return ppl;
+    // Vertical ppl.
+    double vsV = 0;
+    p->get_CurrentVerticalViewSize(&vsV);
+    if (vsV > 0) {
+        double vs = vsV;
+        if      (vs > 25 && vs < 70) vs = vs * vs / 25.0;
+        else if (vs >= 70 && vs < 92) vs = std::pow(vs, 5.0) * 196.0 / pow70_5;
+        else if (vs >= 92)            vs = std::pow(vs, 20.0) * anchor92 / pow92_20;
+        double rows = wh / 24.0;
+        if (rows < 3) rows = 3;
+        *outV = vs / rows;
+    } else {
+        *outV = 1.0;
+    }
+
+    // Horizontal ppl — use window width and wider column estimate.
+    double vsH = 0;
+    p->get_CurrentHorizontalViewSize(&vsH);
+    if (vsH > 0) {
+        double vs = vsH;
+        if (vs > 25) vs = vs * vs / 25.0;
+        double cols = ww / 120.0;
+        if (cols < 3) cols = 3;
+        *outH = vs / cols;
+    } else {
+        *outH = 1.0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -381,21 +576,22 @@ static double EstimatePPL(IUIAutomationScrollPattern* p, HWND hwnd) {
 // ---------------------------------------------------------------------------
 
 struct State {
+    int intervalMs = 8;    // per-window, auto-detected from monitor refresh rate
+    HMONITOR lastMonitor = nullptr; // cached to avoid re-querying unchanged monitors
     Spring sV, sH;
     UINT_PTR timer = 0;
     Method method = Method::Pass;
-    int lineH = 20;
-    double ppl = 0;          // percent-per-line (UIA)
+    double pplV = 0, pplH = 0;
     double accV = 0, accH = 0;
     IUIAutomationScrollPattern* pat = nullptr;
     bool uiaOk = true;
     bool hasVScroll = true;
     bool hasHScroll = false;
+    RECT lastClientRect = {};  // cache key for EstimatePPL: skip when window unchanged
 };
 
 static CRITICAL_SECTION g_cs;
 static std::map<HWND, State> g_st;
-static UINT g_sysLines = 3;
 
 constexpr UINT_PTR TID = 0x534D5448;
 
@@ -403,7 +599,6 @@ static void Release(State& s) {
     if (s.pat) { s.pat->Release(); s.pat = nullptr; }
 }
 
-// Method-aware settling: is the remaining motion imperceptible?
 static bool Settled(const State& s) {
     double tV, tH, tVel;
     switch (s.method) {
@@ -425,49 +620,42 @@ static bool Settled(const State& s) {
 // ---------------------------------------------------------------------------
 
 static void LoadSettings() {
-    int k = Wh_GetIntSetting(L"springConstant");
-    g_cfg.springK = (k >= 50 && k <= 1000) ? (double)k : 700.0;
-
-    int d = Wh_GetIntSetting(L"dampingX10");
-    g_cfg.damping = (d >= 3 && d <= 30) ? d / 10.0 : 1.2;
-
+    int k = Wh_GetIntSetting(L"spring.springConstant");
+    int d = Wh_GetIntSetting(L"spring.dampingX10");
     int m = Wh_GetIntSetting(L"scrollMultiplierX10");
-    g_cfg.multiplier = (m >= 1 && m <= 100) ? m / 10.0 : 2.0;
-
-    int i = Wh_GetIntSetting(L"animationIntervalMs");
-    g_cfg.intervalMs = (i >= 4 && i <= 100) ? i : 8;
-
-    g_cfg.vsync = Wh_GetIntSetting(L"vsync");
-
-    // V-Sync: override timer interval to match display refresh rate.
-    // Non-blocking — just sets the right interval so we produce one
-    // scroll update per display frame instead of blocking with DwmFlush.
-    if (g_cfg.vsync) {
-        DEVMODEW dm = {};
-        dm.dmSize = sizeof(dm);
-        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm) &&
-            dm.dmDisplayFrequency > 0) {
-            g_cfg.intervalMs = 1000 / dm.dmDisplayFrequency;
-            if (g_cfg.intervalMs < 4) g_cfg.intervalMs = 4;
-        }
-    }
+    bool sm = Wh_GetIntSetting(L"smoothOnly") != 0;
+    bool ov = Wh_GetIntSetting(L"spring.overshoot") != 0;
+    int sp = Wh_GetIntSetting(L"smoothSpeedX10");
 
     UINT ln = 3;
     SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &ln, 0);
     if (ln == 0) ln = 3;
     if (ln == WHEEL_PAGESCROLL) ln = 20;
-    g_sysLines = ln;
 
-    Wh_Log(L"Cfg: k=%.0f d=%.2f m=%.1f i=%d vs=%d sl=%u",
-            g_cfg.springK, g_cfg.damping, g_cfg.multiplier,
-            g_cfg.intervalMs, g_cfg.vsync, g_sysLines);
+    double logK, logD, logM, logSp;
+    AcquireSRWLockExclusive(&g_cfgLock);
+    g_cfg.springK    = logK = (k >= 50 && k <= 1000) ? (double)k : 700.0;
+    g_cfg.damping    = logD = (d >= 3  && d <= 30)   ? d / 10.0  : 1.2;
+    g_cfg.multiplier = logM = (m >= 1  && m <= 100)  ? m / 10.0  : 2.0;
+    g_cfg.smoothOnly = sm;
+    g_cfg.overshoot  = ov;
+    g_cfg.smoothSpeed= logSp = (sp >= 1 && sp <= 8)  ? sp / 10.0 : 0.3;
+    g_sysLines_g     = ln;
+    ReleaseSRWLockExclusive(&g_cfgLock);
+
+    Wh_Log(L"Cfg: k=%.0f d=%.2f m=%.1f ov=%d sm=%d sp=%.1f sl=%u",
+            logK, logD, logM, (int)ov, (int)sm, logSp, ln);
 }
 
 // ---------------------------------------------------------------------------
-// Timer — runs every intervalMs, steps the spring, sends scroll commands
+// Timer
 // ---------------------------------------------------------------------------
 
 static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
+    // Snapshot settings before acquiring g_cs: SnapCfg uses its own
+    // g_cfgLock (shared), no need to hold both locks simultaneously.
+    const CfgSnap cfg = SnapCfg();
+
     EnterCriticalSection(&g_cs);
 
     auto it = g_st.find(hw);
@@ -479,13 +667,35 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
     }
 
     State& s = it->second;
-    double dt = g_cfg.intervalMs / 1000.0;
 
-    // Step springs.
-    double dV = s.sV.Step(dt, g_cfg.springK, g_cfg.damping);
-    double dH = s.sH.Step(dt, g_cfg.springK, g_cfg.damping);
+    // Per-monitor refresh: one cheap MonitorFromWindow per frame.
+    // GetMonitorInfoW + EnumDisplaySettingsW only run when the window
+    // actually moved to a different monitor (HMONITOR changed).
+    {
+        HMONITOR hmon = MonitorFromWindow(hw, MONITOR_DEFAULTTOPRIMARY);
+        if (hmon != s.lastMonitor) {
+            s.lastMonitor = hmon;
+            s.intervalMs  = CalcFrameMsFromMonitor(hmon);
+            KillTimer(hw, TID);
+            s.timer = SetTimer(hw, TID, (UINT)s.intervalMs, Tick);
+            if (!s.timer) {
+                Release(s); g_st.erase(it);
+                LeaveCriticalSection(&g_cs);
+                return;
+            }
+        }
+    }
+    double dt = s.intervalMs / 1000.0;
 
-    // Stop early if remaining motion is imperceptible.
+    double dV, dH;
+    if (cfg.smoothOnly) {
+        dV = s.sV.StepSmooth(cfg.smoothSpeed);
+        dH = s.sH.StepSmooth(cfg.smoothSpeed);
+    } else {
+        dV = s.sV.StepSpring(dt, cfg.springK, cfg.damping, cfg.overshoot);
+        dH = s.sH.StepSpring(dt, cfg.springK, cfg.damping, cfg.overshoot);
+    }
+
     if (Settled(s)) {
         s.sV.Snap(); s.sH.Snap();
         s.accV = s.accH = 0;
@@ -506,8 +716,6 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
                 s.accV -= px;
                 int dy = -px;
 
-                // Prevent overscroll: if already at top/bottom, snap the
-                // spring to stop the animation instead of scrolling further.
                 SCROLLINFO si = { sizeof(si), SIF_ALL };
                 if (GetScrollInfo(hw, SB_VERT, &si)) {
                     int maxPos = si.nMax - (int)si.nPage + 1;
@@ -544,9 +752,9 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
 
         case Method::UIAPercent: {
             if (s.uiaOk && s.pat) {
-                double pct = dV * s.ppl;
+                double pct = dV * s.pplV;
 
-                // Boundary: snap if at top scrolling up or bottom down.
+                // Boundary: snap if at limit in scroll direction.
                 double curPct = -1;
                 s.pat->get_CurrentVerticalScrollPercent(&curPct);
                 if (curPct >= 0 &&
@@ -629,7 +837,7 @@ static void CALLBACK Tick(HWND hw, UINT, UINT_PTR, DWORD) {
 
         case Method::UIAPercent: {
             if (sh.uiaOk && sh.pat) {
-                double pct = dH * sh.ppl;
+                double pct = dH * sh.pplH;
 
                 double curPct = -1;
                 sh.pat->get_CurrentHorizontalScrollPercent(&curPct);
@@ -673,15 +881,16 @@ static bool Handle(const MSG* m) {
     short delta = GET_WHEEL_DELTA_WPARAM(m->wParam);
     if (!delta) return false;
 
-    // Ctrl+wheel is zoom (icon size, font size, etc.) — let it through.
+    // Ctrl+wheel = zoom — pass through.
     if (GET_KEYSTATE_WPARAM(m->wParam) & MK_CONTROL)
         return false;
+
+    const CfgSnap cfg = SnapCfg();
 
     bool vert = (m->message == WM_MOUSEWHEEL);
     HWND tgt = m->hwnd;
     Method mt = Detect(tgt);
 
-    // Container? Try children.
     if (mt == Method::Pass) {
         POINT pt = { GET_X_LPARAM(m->lParam), GET_Y_LPARAM(m->lParam) };
         HWND ch = FindChild(tgt, pt);
@@ -689,34 +898,33 @@ static bool Handle(const MSG* m) {
     }
     if (mt == Method::Pass) return false;
 
-    // Must be in-process.
     DWORD pid = 0;
     GetWindowThreadProcessId(tgt, &pid);
     if (pid != GetCurrentProcessId()) return false;
 
-    // SysListView32 in horizontal-only modes (Icon, Table, Tile, etc.):
-    // the default WM_MOUSEWHEEL handler already scrolls correctly in these
-    // modes, so we pass through to avoid breaking it.  Only intercept when
-    // the ListView has a vertical scrollbar (Details view, etc.).
+    // SysListView32 horizontal-only (Icon/Tile): pass through.
     if (mt == Method::PixelLV && vert) {
         SCROLLINFO si = { sizeof(si), SIF_RANGE };
         if (!GetScrollInfo(tgt, SB_VERT, &si) || si.nMax <= si.nMin)
             return false;
     }
 
-    double lines = ((double)delta / WHEEL_DELTA) * g_sysLines * g_cfg.multiplier;
-    int lh = (mt == Method::PixelLV) ? LVLineH(tgt) : 20;
+    double lines = ((double)delta / WHEEL_DELTA) * cfg.sysLines * cfg.multiplier;
+    int lh = (mt == Method::PixelLV) ? LVLineH(tgt) : 0;
 
     EnterCriticalSection(&g_cs);
 
     State& s = g_st[tgt];
     s.method = mt;
-    s.lineH = lh;
 
-    // Lazy init UIA pattern.
+    // Lazy init UIA pattern — GetPattern is a COM cross-process call,
+    // must be done outside g_cs to avoid holding the lock during blocking I/O.
     if (mt == Method::UIAPercent && s.uiaOk && !s.pat) {
         LeaveCriticalSection(&g_cs);
         auto* p = GetPattern(tgt);
+        // EstimatePPL is also a COM call — keep it outside the lock.
+        double pplV = 1.0, pplH = 1.0;
+        if (p) EstimatePPL(p, tgt, &pplV, &pplH);
         EnterCriticalSection(&g_cs);
         auto i2 = g_st.find(tgt);
         if (i2 == g_st.end()) {
@@ -725,22 +933,89 @@ static bool Handle(const MSG* m) {
             return false;
         }
         i2->second.pat = p;
-        if (!p) {
+        if (p) {
+            i2->second.pplV = pplV;
+            i2->second.pplH = pplH;
+        } else {
             i2->second.uiaOk = false;
             LeaveCriticalSection(&g_cs);
             return false;
         }
     }
 
-    // Refresh scroll axis availability on every event — the user may
-    // switch views while the same DirectUIHWND is reused.
+    // Refresh scroll axes on every event.
+    // get_CurrentVerticalScrollPercent is a lightweight in-process call
+    // (the COM proxy caches the value), acceptable under the lock.
     if (mt == Method::UIAPercent && s.pat) {
         double pctV = -1, pctH = -1;
         s.pat->get_CurrentVerticalScrollPercent(&pctV);
         s.pat->get_CurrentHorizontalScrollPercent(&pctH);
         s.hasVScroll = (pctV >= 0);
         s.hasHScroll = (pctH >= 0);
-        s.ppl = EstimatePPL(s.pat, tgt);
+
+        // Re-estimate percent-per-line only when the client area changed
+        // (window resize or first call). The view size in UIA is stable
+        // between resize events, so calling EstimatePPL on every scroll
+        // event is unnecessary COM overhead.
+        RECT cr = {};
+        GetClientRect(tgt, &cr);
+        bool needsPPL = (s.pplV == 0 ||
+                         cr.right  != s.lastClientRect.right ||
+                         cr.bottom != s.lastClientRect.bottom);
+
+        State* sp = &s;  // will point to re-found state if we leave the lock
+        if (needsPPL) {
+            auto* pat = s.pat;
+            LeaveCriticalSection(&g_cs);
+            double pplV = 1.0, pplH = 1.0;
+            EstimatePPL(pat, tgt, &pplV, &pplH);
+            EnterCriticalSection(&g_cs);
+            auto i2 = g_st.find(tgt);
+            if (i2 == g_st.end()) {
+                LeaveCriticalSection(&g_cs);
+                return false;
+            }
+            i2->second.pplV = pplV;
+            i2->second.pplH = pplH;
+            i2->second.lastClientRect = cr;
+            sp = &i2->second;
+        }
+        State& s2 = *sp;
+
+        // Spring delta and push using refreshed state.
+        double add = -lines; // UIAPercent: up = decrease %
+        Spring* pushedSpring = nullptr;
+        double pushValue = 0;
+        if (vert) {
+            if (s2.hasVScroll) {
+                pushValue = add;
+                s2.sV.Push(pushValue, cfg.springK, cfg.smoothOnly);
+                pushedSpring = &s2.sV;
+            } else if (s2.hasHScroll) {
+                pushValue = add;
+                s2.sH.Push(pushValue, cfg.springK, cfg.smoothOnly);
+                pushedSpring = &s2.sH;
+            }
+        } else {
+            if (s2.hasHScroll) {
+                pushValue = -add;
+                s2.sH.Push(pushValue, cfg.springK, cfg.smoothOnly);
+                pushedSpring = &s2.sH;
+            }
+        }
+        if (!pushedSpring) { LeaveCriticalSection(&g_cs); return false; }
+        if (!s2.timer) {
+            s2.lastMonitor = MonitorFromWindow(tgt, MONITOR_DEFAULTTOPRIMARY);
+            s2.intervalMs  = CalcFrameMsFromMonitor(s2.lastMonitor);
+            s2.timer = SetTimer(tgt, TID, (UINT)s2.intervalMs, Tick);
+            if (!s2.timer) {
+                pushedSpring->target -= pushValue;
+                LeaveCriticalSection(&g_cs);
+                return false;
+            }
+        }
+        LeaveCriticalSection(&g_cs);
+        return true;
     }
 
     // Spring delta.
@@ -748,14 +1023,11 @@ static bool Handle(const MSG* m) {
     switch (mt) {
     case Method::PixelLV:    add = lines * lh;  break;
     case Method::LineScroll: add = lines;       break;
-    case Method::UIAPercent: add = -lines;      break;  // invert: up=decrease%
+    case Method::UIAPercent: add = -lines;      break;  // up = decrease %
     default: break;
     }
 
-    // Determine target axis and push.
-    // For UIAPercent, check which scroll axes are available.
-    // ListView mode in Explorer only has horizontal scroll — we reroute
-    // the vertical wheel to horizontal in that case.
+    // Push to correct axis.
     Spring* pushedSpring = nullptr;
     double pushValue = 0;
 
@@ -763,44 +1035,41 @@ static bool Handle(const MSG* m) {
         if (vert) {
             if (s.hasVScroll) {
                 pushValue = add;
-                s.sV.Push(pushValue, g_cfg.springK);
+                s.sV.Push(pushValue, cfg.springK, cfg.smoothOnly);
                 pushedSpring = &s.sV;
             } else if (s.hasHScroll) {
-                // Vertical wheel -> reroute to horizontal scroll.
                 pushValue = add;
-                s.sH.Push(pushValue, g_cfg.springK);
+                s.sH.Push(pushValue, cfg.springK, cfg.smoothOnly);
                 pushedSpring = &s.sH;
             }
         } else {
             if (s.hasHScroll) {
                 pushValue = -add;
-                s.sH.Push(pushValue, g_cfg.springK);
+                s.sH.Push(pushValue, cfg.springK, cfg.smoothOnly);
                 pushedSpring = &s.sH;
             }
         }
     } else {
-        // Non-UIA methods: negate horizontal because convention is opposite
-        // (positive add = scroll up, but SB_LINELEFT / -dx = scroll left).
         if (vert) {
             pushValue = add;
-            s.sV.Push(pushValue, g_cfg.springK);
+            s.sV.Push(pushValue, cfg.springK, cfg.smoothOnly);
             pushedSpring = &s.sV;
         } else {
             pushValue = -add;
-            s.sH.Push(pushValue, g_cfg.springK);
+            s.sH.Push(pushValue, cfg.springK, cfg.smoothOnly);
             pushedSpring = &s.sH;
         }
     }
 
-    // If no scrollable axis found, let the original message through.
     if (!pushedSpring) {
         LeaveCriticalSection(&g_cs);
         return false;
     }
 
-    // Start timer.
     if (!s.timer) {
-        s.timer = SetTimer(tgt, TID, (UINT)g_cfg.intervalMs, Tick);
+        s.lastMonitor = MonitorFromWindow(tgt, MONITOR_DEFAULTTOPRIMARY);
+        s.intervalMs  = CalcFrameMsFromMonitor(s.lastMonitor);
+        s.timer = SetTimer(tgt, TID, (UINT)s.intervalMs, Tick);
         if (!s.timer) {
             pushedSpring->target -= pushValue;
             LeaveCriticalSection(&g_cs);
@@ -859,7 +1128,4 @@ void Wh_ModUninit() {
     g_st.clear();
     LeaveCriticalSection(&g_cs);
     DeleteCriticalSection(&g_cs);
-    // Note: g_uia is thread_local and not released here — each thread's
-    // IUIAutomation instance lives until the process exits.  The cached
-    // ScrollPattern pointers in g_st are explicitly released above.
 }

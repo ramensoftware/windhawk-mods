@@ -2,7 +2,7 @@
 // @id              osu-tray-profile
 // @name            osu!Profile in Taskbar
 // @description     Displays PP, rank, and avatar from rhythm game osu! (standard mode) next to the system tray
-// @version         3.9.1
+// @version         3.9.2
 // @author          antoshika
 // @github          https://github.com/Antoshika
 // @include         windhawk.exe
@@ -79,7 +79,7 @@ std::thread g_uiThread;
 std::thread g_netThread;
 std::atomic<bool> g_running{ false };
 std::atomic<bool> g_forceUpdate{ false };
-std::atomic<bool> g_needsRedraw{ false };
+std::atomic<bool> g_needsRedraw{ true };
 std::atomic<bool> g_isUpdating{ false };
 HWND g_overlayHwnd = NULL;
 SRWLOCK g_statsLock = SRWLOCK_INIT;
@@ -216,7 +216,6 @@ void FetchOsuStats() {
         AcquireSRWLockExclusive(&g_statsLock);
         
         g_consecutiveErrors++;
-        
         if (dwError != 0) {
             if (g_consecutiveErrors <= 4) {
                 g_displayName = L"Loading...";
@@ -242,7 +241,6 @@ void FetchOsuStats() {
     bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
 
     std::string userResponse;
-
     if (bResults && WinHttpReceiveResponse(hRequestUser, NULL)) {
         DWORD dwSize = 0;
         DWORD dwDownloaded = 0;
@@ -343,7 +341,7 @@ void DrawOverlay(HWND hwnd) {
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    
+
     BITMAPINFO bmi = {0};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = 200;
@@ -371,7 +369,6 @@ void DrawOverlay(HWND hwnd) {
             StringFormat format;
             format.SetAlignment(StringAlignmentCenter);
             format.SetLineAlignment(StringAlignmentCenter);
-            
             RectF rect(0, 0, 200, 50);
 
             if (g_isUpdating && g_consecutiveErrors == 0) {
@@ -381,7 +378,6 @@ void DrawOverlay(HWND hwnd) {
             }
         } else {
             Image image(avPath.c_str());
-            
             if (image.GetLastStatus() == Ok) {
                 Bitmap resized(32, 32, &graphics);
                 Graphics gResize(&resized);
@@ -395,7 +391,6 @@ void DrawOverlay(HWND hwnd) {
 
                 GraphicsPath path;
                 int x = 9, y = 9, w = 32, h = 32, d = 12;
-                
                 path.AddArc(x, y, d, d, 180, 90);
                 path.AddArc(x + w - d, y, d, d, 270, 90);
                 path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
@@ -413,7 +408,6 @@ void DrawOverlay(HWND hwnd) {
     POINT ptSrc = {0, 0};
     SIZE size = {200, 50};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    
     UpdateLayeredWindow(hwnd, hdcScreen, NULL, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
 
     SelectObject(hdcMem, hOld);
@@ -435,7 +429,6 @@ void NetThreadFunc() {
 
         g_isUpdating = false;
         g_needsRedraw = true;
-
         int currentInterval = hasError ? 15 : g_updateInterval;
 
         for(int i = 0; i < currentInterval && g_running; i++) {
@@ -485,6 +478,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
 
                     HWND wndPrev = GetWindow(trayWnd, GW_HWNDPREV);
+                    
+                    while (wndPrev && wndPrev != hwnd) {
+                        WCHAR className[256];
+                        GetClassNameW(wndPrev, className, 256);
+                        if (wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+                            wcscmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+                            wcscmp(className, L"StartMenuExperienceHost") == 0 ||
+                            wcscmp(className, L"SearchHost") == 0 ||
+                            wcscmp(className, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
+                            wndPrev = GetWindow(wndPrev, GW_HWNDPREV);
+                        } else {
+                            break;
+                        }
+                    }
+
                     if (wndPrev == hwnd) {
                         flags |= SWP_NOZORDER;
                     } else {
@@ -502,7 +510,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
 
                 SetWindowPos(hwnd, insertAfter, x, y, width, height, flags);
-                
                 if (g_needsRedraw) {
                     DrawOverlay(hwnd);
                     g_needsRedraw = false;
@@ -528,7 +535,7 @@ void UiThreadFunc() {
         RegisterClassW(&wc);
 
         g_overlayHwnd = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             wc.lpszClassName, L"OsuStats",
             WS_POPUP,
             0, 0, 200, 50, 
@@ -682,7 +689,7 @@ void Wh_ModAfterInit() {
                       (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"" WH_MOD_ID L"\"",
                currentProcessPath);
-    
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -700,10 +707,10 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-        
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
+
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
@@ -713,7 +720,6 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-    
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
