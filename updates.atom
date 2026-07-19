@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-18T16:49:27.000Z</updated>
+    <updated>2026-07-19T23:29:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Customize Windows notifications placement 1.2.3]]></title>
+        <id>https://windhawk.net/mods/notifications-placement#7babeba1ee66cca786bbabc10e6b79c53f0c5a22</id>
+        <link href="https://windhawk.net/mods/notifications-placement"/>
+        <updated>2026-07-19T23:29:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility of the animation direction option with recent Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Marquee Fade 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-marquee-fade#9844dd6581b5594ed8a8a601388d96d6e293f23f</id>
@@ -910,58 +923,6 @@ If you are using this mod together with Classic Explorer toolbar (Open Shell), e
         <author>
             <name>gauthumj</name>
             <uri>https://github.com/gauthumj</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 1.5.0]]></title>
-        <id>https://windhawk.net/mods/win7-action-center-recreation#16034bdcfe218948d5917d77a0d8823e8e460b19</id>
-        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
-        <updated>2026-07-14T12:04:47.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781actioncenterrecreation">Windows 7/8.1 Action Center Recreation</h1>
-<p>This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout for modern Windows versions.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>Windows 7 theme</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png" alt="Image" /></p>
-<p>Windows 8.1 theme</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81act.png" alt="Image" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>No File Replacement</strong>: The mod's objective is to be stable and user-friendly and does not require the user to replace system files.</li>
-<li><strong>Real-time Security Status</strong>: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.</li>
-<li><strong>Interactive Flyout</strong>: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.</li>
-<li><strong>Rounded Corners</strong>: Rounded corners are supported for a more similar look to the original Windows 7 flyout.</li>
-<li><strong>Classic Theme support</strong>: Disable the "Rounded Corners" theme to make the flyout use a classic theme.</li>
-<li><strong>Balloon Notifications</strong>: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.</li>
-<li><strong>SmartScreen Check</strong>: Monitors Windows Defender SmartScreen status and reports if it is disabled.</li>
-<li><strong>Privacy Mode</strong>: The user can enable this mod to hide the eventual problems shown by the flyout.</li>
-<li><strong>Maintenance Checks</strong>: Automatically checks Backup status, Windows Error Reporting status, and Disk health. The disk health check is <strong>best-effort</strong>: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside <code>explorer.exe</code>, some drives may not answer — in that case the check is simply skipped and never reports a false problem.</li>
-<li><strong>ESC to Close</strong>: Press Escape to quickly close the flyout window.</li>
-<li><strong>Multiple Languages Support</strong>: English, Italian, Spanish, French, Russian are currently supported.</li>
-<li><strong>Security and Maintenance CPL Links</strong>: The mod restores the classic side-by-side <strong>Troubleshooting</strong> and <strong>Recovery</strong> entries on the Control Panel <em>Security and Maintenance</em> hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. </li>
-</ul>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>These are the hotkeys that can be configured in the mod.
-| Hotkey | Action |
-|--------|--------|
-| <code>Ctrl+N</code> | Simulate a notification |
-| <code>Ctrl+Shift+N</code> | Clear notifications |</p>
-<h2 id="howitworks">How It Works</h2>
-<p>The mod monitors the system's security settings including Firewall, Antivirus, Windows Update, UAC, Windows Defender and other settings. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
-The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod runs inside Explorer and works on Windows 10 and 11.</li>
-<li>If the icon doesn't appear, try restarting Explorer or the mod.</li>
-<li>The Control Panel hub links activate when you open <em>Security and Maintenance</em> (<code>control /name Microsoft.ActionCenter</code>). No system files are modified on disk.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme</li>
-<li>₮ዙℭ♔†WØLF† - Testing on Windows 11 23H2</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

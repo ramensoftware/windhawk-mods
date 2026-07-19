@@ -8668,7 +8668,7 @@
           190
         ],
         "ratingUsers": 211,
-        "updated": 1769267600000,
+        "updated": 1784503759000,
         "users": 15078
       },
       "metadata": {
@@ -8676,7 +8676,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
         "description": "Move notifications to another monitor or another corner of the screen",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -8686,7 +8686,7 @@
         ],
         "name": "Customize Windows notifications placement",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.2.2"
+        "version": "1.2.3"
       }
     },
     "numbered-taskbar": {
