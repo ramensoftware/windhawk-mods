@@ -88,7 +88,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
     $description: Multiplier for how much the pill scales when clicked. Use 1 value for uniform scale (e.g. 0.85) or 2 values for X,Y scale (e.g. 0.85, 0.5). Set to 1.0 to disable.
   - HoverBgColor: ''
     $name: Hover background color (Light, Dark)
-    $description: Optional hex color overrides during hover. Supports multi-color gradients (e.g. '#FF0000, #00FF00') and light|dark separation (e.g. 'light1, light2 | dark1, dark2').
+    $description: Optional hex color overrides during hover. Supports multi-color gradients (e.g. 'hex1, hex2') and light|dark separation (e.g. 'light1, light2 | dark1, dark2').
   - PressedBgColor: ''
     $name: Pressed background color (Light, Dark)
     $description: Optional hex color overrides during click. Supports multi-color gradients and light|dark separation.
@@ -105,7 +105,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
     - icon: App icon color
   - CustomColor: ""
     $name: Custom pill color
-    $description: Hex color code. Supports multi-color gradients (e.g. '#FF0000, #00FF00') and light|dark separation (e.g. 'light1, light2 | dark1, dark2').
+    $description: Hex color code. Supports multi-color gradients (e.g. 'hex1, hex2') and light|dark separation (e.g. 'light1, light2 | dark1, dark2').
   - BgGradientDirection: horizontal
     $name: Pill gradient direction
     $options:
@@ -1123,8 +1123,13 @@ bool UpdatePillPosition(
     double pillW = actW > 0 ? actW : p.Width();
     if (pillW < 1.0) pillW = 1.0;
     
+    double actH = p.ActualHeight();
+    double pillH = actH > 0 ? actH : p.Height();
+    if (pillH < 1.0) pillH = 1.0;
+
     float layoutX = static_cast<float>(g.Padding().Left + g.BorderThickness().Left + p.Margin().Left);
     float targetX = std::round((float)(point.X + (b.ActualWidth() / 2.0) - (pillW / 2.0))) - layoutX;
+    float pillYOffset = (float)(pillH - localSettings.PillHeight) / 2.0f;
     
     std::shared_ptr<PillContext> ctx = nullptr;
     {
@@ -1149,12 +1154,14 @@ bool UpdatePillPosition(
         ctx->forceSnapNext = false;
     }
 
+    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)pillH / 2.0f, 0.0f));
+
     if (shouldSnap || std::abs(lastTargetX - targetX) > 0.1f) {
         visual.Properties().InsertScalar(L"LastTargetX", targetX);
         visual.Properties().InsertScalar(L"LayoutW", (float)pillW);
 
         if (shouldSnap) {
-            visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, 0.0f, 0.0f));
+            visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, pillYOffset, 0.0f));
             visual.Properties().InsertScalar(L"LeftX", targetX);
             visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
             visual.Properties().StopAnimation(L"BaseScale");
@@ -1214,7 +1221,7 @@ bool UpdatePillPosition(
                 anim.Duration(std::chrono::milliseconds(static_cast<long long>(200 / localSettings.SpeedMultiplier)));
                 visual.Properties().StartAnimation(L"Translation.X", anim);
             } else if (animStyle == 8) { // None
-                visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, 0.0f, 0.0f));
+                visual.Properties().InsertVector3(L"Translation", winrt::Windows::Foundation::Numerics::float3(targetX, pillYOffset, 0.0f));
                 visual.Properties().InsertScalar(L"LeftX", targetX);
                 visual.Properties().InsertScalar(L"RightX", targetX + (float)pillW);
             } else { // Stretch (animStyle == 0 or 7)
@@ -1256,7 +1263,7 @@ bool UpdatePillPosition(
                     propSet.StartAnimation(L"RightX", rightAnim);
                 }
 
-                auto offsetExp = compositor.CreateExpressionAnimation(L"props.LeftX");
+                auto offsetExp = compositor.CreateExpressionAnimation(L"(props.LeftX + props.RightX - props.LayoutW) / 2.0");
                 offsetExp.SetReferenceParameter(L"props", propSet);
                 visual.Properties().StartAnimation(L"Translation.X", offsetExp);
             }
@@ -1285,12 +1292,10 @@ bool UpdatePillPosition(
                     
                     auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3(((props.RightX - props.LeftX) / props.LayoutW) * props.SquishX, props.SquishY, 1.0)");
                     scaleExp.SetReferenceParameter(L"props", propSet);
-                    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, (float)localSettings.PillHeight / 2.0f, 0));
                     visual.Properties().StartAnimation(L"BaseScale", scaleExp);
                 } else {
                     auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, 1.0, 1.0)");
                     scaleExp.SetReferenceParameter(L"props", propSet);
-                    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3(0, 0, 0));
                     visual.Properties().StartAnimation(L"BaseScale", scaleExp);
                 }
             } else { // Standard rigid modes (Bounce, Linear, Ease)
@@ -1302,7 +1307,6 @@ bool UpdatePillPosition(
                     scaleAnim.InsertKeyFrame(0.5f, winrt::Windows::Foundation::Numerics::float3(squishX, squishY, 1.0f), cache.squishEase);
                     scaleAnim.InsertKeyFrame(1.0f, winrt::Windows::Foundation::Numerics::float3(1.0f, 1.0f, 1.0f), cache.squishEase);
                     scaleAnim.Duration(std::chrono::milliseconds(static_cast<long long>(300 / localSettings.SpeedMultiplier)));
-                    visual.CenterPoint(winrt::Windows::Foundation::Numerics::float3((float)pillW / 2.0f, (float)localSettings.PillHeight / 2.0f, 0));
                     visual.Properties().StartAnimation(L"BaseScale", scaleAnim);
                 } else {
                     visual.Properties().StopAnimation(L"BaseScale");
@@ -1482,7 +1486,12 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     auto pill = FindChildByName(grid, L"ElasticPill").try_as<winrt::Windows::UI::Xaml::Shapes::Rectangle>();
     auto visual = pill ? ElementCompositionPreview::GetElementVisual(pill) : nullptr;
     
-    if (!pill || !pill.Tag()) {
+    float currentTag = 0.0f;
+    if (pill && pill.Tag()) {
+        try { currentTag = winrt::unbox_value<float>(pill.Tag()); } catch(...) {}
+    }
+
+    if (!pill || currentTag != 4.0f) {
         if (!pill) {
             pill = winrt::Windows::UI::Xaml::Shapes::Rectangle();
             pill.Name(L"ElasticPill");
@@ -1496,8 +1505,9 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         }
         if (!visual) return;
         visual.Properties().InsertScalar(L"LeftX", 0.0f);
-        visual.Properties().InsertScalar(L"RightX", (float)localSettings.PillWidth);
+        visual.Properties().InsertScalar(L"RightX", (float)localSettings.PillWidth * 4.0f);
         visual.Properties().InsertScalar(L"ShowOpacity", 0.0f);
+        visual.Properties().InsertScalar(L"LastShowOpacityTarget", -1.0f);
         visual.Properties().InsertScalar(L"FadeOpacity", 1.0f);
         visual.Properties().InsertVector3(L"PointerScaleVec", {1.0f, 1.0f, 1.0f});
         visual.Properties().InsertVector3(L"BaseScale", {1.0f, 1.0f, 1.0f});
@@ -1506,11 +1516,11 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         opacityExp.SetReferenceParameter(L"props", visual.Properties());
         visual.StartAnimation(L"Opacity", opacityExp);
         
-        auto finalScaleExp = visual.Compositor().CreateExpressionAnimation(L"props.BaseScale * props.PointerScaleVec");
+        auto finalScaleExp = visual.Compositor().CreateExpressionAnimation(L"(props.BaseScale * props.PointerScaleVec) * 0.25f");
         finalScaleExp.SetReferenceParameter(L"props", visual.Properties());
         visual.StartAnimation(L"Scale", finalScaleExp);
 
-        pill.Tag(winrt::box_value(0.0f));
+        pill.Tag(winrt::box_value(4.0f));
     }
 
     if (!visual) return;
@@ -1539,10 +1549,12 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         visual.Properties().InsertScalar(L"LayoutMB", (float)settingsToUse.PillMarginBottom);
         visual.Properties().InsertScalar(L"LayoutMH", (float)settingsToUse.PillMarginHorizontal);
         
-        pill.Height(settingsToUse.PillHeight);
-        pill.Width(settingsToUse.PillWidth);
-        pill.RadiusX(settingsToUse.PillRadius);
-        pill.RadiusY(settingsToUse.PillRadius);
+        visual.Properties().InsertScalar(L"LastTargetX", std::numeric_limits<float>::quiet_NaN());
+        
+        pill.Height(settingsToUse.PillHeight * 4.0);
+        pill.Width(settingsToUse.PillWidth * 4.0);
+        pill.RadiusX(settingsToUse.PillRadius * 4.0);
+        pill.RadiusY(settingsToUse.PillRadius * 4.0);
         pill.Margin({(double)settingsToUse.PillMarginHorizontal, 0, (double)settingsToUse.PillMarginHorizontal, (double)settingsToUse.PillMarginBottom});
     }
 
