@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-20T20:36:51.000Z</updated>
+    <updated>2026-07-20T21:09:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Prevent Focus Stealing 1.0.2]]></title>
+        <id>https://windhawk.net/mods/prevent-focus-stealing#d607126a33c8069941244306d497dc60d16d4384</id>
+        <link href="https://windhawk.net/mods/prevent-focus-stealing"/>
+        <updated>2026-07-20T21:09:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed invisible windows being made visible (resolves issue #4041).</li>
+<li>Corrected outdated documentation.</li>
+</ul>]]></content>
+        <author>
+            <name>bawNg</name>
+            <uri>https://github.com/bawNg</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Details View Columns 1.3]]></title>
         <id>https://windhawk.net/mods/explorer-force-details-columns#615068c3c4bf5f22dbd5f0ddd3af971c4ab9fac7</id>
@@ -649,251 +663,6 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 4.0.0]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#f34b8ea18e7c33e22f774ca5c191f2bead1b5769</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-07-15T08:16:05.000Z</updated>
-        <content type="html"><![CDATA[<p>Version 4.0.0 is a major internal performance and reliability rewrite. It reduces background activity during normal editing and idle periods, improves recovery from Word/COM failures, and makes event connection, document tracking, Save As handling, reload, and shutdown significantly safer.</p>
-<p>The core behavior remains unchanged: the mod listens for Word activity and saves through Word’s native <code>Document.Save</code> method.</p>
-<h2 id="added">Added</h2>
-<ul>
-<li>A unified background scheduler based on one message-only window and one physical <code>WM_TIMER</code>.</li>
-<li>Adaptive monitoring intervals based on the current runtime state.</li>
-<li>Reason-specific retry and backoff policies for:</li>
-<li>Busy Word automation</li>
-<li>Disconnected COM objects</li>
-<li>Temporary document unavailability</li>
-<li>Hard COM failures</li>
-<li>Protected View</li>
-<li>Modal Word interfaces</li>
-<li>Active keyboard, mouse, and IME input</li>
-<li>Inactive Word windows</li>
-<li>Separate COM retry profiles:</li>
-<li>A short background profile for normal monitoring</li>
-<li>A longer critical profile for document closing and lifecycle transitions</li>
-<li>Caching for:</li>
-<li>Word Application</li>
-<li>Active Document</li>
-<li>COM object identities</li>
-<li>Document paths and metadata</li>
-<li>Word window handles and UI threads</li>
-<li>Word property and method <code>DISPID</code> values</li>
-<li>Word event <code>DISPID</code> values</li>
-<li>Generation and epoch tracking for cached objects, document transitions, settings, and event sessions.</li>
-<li>Deferred and retried Word event disconnection when <code>Unadvise</code> cannot be completed immediately.</li>
-<li>Internal standalone tests for scheduling, retries, COM ownership, reentrancy, event lifecycle, path handling, NativeOM fallback, and <code>VARIANT</code> conversions.</li>
-</ul>
-<p>The internal test framework is excluded entirely from production builds.</p>
-<h2 id="schedulerandbackgroundactivity">Scheduler and background activity</h2>
-<ul>
-<li>Replaced separate timers and timer callbacks with one centralized scheduler.</li>
-<li>Word events are now treated as the primary activity signal.</li>
-<li>Polling remains only as a watchdog and fallback mechanism.</li>
-<li>Monitoring frequency now adapts to the current situation:</li>
-</ul>
-<p>| Runtime condition | Monitoring interval |
-|---|---:|
-| Word events connected, no pending work | 30 seconds | | Word events unavailable | 1.5 seconds |
-| Pending or critical work | Up to 1.5 seconds |
-| Active critical or UI transition | Down to 350 milliseconds | | Inactive Word with working events | 30 seconds | | Inactive Word without events | 5 seconds |
-| Modal UI or unfinished input watchdog | 2 seconds | | Event reconnection or deferred disconnection | 2 seconds | | Save As migration timeout | 15 seconds |</p>
-<ul>
-<li>Ordinary input and boundary messages no longer shorten unrelated long retry deadlines.</li>
-<li>A signal can accelerate a retry only when it is relevant to the reason the operation is waiting.</li>
-<li>An owner-thread mismatch no longer consumes an already-due scheduled task.</li>
-<li>Stale queued <code>WM_TIMER</code> messages can no longer cancel a newer timer deadline.</li>
-<li>Reload and shutdown now safely transfer or stop scheduler ownership.</li>
-</ul>
-<h2 id="wordeventhandling">Word event handling</h2>
-<ul>
-<li>Reworked the existing native Word event integration into a transactional connection model.</li>
-<li>Event sessions are built separately and published only after the complete connection succeeds.</li>
-<li>A failed or reentrant connection attempt cannot overwrite a newer valid session.</li>
-<li>Existing support for the following events is retained and hardened:</li>
-<li><code>DocumentBeforeSave</code></li>
-<li><code>DocumentBeforeClose</code></li>
-<li><code>DocumentChange</code></li>
-<li><code>WindowActivate</code></li>
-<li><code>WindowDeactivate</code></li>
-<li>Event reconnection is automatically scheduled after a temporary failure.</li>
-<li>An event connection is retained until <code>Unadvise</code> is confirmed successful.</li>
-<li>Failed disconnects are queued and retried later.</li>
-<li>A live advised event sink is no longer discarded if the deferred-disconnect queue is temporarily full.</li>
-<li>Retained connections automatically retry disconnection when capacity becomes available.</li>
-<li>Event sinks can be deactivated before final COM release.</li>
-<li>Shutdown performs bounded <code>Unadvise</code> retries instead of abandoning a connection immediately.</li>
-<li>Active event callbacks are allowed to drain safely during shutdown.</li>
-<li>Reentrant <code>AddRef</code>, <code>Release</code>, <code>Invoke</code>, <code>Unadvise</code>, reset, and session replacement are handled safely.</li>
-</ul>
-<h2 id="saveanddocumenttracking">Save and document tracking</h2>
-<ul>
-<li>The existing direct <code>Document.Save</code> implementation is preserved.</li>
-<li>Saving now runs through one stable owner STA thread.</li>
-<li>The currently bound document object is reused whenever it is still valid.</li>
-<li>Document matching now prefers COM identity instead of repeatedly comparing filesystem paths.</li>
-<li>Active-document identity and metadata are published as one consistent snapshot.</li>
-<li>Cached document information is invalidated when:</li>
-<li>The active document changes</li>
-<li>The active Word window changes</li>
-<li>A document closes</li>
-<li>Save As begins or completes</li>
-<li>Word reports an external save</li>
-<li>A terminal COM error occurs</li>
-<li>A successful snapshot of an unexpected document no longer incorrectly clears retry state for the expected document.</li>
-<li>The time of the last actual save is now maintained separately from retry-state resets.</li>
-<li>Temporary loss of the target document no longer causes an immediate permanent failure.</li>
-<li>Pending autosaves are preserved while Word is:</li>
-<li>Temporarily busy</li>
-<li>Showing a modal dialog</li>
-<li>Processing IME input</li>
-<li>Receiving keyboard or mouse input</li>
-<li>Inactive</li>
-<li>Switching owner threads</li>
-<li>Temporarily unable to expose the target document</li>
-</ul>
-<h2 id="saveashandling">Save As handling</h2>
-<ul>
-<li>Strengthened the existing Save As tracking and migration logic.</li>
-<li>External save operations now invalidate the cached path before the document is evaluated again.</li>
-<li>Programmatic <code>SaveAs</code> and <code>SaveAs2</code> operations are detected even when <code>SaveAsUI</code> is <code>false</code>.</li>
-<li>Save As transitions are tied to the document’s COM identity and generation.</li>
-<li>Stale Save As results cannot be applied to a newer document state.</li>
-<li>Incomplete Save As transitions expire safely after 15 seconds.</li>
-<li>Path and identity caches are refreshed after the migration completes.</li>
-</ul>
-<h2 id="comperformance">COM performance</h2>
-<ul>
-<li>Repeated Word property and method resolution now uses typed <code>DISPID</code> caches.</li>
-<li><code>GetIDsOfNames</code> is no longer executed repeatedly in normal operation.</li>
-<li>If a cached member returns <code>DISP_E_MEMBERNOTFOUND</code>, the member is resolved again once and the call is safely retried.</li>
-<li>Generic NativeOM fallback chains remain uncached because their object types may vary.</li>
-<li>Word Application acquisition now tries, in order:</li>
-</ul>
-<ol>
-<li>The active Word window</li>
-<li>The current event session</li>
-<li>The Running Object Table</li>
-</ol>
-<ul>
-<li>Every acquired Application object is verified as belonging to the current Word process.</li>
-<li>Repeated Word Application and active Document discovery has been removed from steady-state processing.</li>
-<li>Terminal COM errors invalidate only the affected cached state.</li>
-<li>Composite COM state is published atomically so another call cannot observe mismatched document and identity values.</li>
-</ul>
-<h2 id="retryandrecoverybehavior">Retry and recovery behavior</h2>
-<p>Retries now depend on the failure reason instead of using a single generic delay.</p>
-<p>| Failure type | Retry range |
-|---|---:|
-| Word automation busy | 125 ms → 5 seconds |
-| Document automation busy | 125 ms → 5 seconds |
-| Disconnected object | 250 ms → 5 seconds |
-| Target temporarily unavailable | 250 ms → 5 seconds | | Hard COM failure | 2 seconds → 30 seconds |
-| Protected View | 10 seconds |</p>
-<ul>
-<li>Background COM calls use a retry budget of approximately 1 second with 100-millisecond intervals.</li>
-<li>Critical close and lifecycle operations can retry for up to approximately 10 seconds with 150-millisecond intervals.</li>
-<li>Retry delays increase gradually and remain bounded.</li>
-<li>Relevant activity can wake an operation early without resetting unrelated backoff state.</li>
-<li>Repeated retry and COM error messages are rate-limited to prevent log flooding.</li>
-</ul>
-<h2 id="inputhotpathoptimization">Input hot-path optimization</h2>
-<ul>
-<li>Added an immediate fast path to the <code>TranslateMessage</code> hook.</li>
-<li>Irrelevant messages are passed directly to Word without:</li>
-<li>Window discovery</li>
-<li>Word Application discovery</li>
-<li>Document discovery</li>
-<li>COM calls</li>
-<li>Filesystem access</li>
-<li>Scheduler bookkeeping</li>
-<li>The normal hot path performs only a lightweight pending-state check.</li>
-<li><code>LastError</code> preservation is performed only when the mod actually handles a relevant message.</li>
-<li>Keyboard modifiers are queried once and only for potentially relevant keys.</li>
-<li>Duplicate scheduling from the corresponding <code>WM_KEYDOWN</code> and <code>WM_CHAR</code> pair has been eliminated.</li>
-<li>Mouse, keyboard, and IME state checks are performed only when they can affect a pending save.</li>
-</ul>
-<h2 id="pathhandling">Path handling</h2>
-<ul>
-<li>Filesystem path canonicalization has been removed from normal editing and monitoring paths.</li>
-<li>The steady-state path comparison is now lexical.</li>
-<li><code>CreateFileW</code> and <code>GetFinalPathNameByHandleW</code> are used only for rare ambiguous specific-path resolution.</li>
-<li>Fixed-size path assumptions were replaced with growable buffers.</li>
-<li>Buffers can grow safely up to the supported Win32 path limit.</li>
-<li>Added capacity and integer-overflow checks when constructing or expanding paths.</li>
-<li>Corrected handling of boundary-sized path results.</li>
-</ul>
-<h2 id="variantbstranddispatchoptimization"><code>VARIANT</code>, <code>BSTR</code>, and dispatch optimization</h2>
-<ul>
-<li>Common Word values are extracted directly from:</li>
-<li><code>VT_BOOL</code></li>
-<li><code>VT_I4</code></li>
-<li><code>VT_I8</code></li>
-<li><code>VT_BSTR</code></li>
-<li><code>VT_DISPATCH</code></li>
-<li><code>VariantChangeType</code> is now used only as a fallback.</li>
-<li>Removed unnecessary BSTR copying and temporary allocation.</li>
-<li>Ownership can be transferred directly from a <code>VARIANT</code> where safe.</li>
-<li>Conversion retries always use a fresh destination <code>VARIANT</code>.</li>
-<li>Results are cleared before retrying a call with a newly resolved <code>DISPID</code>.</li>
-</ul>
-<h2 id="fixed">Fixed</h2>
-<ul>
-<li>Fixed pending autosaves being lost when Word temporarily returned an automation-busy error.</li>
-<li>Fixed pending work being cleared during modal Word UI, active input, IME composition, window deactivation, or temporary target loss.</li>
-<li>Fixed document enumeration returning a false “not found” result when a real COM failure occurred.</li>
-<li>Document enumeration now preserves and returns the first hard failure if no matching document is found.</li>
-<li>Fixed NativeOM fallback stopping too early after a non-terminal property failure.</li>
-<li>Expected missing NativeOM properties are now treated as normal misses.</li>
-<li>Non-terminal hard errors are remembered while other property chains continue to be checked.</li>
-<li>Busy and disconnected NativeOM results are still returned immediately.</li>
-<li>Fixed long hard-error and target-unavailable retries being repeatedly shortened by normal message activity.</li>
-<li>Fixed owner-thread changes consuming scheduled work.</li>
-<li>Fixed stale timer messages cancelling later deadlines.</li>
-<li>Fixed stale active-document caches surviving window changes, closes, Save As, or terminal COM errors.</li>
-<li>Fixed older event sessions overwriting newer sessions during reentrant COM calls.</li>
-<li>Fixed COM pointers being released before their published state was safely cleared.</li>
-<li>Fixed failed <code>Unadvise</code> calls causing live event connections to be forgotten.</li>
-<li>Fixed potential event-sink loss when deferred-disconnect storage was temporarily unavailable.</li>
-<li>Fixed a possible <code>VARIANT</code> result leak when a stale <code>DISPID</code> returned <code>DISP_E_MEMBERNOTFOUND</code>.</li>
-<li>Fixed potential double release of transferred <code>VT_DISPATCH</code> values.</li>
-<li>Fixed potential double free of transferred <code>VT_BSTR</code> values.</li>
-<li>Fixed reuse of a partially modified conversion destination after <code>VariantChangeType</code> failed.</li>
-<li>Fixed inconsistent observation of document pointer, document identity, transition target, event session, and cache generation.</li>
-<li>Fixed sign-extended 32-bit Word window handles being interpreted incorrectly in a 64-bit Word process.</li>
-<li>Fixed possible length and capacity overflow while building paths.</li>
-<li>Fixed shutdown and reload races involving active COM callbacks.</li>
-<li>Added a module-pinning fail-safe when callback detachment cannot be proven safe within the shutdown deadline.</li>
-</ul>
-<h2 id="removedfromperformancecriticalpaths">Removed from performance-critical paths</h2>
-<ul>
-<li>Multiple independent physical timers.</li>
-<li>Frequent polling while Word events are connected and the runtime is idle.</li>
-<li>Repeated Word Application discovery.</li>
-<li>Repeated active-document discovery.</li>
-<li>Repeated <code>GetIDsOfNames</code> calls.</li>
-<li>Routine filesystem I/O during normal typing.</li>
-<li>Unnecessary BSTR allocations and copies.</li>
-<li>Unnecessary <code>VARIANT</code> conversions.</li>
-<li>Repeated modifier-key queries.</li>
-<li>Duplicate edit scheduling from related keyboard messages.</li>
-<li>Unrestricted repetitive retry logging.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>User settings remain unchanged:</li>
-<li><code>saveDelay</code></li>
-<li><code>minTimeBetweenSaves</code></li>
-<li>Both settings retain their previous meaning.</li>
-<li>The mod still saves through Word’s native <code>Document.Save</code>.</li>
-<li>Existing Word event and Save As behavior remains supported.</li>
-<li>No Performance Logging option, performance counters, or telemetry are included in the final 4.0.0 build.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

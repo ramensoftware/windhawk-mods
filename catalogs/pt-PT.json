@@ -9489,7 +9489,7 @@
           2
         ],
         "ratingUsers": 4,
-        "updated": 1753040793000,
+        "updated": 1784581764000,
         "users": 226
       },
       "metadata": {
@@ -9501,7 +9501,7 @@
           "*"
         ],
         "name": "Prevent Focus Stealing",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "prevista-explorer-statusbar": {

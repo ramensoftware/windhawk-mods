@@ -1,3 +1,8 @@
+## 1.0.2 ([Jul 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d607126a33c8069941244306d497dc60d16d4384/mods/prevent-focus-stealing.wh.cpp))
+
+- Fixed invisible windows being made visible (resolves issue #4041).
+- Corrected outdated documentation.
+
 ## 1.0.1 ([Jul 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/07ca47be112f26803db61e862625f660a9f4a952/mods/prevent-focus-stealing.wh.cpp))
 
 Reimplemented support for "Never Focus" setting and made changes to settings be applied to existing windows
