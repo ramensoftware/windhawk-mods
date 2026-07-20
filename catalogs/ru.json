@@ -14823,7 +14823,7 @@
           2
         ],
         "ratingUsers": 6,
-        "updated": 1783003254000,
+        "updated": 1784583041000,
         "users": 229
       },
       "metadata": {
@@ -14831,14 +14831,15 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi",
-        "description": "This mod recreates the Windows 7 network flyout for Windows 10 and 11",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi",
+        "description": "This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations",
         "github": "https://github.com/babamohammed2022",
         "include": [
-          "explorer.exe"
+          "explorer.exe",
+          "control.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "2.8.7"
+        "version": "3.2.0"
       }
     },
     "win7-style-uac-dim": {

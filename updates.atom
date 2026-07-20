@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-20T21:09:24.000Z</updated>
+    <updated>2026-07-20T21:30:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 3.2.0]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#7c21492694eac9d7edc008a8e8bb42821687d62e</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-07-20T21:30:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Ethernet support</li>
+<li>Restored "Connect to a network" and "HomeGroup/sharing" links in Network Center Control Page like in Windows 7</li>
+<li>Enhanced the interface to make it more similar to the original Windows 7 one</li>
+<li>Better connection timeouts and auth error handling</li>
+<li>Enhanced the stability</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Prevent Focus Stealing 1.0.2]]></title>
         <id>https://windhawk.net/mods/prevent-focus-stealing#d607126a33c8069941244306d497dc60d16d4384</id>
@@ -650,19 +667,6 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
         <author>
             <name>Lukvbp</name>
             <uri>https://github.com/lukvbp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.2.1]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#bc9c9d57104d5081e9e70a507664872a0d4378e4</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-07-15T08:17:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add <code>Win+F1</code> shortcut to block windows help from opening in default browser</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
