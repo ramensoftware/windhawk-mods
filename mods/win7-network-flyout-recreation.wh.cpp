@@ -113,6 +113,11 @@ If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog 
+// - 3.2.0: Fixed "Restore classic Network Center links" not taking effect at runtime
+//   until a reload (hooks are now installed unconditionally in Wh_ModInit and gated
+//   by the existing enable/disable flags).
+// - 3.2.0: Removed a dead #ifndef UNICODE preprocessor block (Windhawk always compiles
+//   with UNICODE defined, and <psapi.h> was already included unconditionally below).
 // - 3.1.0: Network Center artwork is now handled safely in memory.
 // - 3.1.0: Saved this source as UTF-8 and corrected the Russian language name in settings.
 // - 3.1.0: Added supplied Network Center PNG artwork as in-memory Base64 icons; no DLL or temporary file is used.
@@ -120,10 +125,6 @@ If you encounter issues, please report them on the author of the mod.
 // - Added compact flyout layout when no Wi-Fi networks are available (or Ethernet only), matching original Windows 7 LAN design
 // - Enhanced system stability by supporting systems without Wi-Fi adapters
 // - Restored the 2 links inside the "Network and Sharing Center" control panel page like in Windows 7
-#ifndef UNICODE
-#define UNICODE
-#include <psapi.h>
-#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -2835,6 +2836,15 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     return 0;
 }
 
+// Waits for a previous async-connect thread to finish and closes its handle,
+// off the flyout's UI thread. See the call site in AskForPasswordAndConnect.
+static unsigned __stdcall ReapConnectThreadHandleProc(void* p) {
+    HANDLE h = (HANDLE)p;
+    WaitForSingleObject(h, 5000);
+    CloseHandle(h);
+    return 0;
+}
+
 static BOOL AskForPasswordAndConnect(int index) {
     if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
     if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
@@ -2917,8 +2927,21 @@ static BOOL AskForPasswordAndConnect(int index) {
         return FALSE;
     }
     if (g_hConnectThread) {
-        WaitForSingleObject(g_hConnectThread, 5000);
-        CloseHandle(g_hConnectThread);
+        // Don't block the flyout's UI thread waiting for the previous
+        // WlanConnect to finish (it can still be in flight on rapid
+        // reconnects to a second network). Hand the old handle off to a
+        // short-lived reaper thread that waits and closes it asynchronously.
+        HANDLE hOldThread = g_hConnectThread;
+        HANDLE hReaper = (HANDLE)_beginthreadex(NULL, 0,
+            ReapConnectThreadHandleProc, hOldThread, 0, NULL);
+        if (hReaper) {
+            CloseHandle(hReaper);
+        } else {
+            // Couldn't spin up a reaper thread; fall back to closing the
+            // handle immediately. This does not terminate the still-running
+            // thread, it only releases our reference to its handle.
+            CloseHandle(hOldThread);
+        }
     }
     g_hConnectThread = hThread;
     return TRUE;
@@ -4746,7 +4769,7 @@ void SafeCleanup() {
 
 
 // ============================================================================
-// Integrated Windows 7 Network Center Links v3.1.0
+// Integrated Windows 7 Network Center Links v3.2.0
 // Uses only existing Windows icon resources; no embedded or temporary DLLs.
 // ============================================================================
 namespace Win7NetworkCenterLinks {
@@ -5113,18 +5136,28 @@ static bool Init() {
     g_addConnect = enabled;
     g_addHomegroup = enabled;
 
-    // Do not load dui70.dll or install any hook while the optional feature is off.
-    // If it is enabled later, SettingsChanged installs the hook then.
-    return !enabled || HookAll();
+    // Always install the DirectUI + LoadImageW hooks here, unconditionally,
+    // regardless of whether the feature is currently enabled. Per the
+    // Windhawk API, all hooks should be set in Wh_ModInit, since
+    // Wh_ApplyHookOperations() is called automatically right after it;
+    // hooks registered later (e.g. from Wh_ModSettingsChanged) stay pending
+    // and never actually activate. g_addConnect/g_addHomegroup already make
+    // Patch() a no-op when the feature is off, so installing the hooks
+    // unconditionally has no behavioral effect while it's disabled, and lets
+    // it turn on and off correctly at runtime without a mod reload.
+    if (!HookAll()) {
+        Wh_Log(L"Network Center links: DirectUI hook was not installed");
+        return false;
+    }
+    return true;
 }
 
 static void SettingsChanged() {
     bool enabled = Wh_GetIntSetting(L"restoreClassicNetworkCenterLinks") != 0;
     g_addConnect = enabled;
     g_addHomegroup = enabled;
-
-    if (enabled && !g_hookInstalled && !HookAll())
-        Wh_Log(L"Network Center links: DirectUI hook was not installed");
+    // The hooks were already installed unconditionally in Init(); toggling
+    // the setting only needs to flip these flags, which Patch() checks.
 }
 
 #undef NCL_THISCALL
@@ -5133,7 +5166,7 @@ static void SettingsChanged() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v3.1.0 ===");
+    Wh_Log(L"=== Wh_ModInit v3.2.0 ===");
     DetectWindowsVersion();
     LoadSettings();
     DetermineLocale();
