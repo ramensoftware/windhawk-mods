@@ -31,11 +31,11 @@ By default, **the mod will be injected into all processes** and unload when ther
 - `Window Title` is a title prefix of the window you want to prevent focus being stolen by. Leave it blank to target all windows.
 - `Never Focus` prevents the application from ever stealing focus, instead of only when it initially opens. You can still manually focus the window.
 
-​
+&nbsp;
 
 ---
 
-​
+&nbsp;
 
 ## Preventing focus being stolen by Chromium (Electron / Browsers)
 
