@@ -15192,7 +15192,7 @@
           24
         ],
         "ratingUsers": 28,
-        "updated": 1779474403000,
+        "updated": 1784579521000,
         "users": 1278
       },
       "metadata": {
@@ -15200,7 +15200,7 @@
           "x86-64"
         ],
         "author": "Salyts",
-        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore -lcrypt32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -luser32 -lwtsapi32 -lpowrprof -lgdi32 -lgdiplus -lshcore",
         "description": "Customizable buttons for the Windows 11 Start menu.",
         "github": "https://github.com/Salyts",
         "include": [
@@ -15209,7 +15209,7 @@
         ],
         "license": "MIT",
         "name": "Windows 11 Start Menu Buttons",
-        "version": "2.1"
+        "version": "2.2"
       }
     },
     "windows-11-start-menu-styler": {
