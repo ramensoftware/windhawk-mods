@@ -8675,7 +8675,7 @@
           192
         ],
         "ratingUsers": 212,
-        "updated": 1784503759000,
+        "updated": 1784578999000,
         "users": 15130
       },
       "metadata": {
@@ -8693,7 +8693,7 @@
         ],
         "name": "Customize Windows notifications placement",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.2.3"
+        "version": "1.2.4"
       }
     },
     "numbered-taskbar": {

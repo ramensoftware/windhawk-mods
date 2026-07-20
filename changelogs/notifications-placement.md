@@ -1,3 +1,7 @@
+## 1.2.4 ([Jul 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8fc43afcc434bac3d4511f92e9b78c8e699fbac6/mods/notifications-placement.wh.cpp))
+
+* Fixed a regression in version 1.2.3 which caused notifications to be rotated in older Windows 11 versions.
+
 ## 1.2.3 ([Jul 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7babeba1ee66cca786bbabc10e6b79c53f0c5a22/mods/notifications-placement.wh.cpp))
 
 * Fixed compatibility of the animation direction option with recent Windows 11 versions.
