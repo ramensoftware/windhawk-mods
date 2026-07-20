@@ -1,3 +1,12 @@
+## 1.3 ([Jul 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/615068c3c4bf5f22dbd5f0ddd3af971c4ab9fac7/mods/explorer-force-details-columns.wh.cpp))
+
+- Virtual folders with their own specialized columns (Recycle Bin, This PC, search results, etc.) are no longer affected by default; controlled by "Exclude virtual folders".
+- Sorting can now be enforced with the "Sort By" / "Sort Descending" settings.
+- Width -1 auto-sizes a column to its content.
+- Column widths now update immediately when a window moves to a monitor with a different DPI.
+- Switching an already open folder to Details view now applies the columns immediately.
+- Changing settings now only refreshes windows whose view actually changed.
+
 ## 1.2 ([May 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ee00fe42ee1bf5e16382c2e2a8529336e86278ca/mods/explorer-force-details-columns.wh.cpp))
 
 - Fixed the problem causing the settings to fallback to default during mod initiating.

@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-20T20:32:01.000Z</updated>
+    <updated>2026-07-20T20:36:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.3]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#615068c3c4bf5f22dbd5f0ddd3af971c4ab9fac7</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-07-20T20:36:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Virtual folders with their own specialized columns (Recycle Bin, This PC, search results, etc.) are no longer affected by default; controlled by "Exclude virtual folders".</li>
+<li>Sorting can now be enforced with the "Sort By" / "Sort Descending" settings.</li>
+<li>Width -1 auto-sizes a column to its content.</li>
+<li>Column widths now update immediately when a window moves to a monitor with a different DPI.</li>
+<li>Switching an already open folder to Details view now applies the columns immediately.</li>
+<li>Changing settings now only refreshes windows whose view actually changed.</li>
+</ul>]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.2]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-buttons#8df93b9c741196c6fa1eae0e4bf295cc080cb5c2</id>
@@ -876,30 +894,6 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.1]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#c022aaa6684072a8feb8ccb7d6d97ae9c293c7c2</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-15T08:05:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Translucent windows no longer go grey</strong>: the capture was force-flattening <code>PrintWindow</code> output to opaque and re-premultiplying already-premultiplied pixels. It now passes premultiplied pixels through and keeps fully-transparent regions transparent, so acrylic / Mica windows keep their see-through areas during the genie.</li>
-<li><strong>Window-only capture</strong>: snapshots render just the window's own content, so the taskbar / other windows never bleed into the animation on maximized or fullscreen apps.</li>
-<li><strong>Renderer quality</strong>: per-primitive mask antialiasing, aliased RT modes set once at creation, larger corner radius, retuned tile bloat — smoother silhouette without seams at higher mesh resolutions.</li>
-<li><strong>~120fps frame pacer</strong>: frames land at even intervals when per-frame cost varies (no duration change; a no-op at ≤120Hz where the DwmFlush gate already paces slower).</li>
-<li><strong>Animation tile count setting</strong> (8–96, default 35), replacing the fixed 20x20 mesh.</li>
-</ul>
-<p><strong>The fixes in this release were contributed by @Potassiumuncher</strong> (v1.5 of his genie engine — he's credited in the mod readme as well).</p>
-<p><strong>Mod-side additions:</strong></p>
-<ul>
-<li><strong>Excluded programs setting</strong> (fixes the exclusion-list report): Windhawk's per-mod process exclusion only prevents the mod from loading <em>into</em> a process, but a window's animation is often driven from a <em>different</em> process (Explorer's taskbar, the shell) — so excluded apps still animated (reported with Windows Terminal Quake mode, where the window belongs to WindowsTerminal.exe, not powershell.exe). The new setting matches the process that <em>owns</em> the window at the single animation choke point.</li>
-<li><strong>Non-primary-monitor backdrop fallback</strong>: on secondary displays DWM often returns the whole Mica/acrylic backdrop as fully transparent, which made window backgrounds vanish during the genie. When a majority of captured pixels are fully transparent, the capture now falls back to an opaque backdrop for that snapshot (documented in Known issues; a deeper fix needs investigation).</li>
-</ul>
-<p>Readme also documents the reported (not yet reproduced) looping animation on Zen Browser as a known issue, with the exclusion setting as a workaround.</p>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
