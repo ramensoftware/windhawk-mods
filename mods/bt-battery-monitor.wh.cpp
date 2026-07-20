@@ -1958,7 +1958,6 @@ void WhTool_ModUninit() {
 
     Wh_Log(L"BTBat: Uninitialized");
 }
-
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1972,9 +1971,8 @@ void WhTool_ModUninit() {
 // * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
-////////////////////////////////////////////////////////////////////////////////
 
-std::atomic<bool> g_isToolModProcessLauncher{false};
+bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
@@ -1983,12 +1981,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    static std::atomic<ULONGLONG> g_lastReloadTime{0};
-    ULONGLONG now = GetTickCount64();
-    if (now - g_lastReloadTime.load() < 300)
-        return TRUE;
-    g_lastReloadTime.store(now);
-
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -1999,7 +1991,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -2031,13 +2023,8 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        PSECURITY_DESCRIPTOR pMutexSD = NULL;
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;IU)", 1, &pMutexSD, NULL);
-        SECURITY_ATTRIBUTES mutexSa = { sizeof(mutexSa), pMutexSD, TRUE };
         g_toolModProcessMutex =
-            CreateMutexW(&mutexSa, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (pMutexSD) LocalFree(pMutexSD);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -2048,27 +2035,14 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        // Own the mutex — safe to kill old tray window now
-        HWND hOld = FindWindowW(L"BTBatTrayWindow", nullptr);
-        if (hOld && IsWindow(hOld)) {
-            PostMessageW(hOld, WM_CLOSE, 0, 0);
-            for (int i = 0; i < 40 && FindWindowW(L"BTBatTrayWindow", nullptr); i++) {
-                Sleep(50);
-            }
-        }
-
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        if (!dosHeader) {
-            Wh_Log(L"BTBat: GetModuleHandleW failed");
-            ExitProcess(1);
-        }
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
@@ -2091,8 +2065,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -2102,12 +2076,12 @@ void Wh_ModAfterInit() {
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -2130,8 +2104,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
@@ -2159,8 +2133,6 @@ void Wh_ModUninit() {
         return;
     }
 
-    if (g_toolModProcessMutex)
-        CloseHandle(g_toolModProcessMutex);
     WhTool_ModUninit();
     ExitProcess(0);
 }
