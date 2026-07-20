@@ -2,13 +2,13 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations
-// @version        3.1.0
+// @version        3.2.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lpsapi -lshlwapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,7 +25,8 @@ Screenshot of the dark theme:
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/dark.png)
 
-Screenshot of the restored Control Panel links
+Screenshot of the restored Control Panel links:
+
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/immagine.webp)
 
 The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
@@ -99,7 +100,7 @@ If you encounter issues, please report them on the author of the mod.
   $description: Press Ctrl+H from anywhere to toggle the network flyout. Disabled by default to avoid conflicts with browser and editor shortcuts.
 - useRoundedCorners: true
   $name: Rounded corners
-  $description: Give the flyout window rounded corners. Looks better on Windows 11 or with the Aero theme enabled. Disabled by default for classic theme compatibility.
+  $description: Give the flyout window rounded corners, matching the look of the original Windows 7 flyout. Enabled by default since Windows 7 itself used rounded corners. Disable this for a more strictly classic/square theme look.
 - restoreClassicNetworkCenterLinks: true
   $name: Restore classic Network Center links
   $description: Add the Windows 7 “Connect to a network” and HomeGroup/sharing links to the ''Network and Sharing Center'' page in the Control Panel.
@@ -121,17 +122,10 @@ If you encounter issues, please report them on the author of the mod.
 // - Restored the 2 links inside the "Network and Sharing Center" control panel page like in Windows 7
 #ifndef UNICODE
 #define UNICODE
+#include <psapi.h>
 #endif
-#define WIN32_LEAN_AND_MEAN
-#undef _WINSOCKAPI_
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcpp"
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma GCC diagnostic pop
-#pragma clang diagnostic pop
 #include <windows.h>
 #include <windowsx.h>
 #include <iphlpapi.h>
@@ -140,15 +134,15 @@ If you encounter issues, please report them on the author of the mod.
 #include <objbase.h>
 #include <uxtheme.h>
 #include <dwmapi.h>
+#include <psapi.h>
+
 #include <strsafe.h>
 #include <shellapi.h>
 #include <commctrl.h>
-#include <math.h>
 #include <windhawk_api.h>
 #include <netlistmgr.h>
 #include <windhawk_utils.h>
 #include <process.h>
-#include <psapi.h>
 #include <shlwapi.h>
 #include <string>
 
@@ -185,33 +179,26 @@ struct ModSettings {
     BOOL enableHotkey;
     BOOL useRoundedCorners;
     int  theme;          // 0=light, 1=dark
-} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, FALSE, 0 };
+} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, TRUE, 0 };
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
     int raw_privacy    = Wh_GetIntSetting(L"privacyMode");
     int raw_refresh    = Wh_GetIntSetting(L"refreshInterval");
-    LPCWSTR lang = Wh_GetStringSetting(L"language");
+    WindhawkUtils::StringSetting lang = WindhawkUtils::StringSetting::make(L"language");
     int raw_language = 0;
-    if (lang) {
-        if (_wcsicmp(lang, L"en") == 0)      raw_language = 1;
-        else if (_wcsicmp(lang, L"it") == 0) raw_language = 2;
-        else if (_wcsicmp(lang, L"es") == 0) raw_language = 3;
-        else if (_wcsicmp(lang, L"fr") == 0) raw_language = 4;
-        else if (_wcsicmp(lang, L"ru") == 0) raw_language = 5;
-        else if (_wcsicmp(lang, L"de") == 0) raw_language = 6;
-        else if (_wcsicmp(lang, L"pt") == 0) raw_language = 7;
-        Wh_FreeStringSetting(lang);
-    }
+    if (_wcsicmp(lang.get(), L"en") == 0)      raw_language = 1;
+    else if (_wcsicmp(lang.get(), L"it") == 0) raw_language = 2;
+    else if (_wcsicmp(lang.get(), L"es") == 0) raw_language = 3;
+    else if (_wcsicmp(lang.get(), L"fr") == 0) raw_language = 4;
+    else if (_wcsicmp(lang.get(), L"ru") == 0) raw_language = 5;
+    else if (_wcsicmp(lang.get(), L"de") == 0) raw_language = 6;
+    else if (_wcsicmp(lang.get(), L"pt") == 0) raw_language = 7;
+
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
-    LPCWSTR theme = Wh_GetStringSetting(L"theme");
-    int raw_theme = 0;
-    if (theme) {
-        if (_wcsicmp(theme, L"dark") == 0) raw_theme = 1;
-        else raw_theme = 0;
-        Wh_FreeStringSetting(theme);
-    }
+    WindhawkUtils::StringSetting theme = WindhawkUtils::StringSetting::make(L"theme");
+    int raw_theme = (_wcsicmp(theme.get(), L"dark") == 0) ? 1 : 0;
     
     g_Settings.interceptNativeFlyout     = raw_intercept   != 0;
     g_Settings.privacyMode              = raw_privacy     != 0;
@@ -265,6 +252,7 @@ void RecalcDpiMetrics(UINT dpi) {
 #define WM_SHOW_FLYOUT      (WM_USER + 102)
 #define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
 #define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
+#define WM_UPDATE_REFRESH_TIMER  (WM_USER + 112)
 
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
@@ -1443,21 +1431,41 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0
     return hIcon;
 }
 
-static HICON CopyNetworkCenterIcon(int resourceId) {
+static HICON CopyNetworkCenterIcon(int resourceId, int targetWidth, int targetHeight) {
     HICON* source = nullptr;
+    int* cachedWidth = nullptr;
+    int* cachedHeight = nullptr;
     const WCHAR* base64 = nullptr;
+    static int connectCachedW = 0, connectCachedH = 0;
+    static int homegroupCachedW = 0, homegroupCachedH = 0;
     if (resourceId == 22) {
         source = &g_hIconNetworkCenterConnect;
+        cachedWidth = &connectCachedW;
+        cachedHeight = &connectCachedH;
         base64 = NETWORK_CENTER_CONNECT_ICON_BASE64;
     } else if (resourceId == 27) {
         source = &g_hIconNetworkCenterHomegroup;
+        cachedWidth = &homegroupCachedW;
+        cachedHeight = &homegroupCachedH;
         base64 = NETWORK_CENTER_HOMEGROUP_ICON_BASE64;
     } else {
         return NULL;
     }
 
-    if (!*source)
-        *source = CreateIconFromBase64PNG(base64, 24, 24);
+    // DirectUI requests the icon at a DPI-relative size (e.g. 24rp); fall back
+    // to the classic 24x24 base size if the caller didn't specify one.
+    int wantWidth  = (targetWidth  > 0) ? targetWidth  : 24;
+    int wantHeight = (targetHeight > 0) ? targetHeight : 24;
+
+    if (!*source || *cachedWidth != wantWidth || *cachedHeight != wantHeight) {
+        if (*source) {
+            DestroyIcon(*source);
+            *source = NULL;
+        }
+        *source = CreateIconFromBase64PNG(base64, wantWidth, wantHeight);
+        *cachedWidth = wantWidth;
+        *cachedHeight = wantHeight;
+    }
     return *source ? CopyIcon(*source) : NULL;
 }
 
@@ -1763,7 +1771,7 @@ void RefreshWifiData(HANDLE hClient) {
     WifiNetworkItem tempList[50];
     int tempCount = 0;
     ZeroMemory(tempList, sizeof(tempList));
-    for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
+    for (DWORD i = 0; pIfList && i < pIfList->dwNumberOfItems; i++) {
         WLAN_INTERFACE_INFO IfInfo = pIfList->InterfaceInfo[i];
         PWLAN_AVAILABLE_NETWORK_LIST pBssList  = NULL;
         PWLAN_PROFILE_INFO_LIST      pProfList = NULL;
@@ -2229,7 +2237,9 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             HPEN hPen = CreatePen(PS_SOLID, 1, RGB(75, 75, 85)); 
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            Rectangle(hdc, 144, 49, 145 + 245 + 1, 50 + 20 + 1);
+            int bx = ScaleDpi(144), by = ScaleDpi(49);
+            int bw = ScaleDpi(245) + 1, bh = ScaleDpi(20) + 1;
+            Rectangle(hdc, bx, by, bx + bw, by + bh);
             SelectObject(hdc, hOldBr);
             SelectObject(hdc, hOldPen);
             DeleteObject(hPen);
@@ -2304,11 +2314,11 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         SendMessageW(hwnd, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         HWND hInstr = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_INSTRUCTIONS),
-            WS_CHILD|WS_VISIBLE, 15, 15, 380, 20, hwnd, (HMENU)200, cs->hInstance, NULL);
+            WS_CHILD|WS_VISIBLE, ScaleDpi(15), ScaleDpi(15), ScaleDpi(380), ScaleDpi(20), hwnd, (HMENU)200, cs->hInstance, NULL);
         SendMessageW(hInstr, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
         HWND hLabel = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_LABEL),
-            WS_CHILD|WS_VISIBLE, 15, 53, 125, 18, hwnd, NULL, cs->hInstance, NULL);
+            WS_CHILD|WS_VISIBLE, ScaleDpi(15), ScaleDpi(53), ScaleDpi(125), ScaleDpi(18), hwnd, NULL, cs->hInstance, NULL);
         SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
         BOOL bDarkPwd = (g_Settings.theme == 1);
@@ -2316,19 +2326,19 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         
         HWND hEdit = CreateWindowExW(dwEditExStyle, WC_EDITW, L"",
             WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,
-            145, 50, 245, 20, hwnd, (HMENU)101, cs->hInstance, NULL);
+            ScaleDpi(145), ScaleDpi(50), ScaleDpi(245), ScaleDpi(20), hwnd, (HMENU)101, cs->hInstance, NULL);
         SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         SendMessageW(hEdit, EM_SETPASSWORDCHAR, 0x25CF, 0);
         if (bDarkPwd) SetWindowTheme(hEdit, L"DarkMode_Explorer", NULL);
         SetFocus(hEdit);
         
         HWND hCheck = CreateWindowExW(0, WC_BUTTONW, L"",
-            WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 135, 80, 18, 18, hwnd, (HMENU)102, cs->hInstance, NULL);
+            WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, ScaleDpi(135), ScaleDpi(80), ScaleDpi(18), ScaleDpi(18), hwnd, (HMENU)102, cs->hInstance, NULL);
         SendMessageW(hCheck, BM_SETCHECK, BST_CHECKED, 0);
         if (bDarkPwd) SetWindowTheme(hCheck, L"DarkMode_Explorer", NULL);
         
         HWND hCheckText = CreateWindowExW(0, WC_STATICW, LOC(STR_PWD_HIDE_CHARS),
-            WS_CHILD|WS_VISIBLE|SS_NOTIFY, 156, 80, 200, 18, hwnd, (HMENU)103, cs->hInstance, NULL);
+            WS_CHILD|WS_VISIBLE|SS_NOTIFY, ScaleDpi(156), ScaleDpi(80), ScaleDpi(200), ScaleDpi(18), hwnd, (HMENU)103, cs->hInstance, NULL);
         SendMessageW(hCheckText, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
         if (bDarkPwd) {
@@ -2338,15 +2348,15 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         }
         
         RECT rcClient; GetClientRect(hwnd, &rcClient);
-        int btnW = 85, btnH = 24, btnY = rcClient.bottom - 35;
+        int btnW = ScaleDpi(85), btnH = ScaleDpi(24), btnY = rcClient.bottom - ScaleDpi(35);
         HWND hBtnOk = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_OK),
             WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
-            rcClient.right - btnW - 15, btnY, btnW, btnH, hwnd, (HMENU)IDOK, cs->hInstance, NULL);
+            rcClient.right - btnW - ScaleDpi(15), btnY, btnW, btnH, hwnd, (HMENU)IDOK, cs->hInstance, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         if (bDarkPwd) SetWindowTheme(hBtnOk, L"DarkMode_Explorer", NULL);
         HWND hBtnCancel = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_CANCEL),
             WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : 0),
-            rcClient.right - (btnW * 2) - 25, btnY, btnW, btnH,
+            rcClient.right - (btnW * 2) - ScaleDpi(25), btnY, btnW, btnH,
             hwnd, (HMENU)IDCANCEL, cs->hInstance, NULL);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         if (bDarkPwd) SetWindowTheme(hBtnCancel, L"DarkMode_Explorer", NULL);
@@ -2430,7 +2440,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 return (INT_PTR)hBrushHideLight;
             }
         }
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
             WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
             if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
@@ -2474,7 +2484,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam; HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
             WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
             if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
@@ -2567,7 +2577,7 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
     PasswordDlgData data = { passwordBuffer, bufferSize, FALSE };
     RECT rcWork;
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
-    int dlgW=420, dlgH=180;
+    int dlgW=ScaleDpi(420), dlgH=ScaleDpi(180);
     
     HWND hDlg = CreateWindowExW(
         WS_EX_DLGMODALFRAME|WS_EX_WINDOWEDGE|WS_EX_TOPMOST,
@@ -4150,7 +4160,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
             WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
             if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
@@ -4207,7 +4217,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
         HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0) {
+        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
             WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
             if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
@@ -4664,6 +4674,17 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             ToggleFlyoutWindow();
         if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
             ToggleFlyoutWindow();
+        if (msg.message == WM_UPDATE_REFRESH_TIMER && !ctx->isUninitializing) {
+            if (SafeToAccessUI() && g_hWndFlyout) {
+                if (g_RefreshTimer) {
+                    KillTimer(g_hWndFlyout, g_RefreshTimer);
+                    g_RefreshTimer = 0;
+                }
+                if (g_Settings.refreshInterval > 0) {
+                    g_RefreshTimer = SetTimer(g_hWndFlyout, 1000, g_Settings.refreshInterval, NULL);
+                }
+            }
+        }
         if (msg.message == uTaskbarCreated && !ctx->isUninitializing) {
             InvalidateToolbarCache();
             g_pniduiBase = NULL;
@@ -5008,7 +5029,7 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
             sourceIconId = 27;
 
         if (sourceIconId && IsNetCenter(hInst)) {
-            if (HICON icon = CopyNetworkCenterIcon(sourceIconId))
+            if (HICON icon = CopyNetworkCenterIcon(sourceIconId, width, height))
                 return icon;
             // Decoding failed: preserve the previous Windows icon fallback.
             return LoadImageW_Orig ? LoadImageW_Orig(hInst,
@@ -5174,12 +5195,8 @@ void Wh_ModSettingsChanged() {
         return;
     }
     if (SafeToAccessUI() && g_hWndFlyout) {
-        if (g_RefreshTimer) {
-            KillTimer(g_hWndFlyout, g_RefreshTimer);
-            g_RefreshTimer = 0;
-        }
-        if (g_Settings.refreshInterval > 0) {
-            g_RefreshTimer = SetTimer(g_hWndFlyout, 1000, g_Settings.refreshInterval, NULL);
+        if (g_dwFlyoutOwnerThreadId) {
+            PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
         }
         PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, 0, 0);
         InvalidateRect(g_hWndFlyout, NULL, TRUE);
@@ -5198,5 +5215,4 @@ void Wh_ModUninit() {
     DarkContextMenu::Uninit();
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
-    UnregisterClassW(L"Win7NetFlyoutHidden", GetModuleHandle(NULL));
 }
