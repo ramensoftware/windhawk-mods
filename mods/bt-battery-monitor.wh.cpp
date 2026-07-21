@@ -8,7 +8,7 @@
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
 // @license         MIT
-// @compilerOptions -lbluetoothapis -lbthprops -lsetupapi -lcfgmgr32 -lgdi32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lcomdlg32
+// @compilerOptions -lbluetoothapis -lbthprops -lsetupapi -lcfgmgr32 -lgdi32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lcomdlg32 -ffp-exception-behavior=maytrap
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,9 +32,11 @@ See every connected Bluetooth device's battery level right in your system tray �
 4. **Choose Icons** — Pick a preset icon per device type, or click **Browse...** to load a custom `.ico` file.
 5. Click **Save and Apply** — the tray icon updates immediately, no restart needed.
 
-### Left-click to check on your devices
+### Left-click to rescan
 
-Left-click the tray icon to open a neat flyout listing every paired device with its current battery percentage. At a glance you'll see which ones are doing fine and which ones need charging.
+Left-click the tray icon to trigger an immediate Bluetooth rescan. Use it when you've just paired or disconnected a device and want the battery readout to refresh without waiting for the next polling interval.
+
+### Right-click device list
 
 ### Low Battery Warning
 
@@ -274,7 +276,7 @@ static HICON CreateColorIcon(BYTE r, BYTE g, BYTE b, int size) {
     return hIcon;
 }
 
-// Generate a white X icon for the "no connected devices" state
+// Generate a red X icon for the "no connected devices" state
 static HICON CreateXIcon(int size) {
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -296,7 +298,7 @@ static HICON CreateXIcon(int size) {
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
             if (abs(x - y) <= t / 2 || abs(x + y - last) <= t / 2)
-                pixels[y * size + x] = 0xFFFFFFFF;
+                pixels[y * size + x] = 0xFFFF0000;
         }
     }
 
@@ -307,16 +309,16 @@ static HICON CreateXIcon(int size) {
     if (!hdcMask) { DeleteObject(hbmColor); DeleteObject(hbmMask); return NULL; }
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMask, hbmMask);
     RECT r = {0, 0, size, size};
-    FillRect(hdcMask, &r, (HBRUSH)GetStockObject(WHITE_BRUSH));
-    HBRUSH hbrBlack = CreateSolidBrush(RGB(0, 0, 0));
-    HPEN hBlackPen = CreatePen(PS_SOLID, t, RGB(0, 0, 0));
-    SelectObject(hdcMask, hbrBlack);
-    SelectObject(hdcMask, hBlackPen);
+    FillRect(hdcMask, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
+    HBRUSH hbrWhite = CreateSolidBrush(RGB(255, 255, 255));
+    HPEN hWhitePen = CreatePen(PS_SOLID, t, RGB(255, 255, 255));
+    SelectObject(hdcMask, hbrWhite);
+    SelectObject(hdcMask, hWhitePen);
     MoveToEx(hdcMask, 0, 0, NULL); LineTo(hdcMask, size, size);
     MoveToEx(hdcMask, size, 0, NULL); LineTo(hdcMask, 0, size);
     SelectObject(hdcMask, hOldBmp);
-    DeleteObject(hbrBlack);
-    DeleteObject(hBlackPen);
+    DeleteObject(hbrWhite);
+    DeleteObject(hWhitePen);
     DeleteDC(hdcMask);
 
     ICONINFO ii = {};
@@ -356,7 +358,8 @@ static bool CreateIcons() {
     DestroyIcons();
     LoadSettings();
 
-    g_hIconDisconnected = CreateXIcon(16);
+    if (!g_hIconDisconnected)
+        g_hIconDisconnected = CreateXIcon(16);
 
     g_hIconLowBatRed = CreateColorIcon(255, 0, 0, 16);
     g_hIconLowBatBlack = CreateColorIcon(0, 0, 0, 16);
@@ -752,7 +755,7 @@ static void RefreshBthleConnectedState(std::vector<DeviceInfo>& devices) {
 static unsigned int __stdcall ScannerProc(void*) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"BTBat: CoInitializeEx failed: 0x%08X", hrCo);
+        Wh_Log(L"CoInitializeEx failed: 0x%08X", hrCo);
         return 1;
     }
     HANDLE events[] = { g_shutdownEvent, g_rescanEvent };
@@ -812,7 +815,7 @@ static unsigned int __stdcall ScannerProc(void*) {
                 WaitForSingleObject(g_rescanEvent, 0);
             }
         } catch (const std::bad_alloc&) {
-            Wh_Log(L"BTBat: Scanner allocation failure, retrying");
+            Wh_Log(L"Scanner allocation failure, retrying");
             if (WaitForSingleObject(g_shutdownEvent, g_refreshIntervalMs.load()) == WAIT_OBJECT_0)
                 break;
         }
@@ -1026,7 +1029,7 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
     switch (msg) {
         case WM_TRAY_CALLBACK:
             if (lParam == WM_LBUTTONUP || lParam == NIN_SELECT) {
-                SetEvent(g_rescanEvent);
+                if (g_rescanEvent) SetEvent(g_rescanEvent);
             } else if (lParam == WM_CONTEXTMENU) {
                 ShowPopupMenu();
             }
@@ -1136,8 +1139,15 @@ static void LoadSettings() {
     if (g_hIconMulti) DestroyIcon(g_hIconMulti);
     g_hIconMulti = LoadCustomIcon(L"d_iconMultiple", ddoresPath, 94);
 
-    if (g_hIconDisconnected) DestroyIcon(g_hIconDisconnected);
-    g_hIconDisconnected = LoadCustomIcon(L"d_iconDisconnected", ddoresPath, 130);
+    WCHAR discoVal[32] = {};
+    if (Wh_GetStringValue(L"d_iconDisconnected", discoVal, 32) && discoVal[0]) {
+        if (g_hIconDisconnected) DestroyIcon(g_hIconDisconnected);
+        g_hIconDisconnected = LoadCustomIcon(L"d_iconDisconnected", ddoresPath, 130);
+    } else {
+        // No user configuration — let CreateIcons() use the programmatic red X
+        if (g_hIconDisconnected) DestroyIcon(g_hIconDisconnected);
+        g_hIconDisconnected = nullptr;
+    }
 }
 
 namespace BTBatGui {
@@ -1222,7 +1232,9 @@ namespace BTBatGui {
 
     static HICON LoadSlotPreview(const std::wstring& key, const WCHAR* customPath) {
         HICON h = nullptr;
-        if (key == L"custom" && customPath && customPath[0] && IsValidIconPath(customPath))
+        if (key == L"unknown") {
+            h = CreateXIcon(kIconSz);
+        } else if (key == L"custom" && customPath && customPath[0] && IsValidIconPath(customPath))
             h = (HICON)LoadImageW(NULL, customPath, IMAGE_ICON, kIconSz, kIconSz, LR_LOADFROMFILE);
         if (!h) {
             WCHAR sysPath[MAX_PATH];
@@ -1239,7 +1251,7 @@ namespace BTBatGui {
     static void DarkCombo(HWND h) {
         bool loaded = false;
         HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-        if (!ux) { ux = LoadLibraryW(L"uxtheme.dll"); loaded = true; }
+        if (!ux) { ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); loaded = true; }
         if (!ux) return;
         using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
         auto fn = reinterpret_cast<Fn>(GetProcAddress(ux, "SetWindowTheme"));
@@ -1396,7 +1408,7 @@ namespace BTBatGui {
             // Dark title bar — DWMWA_USE_IMMERSIVE_DARK_MODE is 20 on Win11 24H2+
             bool dwmLoaded = false;
             HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-            if (!dwm) { dwm = LoadLibraryW(L"dwmapi.dll"); dwmLoaded = true; }
+            if (!dwm) { dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); dwmLoaded = true; }
             if (dwm) {
                 using DwmFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
                 auto fn = reinterpret_cast<DwmFn>(GetProcAddress(dwm, "DwmSetWindowAttribute"));
@@ -1639,7 +1651,7 @@ namespace BTBatGui {
     static unsigned int __stdcall GuiThreadProc(void* lpParam) {
         HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
-            Wh_Log(L"BTBatGui: CoInitializeEx failed (0x%X)", hrCo);
+            Wh_Log(L"CoInitializeEx failed (0x%X)", hrCo);
             return 1;
         }
 
@@ -1719,7 +1731,7 @@ namespace BTBatGui {
 static unsigned int __stdcall TrayThreadProc(void*) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"BTBat: CoInitializeEx failed: 0x%08X", hrCo);
+        Wh_Log(L"CoInitializeEx failed: 0x%08X", hrCo);
         return 1;
     }
 
@@ -1728,7 +1740,7 @@ static unsigned int __stdcall TrayThreadProc(void*) {
     wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"BTBatTrayWindow";
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        Wh_Log(L"BTBat: RegisterClassW failed (%u)", GetLastError());
+        Wh_Log(L"RegisterClassW failed (%u)", GetLastError());
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
@@ -1744,7 +1756,7 @@ static unsigned int __stdcall TrayThreadProc(void*) {
         NULL);
 
     if (!hWnd) {
-        Wh_Log(L"BTBat: CreateWindowExW failed (%u)", GetLastError());
+        Wh_Log(L"CreateWindowExW failed (%u)", GetLastError());
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 1;
     }
@@ -1812,7 +1824,7 @@ BOOL WhTool_ModInit() {
     if (InterlockedCompareExchange(&g_initComplete, TRUE, FALSE))
         return TRUE;
 
-    Wh_Log(L"BTBat: Initializing");
+    Wh_Log(L"Initializing");
 
     INITCOMMONCONTROLSEX icex = {sizeof(icex), ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icex);
@@ -1824,7 +1836,7 @@ BOOL WhTool_ModInit() {
     }
 
     if (!CreateIcons()) {
-        Wh_Log(L"BTBat: Failed to create icons");
+        Wh_Log(L"Failed to create icons");
         return FALSE;
     }
 
@@ -1834,7 +1846,7 @@ BOOL WhTool_ModInit() {
     g_rescanEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
 
     if (!g_shutdownEvent || !g_rescanEvent) {
-        Wh_Log(L"BTBat: Failed to create events (%u)", GetLastError());
+        Wh_Log(L"Failed to create events (%u)", GetLastError());
         if (g_shutdownEvent) CloseHandle(g_shutdownEvent);
         if (g_rescanEvent) CloseHandle(g_rescanEvent);
         g_shutdownEvent = g_rescanEvent = NULL;
@@ -1845,7 +1857,7 @@ BOOL WhTool_ModInit() {
 
     g_scannerThread = (HANDLE)_beginthreadex(NULL, 0, ScannerProc, NULL, 0, NULL);
     if (!g_scannerThread) {
-        Wh_Log(L"BTBat: Failed to create scanner thread");
+        Wh_Log(L"Failed to create scanner thread");
         SetEvent(g_shutdownEvent);
         if (g_shutdownEvent) CloseHandle(g_shutdownEvent);
         if (g_rescanEvent) CloseHandle(g_rescanEvent);
@@ -1857,7 +1869,7 @@ BOOL WhTool_ModInit() {
 
     g_trayThread = (HANDLE)_beginthreadex(NULL, 0, TrayThreadProc, NULL, 0, NULL);
     if (!g_trayThread) {
-        Wh_Log(L"BTBat: Failed to create tray thread");
+        Wh_Log(L"Failed to create tray thread");
         SetEvent(g_shutdownEvent);
         WaitForSingleObject(g_scannerThread, 3000);
         CloseHandle(g_scannerThread);
@@ -1870,13 +1882,13 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"BTBat: Initialized");
+    Wh_Log(L"Initialized");
     return TRUE;
 }
 
 // Reload settings and refresh all icons
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"BTBat: Settings changed");
+    Wh_Log(L"Settings changed");
     HWND hwnd = g_hwnd.load();
     if (IsWindow(hwnd))
         PostMessageW(hwnd, WM_RELOAD_ALL, 0, 0);
@@ -1886,7 +1898,7 @@ void WhTool_ModUninit() {
     if (!InterlockedCompareExchange(&g_initComplete, FALSE, TRUE))
         return;
 
-    Wh_Log(L"BTBat: Uninitializing");
+    Wh_Log(L"Uninitializing");
 
     // Step 1: Signal scanner thread to stop
     if (g_shutdownEvent)
@@ -1908,7 +1920,7 @@ void WhTool_ModUninit() {
     if (g_trayThread) {
         DWORD wr = WaitForSingleObject(g_trayThread, 3000);
         if (wr == WAIT_TIMEOUT) {
-            Wh_Log(L"BTBat: tray thread did not exit within 3 s — leaking handle to avoid race");
+            Wh_Log(L"tray thread did not exit within 3 s — leaking handle to avoid race");
         } else {
             CloseHandle(g_trayThread);
         }
@@ -1934,7 +1946,7 @@ void WhTool_ModUninit() {
         }
         DWORD wr = WaitForSingleObject(hGuiThread, 3000);
         if (wr == WAIT_TIMEOUT) {
-            Wh_Log(L"BTBat: GUI thread did not exit within 3 s — leaking handle to avoid race");
+            Wh_Log(L"GUI thread did not exit within 3 s — leaking handle to avoid race");
         } else {
             CloseHandle(hGuiThread);
         }
@@ -1956,8 +1968,9 @@ void WhTool_ModUninit() {
     DisableIcons();
     DestroyIcons();
 
-    Wh_Log(L"BTBat: Uninitialized");
+    Wh_Log(L"Uninitialized");
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
