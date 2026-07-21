@@ -14671,7 +14671,7 @@
           2
         ],
         "ratingUsers": 2,
-        "updated": 1784030687000,
+        "updated": 1784678230000,
         "users": 104
       },
       "metadata": {
@@ -14679,14 +14679,15 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32 -lshlwapi",
-        "description": "This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores classic Security and Maintenance CPL links",
+        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -loleaut32 -ladvapi32 -lshlwapi -lpropsys",
+        "description": "This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links",
         "github": "https://github.com/babamohammed2022",
         "include": [
-          "explorer.exe"
+          "explorer.exe",
+          "control.exe"
         ],
         "name": "Windows 7/8.1 Action Center Recreation",
-        "version": "1.5.0"
+        "version": "1.8.0"
       }
     },
     "win7-alttab-loader": {
