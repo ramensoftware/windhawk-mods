@@ -77,7 +77,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 /*
 - useRoundedCorners: true
   $name: Rounded corners
-  $description: Soft rounded edges on the flyout (Windows 7 look). Turn this off for Classic theme or other styles that need square corners.
+  $description: This setting enables rounded edges on the flyout (Windows 7 look). Turn this off for Classic theme or other styles that need square corners.
 - refreshInterval: 5000
   $name: Status check interval (ms)
   $description: How often the tray icon re-checks security and maintenance (milliseconds). Use at least 1000. Set 0 to check only when Windows reports a change.
@@ -89,7 +89,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
   $description: When hotkeys are enabled, Ctrl+N shows a sample balloon and Ctrl+Shift+N clears it. Useful only for testing.
 - privacyMode: false
   $name: Privacy mode
-  $description: Always show a green "all good" tray icon and hide problems in the flyout. Handy on a shared screen.
+  $description: Always show the neutral tray icon and hide problems in the flyout. Handy on a shared screen.
 - language: auto
   $name: Language
   $description: Language for the tray icon, flyout, and balloons. "Auto" follows Windows.
@@ -1101,6 +1101,75 @@ enum ProblemType {
 };
 
 // ============================================================================
+// MSDT Diagnostic Packs (with fallback to generic troubleshooter)
+// ============================================================================
+
+// Verifica se un diagnostic pack MSDT esiste sul sistema corrente prima di
+// invocarlo. I pack vivono in %SystemRoot%\diagnostics\system\<PackId>.
+// Se il pack non c'e' (rimosso in build piu' recenti, o SKU diverso),
+// OpenMsdtDiagnostic ricade sullo shell folder generico dei troubleshooter,
+// esattamente come fa gia' OpenProblemAction per i problemi non mappati.
+static BOOL IsMsdtPackAvailable(const WCHAR* packId) {
+    WCHAR path[MAX_PATH];
+    WCHAR sysRoot[MAX_PATH];
+    if (!GetEnvironmentVariableW(L"SystemRoot", sysRoot, MAX_PATH)) {
+        StringCchCopyW(sysRoot, MAX_PATH, L"C:\\Windows");
+    }
+    StringCchPrintfW(path, MAX_PATH, L"%s\\diagnostics\\system\\%s", sysRoot, packId);
+    DWORD attrs = GetFileAttributesW(path);
+    return (attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static void OpenGenericTroubleshooter(void) {
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
+    sei.lpVerb = L"open";
+    sei.lpFile = L"explorer.exe";
+    sei.lpParameters = L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}";
+    sei.nShow = SW_SHOWNORMAL;
+
+    if (!ShellExecuteExW(&sei)) {
+        Wh_Log(L"Troubleshooting shell command failed, using fallback");
+        ShellExecuteW(NULL, L"open", L"control.exe",
+                     L"/name Microsoft.Troubleshooting", NULL, SW_SHOWNORMAL);
+    }
+}
+
+// Lancia un diagnostic pack MSDT specifico se disponibile, altrimenti ricade
+// sull'elenco troubleshooter generico (stesso comportamento del ramo
+// "ALL OTHER PROBLEMS" gia' presente in OpenProblemAction).
+static void OpenMsdtDiagnostic(const WCHAR* packId) {
+    if (IsMsdtPackAvailable(packId)) {
+        WCHAR sysDir[MAX_PATH];
+        WCHAR msdtPath[MAX_PATH];
+        WCHAR params[64];
+        UINT len = GetSystemDirectoryW(sysDir, MAX_PATH);
+        if (len > 0 && len < MAX_PATH) {
+            StringCchCopyW(msdtPath, MAX_PATH, sysDir);
+            StringCchCatW(msdtPath, MAX_PATH, L"\\msdt.exe");
+        } else {
+            StringCchCopyW(msdtPath, MAX_PATH, L"msdt.exe");
+        }
+        StringCchPrintfW(params, ARRAYSIZE(params), L"-id %s", packId);
+
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.fMask = SEE_MASK_FLAG_NO_UI;
+        sei.lpVerb = L"open";
+        sei.lpFile = msdtPath;
+        sei.lpParameters = params;
+        sei.nShow = SW_SHOWNORMAL;
+
+        if (ShellExecuteExW(&sei)) {
+            return; // successo
+        }
+        Wh_Log(L"msdt.exe -id %s failed to launch, falling back to generic troubleshooter", packId);
+    } else {
+        Wh_Log(L"MSDT pack %s not available on this system, falling back", packId);
+    }
+    OpenGenericTroubleshooter();
+}
+
+// ============================================================================
 // Open Problem Action (Firewall or Troubleshooting)
 // ============================================================================
 void OpenProblemAction(int problemType) {
@@ -1140,20 +1209,32 @@ void OpenProblemAction(int problemType) {
         return;
     }
 
-    // ALL OTHER PROBLEMS -> Troubleshooting (like right-click)
-    
-    SHELLEXECUTEINFOW sei = { sizeof(sei) };
-    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_INVOKEIDLIST;
-    sei.lpVerb = L"open";
-    sei.lpFile = L"explorer.exe";
-    sei.lpParameters = L"shell:::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}";
-    sei.nShow = SW_SHOWNORMAL;
-    
-    if (!ShellExecuteExW(&sei)) {
-        Wh_Log(L"Troubleshooting shell command failed, using fallback");
-        ShellExecuteW(NULL, L"open", L"control.exe", 
-                     L"/name Microsoft.Troubleshooting", NULL, SW_SHOWNORMAL);
+    // Problemi con un diagnostic pack MSDT pertinente: prova quello, con
+    // fallback automatico al troubleshooter generico se il pack manca o
+    // il lancio fallisce.
+    if (problemType == PROB_INTERNET) {
+        OpenMsdtDiagnostic(L"NetworkDiagnosticsWeb");
+        return;
     }
+    if (problemType == PROB_DEFENDER_RT ||
+        problemType == PROB_ANTIVIRUS ||
+        problemType == PROB_ANTISPYWARE) {
+        // Antivirus/antispyware in Windows moderno sono la stessa componente
+        // Defender: riusano lo stesso pack di diagnostica di sicurezza.
+        OpenMsdtDiagnostic(L"WindowsSecurityDiagnostic");
+        return;
+    }
+    if (problemType == PROB_AUTOUPDATE || problemType == PROB_UPDATE_PENDING) {
+        OpenMsdtDiagnostic(L"WindowsUpdateDiagnostic");
+        return;
+    }
+    if (problemType == PROB_BATTERY) {
+        OpenMsdtDiagnostic(L"PowerDiagnostic");
+        return;
+    }
+
+    // ALL OTHER PROBLEMS -> Troubleshooting generico (comportamento invariato)
+    OpenGenericTroubleshooter();
 }
 static LANGID g_LastDetectedUILang = 0;
 
