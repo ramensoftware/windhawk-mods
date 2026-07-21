@@ -477,7 +477,10 @@ struct ModSettings {
     int          masterButtonSpacing  = 0;
     int          gridVerticalOffset   = 0;
 };
-[[clang::no_destroy]] ModSettings g_settings;
+// ModSettings holds only std::wstring/int/bool, so its destructor is safe to
+// run at process shutdown; no [[clang::no_destroy]] needed, and adding it would
+// leak the string buffers on every normal unload.
+ModSettings g_settings;
 
 static void LoadSettings() {
     auto Str = [](const wchar_t* k) {
