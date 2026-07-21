@@ -2,14 +2,13 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        1.7.0
+// @version        1.8.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
-// @include        systemsettings.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -loleaut32 -lwbemuuid -ladvapi32 -lshlwapi
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -loleaut32 -ladvapi32 -lshlwapi -lpropsys
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -35,7 +34,7 @@ Windows 8.1 theme
 - **Balloon Notifications**: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.
 - **SmartScreen Check**: Monitors Windows Defender SmartScreen status and reports if it is disabled.
 - **Privacy Mode**: The user can enable this mod to hide the eventual problems shown by the flyout.
-- **Maintenance Checks**: Automatically checks Backup status, Windows Error Reporting status, Disk health, Battery level, and pending Windows updates.
+- **Maintenance Checks**: Automatically checks Backup status, Windows Error Reporting status, Disk health, Battery level, pending Windows updates, RDP without NLA, and BitLocker protection.
   - The disk health check is **best-effort**: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside `explorer.exe`, some drives may not answer — in that case the check is simply skipped and never reports a false problem.
   - The battery check fires only on laptops running on battery power and warns when the charge drops to 20 % or below.
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
@@ -119,12 +118,6 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 */
 // ==/WindhawkModSettings==
 
-// in the new the interface has been enhanced and the integration with the system has improved
-// in the new version the Theme option (auto/light/dark) has been fully wired: it now drives the
-// flyout and notification colors, reapplies the DWM dark attribute on the fly, and in "auto" mode
-// it follows live Windows light/dark changes (WM_SETTINGCHANGE / ImmersiveColorSet)
-// in the new version multi monitor support has been added and it should work as confirmed by a test by one user
-// i assume that it is almost correct now and it should be more similar to the original windows 7 one as it also shows the balloon notification when restarting the mod
 
 #ifndef UNICODE
 #define UNICODE
@@ -143,6 +136,11 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 #include <winioctl.h>
 #include <wbemidl.h>
 #include <string>
+#include <propsys.h>
+#include <propkey.h>
+#include <propvarutil.h>
+#include <shobjidl.h>
+#include <shlguid.h>
 
 #define FLYOUT_OFFSET 8
 
@@ -1156,22 +1154,6 @@ void OpenProblemAction(int problemType) {
         ShellExecuteW(NULL, L"open", L"control.exe", 
                      L"/name Microsoft.Troubleshooting", NULL, SW_SHOWNORMAL);
     }
-}
-// Aggiungi questa funzione dopo OpenProblemAction()
-void OpenActionCenterFromFlyout() {
-    // Prima chiudi qualsiasi finestra esistente del Centro Operativo
-    HWND hwndAC = FindWindowW(NULL, L"Action Center");
-    if (hwndAC && IsWindow(hwndAC)) {
-        // Invia un messaggio per chiudere gentilmente
-        PostMessageW(hwndAC, WM_CLOSE, 0, 0);
-        // Aspetta che si chiuda (breve pausa)
-        Sleep(100);
-    }
-    
-    // Poi aprilo con il parametro che forza il ricaricamento
-    // Il flag /reload non esiste realmente, ma usiamo /name che forza il refresh
-    ShellExecuteW(NULL, L"open", L"control.exe", 
-                 L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
 }
 static LANGID g_LastDetectedUILang = 0;
 
@@ -2206,24 +2188,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
             return;
         }
     }
-    // Key 3: post-rename reboot (file rename operations)
-    {
-        HKEY hKey = NULL;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                L"SYSTEM\\CurrentControlSet\\Control\\Session Manager",
-                0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            DWORD type = 0;
-            DWORD needed = 0;
-            // PendingFileRenameOperations = REG_MULTI_SZ, present when reboot needed
-            if (RegQueryValueExW(hKey, L"PendingFileRenameOperations",
-                    NULL, &type, NULL, &needed) == ERROR_SUCCESS && needed > 4) {
-                RegCloseKey(hKey);
-                AddProblem(PROB_UPDATE_PENDING, idx, criticalCount);
-                return;
-            }
-            RegCloseKey(hKey);
-        }
-    }
+
 }
 
 // Remote Desktop enabled but without Network Level Authentication: a real
@@ -2256,73 +2221,104 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
     }
 }
 
-// BitLocker check on the system drive via WMI (Win32_EncryptableVolume in the
-// MicrosoftVolumeEncryption namespace). This is queryable unelevated on
-// standard desktop editions. Any COM/WMI failure (Home edition without the
-// namespace, policy restrictions, RPC hiccup, etc.) causes an immediate,
-// silent return - consistent with the "never a false positive" rule used by
-// the disk-health check elsewhere in this file. CoInitializeEx is safe to
-// call again here even though the tray thread already called it once for
-// apartment-threaded COM (STA), since Windhawk mods can run this check from
-// the same thread as the refresh timer.
+// BitLocker check on the system drive via the shell property
+// System.Volume.BitLockerProtection (SHCreateItemFromParsingName +
+// IShellItem2::GetProperty). This is what Explorer itself uses for the drive
+// padlock overlays and is queryable unelevated, unlike WMI
+// Win32_EncryptableVolume which requires admin rights.
+// Result is cached (10 min) to avoid hitting the property store on every
+// refresh tick (tray UI thread).
 static void CheckBitLocker(int* idx, int* criticalCount) {
-    RegKey hKeyFve;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-        L"SYSTEM\\CurrentControlSet\\Services\\FVE", 0, KEY_READ, &hKeyFve) != ERROR_SUCCESS)
-        return; // feature not present on this SKU (e.g. Windows Home): skip silently
+    // Cache: encryption status doesn't change minute-to-minute
+    static DWORD s_lastTick = 0;
+    static bool s_hasCache = false;
+    static bool s_isUnprotected = false;
+    static bool s_checkedOnce = false;
 
+    DWORD now = GetTickCount();
+    const DWORD kCacheMs = 10 * 60 * 1000; // 10 minutes
+
+    if (s_hasCache && s_checkedOnce && (now - s_lastTick < kCacheMs)) {
+        if (s_isUnprotected) {
+            AddProblem(PROB_BITLOCKER, idx, criticalCount);
+        }
+        return;
+    }
+
+    bool unprotected = false;
+    bool gotResult = false;
+
+    // Get system drive, e.g. "C:"
     WCHAR sysDrive[8] = {0};
-    if (!GetEnvironmentVariableW(L"SystemDrive", sysDrive, ARRAYSIZE(sysDrive))) return;
-
-    IWbemLocator* pLoc = NULL;
-    IWbemServices* pSvc = NULL;
-    IEnumWbemClassObject* pEnum = NULL;
-    BOOL didCoInit = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
-
-    HRESULT hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
-                                  IID_IWbemLocator, (LPVOID*)&pLoc);
-    if (SUCCEEDED(hr) && pLoc) {
-        BSTR ns = SysAllocString(L"ROOT\\CIMV2\\Security\\MicrosoftVolumeEncryption");
-        hr = pLoc->ConnectServer(ns, NULL, NULL, NULL, 0, NULL, NULL, &pSvc);
-        SysFreeString(ns);
+    if (!GetEnvironmentVariableW(L"SystemDrive", sysDrive, ARRAYSIZE(sysDrive))) {
+        // Fallback to C:
+        StringCchCopyW(sysDrive, ARRAYSIZE(sysDrive), L"C:");
     }
-    if (SUCCEEDED(hr) && pSvc) {
-        CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
-                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
-
-        WCHAR query[192];
-        StringCchPrintfW(query, ARRAYSIZE(query),
-            L"SELECT ProtectionStatus FROM Win32_EncryptableVolume WHERE DriveLetter='%s'", sysDrive);
-
-        BSTR lang = SysAllocString(L"WQL");
-        BSTR q = SysAllocString(query);
-        hr = pSvc->ExecQuery(lang, q, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-                             NULL, &pEnum);
-        SysFreeString(lang);
-        SysFreeString(q);
-    }
-    if (SUCCEEDED(hr) && pEnum) {
-        IWbemClassObject* pObj = NULL;
-        ULONG returned = 0;
-        if (pEnum->Next(WBEM_INFINITE, 1, &pObj, &returned) == S_OK && returned == 1) {
-            VARIANT vt;
-            VariantInit(&vt);
-            if (SUCCEEDED(pObj->Get(L"ProtectionStatus", 0, &vt, 0, 0))) {
-                // 0 = Unprotected, 1 = Protected, 2 = Unknown
-                if (vt.vt == VT_I4 && vt.lVal == 0) {
-                    AddProblem(PROB_BITLOCKER, idx, criticalCount);
-                }
-                VariantClear(&vt);
-            }
-            pObj->Release();
+    // Ensure trailing backslash for SHCreateItemFromParsingName
+    WCHAR parsingName[MAX_PATH] = {0};
+    StringCchCopyW(parsingName, ARRAYSIZE(parsingName), sysDrive);
+    size_t len = wcslen(parsingName);
+    if (len > 0 && parsingName[len-1] != L'\\') {
+        if (len + 1 < ARRAYSIZE(parsingName)) {
+            parsingName[len] = L'\\';
+            parsingName[len+1] = L'\0';
         }
     }
 
-    if (pEnum) pEnum->Release();
-    if (pSvc) pSvc->Release();
-    if (pLoc) pLoc->Release();
+    BOOL didCoInit = FALSE;
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (SUCCEEDED(hrCo) || hrCo == S_FALSE || hrCo == RPC_E_CHANGED_MODE) {
+        didCoInit = SUCCEEDED(hrCo);
+    }
+
+    IShellItem2* pItem = NULL;
+    HRESULT hr = SHCreateItemFromParsingName(parsingName, NULL, IID_PPV_ARGS(&pItem));
+    if (SUCCEEDED(hr) && pItem) {
+        PROPERTYKEY pk = {{0}};
+        hr = PSGetPropertyKeyFromName(L"System.Volume.BitLockerProtection", &pk);
+        if (SUCCEEDED(hr)) {
+            PROPVARIANT var;
+            PropVariantInit(&var);
+            hr = pItem->GetProperty(pk, &var);
+            if (SUCCEEDED(hr)) {
+                if (var.vt == VT_I4 || var.vt == VT_UI4 || var.vt == VT_INT) {
+                    int status = 0;
+                    if (var.vt == VT_I4) status = var.lVal;
+                    else if (var.vt == VT_UI4) status = (int)var.ulVal;
+                    else if (var.vt == VT_INT) status = var.intVal;
+                    else status = var.intVal;
+                    gotResult = true;
+                    if (!(status == 1 || status == 3 || status == 5)) {
+                        if (status == 0) {
+                            unprotected = true;
+                        }
+                    }
+                } else if (var.vt == VT_EMPTY || var.vt == VT_NULL) {
+                } else {
+                    int status = var.intVal;
+                    gotResult = true;
+                    if (status == 0) unprotected = true;
+                }
+            }
+            PropVariantClear(&var);
+        }
+        pItem->Release();
+    }
+
     if (didCoInit) CoUninitialize();
+
+    if (gotResult || !s_hasCache) {
+        s_isUnprotected = unprotected;
+        s_hasCache = true;
+        s_lastTick = now;
+        s_checkedOnce = true;
+    }
+
+    if (unprotected) {
+        AddProblem(PROB_BITLOCKER, idx, criticalCount);
+    }
 }
+
 
 // Best-effort disk health check via IOCTL_STORAGE_PREDICT_FAILURE (SMART).
 // Deliberately kept ultra-simple: we ask each physical drive whether it is
@@ -3837,11 +3833,11 @@ if (activeProblems > 0) {
             break;
         case 0x0419: // Русский
             if (activeProblems % 10 == 1 && activeProblems % 100 != 11)
-                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435";   // всего сообщение
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435";   // ????? Русский??
             else if (activeProblems % 10 >= 2 && activeProblems % 10 <= 4 && (activeProblems % 100 < 10 || activeProblems % 100 >= 20))
-                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F";   // всего сообщения
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F";   // ????? Русский??
             else
-                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439";   // всего сообщений
+                totalText = L"\u0432\u0441\u0435\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439";   // ????? Русский??
             break;
                 case 0x0816: // Portuguese
             totalText = (activeProblems == 1) ? L"mensagem total" : L"mensagens totais";
@@ -5475,11 +5471,8 @@ bool ValidateHubXml(const std::wstring& xml, const std::wstring& originalInput =
         }
     }
     if (opens != closes) {
-        Wh_Log(L"ValidateHubXml WARN Element open=%zu close=%zu (continuing)", opens, closes);
-        if (opens > closes + 5 || closes > opens + 5) {
-            Wh_Log(L"ValidateHubXml FAIL heavily unbalanced");
-            return false;
-        }
+        Wh_Log(L"ValidateHubXml FAIL Element open=%zu close=%zu", opens, closes);
+        return false;
     }
 
     // 4. Ordering check: if both Security and Maintenance are present, ensure order
@@ -5656,11 +5649,14 @@ HRESULT THISCALL SetXML_Hook(void* pThis, const WCHAR* pszXML, HINSTANCE hRes,
         return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
     }
 
-    // Solo se è il Centro Operativo
+        // Fast pre-filter: avoid building std::wstring work for irrelevant fragments
+    // using raw pointer search before any allocation.
+    if (!wcsstr(pszXML, L"atom(HavingAProblem)")) {
+        return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
+    }
+
     std::wstring xml(pszXML);
 
-    // Fast pre-filter: avoid building std::wstring work for irrelevant fragments
-    // but keep full LooksLike check for correctness.
     if (!LooksLikeActionCenterHub(xml)) {
         return CallOriginalSetXML(pThis, pszXML, hRes, hResTheme);
     }
@@ -5784,7 +5780,6 @@ HRESULT THISCALL SetXMLFromResource_Hook(void* pThis, PCWSTR lpName, PCWSTR lpTy
 }
 
 static bool g_cplHooksInstalled = false;
-static HANDLE g_cplRetryThread = NULL;
 
 bool CplHookDui() {
     if (g_cplHooksInstalled && SetXML_Original) {
@@ -5846,34 +5841,19 @@ bool CplHookDui() {
     return g_cplHooksInstalled;
 }
 
-static DWORD WINAPI CplHookRetryThread(LPVOID) {
-    for (int attempt = 0; attempt < 20; ++attempt) {
-        Sleep(1000);
-        if (g_cplHooksInstalled) break;
-        if (CplHookDui()) {
-            Wh_Log(L"CPL hub links: retry hook succeeded at attempt %d", attempt+1);
-            break;
-        }
-    }
-    return 0;
-}
-
 static void CplInit(void) {
     CplLoadSettings();
     if (!g_cplRestoreHubLinks) {
         Wh_Log(L"CPL hub links: disabled in settings");
         return;
     }
-    EnsureSolutionTemplate();
-    EnsureEmbeddedUifile();
-
+    // Lazy decoding: EnsureSolutionTemplate / EnsureEmbeddedUifile are now decoded
+    // on demand inside the hook path to avoid paying the conversion in processes
+    // that never open the Security and Maintenance page.
     if (CplHookDui()) {
         Wh_Log(L"CPL hub links: hooks installed");
     } else {
-        Wh_Log(L"CPL hub links: initial hook failed - starting retry thread");
-        if (!g_cplRetryThread) {
-            g_cplRetryThread = CreateThread(NULL, 0, CplHookRetryThread, NULL, 0, NULL);
-        }
+        Wh_Log(L"CPL hub links: initial hook failed");
     }
 }
 static void CplSettingsChanged(void) {
