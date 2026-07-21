@@ -11454,7 +11454,6 @@ static void __fastcall DiskPieDrvPrshtDrawItem_Hook(void* lpps, LPDRAWITEMSTRUCT
     g_pDiskPieDrvPrshtDrawItem_Orig(lpps, lpdi);
 }
 
-// shell32.dll
 static const WindhawkUtils::SYMBOL_HOOK g_diskPieShell32Hooks[] = {
     {
         { DISKPIE_SHELL32_DRAWPIE },
@@ -11472,7 +11471,6 @@ static const WindhawkUtils::SYMBOL_HOOK g_diskPieShell32Hooks[] = {
     }
 };
 
-// wpdshext.dll
 static const WindhawkUtils::SYMBOL_HOOK g_diskPieWpdshextHooks[] = {
     {
         { DISKPIE_WPDSHEXT_DRAWPIE },
@@ -37110,7 +37108,6 @@ BOOL Wh_ModInit()
     {
         HMODULE hDui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hDui) {
-            // dui70.dll
             WindhawkUtils::SYMBOL_HOOK dui70dllHooks = {
                 {L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
                 (void**)&DuiElement_PaintBg_orig,
