@@ -11454,7 +11454,7 @@ static void __fastcall DiskPieDrvPrshtDrawItem_Hook(void* lpps, LPDRAWITEMSTRUCT
     g_pDiskPieDrvPrshtDrawItem_Orig(lpps, lpdi);
 }
 
-static const WindhawkUtils::SYMBOL_HOOK g_diskPieShell32Hooks[] = {
+static const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         { DISKPIE_SHELL32_DRAWPIE },
         &g_pDiskPieShell32DrawPie_Orig,
@@ -11471,7 +11471,7 @@ static const WindhawkUtils::SYMBOL_HOOK g_diskPieShell32Hooks[] = {
     }
 };
 
-static const WindhawkUtils::SYMBOL_HOOK g_diskPieWpdshextHooks[] = {
+static const WindhawkUtils::SYMBOL_HOOK wpdshextDllHooks[] = {
     {
         { DISKPIE_WPDSHEXT_DRAWPIE },
         &g_pDiskPieWpdShExtDrawPie_Orig,
@@ -11493,7 +11493,7 @@ static void DiskPieInit()
     }
     if (hShell32)
     {
-        WindhawkUtils::HookSymbols(hShell32, g_diskPieShell32Hooks, ARRAYSIZE(g_diskPieShell32Hooks));
+        WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks));
     }
 
     // Best-effort: not every host process loads wpdshext.dll, and missing
@@ -11501,7 +11501,7 @@ static void DiskPieInit()
     HMODULE hWpdShExt = LoadLibraryExW(L"wpdshext.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hWpdShExt)
     {
-        WindhawkUtils::HookSymbols(hWpdShExt, g_diskPieWpdshextHooks, ARRAYSIZE(g_diskPieWpdshextHooks));
+        WindhawkUtils::HookSymbols(hWpdShExt, wpdshextDllHooks, ARRAYSIZE(wpdshextDllHooks));
     }
 
     // Best-effort: the chart is rendered via GDI+, confirmed by probing —
