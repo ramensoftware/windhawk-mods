@@ -14637,12 +14637,12 @@
           23
         ],
         "ratingUsers": 27,
-        "updated": 1784246836000,
+        "updated": 1784662230000,
         "users": 308
       },
       "metadata": {
         "author": "crazyboyybs",
-        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lversion -lgdiplus",
+        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lgdiplus",
         "description": "Modernizes legacy Win32 UI elements",
         "exclude": [
           "dwm.exe",
@@ -14654,7 +14654,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Win32 UI Modernizer",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "win7-action-center-recreation": {
