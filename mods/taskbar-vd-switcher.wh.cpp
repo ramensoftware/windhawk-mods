@@ -77,8 +77,8 @@ A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable but
 | Button spacing | 2 px | Gap between buttons in the grid |
 | Label format | Numbers | Numbers · Roman numerals · Indicator symbols · Custom labels |
 | Custom labels | *(empty)* | Comma-separated, e.g. `H,W,M` |
-| Active indicator | ● | Symbol shown for the current desktop in Indicator symbols mode |
-| Inactive indicator | ○ | Symbol shown for other desktops in Indicator symbols mode |
+| Active indicator | ● | Current desktop's symbol in Indicator symbols mode; e.g. 🟢 for a red/green light look |
+| Inactive indicator | ○ | Other desktops' symbol in Indicator symbols mode; e.g. 🔴 |
 | Font size | 10 pt | Button label size |
 | Indicator font family | *(native)* | Font family for desktop labels and indicator symbols |
 | Active text color | *(native)* | Current desktop's label color |
@@ -103,10 +103,6 @@ A [Windhawk](https://windhawk.net) mod for Windows 11 that injects clickable but
 | Task View button position | After | Column before/after desktop buttons, or sliver row above/below |
 | Task View button sliver height | 6 px | Height of the Task View button when used as a sliver row |
 | Task View button column width | 14 px | Width of the Task View button when used as a side column |
-
-For a copy-ready colored indicator preset, choose **Indicator symbols** and set
-**Active indicator symbol** to `🟢` and **Inactive indicator symbol** to `🔴`.
-Swap either emoji for any symbol, letter, or text you prefer.
 
 All color settings accept `#RRGGBB` or `#AARRGGBB` hex (the alpha byte is
 honored), the generics `accent`, `accentLight`, and `accentDark` for the
@@ -248,11 +244,15 @@ This mod builds directly on patterns established by several community mods:
 
 - activeIndicator: "●"
   $name: Active indicator symbol
-  $description: Symbol or text shown for the current desktop when Label format is Indicator symbols.
+  $description: >-
+    Symbol or text shown for the current desktop when Label format is Indicator
+    symbols. For a red/green light look, paste 🟢 here and 🔴 below.
 
 - inactiveIndicator: "○"
   $name: Inactive indicator symbol
-  $description: Symbol or text shown for other desktops when Label format is Indicator symbols.
+  $description: >-
+    Symbol or text shown for other desktops when Label format is Indicator
+    symbols. For a red/green light look, paste 🔴 here and 🟢 above.
 
 - fontSize: 10
   $name: Font size (pt)
