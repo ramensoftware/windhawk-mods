@@ -5174,6 +5174,37 @@
         "version": "1.0.0"
       }
     },
+    "explorer-tree-click-expand": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784661752000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784661752000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Didi",
+        "compilerOptions": "-lcomctl32",
+        "description": "Left click expands a folder one level; Ctrl+click collapses the whole tree; Alt+click expands all subfolders",
+        "github": "https://github.com/diegoalejo15",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Expand folder on click (Explorer nav pane)",
+        "version": "1.2"
+      }
+    },
     "explorer-treeitem-tweaker": {
       "details": {
         "defaultSorting": 5913,
