@@ -1274,6 +1274,10 @@ static BOOL g_FlyoutClosing = FALSE;
 static BOOL g_NotifyShowing = FALSE;
 static int g_SimulatedNotificationType = 0; // protected by srwLock
 static int g_ActiveProblems = 0;             // protected by srwLock
+// Stato del backoff del refresh periodico (vedi REFRESH_TIMER_ID in TrayMsgHandlerProc).
+// Solo scrittura/lettura dal tray thread (proprietario del timer), niente lock necessario.
+static DWORD g_RefreshNoChangeCount = 0;
+static UINT_PTR g_RefreshCurrentInterval = 0;
 static int g_ProblemTypes[MAX_PROBLEMS] = { 0 }; // protected by srwLock
 static RECT g_rcFooterLink = { 0 };
 static BOOL g_IsHoveringNoProblems = FALSE;  // hover state for the no-problems area
@@ -4242,7 +4246,44 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             return 0;
         }
         if (wParam == REFRESH_TIMER_ID) {
-            if (!g_Ctx.isUninitializing) RefreshSecurityState();
+            if (!g_Ctx.isUninitializing) {
+                int prevStateBk, prevProblemsBk;
+                { SRWGuard g(g_Ctx.srwLock, false); prevStateBk = g_SecurityState; prevProblemsBk = g_ActiveProblems; }
+
+                RefreshSecurityState();
+
+                int newStateBk, newProblemsBk;
+                { SRWGuard g(g_Ctx.srwLock, false); newStateBk = g_SecurityState; newProblemsBk = g_ActiveProblems; }
+
+                // Backoff del refresh periodico: se lo stato resta invariato per
+                // diversi controlli consecutivi, allunga gradualmente l'intervallo
+                // (fino a 4x, cap 30s) per ridurre il carico CPU quando tutto e'
+                // stabile. Alla prima variazione si torna subito all'intervallo base.
+                // Non modifica alcun percorso di notifica/balloon: agisce solo sul
+                // periodo del timer REFRESH_TIMER_ID.
+                if (g_Settings.refreshInterval > 0 && hwnd && IsWindow(hwnd)) {
+                    if (prevStateBk == newStateBk && prevProblemsBk == newProblemsBk) {
+                        if (g_RefreshNoChangeCount < 0x7FFFFFFF) g_RefreshNoChangeCount++;
+                    } else {
+                        g_RefreshNoChangeCount = 0;
+                    }
+
+                    UINT_PTR baseInterval = (UINT_PTR)g_Settings.refreshInterval;
+                    UINT_PTR desiredInterval = baseInterval;
+                    if (g_RefreshNoChangeCount >= 12) {
+                        UINT_PTR mul = 1 + (g_RefreshNoChangeCount - 12) / 12;
+                        if (mul > 4) mul = 4;
+                        desiredInterval = baseInterval * mul;
+                        if (desiredInterval > 30000) desiredInterval = 30000;
+                    }
+
+                    if (desiredInterval != g_RefreshCurrentInterval) {
+                        KillTimer(hwnd, REFRESH_TIMER_ID);
+                        g_Ctx.refreshTimer = SetTimer(hwnd, REFRESH_TIMER_ID, (UINT)desiredInterval, NULL);
+                        g_RefreshCurrentInterval = desiredInterval;
+                    }
+                }
+            }
             return 0;
         }
         if (wParam == TRAY_RETRY_TIMER_ID) {
@@ -4375,9 +4416,16 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (g_Settings.refreshInterval > 0) {
                 if (g_Ctx.refreshTimer) KillTimer(hwnd, g_Ctx.refreshTimer);
                 g_Ctx.refreshTimer = SetTimer(hwnd, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
+                // L'utente ha (ri)applicato le impostazioni: riparti dall'intervallo
+                // base invece di restare su un intervallo "rallentato" da un backoff
+                // precedente.
+                g_RefreshNoChangeCount = 0;
+                g_RefreshCurrentInterval = (UINT_PTR)g_Settings.refreshInterval;
             } else if (g_Ctx.refreshTimer) {
                 KillTimer(hwnd, g_Ctx.refreshTimer);
                 g_Ctx.refreshTimer = 0;
+                g_RefreshNoChangeCount = 0;
+                g_RefreshCurrentInterval = 0;
             }
         }
         return 0;
@@ -4502,8 +4550,11 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         RegisterWscNotifications();
         StartRegistryMonitor();
 
-        if (g_Settings.refreshInterval > 0)
+        if (g_Settings.refreshInterval > 0) {
             g_Ctx.refreshTimer = SetTimer(g_Ctx.hWndMsgHandler, REFRESH_TIMER_ID, g_Settings.refreshInterval, NULL);
+            g_RefreshNoChangeCount = 0;
+            g_RefreshCurrentInterval = (UINT_PTR)g_Settings.refreshInterval;
+        }
 
         SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
 
