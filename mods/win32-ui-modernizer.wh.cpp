@@ -12,7 +12,7 @@
 // @include         *
 // @exclude         dwm.exe
 // @exclude         mmc.exe
-// @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lversion -lgdiplus
+// @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lgdiplus
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -346,8 +346,8 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $description:pt: Preferencia de cantos DWM para menus de contexto.
     $description:es: Preferencia de esquinas DWM para menus de contexto.
     $options:
-    - round: Round (WinUI 3)
-    - smallround: Small round (default)
+    - round: Round (WinUI 3) (default)
+    - smallround: Small round
     - square: Square
   - MenuHoverRadius: 4
     $name: Menu hover corner radius
@@ -1050,8 +1050,21 @@ static bool IsTextPipelineDisabled()
 
 static ID2D1Factory1* g_d2dFactory = nullptr;
 
-// DPI from primary monitor (no DPI-aware API dependency)
+// DPI from primary monitor (no DPI-aware API dependency). Captured once in
+// Wh_ModInit and never updated -- only a safe last-resort fallback for paint
+// paths that can't resolve a real target window (see DpiForPaint(Hdc) below,
+// which is what most D2D paint call sites should actually use).
 static UINT g_Dpi = USER_DEFAULT_SCREEN_DPI;
+
+// Per-paint DPI resolution: prefer the real target window's own DPI (correct
+// on mixed-DPI multi-monitor setups and after a runtime DPI change), falling
+// back to the primary-monitor snapshot only when hwnd can't be resolved.
+// Mirrors the existing "hwnd ? GetDpiForWindow(hwnd) : g_Dpi" idiom already
+// used at several call sites in this file.
+static UINT DpiForPaint(HWND hwnd)
+{
+    return hwnd ? GetDpiForWindow(hwnd) : g_Dpi;
+}
 
 // Stroke style for checkbox checkmark animation (round caps, solid)
 static Microsoft::WRL::ComPtr<ID2D1StrokeStyle> g_checkStrokeStyle;
@@ -2645,7 +2658,7 @@ static bool PillDCompInit_Locked(HWND hwnd) {
         float halfPad = h2 * (1.0f - PILL_H_FRAC) / 2.0f;
         float vTop    = (float)snap.curTop + halfPad;
         float vBot    = (float)snap.curTop + h2 - halfPad;
-        float sc      = (float)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+        float sc      = (float)DpiForPaint(hwnd) / USER_DEFAULT_SCREEN_DPI;
         PillDCompDrawFrame_Locked(vTop, vBot, 0.f, 0.f, false,
             sc, 1.0f, false, false, snap.curIndentPx,
             snap.style, snap.curTop, snap.prevTop, snap.itemH,
@@ -2823,7 +2836,7 @@ static bool PillDCompStartExpand_Locked(float itemCenterY, float durSec)
             return false;
         }
     }
-    float scale  = (float)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    float scale  = (float)DpiForPaint(g_pillDC.hwnd) / USER_DEFAULT_SCREEN_DPI;
     float pillW  = 3.2f * scale;  // logical, matches PillDCompDrawFrame
     float pillX  = 4.0f;           // logical
     HRESULT hr = g_pillDC.pScale->SetCenterX(pillX + pillW / 2.0f);
@@ -3645,10 +3658,27 @@ static LRESULT CALLBACK CheckBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPA
 
 static void CheckAnims_Cleanup()
 {
-    std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
-    for (auto& [key, anim] : g_checkAnims)
+    // RemoveWindowSubclassFromAnyThread is a synchronous cross-thread
+    // SendMessage, and CheckBoxSubclassProc takes g_checkAnimsMutex at the
+    // top of every message it handles. Holding the lock across that call (as
+    // this used to) deadlocks whenever the checkbox lives on a different
+    // thread than Wh_ModUninit: this thread blocks in SendMessage waiting
+    // for the owning thread to pump it, while that thread blocks inside
+    // CheckBoxSubclassProc waiting for the mutex this thread still holds.
+    // Copy the HWNDs out and release the lock first -- same pattern as
+    // ButtonPopCleanup/BreadcrumbChevronCleanup/PlacesBarCleanup/
+    // TabPillRemoveAll/AuxiliarySubclassCleanup.
+    std::vector<HWND> owners;
     {
-        HWND hw = (HWND)key;
+        std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
+        owners.reserve(g_checkAnims.size());
+        for (const auto& [key, anim] : g_checkAnims) {
+            (void)anim;
+            owners.push_back((HWND)key);
+        }
+        g_checkAnims.clear();
+    }
+    for (HWND hw : owners) {
         if (!IsWindow(hw)) continue;
         KillTimer(hw, kCheckTimerId);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hw, CheckBoxSubclassProc);
@@ -3657,7 +3687,6 @@ static void CheckAnims_Cleanup()
         // until the next manual hover/click triggers a redraw.
         InvalidateRect(hw, nullptr, TRUE);
     }
-    g_checkAnims.clear();
 }
 // Glyph (expand/collapse arrow) rotation animation
 // ============================================================================
@@ -4978,6 +5007,14 @@ static const wchar_t GLYPH_DLG_VIEW[]      = L"\uE8A9";
 // there), so this BeginPaint-hook-set fallback is required, not optional.
 static thread_local HWND g_tlsPaintHwnd = nullptr; // BeginPaint hook sets this
 
+// DpiForPaint (see its own declaration near g_Dpi) for call sites that only
+// have an HDC -- same g_tlsPaintHwnd-first, WindowFromDC(hdc)-fallback idiom
+// used by IsDarkForExcludedAwarePaintHdc and throughout this file.
+static UINT DpiForPaintHdc(HDC hdc)
+{
+    return DpiForPaint(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc));
+}
+
 // Edit-class-only, promptly-cleared counterpart to g_tlsPaintHwnd. Set by
 // BeginPaint_hook (only when hWnd is class "Edit") and cleared by
 // EndPaint_hook the instant that specific Edit's own paint cycle ends --
@@ -5436,7 +5473,7 @@ static void PaintTravelBandToolbarItem(const NMCUSTOMDRAW* cd)
     }
 
     const bool dark = g_darkModeActive;
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(cd->hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const float alpha = pressed ? (dark ? 0.050f : 0.040f)
                                 : (dark ? 0.085f : 0.060f);
 
@@ -5678,7 +5715,7 @@ static void PaintUpBandToolbarItem(const NMCUSTOMDRAW* cd)
     }
 
     const bool dark = g_darkModeActive;
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(cd->hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const float alpha = pressed ? (dark ? 0.050f : 0.040f)
                                 : (dark ? 0.085f : 0.060f);
 
@@ -6144,7 +6181,7 @@ static void PaintBreadcrumbRootChevronOverlay(const NMCUSTOMDRAW* cd, HWND toolb
     // Three dots, not a rotating arrow -- a static "more" ellipsis needs no
     // open/closed state at all.
     pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    const float scale = (float)g_Dpi / 96.f;
+    const float scale = (float)DpiForPaintHdc(cd->hdc) / 96.f;
     const float dotR = 1.0f * scale;
     const float spacing = dotR * 3.f;
     for (int i = -1; i <= 1; ++i) {
@@ -7852,7 +7889,7 @@ static bool PaintTreeViewGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
 {
     if (!g_d2dFactory || (iPartId != TVP_GLYPH && iPartId != TVP_HOTGLYPH)) return false;
 
-    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     FLOAT w = (FLOAT)(pRect->right  - pRect->left);
     FLOAT h = (FLOAT)(pRect->bottom - pRect->top);
 
@@ -8031,7 +8068,7 @@ static bool TabBgCacheEnsure(HDC hdc, int index)
     if (g_tabBgCache[index]) return true;
     if (!g_d2dFactory) return false;
 
-    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     FLOAT cr = 6.f * scale;
     const INT W = 18, H = 18;
 
@@ -8242,7 +8279,7 @@ static bool PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, bool for
     if (!isSelected) return true;
 
     // -- Tab pill (DComp slide animation) --
-    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
     FLOAT inset  = 3.0f;
 
@@ -8453,7 +8490,7 @@ static bool PaintRadioButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     bool pressed  = (iStateId == RBS_UNCHECKEDPRESSED  || iStateId == RBS_CHECKEDPRESSED);
     bool dark     = IsWindowDarkMode(hdc);
 
-    float scale  = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    float scale  = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     float fw = (float)w, fh = (float)h;
     float dim    = std::min(fw, fh);
     float cx     = fw / 2.f, cy = fh / 2.f;
@@ -8646,7 +8683,7 @@ static bool PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     int h = pRect->bottom - pRect->top;
     if (w <= 0 || h <= 0) return false;
 
-    FLOAT scale        = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT scale        = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
     FLOAT cornerRadius = 4.f * scale;
 
@@ -9489,7 +9526,7 @@ static bool UAHWndProc(HWND hWnd, UINT uMsg, WPARAM, LPARAM lParam) {
             int w = rc->right  - rc->left;
             int h = rc->bottom - rc->top;
             if (w > 0 && h > 0) {
-                const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+                const float scale = (float)DpiForPaint(hWnd) / (float)USER_DEFAULT_SCREEN_DPI;
                 const float cr = kRoundedSelectionCornerRadius * scale;
                 const float inset = 2.f * scale;
 
@@ -10640,7 +10677,10 @@ static void DrawModernInsertMarkGdi(HWND tv, HDC hdc,
     }
 }
 
-static constexpr UINT_PTR kTreeCursorSubId = 0x7AEE01;
+// Marks a window as currently carrying TreeCursorSubclassProc, so
+// Wh_ModUninit's RemoveSubclassesFromWindow sweep knows to remove it
+// without unconditionally messaging every enumerated window.
+static constexpr LPCWSTR kTreeCursorSubclassProp = L"WH_MW_TREE_CURSOR_SUB";
 
 static HCURSOR TreeArrowCursor()
 {
@@ -10649,10 +10689,9 @@ static HCURSOR TreeArrowCursor()
 }
 
 static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
-    WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+    WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
     UNREFERENCED_PARAMETER(wParam);
-    UNREFERENCED_PARAMETER(uIdSubclass);
     UNREFERENCED_PARAMETER(dwRefData);
 
     if (uMsg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT
@@ -10663,7 +10702,8 @@ static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
 
     if (uMsg == WM_NCDESTROY) {
         GlyphTreeOwnerCleanup(hWnd);
-        RemoveWindowSubclass(hWnd, TreeCursorSubclassProc, kTreeCursorSubId);
+        RemovePropW(hWnd, kTreeCursorSubclassProp);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TreeCursorSubclassProc);
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -10674,7 +10714,9 @@ static void TreeCursorTrySubclass(HWND hwnd)
     if (!g_settings.ExplorerSection || !GlyphIsNavPaneTreeView(hwnd))
         return;
 
-    SetWindowSubclass(hwnd, TreeCursorSubclassProc, kTreeCursorSubId, 0);
+    if (!GetPropW(hwnd, kTreeCursorSubclassProp) &&
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc, 0))
+        SetPropW(hwnd, kTreeCursorSubclassProp, (HANDLE)1);
 }
 
 static LRESULT CALLBACK TreeViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
@@ -11602,7 +11644,7 @@ static bool PaintExplorerAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT
         return false;
 
     const bool dark = IsWindowDarkMode(hdc);
-    const float scale = (float)g_Dpi / 96.f;
+    const float scale = (float)DpiForPaintHdc(hdc) / 96.f;
     const float cr = 6.f * scale;
     const bool focused = (iStateId == 4);
     const bool hot = (iStateId == 2);
@@ -11788,7 +11830,7 @@ static bool PaintExplorerAddressDropDownArrow(
                 ? (dark ? D2D1::ColorF(1.f, 1.f, 1.f, 0.95f) : D2D1::ColorF(0.f, 0.f, 0.f, 0.85f))
                 : (dark ? D2D1::ColorF(1.f, 1.f, 1.f, 0.72f) : D2D1::ColorF(0.f, 0.f, 0.f, 0.62f));
 
-    const float scale = (float)g_Dpi / 96.f;
+    const float scale = (float)DpiForPaintHdc(hdc) / 96.f;
     const float fw = (float)w;
     const float fh = (float)h;
     const float len = std::min(fw, fh) * (addressPart ? 0.15f : 0.24f);
@@ -11848,7 +11890,7 @@ static bool PaintExplorerNavigationButton(HDC hdc, INT iPartId, INT iStateId, LP
     const bool hot = (iStateId == NAV_BB_HOT);
     const bool pressed = (iStateId == NAV_BB_PRESSED);
     const bool disabled = (iStateId == NAV_BB_DISABLED);
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
 
     D2D1_COLOR_F fill = D2D1::ColorF(0.f, 0.f, 0.f, 0.f);
     if (hot)
@@ -13163,7 +13205,7 @@ static bool PaintListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCREC
 
     const float fw = (float)w;
     const float fh = (float)h;
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const bool hot = (iStateId == 2 || iStateId == 3);
     const bool pressed = (iStateId == 3);
     const float hoverAlpha = pressed ? 0.10f : hot ? 0.075f : 0.f;
@@ -13391,7 +13433,7 @@ static bool PaintAnimatedListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId
 
     const float fw = (float)w;
     const float fh = (float)h;
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const bool dark = IsWindowDarkMode(hdc);
     const bool hot = (iStateId == 2 || iStateId == 3);
     const bool pressed = (iStateId == 3);
@@ -13550,7 +13592,7 @@ static bool PaintRoundedHeaderItem(HDC hdc, INT iStateId, LPCRECT pRect)
     const float alpha = dark ? (isPressed ? 180.f / 255.f : 80.f / 255.f)
                              : (isPressed ?  60.f / 255.f : 25.f / 255.f);
 
-    const float scale = (float)g_Dpi / 96.f;
+    const float scale = (float)DpiForPaintHdc(hdc) / 96.f;
     const float inset = 1.4f * scale;
     RECT rc = *pRect;
     const int gdiInset = std::max(1, (int)std::lround(inset));
@@ -13608,7 +13650,7 @@ static bool PaintRoundedHeaderItem(HDC hdc, INT iStateId, LPCRECT pRect)
     HPEN pen = CreatePen(PS_NULL, 0, fallbackClr);
     HGDIOBJ oldBr = SelectObject(hdc, br);
     HGDIOBJ oldPen = pen ? SelectObject(hdc, pen) : nullptr;
-    const int radius = MulDiv(6, g_Dpi, 96) * 2;
+    const int radius = MulDiv(6, DpiForPaintHdc(hdc), 96) * 2;
     RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
     if (oldPen) SelectObject(hdc, oldPen);
     SelectObject(hdc, oldBr);
@@ -13670,7 +13712,6 @@ static bool IsSplitButtonChevronCandidate(HWND hwnd)
     return false;
 }
 
-static constexpr UINT_PTR kSplitButtonChevronSubId = 0x5B1701;
 static constexpr LPCWSTR kSplitButtonChevronSubclassProp =
     L"Win32UIModernizer.SplitChevronSubclass";
 
@@ -13836,9 +13877,7 @@ static bool DrawCommandModuleChevronGlyph(HDC hdc, LPCRECT pRect, bool useAccent
     if (w <= 0 || h <= 0)
         return false;
 
-    HWND hwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-    float scale = hwnd ? (float)GetDpiForWindow(hwnd) / 96.f
-                       : (float)g_Dpi / 96.f;
+    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
 
     // Non-accent callers (Organize, the split-button pair) don't trust
     // GetTextColor(hdc) at all here -- for this specific CommandModule part
@@ -13925,12 +13964,11 @@ static void InvalidateSplitButtonChevron(HWND hwnd)
 }
 
 static LRESULT CALLBACK SplitButtonChevronSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
-    UINT_PTR uIdSubclass, DWORD_PTR)
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     if (msg == WM_NCDESTROY) {
         RemovePropW(hwnd, kSplitButtonChevronSubclassProp);
-        RemoveWindowSubclass(hwnd, SplitButtonChevronSubclassProc, uIdSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SplitButtonChevronSubclassProc);
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
 
@@ -13951,8 +13989,8 @@ static void TryInstallSplitButtonChevronSubclass(HWND hwnd)
         return;
 
     if (!GetPropW(hwnd, kSplitButtonChevronSubclassProp)) {
-        if (SetWindowSubclass(hwnd, SplitButtonChevronSubclassProc,
-                kSplitButtonChevronSubId, 0))
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, SplitButtonChevronSubclassProc, 0))
             SetPropW(hwnd, kSplitButtonChevronSubclassProp, (HANDLE)1);
     }
 
@@ -13979,7 +14017,7 @@ static bool PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LP
     int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
     if (w <= 0 || h <= 0) return false;
 
-    FLOAT scale  = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT scale  = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     bool  isVert = (iPartId == PP_MOVEOVERLAYVERT);
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
@@ -14425,7 +14463,7 @@ static bool PaintDragDrop(HDC hdc, LPCRECT pRect)
         : D2D1::ColorF(0.10f, 0.10f, 0.10f, 0.15f);  // dark on light
 
     // Scale corner radius by DPI
-    float cr = 8.f * (g_Dpi / (float)USER_DEFAULT_SCREEN_DPI);
+    float cr = 8.f * (DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI);
     float w  = (float)(pRect->right  - pRect->left);
     float h  = (float)(pRect->bottom - pRect->top);
 
@@ -15371,7 +15409,8 @@ static bool PaintDragDropTextBg(HDC hdc, LPCRECT pRect)
         return true;
 
     const bool dark = DragDropDarkMode();
-    const float scale = g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const UINT dpi = DpiForPaintHdc(hdc);
+    const float scale = dpi / (float)USER_DEFAULT_SCREEN_DPI;
     const int pad = std::max(4, (int)(5.f * scale + 0.5f));
     const int side = std::max(wPx, hPx) + pad * 2;
     const int cx = (pRect->left + pRect->right) / 2;
@@ -15384,7 +15423,7 @@ static bool PaintDragDropTextBg(HDC hdc, LPCRECT pRect)
     };
 
     std::lock_guard<std::recursive_mutex> lk(g_dragDropBadgeCacheMutex);
-    if (!DragDropBadgeBitmapEnsureLocked(hdc, side, g_Dpi, dark))
+    if (!DragDropBadgeBitmapEnsureLocked(hdc, side, dpi, dark))
         return false;
 
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
@@ -15795,7 +15834,7 @@ static bool PaintPushButton(HDC hdc, INT iStateId, LPCRECT pRect)
         IsCurrentProcessWinver() && WinverUsesBlackBackground();
     const bool dark = winverBlackVisual ? WinverIsDarkVisualMode()
                                         : g_darkModeActive.load(std::memory_order_acquire);
-    const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaint(hBtn) / (float)USER_DEFAULT_SCREEN_DPI;
     const float cr = 4.f * scale;
 
     // Colors — use GetAccentFromPalette with mode-aware offsets (same as checkboxes)
@@ -16492,9 +16531,24 @@ static constexpr UINT     kNavDividerWatchTimerMs = 80;
 
 static std::atomic<HWND> g_navDividerHotHwnd{nullptr};
 
+// Set first thing in Wh_ModUninit (see there), well before the
+// NavDividerClearAll() teardown sweep -- NOT the same as g_darkModeUnloading
+// (hover-reveal isn't dark-mode-specific) and never reset back to false
+// (this DLL instance is done either way). Declared here (rather than next to
+// its other consumer, NavDividerInstallSetCursorHookThread, further down)
+// because NavDividerFadeTimerProc below also needs it: closes a narrow race
+// where NavDividerClearAll's KillTimer reliably removes the timer even
+// cross-thread, but if a WM_TIMER for it was already dequeued on the divider
+// window's own thread microseconds earlier, DispatchMessage still invokes
+// NavDividerFadeTimerProc once more -- and its normal body re-arms itself
+// via SetTimer, which would leave a fresh timer pointing at this TIMERPROC
+// with nothing left to kill it before the DLL unloads. The guard in
+// NavDividerFadeTimerProc makes that stray call a no-op instead.
+static std::atomic<bool> g_navDividerUnloading{false};
+
 static void NavDividerInvalidateStrip(HWND hWnd, int centerX, int marginMul)
 {
-    float scale  = (float)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    float scale  = (float)DpiForPaint(hWnd) / USER_DEFAULT_SCREEN_DPI;
     int   margin = std::max(2, (int)(4.f * scale)) * marginMul;
     RECT rc; GetClientRect(hWnd, &rc);
     RECT inval = { centerX - margin, rc.top, centerX + margin, rc.bottom };
@@ -16513,6 +16567,11 @@ static void NavDividerInvalidateStrip(HWND hWnd, int centerX, int marginMul)
 // mouse drifted away, instead of stopping once fully faded in.
 static void CALLBACK NavDividerFadeTimerProc(HWND hwnd, UINT, UINT_PTR idEvent, DWORD)
 {
+    if (g_navDividerUnloading.load(std::memory_order_acquire)) {
+        KillTimer(hwnd, idEvent);
+        return;
+    }
+
     // kPropNavDividerHot/X are read once each and reused below (neither prop
     // changes mid-call) instead of re-querying the same window property twice.
     bool   hot   = GetPropW(hwnd, kPropNavDividerHot) != nullptr;
@@ -16525,7 +16584,7 @@ static void CALLBACK NavDividerFadeTimerProc(HWND hwnd, UINT, UINT_PTR idEvent, 
             POINT clientPt = pt;
             RECT rc;
             if (ScreenToClient(hwnd, &clientPt) && GetClientRect(hwnd, &rc) && PtInRect(&rc, clientPt)) {
-                float scale  = (float)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+                float scale  = (float)DpiForPaint(hwnd) / USER_DEFAULT_SCREEN_DPI;
                 int   margin = std::max(2, (int)(4.f * scale));
                 stillNear = std::abs(clientPt.x - (int)(INT_PTR)xProp) <= margin;
             }
@@ -16709,13 +16768,12 @@ HCURSOR WINAPI NavDividerSetCursor_hook(HCURSOR hCursor)
     return NavDividerSetCursor_orig(hCursor);
 }
 
-// Guards the one-shot installer thread below: g_navDividerHookInstallTriggered
-// ensures CreateThread fires exactly once even if multiple UI threads hit
-// NavDividerTrackAndGetHwnd concurrently right as the first divider(s)
-// appear; g_navDividerUnloading is set first thing in Wh_ModUninit so the
-// thread can bail out if the mod is disabled in the same instant it started.
+// Guards the one-shot installer thread below: ensures CreateThread fires
+// exactly once even if multiple UI threads hit NavDividerTrackAndGetHwnd
+// concurrently right as the first divider(s) appear. (g_navDividerUnloading,
+// used right below too, is declared earlier in the file -- see its own
+// comment there for why.)
 static std::atomic<bool> g_navDividerHookInstallTriggered{false};
-static std::atomic<bool> g_navDividerUnloading{false};
 
 // Wh_SetFunctionHook + Wh_ApplyHookOperations must never run from inside a
 // hook callback (or Wh_ModInit) -- only from a deferred handler -- per the
@@ -16808,7 +16866,7 @@ static void PaintNavDividerHoverPill(HDC hdc, LPCRECT pRect, float fadeFrac, boo
 
     D2DThreadCache* cache = D2DGetThreadCache();
 
-    const float scale = (float)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    const float scale = (float)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
     const float w  = (float)(pRect->right - pRect->left);
     const float h  = (float)(pRect->bottom - pRect->top);
     const float cx = w / 2.f;
@@ -17134,7 +17192,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 int w = pRect->right - pRect->left;
                 int h = pRect->bottom - pRect->top;
                 if (w > 0 && h > 0) {
-                    float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+                    float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
                     float cr = kRoundedSelectionCornerRadius * scale;
                     float inset = 2.f * scale;
                     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
@@ -17174,7 +17232,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 int h = pRect->bottom - pRect->top;
                 if (w > 0 && h > 0) {
                     FillAcrylicMenuTransparentRect(hdc, pRect);
-                    float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+                    float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
                     float cr = g_settings.MenuHoverRadius * scale;
                     float inset = 1.f * scale;
                     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
@@ -17216,7 +17274,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 // Let system draw the default highlight first
                 DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, nullptr);
                 // Then overlay with a subtle D2D rounded rect
-                float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+                float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
                 float cr = g_settings.MenuHoverRadius * scale;
                 float inset = 1.f * scale;
                 Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
@@ -17434,7 +17492,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         const int h = pRect->bottom - pRect->top;
         if (w <= 0 || h <= 0) return false;
 
-        const float scale = (float)g_Dpi / (float)USER_DEFAULT_SCREEN_DPI;
+        const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
         const float cr = 6.f * scale;
 
         // Pane fill and border — transparency-aware
@@ -17597,7 +17655,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                     pressed ? PBS_PRESSED : hot ? PBS_HOT : PBS_NORMAL;
                 if (iPartId == 4)
                     SyncComboEditButtonState(hdc, buttonState);
-                const float scale = (float)g_Dpi / 96.f;
+                const float scale = (float)DpiForPaintHdc(hdc) / 96.f;
                 const float cr = 4.f * scale;
 
                 D2D1_COLOR_F fill, border;
@@ -17673,7 +17731,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 const bool hot = (iStateId == 2);
                 const INT buttonState = disabled ? PBS_DISABLED :
                     pressed ? PBS_PRESSED : hot ? PBS_HOT : PBS_NORMAL;
-                const FLOAT scale = (FLOAT)g_Dpi / 96.f;
+                const FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / 96.f;
 
                 D2D1_COLOR_F fill, unusedBorder;
                 GetNeutralPushButtonColors(
@@ -17767,7 +17825,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
 
                 if (isHot && g_d2dFactory) {
                     bool isVert = (iPartId == SBP_UPPERTRACKVERT || iPartId == SBP_LOWERTRACKVERT);
-                    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+                    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
                     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
                     FPUGuard fpu;
                     if (SUCCEEDED(CreateBoundD2DRenderTarget(paintDC, pRect, g_d2dFactory, &pRT))) {
@@ -17801,7 +17859,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 if (!g_d2dFactory) return false;
 
                 bool isVert = (iPartId == SBP_THUMBBTNVERT);
-                FLOAT scale  = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+                FLOAT scale  = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
                 FLOAT thumbW = (isHot ? 6.f : 2.4f) * scale;
                 D2D1_COLOR_F color = darkScrollbar
                     ? (isDisabled
@@ -17887,7 +17945,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 if (FAILED(CreateBoundD2DRenderTarget(paintDC, pRect, g_d2dFactory, &pRT)))
                     return false;
 
-                FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+                FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
                 FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
                 FLOAT triBase = 6.0f * scale, triH = 3.75f * scale;
                 FLOAT hotThumbW = 6.f * scale;
@@ -18024,7 +18082,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
             if (st == 2 && (GetAsyncKeyState(VK_LBUTTON) & 0x8000))
                 st = 3;
 
-            FLOAT scale = (FLOAT)g_Dpi / 96.f;
+            FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / 96.f;
             FLOAT innerPad = (st == 2) ? 1.0f * scale :  // HOT: accent grows
                              (st == 3) ? 3.5f * scale :  // PRESSED: accent shrinks
                              (st == 5) ? 2.5f * scale :  // DISABLED
@@ -18094,7 +18152,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         bool disabled  = (iStateId == 4);
 
         // Background: rounded fill matching Edit control
-        FLOAT scale = (FLOAT)g_Dpi / 96.f;
+        FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / 96.f;
         FLOAT cr = 3.5f * scale;
 
         // Corner fill: sample actual pixel at corner (parent's bg)
@@ -18464,7 +18522,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                     }
                     // Chevron: rotate the existing > into V with the same
                     // 160 ms EaseOutCubic transition used by TreeView.
-                    float scale = (float)g_Dpi / 96.f;
+                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
                     float cx = fw / 2.f, cy = fh / 2.f;
                     float al = std::min(fw, fh) * 0.2f;
                     D2D1_COLOR_F ac = dark ? D2D1::ColorF(0.85f, 0.85f, 0.85f)
@@ -18634,7 +18692,7 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                 return;
 
             INT   animStyle   = PillAnimStyle();
-            FLOAT scale       = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+            FLOAT scale       = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
             int   itemH       = pRect->bottom - pRect->top;
 
             bool isDCompStyle =
@@ -22626,7 +22684,11 @@ BOOL WINAPI DrawTextExW_hook(HDC hdc, LPWSTR lpchText, INT cchText,
             // on the result would get it wrong with a synthesized TRUE (1).
             // DT_CALCRECT measures without drawing, so this still suppresses
             // the actual native paint (already drawn by our own logic).
-            return DrawTextExW_orig(hdc, lpchText, cchText, lprc,
+            // Measure into a local copy -- the caller issued a drawing call
+            // and doesn't expect DT_CALCRECT to write the measured box back
+            // into its own *lprc.
+            RECT tmp = *lprc;
+            return DrawTextExW_orig(hdc, lpchText, cchText, &tmp,
                 format | DT_CALCRECT, lpdtp);
         }
     }
@@ -25885,7 +25947,11 @@ static void RestoreDarkSysColors()
 
 static constexpr UINT_PTR kPropDlgSubId  = 0xDE02;
 static constexpr UINT_PTR kPropPageSubId = 0xDE03;
-static constexpr UINT_PTR kClassicDlgToolbarSubId = 0xDE04;
+// Marks a window as currently carrying ClassicDlgToolbarSubclassProc, so
+// Wh_ModUninit's RemoveSubclassesFromWindow sweep knows to remove it
+// without unconditionally messaging every enumerated window.
+static constexpr LPCWSTR kClassicDlgToolbarSubclassProp =
+    L"WH_MW_CLASSIC_DLG_TOOLBAR_SUB";
 static constexpr wchar_t kPropDarkWindowApplied[] = L"_W32M_DarkWindowApplied";
 static HBRUSH g_propDkPaneBrush = nullptr;   // inner pane / controls
 static HBRUSH g_propDlgOriginalClassBrush = nullptr; // borrowed class brush
@@ -27005,11 +27071,12 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
 }
 
 static LRESULT CALLBACK ClassicDlgToolbarSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
-    UINT_PTR uIdSubclass, DWORD_PTR)
+    DWORD_PTR)
 {
     if (msg == WM_NCDESTROY) {
         TravelBandFontCachesClear();
-        RemoveWindowSubclass(hwnd, ClassicDlgToolbarSubclassProc, uIdSubclass);
+        RemovePropW(hwnd, kClassicDlgToolbarSubclassProp);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClassicDlgToolbarSubclassProc);
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
     if (msg == WM_NOTIFY) {
@@ -27548,8 +27615,10 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
     // the IsCustomDarkModeAllowed() block below (which PropApplyDarkMode
     // and everything else #32770-related sits in, and never runs in light
     // mode since PropApplyDarkMode itself bails when !IsSystemDarkMode()).
-    if (g_settings.LegacyRebarControls && _wcsicmp(cls, L"#32770") == 0)
-        SetWindowSubclass(hwnd, ClassicDlgToolbarSubclassProc, kClassicDlgToolbarSubId, 0);
+    if (g_settings.LegacyRebarControls && _wcsicmp(cls, L"#32770") == 0 &&
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ClassicDlgToolbarSubclassProc, 0))
+        SetPropW(hwnd, kClassicDlgToolbarSubclassProp, (HANDLE)1);
 
     if (IsCustomDarkModeAllowed() && _wcsicmp(cls, L"FontViewWClass") == 0) {
         if (!g_propDkBgBrush)
@@ -27993,6 +28062,24 @@ static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
     }
     TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_HASLINES_ORIG, TVS_HASLINES);
     TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_NOTOOLTIPS_ORIG, TVS_NOTOOLTIPS);
+    // These three are installed with raw SetWindowSubclass and previously
+    // only removed themselves in their own WM_NCDESTROY -- if the mod is
+    // disabled while such a window is still alive (e.g. Explorer's nav pane
+    // is long-lived, so TreeCursorSubclassProc is essentially always
+    // installed), the subclass proc stayed in comctl32's chain after the
+    // DLL unloaded, and the next message dispatched into freed memory.
+    if (GetPropW(hwnd, kTreeCursorSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc);
+        RemovePropW(hwnd, kTreeCursorSubclassProp);
+    }
+    if (GetPropW(hwnd, kSplitButtonChevronSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SplitButtonChevronSubclassProc);
+        RemovePropW(hwnd, kSplitButtonChevronSubclassProp);
+    }
+    if (GetPropW(hwnd, kClassicDlgToolbarSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClassicDlgToolbarSubclassProc);
+        RemovePropW(hwnd, kClassicDlgToolbarSubclassProp);
+    }
     return TRUE;
 }
 
@@ -28070,7 +28157,7 @@ static Settings LoadSettings()
     next.AnimatedArrows   = Wh_GetIntSetting(L"TreeViewSection.AnimatedArrows");
     {
         auto s = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TreeViewSection.InsertMarkColor"));
-        next.InsertMarkUseAccent = !s || _wcsicmp(s, L"accent") == 0;
+        next.InsertMarkUseAccent = _wcsicmp(s, L"accent") == 0;
         if (!next.InsertMarkUseAccent && wcslen(s) == 6) {
             DWORD v = wcstoul(s, nullptr, 16);
             next.InsertMarkClr = RGB((v>>16)&0xFF, (v>>8)&0xFF, v&0xFF);
@@ -28082,7 +28169,7 @@ static Settings LoadSettings()
         // ModernFocusRect is a string enum: "modern"=0, "hidden"=1
         auto sv = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"GeneralSection.ModernFocusRect"));
         const wchar_t* sp = sv;
-        if (!sp || wcscmp(sp, L"modern") == 0) next.ModernFocusRect = 0;
+        if (wcscmp(sp, L"modern") == 0) next.ModernFocusRect = 0;
         else if (wcscmp(sp, L"hidden") == 0)    next.ModernFocusRect = 1;
         else                                     next.ModernFocusRect = 0;
     }
@@ -28114,7 +28201,7 @@ static Settings LoadSettings()
     {
         LPCWSTR hex = Wh_GetStringSetting(L"GeneralSection.CustomAccentColor");
         next.CustomAccentColor = 0;
-        if (hex && hex[0] == L'#' && wcslen(hex) == 7) {
+        if (hex[0] == L'#' && wcslen(hex) == 7) {
             unsigned r = 0, g = 0, b = 0;
             if (swscanf(hex + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.CustomAccentColor = RGB(r, g, b);
@@ -28139,11 +28226,11 @@ static Settings LoadSettings()
         // NavPillStyle is a string enum: "none"=0, "expand"=1, "fade"=2, "slide"=3, "winui_top"=4
         auto sv = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.NavPillStyle"));
         const wchar_t* sp = sv;
-        if      (!sp || wcscmp(sp, L"winui_top") == 0) next.NavPillStyle = 4;
-        else if (wcscmp(sp, L"slide")    == 0)          next.NavPillStyle = 3;
-        else if (wcscmp(sp, L"fade")     == 0)          next.NavPillStyle = 2;
-        else if (wcscmp(sp, L"expand")   == 0)          next.NavPillStyle = 1;
-        else                                             next.NavPillStyle = 0; // "none"
+        if      (wcscmp(sp, L"winui_top") == 0) next.NavPillStyle = 4;
+        else if (wcscmp(sp, L"slide")     == 0) next.NavPillStyle = 3;
+        else if (wcscmp(sp, L"fade")      == 0) next.NavPillStyle = 2;
+        else if (wcscmp(sp, L"expand")    == 0) next.NavPillStyle = 1;
+        else                                    next.NavPillStyle = 0; // "none"
     }
     next.NavPillGradient      = Wh_GetIntSetting(L"ExplorerSection.NavPillGradient");
     next.AccentButtonGradient = Wh_GetIntSetting(L"ExplorerSection.AccentButtonGradient");
@@ -28153,12 +28240,12 @@ static Settings LoadSettings()
     next.FluentPinIcon        = Wh_GetIntSetting(L"ExplorerSection.FluentPinIcon");
     {
         LPCWSTR pinSty = Wh_GetStringSetting(L"ExplorerSection.PinIconStyle");
-        next.PinIconStyle = (pinSty && wcscmp(pinSty, L"filled") == 0) ? 1 : 0;
+        next.PinIconStyle = (wcscmp(pinSty, L"filled") == 0) ? 1 : 0;
         Wh_FreeStringSetting(pinSty);
     }
     {
         LPCWSTR pinClr = Wh_GetStringSetting(L"ExplorerSection.PinIconColor");
-        next.PinIconColor = (pinClr && wcscmp(pinClr, L"accent") == 0) ? 1 : 0;
+        next.PinIconColor = (wcscmp(pinClr, L"accent") == 0) ? 1 : 0;
         Wh_FreeStringSetting(pinClr);
     }
     next.PinMarginRight = std::clamp(Wh_GetIntSetting(L"ExplorerSection.PinMarginRight"), 0, 32);
@@ -28166,11 +28253,11 @@ static Settings LoadSettings()
         auto mode = WindhawkUtils::StringSetting(
             Wh_GetStringSetting(L"ExplorerSection.GlyphIcons"));
         const wchar_t* value = mode;
-        if (value && wcscmp(value, L"static") == 0)
+        if (wcscmp(value, L"static") == 0)
             next.GlyphIconMode = 1;
-        else if (value && wcscmp(value, L"gpu") == 0)
+        else if (wcscmp(value, L"gpu") == 0)
             next.GlyphIconMode = 2;
-        else if (value && wcscmp(value, L"native") == 0)
+        else if (wcscmp(value, L"native") == 0)
             next.GlyphIconMode = 3;
         else
             next.GlyphIconMode = 0;
@@ -28181,7 +28268,7 @@ static Settings LoadSettings()
     {
         const wchar_t* s = Wh_GetStringSetting(L"ExplorerSection.GlyphColor");
         next.GlyphColor = CLR_INVALID;
-        if (s && s[0] == L'#' && wcslen(s) == 7) {
+        if (s[0] == L'#' && wcslen(s) == 7) {
             unsigned r, g, b;
             if (swscanf_s(s + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.GlyphColor = RGB(r, g, b);
@@ -37020,8 +37107,21 @@ BOOL Wh_ModInit()
         HMODULE hDui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hDui) {
             // dui70.dll
+            // On x86, a non-static, non-explicitly-annotated C++ member
+            // function defaults to __thiscall, not __stdcall -- DUI_SSTDCALL
+            // is only confirmed correct on x64 (where it resolves to
+            // __cdecl, matching the unified x64 convention). Listing both
+            // the __stdcall and __thiscall forms here means whichever one
+            // the real 32-bit dui70.dll PDB actually uses still resolves,
+            // instead of this hook silently never installing on x86 if the
+            // assumption was wrong.
             WindhawkUtils::SYMBOL_HOOK duiHook = {
-                {L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
+                {
+                    L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)",
+#ifndef _WIN64
+                    L"public: void __thiscall DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)",
+#endif
+                },
                 (void**)&DuiElement_PaintBg_orig,
                 (void*)DuiElement_PaintBg_hook,
                 false
@@ -37354,6 +37454,7 @@ void Wh_ModUninit()
     // Remove all treeview insertion-mark subclasses
     EnumWindows(EnumWindowsRemoveSubclasses, 0);
     SetPropertyDialogClassBrush(false);
+    // g_navDividerUnloading was already set at the very top of this function.
     NavDividerClearAll();
 
     // Remove ComboBox DWM subclasses
@@ -37385,7 +37486,18 @@ void Wh_ModUninit()
             Wh_Log(L"[AutoPlay] Resources retained for quarantined replacement");
     }
 
-    {
+    // Only safe to take g_pillDCMutex unconditionally if the pill thread
+    // actually joined above: it holds this mutex for the whole duration of
+    // its GPU draw/commit (see PillDCompDrawFrame_Locked's callers), so in
+    // exactly the stuck-driver/TDR scenario the bounded 500ms join was
+    // written for, the thread is wedged WHILE HOLDING it -- an unconditional
+    // lock_guard here would then block Wh_ModUninit forever, defeating the
+    // whole point of that bound. If pillThreadJoined is true, the thread has
+    // fully returned (all its local lock_guards already destructed), so the
+    // mutex is provably uncontended and this acquire is instant. If false,
+    // skip and leak the DComp device -- consistent with leaking the thread
+    // handle itself a few lines above for the same reason.
+    if (pillThreadJoined) {
         std::lock_guard<std::mutex> lk(g_pillDCMutex);
         PillDCompRelease_Locked();
     }
