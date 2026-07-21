@@ -28381,12 +28381,16 @@ static void InitCallWndHooks_Cleanup()
 }
 
 // -- DirectUI Element::PaintBackground hook --
+// x86 confirmed via a real 32-bit dui70.dll symbol dump (Windhawk Symbol
+// Helper against C:\Windows\SysWOW64\dui70.dll): __thiscall, matching the
+// default calling convention for a non-static C++ member function that
+// isn't explicitly annotated otherwise -- not __stdcall.
 #ifdef _WIN64
 #define DUI_STDCALL __cdecl
 #define DUI_SSTDCALL L"__cdecl"
 #else
-#define DUI_STDCALL __stdcall
-#define DUI_SSTDCALL L"__stdcall"
+#define DUI_STDCALL __thiscall
+#define DUI_SSTDCALL L"__thiscall"
 #endif
 
 typedef VOID(DUI_STDCALL *DuiElement_PaintBg_t)(
@@ -37107,21 +37111,8 @@ BOOL Wh_ModInit()
         HMODULE hDui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hDui) {
             // dui70.dll
-            // On x86, a non-static, non-explicitly-annotated C++ member
-            // function defaults to __thiscall, not __stdcall -- DUI_SSTDCALL
-            // is only confirmed correct on x64 (where it resolves to
-            // __cdecl, matching the unified x64 convention). Listing both
-            // the __stdcall and __thiscall forms here means whichever one
-            // the real 32-bit dui70.dll PDB actually uses still resolves,
-            // instead of this hook silently never installing on x86 if the
-            // assumption was wrong.
             WindhawkUtils::SYMBOL_HOOK dui70dllHooks = {
-                {
-                    L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)",
-#ifndef _WIN64
-                    L"public: void __thiscall DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)",
-#endif
-                },
+                {L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
                 (void**)&DuiElement_PaintBg_orig,
                 (void*)DuiElement_PaintBg_hook,
                 false
