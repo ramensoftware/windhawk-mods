@@ -37115,7 +37115,7 @@ BOOL Wh_ModInit()
             // the real 32-bit dui70.dll PDB actually uses still resolves,
             // instead of this hook silently never installing on x86 if the
             // assumption was wrong.
-            WindhawkUtils::SYMBOL_HOOK duiHook = {
+            WindhawkUtils::SYMBOL_HOOK dui70dllHooks = {
                 {
                     L"public: void " DUI_SSTDCALL L" DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)",
 #ifndef _WIN64
@@ -37126,7 +37126,7 @@ BOOL Wh_ModInit()
                 (void*)DuiElement_PaintBg_hook,
                 false
             };
-            WindhawkUtils::HookSymbols(hDui, &duiHook, 1);
+            WindhawkUtils::HookSymbols(hDui, &dui70dllHooks, 1);
         }
     }
 
