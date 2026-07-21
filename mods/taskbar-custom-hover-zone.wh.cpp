@@ -2,12 +2,27 @@
 // @id              taskbar-custom-hover-zone
 // @name            Taskbar Custom Hover Zone
 // @description     Only unhide the auto-hidden taskbar when the mouse enters a custom-defined region of the bottom edge.
-// @version         1.1
+// @version         1.0
 // @author          RiverMountain Yoo
+// @github          https://github.com/ksryou3224926-jpg
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Taskbar Custom Hover Zone
+
+Restricts the active mouse trigger area for Windows **Taskbar Auto-Hide** to a customizable central region of the screen edge.
+
+### Features
+* **Customizable Trigger Zone:** Set the start and end percentages of the screen width allowed to trigger the taskbar.
+* **Accidental Trigger Prevention:** Avoids taskbar pop-ups near corners while using scrollbars or full-screen apps.
+* **Windows 10 & 11 Support:** Compatible with both legacy Win32 taskbar timers and modern Windows 11 XAML-based `ViewCoordinator`.
+* **Multi-Monitor Support:** Automatically adapts to active monitor resolution bounds.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
@@ -29,7 +44,7 @@ struct {
     int edgeMarginPx;
 } g_settings;
 
-// 상수 정의 (Windows 기본 작업 표시줄 Unhide 타이머 ID)
+// Standard Windows Taskbar Unhide Timer ID
 enum {
     kTrayUITimerUnhide = 3,
 };
@@ -48,7 +63,7 @@ void LoadSettings() {
     if (g_settings.edgeMarginPx < 1) g_settings.edgeMarginPx = 1;
 }
 
-// 현재 마우스가 지정한 하단 중앙 영역 내부인지 검사
+// Check if current mouse position is within custom trigger bounds
 bool IsCursorInCustomZone() {
     POINT pt;
     if (!GetCursorPos(&pt)) return true;
@@ -71,29 +86,29 @@ bool IsCursorInCustomZone() {
     return inX && inY;
 }
 
-// --- Windows 10 / 구형 작업 표시줄 제어 (SetTimer 후킹) ---
+// --- Windows 10 / Legacy Taskbar Control (SetTimer Hook) ---
 using SetTimer_t = decltype(&SetTimer);
 SetTimer_t SetTimer_Original;
 UINT_PTR WINAPI SetTimer_Hook(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc) {
     if (nIDEvent == kTrayUITimerUnhide) {
         if (!IsCursorInCustomZone()) {
             Wh_Log(L"[Win10] Cursor outside custom zone, blocking unhide timer");
-            return 1; // 타이머 실행 차단
+            return 1;
         }
     }
     return SetTimer_Original(hWnd, nIDEvent, uElapse, lpTimerFunc);
 }
 
-// --- Windows 11 신형 작업 표시줄 제어 (ViewCoordinator 후킹) ---
+// --- Windows 11 Modern Taskbar Control (ViewCoordinator Hook) ---
 using ViewCoordinator_UpdateIsExpanded_t = void(WINAPI*)(void* pThis, HWND hMMTaskbarWnd, int reason);
 ViewCoordinator_UpdateIsExpanded_t ViewCoordinator_UpdateIsExpanded_Original;
 
 void WINAPI ViewCoordinator_UpdateIsExpanded_Hook(void* pThis, HWND hMMTaskbarWnd, int reason) {
-    // 7: PointerOverChanged, 8: ScreenEdgeStrokePointerEntered (마우스 호버 관련 이벤트)
+    // 7: PointerOverChanged, 8: ScreenEdgeStrokePointerEntered
     if (reason == 7 || reason == 8) {
         if (!IsCursorInCustomZone()) {
             Wh_Log(L"[Win11] Cursor outside custom zone, blocking Taskbar expansion");
-            return; // 작업 표시줄 확장(Unhide) 차단
+            return;
         }
     }
     ViewCoordinator_UpdateIsExpanded_Original(pThis, hMMTaskbarWnd, reason);
@@ -103,17 +118,18 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Taskbar Custom Hover Zone: ModInit");
     LoadSettings();
 
-    // 1. Win32 SetTimer API 후킹 (Win10 및 기본 시스템 호버 차단)
+    // 1. Hook Win32 SetTimer API
     WindhawkUtils::SetFunctionHook(SetTimer, SetTimer_Hook, &SetTimer_Original);
 
-    // 2. Windows 11 Taskbar.View.dll 심볼 후킹
+    // 2. Hook Windows 11 Taskbar.View.dll Symbols
     HMODULE taskbarViewModule = GetModuleHandle(L"Taskbar.View.dll");
     if (!taskbarViewModule) {
         taskbarViewModule = GetModuleHandle(L"ExplorerExtensions.dll");
     }
 
     if (taskbarViewModule) {
-        WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        // Taskbar.View.dll, ExplorerExtensions.dll
+        WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
             {
                 {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))"},
                 &ViewCoordinator_UpdateIsExpanded_Original,
@@ -121,7 +137,7 @@ BOOL Wh_ModInit() {
             }
         };
 
-        if (WindhawkUtils::HookSymbols(taskbarViewModule, symbolHooks, 1)) {
+        if (WindhawkUtils::HookSymbols(taskbarViewModule, taskbarViewDllHooks, 1)) {
             Wh_Log(L"Successfully hooked Taskbar.View.dll ViewCoordinator");
         } else {
             Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
