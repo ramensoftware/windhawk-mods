@@ -8,7 +8,7 @@
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
 // @license         MIT
-// @compilerOptions -lbluetoothapis -lbthprops -lsetupapi -lcfgmgr32 -lgdi32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lcomdlg32 -ffp-exception-behavior=maytrap
+// @compilerOptions -lbluetoothapis -lbthprops -lsetupapi -lcfgmgr32 -lgdi32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lcomdlg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
