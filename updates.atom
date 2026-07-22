@@ -2,12 +2,73 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-22T09:34:18.000Z</updated>
+    <updated>2026-07-22T13:45:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[BT Battery Monitor 1.0.0]]></title>
+        <id>https://windhawk.net/mods/bt-battery-monitor#93e8be7ddb883a9fa154bf1d50a23dd6f9ecab59</id>
+        <link href="https://windhawk.net/mods/bt-battery-monitor"/>
+        <updated>2026-07-22T13:45:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="btbatterymonitor">BT Battery Monitor</h1>
+<p>See every connected Bluetooth device's battery level right in your system tray — no more digging into Bluetooth settings to find out which keyboard or mouse needs charging.</p>
+<blockquote>
+  <p>Works great alongside <strong><a href="https://windhawk.net/mods/audioswap">AudioSwap</a></strong> and <strong><a href="https://windhawk.net/mods/microswap">MicSwitch</a></strong> — companion mods that bring the same tray experience to audio output and microphone control.</p>
+</blockquote>
+<p><img src="https://i.imgur.com/QDHrOTO.png" alt="Controller connected" /></p>
+<p><img src="https://i.imgur.com/GWzrttu.png" alt="Right-click menu" /></p>
+<hr />
+<h2 id="howtouse">How to Use</h2>
+<ol>
+<li><strong>Open Settings</strong> — Right-click the tray icon and select <strong>Mod Settings</strong> to open the configuration dashboard.</li>
+<li><strong>Set Polling Interval</strong> — Choose how often to scan for battery updates (default: 10 seconds).</li>
+<li><strong>Set Warning Threshold</strong> — Pick the battery percentage that triggers the red/black flashing icon.</li>
+<li><strong>Choose Icons</strong> — Pick a preset icon per device type, or click <strong>Browse…</strong> to load a custom <code>.ico</code> file.</li>
+<li>Click <strong>Save and Apply</strong> — the tray icon updates immediately, no restart needed.</li>
+</ol>
+<h3 id="leftclicktorescan">Left-click to rescan</h3>
+<p>Left-click the tray icon to trigger an immediate Bluetooth rescan. Use it when you've just paired or disconnected a device and want the battery readout to refresh without waiting for the next polling interval.</p>
+<h3 id="rightclickdevicelist">Right-click device list</h3>
+<p>Right-click the tray icon to see every connected Bluetooth device with its battery percentage, rescan immediately, or open Bluetooth Settings.</p>
+<h3 id="lowbatterywarning">Low Battery Warning</h3>
+<p>When any connected device drops below the configured threshold (default 30%), the tray icon starts alternating between solid red and black every second. Hover over the icon to see which device is running low and exactly how much juice it has left.</p>
+<h3 id="deviceicons">Device Icons</h3>
+<p>The mod detects device types automatically and lets you pick a different icon for each:</p>
+<ul>
+<li><strong>Keyboard</strong>, <strong>Mouse</strong>, <strong>Headphones</strong>, <strong>Controller</strong> — each gets its own icon so you can tell them apart instantly.</li>
+<li><strong>Multiple Devices</strong> — shown when more than one device is connected.</li>
+<li><strong>No Connected Devices</strong> — a clear visual indicator that nothing's paired.</li>
+</ul>
+<h3 id="pollinginterval">Polling Interval</h3>
+<p>Pick how often the mod checks for updates, from <strong>every second</strong> to <strong>once an hour</strong> (default: 10 seconds). Quick polling keeps the battery readout fresh, while slower polling saves a tiny bit of CPU.</p>
+<hr />
+<h2 id="knownbugs">Known Bugs</h2>
+<ul>
+<li><strong>Bluetooth devices that don't report battery</strong>: Some older Bluetooth peripherals simply don't broadcast battery info — the mod can't show what the hardware doesn't tell it. Check your device specs to see if battery reporting is supported.</li>
+</ul>
+<hr />
+<h2 id="changelog">Changelog</h2>
+<h1 id="100">1.0.0</h1>
+<ul>
+<li><strong>New:</strong> Tray icon shows battery percentage for every connected Bluetooth device — keyboard, mouse, headphones, controller, you name it.</li>
+<li><strong>New:</strong> Left-click triggers an immediate Bluetooth rescan to refresh battery readouts.</li>
+<li><strong>New:</strong> Low battery warning — tray icon flashes red and black when any device drops below your threshold.</li>
+<li><strong>New:</strong> Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.</li>
+<li><strong>New:</strong> Configurable polling interval (1s–1h) and warning threshold (0–50%).</li>
+<li><strong>New:</strong> Automatic Bluetooth rescan on device arrival/removal — no manual refresh needed.</li>
+<li><strong>New:</strong> Right-click → Bluetooth Settings shortcut for quick pairing.</li>
+<li><strong>New:</strong> Choose preset icons from <code>ddores.dll</code> per device type or browse for custom <code>.ico</code> files.</li>
+<li><strong>New:</strong> Clean tray icon identity — independent from Windhawk, no taskbar grouping issues.</li>
+<li><strong>New:</strong> Safe tool mod — runs in a dedicated <code>windhawk.exe</code> child process, no Explorer injection needed.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Energy Saver Power Plan Link 1.0.0]]></title>
         <id>https://windhawk.net/mods/energy-saver-power-plan-link#18615a32f83d3bcde2a32bd7ef648021b8100cc5</id>
@@ -421,22 +482,6 @@ selection colors are never touched.</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MicSwitch 2.0.1]]></title>
-        <id>https://windhawk.net/mods/microswap#99c8afb62c5af3264f20deea6408b8475a079c9d</id>
-        <link href="https://windhawk.net/mods/microswap"/>
-        <updated>2026-07-17T00:43:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>New:</strong> Persistent Mute toggle in dashboard settings. When checked, mute state survives device cycles (USB replug, sleep/wake, driver resets).</li>
-<li><strong>Fixed:</strong> Persistent mute now survives device cycling — mute is re-applied to the newly defaulted device after switching.</li>
-<li><strong>Fixed:</strong> Tray icon red-dot overlay updates after persistent re-muting.</li>
-<li><strong>Fixed:</strong> "Persistent Mute" checkbox text now renders correctly on the dark dashboard.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

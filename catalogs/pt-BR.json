@@ -887,6 +887,36 @@
         "version": "1.2.0"
       }
     },
+    "bt-battery-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784727959000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784727959000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "BlackPaw",
+        "compilerOptions": "-lbluetoothapis -lbthprops -lsetupapi -lcfgmgr32 -lgdi32 -luser32 -lshell32 -lole32 -luuid -lcomctl32 -lcomdlg32",
+        "description": "Shows Bluetooth device battery levels in the system tray with battery overview",
+        "donateUrl": "https://ko-fi.com/blackpaw21",
+        "github": "https://github.com/BlackPaw21",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "BT Battery Monitor",
+        "version": "1.0.0"
+      }
+    },
     "caffeine": {
       "details": {
         "defaultSorting": 8316,
