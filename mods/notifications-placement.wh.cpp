@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.2.2
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -366,7 +366,7 @@ bool IsTargetCoreWindow(HWND hWnd) {
         L"Ný tilkynning", // IS-IS
         L"ახალი შეტყობინება", // KA-GE
         L"Жаңа хабарландыру", // KK-KZ
-        L"ការ​ជូន​ដំណឹង​ថ្មី", // KM-KH
+        L"ការ\u200bជូន\u200bដំណឹង\u200bថ្មី", // KM-KH
         L"ಹೊಸ ಪ್ರಕಟಣೆ", // KN-IN
         L"नवी अधिसुचोवणी", // KOK-IN
         L"Nei Notifikatioun", // LB-LU
@@ -736,20 +736,32 @@ void UpdateAnimationDirectionStyle() {
             return false;  // continue enumeration
         }
 
-        FrameworkElement revealGrid2 =
-            FindChildByName(mainGrid, L"RevealGrid2");
-        if (!revealGrid2) {
-            return false;  // continue enumeration
+        if (FrameworkElement revealGrid =
+                FindChildByName(mainGrid, L"RevealGrid")) {
+            Wh_Log(L"Applying transform to toast view %s", name.c_str());
+
+            Media::RotateTransform transform;
+            transform.Angle(-angle);
+            revealGrid.RenderTransform(transform);
+            revealGrid.RenderTransformOrigin(origin);
+
+            foundAnyRootGridContent = true;
         }
 
-        Wh_Log(L"Applying transform to toast view %s", name.c_str());
+        // Older Windows 11 versions have both RevealGrid and RevealGrid2
+        // (before ~Jul 2026). Newer builds only have RevealGrid.
+        if (FrameworkElement revealGrid2 =
+                FindChildByName(mainGrid, L"RevealGrid2")) {
+            Wh_Log(L"Applying transform to toast view %s", name.c_str());
 
-        Media::RotateTransform transform;
-        transform.Angle(-angle);
-        revealGrid2.RenderTransform(transform);
-        revealGrid2.RenderTransformOrigin(origin);
+            Media::RotateTransform transform;
+            transform.Angle(-angle);
+            revealGrid2.RenderTransform(transform);
+            revealGrid2.RenderTransformOrigin(origin);
 
-        foundAnyRootGridContent = true;
+            foundAnyRootGridContent = true;
+        }
+
         return false;  // continue enumeration to find all matching children
     });
 
@@ -927,7 +939,7 @@ BOOL Wh_ModInit() {
         case 0:
         case ARRAYSIZE(moduleFilePath):
             Wh_Log(L"GetModuleFileName failed");
-            break;
+            return FALSE;
 
         default:
             if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
@@ -937,6 +949,7 @@ BOOL Wh_ModInit() {
                 }
             } else {
                 Wh_Log(L"GetModuleFileName returned an unsupported path");
+                return FALSE;
             }
             break;
     }
@@ -949,9 +962,8 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        WindhawkUtils::Wh_SetFunctionHookT(MonitorFromPoint,
-                                           MonitorFromPoint_Hook,
-                                           &MonitorFromPoint_Original);
+        WindhawkUtils::SetFunctionHook(MonitorFromPoint, MonitorFromPoint_Hook,
+                                       &MonitorFromPoint_Original);
     }
 
     return TRUE;
