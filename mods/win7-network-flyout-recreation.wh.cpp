@@ -8,7 +8,7 @@
 // @include        explorer.exe
 // @include        control.exe
 // @architecture   x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -finput-charset=UTF-8 -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
