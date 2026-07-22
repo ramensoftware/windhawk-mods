@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), with a workaround hotkey for other file managers
-// @version         2.2
+// @version         2.5
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -38,6 +38,14 @@ with four options for moving the selection into a new subfolder:
    segment follows the reuse/numbering rule above. Each segment is sanitized
    individually, and empty segments (leading, trailing, or doubled separators)
    are ignored.
+
+   Two optional aids for building nested paths (both on by default, each has
+   its own settings toggle):
+   - A small **preview line** under the box shows the typed name split into
+     its segments, e.g. typing `archive/incoming` shows `archive › incoming`
+     as you type.
+   - A **+** button next to the box appends a `\` and refocuses the box, so
+     you can build a path by clicking instead of typing `/` or `\` yourself.
 2. Move each file into a subfolder named after the file (without extension):
    `Good.bat` -> `.\Good\Good.bat`. With a single file selected, this just
    creates one folder around that file.
@@ -88,6 +96,16 @@ The **Operation** setting controls what happens to the selection:
 In copy mode the dialog options say "Copy" rather than "Move", so you can tell
 the configured operation at a glance.
 
+The dialog also has an **Operation** segmented control above the mode list —
+three buttons glued together (**Move - fast** / **Move - safe** / **Copy**),
+the active one shown pressed/held down. Picking one changes the operation for
+just this one run, without touching the **Operation** setting — handy for a
+one-off copy, or a one-off progress-bar/undo-capable move, without changing
+your default. It relabels the mode list immediately (Move ↔ Copy) and
+doesn't persist: the next time the dialog opens it starts from the
+configured **Operation** again. Silent mode has no dialog, so it always uses
+the configured **Operation** as-is.
+
 ## Workaround for other programs
 A configurable global hotkey (default **Ctrl+Alt+F**) makes the mod usable
 from any file manager (Total Commander, Directory Opus, Files, XYplorer,
@@ -137,6 +155,16 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
     On (default): in "Fixed name" mode, if a folder of that name already exists, files are moved into it (e.g. everything goes into "archive").
     Off: a new numbered folder is created instead ("archive", "archive (2)", "archive (3)"…), the way Explorer numbers duplicates.
     Only affects the "Fixed name" mode. "By date" always creates a new numbered folder; "by name"/"by extension" always reuse.
+- showNestedPreview: true
+  $name: "Fixed name: show nested-folder preview"
+  $description: |-
+    On (default): a small read-only line under the "Fixed name" box shows how the typed name will be split into nested subfolders, e.g. typing "archive/incoming" shows "archive › incoming". Updates live as you type.
+    Off: no preview line.
+- showAddLevelButton: true
+  $name: "Fixed name: show \"Add level\" button"
+  $description: |-
+    On (default): a small button next to the "Fixed name" box appends a "\" separator and refocuses the box, so you can build a nested path (e.g. archive\2024\incoming) by clicking instead of typing "/" or "\" yourself.
+    Off: no button; the box still accepts "/" or "\" typed directly.
 - defaultMode: fixed
   $name: "Default selected mode"
   $description: "Which radio button is pre-selected when the dialog opens."
@@ -244,6 +272,13 @@ Forbidden characters in folder names (`* : ? " < > | / \`) are replaced with
 #include <vector>
 #include <algorithm>
 
+// Not pulled in by this toolchain's <windows.h>/<winuser.h> headers even
+// though it's a long-standing documented static-control style; define it
+// directly rather than bumping WINVER (which the PR validator disallows).
+#ifndef SS_END_ELLIPSIS
+#define SS_END_ELLIPSIS 0x00004000L
+#endif
+
 // ============================================================
 //  Localized strings from shell32.dll
 //
@@ -329,6 +364,8 @@ static F2FOperation OperationFromKey(const std::wstring& key) {
 struct ModSettings {
     std::wstring defaultSubfolderName;
     bool fixedNameReuse;
+    bool showNestedPreview;
+    bool showAddLevelButton;
     std::wstring dateFormat;
     int defaultMode;
     int operation;
@@ -354,6 +391,8 @@ static void LoadSettings() {
     if (s) Wh_FreeStringSetting(s);
 
     g_settings.fixedNameReuse = Wh_GetIntSetting(L"fixedNameReuse") != 0;
+    g_settings.showNestedPreview = Wh_GetIntSetting(L"showNestedPreview") != 0;
+    g_settings.showAddLevelButton = Wh_GetIntSetting(L"showAddLevelButton") != 0;
 
     s = Wh_GetStringSetting(L"dateFormat");
     g_settings.dateFormat = (s && *s) ? s : L"yyyy-MM-dd-HH-mm";
@@ -847,7 +886,8 @@ static void DoFiles2Folder(HWND owner,
                            const std::vector<std::wstring>& items,
                            const std::wstring& fixedName,
                            const std::wstring& dateText,
-                           bool silent)
+                           bool silent,
+                           F2FOperation effectiveOp)
 {
     std::vector<std::pair<std::wstring, std::wstring>> moves;
 
@@ -925,7 +965,7 @@ static void DoFiles2Folder(HWND owner,
 
     // Move - fast goes straight through MoveFileExW; both Move - safe and Copy
     // route through IFileOperation (Copy leaves the originals in place).
-    switch ((F2FOperation)g_settings.operation) {
+    switch (effectiveOp) {
         case F2F_MOVE_SAFE:
             RunItemsShell(owner, moves, /*copy=*/false);
             break;
@@ -1107,7 +1147,10 @@ struct DlgState {
     bool ok;
     bool singleItem;
     size_t itemCount;
-    bool copy;   // true when the operation is Copy (labels read "Copy" not "Move")
+    // Per-run Operation choice, seeded from the configured Operation setting
+    // but freely changeable for this one run via the Operation segmented
+    // control's three buttons, without touching the setting itself.
+    F2FOperation runOp;
 };
 
 // IDs
@@ -1118,6 +1161,11 @@ struct DlgState {
 #define IDC_ED_FIXED   1011
 #define IDC_ED_DATE    1014
 #define IDC_HEADER     1020
+#define IDC_LBL_NESTED_PREVIEW 1021
+#define IDC_BTN_ADD_LEVEL      1024
+#define IDC_OP_MOVE_FAST       1028
+#define IDC_OP_MOVE_SAFE       1029
+#define IDC_OP_COPY            1030
 
 // Per-dialog runtime state. Stored on the heap and reached via
 // GWLP_USERDATA so two dialogs open at once on different threads (a
@@ -1136,6 +1184,71 @@ struct DlgContext {
     COLORREF  editBrushColor = 0;
 };
 
+// Re-renders the radio labels, header, and the Operation group's checked
+// state from s->runOp. Shared by WM_INITDIALOG (initial render) and the
+// operation radios' click handler (live re-render, no dialog rebuild).
+static void ApplyF2FLabels(HWND hDlg, const DlgState* s) {
+    const wchar_t* V = (s->runOp == F2F_COPY) ? L"Copy" : L"Move";
+    WCHAR lbl[160];
+    if (s->singleItem) {
+        SetDlgItemTextW(hDlg, IDC_HEADER,
+            L"You have selected one item.  What would you like to do?");
+        wsprintfW(lbl, L"%s the selected item into a subfolder named:", V);
+        SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
+        wsprintfW(lbl, L"%s the file into a subfolder based on its name", V);
+        SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
+        wsprintfW(lbl, L"%s the file into a subfolder based on its file extension", V);
+        SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
+        wsprintfW(lbl, L"%s the selected item to a date-named subfolder:", V);
+        SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
+    } else {
+        wsprintfW(lbl, L"%s all selected items into a subfolder named:", V);
+        SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
+        wsprintfW(lbl, L"%s each file to an individual subfolder based on its name", V);
+        SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
+        wsprintfW(lbl, L"%s each file to a subfolder based on its file extension", V);
+        SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
+        wsprintfW(lbl, L"%s all selected items to a date-named subfolder:", V);
+        SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
+
+        WCHAR header[128];
+        wsprintfW(header,
+            L"You have selected %u items.  What would you like to do?",
+            (unsigned)s->itemCount);
+        SetDlgItemTextW(hDlg, IDC_HEADER, header);
+    }
+
+    // Operation segmented control: three BS_PUSHLIKE buttons (Move - fast /
+    // Move - safe / Copy) glued together above the mode list. The checked
+    // one renders pressed/held down via the normal radio-check state.
+    int opRb = IDC_OP_MOVE_FAST;
+    switch (s->runOp) {
+        case F2F_MOVE_FAST: opRb = IDC_OP_MOVE_FAST; break;
+        case F2F_MOVE_SAFE: opRb = IDC_OP_MOVE_SAFE; break;
+        case F2F_COPY:       opRb = IDC_OP_COPY;      break;
+    }
+    CheckRadioButton(hDlg, IDC_OP_MOVE_FAST, IDC_OP_COPY, opRb);
+}
+
+// Renders the live nested-folder breadcrumb preview under the "Fixed name"
+// box, e.g. "archive/incoming" -> "archive › incoming". No-op if the
+// preview control wasn't created (showNestedPreview off). Reuses
+// SplitNamePath so the preview always matches exactly what DoFiles2Folder
+// will actually create.
+static void UpdateNestedPreview(HWND hDlg) {
+    HWND hLbl = GetDlgItem(hDlg, IDC_LBL_NESTED_PREVIEW);
+    if (!hLbl) return;
+    WCHAR buf[260] = {};
+    GetDlgItemTextW(hDlg, IDC_ED_FIXED, buf, 260);
+    std::vector<std::wstring> segs = SplitNamePath(buf);
+    std::wstring preview;
+    for (size_t i = 0; i < segs.size(); ++i) {
+        if (i) preview += L" \x203a ";  // "›" single right-pointing angle quote
+        preview += segs[i];
+    }
+    SetWindowTextW(hLbl, preview.c_str());
+}
+
 static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
     auto* ctx = (DlgContext*)GetWindowLongPtrW(hDlg, GWLP_USERDATA);
     // Before WM_INITDIALOG runs (and on any stray late message) the context is
@@ -1152,6 +1265,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowTextW(hDlg, L"Files 2 Folder");
         SetDlgItemTextW(hDlg, IDC_ED_FIXED, s->fixedName.c_str());
         SetDlgItemTextW(hDlg, IDC_ED_DATE, s->dateText.c_str());
+        UpdateNestedPreview(hDlg);
 
         // Apply theme: title bar + child controls + cached brushes for body.
         bool dark = ResolveDarkMode();
@@ -1159,36 +1273,9 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
         ApplyDarkTitleBar(hDlg, dark);
         if (dark) ApplyDarkChildTheme(hDlg);
         // The radio labels describe the layout; the leading verb (Move/Copy)
-        // reflects the configured operation so Copy mode doesn't say "Move".
-        const wchar_t* V = s->copy ? L"Copy" : L"Move";
-        WCHAR lbl[160];
-        if (s->singleItem) {
-            SetDlgItemTextW(hDlg, IDC_HEADER,
-                L"You have selected one item.  What would you like to do?");
-            wsprintfW(lbl, L"%s the selected item into a subfolder named:", V);
-            SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
-            wsprintfW(lbl, L"%s the file into a subfolder based on its name", V);
-            SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
-            wsprintfW(lbl, L"%s the file into a subfolder based on its file extension", V);
-            SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
-            wsprintfW(lbl, L"%s the selected item to a date-named subfolder:", V);
-            SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
-        } else {
-            wsprintfW(lbl, L"%s all selected items into a subfolder named:", V);
-            SetDlgItemTextW(hDlg, IDC_RB_FIXED, lbl);
-            wsprintfW(lbl, L"%s each file to an individual subfolder based on its name", V);
-            SetDlgItemTextW(hDlg, IDC_RB_PERNAME, lbl);
-            wsprintfW(lbl, L"%s each file to a subfolder based on its file extension", V);
-            SetDlgItemTextW(hDlg, IDC_RB_PEREXT, lbl);
-            wsprintfW(lbl, L"%s all selected items to a date-named subfolder:", V);
-            SetDlgItemTextW(hDlg, IDC_RB_DATE, lbl);
-
-            WCHAR header[128];
-            wsprintfW(header,
-                L"You have selected %u items.  What would you like to do?",
-                (unsigned)s->itemCount);
-            SetDlgItemTextW(hDlg, IDC_HEADER, header);
-        }
+        // reflects the Operation group's checked radio (seeded from the
+        // configured operation).
+        ApplyF2FLabels(hDlg, s);
 
         // Both entry points (context-menu command, WM_HOTKEY) already grant
         // this thread foreground rights, so a plain SetForegroundWindow is
@@ -1223,6 +1310,38 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
                 CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_FIXED);
             else if (id == IDC_ED_DATE)
                 CheckRadioButton(hDlg, IDC_RB_FIXED, IDC_RB_DATE, IDC_RB_DATE);
+            return TRUE;
+        }
+        if (id == IDC_ED_FIXED && code == EN_CHANGE) {
+            UpdateNestedPreview(hDlg);
+            return TRUE;
+        }
+        if (id == IDC_BTN_ADD_LEVEL && code == BN_CLICKED) {
+            // Append a "\" separator to the fixed-name box and put the caret
+            // at the end, so the user can keep typing the next path segment
+            // without needing to know "/" or "\" builds a nested path.
+            WCHAR buf[260] = {};
+            GetDlgItemTextW(hDlg, IDC_ED_FIXED, buf, 260);
+            std::wstring cur = buf;
+            if (!cur.empty() && cur.back() != L'\\' && cur.back() != L'/')
+                cur += L'\\';
+            SetDlgItemTextW(hDlg, IDC_ED_FIXED, cur.c_str());
+            HWND hEd = GetDlgItem(hDlg, IDC_ED_FIXED);
+            SetFocus(hEd);
+            SendMessageW(hEd, EM_SETSEL, (WPARAM)cur.size(), (LPARAM)cur.size());
+            UpdateNestedPreview(hDlg);
+            return TRUE;
+        }
+        if ((id == IDC_OP_MOVE_FAST || id == IDC_OP_MOVE_SAFE || id == IDC_OP_COPY)
+            && code == BN_CLICKED)
+        {
+            // Set the per-run Operation from whichever radio was picked and
+            // re-render the mode-radio labels/header. Doesn't touch the
+            // Operation setting — this only affects the current run.
+            s->runOp = (id == IDC_OP_MOVE_FAST) ? F2F_MOVE_FAST
+                     : (id == IDC_OP_MOVE_SAFE) ? F2F_MOVE_SAFE
+                                                  : F2F_COPY;
+            ApplyF2FLabels(hDlg, s);
             return TRUE;
         }
         if (id == IDOK) {
@@ -1341,7 +1460,7 @@ static bool ShowF2FDialog(HWND owner, DlgState& state) {
     size_t cditPos = tpl.size();
     AppendWord(tpl, 0);
     AppendWord(tpl, 30); AppendWord(tpl, 30);   // x, y
-    AppendWord(tpl, 280); AppendWord(tpl, 110); // cx, cy
+    AppendWord(tpl, 280); AppendWord(tpl, 129); // cx, cy
     AppendWord(tpl, 0);   // menu
     AppendWord(tpl, 0);   // class
     AppendStr(tpl, L"Files 2 Folder");          // title
@@ -1365,42 +1484,79 @@ static bool ShowF2FDialog(HWND owner, DlgState& state) {
             L"You have selected multiple items.  What would you like to do?");
     cdit++;
 
-    // Row 1: RB fixed name + edit
+    // Operation segmented control: three BS_PUSHLIKE autoradio buttons glued
+    // together edge-to-edge (no gap, no group box) so they read as one
+    // three-state control. The checked one renders pressed/held down.
+    // Picking one sets the per-run Operation without touching the Operation
+    // setting; ApplyF2FLabels keeps the pressed segment in sync and
+    // re-renders the Move/Copy verb in the mode list below.
+    addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_GROUP | WS_TABSTOP, 0,
+            7, 18, 89, 14, IDC_OP_MOVE_FAST, CLS_BUTTON, L"Move - fast");
+    cdit++;
+    addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
+            96, 18, 89, 14, IDC_OP_MOVE_SAFE, CLS_BUTTON, L"Move - safe");
+    cdit++;
+    addItem(BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_TABSTOP, 0,
+            185, 18, 88, 14, IDC_OP_COPY, CLS_BUTTON, L"Copy");
+    cdit++;
+
+    // Row 1: RB fixed name + edit + "Add level" button (button only added
+    // when showAddLevelButton is on; the edit box widens to fill the gap
+    // when it's off, so there's no dead space either way).
     addItem(BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 0,
-            7, 24, 165, 10, IDC_RB_FIXED, CLS_BUTTON,
+            7, 40, 165, 10, IDC_RB_FIXED, CLS_BUTTON,
             L"Move all selected items into a subfolder named:");
     cdit++;
+    short editW = g_settings.showAddLevelButton ? 78 : 98;
     addItem(ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, 0,
-            175, 22, 98, 12, IDC_ED_FIXED, CLS_EDIT, L"");
+            175, 38, editW, 12, IDC_ED_FIXED, CLS_EDIT, L"");
     cdit++;
+    if (g_settings.showAddLevelButton) {
+        addItem(BS_PUSHBUTTON | WS_TABSTOP, 0,
+                255, 38, 18, 12, IDC_BTN_ADD_LEVEL, CLS_BUTTON, L"+");
+        cdit++;
+    }
+
+    // Nested-folder preview: read-only line under row 1 showing how the
+    // typed "Fixed name" splits into subfolders (e.g. "archive › incoming").
+    // Spans the full row width (like the header) rather than just sitting
+    // under the edit box, and truncates with an ellipsis instead of wrapping
+    // or overlapping row 2 when the path has many segments. Rows 2-4 below
+    // sit at fixed y-coordinates regardless of this setting, so turning it
+    // off just leaves blank space rather than reflowing.
+    if (g_settings.showNestedPreview) {
+        addItem(SS_LEFT | SS_END_ELLIPSIS | SS_NOPREFIX, 0,
+                7, 52, 266, 10, IDC_LBL_NESTED_PREVIEW, CLS_STATIC, L"");
+        cdit++;
+    }
 
     // Row 2: RB per name
     addItem(BS_AUTORADIOBUTTON | WS_TABSTOP, 0,
-            7, 40, 266, 10, IDC_RB_PERNAME, CLS_BUTTON,
+            7, 64, 266, 10, IDC_RB_PERNAME, CLS_BUTTON,
             L"Move each file to an individual subfolder based on its name");
     cdit++;
 
     // Row 3: RB per ext
     addItem(BS_AUTORADIOBUTTON | WS_TABSTOP, 0,
-            7, 54, 266, 10, IDC_RB_PEREXT, CLS_BUTTON,
+            7, 78, 266, 10, IDC_RB_PEREXT, CLS_BUTTON,
             L"Move each file to a subfolder based on its file extension");
     cdit++;
 
     // Row 4: RB date + edit (read-only display)
     addItem(BS_AUTORADIOBUTTON | WS_TABSTOP, 0,
-            7, 70, 165, 10, IDC_RB_DATE, CLS_BUTTON,
+            7, 94, 165, 10, IDC_RB_DATE, CLS_BUTTON,
             L"Move all selected items to a date-named subfolder:");
     cdit++;
     addItem(ES_AUTOHSCROLL | ES_READONLY | WS_BORDER, 0,
-            175, 68, 98, 12, IDC_ED_DATE, CLS_EDIT, L"");
+            175, 92, 98, 12, IDC_ED_DATE, CLS_EDIT, L"");
     cdit++;
 
     // OK / Cancel
     addItem(BS_DEFPUSHBUTTON | WS_TABSTOP, 0,
-            162, 92, 50, 14, IDOK, CLS_BUTTON, L"OK");
+            162, 108, 50, 14, IDOK, CLS_BUTTON, L"OK");
     cdit++;
     addItem(BS_PUSHBUTTON | WS_TABSTOP, 0,
-            220, 92, 50, 14, IDCANCEL, CLS_BUTTON, L"Cancel");
+            220, 108, 50, 14, IDCANCEL, CLS_BUTTON, L"Cancel");
     cdit++;
 
     // Patch cdit
@@ -1425,29 +1581,32 @@ static void RunFiles2Folder(HWND owner,
     if (folder.empty() || items.empty()) return;
 
     // Silent mode (right-click menu only): skip the dialog and move using the
-    // configured defaults.
+    // configured defaults. No dialog means no toggle — use the setting as-is.
     if (silent) {
         F2FMode mode = (F2FMode)g_settings.defaultMode;
         DoFiles2Folder(owner, mode, folder, items,
                        g_settings.defaultSubfolderName,
-                       FormatNow(g_settings.dateFormat), /*silent=*/true);
+                       FormatNow(g_settings.dateFormat), /*silent=*/true,
+                       (F2FOperation)g_settings.operation);
         return;
     }
 
-    // The dialog always opens on the configured "Default selected mode" and
-    // "Default subfolder name" — no session memory of previous choices.
+    // The dialog always opens on the configured "Default selected mode",
+    // "Default subfolder name", and "Operation" — no session memory of
+    // previous choices.
     DlgState state = {};
     state.mode = (F2FMode)g_settings.defaultMode;
     state.fixedName = g_settings.defaultSubfolderName;
     state.dateText = FormatNow(g_settings.dateFormat);
     state.singleItem = (items.size() == 1);
     state.itemCount = items.size();
-    state.copy = ((F2FOperation)g_settings.operation == F2F_COPY);
+    state.runOp = (F2FOperation)g_settings.operation;
 
     if (!ShowF2FDialog(owner, state)) return;
 
     DoFiles2Folder(owner, state.mode, folder, items,
-                   state.fixedName, state.dateText, /*silent=*/false);
+                   state.fixedName, state.dateText, /*silent=*/false,
+                   state.runOp);
 }
 
 // ============================================================

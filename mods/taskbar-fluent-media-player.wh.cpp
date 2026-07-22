@@ -3,7 +3,7 @@
 // @name            Taskbar Fluent Media Player
 // @description     Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
 // @description:ru-RU Taskbar Fluent Media Player — это мод Windhawk, который интегрирует современный медиаплеер в стиле Fluent Design прямо в панель задач Windows 11. Он позволяет управлять музыкой и просматривать информацию о треке без прерывания работы.
-// @version         1.4.0
+// @version         1.5.0
 // @author          Salyts
 // @github          https://github.com/Salyts
 // @include         explorer.exe
@@ -12,25 +12,31 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Fluent Media Player 1.4.0
+# Taskbar Fluent Media Player 1.5.0
 
-**Taskbar Fluent Media Player —** is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.
+**Taskbar Fluent Media Player —** is a Windhawk mod that embeds a fully functional media player directly into your Windows 11 taskbar. No popups, no separate windows — just your music, always one glance away.
 
 ### [> Russian documentation <](https://github.com/Salyts/Taskbar-Fluent-Media-Player/blob/main/README_RU.md)
 
 ![video](https://i.imgur.com/pGFnmiG.gif)
+
 ### Key Features:
-* **Deep Integration —** Place the player in the tray area (left or right of the clock), next to system icons, or in the center of the taskbar.
-* **Fluent UI Effects —** Full support for native Windows 11 materials including **Acrylic**, **Mica**, and **Mica Alt**.
-* **Adaptive Design —** The player can automatically adapt its colors based on the album art or follow the system accent color.
-* **Full Media Control —** Buttons for Play/Pause, Skip, 5-second Seek, Shuffle, and Repeat modes.
-* **Smart Behavior —** Automatically hides the player when no media is playing, when entering full-screen mode, or after a period of inactivity (idle).
-* **Audio Visualizer —** A real-time spectrum visualizer (WASAPI loopback + FFT) with multiple bar shapes (Stereo, Mountain, Mirror, Wave, Breathe), color modes (Solid, Dynamic Album, Gradient, Acrylic, Accent), EQ presets, vertical anchoring, and per-side placement.
+* **Deep Integration —** Place the player anywhere on the taskbar or tray — left/right of the clock, next to system icons, near the Start button, or overlaid on the taskbar edge. 20+ positions to choose from.
+* **Fluent UI Effects —** Native Windows 11 materials: **Acrylic**, **Mica**, **Mica Alt**, blurred album art background, solid color, and gradient — all with per-theme light/dark color support.
+* **Adaptive Colors —** Every color field accepts a `light$dark` pair. Use the album art dominant color or the system accent color as a value for any element.
+* **Full Media Control —** Play/Pause, Previous, Next, Rewind/Forward 5s, Shuffle, and Repeat. Button order is fully configurable — show only what you need.
+* **Right-Click Context Menu —** Repeat and Shuffle each have their own submenu or single-button toggle mode. All items are optional, reorderable.
+* **Session Switching —** Multiple apps playing at once? Switch between media sessions with a dedicated button, a click, or by scrolling the mouse wheel over the album art — no need to open anything.
+* **Audio Visualizer —** Real-time spectrum bars (WASAPI loopback + FFT) with 5 shapes (Stereo, Mountain, Mirror, Wave, Breathe), 5 color modes, 6 EQ presets, and full size/position/sensitivity control.
+* **Smart Behavior —** Auto-hides when there is no media, in full-screen, or after a configurable idle timeout. Shows again the moment playback resumes.
 
 ### Advanced Customization:
-* **Visuals —** Customize fonts (Segoe UI, Aptos, etc.), text sizes, padding, and element transparency.
-* **Album Art —** Adjustable corner radius, source app icon overlay, and pause overlay effects.
-* **Mouse Interactions —** Assign custom actions (Volume control, Track seeking, Session switching) to the mouse wheel, single clicks, or double clicks on different parts of the player.
+* **Layout —** Mirror the entire player layout, set min/max width and height, control margins for each element independently.
+* **Backgrounds —** Gradient angle, color balance, acrylic tint opacity, Mica opacity, and blur strength are all tunable. Corner radius can be set per-corner for the player, buttons, and album art.
+* **Text —** Scrolling titles and artist names in Bounce or Loop mode — with adjustable speed, pause duration at edges, and gap between repeats. Full font control: family, size, weight, style, and character spacing. Custom placeholder text for every state (no title, no artist, no session).
+* **Album Art —** Adjustable size, per-corner radius, source app icon overlay with configurable size and position, pause overlay with adjustable opacity. Custom placeholder glyph (any icon font character) with its own font, size, color, and opacity when no art is available.
+* **Buttons —** Icon style (Segoe Fluent Icons or MDL2 Assets, Outline or Filled), size, spacing, corner radius, color, and opacity — all independent from the context menu icons.
+* **Mouse Interactions —** Bind volume control, track seeking, session switching, opening the context menu, and more to scroll wheel, single click, double click, or middle click — configured separately for the album art area and the rest of the player.
 
 ---
 
@@ -39,7 +45,7 @@
 * **[GR0UD](https://github.com/GR0UD) —** Audio visualizer (capture + FFT engine) ported from his Taskbar Media Player.
 
 ### Report a Bug
-If you encounter any issues, bugs, or have suggestions for new features, please report them on the project's GitHub page:
+If you encounter any issues or have a feature suggestion, please open a report on the project's GitHub page:
 👉 **[Report an Issue on GitHub](https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues)**
 */
 // ==/WindhawkModReadme==
@@ -229,6 +235,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       $description: Select which media control buttons to display and their order. Duplicates are ignored.
       $description:ru-RU: Выберите, какие кнопки управления воспроизведением отображать, а также их порядок. Дубликаты игнорируются.
       $options:
+      - none: Nothing
       - prev: Previous Track
       - play: Play/Pause
       - next: Next Track
@@ -238,6 +245,7 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       - repeat: Toggle Repeat
       - switch_sessions: Switch Sessions
       $options:ru-RU:
+      - none: Ничего
       - prev: Предыдущий трек
       - play: Воспроизведение/Пауза
       - next: Следующий трек
@@ -319,11 +327,11 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
       $name:ru-RU: Столбики (количество промежуток)
       $description: Two values "count gap" — number of bars (1-20) and spacing between them in px.
       $description:ru-RU: Два значения "количество промежуток" — количество столбиков (1-20) и расстояние между ними в пикселях.
-    - vizBarSize: "5 15"
+    - vizBarSize: "5 3"
       $name: Bar size (width height)
       $name:ru-RU: Размер столбика (ширина высота)
-      $description: Two values "width height" — bar width in px and idle (resting) height in %.
-      $description:ru-RU: Два значения "ширина высота" — ширина столбика в пикселях и высота покоя в %.
+      $description: Two values "width height" — bar width in px (0-40) and idle (resting) height in px (0-15). Width 0 hides the bars.
+      $description:ru-RU: Два значения "ширина высота" — ширина столбика в пикселях (0-40) и высота покоя в пикселях (0-15). Ширина 0 скрывает столбики.
     - vizPadding: "0 0"
       $name: Padding (left right)
       $name:ru-RU: Отступы (слева справа)
@@ -943,6 +951,79 @@ If you encounter any issues, bugs, or have suggestions for new features, please 
   $name: Notification Settings
   $name:ru-RU: Настройки уведомлений
 
+- ContextMenuSettings:
+  - contextMenuItems: [repeat, shuffle, forward, rewind, next, prev, switch_sessions, open_app]
+    $name: Context menu items
+    $name:ru-RU: Пункты контекстного меню
+    $description: Select which items to show in the context menu and their order. Duplicates are ignored.
+    $description:ru-RU: Выберите, какие пункты отображать в контекстном меню, и их порядок. Дубликаты игнорируются.
+    $options:
+    - none:             Nothing
+    - repeat:           Repeat
+    - shuffle:          Shuffle
+    - forward:          Forward 5s
+    - rewind:           Rewind 5s
+    - next:             Next Track
+    - prev:             Previous Track
+    - switch_sessions:  Switch Sessions
+    - open_app:         Open media app
+    $options:ru-RU:
+    - none:             Ничего
+    - repeat:           Повтор
+    - shuffle:          Случайный порядок
+    - forward:          Вперёд 5 сек
+    - rewind:           Назад 5 сек
+    - next:             Следующий трек
+    - prev:             Предыдущий трек
+    - switch_sessions:  Переключить сессию
+    - open_app:         Открыть медиаприложение
+  - repeatStyle: "submenu"
+    $name: Repeat style
+    $name:ru-RU: Стиль повтора
+    $options:
+    - "submenu": "Submenu (Repeat off / Repeat all / Repeat one)"
+    - "toggle":  "Toggle (cycle through modes)"
+    $options:ru-RU:
+    - "submenu": "Подменю (Выкл / Все / Один)"
+    - "toggle":  "Переключатель (цикл по режимам)"
+  - shuffleStyle: "toggle"
+    $name: Shuffle style
+    $name:ru-RU: Стиль случайного воспроизведения
+    $options:
+    - "submenu": "Submenu (Shuffle off / Shuffle on)"
+    - "toggle":  "Toggle (single button)"
+    $options:ru-RU:
+    - "submenu": "Подменю (Выкл / Вкл)"
+    - "toggle":  "Переключатель (одна кнопка)"
+  - showOpenWindhawk: true
+    $name: Show "Open Windhawk" button
+    $name:ru-RU: Показывать кнопку «Открыть Windhawk»
+  - contextMenuIconStyle: "as_media_buttons"
+    $name: Context menu icon style
+    $name:ru-RU: Стиль иконок контекстного меню
+    $options:
+    - "as_media_buttons": "Same as Media Buttons"
+    - "fluent_outline":   "Segoe Fluent Icons (Outline)"
+    - "fluent_filled":    "Segoe Fluent Icons (Filled)"
+    - "mdl2_outline":     "Segoe MDL2 Assets (Outline)"
+    - "mdl2_filled":      "Segoe MDL2 Assets (Filled)"
+    $options:ru-RU:
+    - "as_media_buttons": "Как у кнопок управления"
+    - "fluent_outline":   "Segoe Fluent Icons (Контур)"
+    - "fluent_filled":    "Segoe Fluent Icons (Заполненный)"
+    - "mdl2_outline":     "Segoe MDL2 Assets (Контур)"
+    - "mdl2_filled":      "Segoe MDL2 Assets (Заполненный)"
+  - contextMenuIconColor: "0 0 0$255 255 255"
+    $name: Context menu icons color (RGB)
+    $name:ru-RU: Цвет иконок контекстного меню (RGB)
+    $description: "Use '-1 -1 -1' for the system contrast color and '-2 -2 -2' for the album art color. You can also specify two colors separated by a $ symbol (e.g., '0 0 0$255 255 255') where the first color is for light theme and the second for dark theme. Leave empty to use the Media Buttons color."
+    $description:ru-RU: "Используйте '-1 -1 -1' для системного контрастного цвета, '-2 -2 -2' — для цвета обложки альбома. Также можно указать два цвета через $ (например, '0 0 0$255 255 255'). Оставьте пустым, чтобы использовать цвет кнопок управления."
+  - contextMenuIconOpacity: 100
+    $name: Context menu icons opacity (0-100)
+    $name:ru-RU: Прозрачность иконок контекстного меню (0-100)
+  $name: Context Menu Settings
+  $name:ru-RU: Настройки контекстного меню
+
 - DebugSettings:
   - ignoredProcesses: ""
     $name: Ignore media from processes (separate with ; )
@@ -1159,6 +1240,13 @@ struct ModSettings {
     bool         showSuccessNotification = false;
     bool         hideUnsupportedButtons  = false;
     bool         disableAlbumArtClick    = false;
+    std::vector<std::wstring> contextMenuItems;
+    std::wstring contextMenuRepeatStyle   = L"submenu";
+    std::wstring contextMenuShuffleStyle  = L"submenu";
+    bool         showOpenWindhawk         = true;
+    std::wstring contextMenuIconStyle     = L"as_media_buttons";
+    std::wstring contextMenuIconColor     = L"255 255 255";
+    int          contextMenuIconOpacity   = 100;
     bool         vizEnabled      = false;
     std::wstring vizPosition     = L"right";
     VizShape     vizShape        = VizShape::Stereo;
@@ -1171,7 +1259,7 @@ struct ModSettings {
     int          vizBars         = 7;
     int          vizBarWidth     = 5;
     int          vizBarGap       = 5;
-    int          vizIdleBarSize  = 15;
+    int          vizIdleBarSize  = 3;
     int          vizSensitivity  = 150;
     int          vizPadLeft      = 0;
     int          vizPadRight     = 0;
@@ -1432,10 +1520,10 @@ static void LoadSettings() {
         ParseTwoInts(Str(L"MainSettings.VisualizerFunctionsSettings.vizBarCountGap", L"7 5"), n, gap);
         g_settings.vizBars   = std::clamp(n, 1, 20);
         g_settings.vizBarGap = std::clamp(gap, 0, 40);
-        int w = 5, h = 15;
-        ParseTwoInts(Str(L"MainSettings.VisualizerFunctionsSettings.vizBarSize", L"5 15"), w, h);
-        g_settings.vizBarWidth    = std::clamp(w, 1, 40);
-        g_settings.vizIdleBarSize = std::clamp(h, 0, 100);
+        int w = 5, h = 3;
+        ParseTwoInts(Str(L"MainSettings.VisualizerFunctionsSettings.vizBarSize", L"5 3"), w, h);
+        g_settings.vizBarWidth    = std::clamp(w, 0, 40);
+        g_settings.vizIdleBarSize = std::clamp(h, 0, 15);
         int l = 0, r = 0;
         ParseTwoInts(Str(L"MainSettings.VisualizerFunctionsSettings.vizPadding", L"0 0"), l, r);
         g_settings.vizPadLeft  = std::clamp(l, 0, 200);
@@ -1580,6 +1668,36 @@ static void LoadSettings() {
     g_settings.showDebugBorders     = Wh_GetIntSetting(L"DebugSettings.showDebugBorders")  != 0;
     g_settings.showLayoutAnchors    = Wh_GetIntSetting(L"DebugSettings.showLayoutAnchors") != 0;
     g_settings.showRestartButton    = Wh_GetIntSetting(L"DebugSettings.showRestartButton") != 0;
+
+    g_settings.contextMenuRepeatStyle  = Str(L"ContextMenuSettings.repeatStyle",  L"submenu");
+    g_settings.contextMenuShuffleStyle = Str(L"ContextMenuSettings.shuffleStyle", L"submenu");
+    g_settings.showOpenWindhawk        = Wh_GetIntSetting(L"ContextMenuSettings.showOpenWindhawk") != 0;
+    g_settings.contextMenuIconStyle    = Str(L"ContextMenuSettings.contextMenuIconStyle", L"as_media_buttons");
+    g_settings.contextMenuIconColor    = StrAllowEmpty(L"ContextMenuSettings.contextMenuIconColor", L"255 255 255");
+    g_settings.contextMenuIconOpacity  = Int(L"ContextMenuSettings.contextMenuIconOpacity", 0, 100, 100);
+    {
+        g_settings.contextMenuItems.clear();
+        const wchar_t* defaultItems[] = {
+            L"repeat", L"shuffle", L"forward", L"rewind",
+            L"next", L"prev", L"switch_sessions", L"open_app"
+        };
+        bool hasAny = false;
+        std::set<std::wstring> seen;
+        for (int i = 0; i < 20; i++) {
+            PCWSTR p = Wh_GetStringSetting(L"ContextMenuSettings.contextMenuItems[%d]", i);
+            if (!p || !*p) { Wh_FreeStringSetting(p); break; }
+            std::wstring s(p);
+            Wh_FreeStringSetting(p);
+            if (seen.insert(s).second) {
+                g_settings.contextMenuItems.push_back(s);
+                hasAny = true;
+            }
+        }
+        if (!hasAny) {
+            for (auto& d : defaultItems)
+                g_settings.contextMenuItems.push_back(d);
+        }
+    }
 
     try {
         std::lock_guard<std::mutex> lock(g_mediaButtonsMutex);
@@ -2337,37 +2455,18 @@ static AlbumPalette ExtractAlbumPalette(const std::vector<BYTE>& thumbBytes) {
         return {fallbackPrimary, fallbackSecondary};
 
     try {
-        auto stream = winrt::Windows::Storage::Streams::InMemoryRandomAccessStream();
-        auto writer = winrt::Windows::Storage::Streams::DataWriter(stream);
-        writer.WriteBytes(thumbBytes);
-        writer.StoreAsync().get();
-        writer.DetachStream();
-        stream.Seek(0);
-
-        auto decoder = winrt::Windows::Graphics::Imaging::BitmapDecoder::CreateAsync(stream).get();
-
-        auto transform = winrt::Windows::Graphics::Imaging::BitmapTransform();
-        auto pixelData = decoder.GetPixelDataAsync(
-            winrt::Windows::Graphics::Imaging::BitmapPixelFormat::Bgra8,
-            winrt::Windows::Graphics::Imaging::BitmapAlphaMode::Premultiplied,
-            transform,
-            winrt::Windows::Graphics::Imaging::ExifOrientationMode::RespectExifOrientation,
-            winrt::Windows::Graphics::Imaging::ColorManagementMode::DoNotColorManage
-        ).get();
-
-        auto pixels = pixelData.DetachPixelData();
-        uint32_t w = decoder.PixelWidth();
-        uint32_t h = decoder.PixelHeight();
-
-        if (w == 0 || h == 0 || pixels.size() < w * h * 4)
+        std::vector<BYTE> pixels;
+        int w = 0, h = 0;
+        if (!DecodeImageToBGRA(thumbBytes, pixels, w, h) || w <= 0 || h <= 0 ||
+            pixels.size() < (size_t)w * h * 4)
             return {fallbackPrimary, fallbackSecondary};
 
         struct Bucket { uint32_t r=0, g=0, b=0, n=0; };
         Bucket buckets[16][16][16]{};
 
-        for (uint32_t y = 0; y < h; y += 4) {
-            for (uint32_t x = 0; x < w; x += 4) {
-                uint32_t idx = (y * w + x) * 4;
+        for (int y = 0; y < h; y += 4) {
+            for (int x = 0; x < w; x += 4) {
+                size_t idx = ((size_t)y * w + x) * 4;
                 if (idx + 4 > pixels.size()) continue;
 
                 BYTE pb = pixels[idx];
@@ -2507,6 +2606,21 @@ static winrt::Windows::UI::Color ArtistColor() {
 static winrt::Windows::UI::Color ButtonColor() {
     BYTE alpha = (BYTE)((g_settings.buttonColorOpacity / 100.0) * 255);
     return ParseColorWithThemeSupport(g_settings.buttonColor, alpha);
+}
+
+static winrt::Windows::UI::Color ContextMenuIconColor() {
+    BYTE alpha = (BYTE)((g_settings.contextMenuIconOpacity / 100.0) * 255);
+    const std::wstring& clr = g_settings.contextMenuIconColor;
+    if (clr.empty()) {
+        return ParseColorWithThemeSupport(g_settings.buttonColor, alpha);
+    }
+    return ParseColorWithThemeSupport(clr, alpha);
+}
+
+static const std::wstring& ContextMenuIconStyle() {
+    if (g_settings.contextMenuIconStyle == L"as_media_buttons")
+        return g_settings.iconStyle;
+    return g_settings.contextMenuIconStyle;
 }
 
 static Brush MakeAlbumBlurBrush(const std::vector<BYTE>& thumbBytes,
@@ -2655,6 +2769,7 @@ static constexpr wchar_t kRepeatBtnName[]   = L"FluentMedia_Repeat";
 static constexpr wchar_t kSwitchSessionsBtnName[] = L"FluentMedia_SwitchSessions";
 
 static int  g_idleSeconds  = 0;
+static int  g_idleTicks    = 0;
 static bool g_hiddenByIdle = false;
 static std::chrono::steady_clock::time_point g_lastMediaTime = std::chrono::steady_clock::now();
 
@@ -2753,6 +2868,30 @@ static void SendMediaCommandAsync(int cmd) {
                         break;
                     case 9:
                         SwitchMediaSession();
+                        break;
+                    case 10:
+                        try {
+                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None).get()) {
+                                g_repeatMode = RepeatMode::Off;
+                                DispatchMediaUpdate();
+                            }
+                        } catch (...) {}
+                        break;
+                    case 11:
+                        try {
+                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::List).get()) {
+                                g_repeatMode = RepeatMode::All;
+                                DispatchMediaUpdate();
+                            }
+                        } catch (...) {}
+                        break;
+                    case 12:
+                        try {
+                            if (session.TryChangeAutoRepeatModeAsync(winrt::Windows::Media::MediaPlaybackAutoRepeatMode::Track).get()) {
+                                g_repeatMode = RepeatMode::One;
+                                DispatchMediaUpdate();
+                            }
+                        } catch (...) {}
                         break;
                 }
             }
@@ -4222,6 +4361,37 @@ static DWORD WINAPI TimerThreadProc(void*) {
         }
 
         bool needsUpdate = g_needsUiUpdate.exchange(false);
+
+        if (g_settings.idleHideSeconds > 0) {
+            bool playing = false;
+            { std::lock_guard<std::mutex> lk(g_mediaMtx); playing = g_media.isPlaying; }
+            if (playing) {
+                g_idleSeconds = 0;
+                g_idleTicks   = 0;
+                if (g_hiddenByIdle) {
+                    g_hiddenByIdle = false;
+                    needsUpdate = true;
+                }
+            } else {
+                ++g_idleTicks;
+                if (g_idleTicks >= 2) {
+                    g_idleTicks = 0;
+                    ++g_idleSeconds;
+                }
+                if (!g_hiddenByIdle && g_idleSeconds >= g_settings.idleHideSeconds) {
+                    g_hiddenByIdle = true;
+                    needsUpdate = true;
+                }
+            }
+        } else {
+            if (g_hiddenByIdle) {
+                g_hiddenByIdle = false;
+                g_idleSeconds  = 0;
+                g_idleTicks    = 0;
+                needsUpdate    = true;
+            }
+        }
+
         if (needsUpdate) {
             RunFromWindowThread(hWnd, [](void*) {
                 if (g_unloading || g_applyingSettings) return;
@@ -4249,6 +4419,55 @@ static std::atomic<bool> g_CaptureRunning{false};
 static bool g_vizCurrentlyVisible = false;
 static std::thread* g_CaptureThread = nullptr;
 static HANDLE g_hCaptureEvent = nullptr;
+static std::atomic<bool> g_VizDeviceChanged{false};
+
+class VizEndpointNotificationClient : public IMMNotificationClient {
+   public:
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return InterlockedIncrement(&m_ref);
+    }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG ref = InterlockedDecrement(&m_ref);
+        if (ref == 0)
+            delete this;
+        return ref;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IMMNotificationClient)) {
+            *ppv = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole,
+                                                      LPCWSTR) override {
+        if (flow == eRender)
+            g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
+        g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
+        g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
+        g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR,
+                                                      const PROPERTYKEY) override {
+        return S_OK;
+    }
+
+   private:
+    LONG m_ref = 1;
+};
 
 static float g_HannWindow[VIZ_FFT_SIZE] = {};
 static float g_TwiddleRe[VIZ_FFT_SIZE / 2] = {};
@@ -4320,6 +4539,58 @@ static VizEQMul GetVizEQMultipliers(VizEQ eq) {
     }
 }
 
+static bool VizInitAudioClient(IMMDeviceEnumerator* pEnum,
+                                winrt::com_ptr<IAudioClient>& pClient,
+                                winrt::com_ptr<IAudioCaptureClient>& pCapture,
+                                UINT32& sampleRate, UINT32& channels,
+                                bool& isFloat, HANDLE hEvent) {
+    pClient = nullptr;
+    pCapture = nullptr;
+
+    winrt::com_ptr<IMMDevice> pDev;
+    if (FAILED(pEnum->GetDefaultAudioEndpoint(eRender, eConsole, pDev.put())))
+        return false;
+
+    winrt::com_ptr<IAudioClient> pC;
+    if (FAILED(pDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                              pC.put_void())))
+        return false;
+
+    WAVEFORMATEX* pwfx = nullptr;
+    pC->GetMixFormat(&pwfx);
+    if (!pwfx)
+        return false;
+
+    sampleRate = pwfx->nSamplesPerSec;
+    channels = pwfx->nChannels;
+    isFloat = (pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) ||
+              (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+               reinterpret_cast<WAVEFORMATEXTENSIBLE*>(pwfx)->SubFormat ==
+                   KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
+
+    HRESULT hr = pC->Initialize(
+        AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        200000, 0, pwfx, nullptr);
+    CoTaskMemFree(pwfx);
+    if (FAILED(hr))
+        return false;
+
+    if (hEvent)
+        pC->SetEventHandle(hEvent);
+
+    winrt::com_ptr<IAudioCaptureClient> pCap;
+    if (FAILED(pC->GetService(__uuidof(IAudioCaptureClient), pCap.put_void())))
+        return false;
+
+    if (FAILED(pC->Start()))
+        return false;
+
+    pClient = pC;
+    pCapture = pCap;
+    return true;
+}
+
 static void VizCaptureThreadProc() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     BuildHannWindow();
@@ -4333,52 +4604,19 @@ static void VizCaptureThreadProc() {
         return;
     }
 
-    winrt::com_ptr<IMMDevice> pDev;
-    if (FAILED(pEnum->GetDefaultAudioEndpoint(eRender, eConsole, pDev.put()))) {
-        g_CaptureRunning.store(false);
-        CoUninitialize();
-        return;
-    }
+    auto* notifyClient = new VizEndpointNotificationClient();
+    bool notifyRegistered =
+        SUCCEEDED(pEnum->RegisterEndpointNotificationCallback(notifyClient));
 
     winrt::com_ptr<IAudioClient> pClient;
     winrt::com_ptr<IAudioCaptureClient> pCapture;
     UINT32 sampleRate = 48000, channels = 2;
     bool isFloat = true;
 
-    {
-        winrt::com_ptr<IAudioClient> pC;
-        if (SUCCEEDED(pDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
-                                     pC.put_void()))) {
-            WAVEFORMATEX* pwfx = nullptr;
-            pC->GetMixFormat(&pwfx);
-            if (pwfx) {
-                sampleRate = pwfx->nSamplesPerSec;
-                channels = pwfx->nChannels;
-                isFloat =
-                    (pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) ||
-                    (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-                     reinterpret_cast<WAVEFORMATEXTENSIBLE*>(pwfx)->SubFormat ==
-                         KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
-                if (SUCCEEDED(pC->Initialize(
-                        AUDCLNT_SHAREMODE_SHARED,
-                        AUDCLNT_STREAMFLAGS_LOOPBACK |
-                            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                        200000, 0, pwfx, nullptr))) {
-                    if (g_hCaptureEvent)
-                        pC->SetEventHandle(g_hCaptureEvent);
-                    winrt::com_ptr<IAudioCaptureClient> pCap;
-                    if (SUCCEEDED(pC->GetService(__uuidof(IAudioCaptureClient),
-                                                 pCap.put_void()))) {
-                        pClient = pC;
-                        pCapture = pCap;
-                    }
-                }
-                CoTaskMemFree(pwfx);
-            }
-        }
-    }
-
-    BuildLogBins(sampleRate);
+    g_VizDeviceChanged.store(false, std::memory_order_relaxed);
+    if (VizInitAudioClient(pEnum.get(), pClient, pCapture, sampleRate, channels,
+                           isFloat, g_hCaptureEvent))
+        BuildLogBins(sampleRate);
 
     static constexpr int RING_CAP = VIZ_FFT_SIZE * 4;
     std::vector<float> ringBuf(RING_CAP, 0.f);
@@ -4388,9 +4626,7 @@ static void VizCaptureThreadProc() {
     float bandEnv[VIZ_NUM_BANDS] = {};
     static constexpr float GRAVITY[VIZ_NUM_BANDS] = {0.018f, 0.020f, 0.022f, 0.025f,
                                                      0.030f, 0.036f, 0.042f};
-
-    if (pClient)
-        pClient->Start();
+    ULONGLONG lastReinitAttempt = GetTickCount64() - 1000;
 
     while (g_CaptureRunning.load(std::memory_order_relaxed)) {
         if (g_hCaptureEvent)
@@ -4398,11 +4634,36 @@ static void VizCaptureThreadProc() {
         else
             Sleep(8);
 
+        bool needsReinit = g_VizDeviceChanged.exchange(false, std::memory_order_relaxed) ||
+                            !pClient;
+        if (needsReinit) {
+            ULONGLONG now = GetTickCount64();
+            if (now - lastReinitAttempt >= 500) {
+                lastReinitAttempt = now;
+                if (pClient)
+                    pClient->Stop();
+                ringHead = 0;
+                ringCount = 0;
+                for (int b = 0; b < VIZ_NUM_BANDS; b++) {
+                    bandEnv[b] = 0.f;
+                    g_VizBands[b].store(0.f, std::memory_order_relaxed);
+                }
+                if (VizInitAudioClient(pEnum.get(), pClient, pCapture, sampleRate,
+                                       channels, isFloat, g_hCaptureEvent))
+                    BuildLogBins(sampleRate);
+            }
+        }
+
         if (!pCapture)
             continue;
 
         UINT32 packetSize = 0;
-        if (FAILED(pCapture->GetNextPacketSize(&packetSize)) || packetSize == 0) {
+        HRESULT hr = pCapture->GetNextPacketSize(&packetSize);
+        if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+            g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+            continue;
+        }
+        if (FAILED(hr) || packetSize == 0) {
             for (int b = 0; b < VIZ_NUM_BANDS; b++) {
                 bandEnv[b] = std::max(0.f, bandEnv[b] - GRAVITY[b]);
                 g_VizBands[b].store(bandEnv[b], std::memory_order_relaxed);
@@ -4414,8 +4675,13 @@ static void VizCaptureThreadProc() {
             BYTE* pData = nullptr;
             UINT32 numFrames = 0;
             DWORD flags = 0;
-            if (FAILED(pCapture->GetBuffer(&pData, &numFrames, &flags, nullptr,
-                                           nullptr)))
+            HRESULT hrBuf =
+                pCapture->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr);
+            if (hrBuf == AUDCLNT_E_DEVICE_INVALIDATED) {
+                g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+                break;
+            }
+            if (FAILED(hrBuf))
                 break;
 
             if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT) && pData && numFrames > 0) {
@@ -4444,7 +4710,12 @@ static void VizCaptureThreadProc() {
                 }
             }
             pCapture->ReleaseBuffer(numFrames);
-            if (FAILED(pCapture->GetNextPacketSize(&packetSize)))
+            hr = pCapture->GetNextPacketSize(&packetSize);
+            if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                g_VizDeviceChanged.store(true, std::memory_order_relaxed);
+                break;
+            }
+            if (FAILED(hr))
                 break;
         }
 
@@ -4497,6 +4768,9 @@ static void VizCaptureThreadProc() {
 
     if (pClient)
         pClient->Stop();
+    if (notifyRegistered)
+        pEnum->UnregisterEndpointNotificationCallback(notifyClient);
+    notifyClient->Release();
     CoUninitialize();
 }
 
@@ -4567,7 +4841,6 @@ static void UpdateVisualizerPeaks() {
 
     float t = (float)GetTickCount64() * 0.001f;
     float center = (vizBars - 1) * 0.5f;
-    float idleFloor = g_settings.vizIdleBarSize / 100.0f;
 
     for (int i = 0; i < vizBars; i++) {
         float freqT = (vizBars > 1) ? (float)i / (float)(vizBars - 1) : 0.5f;
@@ -4619,7 +4892,7 @@ static void UpdateVisualizerPeaks() {
             }
         }
 
-        g_VizTarget[i] = std::max(idleFloor, std::min(1.f, target));
+        g_VizTarget[i] = std::max(0.f, std::min(1.f, target));
     }
 }
 
@@ -4667,8 +4940,9 @@ static void VizApplyFrame() {
     int barCount = std::min((int)g_vizBars.size(), std::max(1, g_settings.vizBars));
     double zoneH = VizZoneHeight();
     double maxBH = std::max(4.0, zoneH - 6.0);
-    double minBH = std::max((double)g_settings.vizBarWidth, 3.0);
-    float  idleH = g_settings.vizIdleBarSize / 100.f;
+    double minBH = (double)g_settings.vizBarWidth;
+    double idlePx = std::min((double)g_settings.vizIdleBarSize, std::max(0.0, maxBH - minBH));
+    double range = std::max(0.0, maxBH - minBH - idlePx);
 
     winrt::Windows::UI::Color baseCol{255, 255, 255, 255};
     if (g_settings.vizColorMode == VizColorMode::DynamicAlbum) {
@@ -4702,8 +4976,8 @@ static void VizApplyFrame() {
         float next = cur + (tgt - cur) * ((tgt > cur) ? a : d);
         g_VizPeak[i] = (fabsf(next - cur) > 0.0005f) ? next : tgt;
 
-        float  fac = std::max(idleH, g_VizPeak[i]);
-        double bh = minBH + fac * (maxBH - minBH);
+        float fac = std::max(0.f, g_VizPeak[i]);
+        double bh = minBH + idlePx + fac * range;
 
         winrt::Windows::UI::Color c = baseCol;
         if (g_settings.vizColorMode == VizColorMode::DynamicGradient) {
@@ -4799,13 +5073,15 @@ static FrameworkElement BuildVisualizerElement() {
                          : (g_settings.vizAnchor == VizAnchor::Bottom) ? VerticalAlignment::Bottom
                                                                : VerticalAlignment::Center;
 
-    double minBH   = std::max((double)g_settings.vizBarWidth, 3.0);
-    double corner  = std::max(1.0, g_settings.vizBarWidth * 0.5);
+    double minBH = (double)g_settings.vizBarWidth;
+    double maxBH = std::max(4.0, zoneH - 6.0);
+    double idlePx = std::min((double)g_settings.vizIdleBarSize, std::max(0.0, maxBH - minBH));
+    double corner = g_settings.vizBarWidth * 0.5;
 
     for (int i = 0; i < barCount; i++) {
         VizRect r;
         r.Width((double)g_settings.vizBarWidth);
-        r.Height(minBH);
+        r.Height(minBH + idlePx);
         r.RadiusX(corner);
         r.RadiusY(corner);
         r.VerticalAlignment(va);
@@ -5090,9 +5366,58 @@ static const wchar_t* GetGlyph(int cmd, bool isPlaying = false) {
         }
         case 9:
             return L"";
+        case 10: return L"";
+        case 11: return L"";
+        case 12: return L"";
     }
     return L"";
 }
+
+static const wchar_t* GetGlyphWithStyle(int cmd, const std::wstring& style, bool isPlaying = false) {
+    bool isFluent = (style == L"fluent_outline" || style == L"fluent_filled");
+    bool isFilled = (style == L"fluent_filled" || style == L"mdl2_filled");
+
+    switch (cmd) {
+        case 1:
+            if (isFilled) return L"";
+            return L"";
+        case 2:
+            if (isPlaying) {
+                if (isFluent && isFilled) return L"";
+                if (!isFluent && isFilled) return L"";
+                return L"";
+            } else {
+                if (isFilled) return L"";
+                return L"";
+            }
+        case 3:
+            if (isFilled) return L"";
+            return L"";
+        case 5:
+            if (isFilled) return L"";
+            return L"";
+        case 6:
+            if (isFilled) return L"";
+            return L"";
+        case 7:
+            return L"";
+        case 8: {
+            RepeatMode mode = g_repeatMode.load();
+            switch (mode) {
+                case RepeatMode::Off: return L"";
+                case RepeatMode::All: return L"";
+                case RepeatMode::One: return L"";
+            }
+        }
+        case 9:
+            return L"";
+        case 10: return L"";
+        case 11: return L"";
+        case 12: return L"";
+    }
+    return L"";
+}
+
 
 static TextBlock MakeIconText(const wchar_t* glyph, double sz, winrt::Windows::UI::Color c) {
     TextBlock t;
@@ -5291,7 +5616,7 @@ static MenuFlyoutItem MakeActionContextMenuItem(const wchar_t* glyph, const wcha
         FontIcon icon;
         icon.Glyph(glyph);
         icon.FontSize((double)g_settings.buttonIconSize);
-        bool useFluent = (g_settings.iconStyle == L"fluent_outline" || g_settings.iconStyle == L"fluent_filled");
+        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
         try {
             icon.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets"));
         } catch (...) {
@@ -5299,7 +5624,7 @@ static MenuFlyoutItem MakeActionContextMenuItem(const wchar_t* glyph, const wcha
                 icon.FontFamily(FontFamily(L"Segoe MDL2 Assets"));
             } catch (...) {}
         }
-        icon.Foreground(MakeBrush(ButtonColor()));
+        icon.Foreground(MakeBrush(ContextMenuIconColor()));
         icon.Opacity(1.0);
         item.Icon(icon);
     } catch (...) {}
@@ -5335,9 +5660,9 @@ static MenuFlyoutItem MakeMediaContextMenuItem(int cmd, const wchar_t* label, bo
 
     try {
         FontIcon icon;
-        icon.Glyph(GetGlyph(cmd));
+        icon.Glyph(GetGlyphWithStyle(cmd, ContextMenuIconStyle()));
         icon.FontSize((double)g_settings.buttonIconSize);
-        bool useFluent = (g_settings.iconStyle == L"fluent_outline" || g_settings.iconStyle == L"fluent_filled");
+        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
         try {
             icon.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets"));
         } catch (...) {
@@ -5345,7 +5670,7 @@ static MenuFlyoutItem MakeMediaContextMenuItem(int cmd, const wchar_t* label, bo
                 icon.FontFamily(FontFamily(L"Segoe MDL2 Assets"));
             } catch (...) {}
         }
-        icon.Foreground(MakeBrush(ButtonColor()));
+        icon.Foreground(MakeBrush(ContextMenuIconColor()));
         icon.Opacity(iconOpacity);
         item.Icon(icon);
     } catch (...) {}
@@ -5382,25 +5707,166 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
             menu.Placement(Controls::Primitives::FlyoutPlacementMode::Top);
         } catch (...) {}
 
-        menu.Items().Append(MakeMediaContextMenuItem(8, L"Toggle Repeat", canRepeat, canRepeat ? 1.0 : 0.4));
+        RepeatMode curRepeat = g_repeatMode.load();
 
-        double shuffleOpacity = canShuffle ? (shuffleEnabled ? 1.0 : 0.4) : 0.4;
-        menu.Items().Append(MakeMediaContextMenuItem(7, L"Toggle Shuffle", canShuffle, shuffleOpacity));
+        auto makeRepeatSubItem = [&](int cmd, const wchar_t* label, const wchar_t* glyph, bool isCurrent) {
+            MenuFlyoutItem ri;
+            ri.Text(label);
+            ri.IsEnabled(canRepeat);
+            try {
+                FontIcon ic;
+                ic.Glyph(glyph);
+                ic.FontSize((double)g_settings.buttonIconSize);
+                bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
+                try {
+                    ic.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets"));
+                } catch (...) {}
+                ic.Foreground(MakeBrush(ContextMenuIconColor()));
+                ic.Opacity(isCurrent ? 1.0 : 0.5);
+                ri.Icon(ic);
+            } catch (...) {}
+            ri.Click([cmd](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                if (g_unloading) return;
+                try {
+                    SendMediaCommandAsync(cmd);
+                    DispatchMediaUpdate();
+                } catch (...) {}
+            });
+            return ri;
+        };
 
-        menu.Items().Append(MakeMediaContextMenuItem(6, L"Forward 5s", canSeek, canSeek ? 1.0 : 0.4));
-        menu.Items().Append(MakeMediaContextMenuItem(5, L"Rewind 5s", canSeek, canSeek ? 1.0 : 0.4));
-        menu.Items().Append(MakeMediaContextMenuItem(3, L"Next Track", canSkipNext, canSkipNext ? 1.0 : 0.4));
-        menu.Items().Append(MakeMediaContextMenuItem(1, L"Previous Track", canSkipPrevious, canSkipPrevious ? 1.0 : 0.4));
+        bool addedSeparator = false;
+        auto ensureSeparator = [&]() {
+            if (!addedSeparator) {
+                try {
+                    Controls::MenuFlyoutSeparator sep;
+                    menu.Items().Append(sep);
+                } catch (...) {}
+                addedSeparator = true;
+            }
+        };
 
-        menu.Items().Append(MakeMediaContextMenuItem(9, L"Switch Sessions", g_sessionCount.load() > 1, g_sessionCount.load() > 1 ? 1.0 : 0.4));
-        menu.Items().Append(MakeActionContextMenuItem(L"\uE8A7", L"Open media app", []() {
-            ExecuteMediaAction(L"open_app");
-        }));
+        for (const auto& item : g_settings.contextMenuItems) {
+            if (item == L"repeat") {
+                if (g_settings.contextMenuRepeatStyle == L"toggle") {
+                    const wchar_t* repeatLabel =
+                        (curRepeat == RepeatMode::All) ? L"Repeat all" :
+                        (curRepeat == RepeatMode::One) ? L"Repeat one" : L"Repeat off";
+                    double repeatOpacity = canRepeat ? (curRepeat != RepeatMode::Off ? 1.0 : 0.4) : 0.4;
+                    menu.Items().Append(MakeMediaContextMenuItem(8, repeatLabel, canRepeat, repeatOpacity));
+                } else {
+                    MenuFlyoutSubItem repeatSubMenu;
+                    repeatSubMenu.Text(L"Repeat");
+                    try {
+                        FontIcon repeatIcon;
+                        repeatIcon.Glyph(GetGlyphWithStyle(8, ContextMenuIconStyle()));
+                        repeatIcon.FontSize((double)g_settings.buttonIconSize);
+                        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
+                        try {
+                            repeatIcon.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets"));
+                        } catch (...) {}
+                        repeatIcon.Foreground(MakeBrush(ContextMenuIconColor()));
+                        repeatIcon.Opacity(canRepeat ? 1.0 : 0.4);
+                        repeatSubMenu.Icon(repeatIcon);
+                    } catch (...) {}
+                    repeatSubMenu.IsEnabled(canRepeat);
+                    repeatSubMenu.Items().Append(makeRepeatSubItem(10, L"Repeat off", GetGlyphWithStyle(10, ContextMenuIconStyle()), curRepeat == RepeatMode::Off));
+                    repeatSubMenu.Items().Append(makeRepeatSubItem(11, L"Repeat all", GetGlyphWithStyle(11, ContextMenuIconStyle()), curRepeat == RepeatMode::All));
+                    repeatSubMenu.Items().Append(makeRepeatSubItem(12, L"Repeat one", GetGlyphWithStyle(12, ContextMenuIconStyle()), curRepeat == RepeatMode::One));
+                    menu.Items().Append(repeatSubMenu);
+                }
+            } else if (item == L"shuffle") {
+                if (g_settings.contextMenuShuffleStyle == L"toggle") {
+                    const wchar_t* shuffleLabel = shuffleEnabled ? L"Shuffle on" : L"Shuffle off";
+                    double shuffleOpacity = canShuffle ? (shuffleEnabled ? 1.0 : 0.4) : 0.4;
+                    menu.Items().Append(MakeMediaContextMenuItem(7, shuffleLabel, canShuffle, shuffleOpacity));
+                } else {
+                    MenuFlyoutSubItem shuffleSubMenu;
+                    shuffleSubMenu.Text(L"Shuffle");
+                    try {
+                        FontIcon shuffleIcon;
+                        shuffleIcon.Glyph(GetGlyphWithStyle(7, ContextMenuIconStyle()));
+                        shuffleIcon.FontSize((double)g_settings.buttonIconSize);
+                        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
+                        try {
+                            shuffleIcon.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets"));
+                        } catch (...) {}
+                        shuffleIcon.Foreground(MakeBrush(ContextMenuIconColor()));
+                        shuffleIcon.Opacity(canShuffle ? 1.0 : 0.4);
+                        shuffleSubMenu.Icon(shuffleIcon);
+                    } catch (...) {}
+                    shuffleSubMenu.IsEnabled(canShuffle);
 
-        try {
-            Controls::MenuFlyoutSeparator separator;
-            menu.Items().Append(separator);
-        } catch (...) {}
+                    MenuFlyoutItem shuffleOffItem;
+                    shuffleOffItem.Text(L"Shuffle off");
+                    shuffleOffItem.IsEnabled(canShuffle);
+                    try {
+                        FontIcon ic;
+                        ic.Glyph(GetGlyphWithStyle(7, ContextMenuIconStyle()));
+                        ic.FontSize((double)g_settings.buttonIconSize);
+                        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
+                        try { ic.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets")); } catch (...) {}
+                        ic.Foreground(MakeBrush(ContextMenuIconColor()));
+                        ic.Opacity(!shuffleEnabled ? 1.0 : 0.5);
+                        shuffleOffItem.Icon(ic);
+                    } catch (...) {}
+                    shuffleOffItem.Click([](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                        if (g_unloading) return;
+                        try {
+                            if (g_shuffleEnabled.load()) {
+                                SendMediaCommandAsync(7);
+                                DispatchMediaUpdate();
+                            }
+                        } catch (...) {}
+                    });
+
+                    MenuFlyoutItem shuffleOnItem;
+                    shuffleOnItem.Text(L"Shuffle on");
+                    shuffleOnItem.IsEnabled(canShuffle);
+                    try {
+                        FontIcon ic;
+                        ic.Glyph(GetGlyphWithStyle(7, ContextMenuIconStyle()));
+                        ic.FontSize((double)g_settings.buttonIconSize);
+                        bool useFluent = (ContextMenuIconStyle() == L"fluent_outline" || ContextMenuIconStyle() == L"fluent_filled");
+                        try { ic.FontFamily(FontFamily(useFluent ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets")); } catch (...) {}
+                        ic.Foreground(MakeBrush(ContextMenuIconColor()));
+                        ic.Opacity(shuffleEnabled ? 1.0 : 0.5);
+                        shuffleOnItem.Icon(ic);
+                    } catch (...) {}
+                    shuffleOnItem.Click([](winrt::Windows::Foundation::IInspectable const&, RoutedEventArgs const&) {
+                        if (g_unloading) return;
+                        try {
+                            if (!g_shuffleEnabled.load()) {
+                                SendMediaCommandAsync(7);
+                                DispatchMediaUpdate();
+                            }
+                        } catch (...) {}
+                    });
+
+                    shuffleSubMenu.Items().Append(shuffleOffItem);
+                    shuffleSubMenu.Items().Append(shuffleOnItem);
+                    menu.Items().Append(shuffleSubMenu);
+                }
+            } else if (item == L"forward") {
+                menu.Items().Append(MakeMediaContextMenuItem(6, L"Forward 5s", canSeek, canSeek ? 1.0 : 0.4));
+            } else if (item == L"rewind") {
+                menu.Items().Append(MakeMediaContextMenuItem(5, L"Rewind 5s", canSeek, canSeek ? 1.0 : 0.4));
+            } else if (item == L"next") {
+                menu.Items().Append(MakeMediaContextMenuItem(3, L"Next Track", canSkipNext, canSkipNext ? 1.0 : 0.4));
+            } else if (item == L"prev") {
+                menu.Items().Append(MakeMediaContextMenuItem(1, L"Previous Track", canSkipPrevious, canSkipPrevious ? 1.0 : 0.4));
+            } else if (item == L"switch_sessions") {
+                menu.Items().Append(MakeMediaContextMenuItem(9, L"Switch Sessions", g_sessionCount.load() > 1, g_sessionCount.load() > 1 ? 1.0 : 0.4));
+            } else if (item == L"open_app") {
+                menu.Items().Append(MakeActionContextMenuItem(L"\uE8A7", L"Open media app", []() {
+                    ExecuteMediaAction(L"open_app");
+                }));
+            }
+        }
+
+        if (g_settings.showRestartButton || g_settings.showOpenWindhawk) {
+            ensureSeparator();
+        }
 
         if (g_settings.showRestartButton) {
             menu.Items().Append(MakeActionContextMenuItem(L"\uE72C", L"Restart Player", []() {
@@ -5424,9 +5890,11 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
             }));
         }
 
-        menu.Items().Append(MakeActionContextMenuItem(L"\uE713", L"Open Windhawk", []() {
-            OpenWindhawk();
-        }));
+        if (g_settings.showOpenWindhawk) {
+            menu.Items().Append(MakeActionContextMenuItem(L"\uE713", L"Open Windhawk", []() {
+                OpenWindhawk();
+            }));
+        }
 
         menu.ShowAt(target);
     } catch (...) {
@@ -7260,6 +7728,10 @@ static void RefreshPlayerContents() {
                 }
 
                 if (g_settings.enableTitleScrolling && visible) {
+                    try {
+                        if (auto viewFe = FindChildByName(g_playerGrid, kTitleScrollViewName))
+                            viewFe.Visibility(Visibility::Visible);
+                    } catch (...) {}
                     if (auto panelFe = FindChildByName(g_playerGrid, kPanelGridName)) {
                         panelFe.UpdateLayout();
                     }
@@ -7320,6 +7792,12 @@ static void RefreshPlayerContents() {
                 } else {
                     g_titleScroll.active = false;
                     g_titleScroll.offset = 0.0;
+                    if (g_settings.enableTitleScrolling) {
+                        try {
+                            if (auto viewFe = FindChildByName(g_playerGrid, kTitleScrollViewName))
+                                viewFe.Visibility(Visibility::Collapsed);
+                        } catch (...) {}
+                    }
                 }
             } catch (...) {}
 
@@ -7346,6 +7824,10 @@ static void RefreshPlayerContents() {
                 }
 
                 if (g_settings.enableArtistScrolling && visible) {
+                    try {
+                        if (auto viewFe = FindChildByName(g_playerGrid, kArtistScrollViewName))
+                            viewFe.Visibility(Visibility::Visible);
+                    } catch (...) {}
                     if (auto panelFe = FindChildByName(g_playerGrid, kPanelGridName)) {
                         panelFe.UpdateLayout();
                     }
@@ -7406,6 +7888,12 @@ static void RefreshPlayerContents() {
                 } else {
                     g_artistScroll.active = false;
                     g_artistScroll.offset = 0.0;
+                    if (g_settings.enableArtistScrolling) {
+                        try {
+                            if (auto viewFe = FindChildByName(g_playerGrid, kArtistScrollViewName))
+                                viewFe.Visibility(Visibility::Collapsed);
+                        } catch (...) {}
+                    }
                 }
             } catch (...) {}
 
@@ -7998,13 +8486,7 @@ static void UpdateVisibility() {
     bool hide = false;
     if (g_settings.hideFullscreen && IsFullscreenActive()) hide = true;
 
-    if (!hide && g_settings.idleHideSeconds > 0) {
-        bool playing = false;
-        { std::lock_guard<std::mutex> lk(g_mediaMtx); playing = g_media.isPlaying; }
-        if (playing) { g_idleSeconds = 0; g_hiddenByIdle = false; }
-        else if (++g_idleSeconds >= g_settings.idleHideSeconds) g_hiddenByIdle = true;
-        if (g_hiddenByIdle) hide = true;
-    }
+    if (!hide && g_hiddenByIdle) hide = true;
 
     if (!hide) {
         bool hasMedia = false, hasSession = false;
@@ -8150,6 +8632,9 @@ static void UpdateVisibility() {
 
 static void ApplySettings() {
     Wh_Log(L"ApplySettings: Called");
+    g_idleSeconds  = 0;
+    g_idleTicks    = 0;
+    g_hiddenByIdle = false;
     try { RemovePlayerGrid(); } catch (...) { Wh_Log(L"ApplySettings: Exception in RemovePlayerGrid"); }
     if (!g_unloading) {
         Wh_Log(L"ApplySettings: Calling InjectPlayerGrid");

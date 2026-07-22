@@ -2,14 +2,14 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.4
+// @version         1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -29,8 +29,6 @@ own.
 
 Also check out the **Windows 11 Taskbar Styler**, **Windows 11 Start Menu
 Styler** and **Windows 11 Notification Center Styler** mods.
-
-**Note**: This mod requires Windhawk v1.6 or newer.
 
 ## Themes
 
@@ -81,6 +79,26 @@ TintedGlass](https://github.com/ramensoftware/windows-11-file-explorer-styling-g
 \
 LiquidGlass](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/LiquidGlass/README.md)
 
+[![MicaTabless](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/MicaTabless/screenshot-small.png)
+\
+MicaTabless](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/MicaTabless/README.md)
+
+[![OS26 Liquid
+Glass](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/OS26%20Liquid%20Glass/screenshot-small.png)
+\
+OS26 Liquid
+Glass](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/OS26%20Liquid%20Glass/README.md)
+
+[![ZEUSosX_044](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/ZEUSosX_044/screenshot-small.png)
+\
+ZEUSosX_044](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/ZEUSosX_044/README.md)
+
+[![Compact
+Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Compact%20Explorer11/screenshot-small.png)
+\
+Compact
+Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Compact%20Explorer11/README.md)
+
 More themes can be found in the **Themes** section of [The Windows 11 file
 explorer styling
 guide](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/README.md#themes).
@@ -117,6 +135,15 @@ resource files). The target control can also include:
   `Class#Name[Property1=Value1][Property2=Value2]`.
 * Parent controls, separated by `>`, for example: `ParentClass#ParentName >
   Class#Name`.
+* `*` between two `>` separators to match any number of intermediate parent
+  controls, for example: `ParentClass > * > Class#Name` matches `Class#Name`
+  when `ParentClass` is any of its ancestors (with zero or more controls in
+  between). `*` must be in the middle of the target (not the leftmost or
+  rightmost part), and consecutive `*` are not allowed.
+* `:root` as the leftmost target part to require that the next part has no
+  parent, i.e., it's a root element. For example: `:root > Class#Name` matches
+  `Class#Name` only when it has no parent control. `:root` must be followed by a
+  non-`*` target part.
 * Visual state group name, for example: `Class#Name@VisualStateGroupName`. It
   can be specified for the target control or for a parent control, but can be
   specified only once per target. The visual state group can be used in styles
@@ -136,13 +163,84 @@ specified visual state.
 For the XAML syntax, in addition to the built-in taskbar objects, the mod
 provides a built-in blur brush via the `WindhawkBlur` object, which supports the
 `BlurAmount`, `TintColor`, `TintOpacity`, `TintLuminosityOpacity`,
-`TintSaturation`, `NoiseOpacity`, and `NoiseDensity` properties. For example:
-`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`. Theme resources
-are also supported, for example: `Fill:=<WindhawkBlur BlurAmount="18"
-TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`.
+`TintSaturation`, `NoiseOpacity`, `NoiseDensity`, and `FallbackColor`
+properties. For example: `Fill:=<WindhawkBlur BlurAmount="10"
+TintColor="#80FF00FF"/>`. Theme resources are also supported for `TintColor` and
+`FallbackColor`, for example: `Fill:=<WindhawkBlur BlurAmount="18"
+TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`. The
+`FallbackColor` is used in place of the blur effect when battery saver is on or
+when transparency effects are disabled in the system settings.
 
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
+
+#### Style variables
+
+In addition to literal values, XAML values, and style constants, styles can
+reference live property values via global *style variables*. A capture rule of
+the form `Property=>VarName` observes a control's property and publishes its
+value to a variable. Other styles can then substitute that variable with
+`{{VarName}}`. When the source property changes, every style that uses the
+variable is recomputed and reapplied.
+
+For example, the following two styles on the same target make it square - the
+height tracks the width:
+
+```
+ActualWidth=>width1
+Height={{width1}}
+```
+
+Substitution can appear anywhere in a style's value, including alongside literal
+text:
+
+```
+Margin=0,{{x1}},0,{{x2 + 10}}
+```
+
+Inside `{{ ... }}`, the supported expression syntax is:
+
+* Numbers (e.g. `42`, `3.14`).
+* Backtick-delimited string literals (e.g. `` `Auto` ``, `` `*` ``). A doubled
+  backtick encodes one literal backtick. Backtick is used rather than a quote so
+  that literals don't clash with the string quoting of YAML settings or the
+  double quotes of XAML attributes.
+* Variable references (a previously captured `VarName`).
+* Binary operators `+`, `-`, `*`, `/`, with standard precedence.
+* Unary `+` and `-`.
+* Comparison operators `<`, `<=`, `==`, `>=`, `>`, `!=`, which evaluate to `1`
+  (true) or `0` (false). The relational operators (`<`, `<=`, `>=`, `>`) require
+  numbers; `==` and `!=` compare either two numbers or two strings.
+* The conditional operator `cond ? a : b`: evaluates to `a` when `cond` is
+  non-zero, otherwise `b`. The condition must be numeric, but the two branches
+  may each be a number or a string. For example, `{{x > 8 ? 1 : 3}}` gives `1`
+  when `x` is greater than `8`, else `3`, and `` {{width > 0 ? `*` : `Auto`}} ``
+  selects a `GridLength` keyword.
+* Parentheses for grouping.
+* The two-argument functions `min(a, b)` and `max(a, b)`.
+
+Arithmetic (`+`, `-`, `*`, `/`), the unary sign, the relational comparisons, and
+`min` / `max` require numeric operands. String values can only be produced (by a
+literal or a string-typed variable), compared with `==` / `!=`, and selected by
+the conditional operator.
+
+Expressions can be nested (`{{min(a, b + 1) * 2}}`), and `{{ ... }}` markers can
+appear inside larger expressions. Brace pairs match innermost-first, so
+`{{{x}}}` is parsed as a literal `{`, the variable substitution `{{x}}`, and a
+literal `}` - producing `{<value-of-x>}`.
+
+A bare-identifier substitution (`{{VarName}}` with no operators) inserts the
+variable's captured string form verbatim. This is meaningful only for primitive
+captured types: numeric, boolean, and string. Other captured types (brushes,
+thicknesses, etc.) are currently unsupported - substitution of such a variable
+is treated as a failure and the style is skipped. Substitutions that involve
+arithmetic require numeric source values; using a non-numeric variable in an
+expression also skips the style and logs a warning. Referencing a variable that
+has never been captured likewise skips the style.
+
+Variables are global - a capture from any matched element overwrites the same
+name. Capture rules cannot be combined with `:=` or with the per-rule
+`@VisualState` qualifier.
 
 ### Resource variables
 
@@ -201,8 +299,8 @@ Fill=$mainColor
 Background:=<AcrylicBrush TintColor="$mainColor" TintOpacity="0.3" />
 ```
 
-Some themes use style constants to allow easy customization. Refer to the
-theme page for details on which constants are available.
+Some themes use style constants to allow easy customization. Refer to the theme
+page for details on which constants are available.
 
 ## XAML diagnostics consumer handling
 
@@ -254,6 +352,11 @@ from the **TranslucentTB** project.
   - AddressSearchOnly: AddressSearchOnly
   - TintedGlass: TintedGlass
   - LiquidGlass: LiquidGlass
+  - MicaTabless: MicaTabless
+  - OS26 Liquid Glass: OS26 Liquid Glass
+  - OS26 Liquid Glass_variant_Compact: OS26 Liquid Glass (Compact)
+  - ZEUSosX_044: ZEUSosX_044
+  - Compact Explorer11: Compact Explorer11
 - backgroundTranslucentEffect: ""
   $name: Translucent background effect
   $description: >-
@@ -380,7 +483,7 @@ const Theme g_themeMicaBar = {{
         L"BorderThickness=0,0,0,1"}},
     ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
         L"Background=Transparent"}},
-}, {}, {}, /*explorerFrameContainerHeight=*/0};
+}};
 
 const Theme g_themeNoCommandBar = {{
     ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
@@ -509,10 +612,10 @@ const Theme g_themeTabless = {{
 }, {
     L"NavigationBarGrid=2",
     L"CommandBarGrid=1",
-}, {}, /*explorerFrameContainerHeight=*/0};
+}};
 
 const Theme g_themeMatter = {{
-    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar ", {
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
         L"Background=Transparent",
         L"HorizontalAlignment  = 1"}},
     ThemeTargetStyles{L"CommandBar#FileExplorerSecondaryCommandBar", {
@@ -531,7 +634,7 @@ const Theme g_themeMatter = {{
     ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
-        L"Background = Transparent ",
+        L"Background = Transparent",
         L"BorderThickness = 0"}},
     ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
         L"Background@Selected:= $accentColor2",
@@ -544,10 +647,10 @@ const Theme g_themeMatter = {{
         L"Visibility  = 0",
         L"Margin = 0,0,0,3"}},
     ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
-        L"Background=Transparent ",
+        L"Background=Transparent",
         L"BorderThickness = 0"}},
     ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
-        L"Background=Transparent "}},
+        L"Background=Transparent"}},
     ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
         L"Background :=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity=\"0.4\" />",
         L"CornerRadius = 6",
@@ -587,7 +690,7 @@ const Theme g_themeMatter = {{
 }, {
     L"accentColor=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" />",
     L"accentColor2=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity=\"0.5\" />",
-}, {}, /*explorerFrameContainerHeight=*/0};
+}};
 
 const Theme g_themeWindowGlass = {{
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#PART_LayoutRoot", {
@@ -636,7 +739,7 @@ const Theme g_themeWindowGlass = {{
         L"BorderThickness=0",
         L"Margin=0,0,8,8",
         L"Background:=$MainContentBG"}},
-    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid  ", {
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
         L"BorderBrush:=$MainContentBG",
         L"CornerRadius=8",
         L"BorderThickness=0",
@@ -787,9 +890,10 @@ const Theme g_themeLiquidGlass = {{
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootCommandSearchGrid > Windows.UI.Xaml.Controls.Border#BorderElement", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.NavigationViewItemPresenter#NavigationViewItemPresenter > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot", {
-        L"BorderThickness=$BorderThickness",
-        L"Background:=$ButtonBackground",
-        L"BorderBrush:=$ButtonBorder"}},
+        L"BorderThickness=$ElementBorderThickness",
+        L"Background:=$ElementBackground",
+        L"BorderBrush:=$ElementBorder",
+        L"CornerRadius=$ElementCornerRadius"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#NavigationBarControlGrid", {
         L"Background:=Transparent",
         L"BorderBrush:=Transparent"}},
@@ -798,7 +902,7 @@ const Theme g_themeLiquidGlass = {{
         L"CornerRadius=$ElementCornerRadius",
         L"BorderThickness=$ElementBorderThickness",
         L"Margin=4,0"}},
-    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid  ", {
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
         L"BorderBrush:=$ElementBorderBrush",
         L"CornerRadius=$ElementCornerRadius",
         L"BorderThickness=$ElementBorderThickness",
@@ -806,7 +910,6 @@ const Theme g_themeLiquidGlass = {{
     ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid > Grid#GalleryRootGrid", {
         L"Background:=Transparent"}},
     ThemeTargetStyles{L"ToolTip", {
-        L"Background:=$ElementBG",
         L"BorderBrush:=$ElementBorderBrush",
         L"BorderThickness=$ElementBorderThickness",
         L"CornerRadius=$ElementCornerRadius"}},
@@ -826,11 +929,11 @@ const Theme g_themeLiquidGlass = {{
         L"Background=Transparent",
         L"BorderBrush=Transparent"}},
     ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
-        L"Background@Selected:=$ElementBG",
-        L"Background@PointerOverSelected:=$ButtonBackground",
-        L"Background@PointerOver:=$ButtonBackground",
-        L"Background@Normal:=$ElementBG",
-        L"Background@PressedSelected:=$ButtonBackground"}},
+        L"Background@Selected:=$ElementBackground",
+        L"Background@PointerOverSelected:=$AccentBackground",
+        L"Background@PointerOver:=$AccentBackground",
+        L"Background@Normal:=$ElementBackground",
+        L"Background@PressedSelected:=$ButtonBackground2"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
@@ -846,18 +949,18 @@ const Theme g_themeLiquidGlass = {{
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox#IconBox", {
         L"Visibility=1"}},
     ThemeTargetStyles{L"CommandBarOverflowPresenter#SecondaryItemsControl > Grid#LayoutRoot", {
-        L"Background:=$ElementBG",
+        L"Background:=$ElementBackground",
         L"BorderThickness=$ElementBorderThickness",
         L"BorderBrush:=$ElementBorderBrush",
         L"CornerRadius=$ElementCornerRadius"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AutoSuggestBox#FileExplorerSearchBox > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.TextBox#TextBox", {
         L"CornerRadius=$ElementCornerRadius",
-        L"Background:=$ElementBG",
+        L"Background:=$ElementBackground",
         L"BorderBrush:=$ElementBorderBrush",
         L"BorderThickness=$ElementBorderThickness"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
         L"CornerRadius=$ElementCornerRadius",
-        L"Background:=$ElementBG",
+        L"Background:=$ElementBackground",
         L"BorderBrush:=$ElementBorderBrush",
         L"BorderThickness=$ElementBorderThickness"}},
     ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AutoSuggestBox#PART_AutoSuggestBox > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.TextBox#TextBox", {
@@ -884,19 +987,634 @@ const Theme g_themeLiquidGlass = {{
     ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail", {
         L"Background:=Transparent"}},
 }, {
-    L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25323232\" TintOpacity=\"0.2\" />",
-    L"MainContentBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"1\" />",
-    L"ButtonBackground=<SolidColorBrush Color=\"{ThemeResource SystemAccentColor}\" Opacity=\"1\" />",
-    L"BorderThickness=0.3,1,0.3,0.3",
-    L"ClockBG=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemAccentColorLight2}\" TintOpacity=\"0.3\" />",
-    L"ElementBG=<WindhawkBlur BlurAmount=\"20\" TintColor=\"#202020\" TintOpacity=\"0.2\" />",
-    L"ElementBorderThickness=0.3,0.3,0.3,1",
-    L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>",
+    L"ContentBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"1\" />",
+    L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\" />",
+    L"ElementBackground=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.4\" />",
+    L"ElementBackground2=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\" />",
+    L"AccentBackground=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAccentColorLight1}\" TintOpacity=\"0.2\" />",
     L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>",
-    L"ButtonBorder=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight3}\" Opacity=\"1\" />",
-    L"CornerRadius=6",
-    L"ElementCornerRadius=4",
-}, {}, /*explorerFrameContainerHeight=*/87, BackgroundTranslucentEffect::kAcrylic};
+    L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>",
+    L"BorderThickness=0.3,1,0.3,0.3",
+    L"ElementBorderThickness=0.3,0.3,0.3,1",
+    L"CornerRadius=12",
+    L"ElementCornerRadius=8",
+}, {}, /*explorerFrameContainerHeight=*/87};
+
+const Theme g_themeMicaTabless = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#ContentRoot", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.Row=$NavigationBarGrid"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Grid.Row=$CommandBarGrid"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainerGrid > Border", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer > Microsoft.UI.Xaml.Controls.Button#CloseButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TabViewItem > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.Canvas", {
+        L"Opacity=0"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeLowColor}\" />"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.ContentPresenter > Microsoft.UI.Xaml.Controls.StackPanel > Microsoft.UI.Xaml.Controls.TextBlock", {
+        L"FontFamily=Segoe UI, Segoe Fluent Icons",
+        L"FontWeight=Normal"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"BorderThickness=0,0,0,1"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FileExplorerTabControl", {
+        L"Height=36"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer", {
+        L"Padding=1,0,0,1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox#IconBox", {
+        L"Margin=0,0,4,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TabViewItem", {
+        L"Margin=0,-8,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#DetailsViewControlRootGrid", {
+        L"Background=Transparent"}},
+}, {
+    L"NavigationBarGrid=1",
+    L"CommandBarGrid=2",
+}};
+
+const Theme g_themeOS26_Liquid_Glass = {{
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Margin=20,20,20,1",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Margin=10",
+        L"Background:=transparent",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=12",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=2,6,2,6",
+        L"Padding@Disabled=0,-7",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#upButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent",
+        L"HorizontalAlignment=1"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerSecondaryCommandBar", {
+        L"Background=Transparent",
+        L"MinHeight=0"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Margin=0,0,8,0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"CornerRadius=12",
+        L"Margin=2,4,0,4",
+        L"Height=27",
+        L"BorderThickness=1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\" />",
+        L"Background@PointerOverSelected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#35ffffff\" />",
+        L"Background@Normal:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#15ffffff\" />"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Visibility=Visible",
+        L"Margin=0,0,0,2",
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"BorderBrush:=<LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\"/><GradientStop Color=\"#80ffffff\" Offset=\"1\"/></LinearGradientBrush>",
+        L"Width=24",
+        L"Height=24"}},
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
+        L"Margin=-6,0,0,0"}},
+    ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\" />",
+        L"CornerRadius=14",
+        L"BorderThickness=1",
+        L"Margin=2",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox > Grid#LayoutRoot > TextBox > Grid@CommonStates > Border#BorderElement", {
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\" />",
+        L"CornerRadius=14",
+        L"BorderThickness=1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\" />",
+        L"CornerRadius=12",
+        L"BorderThickness=1",
+        L"Margin=3,0,3,1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarToggleButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\" />",
+        L"CornerRadius=12",
+        L"BorderThickness=1",
+        L"Margin=3,0,3,1",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#OuterOverflowContentRootV2", {
+        L"CornerRadius=20"}},
+    ThemeTargetStyles{L"Button#MoreButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarSeparator", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton", {
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton", {
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#upButton", {
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton", {
+        L"Margin=0,9,9,0"}},
+}};
+
+const Theme g_themeOS26_Liquid_Glass_variant_Compact = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.SuggestionsPopup", {
+        L"Margin=0,0,0,900"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton > Grid@CommonStates", {
+        L"Background@Disabled:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius@Disabled=12",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=2,6,2,6",
+        L"Padding@Disabled=0,-7"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > Button#MoreButton", {
+        L"Background:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius=12",
+        L"BorderThickness=1",
+        L"Margin=3,2,3,2",
+        L"Width=45",
+        L"Height=32"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton > Grid@CommonStates", {
+        L"Background@Disabled:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton > Grid@CommonStates", {
+        L"Background@Disabled:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton > Grid@CommonStates", {
+        L"Background@Disabled:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarToggleButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#2D101010\"/>"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Margin=20,20,20,1",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid > OuterOverflowContentRootV2", {
+        L"CornerRadius=250"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBarOverflowPresenter > Microsoft.UI.Xaml.Controls.CommandBarOverflowPresenter", {
+        L"Background=transparent"}},
+    ThemeTargetStyles{L"AppBarButton[7]", {
+        L"Visibility=Collapsed",
+        L"Width=0",
+        L"MinWidth=0",
+        L"Margin=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox > ContentViewB", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Margin=10",
+        L"Background:=transparent",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Grid.Row=0",
+        L"Grid.RowSpan=1",
+        L"CornerRadius:=15",
+        L"Width=400",
+        L"HorizontalAlignment=Left",
+        L"Background:=transparent",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > Grid#OverflowSeparator", {
+        L"Visibility=Collapsed",
+        L"Width=0",
+        L"MinWidth=0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot", {
+        L"HorizontalAlignment=Left"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > ItemsControl#PrimaryItemsControl", {
+        L"HorizontalAlignment=Left"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerSecondaryCommandBar", {
+        L"Visibility=Visible",
+        L"Margin=0,40,0,-20"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid", {
+        L"Margin=370,1,0,1"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Width=150",
+        L"Height=40",
+        L"Margin=0,0,8,0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=2,2,0,2",
+        L"Height=35"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#20ffffff\"/>",
+        L"Background@PointerOverSelected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\"/>",
+        L"Background@Normal:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#15ffffff\"/>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Visibility=Visible",
+        L"Margin=0,0,0,4",
+        L"Background:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius=8",
+        L"BorderThickness=1",
+        L"BorderBrush:=<LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\"/><GradientStop Color=\"#80ffffff\" Offset=\"1\"/></LinearGradientBrush>",
+        L"Width=24",
+        L"Height=24"}},
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background:=",
+        L"BorderBrush:="}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#15ffffff\"/>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=2"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Grid.Row=0",
+        L"Grid.RowSpan=2",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox > Grid#LayoutRoot > TextBox > Grid@CommonStates", {
+        L"BorderThickness=1",
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#15ffffff\"/>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius=10",
+        L"Margin=-90,0,90,0",
+        L"Height=32"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
+        L"Margin=-8,0,90,0"}},
+    ThemeTargetStyles{L"CommandBarOverflowPresenter Microsoft.UI.Xaml.Controls.AppBarButton", {
+        L"Background=Transparent",
+        L"CornerRadius=8",
+        L"Margin=2,1,2,1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton", {
+        L"Background:=<LinearGradientBrush StartPoint=\"-0.3,-0.3\" EndPoint=\"1.3,1.3\"><GradientStop Color=\"#55f0f07d\" Offset=\"0.0\"/><GradientStop Color=\"#2AF0F0F0\" Offset=\"0.3\"/><GradientStop Color=\"#00F0F0F0\" Offset=\"0.6\"/></LinearGradientBrush>",
+        L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,1\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\" /><GradientStop Color=\"#80ffffff\" Offset=\"1\" /></LinearGradientBrush>",
+        L"CornerRadius=12",
+        L"BorderThickness=1",
+        L"Margin=3,2,3,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#OuterOverflowContentRootV2", {
+        L"CornerRadius=20"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarToggleButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#2D101010\"/>",
+        L"CornerRadius=8",
+        L"BorderThickness=1",
+        L"Margin=3,0,3,1",
+        L"BorderBrush:=<LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\"/><GradientStop Color=\"#80ffffff\" Offset=\"1\"/></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarSeparator", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#upButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton", {
+        L"Visibility=Visible",
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#stopButton", {
+        L"Visibility=Collapsed",
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.RowSpan=2"}},
+}, {}, {}, /*explorerFrameContainerHeight=*/87};
+
+const Theme g_themeZEUSosX_044 = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent",
+        L"BorderThickness=0",
+        L"Grid.Row=0",
+        L"Grid.RowSpan=2",
+        L"HorizontalAlignment=Left",
+        L"VerticalAlignment=Top",
+        L"Width=155",
+        L"Margin=197,-30,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent",
+        L"HorizontalAlignment=Left",
+        L"VerticalAlignment=Top"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Border#BottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#NavigationBarControlGrid", {
+        L"Background=Transparent",
+        L"BorderBrush=Transparent",
+        L"ColumnDefinitions:=<ColumnDefinitionCollection><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"380\"/></ColumnDefinitionCollection>",
+        L"Margin=0,-16,0,-21"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid", {
+        L"Grid.Row=0",
+        L"HorizontalAlignment=Left",
+        L"Margin=100,0,0,0",
+        L"Width=1",
+        L"MaxWidth=1"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FileExplorerTabControl", {
+        L"HorizontalAlignment=Left",
+        L"Margin=100,0,0,0",
+        L"Width=1",
+        L"MaxWidth=1"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Width=0",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox > Grid#LayoutRoot > TextBox > Grid@CommonStates > Border#BorderElement", {
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid > Grid#LayoutRoot > TextBox > Grid@CommonStates > Border#BorderElement", {
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AutoSuggestBox#FileExplorerSearchBox > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.TextBox#TextBox", {
+        L"Margin=0,0,140,0",
+        L"Background=Transparent",
+        L"BorderBrush=Transparent",
+        L"TextAlignment=Center",
+        L"HorizontalContentAlignment=Center"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
+        L"HorizontalAlignment=Stretch",
+        L"Height=28",
+        L"Margin=155,0,0,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox", {
+        L"HorizontalAlignment=Stretch",
+        L"Height=28",
+        L"Margin=-7,-1,7,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBar#FileExplorerCommandBar Button", {
+        L"FontSize=14"}},
+}, {}, {}, /*explorerFrameContainerHeight=*/44, BackgroundTranslucentEffect::kMica};
+
+const Theme g_themeCompact_Explorer11 = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Primitives.SuggestionsPopup", {
+        L"Margin=0,0,0,900"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=10",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=2,6,2,6",
+        L"Padding@Disabled=0,-7"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > Button#MoreButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=3,2,3,2",
+        L"Width=45",
+        L"Height=32"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius@Disabled=11",
+        L"BorderThickness@Disabled=1",
+        L"Margin@Disabled=0,0,0,0",
+        L"Height@Disabled=32",
+        L"Width@Disabled=20",
+        L"Padding@Disabled=0,-2,0,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarToggleButton > Grid@CommonStates", {
+        L"Background@Disabled:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#2D101010\"/>"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Margin=20,20,20,1",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid > OuterOverflowContentRootV2", {
+        L"CornerRadius=250"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.CommandBarOverflowPresenter > Microsoft.UI.Xaml.Controls.CommandBarOverflowPresenter", {
+        L"Background=transparent"}},
+    ThemeTargetStyles{L"AppBarButton[7]", {
+        L"Visibility=Collapsed",
+        L"Width=0",
+        L"MinWidth=0",
+        L"Margin=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox > ContentViewB", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Margin=20,20,20,0",
+        L"Background:=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#2D101010\" TintOpacity=\"0.4\"/>",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Margin=10",
+        L"Background:=transparent",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Grid.Row=0",
+        L"Grid.RowSpan=1",
+        L"CornerRadius:=15",
+        L"Width=400",
+        L"HorizontalAlignment=Left",
+        L"Background:=transparent",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > Grid#OverflowSeparator", {
+        L"Visibility=Collapsed",
+        L"Width=0",
+        L"MinWidth=0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot", {
+        L"HorizontalAlignment=Left"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar > Grid#LayoutRoot > Grid#ContentRoot > ItemsControl#PrimaryItemsControl", {
+        L"HorizontalAlignment=Left"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerSecondaryCommandBar", {
+        L"Visibility=Visible",
+        L"Margin=0,40,0,-20"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid", {
+        L"Margin=370,1,0,1"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Width=150",
+        L"Height=40",
+        L"Margin=0,0,8,0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=2,2,0,2",
+        L"Height=35"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background=Transparent",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#30ffffff\"/>",
+        L"Background@PointerOverSelected:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#40ffffff\"/>",
+        L"Background@Normal:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#20ffffff\"/>"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Visibility=Visible",
+        L"Margin=0,0,0,4",
+        L"Background:=<WindhawkBlur BlurAmount=\"15\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=0",
+        L"BorderBrush:=<LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\"/><GradientStop Color=\"#80ffffff\" Offset=\"1\"/></LinearGradientBrush>",
+        L"Width=24",
+        L"Height=24"}},
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background:=",
+        L"BorderBrush:="}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=1"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Grid.Row=0",
+        L"Grid.RowSpan=2",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox > Grid#LayoutRoot > TextBox > Grid@CommonStates", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"Margin=-90,0,90,0",
+        L"Height=30"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#FileExplorerAddressBarGrid", {
+        L"Margin=-8,0,90,0"}},
+    ThemeTargetStyles{L"CommandBarOverflowPresenter#SecondaryItemsControl > Microsoft.UI.Xaml.Controls.AppBarButton", {
+        L"Background=Transparent",
+        L"CornerRadius=4",
+        L"BorderThickness=0",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#25ffffff\"/>",
+        L"CornerRadius=10",
+        L"BorderThickness=1",
+        L"Margin=3,2,3,2"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarToggleButton", {
+        L"Background:=<WindhawkBlur BlurAmount=\"8\" TintColor=\"#2D101010\"/>",
+        L"CornerRadius=8",
+        L"BorderThickness=1",
+        L"Margin=3,0,3,1",
+        L"BorderBrush:=<LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#80ffffff\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource SurfaceStrokeColorDefault}\" Offset=\"0.55\"/><GradientStop Color=\"#80ffffff\" Offset=\"1\"/></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarSeparator", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#backButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#forwardButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Visible"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#upButton", {
+        L"Margin=0,9,9,0",
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#refreshButton", {
+        L"Visibility=Visible",
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.AppBarButton#stopButton", {
+        L"Visibility=Collapsed",
+        L"Margin=0,9,9,0"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.RowSpan=2"}},
+}, {}, {}, /*explorerFrameContainerHeight=*/87};
 
 // clang-format on
 
@@ -1046,26 +1764,28 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
 {
     Wh_Log(L"========================================");
 
-    if (!g_initializedForThread) {
-        Wh_Log(L"NOTE: Not initialized for thread %u", GetCurrentThreadId());
-    }
-
     switch (mutationType)
     {
     case Add:
-        Wh_Log(L"Mutation type: Add");
+        Wh_Log(L"Mutation type: Add %llu", element.Handle);
         break;
 
     case Remove:
-        Wh_Log(L"Mutation type: Remove");
+        Wh_Log(L"Mutation type: Remove %llu", element.Handle);
         break;
 
     default:
-        Wh_Log(L"Mutation type: %d", static_cast<int>(mutationType));
+        Wh_Log(L"Mutation type: %d %llu", static_cast<int>(mutationType), element.Handle);
         break;
     }
 
     Wh_Log(L"Element type: %s", element.Type);
+
+    if (!g_initializedForThread)
+    {
+        Wh_Log(L"Not initialized for thread %u", GetCurrentThreadId());
+        return S_OK;
+    }
 
     if (mutationType == Add)
     {
@@ -1226,7 +1946,7 @@ catch (...)
 }
 
 __declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
+_Use_decl_annotations_ STDAPI DllCanUnloadNow()
 {
     if (winrt::get_module_lock())
     {
@@ -1307,7 +2027,9 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <windhawk_utils.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
+#include <limits>
 #include <list>
 #include <mutex>
 #include <optional>
@@ -1315,6 +2037,7 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -1345,6 +2068,7 @@ using namespace std::string_view_literals;
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.Networking.Connectivity.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.System.Power.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 
 using namespace winrt::Microsoft::UI::Xaml;
@@ -1375,6 +2099,12 @@ using PropertyValuesMaybeUnresolved =
     std::variant<PropertyValuesUnresolved, PropertyValues>;
 
 struct ElementMatcher {
+    enum class Kind {
+        Element,   // Normal element matcher.
+        Wildcard,  // '*': matches zero or more intermediate ancestors.
+        Root,      // ':root': asserts the next element has no parent.
+    };
+    Kind kind = Kind::Element;
     std::wstring type;
     std::wstring name;
     std::optional<std::wstring> visualStateGroupName;
@@ -1382,14 +2112,33 @@ struct ElementMatcher {
     PropertyValuesMaybeUnresolved propertyValues;
 };
 
-struct StyleRule {
-    std::wstring name;
+// A `Property[@VisualState][:]=value` rule that sets a control property.
+// `value` may contain `{{...}}` placeholders, in which case `isDynamic()`
+// returns true and the rule is re-resolved on every apply.
+struct ValueRule {
+    std::wstring propertyName;
     std::wstring visualState;
     std::wstring value;
     bool isXamlValue = false;
+
+    bool isDynamic() const { return value.find(L"{{") != std::wstring::npos; }
 };
 
-using PropertyOverridesUnresolved = std::vector<StyleRule>;
+// A `Property=>VarName` rule that observes a control property and writes its
+// current value into the named mod-global style variable.
+struct CaptureRule {
+    std::wstring propertyName;
+    std::wstring varName;
+};
+
+// Parsed-but-not-yet-resolved rules for one target. Captures and value-rules
+// are intentionally split: they live in different fields of `ResolvedRules`
+// post-resolution, and the parser already validates that captures cannot carry
+// `:=` or `@VisualState`.
+struct UnresolvedRules {
+    std::vector<ValueRule> valueRules;
+    std::vector<CaptureRule> captureRules;
+};
 
 struct XamlBlurBrushParams {
     float blurAmount;
@@ -1400,18 +2149,60 @@ struct XamlBlurBrushParams {
     std::optional<float> tintSaturation;
     std::optional<float> noiseOpacity;
     std::optional<float> noiseDensity;
+    std::optional<winrt::Windows::UI::Color> fallbackColor;
+    std::wstring fallbackThemeResourceKey;  // Empty if not from ThemeResource
 };
 
+// Holds the raw rule body for a style whose value depends on `{{...}}`
+// substitutions. Re-resolved on every apply and on every variable change.
+// `propertyName` is kept alongside the value because Windows.UI.Xaml's
+// DependencyProperty does not expose its name, and the re-resolution path needs
+// to feed the name back to the XAML parser.
+struct DynamicStyleTemplate {
+    std::wstring propertyName;
+    std::wstring rawValue;
+    bool isXamlValue = false;
+};
+
+// Tagged value for one (property, visualState) cell of PropertyOverrides.
+// Possible states:
+// - IInspectable        : fully resolved WinRT value (literal or static XAML).
+//                         Apply directly via SetValue.
+// - XamlBlurBrushParams : parsed `<WindhawkBlur .../>` parameters. The brush
+//                         instance is constructed at apply time (needs the live
+//                         UIElement).
+// - DynamicStyleTemplate: rule body contains `{{...}}` substitutions.
+//                         Re-resolved on every apply and on every variable
+//                         change. This arm appears only inside
+//                         PropertyOverrides cells; it is never stored in
+//                         ElementPropertyCustomizationState::customValue (see
+//                         notes there).
 using PropertyOverrideValue =
-    std::variant<winrt::Windows::Foundation::IInspectable, XamlBlurBrushParams>;
+    std::variant<winrt::Windows::Foundation::IInspectable,
+                 XamlBlurBrushParams,
+                 DynamicStyleTemplate>;
 
 // Property -> visual state -> value.
 using PropertyOverrides =
     std::unordered_map<DependencyProperty,
                        std::unordered_map<std::wstring, PropertyOverrideValue>>;
 
+// Resolved counterpart to CaptureRule: the property name string has been turned
+// into an actual DependencyProperty by the XAML parser, so the apply path can
+// call RegisterPropertyChangedCallback / GetValue directly without re-resolving
+// on every use.
+struct CaptureSpec {
+    DependencyProperty property{nullptr};
+    std::wstring varName;
+};
+
+struct ResolvedRules {
+    PropertyOverrides propertyOverrides;
+    std::vector<CaptureSpec> captures;
+};
+
 using PropertyOverridesMaybeUnresolved =
-    std::variant<PropertyOverridesUnresolved, PropertyOverrides>;
+    std::variant<UnresolvedRules, ResolvedRules>;
 
 struct ElementCustomizationRules {
     ElementMatcher elementMatcher;
@@ -1424,8 +2215,28 @@ thread_local std::vector<ElementCustomizationRules>
 
 struct ElementPropertyCustomizationState {
     std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
+    // The most recently applied value, re-pushed by the per-DP property-
+    // changed callback when something external (animation, system Setter)
+    // overrides it. Although PropertyOverrideValue's variant declares a
+    // DynamicStyleTemplate arm, customValue here is always either IInspectable
+    // or XamlBlurBrushParams in practice -- dynamic styles get resolved into
+    // one of those before being stored, and the source template lives
+    // separately in `dynamicTemplate` below.
     std::optional<PropertyOverrideValue> customValue;
     winrt::Windows::Foundation::IInspectable lastAppliedValue{nullptr};
+    int64_t propertyChangedToken = 0;
+    // Source template for dynamic styles whose value contains `{{...}}`
+    // substitutions; re-evaluated whenever a referenced variable changes, with
+    // the resolved result written back into `customValue`. Empty for static
+    // styles.
+    std::optional<DynamicStyleTemplate> dynamicTemplate;
+    // Names of style variables this property's value depends on. Populated
+    // alongside `dynamicTemplate`; empty for static styles.
+    std::vector<std::wstring> variableDependencies;
+};
+
+struct CapturePropertyCustomizationState {
+    std::wstring varName;
     int64_t propertyChangedToken = 0;
 };
 
@@ -1438,6 +2249,20 @@ struct ElementCustomizationStateForVisualStateGroup {
 struct ElementCustomizationState {
     winrt::weak_ref<FrameworkElement> element;
 
+    // Capture state lives at the element level: capture rules (`Prop=>Var`) are
+    // intentionally not visual-state-aware (the parser rejects `@VisualState`
+    // on them), and a single element observed by multiple targets with
+    // different VSGs should still only register one
+    // RegisterPropertyChangedCallback per DP and one SizeChanged subscription.
+    std::unordered_map<DependencyProperty, CapturePropertyCustomizationState>
+        captureCustomizationStates;
+
+    // ActualWidth/ActualHeight (and other layout-driven DPs) do not fire
+    // RegisterPropertyChangedCallback on UWP, so any element with capture rules
+    // also subscribes to `FrameworkElement.SizeChanged` to pick up size
+    // changes.
+    winrt::event_token captureSizeChangedToken;
+
     // Use list to avoid reallocations on insertion, as pointers to items are
     // captured in callbacks and stored.
     std::list<std::pair<std::optional<winrt::weak_ref<VisualStateGroup>>,
@@ -1447,6 +2272,43 @@ struct ElementCustomizationState {
 
 thread_local std::unordered_map<InstanceHandle, ElementCustomizationState>
     g_elementsCustomizationState;
+
+// Mod-global style variable registry. Populated by `Property=>VarName` capture
+// rules and consumed by `{{VarName}}` substitutions in other styles. Last
+// writer wins -- a new capture from any element overwrites the value.
+struct StyleVariableValue {
+    std::wstring stringForm;        // invariant-formatted text representation
+    std::optional<double> numeric;  // only present when source was numeric
+    // True for primitive captures whose `stringForm` is meaningful to insert
+    // verbatim into a XAML attribute (numeric, boolean, string). False for
+    // opaque types -- their stringForm is the captured class name, kept only
+    // for diagnostics; bare-identifier substitution skips such variables.
+    bool substitutable = false;
+};
+
+struct StyleVariableConsumer {
+    InstanceHandle elementHandle;
+    DependencyProperty property{nullptr};
+    // Each consumer remembers its own fallbackClassName so that propagation can
+    // re-resolve dynamic styles using the consumer's match-site context, not
+    // the (potentially different) capturer's.
+    std::wstring fallbackClassName;
+};
+
+// Mod-global style variable registry. The struct mirrors the per-XamlRoot state
+// used by the taskbar styler so the variable-resolution call paths stay aligned
+// across the styler mods, but here all elements share one registry.
+struct StyleVariableState {
+    std::unordered_map<std::wstring, StyleVariableValue> variables;
+    std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
+        consumers;
+};
+
+thread_local StyleVariableState g_styleVariableState;
+
+StyleVariableState* GetStyleVariableState() {
+    return &g_styleVariableState;
+}
 
 thread_local bool g_elementPropertyModifying;
 
@@ -1659,10 +2521,10 @@ typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
 
 ////////////////////////////////////////////////////////////////////////////////
 // XamlBlurBrush.h
-class XamlBlurBrush : public mux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
+class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush>
 {
 public:
-    XamlBlurBrush(muc::Compositor compositor,
+    XamlBlurBrush(UIElement element,
                   float blurAmount,
                   winrt::Windows::UI::Color tint,
                   std::optional<uint8_t> tintOpacity,
@@ -1670,14 +2532,21 @@ public:
                   std::optional<float> tintLuminosityOpacity,
                   std::optional<float> tintSaturation,
                   std::optional<float> noiseOpacity,
-                  std::optional<float> noiseDensity);
+                  std::optional<float> noiseDensity,
+                  std::optional<winrt::Windows::UI::Color> fallbackColor,
+                  winrt::hstring fallbackThemeResourceKey);
+    ~XamlBlurBrush();
 
     void OnConnected();
     void OnDisconnected();
 
 private:
     void RefreshThemeTint();
-    void OnThemeRefreshed();
+    void RefreshFallbackColor();
+    bool ShouldUseFallback() const;
+    void RefreshBrush();
+    muc::CompositionBrush CreateEffectBrush();
+    muc::CompositionBrush CreateFallbackBrush();
 
     muc::Compositor m_compositor;
     float m_blurAmount;
@@ -1688,7 +2557,23 @@ private:
     std::optional<float> m_tintSaturation;
     std::optional<float> m_noiseOpacity;
     std::optional<float> m_noiseDensity;
-    winrt::Windows::UI::ViewManagement::UISettings m_uiSettings;
+    std::optional<winrt::Windows::UI::Color> m_fallbackColor;
+    winrt::hstring m_fallbackThemeResourceKey;
+    Media::SolidColorBrush m_proxyBrush{nullptr};
+    Media::SolidColorBrush m_fallbackProxyBrush{nullptr};
+    winrt::weak_ref<FrameworkElement> m_weakProxyElement;
+    winrt::hstring m_proxyKey;
+    winrt::hstring m_fallbackProxyKey;
+    winrt::Windows::UI::ViewManagement::UISettings m_uiSettings{nullptr};
+    winrt::event_token m_advancedEffectsEnabledChangedToken{};
+    winrt::event_token m_energySaverStatusChangedToken{};
+    winrt::Microsoft::UI::Dispatching::DispatcherQueue m_dispatcher{nullptr};
+    HKEY m_powerKey{nullptr};
+    HANDLE m_regNotifyEvent{nullptr};
+    HANDLE m_regWaitHandle{nullptr};
+
+    static void CALLBACK OnEnergySaverRegistryChanged(PVOID context,
+                                                      BOOLEAN timerOrWaitFired);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2487,7 +3372,7 @@ void ColorMatrixEffect::Name(winrt::hstring name)
 
 ////////////////////////////////////////////////////////////////////////////////
 // XamlBlurBrush.cpp
-XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor,
+XamlBlurBrush::XamlBlurBrush(UIElement element,
                              float blurAmount,
                              winrt::Windows::UI::Color tint,
                              std::optional<uint8_t> tintOpacity,
@@ -2495,8 +3380,11 @@ XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor,
                              std::optional<float> tintLuminosityOpacity,
                              std::optional<float> tintSaturation,
                              std::optional<float> noiseOpacity,
-                             std::optional<float> noiseDensity) :
-    m_compositor(std::move(compositor)),
+                             std::optional<float> noiseDensity,
+                             std::optional<winrt::Windows::UI::Color> fallbackColor,
+                             winrt::hstring fallbackThemeResourceKey) :
+    m_compositor(muxh::ElementCompositionPreview::GetElementVisual(element)
+                     .Compositor()),
     m_blurAmount(blurAmount),
     m_tint(tint),
     m_tintOpacity(tintOpacity),
@@ -2504,24 +3392,295 @@ XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor,
     m_tintLuminosityOpacity(tintLuminosityOpacity),
     m_tintSaturation(tintSaturation),
     m_noiseOpacity(noiseOpacity),
-    m_noiseDensity(noiseDensity)
+    m_noiseDensity(noiseDensity),
+    m_fallbackColor(fallbackColor),
+    m_fallbackThemeResourceKey(std::move(fallbackThemeResourceKey))
 {
+    auto fe = element.try_as<FrameworkElement>();
+
+    auto createProxy = [&](winrt::hstring const& themeResourceKey)
+        -> Media::SolidColorBrush
+    {
+        if (!fe)
+        {
+            return nullptr;
+        }
+        std::wstring xaml =
+            L"<SolidColorBrush"
+            L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/"
+            L"presentation\""
+            L" Color=\"{ThemeResource " +
+            std::wstring(themeResourceKey) + L"}\"/>";
+        try
+        {
+            return Markup::XamlReader::Load(winrt::hstring(xaml))
+                .try_as<Media::SolidColorBrush>();
+        }
+        catch (winrt::hresult_error const& ex)
+        {
+            Wh_Log(L"Failed to create proxy brush: %08X", ex.code());
+            return nullptr;
+        }
+    };
+
+    static std::atomic<uint64_t> s_proxyCounter{0};
+
     if (!m_tintThemeResourceKey.empty())
     {
-        RefreshThemeTint();
-
-        auto dq = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-
-        m_uiSettings.ColorValuesChanged([weakThis = get_weak(), dq] (auto const&, auto const&)
+        if (auto proxyBrush = createProxy(m_tintThemeResourceKey))
         {
-            dq.TryEnqueue([weakThis]
-            {
-                if (auto self = weakThis.get())
+            auto proxyKey = winrt::hstring(
+                L"__WhBlurProxy_" +
+                std::to_wstring(++s_proxyCounter));
+            fe.Resources().Insert(
+                winrt::box_value(proxyKey), proxyBrush);
+            m_proxyBrush = proxyBrush;
+            m_weakProxyElement = winrt::make_weak(fe);
+            m_proxyKey = proxyKey;
+            Wh_Log(L"Tint proxy brush for %s inserted with key %s",
+                   m_tintThemeResourceKey.c_str(),
+                   proxyKey.c_str());
+        }
+
+        if (m_proxyBrush)
+        {
+            m_proxyBrush.RegisterPropertyChangedCallback(
+                Media::SolidColorBrush::ColorProperty(),
+                [weakThis = get_weak()](auto&&, auto&&)
                 {
-                    self->OnThemeRefreshed();
+                    if (auto self = weakThis.get())
+                    {
+                        Wh_Log(L"Tint theme color changed");
+                        self->RefreshBrush();
+                    }
+                });
+        }
+    }
+
+    if (!m_fallbackThemeResourceKey.empty())
+    {
+        if (auto proxyBrush = createProxy(m_fallbackThemeResourceKey))
+        {
+            auto proxyKey = winrt::hstring(
+                L"__WhBlurFallbackProxy_" +
+                std::to_wstring(++s_proxyCounter));
+            fe.Resources().Insert(
+                winrt::box_value(proxyKey), proxyBrush);
+            m_fallbackProxyBrush = proxyBrush;
+            if (!m_weakProxyElement.get())
+            {
+                m_weakProxyElement = winrt::make_weak(fe);
+            }
+            m_fallbackProxyKey = proxyKey;
+            Wh_Log(L"Fallback proxy brush for %s inserted with key %s",
+                   m_fallbackThemeResourceKey.c_str(),
+                   proxyKey.c_str());
+        }
+
+        if (m_fallbackProxyBrush)
+        {
+            m_fallbackProxyBrush.RegisterPropertyChangedCallback(
+                Media::SolidColorBrush::ColorProperty(),
+                [weakThis = get_weak()](auto&&, auto&&)
+                {
+                    if (auto self = weakThis.get())
+                    {
+                        Wh_Log(L"Fallback theme color changed");
+                        self->RefreshBrush();
+                    }
+                });
+        }
+    }
+
+    if (m_fallbackColor || !m_fallbackThemeResourceKey.empty())
+    {
+        m_dispatcher =
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+
+        try
+        {
+            m_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+            auto dispatcher = m_dispatcher;
+            m_advancedEffectsEnabledChangedToken =
+                m_uiSettings.AdvancedEffectsEnabledChanged(
+                    [weakThis = get_weak(), dispatcher](auto&&, auto&&)
+                    {
+                        dispatcher.TryEnqueue([weakThis]
+                        {
+                            if (auto self = weakThis.get())
+                            {
+                                Wh_Log(L"AdvancedEffectsEnabled changed");
+                                self->RefreshBrush();
+                            }
+                        });
+                    });
+            m_energySaverStatusChangedToken =
+                winrt::Windows::System::Power::PowerManager::
+                    EnergySaverStatusChanged(
+                        [weakThis = get_weak(), dispatcher](auto&&, auto&&)
+                        {
+                            dispatcher.TryEnqueue([weakThis]
+                            {
+                                if (auto self = weakThis.get())
+                                {
+                                    Wh_Log(L"EnergySaverStatus changed");
+                                    self->RefreshBrush();
+                                }
+                            });
+                        });
+        }
+        catch (winrt::hresult_error const& ex)
+        {
+            Wh_Log(L"Failed to register fallback state listeners: %08X",
+                   ex.code());
+        }
+
+        // Watch HKLM\SYSTEM\CurrentControlSet\Control\Power for changes to
+        // EnergySaverState. On Windows 11 24H2+ neither the WinRT
+        // PowerManager.EnergySaverStatus property nor the Win32
+        // GetSystemPowerStatus.SystemStatusFlag flag reliably reflects the
+        // "Always use energy saver" setting; the registry value is the only
+        // signal that updates in that case. The wait callback re-arms the
+        // notification and posts a brush refresh on the UI thread.
+        LONG regStatus = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            L"SYSTEM\\CurrentControlSet\\Control\\Power", 0, KEY_NOTIFY,
+            &m_powerKey);
+        if (regStatus == ERROR_SUCCESS)
+        {
+            m_regNotifyEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+            if (m_regNotifyEvent)
+            {
+                regStatus = RegNotifyChangeKeyValue(m_powerKey, FALSE,
+                                                   REG_NOTIFY_CHANGE_LAST_SET,
+                                                   m_regNotifyEvent, TRUE);
+                if (regStatus == ERROR_SUCCESS)
+                {
+                    if (!RegisterWaitForSingleObject(
+                            &m_regWaitHandle, m_regNotifyEvent,
+                            OnEnergySaverRegistryChanged, this, INFINITE,
+                            WT_EXECUTEINWAITTHREAD))
+                    {
+                        Wh_Log(L"RegisterWaitForSingleObject failed: %lu",
+                               GetLastError());
+                        m_regWaitHandle = nullptr;
+                    }
                 }
-            });
+                else
+                {
+                    Wh_Log(L"RegNotifyChangeKeyValue failed: %ld", regStatus);
+                    CloseHandle(m_regNotifyEvent);
+                    m_regNotifyEvent = nullptr;
+                    RegCloseKey(m_powerKey);
+                    m_powerKey = nullptr;
+                }
+            }
+            else
+            {
+                Wh_Log(L"CreateEvent failed: %lu", GetLastError());
+                RegCloseKey(m_powerKey);
+                m_powerKey = nullptr;
+            }
+        }
+        else
+        {
+            Wh_Log(L"RegOpenKeyEx for Power key failed: %ld", regStatus);
+        }
+    }
+}
+
+void CALLBACK XamlBlurBrush::OnEnergySaverRegistryChanged(PVOID context,
+                                                          BOOLEAN)
+{
+    auto* self = static_cast<XamlBlurBrush*>(context);
+
+    // Re-arm before dispatching so a rapid second change isn't dropped.
+    if (self->m_powerKey && self->m_regNotifyEvent)
+    {
+        RegNotifyChangeKeyValue(self->m_powerKey, FALSE,
+                                REG_NOTIFY_CHANGE_LAST_SET,
+                                self->m_regNotifyEvent, TRUE);
+    }
+
+    if (self->m_dispatcher)
+    {
+        auto weakThis = self->get_weak();
+        self->m_dispatcher.TryEnqueue([weakThis]
+        {
+            if (auto strongThis = weakThis.get())
+            {
+                Wh_Log(L"Power registry key changed, refreshing brush");
+                strongThis->RefreshBrush();
+            }
         });
+    }
+}
+
+XamlBlurBrush::~XamlBlurBrush()
+{
+    // Tear down the registry watch first so no more callbacks can fire while
+    // we close the underlying handles.
+    if (m_regWaitHandle)
+    {
+        UnregisterWaitEx(m_regWaitHandle, INVALID_HANDLE_VALUE);
+        m_regWaitHandle = nullptr;
+    }
+    if (m_regNotifyEvent)
+    {
+        CloseHandle(m_regNotifyEvent);
+        m_regNotifyEvent = nullptr;
+    }
+    if (m_powerKey)
+    {
+        RegCloseKey(m_powerKey);
+        m_powerKey = nullptr;
+    }
+
+    if (m_uiSettings && m_advancedEffectsEnabledChangedToken.value)
+    {
+        try
+        {
+            m_uiSettings.AdvancedEffectsEnabledChanged(
+                m_advancedEffectsEnabledChangedToken);
+        }
+        catch (...)
+        {
+            Wh_Log(L"Error %08X", winrt::to_hresult());
+        }
+    }
+
+    if (m_energySaverStatusChangedToken.value)
+    {
+        try
+        {
+            winrt::Windows::System::Power::PowerManager::
+                EnergySaverStatusChanged(m_energySaverStatusChangedToken);
+        }
+        catch (...)
+        {
+            Wh_Log(L"Error %08X", winrt::to_hresult());
+        }
+    }
+
+    if (auto element = m_weakProxyElement.get())
+    {
+        try
+        {
+            if (!m_proxyKey.empty())
+            {
+                element.Resources().Remove(winrt::box_value(m_proxyKey));
+            }
+            if (!m_fallbackProxyKey.empty())
+            {
+                element.Resources().Remove(
+                    winrt::box_value(m_fallbackProxyKey));
+            }
+        }
+        catch (...)
+        {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
     }
 }
 
@@ -2529,131 +3688,141 @@ void XamlBlurBrush::OnConnected()
 {
     if (!CompositionBrush())
     {
-        auto backdropBrush = m_compositor.CreateBackdropBrush();
+        RefreshThemeTint();
+        RefreshFallbackColor();
 
-        // Rec. 709 luma coefficients, used for saturation and luminosity.
-        constexpr float kLumaR = 0.2126f;
-        constexpr float kLumaG = 0.7152f;
-        constexpr float kLumaB = 0.0722f;
-
-        // 1. Blur
-        auto blurEffect = winrt::make_self<GaussianBlurEffect>();
-        blurEffect->Source = muc::CompositionEffectSourceParameter(L"backdrop");
-        blurEffect->BlurAmount = m_blurAmount;
-        blurEffect->Name(L"BlurEffect");
-
-        wge::IGraphicsEffectSource topOfStack = *blurEffect;
-
-        // 2. Saturation (optional)
-        if (m_tintSaturation && *m_tintSaturation != 1.0f)
-        {
-            float s = std::max(*m_tintSaturation, 0.0f);
-            float invS = 1.0f - s;
-
-            auto satMatrix = winrt::make_self<ColorMatrixEffect>();
-            satMatrix->Source = topOfStack;
-
-            // Standard saturation matrix: lerp between luminance and identity.
-            auto& m = satMatrix->Matrix;
-            m[0]  = invS * kLumaR + s; m[1]  = invS * kLumaR;     m[2]  = invS * kLumaR;     m[3]  = 0.0f;
-            m[4]  = invS * kLumaG;     m[5]  = invS * kLumaG + s; m[6]  = invS * kLumaG;     m[7]  = 0.0f;
-            m[8]  = invS * kLumaB;     m[9]  = invS * kLumaB;     m[10] = invS * kLumaB + s; m[11] = 0.0f;
-            m[12] = 0.0f;              m[13] = 0.0f;              m[14] = 0.0f;              m[15] = 1.0f;
-
-            satMatrix->Name(L"SaturationEffect");
-            topOfStack = *satMatrix;
-        }
-
-        // 3. Luminosity (optional) - shifts pixel luminance towards the tint's
-        // luminance, blended by the opacity factor.
-        if (m_tintLuminosityOpacity && *m_tintLuminosityOpacity > 0.0f)
-        {
-            float op = std::clamp(*m_tintLuminosityOpacity, 0.0f, 1.0f);
-
-            float tintLum = (m_tint.R / 255.0f) * kLumaR +
-                            (m_tint.G / 255.0f) * kLumaG +
-                            (m_tint.B / 255.0f) * kLumaB;
-
-            auto lumMatrix = winrt::make_self<ColorMatrixEffect>();
-            lumMatrix->Source = topOfStack;
-
-            auto& m = lumMatrix->Matrix;
-            m[0]  = 1.0f - (kLumaR * op); m[1]  = -(kLumaR * op);       m[2]  = -(kLumaR * op);       m[3]  = 0.0f;
-            m[4]  = -(kLumaG * op);       m[5]  = 1.0f - (kLumaG * op); m[6]  = -(kLumaG * op);       m[7]  = 0.0f;
-            m[8]  = -(kLumaB * op);       m[9]  = -(kLumaB * op);       m[10] = 1.0f - (kLumaB * op); m[11] = 0.0f;
-            m[12] = 0.0f;                 m[13] = 0.0f;                 m[14] = 0.0f;                 m[15] = 1.0f;
-            m[16] = tintLum * op;         m[17] = tintLum * op;         m[18] = tintLum * op;         m[19] = 0.0f;
-
-            lumMatrix->Name(L"LuminosityBlend");
-            topOfStack = *lumMatrix;
-        }
-
-        // 4. Noise overlay (optional) - procedural tiled noise with adjustable
-        // density and opacity.
-        muc::CompositionSurfaceBrush noiseBrush{nullptr};
-        if (m_noiseOpacity && *m_noiseOpacity > 0.0f)
-        {
-            float density = m_noiseDensity.value_or(1.0f);
-
-            auto stream = CreateNoiseStream(density);
-            auto surface =
-                mux::Media::LoadedImageSurface::StartLoadFromStream(stream);
-            noiseBrush = m_compositor.CreateSurfaceBrush(surface);
-            noiseBrush.Stretch(muc::CompositionStretch::None);
-
-            // Tile via border effect (wrap mode).
-            auto borderEffect = winrt::make_self<BorderEffect>();
-            borderEffect->Source =
-                muc::CompositionEffectSourceParameter(L"NoiseSource");
-
-            // Scale all channels by opacity for premultiplied blending.
-            float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
-
-            auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
-            opacityEffect->Source = *borderEffect;
-            // Matrix: Scale all channels by opacity (for premultiplied blending).
-            opacityEffect->Matrix[0] = nOp;
-            opacityEffect->Matrix[5] = nOp;
-            opacityEffect->Matrix[10] = nOp;
-            opacityEffect->Matrix[15] = nOp;
-            opacityEffect->Name(L"NoiseOpacityEffect");
-
-            // Composite noise over the current stack.
-            auto noiseComposite = winrt::make_self<CompositeEffect>();
-            noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-            noiseComposite->Sources.push_back(topOfStack);
-            noiseComposite->Sources.push_back(*opacityEffect);
-            noiseComposite->Name(L"NoiseComposite");
-            topOfStack = *noiseComposite;
-        }
-
-        // 5. Tint (flood color composited over the stack).
-        auto floodEffect = winrt::make_self<FloodEffect>();
-        floodEffect->Color = m_tint;
-        floodEffect->Name(L"FloodEffect");
-
-        auto compositeEffect = winrt::make_self<CompositeEffect>();
-        compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-        compositeEffect->Sources.push_back(topOfStack);
-        compositeEffect->Sources.push_back(*floodEffect);
-
-        auto factory = m_compositor.CreateEffectFactory(
-            *compositeEffect,
-            // List of animatable properties.
-            {L"FloodEffect.Color"}
-        );
-        auto brush = factory.CreateBrush();
-
-        brush.SetSourceParameter(L"backdrop", backdropBrush);
-
-        // Bind the noise brush if we created one.
-        if (noiseBrush)
-        {
-            brush.SetSourceParameter(L"NoiseSource", noiseBrush);
-        }
-
-        CompositionBrush(brush);
+        CompositionBrush(ShouldUseFallback() ? CreateFallbackBrush()
+                                             : CreateEffectBrush());
     }
+}
+
+muc::CompositionBrush XamlBlurBrush::CreateFallbackBrush()
+{
+    return m_compositor.CreateColorBrush(m_fallbackColor.value_or(m_tint));
+}
+
+muc::CompositionBrush XamlBlurBrush::CreateEffectBrush()
+{
+    auto backdropBrush = m_compositor.CreateBackdropBrush();
+
+    // Rec. 709 luma coefficients, used for saturation and luminosity.
+    constexpr float kLumaR = 0.2126f;
+    constexpr float kLumaG = 0.7152f;
+    constexpr float kLumaB = 0.0722f;
+
+    // 1. Blur
+    auto blurEffect = winrt::make_self<GaussianBlurEffect>();
+    blurEffect->Source = muc::CompositionEffectSourceParameter(L"backdrop");
+    blurEffect->BlurAmount = m_blurAmount;
+    blurEffect->Name(L"BlurEffect");
+
+    wge::IGraphicsEffectSource topOfStack = *blurEffect;
+
+    // 2. Saturation (optional)
+    if (m_tintSaturation && *m_tintSaturation != 1.0f)
+    {
+        float s = std::max(*m_tintSaturation, 0.0f);
+        float invS = 1.0f - s;
+
+        auto satMatrix = winrt::make_self<ColorMatrixEffect>();
+        satMatrix->Source = topOfStack;
+
+        // Standard saturation matrix: lerp between luminance and identity.
+        auto& m = satMatrix->Matrix;
+        m[0]  = invS * kLumaR + s; m[1]  = invS * kLumaR;     m[2]  = invS * kLumaR;     m[3]  = 0.0f;
+        m[4]  = invS * kLumaG;     m[5]  = invS * kLumaG + s; m[6]  = invS * kLumaG;     m[7]  = 0.0f;
+        m[8]  = invS * kLumaB;     m[9]  = invS * kLumaB;     m[10] = invS * kLumaB + s; m[11] = 0.0f;
+        m[12] = 0.0f;              m[13] = 0.0f;              m[14] = 0.0f;              m[15] = 1.0f;
+
+        satMatrix->Name(L"SaturationEffect");
+        topOfStack = *satMatrix;
+    }
+
+    // 3. Luminosity (optional) - shifts pixel luminance towards the tint's
+    // luminance, blended by the opacity factor.
+    if (m_tintLuminosityOpacity && *m_tintLuminosityOpacity > 0.0f)
+    {
+        float op = std::clamp(*m_tintLuminosityOpacity, 0.0f, 1.0f);
+
+        float tintLum = (m_tint.R / 255.0f) * kLumaR +
+                        (m_tint.G / 255.0f) * kLumaG +
+                        (m_tint.B / 255.0f) * kLumaB;
+
+        auto lumMatrix = winrt::make_self<ColorMatrixEffect>();
+        lumMatrix->Source = topOfStack;
+
+        auto& m = lumMatrix->Matrix;
+        m[0]  = 1.0f - (kLumaR * op); m[1]  = -(kLumaR * op);       m[2]  = -(kLumaR * op);       m[3]  = 0.0f;
+        m[4]  = -(kLumaG * op);       m[5]  = 1.0f - (kLumaG * op); m[6]  = -(kLumaG * op);       m[7]  = 0.0f;
+        m[8]  = -(kLumaB * op);       m[9]  = -(kLumaB * op);       m[10] = 1.0f - (kLumaB * op); m[11] = 0.0f;
+        m[12] = 0.0f;                 m[13] = 0.0f;                 m[14] = 0.0f;                 m[15] = 1.0f;
+        m[16] = tintLum * op;         m[17] = tintLum * op;         m[18] = tintLum * op;         m[19] = 0.0f;
+
+        lumMatrix->Name(L"LuminosityBlend");
+        topOfStack = *lumMatrix;
+    }
+
+    // 4. Noise overlay (optional) - procedural tiled noise with adjustable
+    // density and opacity.
+    muc::CompositionSurfaceBrush noiseBrush{nullptr};
+    if (m_noiseOpacity && *m_noiseOpacity > 0.0f)
+    {
+        float density = m_noiseDensity.value_or(1.0f);
+
+        auto stream = CreateNoiseStream(density);
+        auto surface =
+            Media::LoadedImageSurface::StartLoadFromStream(stream);
+        noiseBrush = m_compositor.CreateSurfaceBrush(surface);
+        noiseBrush.Stretch(muc::CompositionStretch::None);
+
+        // Tile via border effect (wrap mode).
+        auto borderEffect = winrt::make_self<BorderEffect>();
+        borderEffect->Source =
+            muc::CompositionEffectSourceParameter(L"NoiseSource");
+
+        // Scale all channels by opacity for premultiplied blending.
+        float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
+
+        auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
+        opacityEffect->Source = *borderEffect;
+        // Matrix: Scale all channels by opacity (for premultiplied blending).
+        opacityEffect->Matrix[0] = nOp;
+        opacityEffect->Matrix[5] = nOp;
+        opacityEffect->Matrix[10] = nOp;
+        opacityEffect->Matrix[15] = nOp;
+        opacityEffect->Name(L"NoiseOpacityEffect");
+
+        // Composite noise over the current stack.
+        auto noiseComposite = winrt::make_self<CompositeEffect>();
+        noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+        noiseComposite->Sources.push_back(topOfStack);
+        noiseComposite->Sources.push_back(*opacityEffect);
+        noiseComposite->Name(L"NoiseComposite");
+        topOfStack = *noiseComposite;
+    }
+
+    // 5. Tint (flood color composited over the stack).
+    auto floodEffect = winrt::make_self<FloodEffect>();
+    floodEffect->Color = m_tint;
+    floodEffect->Name(L"FloodEffect");
+
+    auto compositeEffect = winrt::make_self<CompositeEffect>();
+    compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+    compositeEffect->Sources.push_back(topOfStack);
+    compositeEffect->Sources.push_back(*floodEffect);
+
+    auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
+    auto brush = factory.CreateBrush();
+
+    brush.SetSourceParameter(L"backdrop", backdropBrush);
+
+    // Bind the noise brush if we created one.
+    if (noiseBrush)
+    {
+        brush.SetSourceParameter(L"NoiseSource", noiseBrush);
+    }
+
+    return brush;
 }
 
 void XamlBlurBrush::OnDisconnected()
@@ -2667,54 +3836,93 @@ void XamlBlurBrush::OnDisconnected()
 
 void XamlBlurBrush::RefreshThemeTint()
 {
-    if (m_tintThemeResourceKey.empty())
+    if (!m_proxyBrush)
     {
         return;
     }
 
-    auto resources = Application::Current().Resources();
-    auto resource = resources.TryLookup(winrt::box_value(m_tintThemeResourceKey));
-    if (!resource)
-    {
-        Wh_Log(L"Failed to find resource");
-        return;
-    }
-
-    if (auto colorBrush = resource.try_as<mux::Media::SolidColorBrush>())
-    {
-        m_tint = colorBrush.Color();
-    }
-    else if (auto color = resource.try_as<winrt::Windows::UI::Color>())
-    {
-        m_tint = *color;
-    }
-    else
-    {
-        Wh_Log(L"Resource type is unsupported: %s",
-            winrt::get_class_name(resource).c_str());
-        return;
-    }
-
+    m_tint = m_proxyBrush.Color();
     if (m_tintOpacity)
     {
         m_tint.A = *m_tintOpacity;
     }
 }
 
-void XamlBlurBrush::OnThemeRefreshed()
+void XamlBlurBrush::RefreshFallbackColor()
 {
-    Wh_Log(L"Theme refreshed");
-
-    auto prevTint = m_tint;
-
-    RefreshThemeTint();
-
-    if (prevTint != m_tint)
+    if (!m_fallbackProxyBrush)
     {
-        if (auto effectBrush = CompositionBrush().try_as<muc::CompositionEffectBrush>())
+        return;
+    }
+
+    m_fallbackColor = m_fallbackProxyBrush.Color();
+}
+
+bool XamlBlurBrush::ShouldUseFallback() const
+{
+    if (!m_fallbackColor && m_fallbackThemeResourceKey.empty())
+    {
+        return false;
+    }
+
+    // The HKLM\SYSTEM\CurrentControlSet\Control\Power\EnergySaverState value
+    // is the only signal that consistently reflects "Always use energy saver"
+    // on Windows 11 24H2+; the WinRT and Win32 power-status APIs can stay
+    // stuck in the off state on those builds. 1 = enabled, 2 = disabled.
+    bool energySaverActive = false;
+    HKEY key{};
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SYSTEM\\CurrentControlSet\\Control\\Power", 0,
+                      KEY_QUERY_VALUE, &key) == ERROR_SUCCESS)
+    {
+        DWORD value = 0;
+        DWORD type = 0;
+        DWORD size = sizeof(value);
+        if (RegQueryValueExW(key, L"EnergySaverState", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(&value),
+                             &size) == ERROR_SUCCESS &&
+            type == REG_DWORD)
         {
-            effectBrush.Properties().InsertColor(L"FloodEffect.Color", m_tint);
+            energySaverActive = (value == 1);
         }
+        RegCloseKey(key);
+    }
+
+    // Backup for older Windows where the registry value above isn't populated.
+    if (!energySaverActive)
+    {
+        SYSTEM_POWER_STATUS powerStatus{};
+        if (GetSystemPowerStatus(&powerStatus) &&
+            powerStatus.SystemStatusFlag != 0)
+        {
+            energySaverActive = true;
+        }
+    }
+
+    bool advancedEffectsOff = false;
+    if (m_uiSettings)
+    {
+        try
+        {
+            advancedEffectsOff = !m_uiSettings.AdvancedEffectsEnabled();
+        }
+        catch (...)
+        {
+            Wh_Log(L"AdvancedEffectsEnabled query failed: %08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    return energySaverActive || advancedEffectsOff;
+}
+
+void XamlBlurBrush::RefreshBrush()
+{
+    if (const auto brush = CompositionBrush())
+    {
+        brush.Close();
+        CompositionBrush(nullptr);
+        OnConnected();
     }
 }
 
@@ -2872,7 +4080,8 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
 
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
-                     const PropertyOverrideValue& overrideValue) {
+                     const PropertyOverrideValue& overrideValue,
+                     bool initialApply = false) {
     winrt::Windows::Foundation::IInspectable value;
     if (auto* inspectable =
             std::get_if<winrt::Windows::Foundation::IInspectable>(
@@ -2881,17 +4090,14 @@ void SetOrClearValue(DependencyObject elementDo,
     } else if (auto* blurBrushParams =
                    std::get_if<XamlBlurBrushParams>(&overrideValue)) {
         if (auto uiElement = elementDo.try_as<UIElement>()) {
-            auto compositor =
-                muxh::ElementCompositionPreview::GetElementVisual(uiElement)
-                    .Compositor();
-
             value = winrt::make<XamlBlurBrush>(
-                std::move(compositor), blurBrushParams->blurAmount,
-                blurBrushParams->tint, blurBrushParams->tintOpacity,
+                uiElement, blurBrushParams->blurAmount, blurBrushParams->tint,
+                blurBrushParams->tintOpacity,
                 winrt::hstring(blurBrushParams->tintThemeResourceKey),
                 blurBrushParams->tintLuminosityOpacity,
                 blurBrushParams->tintSaturation, blurBrushParams->noiseOpacity,
-                blurBrushParams->noiseDensity);
+                blurBrushParams->noiseDensity, blurBrushParams->fallbackColor,
+                winrt::hstring(blurBrushParams->fallbackThemeResourceKey));
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
             return;
@@ -2963,13 +4169,53 @@ void SetOrClearValue(DependencyObject elementDo,
         // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
         // workaround.
         if (property == Controls::TextBlock::FontWeightProperty() ||
-            property == Controls::Control::FontWeightProperty()) {
+            property == Controls::Control::FontWeightProperty() ||
+            property == Controls::RichTextBlock::FontWeightProperty() ||
+            property == Controls::FontIcon::FontWeightProperty() ||
+            property == Controls::FontIconSource::FontWeightProperty() ||
+            property == Controls::ContentPresenter::FontWeightProperty()) {
             auto valueInt = value.try_as<int>();
             if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
                 *valueInt <= std::numeric_limits<uint16_t>::max()) {
                 value = winrt::box_value(winrt::Windows::UI::Text::FontWeight{
                     static_cast<uint16_t>(*valueInt)});
             }
+        }
+
+        // Grid ColumnDefinitions/RowDefinitions hold DependencyObjects
+        // (ColumnDefinition/RowDefinition) that the layout engine writes
+        // ActualWidth/ActualHeight back into. The resolved value is parsed once
+        // and cached, so applying it to more than one grid - e.g. a taskbar per
+        // monitor, all sharing one UI thread - would set the same collection on
+        // each, and one monitor's column sizes would then leak onto another's.
+        // Give each element a private copy. The scratch Grid owns the fresh
+        // collection until SetValue reassigns ownership to the target, so it's
+        // kept alive through the SetValue call below.
+        Controls::Grid definitionsCloneOwner{nullptr};
+        if (auto sourceColumns =
+                value.try_as<Controls::ColumnDefinitionCollection>()) {
+            definitionsCloneOwner = Controls::Grid{};
+            auto clonedColumns = definitionsCloneOwner.ColumnDefinitions();
+            for (auto const& column : sourceColumns) {
+                Controls::ColumnDefinition clonedColumn;
+                clonedColumn.Width(column.Width());
+                clonedColumn.MinWidth(column.MinWidth());
+                clonedColumn.MaxWidth(column.MaxWidth());
+                clonedColumns.Append(clonedColumn);
+            }
+            value = clonedColumns;
+        } else if (auto sourceRows =
+                       value.try_as<Controls::RowDefinitionCollection>()) {
+            definitionsCloneOwner = Controls::Grid{};
+            auto clonedRows = definitionsCloneOwner.RowDefinitions();
+            for (auto const& row : sourceRows) {
+                Controls::RowDefinition clonedRow;
+                clonedRow.Height(row.Height());
+                clonedRow.MinHeight(row.MinHeight());
+                clonedRow.MaxHeight(row.MaxHeight());
+                clonedRows.Append(clonedRow);
+            }
+            value = clonedRows;
         }
 
         elementDo.SetValue(property, value);
@@ -3055,8 +4301,11 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
 
     bool pendingTintColorThemeResource = false;
+    bool pendingFallbackColorThemeResource = false;
     std::wstring tintThemeResourceKey;
+    std::wstring fallbackThemeResourceKey;
     winrt::Windows::UI::Color tint{};
+    std::optional<winrt::Windows::UI::Color> fallbackColor;
     float tintOpacity = std::numeric_limits<float>::quiet_NaN();
     float tintLuminosityOpacity = std::numeric_limits<float>::quiet_NaN();
     float tintSaturation = std::numeric_limits<float>::quiet_NaN();
@@ -3074,6 +4323,10 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     constexpr auto kNoiseOpacityPrefix = L"NoiseOpacity=\""sv;
     constexpr auto kNoiseDensityPrefix = L"NoiseDensity=\""sv;
     constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kFallbackColorThemeResourcePrefix =
+        L"FallbackColor=\"{ThemeResource"sv;
+    constexpr auto kFallbackColorThemeResourceSuffix = L"}\""sv;
+    constexpr auto kFallbackColorPrefix = L"FallbackColor=\"#"sv;
     for (const auto prop : SplitStringView(substr, L" ")) {
         const auto propSubstr = TrimStringView(prop);
         if (propSubstr.empty()) {
@@ -3098,8 +4351,29 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             continue;
         }
 
+        if (pendingFallbackColorThemeResource) {
+            if (!propSubstr.ends_with(kFallbackColorThemeResourceSuffix)) {
+                throw std::runtime_error(
+                    "WindhawkBlur: Invalid FallbackColor theme resource "
+                    "syntax");
+            }
+
+            pendingFallbackColorThemeResource = false;
+
+            fallbackThemeResourceKey = propSubstr.substr(
+                0, propSubstr.size() -
+                       std::size(kFallbackColorThemeResourceSuffix));
+
+            continue;
+        }
+
         if (propSubstr == kTintColorThemeResourcePrefix) {
             pendingTintColorThemeResource = true;
+            continue;
+        }
+
+        if (propSubstr == kFallbackColorThemeResourcePrefix) {
+            pendingFallbackColorThemeResource = true;
             continue;
         }
 
@@ -3128,6 +4402,34 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             uint8_t g = HIBYTE(LOWORD(valNum));
             uint8_t b = LOBYTE(LOWORD(valNum));
             tint = {a, r, g, b};
+            continue;
+        }
+
+        if (propSubstr.starts_with(kFallbackColorPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kFallbackColorPrefix),
+                propSubstr.size() - std::size(kFallbackColorPrefix) - 1);
+
+            bool hasAlpha;
+            switch (valStr.size()) {
+                case 6:
+                    hasAlpha = false;
+                    break;
+                case 8:
+                    hasAlpha = true;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "WindhawkBlur: Unsupported FallbackColor value");
+            }
+
+            auto valNum = std::stoul(std::wstring(valStr), nullptr, 16);
+            uint8_t a = hasAlpha ? HIBYTE(HIWORD(valNum)) : 255;
+            uint8_t r = LOBYTE(HIWORD(valNum));
+            uint8_t g = HIBYTE(LOWORD(valNum));
+            uint8_t b = LOBYTE(LOWORD(valNum));
+            fallbackColor = winrt::Windows::UI::Color{a, r, g, b};
             continue;
         }
 
@@ -3194,6 +4496,11 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             "WindhawkBlur: Unterminated TintColor theme resource");
     }
 
+    if (pendingFallbackColorThemeResource) {
+        throw std::runtime_error(
+            "WindhawkBlur: Unterminated FallbackColor theme resource");
+    }
+
     if (!std::isnan(tintOpacity)) {
         if (tintOpacity < 0.0f) {
             tintOpacity = 0.0f;
@@ -3220,6 +4527,8 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
                                                   : std::nullopt,
         .noiseDensity = !std::isnan(noiseDensity) ? std::optional(noiseDensity)
                                                   : std::nullopt,
+        .fallbackColor = fallbackColor,
+        .fallbackThemeResourceKey = std::move(fallbackThemeResourceKey),
     };
 }
 
@@ -3273,36 +4582,47 @@ Style GetStyleFromXamlSetters(const std::wstring_view type,
     return styleInspectable.as<Style>();
 }
 
-const PropertyOverrides& GetResolvedPropertyOverrides(
+const ResolvedRules& GetResolvedPropertyOverrides(
     const std::wstring_view type,
     PropertyOverridesMaybeUnresolved* propertyOverridesMaybeUnresolved) {
     if (const auto* resolved =
-            std::get_if<PropertyOverrides>(propertyOverridesMaybeUnresolved)) {
+            std::get_if<ResolvedRules>(propertyOverridesMaybeUnresolved)) {
         return *resolved;
     }
 
-    PropertyOverrides propertyOverrides;
+    ResolvedRules resolved;
 
     try {
-        const auto& styleRules = std::get<PropertyOverridesUnresolved>(
-            *propertyOverridesMaybeUnresolved);
-        if (!styleRules.empty()) {
+        const auto& unresolved =
+            std::get<UnresolvedRules>(*propertyOverridesMaybeUnresolved);
+        const auto& valueRules = unresolved.valueRules;
+        const auto& captureRules = unresolved.captureRules;
+
+        if (!valueRules.empty() || !captureRules.empty()) {
+            // Build a single XAML <Style> with one <Setter> per rule. Setters
+            // for value rules come first, followed by one per capture rule.
+            // Dynamic / capture rules emit a placeholder `{x:Null}` value -- we
+            // only need the resolved DependencyProperty from those setters; the
+            // value is computed elsewhere (per apply for dynamic, never for
+            // captures).
             std::wstring xaml;
 
             std::vector<std::optional<PropertyOverrideValue>>
                 propertyOverrideValues;
-            propertyOverrideValues.reserve(styleRules.size());
+            propertyOverrideValues.reserve(valueRules.size());
 
-            for (const auto& rule : styleRules) {
+            for (const auto& rule : valueRules) {
+                const bool isDynamic = rule.isDynamic();
+
                 propertyOverrideValues.push_back(
-                    rule.isXamlValue
+                    !isDynamic && rule.isXamlValue
                         ? ParseNonXamlPropertyOverrideValue(rule.value)
                         : std::nullopt);
 
                 xaml += L"        <Setter Property=\"";
-                xaml += EscapeXmlAttribute(rule.name);
+                xaml += EscapeXmlAttribute(rule.propertyName);
                 xaml += L"\"";
-                if (propertyOverrideValues.back() ||
+                if (isDynamic || propertyOverrideValues.back() ||
                     (rule.isXamlValue && rule.value.empty())) {
                     xaml += L" Value=\"{x:Null}\" />\n";
                 } else if (!rule.isXamlValue) {
@@ -3321,30 +4641,102 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
                 }
             }
 
+            for (const auto& rule : captureRules) {
+                xaml += L"        <Setter Property=\"";
+                xaml += EscapeXmlAttribute(rule.propertyName);
+                xaml += L"\" Value=\"{x:Null}\" />\n";
+            }
+
             auto style = GetStyleFromXamlSetters(type, xaml);
 
-            uint32_t i = 0;
-            for (const auto& rule : styleRules) {
-                const auto setter = style.Setters().GetAt(i).as<Setter>();
-                propertyOverrides[setter.Property()][rule.visualState] =
-                    propertyOverrideValues[i].value_or(
-                        rule.isXamlValue && rule.value.empty()
-                            ? DependencyProperty::UnsetValue()
-                            : setter.Value());
-                i++;
+            uint32_t setterIndex = 0;
+            for (size_t i = 0; i < valueRules.size(); i++, setterIndex++) {
+                const auto& rule = valueRules[i];
+                const auto setter =
+                    style.Setters().GetAt(setterIndex).as<Setter>();
+                auto property = setter.Property();
+                if (rule.isDynamic()) {
+                    resolved.propertyOverrides[property][rule.visualState] =
+                        DynamicStyleTemplate{rule.propertyName, rule.value,
+                                             rule.isXamlValue};
+                } else {
+                    resolved.propertyOverrides[property][rule.visualState] =
+                        propertyOverrideValues[i].value_or(
+                            rule.isXamlValue && rule.value.empty()
+                                ? DependencyProperty::UnsetValue()
+                                : setter.Value());
+                }
+            }
+
+            for (const auto& rule : captureRules) {
+                const auto setter =
+                    style.Setters().GetAt(setterIndex++).as<Setter>();
+                resolved.captures.push_back({setter.Property(), rule.varName});
             }
         }
 
-        Wh_Log(L"%.*s: %zu override styles", static_cast<int>(type.length()),
-               type.data(), propertyOverrides.size());
+        Wh_Log(L"%.*s: %zu override styles, %zu captures",
+               static_cast<int>(type.length()), type.data(),
+               resolved.propertyOverrides.size(), resolved.captures.size());
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     } catch (std::exception const& ex) {
         Wh_Log(L"Error: %S", ex.what());
     }
 
-    *propertyOverridesMaybeUnresolved = std::move(propertyOverrides);
-    return std::get<PropertyOverrides>(*propertyOverridesMaybeUnresolved);
+    *propertyOverridesMaybeUnresolved = std::move(resolved);
+    return std::get<ResolvedRules>(*propertyOverridesMaybeUnresolved);
+}
+
+// Resolve a single style rule's expanded textual value into a usable
+// PropertyOverrideValue. Built for re-resolving dynamic `{{...}}` styles on
+// every variable change; falls back to the same XAML-Setter parse trick used by
+// the bulk resolver above. propertyName is the property whose XAML name should
+// appear on the synthetic Setter (already known at apply time).
+std::optional<PropertyOverrideValue> ResolveExpandedSinglePropertyValue(
+    std::wstring_view type,
+    std::wstring_view propertyName,
+    std::wstring_view expandedValue,
+    bool isXamlValue) {
+    if (isXamlValue) {
+        if (auto blur = ParseNonXamlPropertyOverrideValue(expandedValue)) {
+            return *blur;
+        }
+
+        if (TrimStringView(expandedValue).empty()) {
+            return PropertyOverrideValue{DependencyProperty::UnsetValue()};
+        }
+    }
+
+    std::wstring xaml = L"        <Setter Property=\"";
+    xaml += EscapeXmlAttribute(propertyName);
+    xaml += L"\"";
+    if (!isXamlValue) {
+        xaml += L" Value=\"";
+        xaml += EscapeXmlAttribute(expandedValue);
+        xaml += L"\" />\n";
+    } else {
+        xaml +=
+            L">\n"
+            L"            <Setter.Value>\n";
+        xaml += expandedValue;
+        xaml +=
+            L"\n"
+            L"            </Setter.Value>\n"
+            L"        </Setter>\n";
+    }
+
+    try {
+        auto style = GetStyleFromXamlSetters(type, xaml);
+        const auto setter = style.Setters().GetAt(0).as<Setter>();
+        return PropertyOverrideValue{setter.Value()};
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    } catch (std::exception const& ex) {
+        Wh_Log(L"Error: %S", ex.what());
+    }
+
+    return std::nullopt;
 }
 
 const PropertyValues& GetResolvedPropertyValues(
@@ -3408,6 +4800,142 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement element,
     return nullptr;
 }
 
+// Locale-independent double formatter. Uses `std::to_chars` shortest round-trip
+// representation so XAML always sees `.` as the decimal separator.
+std::wstring FormatDoubleInvariant(double d) {
+    char buf[64];
+    auto [end, ec] = std::to_chars(buf, buf + std::size(buf), d);
+    if (ec != std::errc{}) {
+        return L"0";
+    }
+    return std::wstring(buf, end);
+}
+
+// Locale-independent double parser. Accepts an optional leading sign followed
+// by a decimal fraction or exponent. Returns std::nullopt on partial / bad
+// input.
+std::optional<double> ParseDoubleInvariant(std::wstring_view sv) {
+    std::string narrow;
+    narrow.reserve(sv.size());
+    for (auto c : sv) {
+        if (c > 127) {
+            return std::nullopt;
+        }
+        narrow.push_back(static_cast<char>(c));
+    }
+    double result = 0;
+    auto* first = narrow.data();
+    auto* last = first + narrow.size();
+    auto [ptr, ec] = std::from_chars(first, last, result);
+    if (ec != std::errc{} || ptr != last) {
+        return std::nullopt;
+    }
+    return result;
+}
+
+using UnboxedPropertyValue = std::variant<std::wstring,
+                                          bool,
+                                          char16_t,
+                                          uint8_t,
+                                          int16_t,
+                                          uint16_t,
+                                          int32_t,
+                                          uint32_t,
+                                          int64_t,
+                                          uint64_t,
+                                          float,
+                                          double>;
+
+// Unwraps a boxed primitive into a typed primitive variant. Dispatches on
+// IPropertyValue::Type(). Returns std::nullopt for non-primitive (opaque)
+// values such as brushes or thicknesses.
+std::optional<UnboxedPropertyValue> TryUnboxPropertyValue(
+    winrt::Windows::Foundation::IInspectable const& value) {
+    using winrt::Windows::Foundation::IPropertyValue;
+    using winrt::Windows::Foundation::PropertyType;
+
+    auto pv = value.try_as<IPropertyValue>();
+    if (!pv) {
+        return std::nullopt;
+    }
+
+    switch (pv.Type()) {
+        case PropertyType::String:
+            return UnboxedPropertyValue{std::wstring(pv.GetString())};
+        case PropertyType::Boolean:
+            return UnboxedPropertyValue{pv.GetBoolean()};
+        case PropertyType::Char16:
+            return UnboxedPropertyValue{pv.GetChar16()};
+        case PropertyType::Double:
+            return UnboxedPropertyValue{pv.GetDouble()};
+        case PropertyType::Single:
+            return UnboxedPropertyValue{pv.GetSingle()};
+        case PropertyType::UInt8:
+            return UnboxedPropertyValue{pv.GetUInt8()};
+        case PropertyType::Int16:
+            return UnboxedPropertyValue{pv.GetInt16()};
+        case PropertyType::UInt16:
+            return UnboxedPropertyValue{pv.GetUInt16()};
+        case PropertyType::Int32:
+            return UnboxedPropertyValue{pv.GetInt32()};
+        case PropertyType::UInt32:
+            return UnboxedPropertyValue{pv.GetUInt32()};
+        case PropertyType::Int64:
+            return UnboxedPropertyValue{pv.GetInt64()};
+        case PropertyType::UInt64:
+            return UnboxedPropertyValue{pv.GetUInt64()};
+        case PropertyType::OtherType: {
+            // Common for enums.
+            if (auto intVal = value.try_as<int32_t>()) {
+                return UnboxedPropertyValue{*intVal};
+            }
+            return std::nullopt;
+        }
+        default: {
+            return std::nullopt;
+        }
+    }
+}
+
+// Invariant-formatted text form, suitable for XAML attribute use or diagnostic
+// logs.
+std::wstring FormatUnboxedPropertyValue(UnboxedPropertyValue const& v) {
+    return std::visit(
+        [](auto const& x) -> std::wstring {
+            using T = std::decay_t<decltype(x)>;
+            if constexpr (std::is_same_v<T, std::wstring>) {
+                return x;
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return x ? L"True" : L"False";
+            } else if constexpr (std::is_same_v<T, char16_t>) {
+                // Single-character text form so substitution emits the
+                // character itself.
+                return std::wstring(1, static_cast<wchar_t>(x));
+            } else if constexpr (std::is_floating_point_v<T>) {
+                return FormatDoubleInvariant(static_cast<double>(x));
+            } else {
+                return std::to_wstring(x);
+            }
+        },
+        v);
+}
+
+// Numeric-as-double form, or std::nullopt if the value isn't numeric (i.e.
+// holds a string).
+std::optional<double> UnboxedPropertyValueAsNumeric(
+    UnboxedPropertyValue const& v) {
+    return std::visit(
+        [](auto const& x) -> std::optional<double> {
+            using T = std::decay_t<decltype(x)>;
+            if constexpr (std::is_same_v<T, std::wstring>) {
+                return std::nullopt;
+            } else {
+                return static_cast<double>(x);
+            }
+        },
+        v);
+}
+
 bool TestElementMatcher(FrameworkElement element,
                         ElementMatcher& matcher,
                         VisualStateGroup* visualStateGroup,
@@ -3445,46 +4973,21 @@ bool TestElementMatcher(FrameworkElement element,
         if (!value) {
             Wh_Log(L"Null property value");
             return false;
-        }
-
-        const auto className = winrt::get_class_name(value);
-        const auto expectedClassName =
-            winrt::get_class_name(propertyValue.second);
-        if (className != expectedClassName) {
-            Wh_Log(L"Different property class: %s vs. %s", className.c_str(),
-                   expectedClassName.c_str());
+        } else if (value == DependencyProperty::UnsetValue()) {
             return false;
         }
 
-        if (className == L"Windows.Foundation.IReference`1<String>") {
-            if (winrt::unbox_value<winrt::hstring>(propertyValue.second) ==
-                winrt::unbox_value<winrt::hstring>(value)) {
-                continue;
-            }
-
+        auto expectedUnboxed = TryUnboxPropertyValue(propertyValue.second);
+        auto valueUnboxed = TryUnboxPropertyValue(value);
+        if (!expectedUnboxed || !valueUnboxed) {
+            Wh_Log(L"Unsupported property class: %s",
+                   winrt::get_class_name(value).c_str());
             return false;
         }
 
-        if (className == L"Windows.Foundation.IReference`1<Double>") {
-            if (winrt::unbox_value<double>(propertyValue.second) ==
-                winrt::unbox_value<double>(value)) {
-                continue;
-            }
-
+        if (*expectedUnboxed != *valueUnboxed) {
             return false;
         }
-
-        if (className == L"Windows.Foundation.IReference`1<Boolean>") {
-            if (winrt::unbox_value<bool>(propertyValue.second) ==
-                winrt::unbox_value<bool>(value)) {
-                continue;
-            }
-
-            return false;
-        }
-
-        Wh_Log(L"Unsupported property class: %s", className.c_str());
-        return false;
     }
 
     if (matcher.visualStateGroupName && visualStateGroup) {
@@ -3495,11 +4998,20 @@ bool TestElementMatcher(FrameworkElement element,
     return true;
 }
 
-std::unordered_map<VisualStateGroup, PropertyOverrides>
-FindElementPropertyOverrides(FrameworkElement element,
-                             PCWSTR fallbackClassName) {
-    std::unordered_map<VisualStateGroup, PropertyOverrides> overrides;
+// Aggregated resolved rules for an element. Value-rules are still bucketed by
+// visual-state-group (each target's rules live under that target's @VSGName);
+// captures are intentionally NOT per-VSG -- they are wired up once at element
+// level (see SetUpCapturesForElement).
+struct ElementResolvedRules {
+    std::unordered_map<VisualStateGroup, PropertyOverrides> overridesPerVSG;
+    std::vector<CaptureSpec> captures;
+};
+
+ElementResolvedRules FindElementPropertyOverrides(FrameworkElement element,
+                                                  PCWSTR fallbackClassName) {
+    ElementResolvedRules result;
     std::unordered_set<DependencyProperty> propertiesAdded;
+    std::unordered_set<std::wstring> capturesAdded;
 
     for (auto it = g_elementsCustomizationRules.rbegin();
          it != g_elementsCustomizationRules.rend(); ++it) {
@@ -3512,57 +5024,1109 @@ FindElementPropertyOverrides(FrameworkElement element,
             continue;
         }
 
-        auto parentElementIter = element;
-        bool parentElementMatchFailed = false;
-
-        for (auto& matcher : override.parentElementMatchers) {
-            // Using parentElementIter.Parent() was sometimes returning null.
-            parentElementIter =
-                Media::VisualTreeHelper::GetParent(parentElementIter)
-                    .try_as<FrameworkElement>();
-            if (!parentElementIter) {
-                parentElementMatchFailed = true;
-                break;
+        // Using iter.Parent() was sometimes returning null, so use
+        // VisualTreeHelper::GetParent below instead.
+        //
+        // Recursive lambda so that '*' can backtrack: when a candidate match
+        // for the wildcard's next matcher leads to a failure further up the
+        // chain, retry with a farther ancestor.
+        auto& parentMatchers = override.parentElementMatchers;
+        auto matchParents = [&](auto& self, FrameworkElement iter,
+                                size_t mi) -> bool {
+            if (mi >= parentMatchers.size()) {
+                return true;
             }
 
-            if (!TestElementMatcher(parentElementIter, matcher,
-                                    &visualStateGroup, nullptr)) {
-                parentElementMatchFailed = true;
-                break;
-            }
-        }
+            auto& matcher = parentMatchers[mi];
 
-        if (parentElementMatchFailed) {
+            if (matcher.kind == ElementMatcher::Kind::Root) {
+                if (Media::VisualTreeHelper::GetParent(iter)) {
+                    return false;
+                }
+
+                return self(self, iter, mi + 1);
+            }
+
+            if (matcher.kind == ElementMatcher::Kind::Wildcard) {
+                // '*' is always followed by an Element matcher (validated at
+                // parse time). Walk up parents and try recursing for each
+                // ancestor that matches the next matcher.
+                auto& nextMatcher = parentMatchers[mi + 1];
+                auto cur = iter;
+                while (true) {
+                    auto parent = Media::VisualTreeHelper::GetParent(cur)
+                                      .try_as<FrameworkElement>();
+                    if (!parent) {
+                        return false;
+                    }
+
+                    cur = parent;
+                    if (TestElementMatcher(cur, nextMatcher, &visualStateGroup,
+                                           nullptr) &&
+                        self(self, cur, mi + 2)) {
+                        return true;
+                    }
+                }
+            }
+
+            auto parent = Media::VisualTreeHelper::GetParent(iter)
+                              .try_as<FrameworkElement>();
+            if (!parent) {
+                return false;
+            }
+
+            if (!TestElementMatcher(parent, matcher, &visualStateGroup,
+                                    nullptr)) {
+                return false;
+            }
+
+            return self(self, parent, mi + 1);
+        };
+
+        if (!matchParents(matchParents, element, 0)) {
             continue;
         }
 
-        auto& overridesForVisualStateGroup = overrides[visualStateGroup];
+        const auto& resolvedRules = GetResolvedPropertyOverrides(
+            override.elementMatcher.type, &override.propertyOverrides);
+
+        auto& propertyOverridesForVSG =
+            result.overridesPerVSG[visualStateGroup];
         for (const auto& [property, valuesPerVisualState] :
-             GetResolvedPropertyOverrides(override.elementMatcher.type,
-                                          &override.propertyOverrides)) {
+             resolvedRules.propertyOverrides) {
             bool propertyInserted = propertiesAdded.insert(property).second;
             if (!propertyInserted) {
                 continue;
             }
 
-            auto& propertyOverrides = overridesForVisualStateGroup[property];
+            auto& propertyOverrides = propertyOverridesForVSG[property];
             for (const auto& [visualState, value] : valuesPerVisualState) {
                 propertyOverrides.insert({visualState, value});
             }
         }
+
+        for (const auto& capture : resolvedRules.captures) {
+            if (!capturesAdded.insert(capture.varName).second) {
+                continue;
+            }
+
+            result.captures.push_back(capture);
+        }
     }
 
-    std::erase_if(overrides, [](const auto& item) {
-        auto const& [key, value] = item;
-        return value.empty();
-    });
+    std::erase_if(result.overridesPerVSG,
+                  [](const auto& item) { return item.second.empty(); });
 
-    return overrides;
+    return result;
+}
+
+bool IsValidStyleVariableIdentifier(std::wstring_view sv) {
+    if (sv.empty()) {
+        return false;
+    }
+    auto isStart = [](wchar_t c) {
+        return (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
+               c == L'_';
+    };
+    auto isCont = [&](wchar_t c) {
+        return isStart(c) || (c >= L'0' && c <= L'9');
+    };
+    if (!isStart(sv[0])) {
+        return false;
+    }
+    for (size_t i = 1; i < sv.size(); i++) {
+        if (!isCont(sv[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Value produced while evaluating a `{{ ... }}` expression: either a number or
+// a string. Number literals and numeric variables produce numbers; backtick-
+// delimited string literals and string-typed variables produce strings.
+struct StyleExpressionValue {
+    // Engaged => numeric value; otherwise `text` holds the string value.
+    std::optional<double> number;
+    std::wstring text;
+
+    static StyleExpressionValue Number(double d) { return {d, std::wstring()}; }
+    static StyleExpressionValue String(std::wstring s) {
+        return {std::nullopt, std::move(s)};
+    }
+
+    bool IsNumber() const { return number.has_value(); }
+};
+
+// Recursive-descent evaluator for `{{ ... }}` expressions. Operands: number
+// literals, backtick-delimited string literals, style variable references, and
+// parenthesized subexpressions. Operators: binary + - * /, unary - / +, the
+// comparisons < <= == >= > !=, the conditional operator cond ? a : b, and the
+// two-arg functions min(a, b) and max(a, b). Standard math precedence.
+// Arithmetic, relational, unary-sign, and min/max operators require numeric
+// operands; == and != compare two numbers or two strings; the conditional
+// selects one of its (possibly string) branches. Evaluate() formats the result
+// to text.
+//
+// Variable references pushed into outDeps so the dependent style can be
+// re-evaluated when those variables change.
+class StyleVariableExpressionEvaluator {
+   public:
+    StyleVariableExpressionEvaluator(std::wstring_view text,
+                                     std::vector<std::wstring>* outDeps,
+                                     StyleVariableState* state)
+        : m_text(text), m_outDeps(outDeps), m_state(state) {}
+
+    // Returns the text form of the result: numeric results are formatted with
+    // FormatDoubleInvariant, string results are returned verbatim. Throws
+    // std::runtime_error on parse / evaluation failure (including when a value
+    // is used where the grammar requires a number, or when a numeric result is
+    // non-finite -- NaN/Inf can't be formatted into XAML attributes
+    // meaningfully and would also break the consumer-equality check in
+    // SetStyleVariableIfChangedAndPropagate, since NaN != NaN).
+    std::wstring Evaluate() {
+        m_pos = 0;
+        SkipWhitespace();
+        StyleExpressionValue v = ParseExpression();
+        SkipWhitespace();
+        if (m_pos != m_text.size()) {
+            throw std::runtime_error(
+                "Unexpected trailing characters in style variable expression");
+        }
+        if (v.IsNumber()) {
+            if (!std::isfinite(*v.number)) {
+                throw std::runtime_error(
+                    "Style variable expression produced a non-finite result");
+            }
+            return FormatDoubleInvariant(*v.number);
+        }
+        return v.text;
+    }
+
+   private:
+    void SkipWhitespace() {
+        while (m_pos < m_text.size() &&
+               (m_text[m_pos] == L' ' || m_text[m_pos] == L'\t' ||
+                m_text[m_pos] == L'\r' || m_text[m_pos] == L'\n')) {
+            m_pos++;
+        }
+    }
+
+    bool ConsumeChar(wchar_t c) {
+        SkipWhitespace();
+        if (m_pos < m_text.size() && m_text[m_pos] == c) {
+            m_pos++;
+            return true;
+        }
+        return false;
+    }
+
+    // Tries to consume the multi-char operator `op` at the current position
+    // (after skipping leading whitespace). The operator must match exactly with
+    // no embedded whitespace; advances past it and returns true on success.
+    bool ConsumeOperator(std::wstring_view op) {
+        SkipWhitespace();
+        if (m_text.size() - m_pos >= op.size() &&
+            m_text.compare(m_pos, op.size(), op) == 0) {
+            m_pos += op.size();
+            return true;
+        }
+        return false;
+    }
+
+    // Unwraps a numeric operand. In a dead ternary branch (m_live == false) the
+    // value is discarded, so a string operand is tolerated (reported as 0)
+    // rather than aborting the whole expression.
+    double RequireNumber(const StyleExpressionValue& v) {
+        if (v.IsNumber()) {
+            return *v.number;
+        }
+        if (m_live) {
+            throw std::runtime_error(
+                "Non-numeric value used where a number is required in style "
+                "variable expression");
+        }
+        return 0.0;
+    }
+
+    // Equality test for == / !=. Two numbers compare numerically, two strings
+    // compare by content. A number/string mismatch is a type error in a live
+    // branch; in a dead branch it's harmlessly reported as not-equal.
+    bool ValuesEqual(const StyleExpressionValue& a,
+                     const StyleExpressionValue& b) {
+        if (a.IsNumber() && b.IsNumber()) {
+            return *a.number == *b.number;
+        }
+        if (!a.IsNumber() && !b.IsNumber()) {
+            return a.text == b.text;
+        }
+        if (m_live) {
+            throw std::runtime_error(
+                "Cannot compare a number with a string in style variable "
+                "expression");
+        }
+        return false;
+    }
+
+    StyleExpressionValue ParseExpression() { return ParseTernary(); }
+
+    // Conditional operator `cond ? thenVal : elseVal`, right-associative.
+    // Short-circuit: only the taken branch is evaluated. The untaken branch is
+    // still parsed (to advance the position and enforce syntax) with m_live
+    // cleared, which suppresses value-level errors (division by zero, a
+    // non-numeric / undefined variable, an unknown function) and dependency
+    // capture for that branch.
+    StyleExpressionValue ParseTernary() {
+        StyleExpressionValue cond = ParseEquality();
+        if (!ConsumeChar(L'?')) {
+            return cond;
+        }
+        bool condTrue = RequireNumber(cond) != 0.0;
+        bool prevLive = m_live;
+
+        m_live = prevLive && condTrue;
+        StyleExpressionValue thenVal = ParseExpression();
+        m_live = prevLive;
+
+        if (!ConsumeChar(L':')) {
+            throw std::runtime_error(
+                "Missing ':' for '?' in style variable expression");
+        }
+
+        m_live = prevLive && !condTrue;
+        StyleExpressionValue elseVal = ParseTernary();
+        m_live = prevLive;
+
+        return condTrue ? thenVal : elseVal;
+    }
+
+    StyleExpressionValue ParseEquality() {
+        StyleExpressionValue v = ParseRelational();
+        while (true) {
+            if (ConsumeOperator(L"==")) {
+                v = StyleExpressionValue::Number(
+                    ValuesEqual(v, ParseRelational()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L"!=")) {
+                v = StyleExpressionValue::Number(
+                    ValuesEqual(v, ParseRelational()) ? 0.0 : 1.0);
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseRelational() {
+        StyleExpressionValue v = ParseAdditive();
+        while (true) {
+            // Match the two-char operators before their single-char prefixes.
+            if (ConsumeOperator(L"<=")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs <= RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L">=")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs >= RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L"<")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs < RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L">")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs > RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseAdditive() {
+        StyleExpressionValue v = ParseTerm();
+        while (true) {
+            SkipWhitespace();
+            if (ConsumeChar(L'+')) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs +
+                                                 RequireNumber(ParseTerm()));
+            } else if (ConsumeChar(L'-')) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs -
+                                                 RequireNumber(ParseTerm()));
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseTerm() {
+        StyleExpressionValue v = ParseFactor();
+        while (true) {
+            SkipWhitespace();
+            if (ConsumeChar(L'*')) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs *
+                                                 RequireNumber(ParseFactor()));
+            } else if (ConsumeChar(L'/')) {
+                double lhs = RequireNumber(v);
+                double rhs = RequireNumber(ParseFactor());
+                if (rhs == 0.0) {
+                    if (m_live) {
+                        throw std::runtime_error(
+                            "Division by zero in style variable expression");
+                    }
+                    // Dead ternary branch: the result is discarded, so skip the
+                    // divide instead of throwing or producing inf/nan.
+                    v = StyleExpressionValue::Number(lhs);
+                } else {
+                    v = StyleExpressionValue::Number(lhs / rhs);
+                }
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseFactor() {
+        SkipWhitespace();
+        if (ConsumeChar(L'+')) {
+            return StyleExpressionValue::Number(RequireNumber(ParseFactor()));
+        }
+        if (ConsumeChar(L'-')) {
+            return StyleExpressionValue::Number(-RequireNumber(ParseFactor()));
+        }
+        return ParsePrimary();
+    }
+
+    StyleExpressionValue ParsePrimary() {
+        SkipWhitespace();
+        if (m_pos >= m_text.size()) {
+            throw std::runtime_error(
+                "Unexpected end of style variable expression");
+        }
+
+        wchar_t c = m_text[m_pos];
+        if (c == L'(') {
+            m_pos++;
+            StyleExpressionValue v = ParseExpression();
+            SkipWhitespace();
+            if (!ConsumeChar(L')')) {
+                throw std::runtime_error(
+                    "Missing ')' in style variable expression");
+            }
+            return v;
+        }
+
+        if (c == L'`') {
+            return ParseStringLiteral();
+        }
+
+        if ((c >= L'0' && c <= L'9') || c == L'.') {
+            return StyleExpressionValue::Number(ParseNumberLiteral());
+        }
+
+        if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || c == L'_') {
+            return ParseIdentifierOrCall();
+        }
+
+        throw std::runtime_error(
+            "Unexpected character in style variable expression");
+    }
+
+    // Backtick-delimited string literal. A doubled backtick encodes one literal
+    // backtick character; every other character is taken verbatim. Backtick is
+    // used (rather than a quote) so that literals don't clash with the string
+    // quoting of YAML settings or with the double quotes of XAML attributes,
+    // inside which these expressions often appear. The literal must be closed
+    // before the end of the expression.
+    StyleExpressionValue ParseStringLiteral() {
+        m_pos++;  // Skip the opening backtick.
+        std::wstring out;
+        while (m_pos < m_text.size()) {
+            wchar_t c = m_text[m_pos];
+            if (c == L'`') {
+                if (m_pos + 1 < m_text.size() && m_text[m_pos + 1] == L'`') {
+                    out.push_back(L'`');
+                    m_pos += 2;
+                    continue;
+                }
+                m_pos++;
+                return StyleExpressionValue::String(std::move(out));
+            }
+            out.push_back(c);
+            m_pos++;
+        }
+        throw std::runtime_error(
+            "Unterminated string literal in style variable expression");
+    }
+
+    double ParseNumberLiteral() {
+        size_t start = m_pos;
+        bool sawDigit = false;
+        bool sawDot = false;
+        while (m_pos < m_text.size()) {
+            wchar_t c = m_text[m_pos];
+            if (c >= L'0' && c <= L'9') {
+                sawDigit = true;
+                m_pos++;
+            } else if (c == L'.' && !sawDot) {
+                sawDot = true;
+                m_pos++;
+            } else {
+                break;
+            }
+        }
+        if (m_pos < m_text.size() &&
+            (m_text[m_pos] == L'e' || m_text[m_pos] == L'E')) {
+            m_pos++;
+            if (m_pos < m_text.size() &&
+                (m_text[m_pos] == L'+' || m_text[m_pos] == L'-')) {
+                m_pos++;
+            }
+            while (m_pos < m_text.size() && m_text[m_pos] >= L'0' &&
+                   m_text[m_pos] <= L'9') {
+                m_pos++;
+            }
+        }
+        if (!sawDigit) {
+            throw std::runtime_error(
+                "Bad number literal in style variable expression");
+        }
+        auto parsed = ParseDoubleInvariant(m_text.substr(start, m_pos - start));
+        if (!parsed) {
+            throw std::runtime_error(
+                "Bad number literal in style variable expression");
+        }
+        return *parsed;
+    }
+
+    StyleExpressionValue ParseIdentifierOrCall() {
+        size_t start = m_pos;
+        while (m_pos < m_text.size()) {
+            wchar_t c = m_text[m_pos];
+            if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
+                (c >= L'0' && c <= L'9') || c == L'_') {
+                m_pos++;
+            } else {
+                break;
+            }
+        }
+        std::wstring_view ident = m_text.substr(start, m_pos - start);
+        SkipWhitespace();
+        if (m_pos < m_text.size() && m_text[m_pos] == L'(') {
+            m_pos++;
+            double a = RequireNumber(ParseExpression());
+            if (!ConsumeChar(L',')) {
+                throw std::runtime_error(
+                    "Expected ',' in min/max style variable call");
+            }
+            double b = RequireNumber(ParseExpression());
+            if (!ConsumeChar(L')')) {
+                throw std::runtime_error(
+                    "Missing ')' after min/max style variable call");
+            }
+            if (ident == L"min") {
+                return StyleExpressionValue::Number((a < b) ? a : b);
+            }
+            if (ident == L"max") {
+                return StyleExpressionValue::Number((a > b) ? a : b);
+            }
+            if (m_live) {
+                throw std::runtime_error(
+                    "Unknown function in style variable expression");
+            }
+            // Dead ternary branch: value discarded, don't fail on the name.
+            return StyleExpressionValue::Number(0.0);
+        }
+        return LookupVariable(std::wstring(ident));
+    }
+
+    StyleExpressionValue LookupVariable(const std::wstring& name) {
+        // In a dead ternary branch (m_live == false) the value is discarded, so
+        // suppress dependency capture and the value-level errors below; the
+        // branch must not abort the whole expression.
+        if (m_live && m_outDeps) {
+            m_outDeps->push_back(name);
+        }
+        auto it = m_state->variables.find(name);
+        if (it == m_state->variables.end()) {
+            if (m_live) {
+                Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
+                       name.c_str());
+            }
+            return StyleExpressionValue::Number(0.0);
+        }
+        if (it->second.numeric) {
+            return StyleExpressionValue::Number(*it->second.numeric);
+        }
+        // Non-numeric primitive (e.g. a captured string property): usable as a
+        // string operand.
+        if (it->second.substitutable) {
+            return StyleExpressionValue::String(it->second.stringForm);
+        }
+        // Opaque capture (brush, thickness, etc.): no value form usable in an
+        // expression.
+        if (m_live) {
+            throw std::runtime_error(
+                "Style variable used in expression is not a primitive value");
+        }
+        return StyleExpressionValue::Number(0.0);
+    }
+
+    std::wstring_view m_text;
+    std::vector<std::wstring>* m_outDeps;
+    StyleVariableState* m_state;
+    size_t m_pos = 0;
+    // When false, we're parsing (but discarding) the untaken branch of a
+    // ternary; value-level errors and dependency capture are suppressed.
+    bool m_live = true;
+};
+
+// Evaluate a single expression body (the text between `{{` and `}}`). If the
+// body is a bare identifier, returns the variable's `stringForm` directly --
+// but only when the captured value is a primitive type flagged `substitutable`
+// (numeric, boolean, or string). Missing variables and opaque-type captures
+// both cause this function to return std::nullopt, at which point
+// ExpandStyleVariables aborts the whole expansion and the consuming style is
+// skipped. This matches the arithmetic path's behaviour of failing closed
+// rather than substituting a value that won't parse.
+std::optional<std::wstring> EvaluateStyleVariableExpression(
+    std::wstring_view exprText,
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
+    auto trimmed = TrimStringView(exprText);
+    if (trimmed.empty()) {
+        Wh_Log(L"Empty style variable expression");
+        return std::nullopt;
+    }
+
+    if (IsValidStyleVariableIdentifier(trimmed)) {
+        std::wstring name(trimmed);
+        if (outDeps) {
+            outDeps->push_back(name);
+        }
+        auto it = state->variables.find(name);
+        if (it == state->variables.end()) {
+            Wh_Log(L"Style variable '%s' not yet defined; skipping style",
+                   name.c_str());
+            return std::nullopt;
+        }
+        if (!it->second.substitutable) {
+            Wh_Log(
+                L"Style variable '%s' is not substitutable (captured type "
+                L"'%s'); skipping style",
+                name.c_str(), it->second.stringForm.c_str());
+            return std::nullopt;
+        }
+        return it->second.stringForm;
+    }
+
+    try {
+        StyleVariableExpressionEvaluator eval(trimmed, outDeps, state);
+        return eval.Evaluate();
+    } catch (std::exception const& ex) {
+        Wh_Log(L"Style variable expression failed: %S (in '%.*s')", ex.what(),
+               static_cast<int>(trimmed.size()), trimmed.data());
+        return std::nullopt;
+    }
+}
+
+// Walks the input text, repeatedly expanding the innermost `{{ ... }}`
+// substitution. Returns std::nullopt on parse failure (and logs a warning).
+//
+// Inner-matching rule: the first `}}` is paired with the *rightmost* `{{` that
+// precedes it. So `{{{x}}}` -> `{` + value-of-x + `}` (literal outer braces).
+//
+// Substituted text is treated as literal (no further `{{...}}` expansion of the
+// substituted output) to keep behavior predictable.
+std::optional<std::wstring> ExpandStyleVariables(
+    std::wstring_view input,
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
+    std::wstring result(input);
+    size_t scanFrom = 0;
+
+    while (true) {
+        size_t closePos = std::wstring::npos;
+        for (size_t i = scanFrom; i + 1 < result.size(); i++) {
+            if (result[i] == L'}' && result[i + 1] == L'}') {
+                closePos = i;
+                break;
+            }
+        }
+        if (closePos == std::wstring::npos) {
+            break;
+        }
+
+        // Find rightmost `{{` strictly before closePos. Search from closePos -
+        // 1 downward; the pair occupies indices (j-1, j).
+        size_t openPos = std::wstring::npos;
+        if (closePos >= 2) {
+            for (size_t j = closePos - 1; j >= 1; j--) {
+                if (result[j - 1] == L'{' && result[j] == L'{') {
+                    openPos = j - 1;
+                    break;
+                }
+                if (j == 1) {
+                    break;
+                }
+            }
+        }
+
+        if (openPos == std::wstring::npos) {
+            Wh_Log(L"Unmatched '}}' in style value at offset %zu", closePos);
+            return std::nullopt;
+        }
+
+        std::wstring_view exprText(result.data() + openPos + 2,
+                                   closePos - openPos - 2);
+        auto expanded =
+            EvaluateStyleVariableExpression(exprText, outDeps, state);
+        if (!expanded) {
+            return std::nullopt;
+        }
+
+        size_t spanLen = closePos + 2 - openPos;
+        result.replace(openPos, spanLen, *expanded);
+        scanFrom = openPos + expanded->size();
+    }
+
+    return result;
+}
+
+// Read a property's current effective value and convert it to a
+// StyleVariableValue suitable for `{{Var}}` substitution. Numeric primitives
+// produce both string + numeric forms and are flagged substitutable; boolean
+// and string primitives are flagged substitutable but have no numeric form.
+// Opaque types (brushes, thicknesses, etc.) record only the captured class name
+// as a diagnostic and are NOT flagged substitutable -- the bare- identifier
+// substitution path skips them rather than emitting a class name into the XAML
+// output.
+StyleVariableValue ReadCapturedStyleVariableValue(FrameworkElement element,
+                                                  DependencyProperty property) {
+    StyleVariableValue out;
+
+    auto elementDo = element.as<DependencyObject>();
+    winrt::Windows::Foundation::IInspectable value{nullptr};
+    // Get effective value so layout-driven properties like ActualWidth (which
+    // never have a local value) still capture.
+    try {
+        value = elementDo.GetValue(property);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+    if (!value || value == DependencyProperty::UnsetValue()) {
+        out.stringForm = L"";
+        return out;
+    }
+
+    try {
+        if (auto unboxed = TryUnboxPropertyValue(value)) {
+            out.stringForm = FormatUnboxedPropertyValue(*unboxed);
+            out.numeric = UnboxedPropertyValueAsNumeric(*unboxed);
+            out.substitutable = true;
+            return out;
+        }
+
+        // Opaque value (brush, thickness, etc.). Stored as a diagnostic only;
+        // not flagged substitutable, so bare `{{Var}}` skips the consuming
+        // style with a clear log message rather than emitting `className` into
+        // the XAML.
+        out.stringForm = std::wstring(winrt::get_class_name(value));
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        out.stringForm = L"";
+    }
+    return out;
+}
+
+// Remove this (handle, property) entry from the consumer lists of every
+// variable named in oldDeps, then add it for every variable named in newDeps.
+// `fallbackClassName` is stored on each newly-added consumer entry so the
+// per-consumer context is preserved across propagations; it is irrelevant when
+// newDeps is empty (pure-removal calls from the cleanup paths).
+void UpdateStyleVariableConsumers(StyleVariableState* state,
+                                  InstanceHandle handle,
+                                  DependencyProperty property,
+                                  PCWSTR fallbackClassName,
+                                  const std::vector<std::wstring>& oldDeps,
+                                  const std::vector<std::wstring>& newDeps) {
+    if (!state) {
+        // The element's XamlRoot has already been destroyed (or was never
+        // available); the StyleVariableState entry has been or will be reaped,
+        // and there is nothing to clean up. New registrations (newDeps) are
+        // also dropped on the floor: without a state we cannot route
+        // propagations anyway.
+        return;
+    }
+
+    for (const auto& dep : oldDeps) {
+        auto it = state->consumers.find(dep);
+        if (it == state->consumers.end()) {
+            continue;
+        }
+        auto& consumers = it->second;
+        std::erase_if(consumers, [&](const StyleVariableConsumer& c) {
+            return c.elementHandle == handle && c.property == property;
+        });
+        if (consumers.empty()) {
+            state->consumers.erase(it);
+        }
+    }
+
+    std::wstring fallbackClassNameStr =
+        fallbackClassName ? fallbackClassName : L"";
+    for (const auto& dep : newDeps) {
+        auto& consumers = state->consumers[dep];
+        bool already = std::any_of(consumers.begin(), consumers.end(),
+                                   [&](const StyleVariableConsumer& c) {
+                                       return c.elementHandle == handle &&
+                                              c.property == property;
+                                   });
+        if (!already) {
+            consumers.push_back({handle, property, fallbackClassNameStr});
+        }
+    }
+}
+
+// Re-evaluate the dynamic template stored on `propertyCustomizationState` and
+// return the resolved IInspectable / XamlBlurBrushParams ready to be applied.
+// Updates the (handle, property) -> state->consumers registry to match the
+// freshly computed dependency set so future variable changes route to this
+// property. The dependency registry is committed *before* the final XAML
+// resolution attempt: ExpandStyleVariables records every variable name it scans
+// into newDeps even on partial parse failure, which lets a future change to any
+// of those variables re-enter this function and retry. The trade-off is that on
+// resolution failure the caller's last-good `customValue` is preserved (we
+// return std::nullopt and the caller leaves the property as-is); this
+// self-heals on the next variable change.
+//
+// `fallbackClassName` is the consumer-element's own fallback class name (the
+// one that was used when matching the consumer's target rule), which is
+// generally NOT the same as the capturer's. It is what
+// ResolveExpandedSinglePropertyValue feeds to the synthetic <Style> used to
+// re-parse the rule body, and it is also stored on each new
+// StyleVariableConsumer entry so subsequent propagations route through this
+// same context.
+//
+// Returns std::nullopt if the state has no template, expansion failed, or XAML
+// resolution failed.
+std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
+    StyleVariableState* state,
+    InstanceHandle handle,
+    FrameworkElement element,
+    DependencyProperty property,
+    PCWSTR fallbackClassName,
+    ElementPropertyCustomizationState* propertyCustomizationState) {
+    if (!propertyCustomizationState->dynamicTemplate) {
+        return std::nullopt;
+    }
+
+    const auto& tmpl = *propertyCustomizationState->dynamicTemplate;
+
+    std::vector<std::wstring> newDeps;
+    auto expanded = ExpandStyleVariables(tmpl.rawValue, &newDeps, state);
+
+    UpdateStyleVariableConsumers(
+        state, handle, property, fallbackClassName,
+        propertyCustomizationState->variableDependencies, newDeps);
+    propertyCustomizationState->variableDependencies = std::move(newDeps);
+
+    if (!expanded) {
+        return std::nullopt;
+    }
+
+    auto typeName = winrt::get_class_name(element);
+    auto resolved = ResolveExpandedSinglePropertyValue(
+        std::wstring_view(typeName), tmpl.propertyName, *expanded,
+        tmpl.isXamlValue);
+    if (!resolved) {
+        Wh_Log(
+            L"Dynamic style resolution failed for '%s' on %s; keeping "
+            L"previously applied value",
+            tmpl.propertyName.c_str(), typeName.c_str());
+    }
+    return resolved;
+}
+
+// Re-evaluate every dependent style for the named variable. Driven by capture
+// callbacks when the source property changes, and by the initial capture when a
+// target is first matched. Each consumer carries its own fallbackClassName
+// (recorded when the consumer was registered), so propagation correctly uses
+// the consumer's own match-site context to re-parse the rule body, even when
+// the capturer was matched against a different type/fallback class.
+void PropagateStyleVariableChange(StyleVariableState* state,
+                                  const std::wstring& varName) {
+    auto consumersIt = state->consumers.find(varName);
+    if (consumersIt == state->consumers.end()) {
+        return;
+    }
+
+    auto consumersCopy = consumersIt->second;
+    for (const auto& consumer : consumersCopy) {
+        auto stateIt =
+            g_elementsCustomizationState.find(consumer.elementHandle);
+        if (stateIt == g_elementsCustomizationState.end()) {
+            continue;
+        }
+        auto element = stateIt->second.element.get();
+        if (!element) {
+            continue;
+        }
+
+        PCWSTR consumerFallbackClassName =
+            consumer.fallbackClassName.empty()
+                ? nullptr
+                : consumer.fallbackClassName.c_str();
+
+        for (auto& [vsgWeak, vsgState] : stateIt->second.perVisualStateGroup) {
+            auto propIt =
+                vsgState.propertyCustomizationStates.find(consumer.property);
+            if (propIt == vsgState.propertyCustomizationStates.end()) {
+                continue;
+            }
+            auto& propState = propIt->second;
+            if (!propState.dynamicTemplate) {
+                continue;
+            }
+
+            auto resolved = ResolveDynamicStyleValue(
+                state, consumer.elementHandle, element, consumer.property,
+                consumerFallbackClassName, &propState);
+            if (!resolved) {
+                continue;
+            }
+            if (!propState.originalValue) {
+                propState.originalValue =
+                    ReadLocalValueWithWorkaround(element, consumer.property);
+            }
+            propState.customValue = *resolved;
+
+            bool wasModifying = g_elementPropertyModifying;
+            g_elementPropertyModifying = true;
+            SetOrClearValue(element, consumer.property, *resolved);
+            propState.lastAppliedValue =
+                ReadLocalValueWithWorkaround(element, consumer.property);
+            g_elementPropertyModifying = wasModifying;
+        }
+    }
+}
+
+// Compare a captured value to whatever's currently in state->variables for the
+// same name; if different, store and notify dependents. Each consumer's own
+// fallbackClassName lives on the consumer entry, so this function does not need
+// to be told the capturer's context. Used by every path that wants to publish a
+// captured value -- the per-property capture callback, the SizeChanged
+// catch-all, and the initial seeding loop -- so the no-op fast path applies
+// uniformly.
+void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
+                                           const std::wstring& varName,
+                                           StyleVariableValue value) {
+    auto it = state->variables.find(varName);
+    if (it != state->variables.end() &&
+        it->second.stringForm == value.stringForm &&
+        it->second.numeric == value.numeric &&
+        it->second.substitutable == value.substitutable) {
+        Wh_Log(L"Style variable '%s' unchanged at '%s'", varName.c_str(),
+               value.stringForm.c_str());
+        return;
+    }
+
+    Wh_Log(L"Style variable '%s' changed: '%s' -> '%s'", varName.c_str(),
+           it != state->variables.end() ? it->second.stringForm.c_str()
+                                        : L"(unset)",
+           value.stringForm.c_str());
+    state->variables[varName] = std::move(value);
+    PropagateStyleVariableChange(state, varName);
+}
+
+// True for layout-driven DPs whose updates do not fire
+// RegisterPropertyChangedCallback on UWP, so capture rules on those DPs need
+// `FrameworkElement.SizeChanged` as their notification source instead.
+bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
+    return property == FrameworkElement::ActualWidthProperty() ||
+           property == FrameworkElement::ActualHeightProperty();
+}
+
+// Wire up `Property=>VarName` capture rules for an element. Called once per
+// matched element (captures are not visual-state-aware). Seeds the variables
+// from the current property values, registers per-DP property-changed
+// callbacks, and -- because UWP's ActualWidth/ActualHeight don't fire those
+// callbacks on layout -- subscribes to FrameworkElement.SizeChanged as a
+// catch-all that re-reads every active capture on resize.
+//
+// Seeding writes the captured values into state->variables in a single batch
+// (to avoid intermediate inconsistent states for consumers that depend on
+// multiple variables from this element) and then propagates only the variables
+// whose values actually changed -- the no-op fast path matches the one used by
+// the change-driven callbacks below. The function does not need the capturer's
+// fallbackClassName: each StyleVariableConsumer entry already carries its own
+// consumer-side fallback, so propagation routes through the right context per
+// consumer.
+void SetUpCapturesForElement(StyleVariableState* state,
+                             InstanceHandle handle,
+                             FrameworkElement element,
+                             const std::vector<CaptureSpec>& captures,
+                             ElementCustomizationState* elementState) {
+    if (captures.empty()) {
+        return;
+    }
+
+    auto elementDo = element.as<DependencyObject>();
+    winrt::weak_ref<FrameworkElement> elementWeakRef = element;
+
+    // Names of variables whose seeded value differs from whatever's already in
+    // state->variables. Only these need a propagation pass at the end.
+    std::vector<std::wstring> changedVarNames;
+    changedVarNames.reserve(captures.size());
+
+    // Captures whose source DP is layout-driven (ActualWidth/ActualHeight) need
+    // a SizeChanged subscription as their notification source. Collect them so
+    // we only subscribe once and only when needed.
+    std::vector<std::pair<DependencyProperty, std::wstring>>
+        sizeChangedCaptures;
+
+    for (const auto& capture : captures) {
+        const auto [it, inserted] =
+            elementState->captureCustomizationStates.insert(
+                {capture.property, {}});
+        if (!inserted) {
+            // Same DP captured twice on this element (different rules with the
+            // same property); keep the first and warn so the dropped second is
+            // not a silent footgun for users who later try to reference the
+            // dropped variable in a `{{...}}` substitution.
+            Wh_Log(
+                L"Capture for property already registered on %s; "
+                L"dropping duplicate variable '%s' (kept: '%s')",
+                winrt::get_class_name(element).c_str(), capture.varName.c_str(),
+                it->second.varName.c_str());
+            continue;
+        }
+        auto& captureState = it->second;
+        captureState.varName = capture.varName;
+
+        auto value = ReadCapturedStyleVariableValue(element, capture.property);
+
+        auto existingIt = state->variables.find(capture.varName);
+        const bool changed =
+            existingIt == state->variables.end() ||
+            existingIt->second.stringForm != value.stringForm ||
+            existingIt->second.numeric != value.numeric ||
+            existingIt->second.substitutable != value.substitutable;
+
+        if (changed) {
+            Wh_Log(
+                L"Seeding capture variable '%s' from %s with value '%s' "
+                L"(was: '%s')",
+                capture.varName.c_str(), winrt::get_class_name(element).c_str(),
+                value.stringForm.c_str(),
+                existingIt != state->variables.end()
+                    ? existingIt->second.stringForm.c_str()
+                    : L"(unset)");
+            state->variables[capture.varName] = std::move(value);
+            changedVarNames.push_back(capture.varName);
+        } else {
+            Wh_Log(L"Capture variable '%s' from %s already at '%s'",
+                   capture.varName.c_str(),
+                   winrt::get_class_name(element).c_str(),
+                   value.stringForm.c_str());
+        }
+
+        if (IsLayoutDrivenSizeProperty(capture.property)) {
+            sizeChangedCaptures.push_back({capture.property, capture.varName});
+            // No property-changed callback: the DP doesn't fire one for layout
+            // updates anyway, and SizeChanged below covers it.
+            continue;
+        }
+
+        std::wstring varName = capture.varName;
+        captureState.propertyChangedToken =
+            elementDo.RegisterPropertyChangedCallback(
+                capture.property,
+                [state, varName, elementWeakRef](DependencyObject sender,
+                                                 DependencyProperty property) {
+                    auto element = elementWeakRef.get();
+                    if (!element) {
+                        return;
+                    }
+                    auto value =
+                        ReadCapturedStyleVariableValue(element, property);
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
+                                                          std::move(value));
+                });
+    }
+
+    if (!sizeChangedCaptures.empty()) {
+        elementState->captureSizeChangedToken = element.SizeChanged(
+            [state, elementWeakRef,
+             sizeChangedCaptures = std::move(sizeChangedCaptures)](
+                winrt::Windows::Foundation::IInspectable const& sender,
+                SizeChangedEventArgs const& e) {
+                auto element = elementWeakRef.get();
+                if (!element) {
+                    return;
+                }
+                Wh_Log(L"SizeChanged on %s: %.3fx%.3f",
+                       winrt::get_class_name(element).c_str(),
+                       e.NewSize().Width, e.NewSize().Height);
+                for (const auto& [property, varName] : sizeChangedCaptures) {
+                    auto value =
+                        ReadCapturedStyleVariableValue(element, property);
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
+                                                          std::move(value));
+                }
+            });
+    }
+
+    // Propagate the freshly seeded values to any consumers that were already
+    // registered before this element was matched. Variables whose value did not
+    // actually change are skipped, matching the per-callback fast path.
+    for (const auto& varName : changedVarNames) {
+        PropagateStyleVariableChange(state, varName);
+    }
+}
+
+// Tear down capture subscriptions for an element. Called from
+// CleanupCustomizations and UninitializeSettingsAndTap before the
+// ElementCustomizationState entry is erased.
+void RestoreCapturesForElement(FrameworkElement element,
+                               const ElementCustomizationState& elementState) {
+    if (!element) {
+        return;
+    }
+
+    for (const auto& [property, captureState] :
+         elementState.captureCustomizationStates) {
+        if (!captureState.propertyChangedToken) {
+            continue;
+        }
+        try {
+            element.UnregisterPropertyChangedCallback(
+                property, captureState.propertyChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    if (elementState.captureSizeChangedToken) {
+        try {
+            element.SizeChanged(elementState.captureSizeChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
 }
 
 void ApplyCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
+    InstanceHandle handle,
     FrameworkElement element,
     VisualStateGroup visualStateGroup,
+    PCWSTR fallbackClassName,
     PropertyOverrides propertyOverrides,
     ElementCustomizationStateForVisualStateGroup*
         elementCustomizationStateForVisualStateGroup) {
@@ -3592,12 +6156,25 @@ void ApplyCustomizationsForVisualStateGroup(
         }
 
         if (it != valuesPerVisualState.end()) {
-            propertyCustomizationState.originalValue =
-                ReadLocalValueWithWorkaround(element, property);
-            propertyCustomizationState.customValue = it->second;
-            SetOrClearValue(element, property, it->second);
-            propertyCustomizationState.lastAppliedValue =
-                ReadLocalValueWithWorkaround(element, property);
+            std::optional<PropertyOverrideValue> resolved;
+            if (auto* tmpl = std::get_if<DynamicStyleTemplate>(&it->second)) {
+                propertyCustomizationState.dynamicTemplate = *tmpl;
+                resolved = ResolveDynamicStyleValue(
+                    state, handle, element, property, fallbackClassName,
+                    &propertyCustomizationState);
+            } else {
+                resolved = it->second;
+            }
+
+            if (resolved) {
+                propertyCustomizationState.originalValue =
+                    ReadLocalValueWithWorkaround(element, property);
+                propertyCustomizationState.customValue = *resolved;
+                SetOrClearValue(element, property, *resolved,
+                                /*initialApply=*/true);
+                propertyCustomizationState.lastAppliedValue =
+                    ReadLocalValueWithWorkaround(element, property);
+            }
         }
 
         propertyCustomizationState.propertyChangedToken =
@@ -3646,10 +6223,13 @@ void ApplyCustomizationsForVisualStateGroup(
 
     if (visualStateGroup) {
         winrt::weak_ref<FrameworkElement> elementWeakRef = element;
+        std::wstring fallbackClassNameStr =
+            fallbackClassName ? fallbackClassName : L"";
         elementCustomizationStateForVisualStateGroup
             ->visualStateGroupCurrentStateChangedToken =
             visualStateGroup.CurrentStateChanged(
-                [elementWeakRef, propertyOverrides,
+                [state, elementWeakRef, propertyOverrides, handle,
+                 fallbackClassNameStr,
                  elementCustomizationStateForVisualStateGroup](
                     winrt::Windows::Foundation::IInspectable const& sender,
                     VisualStateChangedEventArgs const& e) {
@@ -3666,6 +6246,11 @@ void ApplyCustomizationsForVisualStateGroup(
                     auto& propertyCustomizationStates =
                         elementCustomizationStateForVisualStateGroup
                             ->propertyCustomizationStates;
+
+                    PCWSTR fallbackClassNamePtr =
+                        fallbackClassNameStr.empty()
+                            ? nullptr
+                            : fallbackClassNameStr.c_str();
 
                     for (const auto& [property, valuesPerVisualState] :
                          propertyOverrides) {
@@ -3690,17 +6275,63 @@ void ApplyCustomizationsForVisualStateGroup(
                         }
 
                         if (it != valuesPerVisualState.end()) {
-                            if (!propertyCustomizationState.originalValue) {
-                                propertyCustomizationState.originalValue =
+                            std::optional<PropertyOverrideValue> resolved;
+                            if (auto* tmpl = std::get_if<DynamicStyleTemplate>(
+                                    &it->second)) {
+                                propertyCustomizationState.dynamicTemplate =
+                                    *tmpl;
+                                resolved = ResolveDynamicStyleValue(
+                                    state, handle, element, property,
+                                    fallbackClassNamePtr,
+                                    &propertyCustomizationState);
+                            } else {
+                                // Transitioning from dynamic to static for this
+                                // visual state: clear template metadata and
+                                // unregister consumer entries.
+                                if (propertyCustomizationState
+                                        .dynamicTemplate) {
+                                    UpdateStyleVariableConsumers(
+                                        state, handle, property,
+                                        /*fallbackClassName=*/nullptr,
+                                        propertyCustomizationState
+                                            .variableDependencies,
+                                        {});
+                                    propertyCustomizationState
+                                        .variableDependencies.clear();
+                                    propertyCustomizationState.dynamicTemplate
+                                        .reset();
+                                }
+
+                                resolved = it->second;
+                            }
+
+                            if (resolved) {
+                                if (!propertyCustomizationState.originalValue) {
+                                    propertyCustomizationState.originalValue =
+                                        ReadLocalValueWithWorkaround(element,
+                                                                     property);
+                                }
+
+                                propertyCustomizationState.customValue =
+                                    *resolved;
+                                SetOrClearValue(element, property, *resolved);
+                                propertyCustomizationState.lastAppliedValue =
                                     ReadLocalValueWithWorkaround(element,
                                                                  property);
                             }
-
-                            propertyCustomizationState.customValue = it->second;
-                            SetOrClearValue(element, property, it->second);
-                            propertyCustomizationState.lastAppliedValue =
-                                ReadLocalValueWithWorkaround(element, property);
                         } else {
+                            if (propertyCustomizationState.dynamicTemplate) {
+                                UpdateStyleVariableConsumers(
+                                    state, handle, property,
+                                    /*fallbackClassName=*/nullptr,
+                                    propertyCustomizationState
+                                        .variableDependencies,
+                                    {});
+                                propertyCustomizationState.variableDependencies
+                                    .clear();
+                                propertyCustomizationState.dynamicTemplate
+                                    .reset();
+                            }
                             if (propertyCustomizationState.originalValue) {
                                 SetOrClearValue(
                                     element, property,
@@ -3721,24 +6352,46 @@ void ApplyCustomizationsForVisualStateGroup(
 }
 
 void RestoreCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
+    InstanceHandle handle,
     FrameworkElement element,
     std::optional<winrt::weak_ref<VisualStateGroup>>
         visualStateGroupOptionalWeakPtr,
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
     if (element) {
-        for (const auto& [property, state] :
+        for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
             try {
                 element.UnregisterPropertyChangedCallback(
-                    property, state.propertyChangedToken);
+                    property, propState.propertyChangedToken);
             } catch (winrt::hresult_error const& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
             }
 
-            if (state.originalValue) {
-                SetOrClearValue(element, property, *state.originalValue);
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
+                                             /*fallbackClassName=*/nullptr,
+                                             propState.variableDependencies,
+                                             {});
+            }
+
+            if (propState.originalValue) {
+                SetOrClearValue(element, property, *propState.originalValue);
+            }
+        }
+    } else {
+        // Element is gone; still clear consumer entries so a stale (handle,
+        // property) pair isn't visited during PropagateStyleVariableChange.
+        for (const auto& [property, propState] :
+             elementCustomizationStateForVisualStateGroup
+                 .propertyCustomizationStates) {
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
+                                             /*fallbackClassName=*/nullptr,
+                                             propState.variableDependencies,
+                                             {});
             }
         }
     }
@@ -3770,25 +6423,41 @@ void ApplyCustomizations(InstanceHandle handle,
         MergeResourceVariables();
     }
 
-    auto overrides = FindElementPropertyOverrides(element, fallbackClassName);
-    if (overrides.empty()) {
+    auto* state = GetStyleVariableState();
+    if (!state) {
+        Wh_Log(L"No XamlRoot for %s, skipping",
+               winrt::get_class_name(element).c_str());
         return;
     }
 
-    Wh_Log(L"Applying styles");
+    auto resolved = FindElementPropertyOverrides(element, fallbackClassName);
+    if (resolved.overridesPerVSG.empty() && resolved.captures.empty()) {
+        return;
+    }
+
+    Wh_Log(L"Applying styles to %s", winrt::get_class_name(element).c_str());
 
     auto& elementCustomizationState = g_elementsCustomizationState[handle];
 
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            element, visualStateGroupOptionalWeakPtrIter, stateIter);
+            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            stateIter);
     }
 
     elementCustomizationState.element = element;
     elementCustomizationState.perVisualStateGroup.clear();
 
-    for (auto& [visualStateGroup, overridesForVisualStateGroup] : overrides) {
+    // Wire up captures first so any variables they define are visible to
+    // dynamic value-rules applied below. Note: SetUpCapturesForElement does not
+    // need this element's fallbackClassName -- propagation routes through each
+    // consumer's own stored fallback.
+    SetUpCapturesForElement(state, handle, element, resolved.captures,
+                            &elementCustomizationState);
+
+    for (auto& [visualStateGroup, overridesForVisualStateGroup] :
+         resolved.overridesPerVSG) {
         std::optional<winrt::weak_ref<VisualStateGroup>>
             visualStateGroupOptionalWeakPtr;
         if (visualStateGroup) {
@@ -3801,7 +6470,8 @@ void ApplyCustomizations(InstanceHandle handle,
             &elementCustomizationState.perVisualStateGroup.back().second;
 
         ApplyCustomizationsForVisualStateGroup(
-            element, visualStateGroup, std::move(overridesForVisualStateGroup),
+            state, handle, element, visualStateGroup, fallbackClassName,
+            std::move(overridesForVisualStateGroup),
             elementCustomizationStateForVisualStateGroup);
     }
 }
@@ -3812,11 +6482,15 @@ void CleanupCustomizations(InstanceHandle handle) {
         auto& elementCustomizationState = it->second;
 
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
+
+        RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                element, visualStateGroupOptionalWeakPtrIter, stateIter);
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
+                stateIter);
         }
 
         g_elementsCustomizationState.erase(it);
@@ -3922,6 +6596,16 @@ ElementMatcher ElementMatcherFromString(std::wstring_view str) {
     ElementMatcher result;
     PropertyValuesUnresolved propertyValuesUnresolved;
 
+    auto trimmed = TrimStringView(str);
+    if (trimmed == L"*") {
+        result.kind = ElementMatcher::Kind::Wildcard;
+        return result;
+    }
+    if (trimmed == L":root") {
+        result.kind = ElementMatcher::Kind::Root;
+        return result;
+    }
+
     auto i = str.find_first_of(L"#@[");
     result.type = TrimStringView(str.substr(0, i));
     if (result.type.empty()) {
@@ -4003,9 +6687,11 @@ ElementMatcher ElementMatcherFromString(std::wstring_view str) {
     return result;
 }
 
-StyleRule StyleRuleFromString(std::wstring_view str) {
-    StyleRule result;
-
+// Parses a single `controlStyles[*].styles[*]` entry into either a ValueRule
+// (`Property[@VisualState][:]=value`) or a CaptureRule (`Property=>VarName`).
+// Throws std::runtime_error on malformed input or disallowed combinations such
+// as `:=>` or `@VisualState=>`.
+std::variant<ValueRule, CaptureRule> ParseRule(std::wstring_view str) {
     auto eqPos = str.find(L'=');
     if (eqPos == str.npos) {
         throw std::runtime_error("Bad style syntax, '=' is missing");
@@ -4014,9 +6700,47 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
     auto name = str.substr(0, eqPos);
     auto value = str.substr(eqPos + 1);
 
+    if (!value.empty() && value.front() == L'>') {
+        // Capture rule: `Property=>VarName`. The right-hand side (after the
+        // leading `>` marker) is the name of a mod-global style variable into
+        // which the property's current value is captured.
+        value = value.substr(1);
+
+        if (!name.empty() && name.back() == L':') {
+            throw std::runtime_error(
+                "Bad style syntax, ':=>' is not valid (':=' XAML value "
+                "cannot be combined with '=>' capture)");
+        }
+
+        if (name.find(L'@') != name.npos) {
+            throw std::runtime_error(
+                "Bad style syntax, '@VisualState' not allowed on a capture "
+                "rule");
+        }
+
+        auto trimmedPropertyName = TrimStringView(name);
+        if (trimmedPropertyName.empty()) {
+            throw std::runtime_error("Bad style syntax, empty name");
+        }
+
+        auto trimmedVarName = TrimStringView(value);
+        if (trimmedVarName.empty()) {
+            throw std::runtime_error(
+                "Bad style syntax, empty capture variable name");
+        }
+        if (!IsValidStyleVariableIdentifier(trimmedVarName)) {
+            throw std::runtime_error(
+                "Bad style syntax, invalid capture variable name");
+        }
+
+        return CaptureRule{std::wstring(trimmedPropertyName),
+                           std::wstring(trimmedVarName)};
+    }
+
+    ValueRule result;
     result.value = TrimStringView(value);
 
-    if (name.size() > 0 && name.back() == L':') {
+    if (!name.empty() && name.back() == L':') {
         result.isXamlValue = true;
         name = name.substr(0, name.size() - 1);
     }
@@ -4027,8 +6751,8 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
         name = name.substr(0, atPos);
     }
 
-    result.name = TrimStringView(name);
-    if (result.name.empty()) {
+    result.propertyName = TrimStringView(name);
+    if (result.propertyName.empty()) {
         throw std::runtime_error("Bad style syntax, empty name");
     }
 
@@ -4070,9 +6794,56 @@ void AddElementCustomizationRules(std::wstring_view target,
     bool hasVisualStateGroup = false;
     for (auto i = targetParts.rbegin(); i != targetParts.rend(); ++i) {
         const auto& targetPart = *i;
+        const bool isLeftmost = (i + 1 == targetParts.rend());
 
         auto matcher = ElementMatcherFromString(targetPart);
-        matcher.type = AdjustTypeName(matcher.type);
+
+        const auto& prevParents =
+            elementCustomizationRules.parentElementMatchers;
+        const bool prevIsWildcard =
+            !prevParents.empty() &&
+            prevParents.back().kind == ElementMatcher::Kind::Wildcard;
+
+        switch (matcher.kind) {
+            case ElementMatcher::Kind::Element:
+                matcher.type = AdjustTypeName(matcher.type);
+                break;
+
+            case ElementMatcher::Kind::Wildcard:
+                if (first) {
+                    throw std::runtime_error(
+                        "Bad target syntax, '*' can't be the matched element");
+                }
+                if (isLeftmost) {
+                    throw std::runtime_error(
+                        "Bad target syntax, '*' can't be the leftmost target "
+                        "part");
+                }
+                if (prevIsWildcard) {
+                    throw std::runtime_error(
+                        "Bad target syntax, '*' can't be adjacent to another "
+                        "'*'");
+                }
+                break;
+
+            case ElementMatcher::Kind::Root:
+                if (first) {
+                    throw std::runtime_error(
+                        "Bad target syntax, ':root' can't be the matched "
+                        "element");
+                }
+                if (!isLeftmost) {
+                    throw std::runtime_error(
+                        "Bad target syntax, ':root' must be the leftmost "
+                        "target part");
+                }
+                if (prevIsWildcard) {
+                    throw std::runtime_error(
+                        "Bad target syntax, ':root' must be followed by a "
+                        "non-wildcard target part");
+                }
+                break;
+        }
 
         if (matcher.visualStateGroupName) {
             if (hasVisualStateGroup) {
@@ -4084,13 +6855,20 @@ void AddElementCustomizationRules(std::wstring_view target,
         }
 
         if (first) {
-            std::vector<StyleRule> styleRules;
+            UnresolvedRules unresolvedRules;
             for (const auto& style : styles) {
-                styleRules.push_back(StyleRuleFromString(style));
+                auto parsed = ParseRule(style);
+                if (auto* valueRule = std::get_if<ValueRule>(&parsed)) {
+                    unresolvedRules.valueRules.push_back(std::move(*valueRule));
+                } else {
+                    unresolvedRules.captureRules.push_back(
+                        std::move(std::get<CaptureRule>(parsed)));
+                }
             }
 
             elementCustomizationRules.elementMatcher = std::move(matcher);
-            elementCustomizationRules.propertyOverrides = std::move(styleRules);
+            elementCustomizationRules.propertyOverrides =
+                std::move(unresolvedRules);
         } else {
             elementCustomizationRules.parentElementMatchers.push_back(
                 std::move(matcher));
@@ -4457,6 +7235,16 @@ const Theme* GetSelectedTheme() {
         theme = &g_themeTintedGlass;
     } else if (wcscmp(themeName, L"LiquidGlass") == 0) {
         theme = &g_themeLiquidGlass;
+    } else if (wcscmp(themeName, L"MicaTabless") == 0) {
+        theme = &g_themeMicaTabless;
+    } else if (wcscmp(themeName, L"OS26 Liquid Glass") == 0) {
+        theme = &g_themeOS26_Liquid_Glass;
+    } else if (wcscmp(themeName, L"OS26 Liquid Glass_variant_Compact") == 0) {
+        theme = &g_themeOS26_Liquid_Glass_variant_Compact;
+    } else if (wcscmp(themeName, L"ZEUSosX_044") == 0) {
+        theme = &g_themeZEUSosX_044;
+    } else if (wcscmp(themeName, L"Compact Explorer11") == 0) {
+        theme = &g_themeCompact_Explorer11;
     }
     Wh_FreeStringSetting(themeName);
     return theme;
@@ -4549,15 +7337,20 @@ void UninitializeForCurrentThread() {
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
+
+        RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                element, visualStateGroupOptionalWeakPtrIter, stateIter);
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
+                stateIter);
         }
     }
 
     g_elementsCustomizationState.clear();
+    g_styleVariableState = {};
 
     g_elementsCustomizationRules.clear();
 
@@ -4958,26 +7751,26 @@ InitializeXamlDiagnosticsEx_Hook(_In_ PCWSTR endPointName,
         wszInitializationData);
 }
 
-void HookInitializeXamlDiagnosticsExIfNeeded() {
+bool HookInitializeXamlDiagnosticsExIfNeeded() {
     if (InitializeXamlDiagnosticsEx_Original) {
-        return;  // Already hooked
+        return false;  // Already hooked
     }
 
     const HMODULE wux = GetModuleHandle(L"Microsoft.Internal.FrameworkUdk.dll");
     if (!wux) {
-        return;  // DLL not loaded yet
+        return false;  // DLL not loaded yet
     }
 
     const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
         GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
     if (!ixde) {
-        return;
+        return false;
     }
 
     Wh_Log(L"Hooking InitializeXamlDiagnosticsEx to handle other consumers");
-    WindhawkUtils::SetFunctionHook(ixde, InitializeXamlDiagnosticsEx_Hook,
-                                   &InitializeXamlDiagnosticsEx_Original);
-    Wh_ApplyHookOperations();
+    return WindhawkUtils::SetFunctionHook(
+        ixde, InitializeXamlDiagnosticsEx_Hook,
+        &InitializeXamlDiagnosticsEx_Original);
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -4992,8 +7785,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
         fileName = fileName ? fileName + 1 : lpLibFileName;
         // CoreMessagingXP.dll loads Microsoft.Internal.FrameworkUdk.dll via the
         // import table.
-        if (_wcsicmp(fileName, L"CoreMessagingXP.dll") == 0) {
-            HookInitializeXamlDiagnosticsExIfNeeded();
+        if (_wcsicmp(fileName, L"CoreMessagingXP.dll") == 0 &&
+            HookInitializeXamlDiagnosticsExIfNeeded()) {
+            Wh_ApplyHookOperations();
         }
     }
 
@@ -5138,7 +7932,7 @@ bool StartStatsTimer() {
     static constexpr WCHAR kStatsBaseUrl[] =
         L"https://github.com/ramensoftware/"
         L"windows-11-file-explorer-styling-guide/"
-        L"releases/download/stats-v4/";
+        L"releases/download/stats-v5/";
 
     ULONGLONG lastStatsTime = 0;
     Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,

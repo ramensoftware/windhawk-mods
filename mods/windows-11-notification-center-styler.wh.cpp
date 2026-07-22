@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center and Action Center with themes contributed by others or create your own
-// @version         1.5
+// @version         1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,7 +10,7 @@
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -83,6 +83,14 @@ LayerMicaUI](https://github.com/ramensoftware/windows-11-notification-center-sty
 [![Borderless](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Borderless/screenshot-small.png)
 \
 Borderless](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Borderless/README.md)
+
+[![Densy](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Densy/screenshot-small.png)
+\
+Densy](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Densy/README.md)
+
+[![FrostyGlass](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/FrostyGlass/screenshot-small.png)
+\
+FrostyGlass](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/FrostyGlass/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11
 notification center styling
@@ -224,11 +232,28 @@ Margin=0,{{x1}},0,{{x2 + 10}}
 Inside `{{ ... }}`, the supported expression syntax is:
 
 * Numbers (e.g. `42`, `3.14`).
+* Backtick-delimited string literals (e.g. `` `Auto` ``, `` `*` ``). A doubled
+  backtick encodes one literal backtick. Backtick is used rather than a quote so
+  that literals don't clash with the string quoting of YAML settings or the
+  double quotes of XAML attributes.
 * Variable references (a previously captured `VarName`).
 * Binary operators `+`, `-`, `*`, `/`, with standard precedence.
 * Unary `+` and `-`.
+* Comparison operators `<`, `<=`, `==`, `>=`, `>`, `!=`, which evaluate to `1`
+  (true) or `0` (false). The relational operators (`<`, `<=`, `>=`, `>`) require
+  numbers; `==` and `!=` compare either two numbers or two strings.
+* The conditional operator `cond ? a : b`: evaluates to `a` when `cond` is
+  non-zero, otherwise `b`. The condition must be numeric, but the two branches
+  may each be a number or a string. For example, `{{x > 8 ? 1 : 3}}` gives `1`
+  when `x` is greater than `8`, else `3`, and `` {{width > 0 ? `*` : `Auto`}} ``
+  selects a `GridLength` keyword.
 * Parentheses for grouping.
 * The two-argument functions `min(a, b)` and `max(a, b)`.
+
+Arithmetic (`+`, `-`, `*`, `/`), the unary sign, the relational comparisons, and
+`min` / `max` require numeric operands. String values can only be produced (by a
+literal or a string-typed variable), compared with `==` / `!=`, and selected by
+the conditional operator.
 
 Expressions can be nested (`{{min(a, b + 1) * 2}}`), and `{{ ... }}` markers can
 appear inside larger expressions. Brace pairs match innermost-first, so
@@ -343,6 +368,8 @@ from the **TranslucentTB** project.
   - BetterControl11: BetterControl11
   - LayerMicaUI: LayerMicaUI
   - Borderless: Borderless
+  - Densy: Densy
+  - FrostyGlass: FrostyGlass
 - styleConstants: [""]
   $name: Style constants
   $description: >-
@@ -443,6 +470,10 @@ const Theme g_themeTranslucentShell = {{
         L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$CommonBgBrush",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
         L"FocusVisualPrimaryThickness=0,0,0,0",
         L"FocusVisualSecondaryThickness=0,0,0,0"}},
@@ -468,6 +499,17 @@ const Theme g_themeTranslucentShell = {{
         L"TextAlignment=Center"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#SubtitleText", {
         L"TextAlignment=Center"}},
+    ThemeTargetStyles{L"GridViewItem[1] > * > Rectangle#HorizontalDecreaseRect", {
+        L"Width=>horizontalDecreaseRectWidth1",
+        L"MinWidth={{horizontalDecreaseRectWidth1 + 8}}"}},
+    ThemeTargetStyles{L"GridViewItem[2] > * > Rectangle#HorizontalDecreaseRect", {
+        L"Width=>horizontalDecreaseRectWidth2",
+        L"MinWidth={{horizontalDecreaseRectWidth2 + 8}}"}},
+    ThemeTargetStyles{L"GridViewItem[3] > * > Rectangle#HorizontalDecreaseRect", {
+        L"Width=>horizontalDecreaseRectWidth3",
+        L"MinWidth={{horizontalDecreaseRectWidth3 + 8}}"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.Thumb#HorizontalThumb", {
+        L"Margin=-8,0,0,0"}},
 }, {
     L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>",
     L"thumbnailImageSize=300",
@@ -545,6 +587,11 @@ const Theme g_themeMatter = {{
         L"Background:= $transparent",
         L"Shadow :="}},
     ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background:=$base",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=16",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
         L"Background:=$base",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=16",
@@ -935,6 +982,11 @@ const Theme g_themeWindowGlass = {{
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=16",
         L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=16",
+        L"BorderBrush:=$BorderBrush"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
         L"CornerRadius=8"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
@@ -1254,6 +1306,11 @@ const Theme g_themeWindowGlass_variant_alternative = {{
         L"BorderThickness=$BorderThickness",
         L"CornerRadius=16",
         L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$Background",
+        L"BorderThickness=$BorderThickness",
+        L"CornerRadius=16",
+        L"BorderBrush:=$BorderBrush"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
         L"CornerRadius=8"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
@@ -1548,6 +1605,11 @@ const Theme g_themeOversimplified_Accentuated = {{
         L"BorderBrush=Transparent",
         L"CornerRadius=15",
         L"Shadow:="}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$Alt",
+        L"BorderBrush=Transparent",
+        L"CornerRadius=15",
+        L"Shadow:="}},
     ThemeTargetStyles{L"Border#AppLogoBorder2", {
         L"Height=30",
         L"Width=30"}},
@@ -1819,6 +1881,10 @@ const Theme g_themeTintedGlass = {{
         L"Background:=$Base",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=$Radius"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$Base",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=$Radius"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
         L"Background:=$Transparent",
         L"CornerRadius=$Radius"}},
@@ -1888,6 +1954,10 @@ const Theme g_themeFluid = {{
     ThemeTargetStyles{L"Border#PopupBorder", {
         L"CornerRadius=$CornerRadius"}},
     ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness=1",
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
         L"BorderBrush:=$BorderBrush",
         L"BorderThickness=1",
         L"CornerRadius=$CornerRadius"}},
@@ -2033,6 +2103,11 @@ const Theme g_themeLiquidGlass = {{
         L"Background := Transparent",
         L"Shadow :="}},
     ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background :=$Background",
+        L"BorderThickness = 0,0,0,0",
+        L"CornerRadius = $CornerRadius",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
         L"Background :=$Background",
         L"BorderThickness = 0,0,0,0",
         L"CornerRadius = $CornerRadius",
@@ -2536,6 +2611,9 @@ const Theme g_themeLayerMicaUI = {{
     ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
         L"CornerRadius=$InnerRadius"}},
     ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"BorderThickness=1",
+        L"BorderBrush:=$ThemeOutBorder"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
         L"BorderThickness=1",
         L"BorderBrush:=$ThemeOutBorder"}},
     ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
@@ -3155,6 +3233,501 @@ const Theme g_themeBorderless = {{
         L"MaxWidth=348"}},
 }};
 
+const Theme g_themeDensy = {{
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid", {
+        L"Margin=0,0,0,0",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid", {
+        L"Margin=0,0,0,0",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid", {
+        L"MinHeight=120"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#DoNotDisturbSubtext", {
+        L"MinHeight=80"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#DoNotDisturbSubtext", {
+        L"Padding=2,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#DoNotDisturbSubtext > Button", {
+        L"Padding=2,0,0,0",
+        L"Margin=0,0,0,0",
+        L"VerticalAlignment=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView", {
+        L"Margin:=$Section_Margin",
+        L"BorderBrush=Gray"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > Grid > Border#ItemOpaquePlating", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#NotificationCenterTopBanner > ActionCenter.ClearAllButton#ClearAllButtonControl > Button#ClearAll > ContentPresenter#ContentPresenter", {
+        L"Padding=0,0,0,0",
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#NotificationCenterTopBanner", {
+        L"Padding=1,0,1,0",
+        L"MinHeight:=$hd_Height"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > Grid > Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > Grid > Border#ItemOpaquePlating", {
+        L"Margin=0,0,0,0",
+        L"BorderThickness=0,0,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid", {
+        L"Margin=0,0,0,0",
+        L"Height=20"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewHeaderItem", {
+        L"MinHeight=22",
+        L"Height=22"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid > ActionCenter.ExpandButtonView#ExpandButtonView > Button#ExpandButton > Grid > Border#Border > ContentPresenter#ContentPresenter > StackPanel > TextBlock#ExpandGlyph", {
+        L"Margin=4,4,0,4"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewHeaderItem > Grid#RootGrid > ContentPresenter#ContentPresenter > ActionCenter.GroupView > Grid#GroupGrid > ActionCenter.GroupTitleView#GroupTitle", {
+        L"Margin=1,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid > ActionCenter.ExpandButtonView#ExpandButtonView", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid", {
+        L"Height=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid > Button#SettingsButton", {
+        L"Padding=0,0,0,0",
+        L"Margin=0,0,0,0",
+        L"Height=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#TitleGrid > Button#DismissButton", {
+        L"Padding=0,0,0,0",
+        L"Margin=0,0,0,0",
+        L"Height=24"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.SeeMoreLessView#SeeMoreLessViewInstance > Button#SeeMoreLessButton", {
+        L"Margin=1,0,0,0"}},
+    ThemeTargetStyles{L"ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > StackPanel#TextContentPanel", {
+        L"Margin=2,0,0,1"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.SeeMoreLessView#SeeMoreLessViewInstance > Button#SeeMoreLessButton > ContentPresenter#ContentPresenter", {
+        L"Padding=1,1,1,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > Grid#InteractiveGrid > ActionCenter.InteractiveView > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid", {
+        L"Margin=0,0,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > Grid#InteractiveGrid", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > Grid#InteractiveGrid > ActionCenter.InteractiveView > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid > ActionCenter.VerbView > Grid > Button#VerbButton > ContentPresenter#ContentPresenter", {
+        L"Height=26",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > TextBlock#NoNotificationsTextBlock", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ActionCenter.NotificationListViewHeaderItem > Grid#RootGrid > ContentPresenter#ContentPresenter > ActionCenter.GroupView > Grid#GroupGrid > ActionCenter.GroupTitleView#GroupTitle", {
+        L"Margin=2,2,2,2"}},
+    ThemeTargetStyles{L"ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > StackPanel#TextContentPanel", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection", {
+        L"Margin:=$Section_Margin",
+        L"CornerRadius=0",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > Border#CalendarHeaderMinimizedOverlay", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > StackPanel#CalendarHeader", {
+        L"Margin:=$Header_Margin"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > Button#ExpandCollapseButton", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > Grid#ClocksSection", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer", {
+        L"Margin=0,0,0,0",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid > Button#HeaderButton", {
+        L"Margin=0,0,0,0",
+        L"Height=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid > Button#HeaderButton > ContentPresenter#Text", {
+        L"Height=24",
+        L"Padding=2,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid > Button#PreviousButton", {
+        L"Height=24",
+        L"Margin=0,0,0,0",
+        L"Padding=6,6,6,6"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid > Button#NextButton", {
+        L"Height=24",
+        L"Margin=0,0,0,0",
+        L"Padding=6,6,6,6"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Border", {
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > Grid#WeekDayNames", {
+        L"Margin=0,0,0,0",
+        L"Height=16"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > Grid#WeekDayNames > TextBlock", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer", {
+        L"ViewportHeight=120"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer > Grid", {
+        L"Height=120"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer > Grid > ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Controls.Primitives.CalendarPanel#MonthViewPanel > CalendarViewDayItem > TextBlock", {
+        L"Padding=0,0,0,0",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer > Grid > ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Controls.Primitives.CalendarPanel#MonthViewPanel > CalendarViewDayItem", {
+        L"Padding=0,0,0,0",
+        L"Margin=0,0,0,0",
+        L"Width=24",
+        L"Height=24",
+        L"MinWidth=24",
+        L"MinHeight=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ScrollViewer#CalendarControlScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > CalendarView#CalendarControl > Border > Grid > Grid#Views > Grid#MonthView > ScrollViewer#MonthViewScrollViewer > Grid > ScrollContentPresenter#ScrollContentPresenter > Windows.UI.Xaml.Controls.Primitives.CalendarPanel#MonthViewPanel > CalendarViewDayItem > Border", {
+        L"Width=24",
+        L"Height=24",
+        L"MinWidth=24",
+        L"MinHeight=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ActionCenter.FocusSessionControl#FocusSessionControl", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#CalendarCenterGrid > ActionCenter.ClockCalendarView#ClockCalendarView > Grid > Grid#CalendarSection > ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
+        L"Padding=2,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#ImageGrid > Windows.UI.Xaml.Shapes.Ellipse#PersonableImage", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > ActionCenter.NotificationCenterView#NotificationCenterView > Grid#MainGrid > ActionCenter.NotificationListView#MainListView > ItemsStackPanel > ActionCenter.NotificationListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter > ActionCenter.FlexibleItemView > Grid#MainGrid > Grid#ItemGrid > ActionCenter.NotificationContentView#NotificationContentView > Grid#ContentGrid > Grid#ImageGrid > Windows.UI.Xaml.Shapes.Ellipse#PersonableImageBorder", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#NotificationCenterTopBanner > ActionCenter.ClearAllButton#ClearAllButtonControl > Button#ClearAll > ContentPresenter#ContentPresenter", {
+        L"BorderThickness=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.NotificationCenterPage > Grid#RootGrid > Grid#RootContent > Grid#NotificationCenterGrid > Grid#NotificationCenterTopBanner > ActionCenter.ClearAllButton#ClearAllButtonControl", {
+        L"Margin=0,0,-1,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid", {
+        L"Margin=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2", {
+        L"Padding=2,2,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView", {
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Border#ToastBackgroundBorder2", {
+        L"CornerRadius=0",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid", {
+        L"VerticalAlignment=2"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,0,0,-12"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2 > ActionCenter.ToastContentView#ToastContentView2 > Grid#ToastContentGrid > Grid#ToastTitleBar > TextBlock#SenderName", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2 > ActionCenter.ToastContentView#ToastContentView2 > Grid#ToastContentGrid > Grid#ToastTitleBar", {
+        L"Margin=0,0,0,1",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2 > ActionCenter.ToastContentView#ToastContentView2 > Grid#ToastContentGrid > Grid#ToastTitleBar > TextBlock#SenderName", {
+        L"Margin=0,0,0,1",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2", {
+        L"Padding=2,2,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid", {
+        L"Margin=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2", {
+        L"Padding=2,2,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView", {
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Border#ToastBackgroundBorder2", {
+        L"CornerRadius=0",
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid", {
+        L"VerticalAlignment=2"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin=0,0,0,-12"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2 > ActionCenter.ToastContentView#ToastContentView2 > Grid#ToastContentGrid > Grid#ToastTitleBar > TextBlock#SenderName", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#ToastGrid2 > ActionCenter.ToastContentView#ToastContentView2 > Grid#ToastContentGrid > Grid#ToastTitleBar", {
+        L"Margin=0,0,0,1",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid > ActionCenter.VerbView > Grid > Button#VerbButton > ContentPresenter#ContentPresenter", {
+        L"Padding=2,1,1,2"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid > ActionCenter.VerbView > Grid > Button#VerbButton > ContentPresenter#ContentPresenter", {
+        L"Padding=0,1,0,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexibleNormalToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid", {
+        L"Margin=0,0,0,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel", {
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Frame > ContentPresenter > ActionCenter.ToastCenterPage > Grid#ToastCenterMainGrid > ActionCenter.ToastCenterView#ToastCenterView > ScrollViewer#ToastCenterScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > Grid#ToastCenterGrid > ActionCenter.FlexibleToastView#FlexiblePriorityToastView > Grid#MainGrid > Grid#RevealGrid2 > Grid#ToastContentExpandedGrid > Grid#InteractiveGrid2 > ActionCenter.InteractiveView#InteractiveView2 > Grid#InteractiveRootGrid > ActionCenter.RowView > Grid > StackPanel#VerbPanel > ActionCenter.VerbRowView > Grid#VerbRowGrid > ActionCenter.VerbView > Grid > Button#VerbButton > ContentPresenter#ContentPresenter", {
+        L"CornerRadius=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage", {
+        L"HorizontalAlignment=2",
+        L"Margin=0,0,-1,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion", {
+        L"CornerRadius=0",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion", {
+        L"CornerRadius=0",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion", {
+        L"Height=132"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot", {
+        L"Padding=1,1,1,1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot > ControlCenter.MediaTransportControlsButton#MediaTransportControlsButton", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot > Grid", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot > Grid#AlbumTextAndArtContainer > Grid#ThumbnailImage", {
+        L"Margin=2,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot > Grid#AlbumTextAndArtContainer > Grid#ThumbnailImage", {
+        L"Width=44",
+        L"Heigt=44"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > ControlCenter.MediaTransportControls#MediaTransportControls > Grid#MediaTransportControlsRegion > Grid#MediaTransportControlsRoot > ListView#MediaButtonsListView", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > Microsoft.UI.Xaml.Controls.PipsPager#QuickActionsPager", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
+        L"Margin=3,0,3,0",
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root", {
+        L"VerticalContentAlignment=0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > StackPanel > ContentControl > ContentPresenter > Grid > Button > Grid#RootGrid > ContentPresenter#Content > StackPanel", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > Grid > Button > Grid#RootGrid > ContentPresenter#Content > StackPanel", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
+        L"Height=72"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > StackPanel > ContentControl > ContentPresenter > Grid > Grid > ControlCenter.PaginatedToggleButton#ToggleButton", {
+        L"Height=32",
+        L"Width=32"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > StackPanel > ContentControl > ContentPresenter > Grid > Grid > ControlCenter.PaginatedToggleButton#SplitL2Button", {
+        L"Height=32",
+        L"Width=32"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > Grid > ControlCenter.PaginatedToggleButton#ToggleButton", {
+        L"Height=32"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > Grid > ControlCenter.PaginatedToggleButton#ToggleButton > ContentPresenter#ContentPresenter > Grid", {
+        L"Height=32"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > Grid > Grid > ControlCenter.PaginatedToggleButton#ToggleButton", {
+        L"Height=32"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid", {
+        L"MaximumRowsOrColumns=4"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem", {
+        L"Width=72"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > Border#PreviousPageSensor", {
+        L"Margin=2,0,2,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > Border#NextPageSensor", {
+        L"Margin=2,0,2,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView", {
+        L"Height=154"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter", {
+        L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > GridViewItem", {
+        L"Margin=0,0,0,0",
+        L"MinHeight=36",
+        L"MinWidth=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > ControlCenter.AccessibleItemContainer > Grid#RootGrid > ContentControl#QuickActionContentControl > ContentPresenter > Grid > ControlCenter.AsyncSlider", {
+        L"Margin=0,0,0,0",
+        L"Height=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer", {
+        L"ExtentHeight=36",
+        L"ViewportHeight=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel", {
+        L"Height=40"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > ControlCenter.AccessibleItemContainer > Grid#RootGrid > ContentControl#QuickActionContentControl > ContentPresenter > Grid > Windows.UI.Xaml.Controls.Primitives.ToggleButton", {
+        L"Width=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > ControlCenter.AccessibleItemContainer > Grid#RootGrid > ContentControl#QuickActionContentControl > ContentPresenter > Grid > Button#VolumeL2Button", {
+        L"MinHeight=36",
+        L"MinWidth=36",
+        L"Height=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#SlidersGroup > ContentPresenter > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsStackPanel > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > Border", {
+        L"Height=36"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid", {
+        L"Padding=0,0,0,0",
+        L"MinHeight=26",
+        L"Height=26"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton > ContentPresenter#ContentPresenter", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton > ContentPresenter#ContentPresenter > Microsoft.UI.Xaml.Controls.AnimatedIcon#FooterButtonIcon", {
+        L"Width=24",
+        L"Height=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton", {
+        L"Padding=0,2,0,2",
+        L"MinHeight=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter", {
+        L"Height=26"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#LeftFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton > ContentPresenter#ContentPresenter", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#LeftFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#LeftFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton > ContentPresenter#ContentPresenter > Microsoft.UI.Xaml.Controls.AnimatedIcon#FooterButtonIcon", {
+        L"Width=24",
+        L"Height=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#LeftFooter > ItemsPresenter > StackPanel > ContentPresenter > ItemsControl > ItemsPresenter > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton", {
+        L"Padding=0,2,0,2",
+        L"MinHeight=24"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#LeftFooter", {
+        L"Height=26"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > Grid#FooterGrid > ItemsControl#RightFooter > StackPanel > ContentPresenter > ItemsControl > StackPanel > ContentPresenter > ContentControl > ContentPresenter > Button#FooterButton > ContentPresenter#ContentPresenter > Microsoft.UI.Xaml.Controls.AnimatedIcon#FooterButtonIcon", {
+        L"VerticalAlignment=1"}},
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > ControlCenter.ControlCenterPage > Grid#RootGrid > Grid#RootContent > Grid#ControlCenterRegion > ControlCenter.ControlCenterView#ControlCenterView > Grid#RootGrid > Grid#L1Grid > ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid > GridView#RootGridView > Border > ScrollViewer#ScrollViewer > Border#Root > Grid > ScrollContentPresenter#ScrollContentPresenter > ItemsPresenter > ItemsWrapGrid > GridViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root > ContentControl > ContentPresenter > StackPanel > ContentControl > ContentPresenter > Grid > Grid", {
+        L"Width=72"}},
+}, {
+    L"hd_Height=24",
+    L"Section_Margin=0,1,0,1",
+    L"Header_Margin=1,0,1,0",
+    L"thumbnailImageSize=100",
+}};
+
+const Theme g_themeFrostyGlass = {{
+    ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
+        L"CornerRadius=$CornerRadius",
+        L"BorderThickness=$BorderThickness",
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"Grid#CalendarCenterGrid", {
+        L"CornerRadius=$CornerRadius",
+        L"BorderThickness=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"Background:=$Background"}},
+    ThemeTargetStyles{L"Grid#ControlCenterRegion", {
+        L"CornerRadius=$CornerRadius",
+        L"BorderThickness=$BorderThickness",
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"Grid#MediaTransportControlsRegion", {
+        L"CornerRadius:=$CornerRadius",
+        L"BorderThickness:=$BorderThickness",
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+        L"CornerRadius:=$CornerRadius",
+        L"BorderThickness:=$BorderThickness",
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush"}},
+    ThemeTargetStyles{L"Button#ClearAll", {
+        L"AccessKey=x"}},
+    ThemeTargetStyles{L"Button#ExpandCollapseButton", {
+        L"AccessKey=c"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage", {
+        L"Width:=$thumbnailImageSize",
+        L"Height:=$thumbnailImageSize",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Top",
+        L"Grid.Column=1",
+        L"Margin=0,2,0,55"}},
+    ThemeTargetStyles{L"ControlCenter.MediaTransportControls#MediaTransportControls > Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"Height=Auto"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer", {
+        L"VerticalAlignment=Bottom",
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#TitleText", {
+        L"TextAlignment=Center",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#SubtitleText", {
+        L"TextAlignment=Center",
+        L"Margin=0,0,0,5"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius:=$CornerRadius"}},
+    ThemeTargetStyles{L"Grid#MediaTransportControlsRoot", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"ContentControl > ContentPresenter > Grid > Grid", {
+        L"BorderBrush:=Transparent"}},
+    ThemeTargetStyles{L"ContentPresenter#ContentPresenter", {
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThinkness:=$BorderThickness",
+        L"Background:=$Background"}},
+    ThemeTargetStyles{L"Border#WADFeatureFooter", {
+        L"BorderBrush:=Transparent"}},
+    ThemeTargetStyles{L"StackPanel > ContentPresenter > Border", {
+        L"BorderBrush:=Transparent",
+        L"BorderThickness:=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid[AutomationProperties.LocalizedLandmarkType=Footer]", {
+        L"BorderBrush:=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.PipsPager#QuickActionsPager", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"CornerRadius:=4.5"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"CornerRadius:=4.5"}},
+    ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
+        L"VerticalAlignment:=2"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness:=$BorderThickness",
+        L"CornerRadius:=$CornerRadius"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness:=$BorderThickness",
+        L"CornerRadius:=$CornerRadius"}},
+    ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer", {
+        L"Background:=Transparent",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
+        L"Background:=Transparent",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"Grid#L1Grid > Border", {
+        L"Background:=Transparent",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot > ContentPresenter#PageHeader", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"ScrollViewer#ListContent", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleItemView", {
+        L"CornerRadius=$CornerRadius"}},
+    ThemeTargetStyles{L"ContentControl#TogglesGroup > ContentPresenter > ControlCenter.PaginatedGridView > Grid", {
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"Grid#FooterGrid", {
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
+        L"Background:=Transparent",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent", {
+        L"Background:=Transparent"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#ItemOpaquePlating", {
+        L"CornerRadius:=7",
+        L"Visibility=0",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness:=$BorderThickness"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListViewItem", {
+        L"Margin=0,0,0,3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#StandardHeroContainer > Windows.UI.Xaml.Controls.Image", {
+        L"Opacity=1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar", {
+        L"Visibility=1"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
+        L"Background:=$Background",
+        L"BorderBrush:=$BorderBrush",
+        L"BorderThickness:=$BorderThickness",
+        L"CornerRadius:=$CornerRadius"}},
+    ThemeTargetStyles{L"Border#JumpListRestyledAcrylic", {
+        L"Background:=$Background",
+        L"BorderThickness:=$BorderThickness",
+        L"BorderBrush:=$BorderBrush",
+        L"CornerRadius:=$CornerRadius",
+        L"Margin=-4.5,-2,-4.5,-2",
+        L"Height=Auto"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ScrollViewer#JumpListScroller", {
+        L"Margin=-2"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer > Windows.UI.Xaml.Controls.Border > JumpViewUI.SystemItemListView#SystemItemList", {
+        L"Margin:=0,3,0,0"}},
+}, {
+    L"Background=<AcrylicBrush TintColor=\"#1000000F\"/>",
+    L"BorderBrush2=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"0.0\" /><GradientStop Color=\"{ThemeResource SystemChromeLowColor}\" Offset=\"0.25\" /><GradientStop Color=\"{ThemeResource SystemChromeHighColor}\" Offset=\"1\" /></LinearGradientBrush>",
+    L"BorderThickness=1",
+    L"CornerRadius=10",
+    L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>",
+    L"Background2=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeAltHighColor}\" TintOpacity=\"0.3\" FallbackColor=\"{ThemeResource SystemChromeAltHighColor}\" />",
+    L"TrayPadding=2",
+    L"ElementBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0.3\" />",
+    L"ElementBorderThickness=1",
+    L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>",
+    L"ElementCornerRadius=10",
+    L"thumbnailImageSize=300",
+}};
+
 // clang-format on
 
 std::atomic<bool> g_initialized;
@@ -3283,21 +3856,22 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
     switch (mutationType)
     {
     case Add:
-        Wh_Log(L"Mutation type: Add");
+        Wh_Log(L"Mutation type: Add %llu", element.Handle);
         break;
 
     case Remove:
-        Wh_Log(L"Mutation type: Remove");
+        Wh_Log(L"Mutation type: Remove %llu", element.Handle);
         break;
 
     default:
-        Wh_Log(L"Mutation type: %d", static_cast<int>(mutationType));
+        Wh_Log(L"Mutation type: %d %llu", static_cast<int>(mutationType), element.Handle);
         break;
     }
 
     Wh_Log(L"Element type: %s", element.Type);
 
-    if (!g_initializedForThread) {
+    if (!g_initializedForThread)
+    {
         Wh_Log(L"Not initialized for thread %u", GetCurrentThreadId());
         return S_OK;
     }
@@ -3461,7 +4035,7 @@ catch (...)
 }
 
 __declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
+_Use_decl_annotations_ STDAPI DllCanUnloadNow()
 {
     if (winrt::get_module_lock())
     {
@@ -3809,11 +4383,20 @@ struct StyleVariableConsumer {
     std::wstring fallbackClassName;
 };
 
-thread_local std::unordered_map<std::wstring, StyleVariableValue>
-    g_styleVariables;
-thread_local std::unordered_map<std::wstring,
-                                std::vector<StyleVariableConsumer>>
-    g_styleVariableConsumers;
+// Mod-global style variable registry. The struct mirrors the per-XamlRoot state
+// used by the taskbar styler so the variable-resolution call paths stay aligned
+// across the styler mods, but here all elements share one registry.
+struct StyleVariableState {
+    std::unordered_map<std::wstring, StyleVariableValue> variables;
+    std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
+        consumers;
+};
+
+thread_local StyleVariableState g_styleVariableState;
+
+StyleVariableState* GetStyleVariableState() {
+    return &g_styleVariableState;
+}
 
 thread_local bool g_elementPropertyModifying;
 
@@ -3877,7 +4460,23 @@ thread_local winrt::event_token g_colorValuesChangedToken;
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
     DependencyProperty property) {
-    auto value = elementDo.ReadLocalValue(property);
+    // Workaround for AcrylicBrushes returning an incorrect background brush.
+    // When restored, it doesn't look correct.
+    bool getValueWorkaround = false;
+    if (property == Controls::Panel::BackgroundProperty()) {
+        if (auto grid = elementDo.try_as<Controls::Grid>()) {
+            auto name = grid.Name();
+            if (name == L"CalendarCenterGrid" ||
+                name == L"ControlCenterRegion") {
+                Wh_Log(L"Using GetValue workaround for %s background",
+                       name.c_str());
+                getValueWorkaround = true;
+            }
+        }
+    }
+
+    auto value = getValueWorkaround ? elementDo.GetValue(property)
+                                    : elementDo.ReadLocalValue(property);
     if (value) {
         // A workaround for RowDefinitionCollection of RootContent which can't
         // be read by ReadLocalValue for some reason, even though it seems to be
@@ -5608,7 +6207,8 @@ void SetupImageBrushTracking(Media::ImageBrush const& brush,
 
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
-                     const PropertyOverrideValue& overrideValue) {
+                     const PropertyOverrideValue& overrideValue,
+                     bool initialApply = false) {
     winrt::Windows::Foundation::IInspectable value;
     if (auto* inspectable =
             std::get_if<winrt::Windows::Foundation::IInspectable>(
@@ -5696,13 +6296,53 @@ void SetOrClearValue(DependencyObject elementDo,
         // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
         // workaround.
         if (property == Controls::TextBlock::FontWeightProperty() ||
-            property == Controls::Control::FontWeightProperty()) {
+            property == Controls::Control::FontWeightProperty() ||
+            property == Controls::RichTextBlock::FontWeightProperty() ||
+            property == Controls::FontIcon::FontWeightProperty() ||
+            property == Controls::FontIconSource::FontWeightProperty() ||
+            property == Controls::ContentPresenter::FontWeightProperty()) {
             auto valueInt = value.try_as<int>();
             if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
                 *valueInt <= std::numeric_limits<uint16_t>::max()) {
                 value = winrt::box_value(winrt::Windows::UI::Text::FontWeight{
                     static_cast<uint16_t>(*valueInt)});
             }
+        }
+
+        // Grid ColumnDefinitions/RowDefinitions hold DependencyObjects
+        // (ColumnDefinition/RowDefinition) that the layout engine writes
+        // ActualWidth/ActualHeight back into. The resolved value is parsed once
+        // and cached, so applying it to more than one grid - e.g. a taskbar per
+        // monitor, all sharing one UI thread - would set the same collection on
+        // each, and one monitor's column sizes would then leak onto another's.
+        // Give each element a private copy. The scratch Grid owns the fresh
+        // collection until SetValue reassigns ownership to the target, so it's
+        // kept alive through the SetValue call below.
+        Controls::Grid definitionsCloneOwner{nullptr};
+        if (auto sourceColumns =
+                value.try_as<Controls::ColumnDefinitionCollection>()) {
+            definitionsCloneOwner = Controls::Grid{};
+            auto clonedColumns = definitionsCloneOwner.ColumnDefinitions();
+            for (auto const& column : sourceColumns) {
+                Controls::ColumnDefinition clonedColumn;
+                clonedColumn.Width(column.Width());
+                clonedColumn.MinWidth(column.MinWidth());
+                clonedColumn.MaxWidth(column.MaxWidth());
+                clonedColumns.Append(clonedColumn);
+            }
+            value = clonedColumns;
+        } else if (auto sourceRows =
+                       value.try_as<Controls::RowDefinitionCollection>()) {
+            definitionsCloneOwner = Controls::Grid{};
+            auto clonedRows = definitionsCloneOwner.RowDefinitions();
+            for (auto const& row : sourceRows) {
+                Controls::RowDefinition clonedRow;
+                clonedRow.Height(row.Height());
+                clonedRow.MinHeight(row.MinHeight());
+                clonedRow.MaxHeight(row.MaxHeight());
+                clonedRows.Append(clonedRow);
+            }
+            value = clonedRows;
         }
 
         elementDo.SetValue(property, value);
@@ -6668,39 +7308,65 @@ bool IsValidStyleVariableIdentifier(std::wstring_view sv) {
     return true;
 }
 
-// Recursive-descent evaluator for `{{ ... }}` expressions. Supports number
-// literal, identifier (style variable reference), parenthesized subexpression,
-// the binary ops + - * /, unary - / +, and the two-arg functions min(a, b) and
-// max(a, b). Standard math precedence.
+// Value produced while evaluating a `{{ ... }}` expression: either a number or
+// a string. Number literals and numeric variables produce numbers; backtick-
+// delimited string literals and string-typed variables produce strings.
+struct StyleExpressionValue {
+    // Engaged => numeric value; otherwise `text` holds the string value.
+    std::optional<double> number;
+    std::wstring text;
+
+    static StyleExpressionValue Number(double d) { return {d, std::wstring()}; }
+    static StyleExpressionValue String(std::wstring s) {
+        return {std::nullopt, std::move(s)};
+    }
+
+    bool IsNumber() const { return number.has_value(); }
+};
+
+// Recursive-descent evaluator for `{{ ... }}` expressions. Operands: number
+// literals, backtick-delimited string literals, style variable references, and
+// parenthesized subexpressions. Operators: binary + - * /, unary - / +, the
+// comparisons < <= == >= > !=, the conditional operator cond ? a : b, and the
+// two-arg functions min(a, b) and max(a, b). Standard math precedence.
+// Arithmetic, relational, unary-sign, and min/max operators require numeric
+// operands; == and != compare two numbers or two strings; the conditional
+// selects one of its (possibly string) branches. Evaluate() formats the result
+// to text.
 //
 // Variable references pushed into outDeps so the dependent style can be
 // re-evaluated when those variables change.
 class StyleVariableExpressionEvaluator {
    public:
     StyleVariableExpressionEvaluator(std::wstring_view text,
-                                     std::vector<std::wstring>* outDeps)
-        : m_text(text), m_outDeps(outDeps) {}
+                                     std::vector<std::wstring>* outDeps,
+                                     StyleVariableState* state)
+        : m_text(text), m_outDeps(outDeps), m_state(state) {}
 
-    // Returns the numeric result of the expression. Throws std::runtime_error
-    // on parse / evaluation failure (including when an identifier resolves to a
-    // non-numeric variable, or when the expression produces a non-finite result
-    // -- NaN/Inf can't be formatted into XAML attributes meaningfully and would
-    // also break the consumer-equality check in
+    // Returns the text form of the result: numeric results are formatted with
+    // FormatDoubleInvariant, string results are returned verbatim. Throws
+    // std::runtime_error on parse / evaluation failure (including when a value
+    // is used where the grammar requires a number, or when a numeric result is
+    // non-finite -- NaN/Inf can't be formatted into XAML attributes
+    // meaningfully and would also break the consumer-equality check in
     // SetStyleVariableIfChangedAndPropagate, since NaN != NaN).
-    double Evaluate() {
+    std::wstring Evaluate() {
         m_pos = 0;
         SkipWhitespace();
-        double v = ParseExpression();
+        StyleExpressionValue v = ParseExpression();
         SkipWhitespace();
         if (m_pos != m_text.size()) {
             throw std::runtime_error(
                 "Unexpected trailing characters in style variable expression");
         }
-        if (!std::isfinite(v)) {
-            throw std::runtime_error(
-                "Style variable expression produced a non-finite result");
+        if (v.IsNumber()) {
+            if (!std::isfinite(*v.number)) {
+                throw std::runtime_error(
+                    "Style variable expression produced a non-finite result");
+            }
+            return FormatDoubleInvariant(*v.number);
         }
-        return v;
+        return v.text;
     }
 
    private:
@@ -6721,14 +7387,140 @@ class StyleVariableExpressionEvaluator {
         return false;
     }
 
-    double ParseExpression() {
-        double v = ParseTerm();
+    // Tries to consume the multi-char operator `op` at the current position
+    // (after skipping leading whitespace). The operator must match exactly with
+    // no embedded whitespace; advances past it and returns true on success.
+    bool ConsumeOperator(std::wstring_view op) {
+        SkipWhitespace();
+        if (m_text.size() - m_pos >= op.size() &&
+            m_text.compare(m_pos, op.size(), op) == 0) {
+            m_pos += op.size();
+            return true;
+        }
+        return false;
+    }
+
+    // Unwraps a numeric operand. In a dead ternary branch (m_live == false) the
+    // value is discarded, so a string operand is tolerated (reported as 0)
+    // rather than aborting the whole expression.
+    double RequireNumber(const StyleExpressionValue& v) {
+        if (v.IsNumber()) {
+            return *v.number;
+        }
+        if (m_live) {
+            throw std::runtime_error(
+                "Non-numeric value used where a number is required in style "
+                "variable expression");
+        }
+        return 0.0;
+    }
+
+    // Equality test for == / !=. Two numbers compare numerically, two strings
+    // compare by content. A number/string mismatch is a type error in a live
+    // branch; in a dead branch it's harmlessly reported as not-equal.
+    bool ValuesEqual(const StyleExpressionValue& a,
+                     const StyleExpressionValue& b) {
+        if (a.IsNumber() && b.IsNumber()) {
+            return *a.number == *b.number;
+        }
+        if (!a.IsNumber() && !b.IsNumber()) {
+            return a.text == b.text;
+        }
+        if (m_live) {
+            throw std::runtime_error(
+                "Cannot compare a number with a string in style variable "
+                "expression");
+        }
+        return false;
+    }
+
+    StyleExpressionValue ParseExpression() { return ParseTernary(); }
+
+    // Conditional operator `cond ? thenVal : elseVal`, right-associative.
+    // Short-circuit: only the taken branch is evaluated. The untaken branch is
+    // still parsed (to advance the position and enforce syntax) with m_live
+    // cleared, which suppresses value-level errors (division by zero, a
+    // non-numeric / undefined variable, an unknown function) and dependency
+    // capture for that branch.
+    StyleExpressionValue ParseTernary() {
+        StyleExpressionValue cond = ParseEquality();
+        if (!ConsumeChar(L'?')) {
+            return cond;
+        }
+        bool condTrue = RequireNumber(cond) != 0.0;
+        bool prevLive = m_live;
+
+        m_live = prevLive && condTrue;
+        StyleExpressionValue thenVal = ParseExpression();
+        m_live = prevLive;
+
+        if (!ConsumeChar(L':')) {
+            throw std::runtime_error(
+                "Missing ':' for '?' in style variable expression");
+        }
+
+        m_live = prevLive && !condTrue;
+        StyleExpressionValue elseVal = ParseTernary();
+        m_live = prevLive;
+
+        return condTrue ? thenVal : elseVal;
+    }
+
+    StyleExpressionValue ParseEquality() {
+        StyleExpressionValue v = ParseRelational();
+        while (true) {
+            if (ConsumeOperator(L"==")) {
+                v = StyleExpressionValue::Number(
+                    ValuesEqual(v, ParseRelational()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L"!=")) {
+                v = StyleExpressionValue::Number(
+                    ValuesEqual(v, ParseRelational()) ? 0.0 : 1.0);
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseRelational() {
+        StyleExpressionValue v = ParseAdditive();
+        while (true) {
+            // Match the two-char operators before their single-char prefixes.
+            if (ConsumeOperator(L"<=")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs <= RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L">=")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs >= RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L"<")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs < RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else if (ConsumeOperator(L">")) {
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(
+                    lhs > RequireNumber(ParseAdditive()) ? 1.0 : 0.0);
+            } else {
+                break;
+            }
+        }
+        return v;
+    }
+
+    StyleExpressionValue ParseAdditive() {
+        StyleExpressionValue v = ParseTerm();
         while (true) {
             SkipWhitespace();
             if (ConsumeChar(L'+')) {
-                v += ParseTerm();
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs +
+                                                 RequireNumber(ParseTerm()));
             } else if (ConsumeChar(L'-')) {
-                v -= ParseTerm();
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs -
+                                                 RequireNumber(ParseTerm()));
             } else {
                 break;
             }
@@ -6736,19 +7528,28 @@ class StyleVariableExpressionEvaluator {
         return v;
     }
 
-    double ParseTerm() {
-        double v = ParseFactor();
+    StyleExpressionValue ParseTerm() {
+        StyleExpressionValue v = ParseFactor();
         while (true) {
             SkipWhitespace();
             if (ConsumeChar(L'*')) {
-                v *= ParseFactor();
+                double lhs = RequireNumber(v);
+                v = StyleExpressionValue::Number(lhs *
+                                                 RequireNumber(ParseFactor()));
             } else if (ConsumeChar(L'/')) {
-                double rhs = ParseFactor();
+                double lhs = RequireNumber(v);
+                double rhs = RequireNumber(ParseFactor());
                 if (rhs == 0.0) {
-                    throw std::runtime_error(
-                        "Division by zero in style variable expression");
+                    if (m_live) {
+                        throw std::runtime_error(
+                            "Division by zero in style variable expression");
+                    }
+                    // Dead ternary branch: the result is discarded, so skip the
+                    // divide instead of throwing or producing inf/nan.
+                    v = StyleExpressionValue::Number(lhs);
+                } else {
+                    v = StyleExpressionValue::Number(lhs / rhs);
                 }
-                v /= rhs;
             } else {
                 break;
             }
@@ -6756,18 +7557,18 @@ class StyleVariableExpressionEvaluator {
         return v;
     }
 
-    double ParseFactor() {
+    StyleExpressionValue ParseFactor() {
         SkipWhitespace();
         if (ConsumeChar(L'+')) {
-            return ParseFactor();
+            return StyleExpressionValue::Number(RequireNumber(ParseFactor()));
         }
         if (ConsumeChar(L'-')) {
-            return -ParseFactor();
+            return StyleExpressionValue::Number(-RequireNumber(ParseFactor()));
         }
         return ParsePrimary();
     }
 
-    double ParsePrimary() {
+    StyleExpressionValue ParsePrimary() {
         SkipWhitespace();
         if (m_pos >= m_text.size()) {
             throw std::runtime_error(
@@ -6777,7 +7578,7 @@ class StyleVariableExpressionEvaluator {
         wchar_t c = m_text[m_pos];
         if (c == L'(') {
             m_pos++;
-            double v = ParseExpression();
+            StyleExpressionValue v = ParseExpression();
             SkipWhitespace();
             if (!ConsumeChar(L')')) {
                 throw std::runtime_error(
@@ -6786,8 +7587,12 @@ class StyleVariableExpressionEvaluator {
             return v;
         }
 
+        if (c == L'`') {
+            return ParseStringLiteral();
+        }
+
         if ((c >= L'0' && c <= L'9') || c == L'.') {
-            return ParseNumberLiteral();
+            return StyleExpressionValue::Number(ParseNumberLiteral());
         }
 
         if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || c == L'_') {
@@ -6796,6 +7601,33 @@ class StyleVariableExpressionEvaluator {
 
         throw std::runtime_error(
             "Unexpected character in style variable expression");
+    }
+
+    // Backtick-delimited string literal. A doubled backtick encodes one literal
+    // backtick character; every other character is taken verbatim. Backtick is
+    // used (rather than a quote) so that literals don't clash with the string
+    // quoting of YAML settings or with the double quotes of XAML attributes,
+    // inside which these expressions often appear. The literal must be closed
+    // before the end of the expression.
+    StyleExpressionValue ParseStringLiteral() {
+        m_pos++;  // Skip the opening backtick.
+        std::wstring out;
+        while (m_pos < m_text.size()) {
+            wchar_t c = m_text[m_pos];
+            if (c == L'`') {
+                if (m_pos + 1 < m_text.size() && m_text[m_pos + 1] == L'`') {
+                    out.push_back(L'`');
+                    m_pos += 2;
+                    continue;
+                }
+                m_pos++;
+                return StyleExpressionValue::String(std::move(out));
+            }
+            out.push_back(c);
+            m_pos++;
+        }
+        throw std::runtime_error(
+            "Unterminated string literal in style variable expression");
     }
 
     double ParseNumberLiteral() {
@@ -6838,7 +7670,7 @@ class StyleVariableExpressionEvaluator {
         return *parsed;
     }
 
-    double ParseIdentifierOrCall() {
+    StyleExpressionValue ParseIdentifierOrCall() {
         size_t start = m_pos;
         while (m_pos < m_text.size()) {
             wchar_t c = m_text[m_pos];
@@ -6853,48 +7685,71 @@ class StyleVariableExpressionEvaluator {
         SkipWhitespace();
         if (m_pos < m_text.size() && m_text[m_pos] == L'(') {
             m_pos++;
-            double a = ParseExpression();
+            double a = RequireNumber(ParseExpression());
             if (!ConsumeChar(L',')) {
                 throw std::runtime_error(
                     "Expected ',' in min/max style variable call");
             }
-            double b = ParseExpression();
+            double b = RequireNumber(ParseExpression());
             if (!ConsumeChar(L')')) {
                 throw std::runtime_error(
                     "Missing ')' after min/max style variable call");
             }
             if (ident == L"min") {
-                return (a < b) ? a : b;
+                return StyleExpressionValue::Number((a < b) ? a : b);
             }
             if (ident == L"max") {
-                return (a > b) ? a : b;
+                return StyleExpressionValue::Number((a > b) ? a : b);
             }
-            throw std::runtime_error(
-                "Unknown function in style variable expression");
+            if (m_live) {
+                throw std::runtime_error(
+                    "Unknown function in style variable expression");
+            }
+            // Dead ternary branch: value discarded, don't fail on the name.
+            return StyleExpressionValue::Number(0.0);
         }
-        return LookupVariableNumeric(std::wstring(ident));
+        return LookupVariable(std::wstring(ident));
     }
 
-    double LookupVariableNumeric(const std::wstring& name) {
-        if (m_outDeps) {
+    StyleExpressionValue LookupVariable(const std::wstring& name) {
+        // In a dead ternary branch (m_live == false) the value is discarded, so
+        // suppress dependency capture and the value-level errors below; the
+        // branch must not abort the whole expression.
+        if (m_live && m_outDeps) {
             m_outDeps->push_back(name);
         }
-        auto it = g_styleVariables.find(name);
-        if (it == g_styleVariables.end()) {
-            Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
-                   name.c_str());
-            return 0.0;
+        auto it = m_state->variables.find(name);
+        if (it == m_state->variables.end()) {
+            if (m_live) {
+                Wh_Log(L"Style variable '%s' not yet defined; treating as 0",
+                       name.c_str());
+            }
+            return StyleExpressionValue::Number(0.0);
         }
-        if (!it->second.numeric) {
+        if (it->second.numeric) {
+            return StyleExpressionValue::Number(*it->second.numeric);
+        }
+        // Non-numeric primitive (e.g. a captured string property): usable as a
+        // string operand.
+        if (it->second.substitutable) {
+            return StyleExpressionValue::String(it->second.stringForm);
+        }
+        // Opaque capture (brush, thickness, etc.): no value form usable in an
+        // expression.
+        if (m_live) {
             throw std::runtime_error(
-                "Style variable used in arithmetic is not numeric");
+                "Style variable used in expression is not a primitive value");
         }
-        return *it->second.numeric;
+        return StyleExpressionValue::Number(0.0);
     }
 
     std::wstring_view m_text;
     std::vector<std::wstring>* m_outDeps;
+    StyleVariableState* m_state;
     size_t m_pos = 0;
+    // When false, we're parsing (but discarding) the untaken branch of a
+    // ternary; value-level errors and dependency capture are suppressed.
+    bool m_live = true;
 };
 
 // Evaluate a single expression body (the text between `{{` and `}}`). If the
@@ -6907,7 +7762,8 @@ class StyleVariableExpressionEvaluator {
 // rather than substituting a value that won't parse.
 std::optional<std::wstring> EvaluateStyleVariableExpression(
     std::wstring_view exprText,
-    std::vector<std::wstring>* outDeps) {
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
     auto trimmed = TrimStringView(exprText);
     if (trimmed.empty()) {
         Wh_Log(L"Empty style variable expression");
@@ -6919,8 +7775,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
         if (outDeps) {
             outDeps->push_back(name);
         }
-        auto it = g_styleVariables.find(name);
-        if (it == g_styleVariables.end()) {
+        auto it = state->variables.find(name);
+        if (it == state->variables.end()) {
             Wh_Log(L"Style variable '%s' not yet defined; skipping style",
                    name.c_str());
             return std::nullopt;
@@ -6936,9 +7792,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
     }
 
     try {
-        StyleVariableExpressionEvaluator eval(trimmed, outDeps);
-        double v = eval.Evaluate();
-        return FormatDoubleInvariant(v);
+        StyleVariableExpressionEvaluator eval(trimmed, outDeps, state);
+        return eval.Evaluate();
     } catch (std::exception const& ex) {
         Wh_Log(L"Style variable expression failed: %S (in '%.*s')", ex.what(),
                static_cast<int>(trimmed.size()), trimmed.data());
@@ -6956,7 +7811,8 @@ std::optional<std::wstring> EvaluateStyleVariableExpression(
 // substituted output) to keep behavior predictable.
 std::optional<std::wstring> ExpandStyleVariables(
     std::wstring_view input,
-    std::vector<std::wstring>* outDeps) {
+    std::vector<std::wstring>* outDeps,
+    StyleVariableState* state) {
     std::wstring result(input);
     size_t scanFrom = 0;
 
@@ -6994,7 +7850,8 @@ std::optional<std::wstring> ExpandStyleVariables(
 
         std::wstring_view exprText(result.data() + openPos + 2,
                                    closePos - openPos - 2);
-        auto expanded = EvaluateStyleVariableExpression(exprText, outDeps);
+        auto expanded =
+            EvaluateStyleVariableExpression(exprText, outDeps, state);
         if (!expanded) {
             return std::nullopt;
         }
@@ -7058,14 +7915,24 @@ StyleVariableValue ReadCapturedStyleVariableValue(FrameworkElement element,
 // `fallbackClassName` is stored on each newly-added consumer entry so the
 // per-consumer context is preserved across propagations; it is irrelevant when
 // newDeps is empty (pure-removal calls from the cleanup paths).
-void UpdateStyleVariableConsumers(InstanceHandle handle,
+void UpdateStyleVariableConsumers(StyleVariableState* state,
+                                  InstanceHandle handle,
                                   DependencyProperty property,
                                   PCWSTR fallbackClassName,
                                   const std::vector<std::wstring>& oldDeps,
                                   const std::vector<std::wstring>& newDeps) {
+    if (!state) {
+        // The element's XamlRoot has already been destroyed (or was never
+        // available); the StyleVariableState entry has been or will be reaped,
+        // and there is nothing to clean up. New registrations (newDeps) are
+        // also dropped on the floor: without a state we cannot route
+        // propagations anyway.
+        return;
+    }
+
     for (const auto& dep : oldDeps) {
-        auto it = g_styleVariableConsumers.find(dep);
-        if (it == g_styleVariableConsumers.end()) {
+        auto it = state->consumers.find(dep);
+        if (it == state->consumers.end()) {
             continue;
         }
         auto& consumers = it->second;
@@ -7073,14 +7940,14 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
             return c.elementHandle == handle && c.property == property;
         });
         if (consumers.empty()) {
-            g_styleVariableConsumers.erase(it);
+            state->consumers.erase(it);
         }
     }
 
     std::wstring fallbackClassNameStr =
         fallbackClassName ? fallbackClassName : L"";
     for (const auto& dep : newDeps) {
-        auto& consumers = g_styleVariableConsumers[dep];
+        auto& consumers = state->consumers[dep];
         bool already = std::any_of(consumers.begin(), consumers.end(),
                                    [&](const StyleVariableConsumer& c) {
                                        return c.elementHandle == handle &&
@@ -7094,8 +7961,8 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
 
 // Re-evaluate the dynamic template stored on `propertyCustomizationState` and
 // return the resolved IInspectable / XamlBlurBrushParams ready to be applied.
-// Updates the (handle, property) -> g_styleVariableConsumers registry to match
-// the freshly computed dependency set so future variable changes route to this
+// Updates the (handle, property) -> state->consumers registry to match the
+// freshly computed dependency set so future variable changes route to this
 // property. The dependency registry is committed *before* the final XAML
 // resolution attempt: ExpandStyleVariables records every variable name it scans
 // into newDeps even on partial parse failure, which lets a future change to any
@@ -7115,6 +7982,7 @@ void UpdateStyleVariableConsumers(InstanceHandle handle,
 // Returns std::nullopt if the state has no template, expansion failed, or XAML
 // resolution failed.
 std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     DependencyProperty property,
@@ -7127,10 +7995,10 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
     const auto& tmpl = *propertyCustomizationState->dynamicTemplate;
 
     std::vector<std::wstring> newDeps;
-    auto expanded = ExpandStyleVariables(tmpl.rawValue, &newDeps);
+    auto expanded = ExpandStyleVariables(tmpl.rawValue, &newDeps, state);
 
     UpdateStyleVariableConsumers(
-        handle, property, fallbackClassName,
+        state, handle, property, fallbackClassName,
         propertyCustomizationState->variableDependencies, newDeps);
     propertyCustomizationState->variableDependencies = std::move(newDeps);
 
@@ -7159,9 +8027,10 @@ std::optional<PropertyOverrideValue> ResolveDynamicStyleValue(
 // (recorded when the consumer was registered), so propagation correctly uses
 // the consumer's own match-site context to re-parse the rule body, even when
 // the capturer was matched against a different type/fallback class.
-void PropagateStyleVariableChange(const std::wstring& varName) {
-    auto consumersIt = g_styleVariableConsumers.find(varName);
-    if (consumersIt == g_styleVariableConsumers.end()) {
+void PropagateStyleVariableChange(StyleVariableState* state,
+                                  const std::wstring& varName) {
+    auto consumersIt = state->consumers.find(varName);
+    if (consumersIt == state->consumers.end()) {
         return;
     }
 
@@ -7194,7 +8063,7 @@ void PropagateStyleVariableChange(const std::wstring& varName) {
             }
 
             auto resolved = ResolveDynamicStyleValue(
-                consumer.elementHandle, element, consumer.property,
+                state, consumer.elementHandle, element, consumer.property,
                 consumerFallbackClassName, &propState);
             if (!resolved) {
                 continue;
@@ -7215,17 +8084,18 @@ void PropagateStyleVariableChange(const std::wstring& varName) {
     }
 }
 
-// Compare a captured value to whatever's currently in g_styleVariables for the
+// Compare a captured value to whatever's currently in state->variables for the
 // same name; if different, store and notify dependents. Each consumer's own
 // fallbackClassName lives on the consumer entry, so this function does not need
 // to be told the capturer's context. Used by every path that wants to publish a
 // captured value -- the per-property capture callback, the SizeChanged
 // catch-all, and the initial seeding loop -- so the no-op fast path applies
 // uniformly.
-void SetStyleVariableIfChangedAndPropagate(const std::wstring& varName,
+void SetStyleVariableIfChangedAndPropagate(StyleVariableState* state,
+                                           const std::wstring& varName,
                                            StyleVariableValue value) {
-    auto it = g_styleVariables.find(varName);
-    if (it != g_styleVariables.end() &&
+    auto it = state->variables.find(varName);
+    if (it != state->variables.end() &&
         it->second.stringForm == value.stringForm &&
         it->second.numeric == value.numeric &&
         it->second.substitutable == value.substitutable) {
@@ -7235,11 +8105,11 @@ void SetStyleVariableIfChangedAndPropagate(const std::wstring& varName,
     }
 
     Wh_Log(L"Style variable '%s' changed: '%s' -> '%s'", varName.c_str(),
-           it != g_styleVariables.end() ? it->second.stringForm.c_str()
+           it != state->variables.end() ? it->second.stringForm.c_str()
                                         : L"(unset)",
            value.stringForm.c_str());
-    g_styleVariables[varName] = std::move(value);
-    PropagateStyleVariableChange(varName);
+    state->variables[varName] = std::move(value);
+    PropagateStyleVariableChange(state, varName);
 }
 
 // True for layout-driven DPs whose updates do not fire
@@ -7257,7 +8127,7 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // callbacks on layout -- subscribes to FrameworkElement.SizeChanged as a
 // catch-all that re-reads every active capture on resize.
 //
-// Seeding writes the captured values into g_styleVariables in a single batch
+// Seeding writes the captured values into state->variables in a single batch
 // (to avoid intermediate inconsistent states for consumers that depend on
 // multiple variables from this element) and then propagates only the variables
 // whose values actually changed -- the no-op fast path matches the one used by
@@ -7265,7 +8135,8 @@ bool IsLayoutDrivenSizeProperty(DependencyProperty property) {
 // fallbackClassName: each StyleVariableConsumer entry already carries its own
 // consumer-side fallback, so propagation routes through the right context per
 // consumer.
-void SetUpCapturesForElement(InstanceHandle handle,
+void SetUpCapturesForElement(StyleVariableState* state,
+                             InstanceHandle handle,
                              FrameworkElement element,
                              const std::vector<CaptureSpec>& captures,
                              ElementCustomizationState* elementState) {
@@ -7277,7 +8148,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
     winrt::weak_ref<FrameworkElement> elementWeakRef = element;
 
     // Names of variables whose seeded value differs from whatever's already in
-    // g_styleVariables. Only these need a propagation pass at the end.
+    // state->variables. Only these need a propagation pass at the end.
     std::vector<std::wstring> changedVarNames;
     changedVarNames.reserve(captures.size());
 
@@ -7308,9 +8179,9 @@ void SetUpCapturesForElement(InstanceHandle handle,
 
         auto value = ReadCapturedStyleVariableValue(element, capture.property);
 
-        auto existingIt = g_styleVariables.find(capture.varName);
+        auto existingIt = state->variables.find(capture.varName);
         const bool changed =
-            existingIt == g_styleVariables.end() ||
+            existingIt == state->variables.end() ||
             existingIt->second.stringForm != value.stringForm ||
             existingIt->second.numeric != value.numeric ||
             existingIt->second.substitutable != value.substitutable;
@@ -7321,10 +8192,10 @@ void SetUpCapturesForElement(InstanceHandle handle,
                 L"(was: '%s')",
                 capture.varName.c_str(), winrt::get_class_name(element).c_str(),
                 value.stringForm.c_str(),
-                existingIt != g_styleVariables.end()
+                existingIt != state->variables.end()
                     ? existingIt->second.stringForm.c_str()
                     : L"(unset)");
-            g_styleVariables[capture.varName] = std::move(value);
+            state->variables[capture.varName] = std::move(value);
             changedVarNames.push_back(capture.varName);
         } else {
             Wh_Log(L"Capture variable '%s' from %s already at '%s'",
@@ -7344,22 +8215,22 @@ void SetUpCapturesForElement(InstanceHandle handle,
         captureState.propertyChangedToken =
             elementDo.RegisterPropertyChangedCallback(
                 capture.property,
-                [varName, elementWeakRef](DependencyObject sender,
-                                          DependencyProperty property) {
+                [state, varName, elementWeakRef](DependencyObject sender,
+                                                 DependencyProperty property) {
                     auto element = elementWeakRef.get();
                     if (!element) {
                         return;
                     }
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
-                    SetStyleVariableIfChangedAndPropagate(varName,
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
                                                           std::move(value));
                 });
     }
 
     if (!sizeChangedCaptures.empty()) {
         elementState->captureSizeChangedToken = element.SizeChanged(
-            [elementWeakRef,
+            [state, elementWeakRef,
              sizeChangedCaptures = std::move(sizeChangedCaptures)](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 SizeChangedEventArgs const& e) {
@@ -7373,7 +8244,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
                 for (const auto& [property, varName] : sizeChangedCaptures) {
                     auto value =
                         ReadCapturedStyleVariableValue(element, property);
-                    SetStyleVariableIfChangedAndPropagate(varName,
+                    SetStyleVariableIfChangedAndPropagate(state, varName,
                                                           std::move(value));
                 }
             });
@@ -7383,7 +8254,7 @@ void SetUpCapturesForElement(InstanceHandle handle,
     // registered before this element was matched. Variables whose value did not
     // actually change are skipped, matching the per-callback fast path.
     for (const auto& varName : changedVarNames) {
-        PropagateStyleVariableChange(varName);
+        PropagateStyleVariableChange(state, varName);
     }
 }
 
@@ -7419,6 +8290,7 @@ void RestoreCapturesForElement(FrameworkElement element,
 }
 
 void ApplyCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     VisualStateGroup visualStateGroup,
@@ -7456,7 +8328,7 @@ void ApplyCustomizationsForVisualStateGroup(
             if (auto* tmpl = std::get_if<DynamicStyleTemplate>(&it->second)) {
                 propertyCustomizationState.dynamicTemplate = *tmpl;
                 resolved = ResolveDynamicStyleValue(
-                    handle, element, property, fallbackClassName,
+                    state, handle, element, property, fallbackClassName,
                     &propertyCustomizationState);
             } else {
                 resolved = it->second;
@@ -7466,7 +8338,8 @@ void ApplyCustomizationsForVisualStateGroup(
                 propertyCustomizationState.originalValue =
                     ReadLocalValueWithWorkaround(element, property);
                 propertyCustomizationState.customValue = *resolved;
-                SetOrClearValue(element, property, *resolved);
+                SetOrClearValue(element, property, *resolved,
+                                /*initialApply=*/true);
                 propertyCustomizationState.lastAppliedValue =
                     ReadLocalValueWithWorkaround(element, property);
             }
@@ -7523,7 +8396,7 @@ void ApplyCustomizationsForVisualStateGroup(
         elementCustomizationStateForVisualStateGroup
             ->visualStateGroupCurrentStateChangedToken =
             visualStateGroup.CurrentStateChanged(
-                [elementWeakRef, propertyOverrides, handle,
+                [state, elementWeakRef, propertyOverrides, handle,
                  fallbackClassNameStr,
                  elementCustomizationStateForVisualStateGroup](
                     winrt::Windows::Foundation::IInspectable const& sender,
@@ -7576,7 +8449,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 propertyCustomizationState.dynamicTemplate =
                                     *tmpl;
                                 resolved = ResolveDynamicStyleValue(
-                                    handle, element, property,
+                                    state, handle, element, property,
                                     fallbackClassNamePtr,
                                     &propertyCustomizationState);
                             } else {
@@ -7586,7 +8459,7 @@ void ApplyCustomizationsForVisualStateGroup(
                                 if (propertyCustomizationState
                                         .dynamicTemplate) {
                                     UpdateStyleVariableConsumers(
-                                        handle, property,
+                                        state, handle, property,
                                         /*fallbackClassName=*/nullptr,
                                         propertyCustomizationState
                                             .variableDependencies,
@@ -7617,7 +8490,7 @@ void ApplyCustomizationsForVisualStateGroup(
                         } else {
                             if (propertyCustomizationState.dynamicTemplate) {
                                 UpdateStyleVariableConsumers(
-                                    handle, property,
+                                    state, handle, property,
                                     /*fallbackClassName=*/nullptr,
                                     propertyCustomizationState
                                         .variableDependencies,
@@ -7647,6 +8520,7 @@ void ApplyCustomizationsForVisualStateGroup(
 }
 
 void RestoreCustomizationsForVisualStateGroup(
+    StyleVariableState* state,
     InstanceHandle handle,
     FrameworkElement element,
     std::optional<winrt::weak_ref<VisualStateGroup>>
@@ -7654,36 +8528,38 @@ void RestoreCustomizationsForVisualStateGroup(
     const ElementCustomizationStateForVisualStateGroup&
         elementCustomizationStateForVisualStateGroup) {
     if (element) {
-        for (const auto& [property, state] :
+        for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
             try {
                 element.UnregisterPropertyChangedCallback(
-                    property, state.propertyChangedToken);
+                    property, propState.propertyChangedToken);
             } catch (winrt::hresult_error const& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
             }
 
-            if (!state.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(handle, property,
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
                                              /*fallbackClassName=*/nullptr,
-                                             state.variableDependencies, {});
+                                             propState.variableDependencies,
+                                             {});
             }
 
-            if (state.originalValue) {
-                SetOrClearValue(element, property, *state.originalValue);
+            if (propState.originalValue) {
+                SetOrClearValue(element, property, *propState.originalValue);
             }
         }
     } else {
         // Element is gone; still clear consumer entries so a stale (handle,
         // property) pair isn't visited during PropagateStyleVariableChange.
-        for (const auto& [property, state] :
+        for (const auto& [property, propState] :
              elementCustomizationStateForVisualStateGroup
                  .propertyCustomizationStates) {
-            if (!state.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(handle, property,
+            if (!propState.variableDependencies.empty()) {
+                UpdateStyleVariableConsumers(state, handle, property,
                                              /*fallbackClassName=*/nullptr,
-                                             state.variableDependencies, {});
+                                             propState.variableDependencies,
+                                             {});
             }
         }
     }
@@ -7715,6 +8591,13 @@ void ApplyCustomizations(InstanceHandle handle,
         MergeResourceVariables();
     }
 
+    auto* state = GetStyleVariableState();
+    if (!state) {
+        Wh_Log(L"No XamlRoot for %s, skipping",
+               winrt::get_class_name(element).c_str());
+        return;
+    }
+
     auto resolved = FindElementPropertyOverrides(element, fallbackClassName);
     if (resolved.overridesPerVSG.empty() && resolved.captures.empty()) {
         return;
@@ -7727,7 +8610,8 @@ void ApplyCustomizations(InstanceHandle handle,
     for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
         RestoreCustomizationsForVisualStateGroup(
-            handle, element, visualStateGroupOptionalWeakPtrIter, stateIter);
+            state, handle, element, visualStateGroupOptionalWeakPtrIter,
+            stateIter);
     }
 
     elementCustomizationState.element = element;
@@ -7737,7 +8621,7 @@ void ApplyCustomizations(InstanceHandle handle,
     // dynamic value-rules applied below. Note: SetUpCapturesForElement does not
     // need this element's fallbackClassName -- propagation routes through each
     // consumer's own stored fallback.
-    SetUpCapturesForElement(handle, element, resolved.captures,
+    SetUpCapturesForElement(state, handle, element, resolved.captures,
                             &elementCustomizationState);
 
     for (auto& [visualStateGroup, overridesForVisualStateGroup] :
@@ -7754,7 +8638,7 @@ void ApplyCustomizations(InstanceHandle handle,
             &elementCustomizationState.perVisualStateGroup.back().second;
 
         ApplyCustomizationsForVisualStateGroup(
-            handle, element, visualStateGroup, fallbackClassName,
+            state, handle, element, visualStateGroup, fallbackClassName,
             std::move(overridesForVisualStateGroup),
             elementCustomizationStateForVisualStateGroup);
     }
@@ -7766,13 +8650,14 @@ void CleanupCustomizations(InstanceHandle handle) {
         auto& elementCustomizationState = it->second;
 
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
 
         RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
 
@@ -8524,6 +9409,10 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeLayerMicaUI;
     } else if (wcscmp(themeName, L"Borderless") == 0) {
         theme = &g_themeBorderless;
+    } else if (wcscmp(themeName, L"Densy") == 0) {
+        theme = &g_themeDensy;
+    } else if (wcscmp(themeName, L"FrostyGlass") == 0) {
+        theme = &g_themeFrostyGlass;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -8607,20 +9496,20 @@ void UninitializeForCurrentThread() {
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
+        auto* state = GetStyleVariableState();
 
         RestoreCapturesForElement(element, elementCustomizationState);
 
         for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
              elementCustomizationState.perVisualStateGroup) {
             RestoreCustomizationsForVisualStateGroup(
-                handle, element, visualStateGroupOptionalWeakPtrIter,
+                state, handle, element, visualStateGroupOptionalWeakPtrIter,
                 stateIter);
         }
     }
 
     g_elementsCustomizationState.clear();
-    g_styleVariables.clear();
-    g_styleVariableConsumers.clear();
+    g_styleVariableState = {};
 
     g_elementsCustomizationRules.clear();
 
@@ -8931,7 +9820,7 @@ bool StartStatsTimer() {
     static constexpr WCHAR kStatsBaseUrl[] =
         L"https://github.com/ramensoftware/"
         L"windows-11-notification-center-styling-guide/"
-        L"releases/download/stats-v4/";
+        L"releases/download/stats-v5/";
 
     ULONGLONG lastStatsTime = 0;
     Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
