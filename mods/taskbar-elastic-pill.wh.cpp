@@ -32,7 +32,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
   - Dimensions: "16, 3"
     $name: Pill Dimensions (Width, Height)
     $description: The width and height of the sliding pill in pixels.
-  - Margins: "0, 0"
+  - Margins: "0, 5"
     $name: Pill Margins (Horizontal, Bottom)
     $description: Left margin (Right is mirrored) and Bottom margin.
   - PillRadius: '1.5'
@@ -162,7 +162,6 @@ struct Settings {
     bool HideInactiveDots = false;
     int ColorMode = 0;
     bool TrackSystemButtons = false;
-    bool PointerInteractions = true;
     
     double HoverScaleX = 1.0, HoverScaleY = 1.0;
     double PressedScaleX = 1.0, PressedScaleY = 1.0;
@@ -737,9 +736,6 @@ FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     if (!pThis) return nullptr;
     try {
         void* iUnknownPtr = (void**)pThis + 3;
-        if (iUnknownPtr) {
-            ((::IUnknown*)iUnknownPtr)->AddRef();
-        }
         winrt::Windows::Foundation::IUnknown iUnknown;
         winrt::copy_from_abi(iUnknown, iUnknownPtr);
         return iUnknown.try_as<winrt::Windows::UI::Xaml::FrameworkElement>();
@@ -900,11 +896,15 @@ void AttachPointerEvents(winrt::Windows::UI::Xaml::FrameworkElement const& butto
     if (!button || !ctx) return;
     Settings localSettings;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-    if (!localSettings.PointerInteractions) return;
     
     void* pBtn = winrt::get_abi(button);
     {
         std::lock_guard<std::mutex> lock(g_attachedPointerButtonsMutex);
+        g_attachedPointerButtons->erase(
+            std::remove_if(g_attachedPointerButtons->begin(), g_attachedPointerButtons->end(),
+                [](const ButtonEventTokens& item) { return item.btn.get() == nullptr; }),
+            g_attachedPointerButtons->end());
+
         for (auto& item : *g_attachedPointerButtons) {
             if (auto b = item.btn.get()) {
                 if (winrt::get_abi(b) == pBtn) return;
@@ -1629,9 +1629,7 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         try {
             UpdatePillPosition(pill, grid, targetButton, settingsToUse);
         } catch (...) {}
-        if (settingsToUse.PointerInteractions) {
-            AttachPointerEvents(targetButton, ctx);
-        }
+        AttachPointerEvents(targetButton, ctx);
     } else {
         ctx->activeBtn = nullptr;
     }
@@ -2113,6 +2111,8 @@ void Wh_ModUninit() {
     delete g_iconColorCache;
     delete g_attachedGroups;
     delete g_attachedEvents;
+    delete g_iconColorExtracting;
+    delete g_attachedPointerButtons;
 }
 
 void Wh_ModSettingsChanged() {
