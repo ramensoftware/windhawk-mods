@@ -117,6 +117,25 @@ If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog 
+// - 3.4.0: Network location detection now only runs while the flyout is
+//   visible (it was previously re-run on every 3s auto-refresh tick even
+//   while hidden), and the last detected category is kept instead of reset
+//   while hidden, avoiding a generic-icon flash on reopen.
+// - 3.4.0: Category detection now joins on the exact network GUID
+//   (adapter -> INetwork::GetNetworkId() -> NetworkList\Profiles\{GUID})
+//   instead of matching on profile display name, which isn't a unique key
+//   and could pick a stale profile. This also fixes Wi-Fi being checked
+//   before Ethernet when the Ethernet registry lookup missed.
+// - 3.4.0: Header network-location icon is now decoded at its actual draw
+//   size and drawn through the existing bicubic GDI+ path instead of being
+//   upscaled ~5% by DrawIconEx, removing a slight blur.
+// - 3.4.0: Normal (non-hover) refresh icon is now decoded at ScaleDpi(16)
+//   instead of a fixed 16px, so it no longer jumps disproportionately
+//   relative to the hover icon at higher DPI.
+// - 3.4.0: Registry profile name reads now use RegGetValueW, which
+//   guarantees null termination, instead of RegQueryValueExW.
+// - 3.4.0: The fallback network scan now fetches the adapter table once per
+//   scan instead of once per connection examined.
 // - 3.3.3: Corrected Public vs Work icon artwork mapping: Public now uses
 //   the public/bench-style icon, while Domain/Work uses the buildings icon.
 // - 3.3.3: Moved the refresh button 2.5% back to the right from 3.3.2
@@ -133,6 +152,12 @@ If you encounter issues, please report them on the author of the mod.
 //   Home/Public/Work network location icons, embedded safely as Base64.
 // - 3.3.1: Saved source as UTF-8 and added a padding-safe Base64 decoder so
 //   settings names such as Español, Français, Русский and Português render correctly.
+// - 3.2.0: Added Ethernet support so the flyout now shows properly for
+//   Ethernet connections, not just Wi-Fi.
+// - 3.2.0: Added the option to restore classic Windows 7 "Connect to a
+//   network" and HomeGroup/sharing links in the Network and Sharing Center.
+// - 3.1.0: Earlier maintenance release predating this changelog's detailed
+//   entries; history prior to 3.1.0 was not preserved.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -144,7 +169,8 @@ If you encounter issues, please report them on the author of the mod.
 #include <uxtheme.h>
 #include <dwmapi.h>
 #include <psapi.h>
-
+#include <shlobj.h>    
+#include <shlwapi.h>
 #include <strsafe.h>
 #include <shellapi.h>
 #include <commctrl.h>
@@ -178,6 +204,13 @@ static int  ROW_HEIGHT_EXPANDED = ROW_HEIGHT_EXPANDED_BASE;
 
 static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
+}
+
+// Shared by InitRefreshButtonRect (hit-testing) and the paint handler
+// (drawing), so the two can't drift apart the way two copies of this
+// expression could.
+static inline int GetRefreshButtonLeftOffset() {
+    return (WINDOW_WIDTH * 7) / 1000;
 }
 
 // Define settings early so they are available to RecalcDpiMetrics and UI helpers
@@ -949,13 +982,13 @@ static void DetectWindowsVersion() {
             int btnCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
             Wh_Log(L"Win11: Win10 legacy taskbar detected (ToolbarWindow32 found, %d buttons)", btnCount);
         } else if (hSysPager) {
-            Wh_Log(L"Win11: SysPager found but no ToolbarWindow32  partial legacy taskbar");
+            Wh_Log(L"Win11: SysPager found but no ToolbarWindow32 - partial legacy taskbar");
         } else if (hNotify) {
-            Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager  modern taskbar only");
+            Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager - modern taskbar only");
         } else if (hTray) {
-            Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd  unusual configuration");
+            Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd - unusual configuration");
         } else {
-            Wh_Log(L"Win11: Shell_TrayWnd not found  taskbar not ready yet");
+            Wh_Log(L"Win11: Shell_TrayWnd not found - taskbar not ready yet");
         }
         WCHAR epPniduiPath[MAX_PATH];
         StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
@@ -1045,8 +1078,16 @@ UINT_PTR g_TimeoutTimer = 0;
 HWND G_hSubclassedToolbar = nullptr;
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
-static HANDLE g_hConnectMutex = NULL;
-static HMODULE g_hGdiPlus = NULL;
+// Aggiungi prima questa struttura (una volta sola, all'inizio del file)
+struct HandleDeleter {
+    void operator()(HANDLE h) const {
+        if (h && h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+};
+using WinHandle = std::unique_ptr<std::remove_pointer<HANDLE>::type, HandleDeleter>;
+
+// Poi sostituisci la dichiarazione con:
+static WinHandle g_hConnectMutex;static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 static void* g_pBitmapSignalBars[6] = { NULL };
 static void* g_pBitmapNetLocHome   = NULL;  // GDI+ cache for bicubic draw
@@ -1816,8 +1857,64 @@ BOOL IsInternetConnected() {
 //     public-first scan of connected NLM networks.
 // -------------------------------------------------------
 static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name);
-static BOOL IsAdapterGuidIgnoredByIpHelper(const GUID* adapterGuid);
 static void SafeSysFreeString(BSTR bstr);
+static BOOL IsZeroGuidValue(const GUID* guid);
+
+// Fetched once per fallback scan (rather than once per connection examined)
+// to avoid a repeated 15 KB alloc + GetAdaptersAddresses enumeration.
+struct AdapterIgnoreTable {
+    PIP_ADAPTER_ADDRESSES pAddresses;
+};
+
+static BOOL AdapterIgnoreTable_Init(AdapterIgnoreTable* table) {
+    table->pAddresses = NULL;
+    ULONG outBufLen = 15000;
+    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+    if (!pAddresses) return FALSE;
+
+    ULONG res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                     NULL, pAddresses, &outBufLen);
+    if (res == ERROR_BUFFER_OVERFLOW) {
+        free(pAddresses);
+        pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+        if (!pAddresses) return FALSE;
+        res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                   NULL, pAddresses, &outBufLen);
+    }
+    if (res != NO_ERROR) {
+        free(pAddresses);
+        return FALSE;
+    }
+    table->pAddresses = pAddresses;
+    return TRUE;
+}
+
+static void AdapterIgnoreTable_Free(AdapterIgnoreTable* table) {
+    if (table && table->pAddresses) {
+        free(table->pAddresses);
+        table->pAddresses = NULL;
+    }
+}
+
+static BOOL AdapterIgnoreTable_IsIgnored(const AdapterIgnoreTable* table, const GUID* adapterGuid) {
+    if (!table || !table->pAddresses || IsZeroGuidValue(adapterGuid)) return FALSE;
+    for (PIP_ADAPTER_ADDRESSES pCurr = table->pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
+        GUID parsedAdapterGuid = {0};
+        BOOL haveParsedGuid = FALSE;
+        if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
+            WCHAR wAdapterName[128];
+            int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
+                                               wAdapterName, ARRAYSIZE(wAdapterName));
+            if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
+                haveParsedGuid = TRUE;
+            }
+        }
+        if (haveParsedGuid && IsEqualGUID(parsedAdapterGuid, *adapterGuid)) {
+            return IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName);
+        }
+    }
+    return FALSE;
+}
 
 static BOOL IsZeroGuidValue(const GUID* guid) {
     static const GUID zeroGuid = {0};
@@ -1896,6 +1993,99 @@ static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
     return found;
 }
 
+// Robust join that removes name matching entirely: given the exact adapter
+// GUID used by the flyout header, find its INetwork via the matching
+// INetworkConnection::GetAdapterId(), then read that network's own GUID via
+// INetwork::GetNetworkId() and look up NetworkList\Profiles\{that GUID}
+// directly (the Profiles subkey names ARE the network GUIDs). This yields
+// the exact Category for the exact network - profile *names* aren't unique
+// (a machine that has seen several networks named "Network"/"Network 2" can
+// have stale profiles whose name collides with the current NLM friendly
+// name, and the first name match would win), so this avoids that ambiguity
+// while keeping the same "registry wins over NLM" property as the name-based
+// path below. Checking Ethernet before Wi-Fi here (see call site) also fixes
+// the case where the Ethernet name-based registry lookup misses and the
+// Wi-Fi lookup would otherwise run first, potentially showing the Wi-Fi
+// network's icon even though the header displays the Ethernet connection.
+static BOOL TryGetCategoryFromRegistryProfileGuid(const GUID* profileGuid, int* outCategory) {
+    if (!profileGuid || IsZeroGuidValue(profileGuid) || !outCategory) return FALSE;
+
+    LPOLESTR guidStr = NULL;
+    if (FAILED(StringFromCLSID(*profileGuid, &guidStr)) || !guidStr) return FALSE;
+
+    WCHAR keyPath[256];
+    StringCchPrintfW(keyPath, ARRAYSIZE(keyPath),
+                     L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Profiles\\%s",
+                     guidStr);
+    CoTaskMemFree(guidStr);
+
+    HKEY hProfile = NULL;
+    LONG openRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, keyPath, 0, KEY_READ | KEY_WOW64_64KEY, &hProfile);
+    if (openRes != ERROR_SUCCESS) {
+        openRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, keyPath, 0, KEY_READ, &hProfile);
+    }
+    if (openRes != ERROR_SUCCESS || !hProfile) return FALSE;
+
+    DWORD category = 0;
+    DWORD categorySize = sizeof(category);
+    DWORD type = 0;
+    BOOL found = FALSE;
+    if (RegQueryValueExW(hProfile, L"Category", NULL, &type,
+                         (LPBYTE)&category, &categorySize) == ERROR_SUCCESS &&
+        type == REG_DWORD && IsValidNetworkCategoryValue((int)category)) {
+        *outCategory = (int)category;
+        found = TRUE;
+        Wh_Log(L"Network category registry profile GUID join: %d", *outCategory);
+    }
+    RegCloseKey(hProfile);
+    return found;
+}
+
+static BOOL TryGetCategoryByAdapterProfileGuid(INetworkListManager* pNLM,
+                                               const GUID* adapterGuid,
+                                               int* outCategory,
+                                               LPCWSTR reason) {
+    if (!pNLM || IsZeroGuidValue(adapterGuid) || !outCategory) return FALSE;
+
+    IEnumNetworks* pEnum = NULL;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+        return FALSE;
+
+    BOOL found = FALSE;
+    INetwork* pNet = NULL;
+    ULONG fetched = 0;
+    while (!found && pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+        BOOL adapterMatched = FALSE;
+        IEnumNetworkConnections* pEnumConn = NULL;
+        if (SUCCEEDED(pNet->GetNetworkConnections(&pEnumConn)) && pEnumConn) {
+            INetworkConnection* pConn = NULL;
+            ULONG fetchedConn = 0;
+            while (!adapterMatched && pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+                GUID connAdapterId = {0};
+                if (SUCCEEDED(pConn->GetAdapterId(&connAdapterId)) &&
+                    IsEqualGUID(connAdapterId, *adapterGuid)) {
+                    adapterMatched = TRUE;
+                }
+                pConn->Release();
+            }
+            pEnumConn->Release();
+        }
+
+        if (adapterMatched) {
+            GUID networkId = {0};
+            if (SUCCEEDED(pNet->GetNetworkId(&networkId)) &&
+                TryGetCategoryFromRegistryProfileGuid(&networkId, outCategory)) {
+                found = TRUE;
+                Wh_Log(L"Network category exact GUID join (%s): %d",
+                       reason ? reason : L"unknown", *outCategory);
+            }
+        }
+        pNet->Release();
+    }
+    pEnum->Release();
+    return found;
+}
+
 static BOOL TryGetCategoryFromRegistryProfileName(LPCWSTR profileName, int* outCategory) {
     if (!profileName || profileName[0] == L'\0' || !outCategory) return FALSE;
 
@@ -1926,9 +2116,11 @@ static BOOL TryGetCategoryFromRegistryProfileName(LPCWSTR profileName, int* outC
         WCHAR storedName[256];
         DWORD storedNameSize = sizeof(storedName);
         DWORD type = 0;
-        if (RegQueryValueExW(hProfile, L"ProfileName", NULL, &type,
-                             (LPBYTE)storedName, &storedNameSize) == ERROR_SUCCESS &&
-            (type == REG_SZ || type == REG_EXPAND_SZ) &&
+        // RegGetValueW (unlike RegQueryValueExW) guarantees the returned
+        // REG_SZ buffer is null-terminated, which _wcsicmp below relies on.
+        if (RegGetValueW(hProfile, NULL, L"ProfileName",
+                        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND, &type,
+                        (LPBYTE)storedName, &storedNameSize) == ERROR_SUCCESS &&
             _wcsicmp(storedName, profileName) == 0) {
             DWORD category = 0;
             DWORD categorySize = sizeof(category);
@@ -1978,7 +2170,7 @@ static BOOL TryGetCategoryByNlmName(INetworkListManager* pNLM, LPCWSTR networkNa
     return found;
 }
 
-static BOOL NetworkHasUsableNonIgnoredConnection(INetwork* pNet) {
+static BOOL NetworkHasUsableNonIgnoredConnection(INetwork* pNet, const AdapterIgnoreTable* ignoreTable) {
     if (!pNet) return FALSE;
 
     IEnumNetworkConnections* pEnumConn = NULL;
@@ -1996,7 +2188,7 @@ static BOOL NetworkHasUsableNonIgnoredConnection(INetwork* pNet) {
         if (FAILED(hrConn) || ConnectivityIsActive(connConnectivity)) {
             GUID connAdapterId = {0};
             if (FAILED(pConn->GetAdapterId(&connAdapterId)) ||
-                !IsAdapterGuidIgnoredByIpHelper(&connAdapterId)) {
+                !AdapterIgnoreTable_IsIgnored(ignoreTable, &connAdapterId)) {
                 hasUsable = TRUE;
             }
         }
@@ -2019,12 +2211,18 @@ static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* out
     if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
         return FALSE;
 
+    // Fetch the adapter table once for this whole scan instead of once per
+    // connection examined - GetAdaptersAddresses is a ~15 KB alloc + kernel
+    // enumeration each time.
+    AdapterIgnoreTable ignoreTable;
+    AdapterIgnoreTable_Init(&ignoreTable);
+
     INetwork* pNet = NULL;
     ULONG fetched = 0;
     while (pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
         NLM_NETWORK_CATEGORY category;
         NLM_CONNECTIVITY connectivity = NLM_CONNECTIVITY_DISCONNECTED;
-        BOOL usable = NetworkHasUsableNonIgnoredConnection(pNet);
+        BOOL usable = NetworkHasUsableNonIgnoredConnection(pNet, &ignoreTable);
         if (usable &&
             SUCCEEDED(pNet->GetCategory(&category)) &&
             IsValidNetworkCategoryValue((int)category) &&
@@ -2043,6 +2241,7 @@ static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* out
         pNet->Release();
     }
     pEnum->Release();
+    AdapterIgnoreTable_Free(&ignoreTable);
 
     // Safe order for fallback: Public must never be overridden by a separate
     // domain/VPN/work network. Exact adapter matching above still allows a real
@@ -2067,6 +2266,23 @@ static int DetectNetworkLocationCategory() {
     }
 
     int detected = -1;
+
+    // Exact GUID join first: no name-matching ambiguity, and Ethernet is
+    // checked before Wi-Fi to match the header's display priority (fixes the
+    // case where a missed Ethernet registry lookup let a Wi-Fi lookup run
+    // first and show the wrong network's icon).
+    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
+        TryGetCategoryByAdapterProfileGuid(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+        return StabilizeNetworkCategoryResult(detected);
+    }
+    if (pNLM && !g_EthernetConnected) {
+        for (int i = 0; i < g_NetworkCount; i++) {
+            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByAdapterProfileGuid(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+                return StabilizeNetworkCategoryResult(detected);
+            }
+        }
+    }
 
     // The registry profile is the most stable source for the icon Windows shows
     // in Network and Sharing Center. Prefer it before NLM exact-adapter data so
@@ -2124,7 +2340,7 @@ static int DetectNetworkLocationCategory() {
 // Get the appropriate icon for the current network location.
 // If the base64-decoded icon for the detected category failed to load,
 // falls back to g_hIconNetworkMap (the generic PC/computer icon).
-// The corresponding GDI+ bitmap cache pointer is stored in *ppOutCache
+// The corresponding GDI+ bitmap cache pointer is stored in *pppOutCache
 // so the caller can pass it to DrawIconBicubic for high-quality scaling.
 static HICON GetNetworkLocationIcon(void*** pppOutCache) {
     // Lazily create icons from base64 (scaled to current DPI)
@@ -2214,7 +2430,7 @@ void InitRefreshButtonRect(void) {
     int totalListHeight = GetTotalListHeight();
     int availableHeight = LIST_Y_END - LIST_Y_START;
     BOOL hasScrollbar = (totalListHeight > availableHeight);
-    int refreshLeftOffset = (WINDOW_WIDTH * 7) / 1000;
+    int refreshLeftOffset = GetRefreshButtonLeftOffset();
     int baseX = WINDOW_WIDTH - margin - buttonSize - refreshLeftOffset;
     if (!hasScrollbar) {
         baseX += (WINDOW_WIDTH * 4) / 100;     
@@ -2699,48 +2915,6 @@ static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
     return FALSE;
 }
 
-static BOOL IsAdapterGuidIgnoredByIpHelper(const GUID* adapterGuid) {
-    if (IsZeroGuidValue(adapterGuid)) return FALSE;
-
-    ULONG outBufLen = 15000;
-    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
-    if (!pAddresses) return FALSE;
-
-    ULONG res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
-                                     NULL, pAddresses, &outBufLen);
-    if (res == ERROR_BUFFER_OVERFLOW) {
-        free(pAddresses);
-        pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
-        if (!pAddresses) return FALSE;
-        res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
-                                   NULL, pAddresses, &outBufLen);
-    }
-
-    BOOL ignored = FALSE;
-    if (res == NO_ERROR) {
-        for (PIP_ADAPTER_ADDRESSES pCurr = pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
-            GUID parsedAdapterGuid = {0};
-            BOOL haveParsedGuid = FALSE;
-            if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
-                WCHAR wAdapterName[128];
-                int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
-                                                   wAdapterName, ARRAYSIZE(wAdapterName));
-                if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
-                    haveParsedGuid = TRUE;
-                }
-            }
-
-            if (haveParsedGuid && IsEqualGUID(parsedAdapterGuid, *adapterGuid)) {
-                ignored = IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName);
-                break;
-            }
-        }
-    }
-
-    free(pAddresses);
-    return ignored;
-}
-
 void UpdateEthernetStatus() {
     g_EthernetConnected = FALSE;
     g_EthernetNetworkName[0] = L'\0';
@@ -2915,7 +3089,7 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
     }
 }
 
-void RefreshNetworkData() {
+void RefreshNetworkData(BOOL forceDetection = FALSE) {
     if (g_Ctx.hWlanClient) {
         RefreshWifiData(g_Ctx.hWlanClient);
     } else {
@@ -2926,16 +3100,27 @@ void RefreshNetworkData() {
     UpdateEthernetStatus();
     
     // Detect network location category (Home / Public / Work).
-    // Skip the COM query entirely when the feature is disabled.
+    // Skip the COM query entirely when the feature is disabled, and also
+    // while the flyout isn't visible: the result is only consumed at paint
+    // time, so running the registry enumeration (and, on a name-match miss,
+    // up to four NLM/COM calls plus a GetAdaptersAddresses pass) on every
+    // auto-refresh tick while hidden would be wasted work. WM_SHOW_FLYOUT
+    // already calls RefreshNetworkData() when the flyout opens, so gating on
+    // visibility here is safe. forceDetection bypasses this gate for the
+    // one-off priming calls at mod startup and after a settings change, so
+    // the category is already known (instead of falling back to the generic
+    // PC icon) the first time the flyout is actually shown.
     BOOL isAnyConnected = (g_EthernetConnected || 
                            (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED));
-    if (isAnyConnected && g_Settings.useNetworkLocationIcons) {
+    BOOL flyoutVisible = forceDetection ||
+                         (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
+    if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
         g_CurrentNetworkCategory = DetectNetworkLocationCategory();
-    } else {
+    } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
         // Don't wipe the reliable fallback just because the connection is
-        // momentarily settling (e.g. during a reconnect).  That way the
-        // correct Home/Public/Work icon stays visible from the previous
-        // known-good category instead of briefly flashing the PC icon.
+        // momentarily settling (e.g. during a reconnect). While the flyout is
+        // merely hidden, g_CurrentNetworkCategory is left untouched below so
+        // the first paint after reopening doesn't flash the generic icon.
         g_CurrentNetworkCategory = -1;
     }
     
@@ -3495,7 +3680,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     AsyncConnectContext* ctx = (AsyncConnectContext*)pParam;
     if (!ctx) return 1;
     
-    DWORD waitResult = WaitForSingleObject(g_hConnectMutex, 10000);
+    DWORD waitResult = WaitForSingleObject(g_hConnectMutex.get(), 10000);
     if (waitResult != WAIT_OBJECT_0) {
         Wh_Log(L"AsyncConnectThreadProc: Could not acquire mutex (timeout or error %lu)", waitResult);
         if (ctx->hWndNotify) {
@@ -3529,7 +3714,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
             if (ctx->hWndNotify) {
                 PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)dwResult);
             }
-            ReleaseMutex(g_hConnectMutex);
+            ReleaseMutex(g_hConnectMutex.get());
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return 1;
@@ -3563,7 +3748,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, (dwResult == ERROR_SUCCESS), (LPARAM)dwResult);
     }
     
-    ReleaseMutex(g_hConnectMutex);
+    ReleaseMutex(g_hConnectMutex.get());
     SecureZeroMemory(ctx->password, sizeof(ctx->password));
     free(ctx);
     return 0;
@@ -4069,24 +4254,103 @@ static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
 }
 
+// Fallback per CSIDL se non definiti
+#ifndef CSIDL_LOCAL_APPDATA
+#define CSIDL_LOCAL_APPDATA 0x001c
+#endif
+
+#ifndef CSIDL_COMMON_APPDATA
+#define CSIDL_COMMON_APPDATA 0x0023
+#endif
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
-    HMODULE hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-    if (!hPnidui) {
-        hPnidui = GetModuleHandleW(L"pnidui.dll");
+    
+    HMODULE hPnidui = NULL;
+    WCHAR pathBuffer[MAX_PATH];
+    
+    // Try standard ExplorerPatcher installation path (64-bit)
+    hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
+    if (hPnidui) {
+        Wh_Log(L"pnidui.dll found at: C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
+        goto found;
     }
-    if (!hPnidui) {
-        Wh_Log(L"pnidui.dll not loaded  network icon detection unavailable");
-        return false;
+    
+    // Try standard ExplorerPatcher installation path (32-bit on 64-bit system)
+    hPnidui = GetModuleHandleW(L"C:\\Program Files (x86)\\ExplorerPatcher\\pnidui.dll");
+    if (hPnidui) {
+        Wh_Log(L"pnidui.dll found at: C:\\Program Files (x86)\\ExplorerPatcher\\pnidui.dll");
+        goto found;
     }
+    
+    // Try Local AppData folder (portable installation for current user)
+    // CSIDL_LOCAL_APPDATA expands to: C:\Users\<Username>\AppData\Local
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, pathBuffer))) {
+        PathAppendW(pathBuffer, L"ExplorerPatcher\\pnidui.dll");
+        hPnidui = GetModuleHandleW(pathBuffer);
+        if (hPnidui) {
+            Wh_Log(L"pnidui.dll found in AppData: %s", pathBuffer);
+            goto found;
+        }
+    }
+    
+    // Try ProgramData folder (installation for all users)
+    // CSIDL_COMMON_APPDATA expands to: C:\ProgramData
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, pathBuffer))) {
+        PathAppendW(pathBuffer, L"ExplorerPatcher\\pnidui.dll");
+        hPnidui = GetModuleHandleW(pathBuffer);
+        if (hPnidui) {
+            Wh_Log(L"pnidui.dll found in ProgramData: %s", pathBuffer);
+            goto found;
+        }
+    }
+    
+    // Try the mod's own directory (Windhawk folder)
+    if (GetModuleFileNameW(GetModuleHandle(NULL), pathBuffer, ARRAYSIZE(pathBuffer))) {
+        PathRemoveFileSpecW(pathBuffer);      // Remove filename, keep directory
+        PathAppendW(pathBuffer, L"pnidui.dll");
+        hPnidui = GetModuleHandleW(pathBuffer);
+        if (hPnidui) {
+            Wh_Log(L"pnidui.dll found alongside mod: %s", pathBuffer);
+            goto found;
+        }
+    }
+    
+    // Try System32 folder (Windows 10/11 sometimes has it natively)
+    if (GetSystemDirectoryW(pathBuffer, ARRAYSIZE(pathBuffer))) {
+        PathAppendW(pathBuffer, L"pnidui.dll");
+        hPnidui = GetModuleHandleW(pathBuffer);
+        if (hPnidui) {
+            Wh_Log(L"pnidui.dll found in System32: %s", pathBuffer);
+            goto found;
+        }
+    }
+    
+    // Final fallback: try to load by simple name
+    hPnidui = GetModuleHandleW(L"pnidui.dll");
+    if (hPnidui) {
+        Wh_Log(L"pnidui.dll found via simple name lookup");
+        goto found;
+    }
+    
+    // Not found in any location - log gracefully and continue without icon detection
+    Wh_Log(L"pnidui.dll not found in any known location");
+    Wh_Log(L"Network icon detection will be unavailable");
+    Wh_Log(L"Try installing ExplorerPatcher or ensure pnidui.dll is loaded");
+    return false;
+
+found:
+    // Get module information (base address and size)
     MODULEINFO mi{};
     if (!GetModuleInformation(GetCurrentProcess(), hPnidui, &mi, sizeof(mi))) {
-        Wh_Log(L"GetModuleInformation failed for pnidui.dll");
+        Wh_Log(L"GetModuleInformation failed for pnidui.dll (error: %lu)", GetLastError());
         return false;
     }
+    
     g_pniduiBase = (BYTE*)mi.lpBaseOfDll;
     g_pniduiEnd  = g_pniduiBase + mi.SizeOfImage;
-    Wh_Log(L"pnidui.dll found at %p-%p", g_pniduiBase, g_pniduiEnd);
+    Wh_Log(L"pnidui.dll loaded at %p-%p (size: %lu bytes)", 
+           g_pniduiBase, g_pniduiEnd, mi.SizeOfImage);
+    
     return true;
 }
 
@@ -4190,18 +4454,23 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         }
     }
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
+        // Keep the button's rect fixed across all three states (only the
+        // text/enabled state changes). Previously the "connecting" state
+        // used a smaller, shifted rect (btnX+50, width 40) while
+        // Connect/Disconnect used the full rect (btnX, width 92) - resizing
+        // between them briefly exposed the parent's background (white)
+        // before the button repainted, since MoveWindow uncovers the old
+        // area for one frame. A fixed rect means there's nothing to expose.
+        MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
         if (isConnecting) {
-            MoveWindow(g_hWndButtonConnect, btnX + 50, btnY, 40, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, L"...");
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, FALSE);
         } else if (isConnected) {
-            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, TRUE);
         } else {
-            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, TRUE);
@@ -4428,7 +4697,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     }
                 }
                 if (isAuthFailure && item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X)  saved password likely wrong, resetting profile", 
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile", 
                            item->ssid, errorCode);
                     item->hasProfile = FALSE;
                     item->connState = CONN_STATE_ERROR;
@@ -4436,14 +4705,14 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
                                MB_OK | MB_ICONERROR);
                 } else if (isAuthFailure && !item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X)  user-entered password was wrong", 
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong", 
                            item->ssid, errorCode);
                     item->connState = CONN_STATE_ERROR;
                     item->operationStartTime = 0;
                     MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
                                MB_OK | MB_ICONERROR);
                 } else {
-                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X)  keeping profile intact", 
+                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact", 
                            item->ssid, errorCode);
                     item->connState = CONN_STATE_ERROR;
                     item->operationStartTime = 0;
@@ -4634,7 +4903,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             TextOutW(hdc, ScaleDpi(56), ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
         }
         
-        int iconSize = ScaleDpi(35*1.05); 
+        int iconSize = ScaleDpi(35); 
         HICON hLargeIcon = NULL;
         if (isAnyConnected) {
             if (g_Settings.useNetworkLocationIcons) {
@@ -4660,7 +4929,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
             int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
             int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH  *4) / 100) - ((WINDOW_WIDTH*  13) / 1000));
-            int refreshLeftOffset = (WINDOW_WIDTH * 7) / 1000;
+            int refreshLeftOffset = GetRefreshButtonLeftOffset();
             g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift - refreshLeftOffset;
             g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
             if (g_rcRefreshButton.right > WINDOW_WIDTH) {
@@ -4696,11 +4965,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             
             if (!drewRefreshHoverImage) {
                 if (!g_hIconRefreshNormal)
-                    g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64);
+                    g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64,
+                                                                   ScaleDpi(16), ScaleDpi(16));
                 if (g_hIconRefreshNormal) {
                     if (g_Settings.theme == 0) {
+                        int normalIconSize = ScaleDpi(16);
                         DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
-                                   g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
+                                   g_hIconRefreshNormal, normalIconSize, normalIconSize, 0, NULL, DI_NORMAL);
                     } else {
                         ICONINFO ii = {0};
                         GetIconInfo(g_hIconRefreshNormal, &ii);
@@ -5457,7 +5728,12 @@ void ToggleFlyoutWindow() {
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
             
-            RefreshNetworkData();
+            // This runs before ShowWindow below, so the window isn't
+            // IsWindowVisible() yet - force detection here instead of
+            // relying on the visibility gate, which would otherwise skip it
+            // on every single open (not just at startup) and always fall
+            // back to the generic PC icon.
+            RefreshNetworkData(/*forceDetection=*/TRUE);
             RecalcArrowRect();
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
@@ -5487,7 +5763,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             if (attempt == 0) Sleep(500);
         }
         if (!ctx->hWlanClient) {
-            Wh_Log(L"WLAN service unavailable  will retry lazily on first flyout open");
+            Wh_Log(L"WLAN service unavailable - will retry lazily on first flyout open");
         }
     }
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
@@ -5562,8 +5838,7 @@ void SafeCleanup() {
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-    if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
-    if (g_hConnectThread) {
+        if (g_hConnectThread) {
         Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
         DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
         Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
@@ -5980,7 +6255,7 @@ static void SettingsChanged() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v3.2.0 ===");
+    Wh_Log(L"=== Wh_ModInit v3.4.0 ===");
     DetectWindowsVersion();
     LoadSettings();
     DetermineLocale();
@@ -5999,18 +6274,21 @@ BOOL Wh_ModInit() {
     DarkContextMenu::Init();
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
-    g_hConnectMutex = CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex");
-    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
     InitGdiPlusRendering();
     InitGlobalFonts();
     InitRefreshButtonRect();
     RecalcArrowRect();
     InstallTrayInterceptionInternal();
+    // Prime Ethernet/registry state and the Home/Public/Work category once at
+    // startup (bypassing the visibility gate) so the very first time the
+    // flyout is shown it already has fresh data instead of momentarily
+    // falling back to the generic PC icon while everything is uninitialized.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
-        if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
-        DeleteCriticalSection(&g_Ctx.csLock);
+                DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
     g_Initialized = TRUE;
@@ -6029,6 +6307,12 @@ void Wh_ModSettingsChanged() {
         return;
 
     DarkContextMenu::OnSettingsChanged();
+
+    // Re-prime the category right away on any settings change (bypassing the
+    // visibility gate), so e.g. enabling "useNetworkLocationIcons" shows the
+    // correct Home/Public/Work icon immediately instead of only on the next
+    // visible refresh.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
 
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
                      || (oldTheme          != g_Settings.theme);
