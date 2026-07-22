@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Music Lounge
+# Dynamic Media Lounge
 
 A media controller that uses Windows 11 native DWM styling for a seamless taskbar experience.
 
@@ -2981,63 +2981,24 @@ void DrawTextWithShadowNormal(Graphics& g, const wstring& text, Font* font, cons
     g.DrawString(text.c_str(), -1, font, rect, sf, &textBrush);
 }
 
-void DrawScaledLyricLine(Graphics& g, const wstring& text, Font* baseFont, const RectF& rect, StringFormat* sf, Color textColor) {
+void DrawScaledLyricLine(Graphics& g, const wstring& text, Font* baseFont, const RectF& rect, StringFormat* sf, Color textColor, bool isActive = false) {
     if (text.empty()) return;
     
     StringFormat sfWrap;
     sfWrap.SetAlignment(StringAlignmentCenter);
     sfWrap.SetLineAlignment(StringAlignmentCenter);
-    sfWrap.SetTrimming(StringTrimmingNone); // Never truncate with ...
+    sfWrap.SetTrimming(StringTrimmingNone);
     
-    // Create a tall drawing rect centered on the line Y center to allow multi-line expansion without clipping
     float centerY = rect.Y + rect.Height / 2.0f;
-    float largeH = 120.0f; 
+    float largeH = 140.0f; 
     RectF drawRect(rect.X, centerY - largeH / 2.0f, rect.Width, largeH);
     
-    RectF layoutRect(0, 0, 2000.0f, largeH);
-    RectF boundRect;
-    g.MeasureString(text.c_str(), -1, baseFont, layoutRect, &sfWrap, &boundRect);
-    
-    float maxW = rect.Width - 6.0f;
-    Font* fontToUse = baseFont;
-    std::unique_ptr<Font> scaledFont;
-    
-    bool isBold = (baseFont->GetStyle() & FontStyleBold) != 0;
-    
-    if (isBold) {
-        // Active line: allows wrapping up to 3 lines. Scale down only if extremely long (> 3 lines of width)
-        if (boundRect.Width > maxW * 3.0f) {
-            float scaleFactor = (maxW * 3.0f) / boundRect.Width;
-            float newSize = baseFont->GetSize() * scaleFactor;
-            if (newSize < 9.5f) newSize = 9.5f;
-            
-            FontFamily family;
-            baseFont->GetFamily(&family);
-            scaledFont = std::make_unique<Font>(&family, newSize, baseFont->GetStyle(), UnitPixel);
-            fontToUse = scaledFont.get();
-        }
-    } else {
-        // Inactive line: keeps on a single line by scaling down
-        sfWrap.SetFormatFlags(StringFormatFlagsNoWrap);
-        if (boundRect.Width > maxW && maxW > 20.0f) {
-            float scaleFactor = maxW / boundRect.Width;
-            float newSize = baseFont->GetSize() * scaleFactor;
-            if (newSize < 9.5f) newSize = 9.5f;
-            
-            FontFamily family;
-            baseFont->GetFamily(&family);
-            scaledFont = std::make_unique<Font>(&family, newSize, baseFont->GetStyle(), UnitPixel);
-            fontToUse = scaledFont.get();
-        }
-    }
-    
-    // Draw with a clean, crisp, soft dark drop shadow (+1px, +1px offset) instead of a blurry 4-way halo
-    SolidBrush shadowBrush(Color(140, 0, 0, 0));
+    SolidBrush shadowBrush(isActive ? Color(160, 0, 40, 10) : Color(140, 0, 0, 0));
     SolidBrush textBrush(textColor);
     
     RectF shadowRect(drawRect.X + 1.0f, drawRect.Y + 1.0f, drawRect.Width, drawRect.Height);
-    g.DrawString(text.c_str(), -1, fontToUse, shadowRect, &sfWrap, &shadowBrush);
-    g.DrawString(text.c_str(), -1, fontToUse, drawRect, &sfWrap, &textBrush);
+    g.DrawString(text.c_str(), -1, baseFont, shadowRect, &sfWrap, &shadowBrush);
+    g.DrawString(text.c_str(), -1, baseFont, drawRect, &sfWrap, &textBrush);
 }
 
 
@@ -3536,8 +3497,8 @@ void DrawExpandedPanel(HDC hdc, int width, int height) {
             }
 
             int activeIndex = -1;
-            if (isSyncedLyrics) {
-                double livePos = GetLivePosition();
+            double livePos = GetLivePosition();
+            if (isSyncedLyrics && !lyricsLines.empty()) {
                 for (size_t i = 0; i < lyricsLines.size(); i++) {
                     if (livePos >= lyricsLines[i].timeSec) {
                         activeIndex = (int)i;
@@ -3545,10 +3506,14 @@ void DrawExpandedPanel(HDC hdc, int width, int height) {
                         break;
                     }
                 }
+            } else if (!lyricsLines.empty() && g_Timeline.valid && g_Timeline.durationSec > 0.0) {
+                double pct = livePos / g_Timeline.durationSec;
+                pct = max(0.0, min(1.0, pct));
+                activeIndex = (int)(pct * (lyricsLines.size() - 1));
             }
             
             float lineHeight = 38.0f;
-            if (isSyncedLyrics) {
+            if (!g_LyricsIsUserScrolling) {
                 if (activeIndex != -1) {
                     g_LyricsTargetScroll = activeIndex * lineHeight;
                 } else {
@@ -3607,8 +3572,9 @@ void DrawExpandedPanel(HDC hdc, int width, int height) {
                 
                 Color lineCol;
                 Font* lineFont = &lyricFont;
-                if (i == activeIndex) {
-                    lineCol = Color(255, 29, 185, 84); // Spotify Green
+                bool isActive = (i == activeIndex);
+                if (isActive) {
+                    lineCol = Color(255, 29, 185, 84); // Spotify Vibrant Green
                     lineFont = &lyricBoldFont;
                 } else {
                     BYTE alpha = (BYTE)(factor * 160.0f);
@@ -3616,7 +3582,7 @@ void DrawExpandedPanel(HDC hdc, int width, int height) {
                 }
                 
                 RectF lineRect((float)artX, lineY - lineHeight / 2.0f, (float)artSize, lineHeight);
-                DrawScaledLyricLine(g, lyricsLines[i].text, lineFont, lineRect, &sf, lineCol);
+                DrawScaledLyricLine(g, lyricsLines[i].text, lineFont, lineRect, &sf, lineCol, isActive);
             }
             g.ResetClip();
 
