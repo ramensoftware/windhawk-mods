@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              bt-battery-monitor
 // @name            BT Battery Monitor
-// @description     Shows Bluetooth device battery levels in the system tray with per-device flyout menu
+// @description     Shows Bluetooth device battery levels in the system tray with battery overview
 // @version         1.0.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
@@ -38,6 +38,8 @@ Left-click the tray icon to trigger an immediate Bluetooth rescan. Use it when y
 
 ### Right-click device list
 
+Right-click the tray icon to see every connected Bluetooth device with its battery percentage, rescan immediately, or open Bluetooth Settings.
+
 ### Low Battery Warning
 
 When any connected device drops below the configured threshold (default 30%), the tray icon starts alternating between solid red and black every second. Hover over the icon to see which device is running low and exactly how much juice it has left.
@@ -48,10 +50,6 @@ The mod detects device types automatically and lets you pick a different icon fo
 - **Keyboard**, **Mouse**, **Headphones**, **Controller** — each gets its own icon so you can tell them apart instantly.
 - **Multiple Devices** — shown when more than one device is connected.
 - **No Connected Devices** — a clear visual indicator that nothing's paired.
-
-### Right-Click Menu
-
-Right-click the tray icon to open **Bluetooth Settings** — handy for quickly pairing a new device without navigating through Windows menus.
 
 ### Polling Interval
 
@@ -69,7 +67,7 @@ Pick how often the mod checks for updates, from **every second** to **once an ho
 
 # 1.0.0
 - **New:** Tray icon shows battery percentage for every connected Bluetooth device — keyboard, mouse, headphones, controller, you name it.
-- **New:** Left-click opens a per-device flyout menu listing each device with its current battery level.
+- **New:** Left-click triggers an immediate Bluetooth rescan to refresh battery readouts.
 - **New:** Low battery warning — tray icon flashes red and black when any device drops below your threshold.
 - **New:** Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.
 - **New:** Configurable polling interval (1s–1h) and warning threshold (0–50%).
@@ -102,7 +100,7 @@ Pick how often the mod checks for updates, from **every second** to **once an ho
 #include <shobjidl.h>
 #include <propkey.h>
 #include <propsys.h>
-#include <sddl.h>
+
 
 // ─── Message & Menu Constants ────────────────────────────────────────────────
 
@@ -177,6 +175,10 @@ static UINT g_taskbarCreatedMsg = 0;
 // Settings (atomically readable from any thread)
 static std::atomic<LONG> g_refreshIntervalMs{10000};
 static std::atomic<int> g_warningThreshold{30};
+
+// Tray icon cache to avoid redundant NIM_MODIFY calls
+static WCHAR g_lastTip[128] = {};
+static HICON g_lastIcon = NULL;
 
 // Dashboard GUI thread
 static HANDLE g_guiThread = nullptr;
@@ -424,7 +426,8 @@ static void GetBatteryFromMediaClass(std::vector<DeviceInfo>& devices) {
                 dev.address[2], dev.address[1], dev.address[0]);
 
             if (_wcsicmp(btAddr, addrStr) == 0) {
-                dev.batteryPercent = battery;
+                if (battery <= 100)
+                    dev.batteryPercent = battery;
                 break;
             }
         }
@@ -836,13 +839,12 @@ static void UpdateTrayIcon() {
     HWND hwnd = g_hwnd.load();
     if (!IsWindow(hwnd)) return;
 
-    static WCHAR lastTip[128] = {};
-    static HICON lastIcon = NULL;
+
     std::vector<DeviceInfo> currentDevices;
     {   CsLock lock(g_devicesLock);
         currentDevices = g_devices;
     }
-    int lowest = 100;
+    int lowest = -1;
     int devCount = 0;
     DeviceType singleType = DEVICE_UNKNOWN;
     for (const auto& d : currentDevices) {
@@ -850,7 +852,7 @@ static void UpdateTrayIcon() {
             devCount++;
             DeviceType dt = GetDeviceType(d);
             if (devCount == 1) singleType = dt;
-            if (d.batteryPercent >= 0 && d.batteryPercent < lowest)
+            if (d.batteryPercent >= 0 && (lowest < 0 || d.batteryPercent < lowest))
                 lowest = d.batteryPercent;
         }
     }
@@ -860,7 +862,7 @@ static void UpdateTrayIcon() {
     nid.uFlags = NIF_ICON | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
     
     int threshold = g_warningThreshold.load();
-    if (lowest < threshold) {
+    if (lowest >= 0 && lowest < threshold) {
         bool flashState = (GetTickCount64() / 1000) % 2 == 0;
         nid.hIcon = flashState ? g_hIconLowBatRed : g_hIconLowBatBlack;
     } else if (devCount == 0) {
@@ -890,15 +892,15 @@ static void UpdateTrayIcon() {
             }
         }
     } else {
-        if (lowest <= 100)
+        if (lowest >= 0)
             StringCchPrintfW(nid.szTip, ARRAYSIZE(nid.szTip), L"%d devices — lowest %d%%", devCount, lowest);
         else
             StringCchPrintfW(nid.szTip, ARRAYSIZE(nid.szTip), L"%d devices", devCount);
     }
 
-    if (wcscmp(nid.szTip, lastTip) != 0 || nid.hIcon != lastIcon) {
-        lstrcpynW(lastTip, nid.szTip, ARRAYSIZE(lastTip));
-        lastIcon = nid.hIcon;
+    if (wcscmp(nid.szTip, g_lastTip) != 0 || nid.hIcon != g_lastIcon) {
+        lstrcpynW(g_lastTip, nid.szTip, ARRAYSIZE(g_lastTip));
+        g_lastIcon = nid.hIcon;
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 }
@@ -985,10 +987,15 @@ static void ShowPopupMenu() {
             ShellExecuteW(NULL, L"open", L"ms-settings:bluetooth", NULL, NULL, SW_SHOW);
             break;
         case MENU_OPEN_SETTINGS: {
+            HWND dh = (HWND)InterlockedCompareExchangePointer((PVOID*)&g_dashboardHwnd, nullptr, nullptr);
+            if (dh && IsWindow(dh)) {
+                SetForegroundWindow(dh);
+                break;
+            }
             HANDLE hOldThread = (HANDLE)InterlockedCompareExchangePointer(
                 (PVOID*)&g_guiThread, NULL, g_guiThread);
             if (hOldThread) {
-                HWND dh = (HWND)InterlockedExchangePointer((PVOID*)&g_dashboardHwnd, nullptr);
+                dh = (HWND)InterlockedExchangePointer((PVOID*)&g_dashboardHwnd, nullptr);
                 if (dh && IsWindow(dh)) { PostMessageW(dh, WM_CLOSE, 0, 0); }
                 WaitForSingleObject(hOldThread, 3000);
                 CloseHandle(hOldThread);
@@ -996,7 +1003,6 @@ static void ShowPopupMenu() {
             g_guiThread = BTBatGui::LaunchDashboard(hwnd);
             break;
         }
-            break;
         case MENU_OPEN_WINDHAWK: {
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
             sei.lpFile = g_windhawkPath;
@@ -1019,7 +1025,10 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         nid.uCallbackMessage = WM_TRAY_CALLBACK;
         nid.hIcon = g_hIconDisconnected ? g_hIconDisconnected : g_hIconMulti;
         lstrcpynW(nid.szTip, L"BT Battery Monitor", ARRAYSIZE(nid.szTip));
-        Shell_NotifyIconW(NIM_ADD, &nid);
+        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+            Shell_NotifyIconW(NIM_DELETE, &nid);
+            Shell_NotifyIconW(NIM_ADD, &nid);
+        }
         nid.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nid);
         PostMessageW(hWnd, WM_UPDATE_DEVICES, 0, 0);
@@ -1052,6 +1061,8 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
 
         case WM_RELOAD_ALL:
+            g_lastIcon = NULL;
+            g_lastTip[0] = L'\0';
             CreateIcons();
             UpdateTrayIcon();
             return 0;
@@ -1085,6 +1096,8 @@ static HICON LoadCustomIcon(PCWSTR storageKey, PCWSTR defaultDll, int defaultInd
                 if (IsValidIconPath(path))
                     hIcon = (HICON)LoadImageW(NULL, path, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
             }
+        } else if (wcscmp(iconKey, L"unknown") == 0) {
+            return CreateXIcon(16);
         } else {
             int index = GetIconIndex(iconKey);
             ExtractIconExW(defaultDll, index, nullptr, &hIcon, 1);
@@ -1576,14 +1589,19 @@ namespace BTBatGui {
                 // Save settings
                 int refreshVals[] = {1000, 5000, 10000, 30000, 60000, 300000, 3600000};
                 int ri = (int)SendMessageW(s->hRefreshCombo, CB_GETCURSEL, 0, 0);
-                WCHAR num[16];
-                swprintf_s(num, L"%d", refreshVals[ri]);
-                Wh_SetStringValue(L"refreshIntervalMs", num);
+                if (ri != CB_ERR && ri < 7) {
+                    WCHAR num[16];
+                    swprintf_s(num, L"%d", refreshVals[ri]);
+                    Wh_SetStringValue(L"refreshIntervalMs", num);
+                }
 
                 int threshVals[] = {0, 10, 20, 30, 40, 50};
                 int ti = (int)SendMessageW(s->hThresholdCombo, CB_GETCURSEL, 0, 0);
-                swprintf_s(num, L"%d", threshVals[ti]);
-                Wh_SetStringValue(L"warningThreshold", num);
+                if (ti != CB_ERR && ti < 6) {
+                    WCHAR num[16];
+                    swprintf_s(num, L"%d", threshVals[ti]);
+                    Wh_SetStringValue(L"warningThreshold", num);
+                }
 
                 for (int i = 0; i < 6; i++) {
                     int is = (int)SendMessageW(s->rows[i].hIconCombo, CB_GETCURSEL, 0, 0);
@@ -1784,7 +1802,10 @@ static unsigned int __stdcall TrayThreadProc(void*) {
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
     nid.hIcon = g_hIconDisconnected ? g_hIconDisconnected : g_hIconMulti;
     lstrcpynW(nid.szTip, L"BT Battery Monitor", ARRAYSIZE(nid.szTip));
-    Shell_NotifyIconW(NIM_ADD, &nid);
+    if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        Shell_NotifyIconW(NIM_ADD, &nid);
+    }
     nid.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &nid);
 
