@@ -1,3 +1,11 @@
+## 2.0.0 ([Jul 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f9f096a896bdd73f8af47bb284efb01b29e2e50/mods/taskbar-elastic-pill.wh.cpp))
+
+* Added elastic intensity setting
+* Added squish multiplier setting
+* Added fade duration multiplier setting
+* Added hover/pressed interactions
+* Added dedicated opacity setting
+
 ## 1.2.0 ([Jul 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1531df78bb6b21bdc2951ee4f54adc8d7625f46b/mods/taskbar-elastic-pill.wh.cpp))
 
 * Added requested 'None' animation mode

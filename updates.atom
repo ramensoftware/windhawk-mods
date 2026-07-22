@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-22T18:01:15.000Z</updated>
+    <updated>2026-07-22T19:34:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-elastic-pill#9f9f096a896bdd73f8af47bb284efb01b29e2e50</id>
+        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
+        <updated>2026-07-22T19:34:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added elastic intensity setting</li>
+<li>Added squish multiplier setting</li>
+<li>Added fade duration multiplier setting</li>
+<li>Added hover/pressed interactions</li>
+<li>Added dedicated opacity setting</li>
+</ul>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
@@ -468,23 +485,6 @@ selection colors are never touched.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Redirect Settings to Control Panel 10.0.35]]></title>
-        <id>https://windhawk.net/mods/settings-to-control-panel#639e8f6b8bde4a0009f039b4aa3dafa7922d5c4b</id>
-        <link href="https://windhawk.net/mods/settings-to-control-panel"/>
-        <updated>2026-07-17T12:43:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made system tray redirect more robust in some edge cases</li>
-<li>Enhanced Windows 11 compatibility</li>
-<li>Fixed menu items appearing blank in system tray context menus</li>
-<li>Enhanced stability</li>
-<li>Added Legacy Name Mapping Fix</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
