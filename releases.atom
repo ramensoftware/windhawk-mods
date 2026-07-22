@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-21T19:22:32.000Z</updated>
+    <updated>2026-07-22T09:34:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Energy Saver Power Plan Link 1.0.0]]></title>
+        <id>https://windhawk.net/mods/energy-saver-power-plan-link#18615a32f83d3bcde2a32bd7ef648021b8100cc5</id>
+        <link href="https://windhawk.net/mods/energy-saver-power-plan-link"/>
+        <updated>2026-07-22T09:34:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="energysaverpowerplanlink">Energy Saver Power Plan Link</h1>
+<p>When Windows Energy Saver is enabled:</p>
+<ul>
+<li>Saves the currently active power plan.</li>
+<li>Switches to the standard Power Saver plan.</li>
+</ul>
+<p>When Energy Saver is disabled:</p>
+<ul>
+<li>Restores the saved plan only if Power Saver is still active.</li>
+<li>If the user manually selected another plan, that selection is preserved.</li>
+</ul>
+<p>Disabling the mod also restores the previous plan when appropriate.</p>
+<blockquote>
+  <p>On some Modern Standby systems, the classic Power Saver plan might not be
+  available. In that case, Windows can't switch to that plan and the mod leaves
+  the current plan unchanged.</p>
+</blockquote>]]></content>
+        <author>
+            <name>Yusseter</name>
+            <uri>https://github.com/Yusseter</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Expand folder on click (Explorer nav pane) 1.2]]></title>
         <id>https://windhawk.net/mods/explorer-tree-click-expand#e4c7c01af169e0fcb3c0945ccd3290fed70f0582</id>
@@ -967,51 +994,6 @@ still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
         <author>
             <name>TheatriChris</name>
             <uri>https://github.com/chrisc44890</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Folder Thumbnail Style Switcher 2.0]]></title>
-        <id>https://windhawk.net/mods/folder-thumbnail-style-switcher#0033679d580da39a2503353ec651b6c3a4a1ceb6</id>
-        <link href="https://windhawk.net/mods/folder-thumbnail-style-switcher"/>
-        <updated>2026-07-06T18:30:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="folderthumbnailstyleswitcher">Folder Thumbnail Style Switcher</h1>
-<p>Tested on Windows 10 22H2, Windows 11 22H2, 23H2, 24H2, 25H2 with Windhawk 1.7.1</p>
-<p>It may support Windows 10 older version, try by yourself</p>
-<h2 id="preparation">📌Preparation</h2>
-<p>Please prepare icon group 5, 6 in imageres.dll and Bitmap 311 in shell32.dll from the respective Windows to match the folder icons and the shadow.
-And you need to clean the thumbnail cache after changing a style!</p>
-<h2 id="gallery">🎞Gallery</h2>
-<p>| Picture | Style |
-|:---:|:---:|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/7.PNG" alt="7 style" />|Original 7 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG" alt="10 style" />|Original 10 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png" alt="11 style" />|Original 11 style|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG" alt="7 style on 10" />|7 style on Windows 10|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png" alt="11 style on 10" />|11 style on Windows 10|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG" alt="7 style on 11" />|7 style on Windows 11|
-|<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png" alt="10 style on 11" />|10 style on 11|</p>
-<p>What's the difference🤨? The position and the size of the thumbnails and the shadow are different.</p>
-<h2 id="notes">⚠️Notes</h2>
-<p><strong>Note 1:</strong>
-<strong>This mod only include explorer.exe as it's the main process that handle thumbnail drawing. However, thumbnails in other processes remain the old ones (e.g. File choosing dialogs).You can change the include to:</strong>
-<strong><code>// @include *</code>, but it may cause problems.</strong></p>
-<p>Note 2:
-Windows 10 has an issue, or rather a bug, when drawing thumbnails. 
-Folder icons are split into two parts - the front and the back - and stored as icons 5 and 6 in imageres.dll, as well as the "multiple folder icon" at icon number 162.
-Normally, the front half of the folder should have the same logic for whether to draw or not as the back half.
-However, the engineers seem to have taken the shortcut of always drawing the front half, which leads to errors in the thumbnails of such folders after replacing the icons.
-This mod attempts to fix this issue. <code>s_DrawIcon</code> hook is for this.</p>
-<p>Note 3:
-Windows 10 uses GDI to draw the thumbnails, while Windows 11 uses D2D/WIC. The latter one has higher resolution.
-This mod try to replicate that too.</p>
-<p>Note 4:
-I try my best to closely replicates the thumbnail drawing logic, including the shadow. Feel free to raise an issue.</p>
-<h2 id="credit">🔵Credit</h2>
-<p><em>win7-folder-thumbnail-skewing credited to <a href="https://github.com/Leymonaide" title="Leymonaide">Leymonaide</a></em></p>
-<p><em>This code is generated by AI</em></p>]]></content>
-        <author>
-            <name>QCQ171-C</name>
-            <uri>https://github.com/QCQ171-C</uri>
         </author>
     </entry>
 </feed>

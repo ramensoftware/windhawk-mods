@@ -4229,6 +4229,36 @@
         "version": "1.0"
       }
     },
+    "energy-saver-power-plan-link": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784712858000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784712858000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Yusseter",
+        "compilerOptions": "-lpowrprof -lshell32",
+        "description": "Links Windows 11 Energy Saver with the Power Saver power plan and restores the previous plan when disabled.",
+        "github": "https://github.com/Yusseter",
+        "homepage": "https://github.com/Yusseter/energy-saver-power-plan-link",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Energy Saver Power Plan Link",
+        "version": "1.0.0"
+      }
+    },
     "enhanced-disk-usage": {
       "details": {
         "defaultSorting": 10140,
