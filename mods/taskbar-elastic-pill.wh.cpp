@@ -198,10 +198,8 @@ std::vector<std::shared_ptr<PillContext>>* g_pillContexts = new std::vector<std:
 std::atomic<bool> g_unloading{false};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-HMODULE g_taskbarViewModule = nullptr;
 
 std::atomic<bool> g_searchUxDllLoaded{false};
-HMODULE g_searchUxModule = nullptr;
 
 struct EasingCache {
     winrt::Windows::UI::Composition::Compositor compositor{nullptr};
@@ -309,6 +307,7 @@ void LoadSettings() {
     WindhawkUtils::StringSetting marStr(Wh_GetStringSetting(L"Pill.Margins"));
     ParseIntTuple(marStr.get(), g_settings.PillMarginHorizontal, g_settings.PillMarginBottom);
     
+    g_settings.PillRadius = 1.5;
     WindhawkUtils::StringSetting radiusStr(Wh_GetStringSetting(L"Pill.PillRadius"));
     if (radiusStr.get()[0]) {
         try {
@@ -837,24 +836,30 @@ static void HandlePointerUpdate(std::weak_ptr<PillContext> weakCtx, winrt::weak_
     if (auto c = weakCtx.lock()) {
         if (auto b = weakBtn.get()) {
             if (c->activeBtn.get() == b) {
+                auto p = c->pill.get();
+                auto g = c->grid.get();
+                if (!p || !g) return;
+
                 c->isHover = hover;
                 c->isPress = press;
                 Settings localSettings;
                 { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
                 
-                UpdatePillPosition(c->pill.get(), c->grid.get(), b, localSettings);
-                
-                std::wstring appName = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(b).c_str();
-                std::wstring stableKey = appName;
-                if (stableKey.empty()) {
-                    stableKey = std::to_wstring((uintptr_t)winrt::get_abi(b));
-                }
-                bool isExtracting = false;
-                {
-                    std::lock_guard<std::mutex> lock(g_iconColorMutex);
-                    isExtracting = g_iconColorExtracting->count(stableKey) > 0;
-                }
-                UpdatePillColor(b, c->pill.get(), c, localSettings, true, c->isHover, c->isPress, stableKey, isExtracting);
+                try {
+                    UpdatePillPosition(p, g, b, localSettings);
+                    
+                    std::wstring appName = winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(b).c_str();
+                    std::wstring stableKey = appName;
+                    if (stableKey.empty()) {
+                        stableKey = std::to_wstring((uintptr_t)winrt::get_abi(b));
+                    }
+                    bool isExtracting = false;
+                    {
+                        std::lock_guard<std::mutex> lock(g_iconColorMutex);
+                        isExtracting = g_iconColorExtracting->count(stableKey) > 0;
+                    }
+                    UpdatePillColor(b, p, c, localSettings, true, c->isHover, c->isPress, stableKey, isExtracting);
+                } catch (...) {}
             }
         }
     }
@@ -1206,7 +1211,7 @@ bool UpdatePillPosition(
                 auto anim = compositor.CreateSpringScalarAnimation();
                 anim.Target(L"Translation.X");
                 anim.FinalValue(targetX);
-                anim.DampingRatio(0.6f);
+                anim.DampingRatio(std::clamp(0.6f / (float)localSettings.ElasticIntensity, 0.1f, 1.0f));
                 anim.Period(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(static_cast<long long>(50 / localSettings.SpeedMultiplier))));
                 visual.Properties().StartAnimation(L"Translation.X", anim);
             } else if (animStyle == 2 || (animStyle >= 4 && animStyle <= 6)) { // KeyFrame Easing
@@ -1333,7 +1338,7 @@ bool UpdatePillPosition(
         visual.Properties().InsertVector3(L"PointerScaleTarget", targetPScale);
         auto pointerScaleAnim = visual.Compositor().CreateVector3KeyFrameAnimation();
         pointerScaleAnim.InsertKeyFrame(1.0f, targetPScale);
-        pointerScaleAnim.Duration(std::chrono::milliseconds(150));
+        pointerScaleAnim.Duration(std::chrono::milliseconds(static_cast<long long>(150 / localSettings.SpeedMultiplier)));
         visual.Properties().StartAnimation(L"PointerScaleVec", pointerScaleAnim);
     }
 
@@ -1531,11 +1536,11 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
     settingsToUse.PillWidth = (std::max)(1, settingsToUse.PillWidth);
     
     float lastW = -1.0f, lastH = -1.0f, lastR = -1.0f, lastMB = -1.0f, lastMH = -1.0f;
-    visual.Properties().TryGetScalar(L"LayoutW", lastW);
-    visual.Properties().TryGetScalar(L"LayoutH", lastH);
-    visual.Properties().TryGetScalar(L"LayoutR", lastR);
-    visual.Properties().TryGetScalar(L"LayoutMB", lastMB);
-    visual.Properties().TryGetScalar(L"LayoutMH", lastMH);
+    visual.Properties().TryGetScalar(L"SettingsW", lastW);
+    visual.Properties().TryGetScalar(L"SettingsH", lastH);
+    visual.Properties().TryGetScalar(L"SettingsR", lastR);
+    visual.Properties().TryGetScalar(L"SettingsMB", lastMB);
+    visual.Properties().TryGetScalar(L"SettingsMH", lastMH);
 
     if (std::abs(lastW - (float)settingsToUse.PillWidth) > 0.001f || 
         std::abs(lastH - (float)settingsToUse.PillHeight) > 0.001f || 
@@ -1543,11 +1548,13 @@ void EnsurePillAndPosition(winrt::Windows::UI::Xaml::FrameworkElement const& but
         std::abs(lastMB - (float)settingsToUse.PillMarginBottom) > 0.001f || 
         std::abs(lastMH - (float)settingsToUse.PillMarginHorizontal) > 0.001f) {
         
-        visual.Properties().InsertScalar(L"LayoutW", (float)settingsToUse.PillWidth);
-        visual.Properties().InsertScalar(L"LayoutH", (float)settingsToUse.PillHeight);
-        visual.Properties().InsertScalar(L"LayoutR", (float)settingsToUse.PillRadius);
-        visual.Properties().InsertScalar(L"LayoutMB", (float)settingsToUse.PillMarginBottom);
-        visual.Properties().InsertScalar(L"LayoutMH", (float)settingsToUse.PillMarginHorizontal);
+        visual.Properties().InsertScalar(L"SettingsW", (float)settingsToUse.PillWidth);
+        visual.Properties().InsertScalar(L"SettingsH", (float)settingsToUse.PillHeight);
+        visual.Properties().InsertScalar(L"SettingsR", (float)settingsToUse.PillRadius);
+        visual.Properties().InsertScalar(L"SettingsMB", (float)settingsToUse.PillMarginBottom);
+        visual.Properties().InsertScalar(L"SettingsMH", (float)settingsToUse.PillMarginHorizontal);
+        
+        visual.Properties().InsertScalar(L"LayoutW", (float)settingsToUse.PillWidth * 4.0f);
         
         visual.Properties().InsertScalar(L"LastTargetX", std::numeric_limits<float>::quiet_NaN());
         
@@ -1883,12 +1890,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
-            g_taskbarViewModule = module;
             Wh_Log(L"Taskbar View DLL loaded: %s", lpLibFileName);
             if (HookTaskbarViewDllSymbols(module)) Wh_ApplyHookOperations();
         }
         if (!g_searchUxDllLoaded && GetSearchUxModuleHandle() == module && !g_searchUxDllLoaded.exchange(true)) {
-            g_searchUxModule = module;
             Wh_Log(L"SearchUx UI DLL loaded: %s", lpLibFileName);
             if (HookSearchUxDllSymbols(module)) Wh_ApplyHookOperations();
         }
@@ -1903,14 +1908,12 @@ BOOL Wh_ModInit() {
     HMODULE m = GetTaskbarViewModuleHandle();
     if (m) {
         g_taskbarViewDllLoaded = true;
-        g_taskbarViewModule = m;
         if (!HookTaskbarViewDllSymbols(m)) return FALSE;
     }
     
     HMODULE sm = GetSearchUxModuleHandle();
     if (sm) {
         g_searchUxDllLoaded = true;
-        g_searchUxModule = sm;
         HookSearchUxDllSymbols(sm);
     }
     
@@ -1995,6 +1998,7 @@ void Wh_ModBeforeUninit() {
             if (dispatcher) {
                 if (dispatcher.HasThreadAccess()) {
                     try {
+                        ctx->colorAnimBoard = nullptr;
                         if (grid) { grid.LayoutUpdated(layoutToken); }
                         if (auto parent = VisualTreeHelper::GetParent(pill)) {
                             if (auto pGrid = parent.try_as<Grid>()) {
@@ -2011,8 +2015,9 @@ void Wh_ModBeforeUninit() {
                         SetEvent(eventLifetime.get());
                     }
                 } else {
-                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [pill, grid, layoutToken, pending, eventLifetime]() {
+                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [ctx, pill, grid, layoutToken, pending, eventLifetime]() {
                         try {
+                            ctx->colorAnimBoard = nullptr;
                             if (grid) { grid.LayoutUpdated(layoutToken); }
                             if (auto parent = VisualTreeHelper::GetParent(pill)) {
                                 if (auto pGrid = parent.try_as<Grid>()) {
@@ -2088,6 +2093,11 @@ void Wh_ModBeforeUninit() {
     for (auto& d : allDispatchers) {
         pending->fetch_add(1);
         d.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [pending, eventLifetime]() {
+            DWORD tid = GetCurrentThreadId();
+            {
+                std::lock_guard<std::mutex> lock(g_easingMutex);
+                g_easingCaches->erase(tid);
+            }
             if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
         });
     }
@@ -2102,10 +2112,6 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Elastic Pill Mod");
-    {
-        std::lock_guard<std::mutex> lock(g_easingMutex);
-        g_easingCaches->clear();
-    }
     delete g_pillContexts;
     delete g_easingCaches;
     delete g_iconColorCache;
