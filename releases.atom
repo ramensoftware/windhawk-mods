@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-22T13:45:59.000Z</updated>
+    <updated>2026-07-22T18:01:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-popups-disable"/>
+        <updated>2026-07-22T18:01:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoppopups">Disable Virtual Desktop Popups</h1>
+<p><img src="https://i.imgur.com/uena3MS.png" alt="Screenshot of Desktop 1 popup with the popup crossed out" /></p>
+<p>This simple mod disables the popups saying "Desktop N" that appear when the current virtual desktop is changed on Windows 11 build 226xx.2050+ and 23493+.</p>
+<p>Tested on Windows 11 22H2 22621.4317 x64 and 24H2 26100.6899 ARM64.</p>]]></content>
+        <author>
+            <name>Amrsatrio</name>
+            <uri>https://github.com/Amrsatrio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[BT Battery Monitor 1.0.0]]></title>
         <id>https://windhawk.net/mods/bt-battery-monitor#93e8be7ddb883a9fa154bf1d50a23dd6f9ecab59</id>
@@ -1003,36 +1017,6 @@ in the Explorer file copy/move conflict dialog when Windows Classic theme is act
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Screenshot Path to Clipboard 1.0.0]]></title>
-        <id>https://windhawk.net/mods/screenshot-path-to-clipboard#a426f3fb81b5984fb74e761c78927965be47aaa6</id>
-        <link href="https://windhawk.net/mods/screenshot-path-to-clipboard"/>
-        <updated>2026-07-08T08:07:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="screenshotpathtoclipboard">Screenshot Path to Clipboard</h1>
-<p>Watches the Windows Screenshots folder and copies the full path of every new
-screenshot to the clipboard, so you can paste it straight into any app
-without digging through File Explorer.</p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Take a screenshot (Win+PrintScreen, Snipping Tool, etc.).</li>
-<li>The full path to the new <code>.png</code> is copied to the clipboard automatically.</li>
-<li>Paste (Ctrl+V) anywhere the path is needed.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Runs as a dedicated background process (see the
-<a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">mods-as-tools</a>
-pattern) and watches the Screenshots known folder (<code>FOLDERID_Screenshots</code>)
-with <code>ReadDirectoryChangesW</code> — no polling.</li>
-<li>Only <code>.png</code> files trigger a clipboard update.</li>
-<li>No configuration is needed; the folder is resolved via the shell so it
-still works if the Screenshots folder has been relocated, e.g. by OneDrive.</li>
-</ul>]]></content>
-        <author>
-            <name>Sondre Myrmel</name>
-            <uri>https://github.com/Sondre234</uri>
         </author>
     </entry>
 </feed>

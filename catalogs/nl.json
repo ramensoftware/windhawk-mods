@@ -13954,6 +13954,37 @@
         "version": "1.0.0"
       }
     },
+    "virtual-desktop-popups-disable": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784743275000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784743275000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Amrsatrio",
+        "description": "Disables \"Desktop N\" popups on virtual desktop change.",
+        "github": "https://github.com/Amrsatrio",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Disable Virtual Desktop Popups",
+        "twitter": "https://twitter.com/amrsatrio",
+        "version": "1.0.0"
+      }
+    },
     "virtual-desktop-taskbar-order": {
       "details": {
         "defaultSorting": 19692,

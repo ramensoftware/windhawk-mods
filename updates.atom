@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-22T13:45:59.000Z</updated>
+    <updated>2026-07-22T18:01:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-popups-disable"/>
+        <updated>2026-07-22T18:01:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoppopups">Disable Virtual Desktop Popups</h1>
+<p><img src="https://i.imgur.com/uena3MS.png" alt="Screenshot of Desktop 1 popup with the popup crossed out" /></p>
+<p>This simple mod disables the popups saying "Desktop N" that appear when the current virtual desktop is changed on Windows 11 build 226xx.2050+ and 23493+.</p>
+<p>Tested on Windows 11 22H2 22621.4317 x64 and 24H2 26100.6899 ARM64.</p>]]></content>
+        <author>
+            <name>Amrsatrio</name>
+            <uri>https://github.com/Amrsatrio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[BT Battery Monitor 1.0.0]]></title>
         <id>https://windhawk.net/mods/bt-battery-monitor#93e8be7ddb883a9fa154bf1d50a23dd6f9ecab59</id>
@@ -471,17 +485,6 @@ selection colors are never touched.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.1]]></title>
-        <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#e6e6322957e02141338ec74bd7320b4b6537f205</id>
-        <link href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe"/>
-        <updated>2026-07-17T11:33:43.000Z</updated>
-        <content type="html"><![CDATA[<p>more aggressively hide the navbar</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
