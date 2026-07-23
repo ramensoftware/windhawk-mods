@@ -44,9 +44,9 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
-- **NEW: Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
-- **NEW: Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
-- **Classic artwork refresh**: Uses cleaned embedded PNG artwork for the refresh button, chevrons, and classic Home/Public/Work network location icons.
+- **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
+- **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
+- **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
 
 
 ## Requirements
