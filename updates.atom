@@ -20,7 +20,7 @@
 <li>Updated the following themes: WinXP and BottomDensy.</li>
 <li>Fixed a layout bug with some themes, such as WindowGlass, when multiple taskbars are used. The bug usually resulted in the tray area becoming hidden.</li>
 <li>Added comparison and condition operations to style substitution expressions, for example:&nbsp;<code>{{x &gt; 8 ? 1 : 3}}</code>.</li>
-<li>Added string literals support for substitution expressions, for example:&nbsp;<code>Text={{var ==</code>a<code>?</code>b<code>:</code>c<code>}}</code>.</li>
+<li>Added string literals support for substitution expressions, for example:&nbsp;<code>Text={{var == `a` ? `b` : `c`}}</code>.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

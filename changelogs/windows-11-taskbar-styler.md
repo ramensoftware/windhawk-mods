@@ -6,7 +6,7 @@
 * Updated the following themes: WinXP and BottomDensy.
 * Fixed a layout bug with some themes, such as WindowGlass, when multiple taskbars are used. The bug usually resulted in the tray area becoming hidden.
 * Added comparison and condition operations to style substitution expressions, for example: `{{x > 8 ? 1 : 3}}`.
-* Added string literals support for substitution expressions, for example: `Text={{var == `a` ? `b` : `c`}}`.
+* Added string literals support for substitution expressions, for example: `` Text={{var == `a` ? `b` : `c`}} ``.
 
 ## 1.7 ([May 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cf0c6b1d2269380846d0da868898d35fc8678c06/mods/windows-11-taskbar-styler.wh.cpp))
 
