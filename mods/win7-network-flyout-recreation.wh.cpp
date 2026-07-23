@@ -5023,9 +5023,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 }
             }
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
-            // Position: aligned just below the separator, with padding
-            int wifiLabelY = separatorY + ScaleDpi(7);
-            TextOutW(hdc, ScaleDpi(12), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
+int wifiLabelY = separatorY + ScaleDpi(7);
+TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
             
             if (g_IsHoveringArrow) {
                 COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
@@ -5109,24 +5108,26 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     
                     WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
                     BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
-                    SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
-                    SetTextColor(hdc, GetNetworkNameColor());
-                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3),
-                                     rcRow.right - rcRow.left - 10, ScaleDpi(24));       
+SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
+SetTextColor(hdc, GetNetworkNameColor());
+int offsetY = (WINDOW_HEIGHT * 1.01) / 100;
+DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + offsetY,
+                 rcRow.right - rcRow.left - 10, ScaleDpi(24));   
                     WifiNetworkItem* item = &g_NetworkList[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
-                        SelectObject(hdc, g_hFontBold);
-                        SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
-                        RECT rcStatus;
-                        rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
-                        rcStatus.left   = rcRow.left + 80;
-                        rcStatus.top    = rcRow.top + 6;
-                        rcStatus.bottom = rcStatus.top + 18;
-                        DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
-                                  DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-                    }
+    SelectObject(hdc, g_hFontBold);
+    SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+    RECT rcStatus;
+    rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
+    rcStatus.left   = rcRow.left + 80;
+    int offsetY = (WINDOW_HEIGHT * 1.01) / 100;
+    rcStatus.top    = rcRow.top + 6 + offsetY;
+    rcStatus.bottom = rcStatus.top + 18;
+    DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
+              DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                }
                     else if (isTransitioning) {
                         SelectObject(hdc, g_hFontNormal);
                         SetTextColor(hdc, GetSecondaryTextColor());
