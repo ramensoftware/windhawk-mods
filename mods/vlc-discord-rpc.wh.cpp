@@ -95,7 +95,7 @@ If you enable **Local Filters Only** in settings, the mod will stop downloading 
 
 | Problem / Log Message | Solution |
 |---|---|
-| **Before trying fixes** | Check the Windhawk mod logs (`[VLC-RPC] ...`) first to identify what the worker is doing. |
+| **Before trying fixes** | Check the Windhawk mod logs (`...`) first to identify what the worker is doing. |
 | **Log: `Port X responded with status code 404`** | Another application on your computer is occupying port `8080` (or `X`) instead of VLC, or VLC's `status.json` file is missing. The mod will automatically check candidate fallback ports (`9080`, `9090`, etc.). |
 | **Log: `Auth failed (401) on port X`** | Wrong VLC password. Ensure your Lua HTTP password in VLC preferences or `%APPDATA%\vlc\vlcrc` (`http-password=`) is set exactly to `1234`. Restart VLC afterward. |
 | **Log: `Could not reach VLC on port X (WinHttp error ...)`** | VLC Web Interface is either disabled, closed, or listening on a different port. The mod will automatically test candidate fallback ports (`8080`, `9080`, `9090`, `7080`, `4212`, `8081`, `8088`). To find VLC's exact port manually: open **Resource Monitor** → **Network** → **Listening Ports**, find `vlc.exe`, and enter that port into **Custom Port** (`CustomPort`) in the mod settings. |
@@ -244,15 +244,17 @@ Found a bug, have a suggestion, or need help?
 #include <sstream>
 #include <shlobj.h>
 #include <sys/stat.h>
-
-#pragma comment(lib, "shell32.lib")
+#include <optional>
+#include <windhawk_utils.h>
 
 // =============================================================
 // ⚙️ GLOBALS
 // =============================================================
 ULONG_PTR g_gdiplusToken = 0;
 std::atomic<bool> g_stopThread{false};
-std::thread g_workerThread;
+[[clang::no_destroy]] std::optional<std::thread> g_workerThread;
+std::mutex g_asyncMutex;
+[[clang::no_destroy]] std::vector<std::thread> g_asyncThreads;
 const std::string SEP = " \xE2\x97\x8F ";
 
 std::map<std::string, std::string> g_imageCache;
@@ -358,7 +360,15 @@ std::wstring StrToWStr(const std::string& str) {
     return wstr;
 }
 
-void ReadVlcConfig(int& port, std::wstring& authBase64, std::string& rawPassword) {
+std::string GetStringSettingSafe(PCWSTR name) {
+    PCWSTR val = Wh_GetStringSetting(name);
+    if (!val) return "";
+    std::wstring wval(val);
+    Wh_FreeStringSetting(val);
+    return WStrToStr(wval);
+}
+
+void ReadVlcConfig(int& port, std::wstring& authBase64) {
     port = 0;
     std::string password = "";
     
@@ -379,10 +389,10 @@ void ReadVlcConfig(int& port, std::wstring& authBase64, std::string& rawPassword
                 }
             }
         } else {
-            Wh_Log(L"[VLC-RPC] Could not open vlcrc at %S — using defaults.", vlcrcPath.c_str());
+            Wh_Log(L"Could not open vlcrc at %S — using defaults.", vlcrcPath.c_str());
         }
     } else {
-        Wh_Log(L"[VLC-RPC] Could not resolve %%APPDATA%% path.");
+        Wh_Log(L"Could not resolve %%APPDATA%% path.");
     }
     
     if (password.empty()) {
@@ -392,7 +402,6 @@ void ReadVlcConfig(int& port, std::wstring& authBase64, std::string& rawPassword
     std::string authStr = ":" + password;
     std::string b64 = Base64Encode(authStr);
     authBase64 = StrToWStr(b64);
-    rawPassword = password;
 }
 
 std::string UrlEncode(const std::string &value) {
@@ -615,15 +624,6 @@ std::string CleanMetadata(std::string text, const std::vector<std::string>& cust
     std::string lowerText = noBrackets;
     std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
 
-    for (const auto& word : customJunk) {
-        if (word.empty()) continue;
-        size_t pos;
-        while ((pos = lowerText.find(word)) != std::string::npos) {
-            noBrackets.replace(pos, word.length(), std::string(word.length(), ' '));
-            lowerText.replace(pos, word.length(), std::string(word.length(), ' '));
-        }
-    }
-
     std::vector<std::string> activeSites;
     std::vector<std::string> activeTlds;
     std::vector<std::string> activeTags;
@@ -697,13 +697,23 @@ std::string CleanMetadata(std::string text, const std::vector<std::string>& cust
     std::string result = noBrackets;
     for (const auto& word : activeWords) {
         if (word.empty()) continue;
-        size_t pos;
+        size_t pos = 0;
         while (true) {
             lowerText = result;
             std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
-            pos = lowerText.find(word);
+            pos = lowerText.find(word, pos);
             if (pos == std::string::npos) break;
-            result.replace(pos, word.length(), " "); 
+            
+            bool isWordBoundary = true;
+            if (pos > 0 && isalnum((unsigned char)lowerText[pos - 1])) isWordBoundary = false;
+            if (pos + word.length() < lowerText.length() && isalnum((unsigned char)lowerText[pos + word.length()])) isWordBoundary = false;
+            
+            if (isWordBoundary) {
+                result.replace(pos, word.length(), std::string(word.length(), ' '));
+                pos += word.length();
+            } else {
+                pos += 1;
+            }
         }
     }
     
@@ -765,7 +775,17 @@ std::string FetchHttps(const std::wstring& host, const std::wstring& path) {
                 } while (dwSize > 0);
             } else {
                 DWORD err = GetLastError();
-                Wh_Log(L"[VLC-RPC] FetchHttps failed for %s%s (WinHttp error: %lu)", host.c_str(), path.c_str(), err);
+                std::wstring cleanPath = path;
+                size_t apiKeyPos = cleanPath.find(L"api_key=");
+                if (apiKeyPos != std::wstring::npos) {
+                    size_t ampPos = cleanPath.find(L"&", apiKeyPos);
+                    if (ampPos == std::wstring::npos) {
+                        cleanPath.replace(apiKeyPos + 8, std::wstring::npos, L"***");
+                    } else {
+                        cleanPath.replace(apiKeyPos + 8, ampPos - (apiKeyPos + 8), L"***");
+                    }
+                }
+                Wh_Log(L"FetchHttps failed for %s%s (WinHttp error: %lu)", host.c_str(), cleanPath.c_str(), err);
             }
             WinHttpCloseHandle(hRequest);
         }
@@ -780,7 +800,7 @@ std::string FindExternalArtwork(int type, const std::string& queryTitle, const s
     std::string suffix = (type == 2) ? " song cover art" : (isTvShow ? " show poster" : " movie poster");
     std::string term = UrlEncode(queryTitle + " " + querySub + suffix);
     std::wstring host = L"www.bing.com";
-    std::wstring path = StrToWStr("/images/async?q=" + term + "&first=0&count=1&adlt=off");
+    std::wstring path = StrToWStr("/images/async?q=" + term + "&first=0&count=1&adlt=strict");
     std::string html = FetchHttps(host, path);
     
     std::string searchToken = "&quot;turl&quot;:&quot;";
@@ -803,7 +823,7 @@ std::string FindExternalArtwork(int type, const std::string& queryTitle, const s
             if (end != std::string::npos) {
                 std::string imageId = html.substr(idStart, end - idStart);
                 finalUrl = "https://tse1.mm.bing.net/th?id=" + imageId;
-                Wh_Log(L"[VLC-RPC] Found external artwork via async: %S", finalUrl.c_str());
+                Wh_Log(L"Found external artwork via async: %S", finalUrl.c_str());
             }
         }
     }
@@ -903,7 +923,7 @@ std::string UploadToUguu(const std::string& fileUrl) {
     if (success) {
         std::string finalCleanUrl;
         for (char c : resultUrl) { if (c != '\\') finalCleanUrl += c; }
-        Wh_Log(L"[VLC-RPC] Uploaded local cover art to Uguu: %S", finalCleanUrl.c_str());
+        Wh_Log(L"Uploaded local cover art to Uguu: %S", finalCleanUrl.c_str());
         return finalCleanUrl;
     }
     return "";
@@ -1113,7 +1133,7 @@ bool LoadMetadataFromDisk(const std::string& cacheKey, TvShowMetadata& outMeta) 
                 long long ts = 0;
                 try { ts = std::stoll(parts[1]); } catch (...) {}
                 if (ts > 0 && difftime(now, (time_t)ts) >= 2592000) {
-                    Wh_Log(L"[VLC-RPC] Disk cache expired (>30 days) for %S", cacheKey.c_str());
+                    Wh_Log(L"Disk cache expired (>30 days) for %S", cacheKey.c_str());
                     continue;
                 }
                 outMeta.valid = true;
@@ -1124,7 +1144,7 @@ bool LoadMetadataFromDisk(const std::string& cacheKey, TvShowMetadata& outMeta) 
                 outMeta.genres = parts[6];
                 outMeta.runtime = parts[7];
                 outMeta.showType = parts[8];
-                Wh_Log(L"[VLC-RPC] Loaded metadata from disk cache for %S", cacheKey.c_str());
+                Wh_Log(L"Loaded metadata from disk cache for %S", cacheKey.c_str());
                 return true;
             }
         }
@@ -1147,11 +1167,48 @@ void SaveMetadataToDisk(const std::string& cacheKey, const TvShowMetadata& meta)
     }
 }
 
+void PruneMetadataDiskCache() {
+    std::wstring path = GetMetadataDiskCachePathW();
+    if (path.empty()) return;
+    std::lock_guard<std::mutex> lock(g_diskMutex);
+    std::ifstream file(path.c_str());
+    if (!file.is_open()) return;
+    
+    std::map<std::string, std::string> latestValidLines;
+    std::string line;
+    time_t now = time(nullptr);
+    
+    while (std::getline(file, line)) {
+        size_t firstSep = line.find("|||");
+        if (firstSep != std::string::npos) {
+            std::string key = line.substr(0, firstSep);
+            size_t secondSep = line.find("|||", firstSep + 3);
+            if (secondSep != std::string::npos) {
+                long long ts = 0;
+                try { ts = std::stoll(line.substr(firstSep + 3, secondSep - (firstSep + 3))); } catch (...) {}
+                if (ts > 0 && difftime(now, (time_t)ts) < 2592000) {
+                    latestValidLines[key] = line;
+                }
+            }
+        }
+    }
+    file.close();
+    
+    std::ofstream out(path.c_str(), std::ios::trunc);
+    if (out.is_open()) {
+        for (const auto& kv : latestValidLines) {
+            out << kv.second << "\n";
+        }
+        out.close();
+    }
+}
+
+
 TvShowMetadata FetchTmdbMetadata(const std::string& showName, const std::string& year, bool isTv, int season, int episode, const std::string& apiKey, const std::string& cacheKey) {
     TvShowMetadata meta;
-    Wh_Log(L"[VLC-RPC] FetchTmdbMetadata starting: show='%S', year='%S', isTv=%d, S=%d, E=%d (apiKey len=%d)", showName.c_str(), year.c_str(), isTv ? 1 : 0, season, episode, (int)apiKey.length());
+    Wh_Log(L"FetchTmdbMetadata starting: show='%S', year='%S', isTv=%d, S=%d, E=%d (apiKey len=%d)", showName.c_str(), year.c_str(), isTv ? 1 : 0, season, episode, (int)apiKey.length());
     if (showName.empty() || apiKey.empty()) {
-        Wh_Log(L"[VLC-RPC] TMDB skipped: showName or apiKey is empty!");
+        Wh_Log(L"TMDB skipped: showName or apiKey is empty!");
         return meta;
     }
 
@@ -1165,25 +1222,25 @@ TvShowMetadata FetchTmdbMetadata(const std::string& showName, const std::string&
     if (!isTv) {
         std::string q = UrlEncode(cleanName);
         std::string path = "/3/search/movie?api_key=" + apiKey + "&query=" + q + (!extractedYr.empty() ? "&year=" + extractedYr : "");
-        Wh_Log(L"[VLC-RPC] TMDB Movie search query: '%S' (year='%S')", cleanName.c_str(), extractedYr.c_str());
+        Wh_Log(L"TMDB Movie search query: '%S' (year='%S')", cleanName.c_str(), extractedYr.c_str());
         searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
         tmdbId = ExtractNumber(searchJson, "id");
         if (tmdbId <= 0 && !extractedYr.empty()) {
-            Wh_Log(L"[VLC-RPC] TMDB Movie search with year returned no ID, retrying without year...");
+            Wh_Log(L"TMDB Movie search with year returned no ID, retrying without year...");
             path = "/3/search/movie?api_key=" + apiKey + "&query=" + q;
             searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
             tmdbId = ExtractNumber(searchJson, "id");
         }
         if (tmdbId <= 0 && cleanName != showName) {
-            Wh_Log(L"[VLC-RPC] TMDB Movie clean name search returned no ID, retrying raw name: '%S'", showName.c_str());
+            Wh_Log(L"TMDB Movie clean name search returned no ID, retrying raw name: '%S'", showName.c_str());
             path = "/3/search/movie?api_key=" + apiKey + "&query=" + UrlEncode(showName);
             searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
             tmdbId = ExtractNumber(searchJson, "id");
         }
         if (tmdbId <= 0) {
-            Wh_Log(L"[VLC-RPC] TMDB Movie search failed or no ID found. Response (first 150 chars): '%S'", searchJson.substr(0, 150).c_str());
+            Wh_Log(L"TMDB Movie search failed or no ID found. Response (first 150 chars): '%S'", searchJson.substr(0, 150).c_str());
         } else {
-            Wh_Log(L"[VLC-RPC] TMDB Movie matched ID=%lld", tmdbId);
+            Wh_Log(L"TMDB Movie matched ID=%lld", tmdbId);
             std::string detailsPath = "/3/movie/" + NumToStr(tmdbId) + "?api_key=" + apiKey;
             std::string detailsJson = FetchHttps(L"api.themoviedb.org", StrToWStr(detailsPath));
             
@@ -1226,31 +1283,31 @@ TvShowMetadata FetchTmdbMetadata(const std::string& showName, const std::string&
             }
             meta.showType = "Movie";
             if (!cacheKey.empty()) SaveMetadataToDisk(cacheKey, meta);
-            Wh_Log(L"[VLC-RPC] TMDB Movie success: Title='%S', Rating='%S', Genres='%S', Runtime='%S'", meta.showName.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str());
+            Wh_Log(L"TMDB Movie success: Title='%S', Rating='%S', Genres='%S', Runtime='%S'", meta.showName.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str());
             return meta;
         }
     } else {
         std::string q = UrlEncode(cleanName);
         std::string path = "/3/search/tv?api_key=" + apiKey + "&query=" + q + (!extractedYr.empty() ? "&first_air_date_year=" + extractedYr : "");
-        Wh_Log(L"[VLC-RPC] TMDB TV search query: '%S' (year='%S')", cleanName.c_str(), extractedYr.c_str());
+        Wh_Log(L"TMDB TV search query: '%S' (year='%S')", cleanName.c_str(), extractedYr.c_str());
         searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
         tmdbId = ExtractNumber(searchJson, "id");
         if (tmdbId <= 0 && !extractedYr.empty()) {
-            Wh_Log(L"[VLC-RPC] TMDB TV search with year returned no ID, retrying without year...");
+            Wh_Log(L"TMDB TV search with year returned no ID, retrying without year...");
             path = "/3/search/tv?api_key=" + apiKey + "&query=" + q;
             searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
             tmdbId = ExtractNumber(searchJson, "id");
         }
         if (tmdbId <= 0 && cleanName != showName) {
-            Wh_Log(L"[VLC-RPC] TMDB TV clean name search returned no ID, retrying raw name: '%S'", showName.c_str());
+            Wh_Log(L"TMDB TV clean name search returned no ID, retrying raw name: '%S'", showName.c_str());
             path = "/3/search/tv?api_key=" + apiKey + "&query=" + UrlEncode(showName);
             searchJson = FetchHttps(L"api.themoviedb.org", StrToWStr(path));
             tmdbId = ExtractNumber(searchJson, "id");
         }
         if (tmdbId <= 0) {
-            Wh_Log(L"[VLC-RPC] TMDB TV search failed or no ID found. Response (first 150 chars): '%S'", searchJson.substr(0, 150).c_str());
+            Wh_Log(L"TMDB TV search failed or no ID found. Response (first 150 chars): '%S'", searchJson.substr(0, 150).c_str());
         } else {
-            Wh_Log(L"[VLC-RPC] TMDB TV matched ID=%lld", tmdbId);
+            Wh_Log(L"TMDB TV matched ID=%lld", tmdbId);
             std::string canonName = ExtractString(searchJson, "name");
             if (canonName.empty()) canonName = showName;
 
@@ -1302,7 +1359,7 @@ TvShowMetadata FetchTmdbMetadata(const std::string& showName, const std::string&
             }
             meta.showType = "TV Show";
             if (!cacheKey.empty()) SaveMetadataToDisk(cacheKey, meta);
-            Wh_Log(L"[VLC-RPC] TMDB TV success: Show='%S', Ep='%S', Rating='%S', Genres='%S', Runtime='%S'", meta.showName.c_str(), meta.episodeTitle.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str());
+            Wh_Log(L"TMDB TV success: Show='%S', Ep='%S', Rating='%S', Genres='%S', Runtime='%S'", meta.showName.c_str(), meta.episodeTitle.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str());
             return meta;
         }
     }
@@ -1327,7 +1384,7 @@ TvShowMetadata FetchTvMazeMetadata(const std::string& showName, int season, int 
         showJson = FetchHttps(L"api.tvmaze.com", showPath);
         showId = ExtractNumber(showJson, "id");
         if (showId > 0) {
-            Wh_Log(L"[VLC-RPC] TVMaze matched show with year: %S", queryWithYear.c_str());
+            Wh_Log(L"TVMaze matched show with year: %S", queryWithYear.c_str());
         }
     }
 
@@ -1339,7 +1396,7 @@ TvShowMetadata FetchTvMazeMetadata(const std::string& showName, int season, int 
     }
 
     if (showId <= 0 && cleanName != showName) {
-        Wh_Log(L"[VLC-RPC] TVMaze show search failed for '%S', retrying raw name: '%S'", cleanName.c_str(), showName.c_str());
+        Wh_Log(L"TVMaze show search failed for '%S', retrying raw name: '%S'", cleanName.c_str(), showName.c_str());
         std::string q = UrlEncode(showName);
         std::wstring showPath = StrToWStr("/singlesearch/shows?q=" + q);
         showJson = FetchHttps(L"api.tvmaze.com", showPath);
@@ -1347,7 +1404,7 @@ TvShowMetadata FetchTvMazeMetadata(const std::string& showName, int season, int 
     }
 
     if (showId <= 0) {
-        Wh_Log(L"[VLC-RPC] TVMaze show search failed or not found for: %S", showName.c_str());
+        Wh_Log(L"TVMaze show search failed or not found for: %S", showName.c_str());
         return meta;
     }
 
@@ -1392,7 +1449,7 @@ TvShowMetadata FetchTvMazeMetadata(const std::string& showName, int season, int 
     }
     meta.showType = ExtractString(showJson, "type");
     if (!cacheKey.empty()) SaveMetadataToDisk(cacheKey, meta);
-    Wh_Log(L"[VLC-RPC] TVMaze success: Show='%S', Episode='%S', Rating='%S', Genres='%S', Runtime='%S', Type='%S'", meta.showName.c_str(), meta.episodeTitle.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str(), meta.showType.c_str());
+    Wh_Log(L"TVMaze success: Show='%S', Episode='%S', Rating='%S', Genres='%S', Runtime='%S', Type='%S'", meta.showName.c_str(), meta.episodeTitle.c_str(), meta.rating.c_str(), meta.genres.c_str(), meta.runtime.c_str(), meta.showType.c_str());
     return meta;
 }
 
@@ -1605,7 +1662,7 @@ void FetchRemoteFilters(bool strictLocalMode) {
             g_truncateTags = localData.tags;
             g_junkWords = localData.words;
             g_filtersLoaded = true;
-            Wh_Log(L"[VLC-RPC] Loaded filter cache from disk (%s).", cachePath.c_str());
+            Wh_Log(L"Loaded filter cache from disk (%s).", cachePath.c_str());
             return;
         }
     }
@@ -1631,7 +1688,7 @@ void FetchRemoteFilters(bool strictLocalMode) {
             g_truncateTags = remoteData.tags;
             g_junkWords = remoteData.words;
             g_filtersLoaded = true;
-            Wh_Log(L"[VLC-RPC] Downloaded and applied updated filters from GitHub.");
+            Wh_Log(L"Downloaded and applied updated filters from GitHub.");
             return;
         }
     }
@@ -1654,7 +1711,7 @@ void FetchRemoteFilters(bool strictLocalMode) {
 // =============================================================
 
 void ShowSystemToast(const std::wstring& title, const std::wstring& message, const std::string& imageUrl) {
-    std::thread([title, message, imageUrl]() {
+    std::thread t([title, message, imageUrl]() {
         HICON hDynamicIcon = NULL;
 
         if (!imageUrl.empty() && imageUrl.find("http") == 0) {
@@ -1754,7 +1811,7 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
         
         DWORD start = GetTickCount();
         MSG msg;
-        while (GetTickCount() - start < 5000) {
+        while (GetTickCount() - start < 5000 && !g_stopThread) {
             if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
@@ -1767,7 +1824,9 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
         if (hAppIcon) DestroyIcon(hAppIcon); 
         if (hDynamicIcon) DestroyIcon(hDynamicIcon);
         DestroyWindow(hwnd);
-    }).detach();
+    });
+    std::lock_guard<std::mutex> lock(g_asyncMutex);
+    g_asyncThreads.emplace_back(std::move(t));
 }
 
 // =============================================================
@@ -1776,56 +1835,34 @@ void ShowSystemToast(const std::wstring& title, const std::wstring& message, con
 
 void Worker() {
     bool bStrictLocalMode = Wh_GetIntSetting(L"FilterGroup.StrictLocalMode");
-    if (!bStrictLocalMode && Wh_GetIntSetting(L"StrictLocalMode")) bStrictLocalMode = true;
-    
     FetchRemoteFilters(bStrictLocalMode);
     
     std::string defaultId = "1465711556418474148"; 
-    PCWSTR sId = Wh_GetStringSetting(L"AdvancedGroup.ClientId");
-    if (!sId) sId = Wh_GetStringSetting(L"ClientId");
-    std::string myClientId = sId ? WStrToStr(sId) : defaultId;
+    std::string myClientId = GetStringSettingSafe(L"AdvancedGroup.ClientId");
     if (myClientId.empty()) myClientId = defaultId;
-    Wh_FreeStringSetting(sId);
+    
+    PruneMetadataDiskCache();
 
     bool bShowCoverArt = Wh_GetIntSetting(L"DisplayGroup.ShowCoverArt");
-    if (!bShowCoverArt && Wh_GetIntSetting(L"ShowCoverArt")) bShowCoverArt = true;
-    bool bShowQualityTags = Wh_GetIntSetting(L"DisplayGroup.ShowQualityTags");
-    if (!bShowQualityTags && Wh_GetIntSetting(L"ShowQualityTags")) bShowQualityTags = true;
     bool bShowChapter = Wh_GetIntSetting(L"DisplayGroup.ShowChapter");
-    if (!bShowChapter && Wh_GetIntSetting(L"ShowChapter")) bShowChapter = true;
+    bool bShowQualityTags = Wh_GetIntSetting(L"DisplayGroup.ShowQualityTags");
     bool bShowAudioLanguage = Wh_GetIntSetting(L"DisplayGroup.ShowAudioLanguage");
-    if (!bShowAudioLanguage && Wh_GetIntSetting(L"ShowAudioLanguage")) bShowAudioLanguage = true;
     bool bEnableMetadataCleaner = Wh_GetIntSetting(L"FilterGroup.EnableMetadataCleaner");
-    if (!bEnableMetadataCleaner && Wh_GetIntSetting(L"EnableMetadataCleaner")) bEnableMetadataCleaner = true;
     
     bool bEnableTmdbScraper = Wh_GetIntSetting(L"ScraperGroup.EnableTmdbScraper");
-    if (!bEnableTmdbScraper && Wh_GetIntSetting(L"EnableTmdbScraper")) bEnableTmdbScraper = true;
     bool bEnableTvMazeScraper = Wh_GetIntSetting(L"ScraperGroup.EnableTvMazeScraper");
-    if (!bEnableTvMazeScraper && Wh_GetIntSetting(L"TvMazeGroup.EnableTvMazeScraper")) bEnableTvMazeScraper = true;
-    if (!bEnableTvMazeScraper && Wh_GetIntSetting(L"EnableTvMazeScraper")) bEnableTvMazeScraper = true;
     bool bShowRating = Wh_GetIntSetting(L"ScraperGroup.ShowRating");
-    if (!bShowRating && Wh_GetIntSetting(L"TvMazeGroup.ShowTvMazeRating")) bShowRating = true;
     bool bShowGenres = Wh_GetIntSetting(L"ScraperGroup.ShowGenres");
-    if (!bShowGenres && Wh_GetIntSetting(L"TvMazeGroup.ShowTvMazeGenres")) bShowGenres = true;
     bool bShowRuntime = Wh_GetIntSetting(L"ScraperGroup.ShowRuntime");
-    if (!bShowRuntime && Wh_GetIntSetting(L"TvMazeGroup.ShowTvMazeRuntime")) bShowRuntime = true;
     bool bShowMediaType = Wh_GetIntSetting(L"ScraperGroup.ShowMediaType");
-    if (!bShowMediaType && Wh_GetIntSetting(L"TvMazeGroup.ShowTvMazeType")) bShowMediaType = true;
 
-    PCWSTR sCustomKey = Wh_GetStringSetting(L"ScraperGroup.CustomTmdbApiKey");
-    std::string customTmdbKey = sCustomKey ? WStrToStr(sCustomKey) : "";
-    Wh_FreeStringSetting(sCustomKey);
+    std::string customTmdbKey = GetStringSettingSafe(L"ScraperGroup.CustomTmdbApiKey");
     std::string activeTmdbKey = GetActiveTmdbApiKey(customTmdbKey);
     
     bool bMinimalMode = Wh_GetIntSetting(L"DisplayGroup.MinimalMode");
-    if (!bMinimalMode && Wh_GetIntSetting(L"MinimalMode")) bMinimalMode = true;
     bool bShowNotifications = Wh_GetIntSetting(L"DisplayGroup.ShowNotifications");
-    if (!bShowNotifications && Wh_GetIntSetting(L"ShowNotifications")) bShowNotifications = true;
 
-    PCWSTR sJunk = Wh_GetStringSetting(L"FilterGroup.CustomJunkWords");
-    if (!sJunk) sJunk = Wh_GetStringSetting(L"CustomJunkWords");
-    std::string customJunkStr = sJunk ? WStrToStr(sJunk) : "";
-    Wh_FreeStringSetting(sJunk);
+    std::string customJunkStr = GetStringSettingSafe(L"FilterGroup.CustomJunkWords");
     
     std::vector<std::string> customJunkList;
     std::stringstream ss(customJunkStr);
@@ -1839,48 +1876,37 @@ void Worker() {
         }
     }
 
-    PCWSTR sTheme = Wh_GetStringSetting(L"DisplayGroup.Theme");
-    if (!sTheme) sTheme = Wh_GetStringSetting(L"Theme");
-    std::string myTheme = sTheme ? WStrToStr(sTheme) : "";
-    Wh_FreeStringSetting(sTheme);
-
+    std::string myTheme = GetStringSettingSafe(L"DisplayGroup.Theme");
     std::string assetLarge = myTheme + "vlc_icon";
     std::string assetPlay  = myTheme + "play_icon";
     std::string assetPause = myTheme + "pause_icon";
     std::string assetStop  = myTheme + "stop_icon";
 
-    PCWSTR sProv = Wh_GetStringSetting(L"ButtonGroup.Provider");
-    if (!sProv) sProv = Wh_GetStringSetting(L"Provider");
-    std::string myProvider = sProv ? WStrToStr(sProv) : "Google";
-    Wh_FreeStringSetting(sProv);
-
-    PCWSTR sCust = Wh_GetStringSetting(L"ButtonGroup.CustomUrl");
-    if (!sCust) sCust = Wh_GetStringSetting(L"CustomUrl");
-    std::string myCustomUrl = sCust ? WStrToStr(sCust) : "";
-    Wh_FreeStringSetting(sCust);
-
-    PCWSTR sLbl = Wh_GetStringSetting(L"ButtonGroup.ButtonLabel");
-    if (!sLbl) sLbl = Wh_GetStringSetting(L"ButtonLabel");
-    std::string myBtnLabel = sLbl ? WStrToStr(sLbl) : "Search This";
-    Wh_FreeStringSetting(sLbl);
+    std::string myProvider = GetStringSettingSafe(L"ButtonGroup.Provider");
+    if (myProvider.empty()) myProvider = "Google";
+    
+    std::string myCustomUrl = GetStringSettingSafe(L"ButtonGroup.CustomUrl");
+    
+    std::string myBtnLabel = GetStringSettingSafe(L"ButtonGroup.ButtonLabel");
+    if (myBtnLabel.empty()) myBtnLabel = "Search This";
     myBtnLabel = SanitizeString(myBtnLabel);
 
-    PCWSTR sMusicName = Wh_GetStringSetting(L"DisplayGroup.MusicActivityName");
-    if (!sMusicName) sMusicName = Wh_GetStringSetting(L"MusicActivityName");
-    std::string myMusicNameSetting = sMusicName ? WStrToStr(sMusicName) : "Title";
-    Wh_FreeStringSetting(sMusicName);
+    std::string myMusicNameSetting = GetStringSettingSafe(L"DisplayGroup.MusicActivityName");
+    if (myMusicNameSetting.empty()) myMusicNameSetting = "Title";
 
     int vlcPort = 0;
     std::wstring vlcAuthBase64 = L"OjEyMzQ=";
-    std::string vlcRawPassword = "";
-    ReadVlcConfig(vlcPort, vlcAuthBase64, vlcRawPassword);
+    ReadVlcConfig(vlcPort, vlcAuthBase64);
 
-    int customPortSetting = Wh_GetIntSetting(L"AdvancedGroup.CustomPort");
-    if (customPortSetting <= 0) customPortSetting = Wh_GetIntSetting(L"CustomPort");
+    bool bUseCustomPort = false;
+    int customPort = Wh_GetIntSetting(L"AdvancedGroup.CustomVlcPort");
+    if (customPort > 0) {
+        vlcPort = customPort;
+        bUseCustomPort = true;
+    }
     
     std::vector<int> candidatePorts;
-    if (customPortSetting > 0) candidatePorts.push_back(customPortSetting);
-    if (vlcPort > 0 && std::find(candidatePorts.begin(), candidatePorts.end(), vlcPort) == candidatePorts.end()) candidatePorts.push_back(vlcPort);
+    if (vlcPort > 0) candidatePorts.push_back(vlcPort);
     
     int fallbacks[] = {8080, 9080, 9090, 7080, 4212, 8081, 8088};
     for (int p : fallbacks) {
@@ -1890,7 +1916,7 @@ void Worker() {
     }
     int currentPortIndex = 0;
 
-    Wh_Log(L"[VLC-RPC] Worker started. Port=%d, Password=%S", vlcPort, vlcRawPassword.c_str());
+    Wh_Log(L"Worker started. Port=%d, AuthConfigLoaded=%d", vlcPort, vlcAuthBase64.length() > 0 ? 1 : 0);
 
     HINTERNET hSession = WinHttpOpen(L"VLC-RPC/1.5", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (hSession) {
@@ -1943,14 +1969,32 @@ void Worker() {
                 WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &dwSizeStatus, WINHTTP_NO_HEADER_INDEX);
                 
                 if (statusCode == 401) {
-                    if (!logged401) {
-                        Wh_Log(L"[VLC-RPC] Auth failed (401) on port %d. Check the Lua HTTP password in %%APPDATA%%\\vlc\\vlcrc.", activePort);
-                        logged401 = true;
+                    DWORD authSize = 0;
+                    bool isVlc = false;
+                    if (!WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_WWW_AUTHENTICATE, WINHTTP_HEADER_NAME_BY_INDEX, NULL, &authSize, WINHTTP_NO_HEADER_INDEX)) {
+                        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && authSize > 0) {
+                            std::vector<WCHAR> authBuffer(authSize / sizeof(WCHAR) + 1, 0);
+                            if (WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_WWW_AUTHENTICATE, WINHTTP_HEADER_NAME_BY_INDEX, authBuffer.data(), &authSize, WINHTTP_NO_HEADER_INDEX)) {
+                                std::wstring authStr(authBuffer.data());
+                                std::transform(authStr.begin(), authStr.end(), authStr.begin(), ::towupper);
+                                if (authStr.find(L"VLC") != std::wstring::npos) {
+                                    isVlc = true;
+                                }
+                            }
+                        }
                     }
-                    requestSuccess = true;
+                    if (isVlc) {
+                        if (!logged401) {
+                            Wh_Log(L"Auth failed (401) on port %d. Check the Lua HTTP password in %%APPDATA%%\\vlc\\vlcrc.", activePort);
+                            logged401 = true;
+                        }
+                        requestSuccess = true;
+                    } else {
+                        requestSuccess = false;
+                    }
                 } else if (statusCode == 200) {
                     if (!logged200) {
-                        Wh_Log(L"[VLC-RPC] Connected to VLC on port %d.", activePort);
+                        Wh_Log(L"Connected to VLC on port %d.", activePort);
                         logged200 = true;
                     }
                     requestSuccess = true;
@@ -1958,7 +2002,7 @@ void Worker() {
                     static DWORD lastBadCode = 0;
                     static int lastBadPort = 0;
                     if (statusCode != lastBadCode || activePort != lastBadPort) {
-                        Wh_Log(L"[VLC-RPC] Port %d responded with status code %lu (not VLC / status.json missing). Checking other candidate ports...", activePort, statusCode);
+                        Wh_Log(L"Port %d responded with status code %lu (not VLC / status.json missing). Checking other candidate ports...", activePort, statusCode);
                         lastBadCode = statusCode;
                         lastBadPort = activePort;
                     }
@@ -1984,7 +2028,7 @@ void Worker() {
                                     std::string name = "\\\\.\\pipe\\discord-ipc-" + std::to_string(i);
                                     hPipe = CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
                                     if (hPipe != INVALID_HANDLE_VALUE) {
-                                        Wh_Log(L"[VLC-RPC] Connected to Discord IPC (pipe %d).", i);
+                                        Wh_Log(L"Connected to Discord IPC (pipe %d).", i);
                                         break;
                                     }
                                 }
@@ -1995,7 +2039,7 @@ void Worker() {
                                 } else {
                                     static bool loggedIpcFail1 = false;
                                     if (!loggedIpcFail1) {
-                                        Wh_Log(L"[VLC-RPC] Could not connect to Discord IPC. Is Discord running?");
+                                        Wh_Log(L"Could not connect to Discord IPC. Is Discord running?");
                                         loggedIpcFail1 = true;
                                     }
                                 }
@@ -2065,7 +2109,7 @@ void Worker() {
 
                             if (rawFilename != lastRawFilename || newCachedFilename != cachedFilename || newCachedTitle != cachedTitle || newCachedArtist != cachedArtist || newCachedShowName != cachedShowName) {
                                 if (rawFilename != lastRawFilename || newCachedTitle != cachedTitle || newCachedShowName != cachedShowName) {
-                                    Wh_Log(L"[VLC-RPC] Media changed: %S", rawFilename.c_str());
+                                    Wh_Log(L"Media changed: %S", rawFilename.c_str());
                                 }
                                 cachedFilename = newCachedFilename;
                                 cachedTitle = newCachedTitle;
@@ -2240,12 +2284,12 @@ void Worker() {
                                         std::string tmdbKeyCopy = activeTmdbKey;
                                         std::string cacheKeyCopy = activeMediaCacheKey;
                                         std::thread([cacheKeyCopy, mediaTitle, dateCopy, isTvCopy, sNumCopy, eNumCopy, bEnableTmdbScraper, bEnableTvMazeScraper, tmdbKeyCopy]() {
-                                            Wh_Log(L"[VLC-RPC] Scraper thread started: media='%S', isTv=%d, TMDB=%d, TVMaze=%d", mediaTitle.c_str(), isTvCopy ? 1 : 0, bEnableTmdbScraper ? 1 : 0, bEnableTvMazeScraper ? 1 : 0);
+                                            Wh_Log(L"Scraper thread started: media='%S', isTv=%d, TMDB=%d, TVMaze=%d", mediaTitle.c_str(), isTvCopy ? 1 : 0, bEnableTmdbScraper ? 1 : 0, bEnableTvMazeScraper ? 1 : 0);
                                             TvShowMetadata res;
                                             if (isTvCopy && bEnableTvMazeScraper) {
                                                 res = FetchTvMazeMetadata(mediaTitle, sNumCopy, eNumCopy, dateCopy, cacheKeyCopy);
                                                 if (!res.valid && bEnableTmdbScraper) {
-                                                    Wh_Log(L"[VLC-RPC] TVMaze did not return valid metadata. Falling back to TMDB...");
+                                                    Wh_Log(L"TVMaze did not return valid metadata. Falling back to TMDB...");
                                                     res = FetchTmdbMetadata(mediaTitle, dateCopy, isTvCopy, sNumCopy, eNumCopy, tmdbKeyCopy, cacheKeyCopy);
                                                 }
                                             } else if (bEnableTmdbScraper) {
@@ -2340,23 +2384,27 @@ void Worker() {
                                     if (!alreadyFetching) {
                                         if (isUpload) {
                                             std::string artUrl = artworkUrl;
-                                            std::thread([targetCacheKey, artUrl]() {
+                                            std::thread t([targetCacheKey, artUrl]() {
                                                 std::string result = UploadToUguu(artUrl);
                                                 std::lock_guard<std::mutex> lock(g_cacheMutex);
                                                 g_imageCache[targetCacheKey] = result;
                                                 g_fetchInProgress[targetCacheKey] = false;
-                                            }).detach();
+                                            });
+                                            std::lock_guard<std::mutex> alock(g_asyncMutex);
+                                            g_asyncThreads.emplace_back(std::move(t));
                                         } else {
                                             int aType = activityType;
                                             std::string qTitle = (activityType == 2) ? (title.empty() ? filename : title) : activityName;
                                             std::string qSub = (activityType == 2) ? artist : date;
                                             bool isTv = (!showName.empty() && !episode.empty()) || (bEnableTvMazeScraper && targetCacheKey.find("MEDIA_TV_") == 0);
-                                            std::thread([targetCacheKey, aType, qTitle, qSub, isTv]() {
+                                            std::thread t([targetCacheKey, aType, qTitle, qSub, isTv]() {
                                                 std::string result = FindExternalArtwork(aType, qTitle, qSub, isTv);
                                                 std::lock_guard<std::mutex> lock(g_cacheMutex);
                                                 g_imageCache[targetCacheKey] = result;
                                                 g_fetchInProgress[targetCacheKey] = false;
-                                            }).detach();
+                                            });
+                                            std::lock_guard<std::mutex> alock(g_asyncMutex);
+                                            g_asyncThreads.emplace_back(std::move(t));
                                         }
                                     }
                                 } else if (!foundInCache && isMediaScraperTarget) {
@@ -2383,12 +2431,14 @@ void Worker() {
                                                 std::string qTitle = activityName;
                                                 std::string qSub = date;
                                                 bool isTvFallback = (targetCacheKey.find("MEDIA_TV_") == 0);
-                                                std::thread([fallbackKey, aType, qTitle, qSub, isTvFallback]() {
+                                                std::thread t([fallbackKey, aType, qTitle, qSub, isTvFallback]() {
                                                     std::string result = FindExternalArtwork(aType, qTitle, qSub, isTvFallback);
                                                     std::lock_guard<std::mutex> lock(g_cacheMutex);
                                                     g_imageCache[fallbackKey] = result;
                                                     g_fetchInProgress[fallbackKey] = false;
-                                                }).detach();
+                                                });
+                                                std::lock_guard<std::mutex> alock(g_asyncMutex);
+                                                g_asyncThreads.emplace_back(std::move(t));
                                             }
                                         }
                                     }
@@ -2418,7 +2468,7 @@ void Worker() {
                                     std::string name = "\\\\.\\pipe\\discord-ipc-" + std::to_string(i);
                                     hPipe = CreateFileA(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
                                     if (hPipe != INVALID_HANDLE_VALUE) {
-                                        Wh_Log(L"[VLC-RPC] Connected to Discord IPC (pipe %d).", i);
+                                        Wh_Log(L"Connected to Discord IPC (pipe %d).", i);
                                         break;
                                     }
                                 }
@@ -2429,7 +2479,7 @@ void Worker() {
                                 } else {
                                     static bool loggedIpcFail2 = false;
                                     if (!loggedIpcFail2) {
-                                        Wh_Log(L"[VLC-RPC] Could not connect to Discord IPC. Is Discord running?");
+                                        Wh_Log(L"Could not connect to Discord IPC. Is Discord running?");
                                         loggedIpcFail2 = true;
                                     }
                                 }
@@ -2471,18 +2521,18 @@ void Worker() {
                                 if (!s1 || !s2 || !s3) { CloseHandle(hPipe); hPipe = INVALID_HANDLE_VALUE; isConnected = false; }
                             }
                             
-                            if (bShowNotifications && isPlaying && !toastFired && toastTimer >= 3) {
-                                if (!top.empty()) {
-                                    ShowSystemToast(StrToWStr(top), StrToWStr(bot), displayImage);
-                                }
-                                toastFired = true;
-                            }
-                            
                             lastTop = top; lastBot = bot; lastPlaying = isPlaying; lastActivityType = activityType; 
                             lastDisplayImage = displayImage; 
                             heartbeat = 0; lastState = stateStr;
                         } else {
                             heartbeat++;
+                        }
+                        
+                        if (bShowNotifications && isPlaying && !toastFired && toastTimer >= 3) {
+                            if (!top.empty()) {
+                                ShowSystemToast(StrToWStr(top), StrToWStr(bot), displayImage);
+                            }
+                            toastFired = true;
                         }
                     }
                 }
@@ -2493,13 +2543,13 @@ void Worker() {
         if (!requestSuccess) {
             DWORD err = GetLastError();
             if (!loggedFailure) {
-                Wh_Log(L"[VLC-RPC] Could not reach VLC on port %d (WinHttp error %lu). Trying fallback ports...", activePort, err);
+                Wh_Log(L"Could not reach VLC on port %d (WinHttp error %lu). Trying fallback ports...", activePort, err);
                 loggedFailure = true;
             }
             if (hConnect) { WinHttpCloseHandle(hConnect); hConnect = NULL; }
             currentPortIndex = (currentPortIndex + 1) % candidatePorts.size();
             if (currentPortIndex == 0 && loggedFailure) {
-                Wh_Log(L"[VLC-RPC] Checked all candidate ports. Still searching for VLC Web Interface... (Is VLC Web Interface enabled and running?)");
+                Wh_Log(L"Checked all candidate ports. Still searching for VLC Web Interface... (Is VLC Web Interface enabled and running?)");
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         } else {
@@ -2520,14 +2570,29 @@ BOOL Wh_ModInit() {
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
     g_stopThread = false;
-    g_workerThread = std::thread(Worker);
+    g_workerThread.emplace(Worker);
     return TRUE;
 }
 
 void Wh_ModUninit() {
     g_stopThread = true;
-    if (g_workerThread.joinable()) g_workerThread.join();
+    if (g_workerThread && g_workerThread->joinable()) {
+        g_workerThread->join();
+    }
+    g_workerThread.reset();
+
+    {
+        std::lock_guard<std::mutex> lock(g_asyncMutex);
+        for (auto& t : g_asyncThreads) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+        g_asyncThreads.clear();
+    }
+
     Gdiplus::GdiplusShutdown(g_gdiplusToken);
+    
     std::lock_guard<std::mutex> lock(g_sessionMutex);
     if (g_hWinHttpSession) {
         WinHttpCloseHandle(g_hWinHttpSession);
