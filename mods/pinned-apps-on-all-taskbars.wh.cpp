@@ -2,7 +2,7 @@
 // @id              pinned-apps-on-all-taskbars
 // @name            Pinned apps on all taskbars
 // @description     Shows pinned apps on every monitor while keeping running apps on the taskbar where their window is open
-// @version         2.1.0
+// @version         1.0.0
 // @author          Div
 // @github          https://github.com/Divc09
 // @include         explorer.exe
