@@ -117,6 +117,10 @@ If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog 
+// - van.dll alignment: row height 30rp + 24rp name + padding
+//   rect(8rp,3rp,10rp,3rp), signal icon re-centered (matches the
+//   real Windows 7 van.dll UIFILE). Refresh button, footer link
+//   alignment, separator and all hover effects left unchanged.
 // - 3.4.0: Network location detection now only runs while the flyout is
 //   visible (it was previously re-run on every 3s auto-refresh tick even
 //   while hidden), and the last detected category is kept instead of reset
@@ -188,7 +192,7 @@ If you encounter issues, please report them on the author of the mod.
 #define WINDOW_HEIGHT_BASE       405
 #define HEADER_HEIGHT_BASE       105
 #define FOOTER_HEIGHT_BASE       60
-#define ROW_HEIGHT_NORMAL_BASE   26
+#define ROW_HEIGHT_NORMAL_BASE   30
 #define ROW_HEIGHT_EXPANDED_BASE 74
 
 static UINT g_dpi = 96;
@@ -1259,12 +1263,12 @@ static const LocalePack g_Locales[] = {
         L"Connessione a %s fallita",
         L"Rete %d",
         L"Tipo di sicurezza:",
-        L"Intensit\u00E0 del segnale:",
+        L"Potenza segnale:",
         L"Tipo di radio:",
         L"Eccellente",
-        L"Buono",
-        L"Discreto",
-        L"Scarso",
+        L"Buona",
+        L"Sufficiente",
+        L"Scarsa",
         L"Nessun segnale",
         L"Connessione in corso...",
         L"Disconnessione in corso...",
@@ -1277,7 +1281,7 @@ static const LocalePack g_Locales[] = {
         L"Timeout durante la connessione",
         L"Il tentativo di connessione \u00E8 scaduto. La rete potrebbe essere fuori portata.",
         L"Inserire una chiave di sicurezza di rete.",
-        L"Risoluzione dei problemi",
+        L"Risoluzione problemi",
         L"Apri Centro connessioni di rete e condivisione",
     }},
     { 0x040A, {
@@ -4107,7 +4111,7 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     else if (quality > 0)  idx = 1;
     int iconSize = ScaleDpi(20);
     int xPos = right - iconSize - 4;
-    int yPos = top + (ScaleDpi(26) - iconSize) / 2;
+    int yPos = top + (ScaleDpi(30) - iconSize) / 2;  // ROW_HEIGHT_NORMAL_BASE=30 (van.dll)
     if (g_hIconSignalBars[idx]) {
         DrawIconBicubic(hdc, xPos, yPos, iconSize, iconSize,
                         g_hIconSignalBars[idx], &g_pBitmapSignalBars[idx]);
@@ -5087,7 +5091,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     BOOL isSelected = (i == g_SelectedRowIndex);
                     BOOL isHovered  = (i == g_HoveredRowIndex);
                     BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
-                    
+
                     if (isSelected || isHovered) {
                         RECT rcFullRow = rcRow; rcFullRow.left = 0; rcFullRow.right = WINDOW_WIDTH - 5;
                         COLORREF bgColor = isSelected ? GetRowSelectedColor() : GetRowHoverColor();
@@ -5107,8 +5111,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
                     SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
                     SetTextColor(hdc, GetNetworkNameColor());
-                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top+6, 
-                                     rcRow.right - rcRow.left - 10, 18);       
+                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3),
+                                     rcRow.right - rcRow.left - 10, ScaleDpi(24));       
                     WifiNetworkItem* item = &g_NetworkList[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
@@ -5156,7 +5160,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         RECT rcClient;
         GetClientRect(hwnd, &rcClient);
         int footerTop = rcClient.bottom - FOOTER_HEIGHT;
-        int centerX = (rcClient.right - textSize.cx) / 2;
+                int centerX = (rcClient.right - textSize.cx) / 2;
         int footerTextYC = footerTop + (FOOTER_HEIGHT - textSize.cy) / 2;
         if (g_Settings.useRoundedCorners) {
             footerTextYC += (FOOTER_HEIGHT * 15) / 100;
