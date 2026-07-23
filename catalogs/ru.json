@@ -15452,7 +15452,7 @@
           9463
         ],
         "ratingUsers": 11326,
-        "updated": 1778861358000,
+        "updated": 1784846379000,
         "users": 738134
       },
       "featured": true,
@@ -15461,7 +15461,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lole32 -loleaut32 -lruntimeobject",
         "description": "Customize the taskbar with themes contributed by others or create your own",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
@@ -15470,7 +15470,7 @@
         ],
         "name": "Windows 11 Taskbar Styler",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.7"
+        "version": "1.8"
       }
     },
     "windows-7-clock-spacing": {

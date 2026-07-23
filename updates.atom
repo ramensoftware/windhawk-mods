@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-23T19:31:49.000Z</updated>
+    <updated>2026-07-23T22:39:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.8]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#ad8a72751f167a0d45a8b9c0794ccd23b12f6f00</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-07-23T22:39:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the click-through taskbar option that allows making the empty parts of the taskbar click-through. Mainly useful for dock themes such as DockLike.</li>
+<li>Added the following themes: LiquidGlass, Command Center, FluentGlass, OS26 Liquid Glass, FrostyGlass, FrostedAcrylic, Pills.</li>
+<li>The previous LiquidGlass theme is now discontinued. It was renamed to "LiquidGlass (Legacy)".</li>
+<li>Updated the following themes: WinXP and BottomDensy.</li>
+<li>Fixed a layout bug with some themes, such as WindowGlass, when multiple taskbars are used. The bug usually resulted in the tray area becoming hidden.</li>
+<li>Added comparison and condition operations to style substitution expressions, for example:&nbsp;<code>{{x &gt; 8 ? 1 : 3}}</code>.</li>
+<li>Added string literals support for substitution expressions, for example:&nbsp;<code>Text={{var ==</code>a<code>?</code>b<code>:</code>c<code>}}</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tray Utility Customizer 1.1]]></title>
         <id>https://windhawk.net/mods/tray-utility-customizer#c0d2cdf90c41060ac6f8f932491d0fba012ed2cb</id>
@@ -641,26 +660,6 @@ selection colors are never touched.</li>
         <author>
             <name>angel_lov</name>
             <uri>https://github.com/Twilight0Sparkle</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.5]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#b00037cb502ab29dc6f0290861e1b776142118e4</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2026-07-18T16:22:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the following themes: MicaTabless, OS26 Liquid Glass, ZEUSosX_044, Compact Explorer11.</li>
-<li>Updated the LiquidGlass theme.</li>
-<li>Added style variables that allow to observe a control's property value and use it in other controls or styles. Refer to the mod description for details.</li>
-<li>Added a way to match any number of intermediate parent controls, for example: <code>ParentClass &gt; * &gt; Class#Name</code>.</li>
-<li>Added a way to match root controls, for example: <code>:root &gt; Class#Name</code>.</li>
-<li>Added <code>FallbackColor</code> property to <code>WindhawkBlur</code>.</li>
-<li>Improved <code>ThemeResource</code> handling for <code>WindhawkBlur</code>.</li>
-<li>Improved property matching which now works for more properties.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
