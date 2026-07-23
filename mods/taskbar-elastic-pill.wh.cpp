@@ -2,7 +2,7 @@
 // @id              taskbar-elastic-pill
 // @name            Taskbar Elastic WinUI Pill
 // @description     Injects an animated sliding pill for active taskbar items.
-// @version         2.0.0
+// @version         2.0.1
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -1295,11 +1295,11 @@ bool UpdatePillPosition(
                     propSet.InsertScalar(L"SquishX", 1.0f);
                     propSet.StartAnimation(L"SquishX", squishXAnim);
                     
-                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3(((props.RightX - props.LeftX) / props.LayoutW) * props.SquishX, props.SquishY, 1.0)");
+                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((((props.RightX - props.LeftX) * 4.0 / props.LayoutW) - 3.0) * props.SquishX, props.SquishY, 1.0)");
                     scaleExp.SetReferenceParameter(L"props", propSet);
                     visual.Properties().StartAnimation(L"BaseScale", scaleExp);
                 } else {
-                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3((props.RightX - props.LeftX) / props.LayoutW, 1.0, 1.0)");
+                    auto scaleExp = compositor.CreateExpressionAnimation(L"Vector3(((props.RightX - props.LeftX) * 4.0 / props.LayoutW) - 3.0, 1.0, 1.0)");
                     scaleExp.SetReferenceParameter(L"props", propSet);
                     visual.Properties().StartAnimation(L"BaseScale", scaleExp);
                 }
