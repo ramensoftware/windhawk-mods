@@ -1,3 +1,8 @@
+## 2.0.1 ([Jul 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/221665bfde3750e80059e9757f7b85f13be5f18d/mods/taskbar-elastic-pill.wh.cpp))
+
+* Fixed stretch animations being barely noticeable due to anti-pixelated-pill efforts
+* Updated default settings to ensure pill is rounded and not rectangular
+
 ## 2.0.0 ([Jul 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9f9f096a896bdd73f8af47bb284efb01b29e2e50/mods/taskbar-elastic-pill.wh.cpp))
 
 * Added elastic intensity setting

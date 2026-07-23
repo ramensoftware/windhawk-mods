@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-22T19:34:26.000Z</updated>
+    <updated>2026-07-23T17:59:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-elastic-pill#221665bfde3750e80059e9757f7b85f13be5f18d</id>
+        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
+        <updated>2026-07-23T17:59:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed stretch animations being barely noticeable due to anti-pixelated-pill efforts</li>
+<li>Updated default settings to ensure pill is rounded and not rectangular</li>
+</ul>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-elastic-pill#9f9f096a896bdd73f8af47bb284efb01b29e2e50</id>
@@ -469,22 +483,6 @@ selection colors are never touched.</li>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.6]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#fe719ff30cfa77714e643de3a28f103a9aa7950a</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2026-07-18T12:08:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: Densy, FrostyGlass.</li>
-<li>Updated the TranslucentShell theme.</li>
-<li>Adjusted several themes to be compatible with recent notification changes in Windows 11.</li>
-<li>Added string literals support for substitution expressions, for example: <code>Text={{var == `a` ? `b` : `c`}}</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

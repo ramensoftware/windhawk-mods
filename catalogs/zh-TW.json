@@ -11775,7 +11775,7 @@
           47
         ],
         "ratingUsers": 57,
-        "updated": 1784748866000,
+        "updated": 1784829560000,
         "users": 742
       },
       "metadata": {
@@ -11790,7 +11790,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Elastic WinUI Pill",
-        "version": "2.0.0"
+        "version": "2.0.1"
       }
     },
     "taskbar-empty-space-clicks": {
