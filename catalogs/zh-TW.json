@@ -11877,6 +11877,37 @@
         "version": "1.5.0"
       }
     },
+    "taskbar-folder-menus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1784834873000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1784834873000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "sb4ssman",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lcomctl32",
+        "description": "Adds compact Windows 11 taskbar buttons that open configured Shell targets as popup menus, similar to classic taskbar toolbars.",
+        "github": "https://github.com/sb4ssman",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Folder Menus",
+        "version": "0.7"
+      }
+    },
     "taskbar-grouping": {
       "details": {
         "defaultSorting": 258300,

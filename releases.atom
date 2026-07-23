@@ -2,12 +2,105 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-22T18:01:15.000Z</updated>
+    <updated>2026-07-23T19:27:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Folder Menus 0.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-folder-menus#70800f8cdf50ac6f5a85ec0655f03db98eaa2bf5</id>
+        <link href="https://windhawk.net/mods/taskbar-folder-menus"/>
+        <updated>2026-07-23T19:27:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarfoldermenus">Taskbar Folder Menus</h1>
+<p>A Windows 11-only mod that adds compact taskbar buttons which open Shell targets
+as native popup menus, recreating the most useful part of the classic taskbar
+toolbar workflow. Windows 10 is not supported.</p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/desktop-controlpanel.png" alt="Two folder buttons in the system tray" />
+<em>A minimal two-button setup for Desktop and Control Panel.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/tooltip-shows-destination.png" alt="Folder button destination tooltip" />
+<em>Hovering a compact button shows its configured Shell target.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel.png" alt="Four folder buttons on a standard taskbar" />
+<em>Drive, GitHub, Desktop, and Control Panel shortcuts arranged in a grid.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel-v.png" alt="Four folder buttons on a taller taskbar" />
+<em>The same four shortcuts arranged vertically by the grid layout on a taller taskbar.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/controlpanel-menu-open.png" alt="Control Panel opened as a native Shell menu" />
+<em>The Control Panel namespace opens directly as a native Shell menu with full icons.</em></p>
+<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/whole-drive-on-taskbar.png" alt="Whole drive opened from a taskbar folder button" />
+<em>A drive-root button opens the whole drive as a native cascading Shell menu.</em></p>
+<p>Click a small button to browse a folder, drive, Desktop, or Control Panel
+directly from the taskbar — no minimizing required. Subfolders expand on
+hover. Right-click any item for the full classic Windows Shell context menu.
+Every folder popup includes an "Open in Explorer" shortcut at the top,
+including the configured root folder.</p>
+<h2 id="examplefolderentries">Example folder entries</h2>
+<pre><code class="text language-text">Label: 🖥    Target: shell:Desktop
+Label: ⚙     Target: shell:ControlPanelFolder
+Label: 📥    Target: %USERPROFILE%\Downloads
+Label: C:    Target: C:  
+</code></pre>
+<p>Add one record per button in the Folders setting. Each record has a short button
+label and a target. Targets can be normal paths or Shell namespace roots like
+<code>shell:Desktop</code> and <code>shell:ControlPanelFolder</code>. Environment variables such as
+<code>%USERPROFILE%</code> are expanded automatically. The full label and target appear in
+the tooltip.</p>
+<p>Emoji labels are a natural fit for narrow buttons. Label ideas: 📁 folder,
+🖥 desktop, 💻 laptop, 🪟 windows, 📥 downloads, 🌐 network, 🗄 drive,
+📄 documents, 🔧 tools, ⚙ settings, ⭐ favorites.</p>
+<h2 id="reorderingfolderbuttons">Reordering folder buttons</h2>
+<p>For several existing records, open the mod's Settings page and switch to
+<strong>Textual mode</strong>, then move each complete <code>label</code> + <code>target</code> record as a block.
+The regular form currently provides add/remove controls but no direct
+drag-to-reorder control.</p>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Description |
+|---------|---------|-------------|
+| Position | Before notification icons | Where to inject the button group in the tray |
+| Folders | Desktop and Control Panel | Add/remove records in the form; reorder complete records in Textual mode |
+| Grid mode | Smart automatic | Smart automatic, single row/column, fixed rows/columns, or fixed grid |
+| Smart layout | Balanced | Balanced, pack vertical, or pack horizontal in smart mode |
+| Grid columns | 0 (auto) | Exact columns in fixed-column modes; maximum columns in smart mode (0 = automatic) |
+| Grid rows | 0 (auto) | Exact rows in fixed-row modes; maximum rows in smart mode (0 = tray height) |
+| Fill order | Row-first | Row-first or column-first |
+| Short row/column position | Last | Put an incomplete row or column first or last |
+| Short row/column alignment | Start | Align an incomplete final row or column |
+| Button width | 24 px | Width of each folder button |
+| Button height | 22 px | Height of each folder button |
+| Button spacing | 4 px | Gap between buttons |
+| Default button text | 📁 | Fallback icon for entries with long labels |
+| Text/icon size | 10 pt | Button label font size |
+| Text color | <em>(system)</em> | Button label color; empty keeps the system default |
+| Background color | <em>(system)</em> | Button background; empty keeps the system default |
+| Hover background color | <code>accent</code> | Hover background; empty keeps the native hover color |
+| Click background color | <em>(system)</em> | Pressed background; empty keeps the native pressed color |
+| Border color | <em>(system)</em> | Button border; empty keeps the system default |
+| Border thickness | -1 (system) | -1 = system default, 0 = no border |
+| Corner rounding | -1 (system) | -1 = system default, 0 = square |
+| Opacity | 100% | Button transparency |
+| Shine effect | Off | Gradient highlight; activates when a custom background color is set |
+| Group padding left | 0 px | Extra space to the left of the button group |
+| Group padding right | 0 px | Extra space to the right of the button group |
+| Group X offset | 0 px | Shift the entire group left or right |
+| Group Y offset | 0 px | Shift the entire group up or down |
+| Max menu items | 0 (unlimited) | Limit items shown per folder |
+| Subfolder depth | 0 (unlimited) | How many subfolder levels to include |
+| Show hidden/system items | Off | Include hidden and system Shell items |</p>
+<p>All color settings accept <code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is
+honored), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
+Windows accent shades, or <code>transparent</code> for a fully transparent surface —
+nothing drawn, button still present and clickable, useful for borderless
+background-free buttons. Leaving a color empty keeps the system default for
+that state.</p>
+<h2 id="noteonshelldesktop">Note on shell:Desktop</h2>
+<p><code>shell:Desktop</code> shows the full Desktop Shell namespace — user shortcuts, public
+shortcuts, and virtual items like Recycle Bin — not just the physical Desktop
+folder. Duplicates from the user+public Desktop merge are suppressed automatically.</p>]]></content>
+        <author>
+            <name>sb4ssman</name>
+            <uri>https://github.com/sb4ssman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
@@ -995,25 +1088,6 @@ in the Explorer file copy/move conflict dialog when Windows Classic theme is act
 <p><img src="https://i.imgur.com/jMGJOHd.png" alt="before" /></p>
 <p>After:</p>
 <p><img src="https://i.imgur.com/pK0Z0u8.png" alt="after" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore the classic Personalization and other CPLs 1.0]]></title>
-        <id>https://windhawk.net/mods/restore-classic-cpls#ae3325a856437d38b88166cce15e7f271261c65d</id>
-        <link href="https://windhawk.net/mods/restore-classic-cpls"/>
-        <updated>2026-07-08T10:03:15.000Z</updated>
-        <content type="html"><![CDATA[<p>Brings back the classic Control Panel applets:</p>
-<ul>
-<li>Personalization</li>
-<li>Notification area icons (for Win10 taskbar)</li>
-<li>Network Connections</li>
-<li>Printers and Faxes</li>
-<li>Suppresses the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1}, originally called "Company Settings Sync", a non-functional icon that may appear if you are using the Classic view of Control Panel</li>
-</ul>
-<p><img src="https://i.imgur.com/mM2JDGp.png" alt="screenshot" /></p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
