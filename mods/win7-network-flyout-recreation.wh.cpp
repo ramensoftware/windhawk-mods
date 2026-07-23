@@ -116,8 +116,8 @@ If you encounter issues, please report them on the author of the mod.
     - dark: Dark (Custom)
 */
 // ==/WindhawkModSettings==
-// ## Changelog 
-// - van.dll alignment: row height 30rp + 24rp name + padding
+// ## Changelog
+// - 3.4.0: van.dll alignment: row height 30rp + 24rp name + padding
 //   rect(8rp,3rp,10rp,3rp), signal icon re-centered (matches the
 //   real Windows 7 van.dll UIFILE). Refresh button, footer link
 //   alignment, separator and all hover effects left unchanged.
@@ -131,8 +131,7 @@ If you encounter issues, please report them on the author of the mod.
 //   and could pick a stale profile. This also fixes Wi-Fi being checked
 //   before Ethernet when the Ethernet registry lookup missed.
 // - 3.4.0: Header network-location icon is now decoded at its actual draw
-//   size and drawn through the existing bicubic GDI+ path instead of being
-//   upscaled ~5% by DrawIconEx, removing a slight blur.
+//   size instead of being upscaled ~5%, removing a slight blur.
 // - 3.4.0: Normal (non-hover) refresh icon is now decoded at ScaleDpi(16)
 //   instead of a fixed 16px, so it no longer jumps disproportionately
 //   relative to the hover icon at higher DPI.
@@ -140,25 +139,25 @@ If you encounter issues, please report them on the author of the mod.
 //   guarantees null termination, instead of RegQueryValueExW.
 // - 3.4.0: The fallback network scan now fetches the adapter table once per
 //   scan instead of once per connection examined.
-// - 3.3.3: Corrected Public vs Work icon artwork mapping: Public now uses
+// - 3.4.0: Corrected Public vs Work icon artwork mapping: Public now uses
 //   the public/bench-style icon, while Domain/Work uses the buildings icon.
-// - 3.3.3: Moved the refresh button 2.5% back to the right from 3.3.2
-//   (net offset: 0.5% left from the original position).
-// - 3.3.3: Prefer the exact registry profile category before NLM adapter
+// - 3.4.0: Moved the refresh button 2.5% back to the right from the previous
+//   release (net offset: 0.5% left from the original position).
+// - 3.4.0: Prefer the exact registry profile category before NLM adapter
 //   category, so a Public profile stays Public even if NLM reports another
 //   connected/domain network elsewhere.
-// - 3.3.2: Hardened network location icon detection by matching the exact
+// - 3.4.0: Hardened network location icon detection by matching the exact
 //   active adapter and registry profile before falling back, preventing a
 //   domain/work network from overriding a Public profile.
-// - 3.3.2: Moved the refresh button 3% further left in both light and dark themes.
-// - 3.3.2: Removed external artwork credit wording; icons are treated as classic Windows 7-style assets.
-// - 3.3.1: Integrated cleaned classic PNG assets for the refresh button and
+// - 3.4.0: Moved the refresh button 3% further left in both light and dark themes.
+// - 3.4.0: Removed external artwork credit wording; icons are treated as classic Windows 7-style assets.
+// - 3.4.0: Integrated cleaned classic PNG assets for the refresh button and
 //   Home/Public/Work network location icons, embedded safely as Base64.
-// - 3.3.1: Saved source as UTF-8 and added a padding-safe Base64 decoder so
+// - 3.4.0: Saved source as UTF-8 and added a padding-safe Base64 decoder so
 //   settings names such as Español, Français, Русский and Português render correctly.
-// - 3.2.0: Added Ethernet support so the flyout now shows properly for
+// - 3.4.0: Added Ethernet support so the flyout now shows properly for
 //   Ethernet connections, not just Wi-Fi.
-// - 3.2.0: Added the option to restore classic Windows 7 "Connect to a
+// - 3.4.0: Added the option to restore classic Windows 7 "Connect to a
 //   network" and HomeGroup/sharing links in the Network and Sharing Center.
 // - 3.1.0: Earlier maintenance release predating this changelog's detailed
 //   entries; history prior to 3.1.0 was not preserved.
@@ -173,7 +172,7 @@ If you encounter issues, please report them on the author of the mod.
 #include <uxtheme.h>
 #include <dwmapi.h>
 #include <psapi.h>
-#include <shlobj.h>    
+#include <shlobj.h>
 #include <shlwapi.h>
 #include <strsafe.h>
 #include <shellapi.h>
@@ -182,7 +181,6 @@ If you encounter issues, please report them on the author of the mod.
 #include <netlistmgr.h>
 #include <windhawk_utils.h>
 #include <process.h>
-#include <shlwapi.h>
 #include <string>
 #include <stdlib.h>
 
@@ -272,6 +270,9 @@ void InitRefreshButtonRect(void);
 void RecalcArrowRect();
 void ApplyNativeControlsTheme();
 
+void FreeSystemIcons();
+void LoadSystemIcons();
+
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
     WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
@@ -288,6 +289,14 @@ void RecalcDpiMetrics(UINT dpi) {
     WIFI_LABEL_Y        = HEADER_HEIGHT - ScaleDpi(24);
     ROW_HEIGHT_NORMAL   = ScaleDpi(ROW_HEIGHT_NORMAL_BASE);
     ROW_HEIGHT_EXPANDED = ScaleDpi(ROW_HEIGHT_EXPANDED_BASE);
+
+    // Cached icons/bitmaps (Home/Public/Work, chevrons, refresh, signal bars,
+    // etc.) were decoded at the DPI in effect on first use and never freed
+    // until unload, so moving the flyout to a monitor with a different DPI
+    // left them stretched/blurry. Freeing them here forces LoadSystemIcons /
+    // GetNetworkLocationIcon to lazily re-decode at the new DPI on next use.
+    FreeSystemIcons();
+    LoadSystemIcons();
 
     InitGlobalFonts();
     InitRefreshButtonRect();
@@ -1082,7 +1091,7 @@ UINT_PTR g_TimeoutTimer = 0;
 HWND G_hSubclassedToolbar = nullptr;
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
-// Aggiungi prima questa struttura (una volta sola, all'inizio del file)
+// RAII deleter for HANDLE, used below for the connect mutex.
 struct HandleDeleter {
     void operator()(HANDLE h) const {
         if (h && h != INVALID_HANDLE_VALUE) CloseHandle(h);
@@ -1090,8 +1099,8 @@ struct HandleDeleter {
 };
 using WinHandle = std::unique_ptr<std::remove_pointer<HANDLE>::type, HandleDeleter>;
 
-// Poi sostituisci la dichiarazione con:
-static WinHandle g_hConnectMutex;static HMODULE g_hGdiPlus = NULL;
+static WinHandle g_hConnectMutex;
+static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 static void* g_pBitmapSignalBars[6] = { NULL };
 static void* g_pBitmapNetLocHome   = NULL;  // GDI+ cache for bicubic draw
@@ -4258,78 +4267,23 @@ static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
 }
 
-// Fallback per CSIDL se non definiti
-#ifndef CSIDL_LOCAL_APPDATA
-#define CSIDL_LOCAL_APPDATA 0x001c
-#endif
-
-#ifndef CSIDL_COMMON_APPDATA
-#define CSIDL_COMMON_APPDATA 0x0023
-#endif
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
     
     HMODULE hPnidui = NULL;
-    WCHAR pathBuffer[MAX_PATH];
     
-    // Try standard ExplorerPatcher installation path (64-bit)
+    // Try standard ExplorerPatcher installation path (64-bit) first: this is
+    // mainly informational logging, since GetModuleHandleW with a bare name
+    // below already matches a loaded module by base name regardless of the
+    // directory it was actually loaded from.
     hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
     if (hPnidui) {
         Wh_Log(L"pnidui.dll found at: C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
         goto found;
     }
     
-    // Try standard ExplorerPatcher installation path (32-bit on 64-bit system)
-    hPnidui = GetModuleHandleW(L"C:\\Program Files (x86)\\ExplorerPatcher\\pnidui.dll");
-    if (hPnidui) {
-        Wh_Log(L"pnidui.dll found at: C:\\Program Files (x86)\\ExplorerPatcher\\pnidui.dll");
-        goto found;
-    }
-    
-    // Try Local AppData folder (portable installation for current user)
-    // CSIDL_LOCAL_APPDATA expands to: C:\Users\<Username>\AppData\Local
-    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, pathBuffer))) {
-        PathAppendW(pathBuffer, L"ExplorerPatcher\\pnidui.dll");
-        hPnidui = GetModuleHandleW(pathBuffer);
-        if (hPnidui) {
-            Wh_Log(L"pnidui.dll found in AppData: %s", pathBuffer);
-            goto found;
-        }
-    }
-    
-    // Try ProgramData folder (installation for all users)
-    // CSIDL_COMMON_APPDATA expands to: C:\ProgramData
-    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, pathBuffer))) {
-        PathAppendW(pathBuffer, L"ExplorerPatcher\\pnidui.dll");
-        hPnidui = GetModuleHandleW(pathBuffer);
-        if (hPnidui) {
-            Wh_Log(L"pnidui.dll found in ProgramData: %s", pathBuffer);
-            goto found;
-        }
-    }
-    
-    // Try the mod's own directory (Windhawk folder)
-    if (GetModuleFileNameW(GetModuleHandle(NULL), pathBuffer, ARRAYSIZE(pathBuffer))) {
-        PathRemoveFileSpecW(pathBuffer);      // Remove filename, keep directory
-        PathAppendW(pathBuffer, L"pnidui.dll");
-        hPnidui = GetModuleHandleW(pathBuffer);
-        if (hPnidui) {
-            Wh_Log(L"pnidui.dll found alongside mod: %s", pathBuffer);
-            goto found;
-        }
-    }
-    
-    // Try System32 folder (Windows 10/11 sometimes has it natively)
-    if (GetSystemDirectoryW(pathBuffer, ARRAYSIZE(pathBuffer))) {
-        PathAppendW(pathBuffer, L"pnidui.dll");
-        hPnidui = GetModuleHandleW(pathBuffer);
-        if (hPnidui) {
-            Wh_Log(L"pnidui.dll found in System32: %s", pathBuffer);
-            goto found;
-        }
-    }
-    
-    // Final fallback: try to load by simple name
+    // Bare-name lookup: matches pnidui.dll regardless of where it was loaded
+    // from (AppData, ProgramData, mod folder, System32, or native on Win10).
     hPnidui = GetModuleHandleW(L"pnidui.dll");
     if (hPnidui) {
         Wh_Log(L"pnidui.dll found via simple name lookup");
@@ -4339,7 +4293,6 @@ static bool InitPniduiInfo() {
     // Not found in any location - log gracefully and continue without icon detection
     Wh_Log(L"pnidui.dll not found in any known location");
     Wh_Log(L"Network icon detection will be unavailable");
-    Wh_Log(L"Try installing ExplorerPatcher or ensure pnidui.dll is loaded");
     return false;
 
 found:
@@ -4635,7 +4588,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         InvalidateRect(hwnd, NULL, TRUE);
         break;
     case WM_REFRESH_DATA: {
-        RefreshNetworkData();
+        RefreshNetworkData(/*forceDetection=*/(BOOL)wParam);
         ClampScrollPos();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
@@ -4915,8 +4868,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 // the active NLM_NETWORK_CATEGORY detected via INetworkListManager.
                 // Mutually exclusive: exactly one icon per active connection.
                 // If base64 decoding failed, falls back to the PC icon.
-                void** ppDummy = NULL;
-                hLargeIcon = GetNetworkLocationIcon(&ppDummy);
+                hLargeIcon = GetNetworkLocationIcon(NULL);
             } else {
                 // User prefers the original generic PC/network icon
                 hLargeIcon = g_hIconNetworkMap;
@@ -4924,7 +4876,16 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         } else {
             hLargeIcon = g_hIconSignalBars[0];  // No connection - show empty signal bars
         }
-if (hLargeIcon) DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37) - 3, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        // ICON_HEADER_Y_OFFSET is the -3 fine-tune used since the original
+        // layout; kept as a named constant rather than a bare magic number so
+        // it stays self-explanatory. Drawn via plain DrawIconEx: bicubic
+        // GDI+ scaling was tried here but corrupted the Home/Public/Work
+        // (bench) icon artwork, so this reverts to the original draw path.
+        const int ICON_HEADER_Y_OFFSET = -3;
+        if (hLargeIcon) {
+            DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37) + ICON_HEADER_Y_OFFSET,
+                       hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        }
         if (showWifiList) {
             int totalHeight = GetTotalListHeight();
             int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -5107,26 +5068,29 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     
                     WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
                     BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
-SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
-SetTextColor(hdc, GetNetworkNameColor());
-int offsetY = (WINDOW_HEIGHT * 1.01) / 100;
-DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + offsetY,
-                 rcRow.right - rcRow.left - 10, ScaleDpi(24));   
+                    SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
+                    SetTextColor(hdc, GetNetworkNameColor());
+                    // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
+                    // WINDOW_HEIGHT*1.01/100 float math); WINDOW_HEIGHT is
+                    // already DPI-scaled, so ScaleDpi(4) (~1% of the base
+                    // 405px window height) keeps this DPI-consistent.
+                    const int ROW_TEXT_Y_OFFSET = ScaleDpi(4);
+                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + ROW_TEXT_Y_OFFSET,
+                                     rcRow.right - rcRow.left - 10, ScaleDpi(24));
                     WifiNetworkItem* item = &g_NetworkList[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
-    SelectObject(hdc, g_hFontBold);
-    SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
-    RECT rcStatus;
-    rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
-    rcStatus.left   = rcRow.left + 80;
-    int offsetY = (WINDOW_HEIGHT * 1.01) / 100;
-    rcStatus.top    = rcRow.top + 6 + offsetY;
-    rcStatus.bottom = rcStatus.top + 18;
-    DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
-              DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-                }
+                        SelectObject(hdc, g_hFontBold);
+                        SetTextColor(hdc, (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+                        RECT rcStatus;
+                        rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
+                        rcStatus.left   = rcRow.left + 80;
+                        rcStatus.top    = rcRow.top + 6 + ROW_TEXT_Y_OFFSET;
+                        rcStatus.bottom = rcStatus.top + 18;
+                        DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
+                                  DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                    }
                     else if (isTransitioning) {
                         SelectObject(hdc, g_hFontNormal);
                         SetTextColor(hdc, GetSecondaryTextColor());
@@ -5160,7 +5124,7 @@ DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3)
         RECT rcClient;
         GetClientRect(hwnd, &rcClient);
         int footerTop = rcClient.bottom - FOOTER_HEIGHT;
-                int centerX = (rcClient.right - textSize.cx) / 2;
+        int centerX = (rcClient.right - textSize.cx) / 2;
         int footerTextYC = footerTop + (FOOTER_HEIGHT - textSize.cy) / 2;
         if (g_Settings.useRoundedCorners) {
             footerTextYC += (FOOTER_HEIGHT * 15) / 100;
@@ -5753,6 +5717,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    // Prime Ethernet/registry state and the Home/Public/Work category once at
+    // startup (bypassing the visibility gate) so the very first time the
+    // flyout is shown it already has fresh data instead of momentarily
+    // falling back to the generic PC icon while everything is uninitialized.
+    // This must happen here (COM-initialized, STA hotkey thread) rather than
+    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
+    // apartment that later uses it.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -6278,21 +6250,24 @@ BOOL Wh_ModInit() {
     DarkContextMenu::Init();
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
-    g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));
+    g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
     InitGdiPlusRendering();
     InitGlobalFonts();
     InitRefreshButtonRect();
     RecalcArrowRect();
     InstallTrayInterceptionInternal();
-    // Prime Ethernet/registry state and the Home/Public/Work category once at
-    // startup (bypassing the visibility gate) so the very first time the
-    // flyout is shown it already has fresh data instead of momentarily
-    // falling back to the generic PC icon while everything is uninitialized.
-    RefreshNetworkData(/*forceDetection=*/TRUE);
+    // Priming of Ethernet/registry state and the Home/Public/Work category is
+    // done on the hotkey thread (right after CoInitializeEx), not here: this
+    // is the Windhawk init thread, which has no COM apartment, so calling
+    // RefreshNetworkData(TRUE) here would silently no-op the NLM half of the
+    // detection (CO_E_NOTINITIALIZED) while still paying the synchronous
+    // GetAdaptersAddresses + registry enumeration cost during explorer
+    // startup, and risks creating g_pNLM in the wrong apartment.
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
-                DeleteCriticalSection(&g_Ctx.csLock);
+        DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
     g_Initialized = TRUE;
@@ -6312,12 +6287,6 @@ void Wh_ModSettingsChanged() {
 
     DarkContextMenu::OnSettingsChanged();
 
-    // Re-prime the category right away on any settings change (bypassing the
-    // visibility gate), so e.g. enabling "useNetworkLocationIcons" shows the
-    // correct Home/Public/Work icon immediately instead of only on the next
-    // visible refresh.
-    RefreshNetworkData(/*forceDetection=*/TRUE);
-
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
                      || (oldTheme          != g_Settings.theme);
 
@@ -6333,7 +6302,12 @@ void Wh_ModSettingsChanged() {
         if (g_dwFlyoutOwnerThreadId) {
             PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
         }
-        PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, 0, 0);
+        // Re-prime the category on any settings change (e.g. enabling
+        // "useNetworkLocationIcons"), marshaled to the flyout thread (which
+        // owns g_pNLM and all the shared network state) via a force flag on
+        // WM_REFRESH_DATA, instead of calling RefreshNetworkData() directly
+        // from this (Windhawk callback) thread.
+        PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, /*forceDetection=*/TRUE, 0);
         InvalidateRect(g_hWndFlyout, NULL, TRUE);
     }
 }
