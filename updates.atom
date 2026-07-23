@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-23T18:13:00.000Z</updated>
+    <updated>2026-07-23T19:25:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 3.4.0]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#1bf38435c2609b83742e4484f3f571466a7826ed</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-07-23T19:25:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added network location icons (Home/Public/Work based on the type of the network) to make it more similar to the original Windows 7 flyout</li>
+<li>Added option to disable network location icons</li>
+<li>Enhanced the interface</li>
+<li>Enhanced the image loading logic</li>
+<li>Fixed the refresh button position</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[VLC Discord Rich Presence 1.2.0]]></title>
         <id>https://windhawk.net/mods/vlc-discord-rpc#166d4f15809125b61e7e9f556c4d3b14ae78a52c</id>
@@ -495,24 +513,6 @@ selection colors are never touched.</li>
         <author>
             <name>usho</name>
             <uri>https://github.com/usho-lear</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Virtual Desktop Switcher 1.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-vd-switcher#64411041fc07359947b0b6a3f85ff5b83361df57</id>
-        <link href="https://windhawk.net/mods/taskbar-vd-switcher"/>
-        <updated>2026-07-18T13:50:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the active-desktop highlight sticking to the startup desktop: every desktop notification now fully rebuilds the button grid (lightweight-styling resources resolve once at template application, so in-place swaps never took effect). This may also resolve the hover/hit-test report in #4784</li>
-<li>Fixed inactive buttons becoming partially unclickable after switching desktops</li>
-<li>Windows accent color support: color settings accept <code>accent</code>, <code>accentLight</code>, <code>accentDark</code>, and <code>transparent</code> in addition to hex; the active desktop now uses the Windows accent color by default (empty = plain native surface)</li>
-<li>Experimental "Show on all taskbars" option: also injects the switcher into secondary monitors' taskbars (tray positions only; requested in a comment on #4785)</li>
-<li>Renamed "Master button" to "Task View button" in settings and readme</li>
-<li>Settings page reordered so color/state options follow a consistent order; expanded readme with screenshot gallery, feature summary, and full settings table</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>

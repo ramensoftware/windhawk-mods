@@ -15005,7 +15005,7 @@
           3
         ],
         "ratingUsers": 8,
-        "updated": 1784583041000,
+        "updated": 1784834750000,
         "users": 263
       },
       "metadata": {
@@ -15021,7 +15021,7 @@
           "control.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "3.2.0"
+        "version": "3.4.0"
       }
     },
     "win7-style-uac-dim": {

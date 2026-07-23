@@ -1,3 +1,12 @@
+## 3.4.0 ([Jul 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1bf38435c2609b83742e4484f3f571466a7826ed/mods/win7-network-flyout-recreation.wh.cpp))
+
+- Added network location icons (Home/Public/Work based on the type of the network) to make it more similar to the original Windows 7 flyout
+- Added option to disable network location icons
+- Enhanced the interface
+- Enhanced the image loading logic
+- Fixed the refresh button position
+- Updated the README
+
 ## 3.2.0 ([Jul 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7c21492694eac9d7edc008a8e8bb42821687d62e/mods/win7-network-flyout-recreation.wh.cpp))
 
 - Added Ethernet support
