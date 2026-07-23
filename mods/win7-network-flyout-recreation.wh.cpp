@@ -4924,8 +4924,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         } else {
             hLargeIcon = g_hIconSignalBars[0];  // No connection - show empty signal bars
         }
-        if (hLargeIcon) DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37), hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-
+if (hLargeIcon) DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37) - 3, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
         if (showWifiList) {
             int totalHeight = GetTotalListHeight();
             int visibleHeight = LIST_Y_END - LIST_Y_START;
