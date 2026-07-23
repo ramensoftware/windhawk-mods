@@ -14121,7 +14121,7 @@
           5
         ],
         "ratingUsers": 8,
-        "updated": 1778575232000,
+        "updated": 1784830380000,
         "users": 630
       },
       "metadata": {
@@ -14139,7 +14139,7 @@
         ],
         "license": "MIT",
         "name": "VLC Discord Rich Presence",
-        "version": "1.1.5"
+        "version": "1.2.0"
       }
     },
     "vmware-audio-fix": {

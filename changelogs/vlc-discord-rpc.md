@@ -1,3 +1,38 @@
+## 1.2.0 ([Jul 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/166d4f15809125b61e7e9f556c4d3b14ae78a52c/mods/vlc-discord-rpc.wh.cpp))
+
+## ✨ Added
+
+- Added a **multi-engine metadata scraper** for more accurate movie and TV information.
+- Added **TVMaze support** for TV shows, providing faster lookups and improving metadata accuracy.
+- Added richer metadata, including:
+  - Official title
+  - Release year
+  - ⭐ Rating
+  - Genres
+  - Runtime
+  - High-quality poster artwork
+- Added a **30-day local metadata cache** to speed up repeat lookups and reduce unnecessary network requests.
+- Reorganized mod settings into clear categories for easier navigation.
+
+## 🚀 Improved
+
+- Improved metadata lookup speed with faster loading times.
+- Improved title matching for files containing scene names, quality tags, release groups, and other unnecessary text.
+- Improved overall metadata accuracy for both movies and TV shows.
+- Improved reliability when fetching metadata and artwork.
+- Automatically removes expired cached metadata to keep the local cache clean and up to date.
+- Improved compatibility with existing settings so previous configurations continue to work after updating.
+- Improved overall stability when enabling, disabling, or reloading the mod.
+
+## 🛠️ Fixed
+
+- Fixed incorrect posters being displayed for movies that are part of a collection (box sets). The correct movie poster is now shown.
+- Fixed metadata matching issues caused by noisy or poorly formatted filenames.
+- Fixed cases where title cleaning could accidentally remove parts of valid movie or TV show names.
+- Fixed duplicate metadata notifications in some situations.
+
+> **Note:** This is the **final release supporting Windhawk v1.x.x**.
+
 ## 1.1.5 ([May 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b2662eeac6b52ea789b3647dd224b0c42a19b05a/mods/vlc-discord-rpc.wh.cpp))
 
 ### New

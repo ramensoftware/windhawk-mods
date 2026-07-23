@@ -2,12 +2,56 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-23T17:59:20.000Z</updated>
+    <updated>2026-07-23T18:13:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[VLC Discord Rich Presence 1.2.0]]></title>
+        <id>https://windhawk.net/mods/vlc-discord-rpc#166d4f15809125b61e7e9f556c4d3b14ae78a52c</id>
+        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
+        <updated>2026-07-23T18:13:00.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="added">✨ Added</h2>
+<ul>
+<li>Added a <strong>multi-engine metadata scraper</strong> for more accurate movie and TV information.</li>
+<li>Added <strong>TVMaze support</strong> for TV shows, providing faster lookups and improving metadata accuracy.</li>
+<li>Added richer metadata, including:</li>
+<li>Official title</li>
+<li>Release year</li>
+<li>⭐ Rating</li>
+<li>Genres</li>
+<li>Runtime</li>
+<li>High-quality poster artwork</li>
+<li>Added a <strong>30-day local metadata cache</strong> to speed up repeat lookups and reduce unnecessary network requests.</li>
+<li>Reorganized mod settings into clear categories for easier navigation.</li>
+</ul>
+<h2 id="improved">🚀 Improved</h2>
+<ul>
+<li>Improved metadata lookup speed with faster loading times.</li>
+<li>Improved title matching for files containing scene names, quality tags, release groups, and other unnecessary text.</li>
+<li>Improved overall metadata accuracy for both movies and TV shows.</li>
+<li>Improved reliability when fetching metadata and artwork.</li>
+<li>Automatically removes expired cached metadata to keep the local cache clean and up to date.</li>
+<li>Improved compatibility with existing settings so previous configurations continue to work after updating.</li>
+<li>Improved overall stability when enabling, disabling, or reloading the mod.</li>
+</ul>
+<h2 id="fixed">🛠️ Fixed</h2>
+<ul>
+<li>Fixed incorrect posters being displayed for movies that are part of a collection (box sets). The correct movie poster is now shown.</li>
+<li>Fixed metadata matching issues caused by noisy or poorly formatted filenames.</li>
+<li>Fixed cases where title cleaning could accidentally remove parts of valid movie or TV show names.</li>
+<li>Fixed duplicate metadata notifications in some situations.</li>
+</ul>
+<blockquote>
+  <p><strong>Note:</strong> This is the <strong>final release supporting Windhawk v1.x.x</strong>.</p>
+</blockquote>]]></content>
+        <author>
+            <name>ciizerr</name>
+            <uri>https://github.com/ciizerr</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-elastic-pill#221665bfde3750e80059e9757f7b85f13be5f18d</id>
@@ -469,20 +513,6 @@ selection colors are never touched.</li>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Copy Queue 1.0]]></title>
-        <id>https://windhawk.net/mods/copy-queue#889a5cd1a64c886634dd4db19e86334a59d7173a</id>
-        <link href="https://windhawk.net/mods/copy-queue"/>
-        <updated>2026-07-18T13:29:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="sequentialexplorercopyqueue">Sequential Explorer Copy Queue</h1>
-<p>Copy queues Windows Explorer copy operations and runs them one after another instead of in parallel. The next copy operation starts automatically when the previous one has finished.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/7Jmifwt.png" alt="Copy dialog" /></p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
         </author>
     </entry>
 </feed>
