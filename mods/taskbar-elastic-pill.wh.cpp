@@ -35,7 +35,7 @@ Stretch animation by [Dan](https://github.com/crazyboyybs)
   - Margins: "0, 5"
     $name: Pill Margins (Horizontal, Bottom)
     $description: Left margin (Right is mirrored) and Bottom margin.
-  - PillRadius: '1.5'
+  - PillRadius: '2'
     $name: Pill corner radius
     $description: The corner radius for the pill (e.g., 1.5).
   - HideInactiveDots: false
