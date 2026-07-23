@@ -7,7 +7,7 @@
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lcomctl32 -lversion
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -302,7 +302,7 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
 #include <climits>
 #include <cwctype>
 #include <functional>
-#include <list>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -310,7 +310,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windhawk_utils.h>
-#include <winver.h>
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
@@ -581,7 +580,7 @@ struct ModSettings {
     int groupOffsetX = 0;
     int groupOffsetY = 0;
 };
-static ModSettings g_settings;
+static ModSettings g_settings;  // exit-time-safe: heap-only
 
 static std::wstring Trim(std::wstring s) {
     auto isWs = [](wchar_t c) { return std::iswspace(c) != 0; };
@@ -743,25 +742,24 @@ struct ButtonEventState {
     Button button{nullptr};
     winrt::event_token clickToken{};
 };
-[[clang::no_destroy]] static std::vector<ButtonEventState> g_buttonEventStates;
+[[clang::no_destroy]] static std::optional<std::vector<ButtonEventState>>
+    g_buttonEventStates{std::in_place};
 
 static HANDLE g_retryThread = nullptr;
 static HANDLE g_retryStopEvent = nullptr;
-static std::atomic<bool> g_systemTrayModuleHooked{false};
-[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
-    g_loadedRevokers;
+static SRWLOCK g_retryLock = SRWLOCK_INIT;
 
 // Lazy Shell menu loading state (per-ShowFolderMenu call, single-threaded UI).
 static UINT g_menuNextId = 1000;
-static std::vector<PIDLIST_ABSOLUTE> g_menuIdToPidl;
-static std::vector<HBITMAP> g_menuBitmaps;
+static std::vector<PIDLIST_ABSOLUTE> g_menuIdToPidl;  // exit-time-safe: heap-only
+static std::vector<HBITMAP> g_menuBitmaps;  // exit-time-safe: heap-only
 
 struct PendingSubmenu {
     HMENU hmenu;
     PIDLIST_ABSOLUTE pidl;
     int depth;
 };
-static std::vector<PendingSubmenu> g_pendingSubmenus;
+static std::vector<PendingSubmenu> g_pendingSubmenus;  // exit-time-safe: heap-only
 
 // Non-owning pointers valid only while a nested Shell context menu is being
 // tracked. MenuOwnerSubclassProc forwards owner-draw and submenu messages to
@@ -1945,7 +1943,7 @@ static Grid BuildFolderButtonGrid(double trayHeight) {
                        reset ? 1 : 0);
             }
         });
-        g_buttonEventStates.push_back({btn, clickToken});
+        g_buttonEventStates->push_back({btn, clickToken});
 
         auto cell = grid::GetCell(i, count, layout, config);
         Grid::SetRow(btn, cell.row);
@@ -2053,7 +2051,7 @@ static int RepairButtonGridColumnCollision(Grid gridParent, Grid buttonGrid) {
 // release them while the DLL is still loaded. XAML tears down removed subtrees
 // on a later UI tick, which can land after the mod has been unloaded.
 static void ClearButtonEventState() {
-    for (auto& state : g_buttonEventStates) {
+    for (auto& state : *g_buttonEventStates) {
         if (!state.button) continue;
         try { state.button.Click(state.clickToken); } catch (...) {}
         try {
@@ -2062,7 +2060,7 @@ static void ClearButtonEventState() {
         } catch (...) {}
         try { state.button.Content(nullptr); } catch (...) {}
     }
-    g_buttonEventStates.clear();
+    g_buttonEventStates->clear();
 }
 
 static void RemoveButtonGrid() {
@@ -2255,96 +2253,6 @@ static void ApplyAllSettingsOnWindowThread() {
 // Hooks
 // ============================================================
 
-static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
-    void* info = nullptr;
-    UINT length = 0;
-    HRSRC resource =
-        FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
-    if (resource) {
-        HGLOBAL loaded = LoadResource(module, resource);
-        if (loaded) {
-            void* data = LockResource(loaded);
-            if (data &&
-                (!VerQueryValueW(data, L"\\", &info, &length) || !length)) {
-                info = nullptr;
-            }
-        }
-    }
-    return static_cast<VS_FIXEDFILEINFO*>(info);
-}
-
-static HMODULE GetSystemTrayModuleHandle() {
-    HMODULE module = GetModuleHandleW(L"SystemTray.dll");
-    if (!module) {
-        module = GetModuleHandleW(L"Taskbar.View.dll");
-        if (module) {
-            auto version = GetModuleVersionInfo(module);
-            WORD major = version ? HIWORD(version->dwFileVersionMS) : 0;
-            if (!major || major >= 2604)
-                module = nullptr;
-        }
-    }
-    if (!module)
-        module = GetModuleHandleW(L"ExplorerExtensions.dll");
-    return module;
-}
-
-using IconView_IconView_t = void* (WINAPI*)(void* pThis);
-static IconView_IconView_t IconView_IconView_Original;
-
-static void* WINAPI IconView_IconView_Hook(void* pThis) {
-    void* result = IconView_IconView_Original(pThis);
-    if (g_unloading)
-        return result;
-
-    FrameworkElement iconView = nullptr;
-    reinterpret_cast<IUnknown**>(pThis)[1]->QueryInterface(
-        winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
-    if (!iconView)
-        return result;
-
-    g_loadedRevokers.emplace_back();
-    auto revoker = std::prev(g_loadedRevokers.end());
-    *revoker = iconView.Loaded(
-        winrt::auto_revoke_t{},
-        [revoker](auto const&, auto const&) {
-            g_loadedRevokers.erase(revoker);
-            if (!g_unloading)
-                ApplyAllSettings();
-        });
-    return result;
-}
-
-static bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
-        {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
-        &IconView_IconView_Original,
-        IconView_IconView_Hook,
-    }};
-    return WindhawkUtils::HookSymbols(
-        module, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks));
-}
-
-using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
-static LoadLibraryExW_t LoadLibraryExW_Original;
-
-static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file,
-                                          DWORD flags) {
-    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
-    if (module && fileName && !g_systemTrayModuleHooked &&
-        GetSystemTrayModuleHandle() == module &&
-        !g_systemTrayModuleHooked.exchange(true)) {
-        Wh_Log(L"[Hooks] System tray module loaded: %s", fileName);
-        if (HookSystemTraySymbols(module)) {
-            Wh_ApplyHookOperations();
-        } else {
-            g_systemTrayModuleHooked = false;
-            Wh_Log(L"[Hooks] System tray symbol hooks failed");
-        }
-    }
-    return module;
-}
-
 using TrayUI_StartTaskbar_t = void (WINAPI*)(void* pThis);
 TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
 
@@ -2373,34 +2281,41 @@ static bool HookTaskbarDllSymbols() {
 }
 
 static void StopRetryThread() {
-    if (g_retryStopEvent)
-        SetEvent(g_retryStopEvent);
+    AcquireSRWLockExclusive(&g_retryLock);
+    HANDLE retryThread = g_retryThread;
+    HANDLE retryStopEvent = g_retryStopEvent;
+    g_retryThread = nullptr;
+    g_retryStopEvent = nullptr;
+    if (retryStopEvent)
+        SetEvent(retryStopEvent);
+    ReleaseSRWLockExclusive(&g_retryLock);
 
-    if (g_retryThread) {
+    if (retryThread) {
         DWORD result;
         do {
             result = MsgWaitForMultipleObjects(
-                1, &g_retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
+                1, &retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
             if (result == WAIT_OBJECT_0 + 1) {
                 MSG msg;
                 PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
             }
         } while (result == WAIT_OBJECT_0 + 1);
 
-        CloseHandle(g_retryThread);
-        g_retryThread = nullptr;
+        CloseHandle(retryThread);
     }
 
-    if (g_retryStopEvent) {
-        CloseHandle(g_retryStopEvent);
-        g_retryStopEvent = nullptr;
+    if (retryStopEvent) {
+        CloseHandle(retryStopEvent);
     }
 }
 
 static void StartRetryThread() {
     StopRetryThread();
-    if (g_unloading)
+    AcquireSRWLockExclusive(&g_retryLock);
+    if (g_unloading || g_retryThread || g_retryStopEvent) {
+        ReleaseSRWLockExclusive(&g_retryLock);
         return;
+    }
 
     // A non-null cached Grid isn't proof that it still belongs to the current
     // tray. StartTaskbar can recreate/reindex the XAML tree after resume.
@@ -2408,8 +2323,10 @@ static void StartRetryThread() {
     g_injectionLive.store(false);
 
     g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_retryStopEvent)
+    if (!g_retryStopEvent) {
+        ReleaseSRWLockExclusive(&g_retryLock);
         return;
+    }
 
     HANDLE stopEvent = g_retryStopEvent;
     g_retryThread = CreateThread(nullptr, 0, [](void* param) -> DWORD {
@@ -2435,6 +2352,7 @@ static void StartRetryThread() {
         CloseHandle(g_retryStopEvent);
         g_retryStopEvent = nullptr;
     }
+    ReleaseSRWLockExclusive(&g_retryLock);
 }
 
 // ============================================================
@@ -2450,44 +2368,13 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
-        if (HookSystemTraySymbols(systemTray)) {
-            g_systemTrayModuleHooked = true;
-        } else {
-            Wh_Log(L"[Init] system tray symbol hooks failed");
-        }
-    } else {
-        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-        auto loadLibraryExW = kernelbase
-            ? reinterpret_cast<LoadLibraryExW_t>(
-                  GetProcAddress(kernelbase, "LoadLibraryExW"))
-            : nullptr;
-        if (loadLibraryExW) {
-            WindhawkUtils::SetFunctionHook(
-                loadLibraryExW, LoadLibraryExW_Hook,
-                &LoadLibraryExW_Original);
-        } else {
-            Wh_Log(L"[Init] LoadLibraryExW hook unavailable; using retry fallback");
-        }
-    }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_systemTrayModuleHooked) {
-        if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
-            if (!g_systemTrayModuleHooked.exchange(true)) {
-                if (HookSystemTraySymbols(systemTray)) {
-                    Wh_ApplyHookOperations();
-                } else {
-                    g_systemTrayModuleHooked = false;
-                    Wh_Log(L"[AfterInit] system tray symbol hooks failed");
-                }
-            }
-        }
-    }
-    StartRetryThread();
+    // One attempt covers loading the mod into an already-running taskbar.
+    // Taskbar startup and rebuilds use the bounded StartTaskbar retry path.
+    ApplyAllSettingsOnWindowThread();
 }
 
 void Wh_ModUninit() {
@@ -2497,14 +2384,15 @@ void Wh_ModUninit() {
     StopRetryThread();
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (hWnd)
+    if (hWnd) {
         RunFromWindowThread(hWnd, [](void*) {
-            g_loadedRevokers.clear();
             RemoveButtonGrid();
+            g_buttonEventStates.reset();
         }, nullptr);
-    else {
-        g_loadedRevokers.clear();
-        RemoveButtonGrid();
+    } else {
+        // No known taskbar UI thread: retain no_destroy XAML state rather than
+        // releasing it from Windhawk's callback thread after framework teardown.
+        Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
     }
 }
 
@@ -2515,7 +2403,6 @@ void Wh_ModSettingsChanged() {
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
-        StartRetryThread();
         return;
     }
     g_taskbarWnd = hWnd;
@@ -2524,6 +2411,4 @@ void Wh_ModSettingsChanged() {
         RemoveButtonGrid();
         ApplyAllSettings();
     }, nullptr);
-    if (!g_injectionLive)
-        StartRetryThread();
 }
