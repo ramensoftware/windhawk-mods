@@ -141,7 +141,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(enum TrayCommon::MultiMonTaskbarMode __cdecl TrayCommon::GetMultiMonTaskbarMode(void))"},
             &GetMultiMonTaskbarMode_Original,
@@ -159,8 +159,8 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(taskbarModule, hooks,
-                                    ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(taskbarModule, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Failed to hook taskbar symbols");
         return FALSE;
     }
