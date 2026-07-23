@@ -141,6 +141,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(enum TrayCommon::MultiMonTaskbarMode __cdecl TrayCommon::GetMultiMonTaskbarMode(void))"},
