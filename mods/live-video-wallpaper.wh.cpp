@@ -1732,6 +1732,8 @@ int g_sourceRetryAttempts = 0;
 bool g_wallpaperHidden = false;
 bool g_isOnBattery = false;
 
+bool ResolveVideoSource(std::wstring &outPath);
+
 // ---------------------------------------------------------------------------
 // Media Foundation notify callback
 // ---------------------------------------------------------------------------
