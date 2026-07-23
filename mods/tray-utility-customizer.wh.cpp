@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              tray-utility-customizer
 // @name            Tray Utility Customizer
-// @description     Granular per-icon control over the Windows tray utility icons — Show hidden icons, Emoji, touch keyboard, pen menu, and virtual touchpad — arranged by one nestable layout expression.
+// @description     Granular per-icon control over the Windows tray utility icons — Show hidden icons, Emoji, touch keyboard, pen menu, virtual touchpad, and input/language indicator — arranged by one nestable layout expression.
 // @version         1.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -104,12 +104,11 @@ taskbar re-centers. Primary taskbar only.
 
 ## Detection
 
-Emoji and touch keyboard are identified by stable Segoe Fluent glyphs, with
-accessibility metadata as a fallback. Pen menu, virtual touchpad, and input
-indicator currently rely on English accessibility text and might not be
-detected on Windows installations using another display language. **Force
+Icons are identified by Windows' language-neutral runtime data-model classes,
+XAML names and content types, Automation IDs, and stable Segoe Fluent glyphs.
+Detection doesn't depend on translated accessibility labels. **Force
 MainStack** allows the complete native `MainStack` to participate as the
-`emoji` item when Windows doesn't expose useful metadata.
+`emoji` item when Windows doesn't expose a distinct identity.
 
 ## Known limitations
 
@@ -250,7 +249,7 @@ MainStack** allows the complete native `MainStack` to participate as the
 #include <cwctype>
 #include <exception>
 #include <functional>
-#include <initializer_list>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -275,7 +274,7 @@ using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
 // ── Nested group layout ───────────────────────────────────────────────────
-// Template block: _templates/nested-group-layout.h v1.0 (verbatim copy —
+// Template block: _templates/nested-group-layout.h v1.1 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 
 namespace windhawk_mod_templates::nested_group_layout {
@@ -315,9 +314,10 @@ public:
 
     bool Run(Node& root) {
         position_ = 0;
+        valid_ = true;
         root = ParseExpr(axis_);
         SkipSpace();
-        return position_ >= text_.size();
+        return valid_ && position_ >= text_.size();
     }
 
 private:
@@ -350,8 +350,11 @@ private:
             ++position_;
             Node inner = ParseExpr(axis);
             SkipSpace();
-            if (position_ < text_.size() && text_[position_] == L')')
+            if (position_ < text_.size() && text_[position_] == L')') {
                 ++position_;
+            } else {
+                valid_ = false;
+            }
             return inner;
         }
         Node leaf;
@@ -362,6 +365,8 @@ private:
                !iswspace(text_[position_]))
             ++position_;
         leaf.token = text_.substr(start, position_ - start);
+        if (leaf.token.empty())
+            valid_ = false;
         return leaf;
     }
 
@@ -378,6 +383,7 @@ private:
     std::wstring const& text_;
     Axis axis_;
     size_t position_ = 0;
+    bool valid_ = true;
 };
 
 inline bool Parse(std::wstring const& text, Axis primaryAxis, Node& root) {
@@ -1027,16 +1033,16 @@ struct Settings {
     bool detailedLogging;
 };
 
-// Namespace-scope XAML/WinRT owners use intentional no_destroy lifetime
-// (lifecycle v1.2 process-shutdown contract): Explorer shutdown does not
-// guarantee Wh_ModUninit, and CRT global destruction must never release
-// XAML state after the framework has torn down. Controlled unload still
-// releases everything synchronously on the taskbar UI thread.
-[[clang::no_destroy]] static Settings g_settings{};
+// Lifecycle v1.3: heap-only state destructs normally; direct XAML handles use
+// no_destroy; XAML-owning containers use no_destroy optional<container> and
+// reset their backing storage after controlled UI-thread cleanup.
+static Settings g_settings{};  // exit-time-safe: heap-only
 static std::atomic<bool> g_unloading = false;
 static HWND g_taskbarWnd = nullptr;
 static HANDLE g_retryStopEvent = nullptr;
 static HANDLE g_retryThread = nullptr;
+static SRWLOCK g_retryLock = SRWLOCK_INIT;
+static std::atomic<bool> g_retryForceApply = false;
 
 // Property snapshot for every element the mod touches (tray hosts and the
 // individual IconViews inside them). Hosts additionally get a zero-size
@@ -1074,20 +1080,23 @@ struct LayoutItem {
     int offsetY = 0;
 };
 
-[[clang::no_destroy]] static std::vector<ElementSnapshot> g_hostSnapshots;
-[[clang::no_destroy]] static std::vector<ElementSnapshot> g_iconSnapshots;
-static bool g_layoutApplied = false;
+[[clang::no_destroy]] static std::optional<std::vector<ElementSnapshot>>
+    g_hostSnapshots{std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<ElementSnapshot>>
+    g_iconSnapshots{std::in_place};
+static std::atomic<bool> g_layoutApplied = false;
 [[clang::no_destroy]] static Grid g_layoutGrid{nullptr};
 [[clang::no_destroy]] static Grid g_group{nullptr};
-[[clang::no_destroy]] static lease_column::Lease g_columnLease;
+static lease_column::Lease g_columnLease;  // exit-time-safe: heap-only
 [[clang::no_destroy]] static start_placement::Lease g_startLease;
 
 static constexpr PCWSTR kLayoutColumnMarkerName =
     L"TrayUtilityCustomizerColumnMarker";
 static constexpr PCWSTR kGroupName = L"TrayUtilityCustomizerGroup";
 
-// Stable Segoe Fluent glyphs captured live on build 26200; metadata terms
-// remain as language-neutral-ish fallbacks.
+// Stable Segoe Fluent glyphs captured live on build 26200. Runtime class,
+// XAML name, and AutomationId matching below use Windows' language-neutral
+// identities; no localized accessibility text participates in detection.
 static constexpr wchar_t kGlyphEmoji = 0xF353;
 static constexpr wchar_t kGlyphTouchKeyboard = 0xE765;
 
@@ -1102,7 +1111,8 @@ struct HostWatcher {
     FrameworkElement element{nullptr};
     int64_t token = 0;
 };
-[[clang::no_destroy]] static std::vector<HostWatcher> g_hostWatchers;
+[[clang::no_destroy]] static std::optional<std::vector<HostWatcher>>
+    g_hostWatchers{std::in_place};
 static winrt::event_token g_trayLayoutToken{};
 [[clang::no_destroy]] static DispatcherTimer g_reapplyTimer{nullptr};
 [[clang::no_destroy]] static DispatcherTimer g_startSettleTimer{nullptr};
@@ -1141,21 +1151,21 @@ static void ScheduleReapply() {
 }
 
 static void ClearHostWatchers() {
-    for (auto& watcher : g_hostWatchers) {
+    for (auto& watcher : *g_hostWatchers) {
         try {
             watcher.element.UnregisterPropertyChangedCallback(
                 UIElement::VisibilityProperty(), watcher.token);
         } catch (...) {
         }
     }
-    g_hostWatchers.clear();
+    g_hostWatchers->clear();
 }
 
 static void WatchHostVisibility(FrameworkElement const& element) {
     if (!element) {
         return;
     }
-    for (auto const& watcher : g_hostWatchers) {
+    for (auto const& watcher : *g_hostWatchers) {
         if (watcher.element == element) {
             return;
         }
@@ -1169,7 +1179,7 @@ static void WatchHostVisibility(FrameworkElement const& element) {
                     ScheduleReapply();
                 }
             });
-        g_hostWatchers.push_back({element, token});
+        g_hostWatchers->push_back({element, token});
     } catch (...) {
     }
 }
@@ -1180,10 +1190,8 @@ static int ClampSetting(int value, int low, int high) {
 
 static std::wstring GetStringSetting(PCWSTR key) {
     PCWSTR value = Wh_GetStringSetting(key);
-    std::wstring result = value ? value : L"";
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
+    std::wstring result = value;
+    Wh_FreeStringSetting(value);
     return result;
 }
 
@@ -1475,30 +1483,35 @@ static std::wstring ToLower(std::wstring value) {
     return value;
 }
 
-static std::wstring GetElementMetadata(FrameworkElement const& element) {
+static bool ElementMatchesStableIdentity(
+    FrameworkElement const& element,
+    PCWSTR identity) {
     try {
-        return ToLower(
-            std::wstring(element.Name()) + L" " +
-            std::wstring(AutomationProperties::GetAutomationId(element)) +
-            L" " +
-            std::wstring(AutomationProperties::GetName(element)) +
-            L" " +
-            std::wstring(AutomationProperties::GetHelpText(element)));
+        if (element.Name() == identity ||
+            AutomationProperties::GetAutomationId(element) == identity ||
+            winrt::get_class_name(element) == identity) {
+            return true;
+        }
+
+        auto dataContext = element.DataContext();
+        return dataContext && winrt::get_class_name(dataContext) == identity;
     } catch (...) {
-        return L"";
+        return false;
     }
 }
 
-static bool MetadataContainsAny(
+static bool TreeContainsStableIdentity(
     FrameworkElement const& element,
-    std::initializer_list<PCWSTR> terms) {
-    auto metadata = GetElementMetadata(element);
-    for (auto term : terms) {
-        if (metadata.find(term) != std::wstring::npos) {
-            return true;
-        }
+    PCWSTR identity) {
+    if (ElementMatchesStableIdentity(element, identity)) {
+        return true;
     }
-    return false;
+
+    return tree_walk::ForEachDescendant(
+        element, 12,
+        [identity](FrameworkElement const& child, int) {
+            return ElementMatchesStableIdentity(child, identity);
+        });
 }
 
 static FrameworkElement FindDirectTrayHost(
@@ -1607,22 +1620,49 @@ static bool IconViewMatchesToken(FrameworkElement const& iconView,
     wchar_t glyph = FirstGlyphChar(iconView);
     if (token == L"emoji") {
         return glyph == kGlyphEmoji ||
-               MetadataContainsAny(iconView, {L"emoji", L"kaomoji"});
+               TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.EmojiAndMoreSystemTrayIconDataModel");
     }
     if (token == L"touchKeyboard") {
         return glyph == kGlyphTouchKeyboard ||
-               MetadataContainsAny(iconView, {L"touch keyboard"});
+               TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.TouchKeyboardSystemTrayIconDataModel") ||
+               TreeContainsStableIdentity(iconView,
+                                          L"TouchKeyboardModeButton");
     }
     if (token == L"penMenu") {
-        return MetadataContainsAny(iconView, {L"pen menu"});
+        return TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.InkWorkspaceSystemTrayIconDataModel") ||
+               TreeContainsStableIdentity(iconView,
+                                          L"SystemTray.InkWorkspaceButton") ||
+               TreeContainsStableIdentity(iconView,
+                                          L"PenWorkspaceButton");
     }
     if (token == L"virtualTouchpad") {
-        return MetadataContainsAny(iconView, {L"virtual touchpad"});
+        return TreeContainsStableIdentity(
+            iconView,
+            L"SystemTray.VirtualTouchpadSystemTrayIconDataModel");
     }
     if (token == L"inputIndicator") {
-        return MetadataContainsAny(
-            iconView,
-            {L"input indicator", L"language bar", L"input language"});
+        return TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.LanguageSystemTrayIconDataModel") ||
+               TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.ImeSystemTrayIconDataModel") ||
+               TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.LanguageTextIconContent") ||
+               TreeContainsStableIdentity(
+                   iconView,
+                   L"SystemTray.LanguageImageIconContent") ||
+               TreeContainsStableIdentity(iconView,
+                                          L"SystemTray.IMEButton") ||
+               TreeContainsStableIdentity(iconView,
+                                          L"SystemTray.InputIndicatorButton");
     }
     return false;
 }
@@ -1959,10 +1999,10 @@ static void RestoreLayout() {
     }
 
     // Icon properties first (icons live inside the hosts).
-    for (auto& snapshot : g_iconSnapshots) {
+    for (auto& snapshot : *g_iconSnapshots) {
         RestoreElement(snapshot);
     }
-    g_iconSnapshots.clear();
+    g_iconSnapshots->clear();
 
     // Send the native hosts home, then take the owned group down.
     try {
@@ -2000,10 +2040,10 @@ static void RestoreLayout() {
             g_columnLease = {};
         }
     }
-    for (auto& snapshot : g_hostSnapshots) {
+    for (auto& snapshot : *g_hostSnapshots) {
         RestoreElement(snapshot);
     }
-    g_hostSnapshots.clear();
+    g_hostSnapshots->clear();
     g_layoutGrid = nullptr;
     g_layoutApplied = false;
     Wh_Log(L"[Restore] Native utility layout restored");
@@ -2042,9 +2082,25 @@ static bool ApplyLayout() {
     // After an in-place taskbar rebuild (TrayUI::StartTaskbar) the old XAML
     // tree is gone; drop stale references instead of restoring into it.
     if (!g_layoutApplied &&
-        (!g_hostSnapshots.empty() || !g_iconSnapshots.empty())) {
-        g_hostSnapshots.clear();
-        g_iconSnapshots.clear();
+        (!g_hostSnapshots->empty() || !g_iconSnapshots->empty())) {
+        // We still own strong references to the old tree here, so revoke its
+        // callbacks before releasing those references. Don't attempt full
+        // placement restoration into a detached taskbar tree.
+        if (g_trayLayoutToken && g_layoutGrid) {
+            try {
+                g_layoutGrid.LayoutUpdated(g_trayLayoutToken);
+            } catch (...) {
+            }
+        }
+        if (g_startLease.layoutToken && g_startLease.rootGrid) {
+            try {
+                g_startLease.rootGrid.LayoutUpdated(
+                    g_startLease.layoutToken);
+            } catch (...) {
+            }
+        }
+        g_hostSnapshots->clear();
+        g_iconSnapshots->clear();
         g_columnLease = {};
         g_startLease = {};
         g_group = nullptr;
@@ -2223,8 +2279,15 @@ static bool ApplyLayout() {
     bool horizontal = config.primaryAxis == ngl::Axis::Horizontal;
     double extraCursor = horizontal ? total.width : total.height;
     for (auto const& host : managedHosts) {
-        if (host == overflowHost) {
-            continue;  // host-leaf; carries no separate icons
+        bool leafHost = false;
+        for (auto const& item : items) {
+            if (item.hostLeaf && item.host == host) {
+                leafHost = true;
+                break;
+            }
+        }
+        if (leafHost) {
+            continue;  // whole-host item; carries no separate targets
         }
         std::vector<FrameworkElement> icons;
         CollectVisibleIconViews(host, icons);
@@ -2260,7 +2323,7 @@ static bool ApplyLayout() {
     g_layoutGrid = trayGrid;
     g_layoutApplied = true;
     for (int i = 0; i < static_cast<int>(managedHosts.size()); i++) {
-        g_hostSnapshots.push_back(
+        g_hostSnapshots->push_back(
             CaptureHost(managedHosts[i], trayGrid, i));
     }
 
@@ -2426,7 +2489,7 @@ static bool ApplyLayout() {
             if (!target) {
                 continue;
             }
-            g_iconSnapshots.push_back(CaptureElementState(icon));
+            g_iconSnapshots->push_back(CaptureElementState(icon));
             icon.Width(target->width);
             icon.Height(target->height);
             icon.MinWidth(0);
@@ -2457,7 +2520,7 @@ static bool ApplyLayout() {
                 return;
             }
             lastCheckTick = nowTick;
-            for (auto const& snapshot : g_hostSnapshots) {
+            for (auto const& snapshot : *g_hostSnapshots) {
                 if (!snapshot.element) {
                     continue;
                 }
@@ -2549,11 +2612,11 @@ static void ApplyLayoutOnWindowThread() {
 
 // ── Hooks and lifecycle ───────────────────────────────────────────────────
 
-static void StartRetryThread();
+static void StartRetryThread(bool forceApply = false);
 
 // Explorer can rebuild the taskbar in place (TrayUI::StartTaskbar); the old
 // XAML tree and our snapshots are gone, so restart the bounded retry
-// (lifecycle v1.2 contract).
+// (lifecycle v1.3 contract).
 using TrayUI_StartTaskbar_t = void (WINAPI*)(void*);
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
 
@@ -2591,35 +2654,47 @@ static bool HookTaskbarDllSymbols() {
 }
 
 static void StopRetryThread() {
-    if (g_retryStopEvent) {
-        SetEvent(g_retryStopEvent);
+    AcquireSRWLockExclusive(&g_retryLock);
+    HANDLE retryThread = g_retryThread;
+    HANDLE retryStopEvent = g_retryStopEvent;
+    g_retryThread = nullptr;
+    g_retryStopEvent = nullptr;
+    if (retryStopEvent) {
+        SetEvent(retryStopEvent);
     }
-    if (g_retryThread) {
+    ReleaseSRWLockExclusive(&g_retryLock);
+
+    if (retryThread) {
         DWORD result;
         do {
             result = MsgWaitForMultipleObjects(
-                1, &g_retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
+                1, &retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
             if (result == WAIT_OBJECT_0 + 1) {
                 MSG message;
                 PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
             }
         } while (result == WAIT_OBJECT_0 + 1);
-        CloseHandle(g_retryThread);
-        g_retryThread = nullptr;
+        CloseHandle(retryThread);
     }
-    if (g_retryStopEvent) {
-        CloseHandle(g_retryStopEvent);
-        g_retryStopEvent = nullptr;
+    if (retryStopEvent) {
+        CloseHandle(retryStopEvent);
     }
 }
 
-static void StartRetryThread() {
+static void StartRetryThread(bool forceApply) {
     StopRetryThread();
-    if (g_unloading) {
+    AcquireSRWLockExclusive(&g_retryLock);
+    if (g_unloading || g_retryThread || g_retryStopEvent) {
+        if (forceApply) {
+            g_retryForceApply = true;
+        }
+        ReleaseSRWLockExclusive(&g_retryLock);
         return;
     }
+    g_retryForceApply = forceApply;
     g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_retryStopEvent) {
+        ReleaseSRWLockExclusive(&g_retryLock);
         return;
     }
     HANDLE stopEvent = g_retryStopEvent;
@@ -2631,7 +2706,8 @@ static void StartRetryThread() {
             for (int attempt = 0;
                  attempt < 6 && !g_unloading;
                  attempt++) {
-                if (g_layoutApplied) {
+                bool forceApply = g_retryForceApply.exchange(false);
+                if (g_layoutApplied && !forceApply) {
                     break;
                 }
                 if (attempt &&
@@ -2653,6 +2729,7 @@ static void StartRetryThread() {
         CloseHandle(g_retryStopEvent);
         g_retryStopEvent = nullptr;
     }
+    ReleaseSRWLockExclusive(&g_retryLock);
 }
 
 BOOL Wh_ModInit() {
@@ -2668,14 +2745,18 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    StartRetryThread();
+    // One attempt covers loading into an already-running taskbar. Startup and
+    // rebuilds use the bounded TrayUI::StartTaskbar retry path.
+    ApplyLayoutOnWindowThread();
 }
 
 void Wh_ModSettingsChanged() {
     StopRetryThread();
     LoadSettings();
     Wh_Log(L"[Settings] Reapplying");
-    ApplyLayoutOnWindowThread();
+    // Settings can land during a transient taskbar rebuild. The retry path is
+    // now handle-race-safe, so use it instead of silently losing the reapply.
+    StartRetryThread(true);
 }
 
 void Wh_ModUninit() {
@@ -2705,12 +2786,15 @@ void Wh_ModUninit() {
                     g_startSettleTimer = nullptr;
                 }
                 RestoreLayout();
+                g_hostWatchers.reset();
+                g_iconSnapshots.reset();
+                g_hostSnapshots.reset();
             },
             nullptr);
     } else {
         // Intentionally retain all no_destroy XAML/WinRT holders. There is
         // no known UI thread on which releasing them would be safe
-        // (lifecycle v1.2 process-shutdown contract).
+        // (lifecycle v1.3 process-shutdown contract).
         Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
     }
 }
