@@ -3117,6 +3117,7 @@ void CheckBatteryState() {
 
 bool IsDesktopFullyCovered(bool forceCheck);
 void PickAndLoadVideoViaDialogAsync(HWND ownerWnd);
+bool ResolveVideoSource(std::wstring &outPath);
 void ReloadWallpaperSource();
 
 HWINEVENTHOOK g_hWinEventHook = nullptr;
