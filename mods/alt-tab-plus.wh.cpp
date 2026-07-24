@@ -3110,8 +3110,8 @@ bool HookAltTabShow() {
         Wh_Log(L"Couldn't load twinui.pcshell.dll: %u", GetLastError());
         return false;
     }
-
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+// twinui.pcshell.dll
+WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &XamlAltTabViewHost_Show_Original,
