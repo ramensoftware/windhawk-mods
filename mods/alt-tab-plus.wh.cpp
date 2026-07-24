@@ -3128,9 +3128,8 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(
-            twinui, twinuiPcshellDllHooks,
-            ARRAYSIZE(twinuiPcshellDllHooks))) {
+if (!WindhawkUtils::HookSymbols(twinui, hooks,
+                                ARRAYSIZE(hooks))) {
         Wh_Log(L"Couldn't hook XamlAltTabViewHost::Show");
         return false;
     }
