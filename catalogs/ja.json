@@ -356,12 +356,12 @@
           4
         ],
         "ratingUsers": 4,
-        "updated": 1783968636000,
+        "updated": 1784917415000,
         "users": 150
       },
       "metadata": {
         "author": "AhmedAwad7",
-        "compilerOptions": "-luser32 -lwinmm",
+        "compilerOptions": "-luser32 -lwinmm -lgdi32",
         "description": "Pin/unpin active window with Ctrl+Alt+T",
         "github": "https://github.com/AhmedAwad7",
         "include": [
@@ -369,7 +369,7 @@
         ],
         "license": "MIT",
         "name": "Always On Top Windows",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "amd-radeon-software-window-fix": {
