@@ -4,7 +4,7 @@
 // @description     Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones
 // @version         1.0.0
 // @author          DanRotaru
-// @github          https://github.com/danrotaru
+// @github          https://github.com/DanRotaru
 // @homepage        https://dan13.me/
 // @include         explorer.exe
 // @architecture    x86-64
