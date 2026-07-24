@@ -4,7 +4,7 @@
 // @description     Adds common programs and recently modified files to the Windows 11 Alt+Tab overlay
 // @version         0.3.1
 // @author          BlueFinch
-// @github 			BlueFinch3000
+// @github          https://github.com/BlueFinch3000
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lversion -ldwmapi -lgdi32
@@ -3111,7 +3111,7 @@ bool HookAltTabShow() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &XamlAltTabViewHost_Show_Original,
@@ -3128,7 +3128,9 @@ bool HookAltTabShow() {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(
+            twinui, twinuiPcshellDllHooks,
+            ARRAYSIZE(twinuiPcshellDllHooks))) {
         Wh_Log(L"Couldn't hook XamlAltTabViewHost::Show");
         return false;
     }
