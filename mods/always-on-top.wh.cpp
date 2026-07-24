@@ -299,7 +299,7 @@ void ShowNotification(PCWSTR text, bool isPinned) {
 }
 
 // ===== تبديل التثبيت =====
-// ===== Switch installation =====
+// ===== Switch pin =====
 void ToggleTopMost() {
     HWND hWnd = GetForegroundWindow();
     if (!hWnd) return;
