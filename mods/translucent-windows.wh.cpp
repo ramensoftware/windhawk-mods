@@ -180,6 +180,22 @@ This is caused by default by the AccentBlur API.❕
 #define RECTWIDTH(lprc)     ((lprc)->right - (lprc)->left)
 #define RECTHEIGHT(lprc)    ((lprc)->bottom - (lprc)->top)
 
+#ifdef _WIN64
+#define THISCALL  __cdecl
+#define _THISCALL L"__cdecl"
+#else
+#define THISCALL  __thiscall
+#define _THISCALL L"__thiscall"
+#endif
+
+#ifdef _WIN64
+#define STDCALL  __cdecl
+#define _STDCALL L"__cdecl"
+#else
+#define STDCALL  __stdcall
+#define _STDCALL L"__stdcall"
+#endif
+
 static constexpr UINT ENABLE = 1;
 static constexpr UINT AUTO = 0; // DWMSBT_AUTO
 //static constexpr UINT NONE = 1; // DWMSBT_NONE
@@ -5169,14 +5185,6 @@ HRESULT WINAPI HookedGetThemeTransitionDuration(HTHEME hTheme, INT iPartId, INT 
     return hr;
 }
 
-#ifdef _WIN64
-#define STDCALL  __cdecl
-#define SSTDCALL L"__cdecl"
-#else
-#define STDCALL  __stdcall
-#define SSTDCALL L"__stdcall"
-#endif
-
 LRESULT (STDCALL *CThemeMenu_MenuKeyboardMsgProc_orig)(INT, WPARAM, LPARAM);
 LRESULT STDCALL HookedCThemeMenu_MenuKeyboardMsgProc_orig(INT code, WPARAM wParam, LPARAM lParam)
 {
@@ -5200,7 +5208,7 @@ LRESULT STDCALL HookedCThemeMenu_MenuKeyboardMsgProc_orig(INT code, WPARAM wPara
 HRESULT (__fastcall *_GetBrushesForPart_orig)(HTHEME, INT, COLORREF, HBITMAP*, HBRUSH*);
 HRESULT __fastcall Hooked_GetBrushesForPart(HTHEME hTheme, INT iPartId, COLORREF Color, HBITMAP *phBitmap, HBRUSH *phBrush)
 {
-    std::wstring ThemeClass = GetThemeClass(hTheme);
+   std::wstring ThemeClass = GetThemeClass(hTheme);
     
     if (ThemeClass == L"Tab" && (iPartId == TABP_BODY || iPartId == TABP_AEROWIZARDBODY)) {
         if (!*phBrush || *phBrush != GetSysColorBrush(COLOR_WINDOW)) {
@@ -5450,7 +5458,7 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
 // User32.dll internal operations in most cases use the gpsi pointer (global pointer shared info) in order to fetch useful attributes about the system session
 // one of them being the system color buffer, gpsi pointing to offest 4568 to system COLORREFs and offset 4696 to system BRUSHES
 //
-// Kernel operations (e.g. win32kfull.sys) use: W32GetUserSessionState() + offset (<20016> as of Win11-26200.8655) + <System color offset>
+// Kernel operations (e.g. win32kfull.sys) use: W32GetUserSessionState() + offset (<20016> as of Win11 26200.8655) + <System color offset>
 //
 // System color offsets:
 //
@@ -5489,57 +5497,88 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
 // ---------------------------------------------------------------------------------------------
 
 // A considerable portion of coloring comes from CTL messages, replace the gpsi pointer inside user32 functions with system colors API getters
-LRESULT (__fastcall *RealDefWindowProcWorker_orig)(struct tagWND*, UINT, WPARAM, LPARAM, UINT);
-LRESULT __fastcall HookedRealDefWindowProcWorker(struct tagWND* pwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT flags)
+LRESULT MyRealDefWindowProcWorker(UINT msg, WPARAM wParam)
 {
-    switch (msg)
+    COLORREF sysColorBk = 0;
+    COLORREF sysColorTxt = 0;
+    HBRUSH sysBrush = nullptr;
+    if (msg == WM_CTLCOLOR || msg == WM_CTLCOLOREDIT || msg == WM_CTLCOLORLISTBOX)
     {
-        case WM_CTLCOLOR:
-        case WM_CTLCOLORMSGBOX:
-        case WM_CTLCOLOREDIT:
-        case WM_CTLCOLORLISTBOX:
-        case WM_CTLCOLORBTN:
-        case WM_CTLCOLORDLG:
-        case WM_CTLCOLORSCROLLBAR:
-        case WM_CTLCOLORSTATIC:
-        {
-            COLORREF sysColorBk = 0;
-            COLORREF sysColorTxt = 0;
-            HBRUSH sysBrush = nullptr;
-            if (msg == WM_CTLCOLOR || msg == WM_CTLCOLOREDIT || msg == WM_CTLCOLORLISTBOX)
-            {
-                sysColorBk = GetSysColor(COLOR_WINDOW);                                 // Default: *gpsi + 4588 (COLOR_WINDOW)
-                sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4600 (COLOR_WINDOWTEXT)
-                sysBrush = GetSysColorBrush(COLOR_WINDOW);                              // Default: *gpsi + 4736 (COLOR_WINDOW)
-            }
-            else if (msg == WM_CTLCOLORMSGBOX || msg == WM_CTLCOLORDLG || msg == WM_CTLCOLORSTATIC)
-            {
-                sysColorBk = GetSysColor(COLOR_BTNFACE);                                // Default: *gpsi + 4628 (COLOR_BTNTEXT)
-                sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4600 (COLOR_WINDOWTEXT)
-                sysBrush = GetSysColorBrush(COLOR_BTNFACE);                             // Default: *gpsi + 4816 (COLOR_BTNTEXT)
-            }
-            else if (msg == WM_CTLCOLORBTN)
-            {
-                sysColorBk = GetSysColor(COLOR_BTNFACE);                                // Default: *gpsi + 4628 (COLOR_BTNTEXT)
-                sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4816 (COLOR_BTNTEXT)
-                sysBrush = GetSysColorBrush(COLOR_BTNFACE);                             // Default: *gpsi + 4816 (COLOR_BTNTEXT)
-            }
-            else if (msg == WM_CTLCOLORSCROLLBAR)
-            {
-                sysColorBk = GetSysColor(COLOR_BTNHIGHLIGHT);                           // Default: *gpsi + 4648 (COLOR_BTNHIGHLIGHT)
-                sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4840 (COLOR_BTNTEXT)
-                sysBrush = GetSysColorBrush(COLOR_BTNHIGHLIGHT);                        // Default: *gpsi + 4856 (COLOR_BTNHIGHLIGHT)
-            }
+        sysColorBk = GetSysColor(COLOR_WINDOW);                                 // Default: *gpsi + 4588 (COLOR_WINDOW)
+        sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4600 (COLOR_WINDOWTEXT)
+        sysBrush = GetSysColorBrush(COLOR_WINDOW);                              // Default: *gpsi + 4736 (COLOR_WINDOW)
+    }
+    else if (msg == WM_CTLCOLORMSGBOX || msg == WM_CTLCOLORDLG || msg == WM_CTLCOLORSTATIC)
+    {
+        sysColorBk = GetSysColor(COLOR_BTNFACE);                                // Default: *gpsi + 4628 (COLOR_BTNTEXT)
+        sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4600 (COLOR_WINDOWTEXT)
+        sysBrush = GetSysColorBrush(COLOR_BTNFACE);                             // Default: *gpsi + 4816 (COLOR_BTNTEXT)
+    }
+    else if (msg == WM_CTLCOLORBTN)
+    {
+        sysColorBk = GetSysColor(COLOR_BTNFACE);                                // Default: *gpsi + 4628 (COLOR_BTNTEXT)
+        sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4816 (COLOR_BTNTEXT)
+        sysBrush = GetSysColorBrush(COLOR_BTNFACE);                             // Default: *gpsi + 4816 (COLOR_BTNTEXT)
+    }
+    else if (msg == WM_CTLCOLORSCROLLBAR)
+    {
+        sysColorBk = GetSysColor(COLOR_BTNHIGHLIGHT);                           // Default: *gpsi + 4648 (COLOR_BTNHIGHLIGHT)
+        sysColorTxt = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0); // Default: *gpsi + 4840 (COLOR_BTNTEXT)
+        sysBrush = GetSysColorBrush(COLOR_BTNHIGHLIGHT);                        // Default: *gpsi + 4856 (COLOR_BTNHIGHLIGHT)
+    }
 
-            HDC hdc = reinterpret_cast<HDC>(wParam);
+    HDC hdc = reinterpret_cast<HDC>(wParam);
 
-            SetTextColor(hdc, sysColorTxt);
-            SetBkColor(hdc, sysColorBk);
-            return reinterpret_cast<LRESULT>(sysBrush);
-        }
-    }     
-    return RealDefWindowProcWorker_orig(pwnd, msg, wParam, lParam, flags);
+    SetTextColor(hdc, sysColorTxt);
+    SetBkColor(hdc, sysColorBk);
+    return reinterpret_cast<LRESULT>(sysBrush);
 }
+
+#ifdef _WIN64
+    LRESULT (__fastcall *RealDefWindowProcWorker_orig)(struct tagWND*, UINT, WPARAM, LPARAM, UINT);
+    LRESULT __fastcall HookedRealDefWindowProcWorker(struct tagWND* pwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT flags)
+    {
+        switch (msg)
+        {
+            case WM_CTLCOLOR:
+            case WM_CTLCOLORMSGBOX:
+            case WM_CTLCOLOREDIT:
+            case WM_CTLCOLORLISTBOX:
+            case WM_CTLCOLORBTN:
+            case WM_CTLCOLORDLG:
+            case WM_CTLCOLORSCROLLBAR:
+            case WM_CTLCOLORSTATIC:
+            {
+                LRESULT res = MyRealDefWindowProcWorker(msg, wParam);
+                return res;
+            }
+        }
+
+        return RealDefWindowProcWorker_orig(pwnd, msg, wParam, lParam, flags);
+    }
+#else
+    LRESULT (__fastcall *RealDefWindowProcWorker_orig)(UINT, WPARAM, struct tagWND*, UINT, LPARAM, UINT);
+    LRESULT __fastcall HookedRealDefWindowProcWorker(UINT msg, WPARAM wParam, struct tagWND* pwnd, UINT msg_dup, LPARAM lParam, UINT flags)
+    {
+        switch (msg)
+        {
+            case WM_CTLCOLOR:
+            case WM_CTLCOLORMSGBOX:
+            case WM_CTLCOLOREDIT:
+            case WM_CTLCOLORLISTBOX:
+            case WM_CTLCOLORBTN:
+            case WM_CTLCOLORDLG:
+            case WM_CTLCOLORSCROLLBAR:
+            case WM_CTLCOLORSTATIC:
+            {
+                LRESULT res = MyRealDefWindowProcWorker(msg, wParam);
+                return res;
+            }
+        }
+
+        return RealDefWindowProcWorker_orig(msg, wParam, pwnd, msg_dup, lParam, flags);
+    }
+#endif
 
 // Paints the background of message boxes
 HBRUSH (STDCALL *MB_DlgProc_orig)(HWND, UINT, WPARAM, LPARAM);
@@ -5551,8 +5590,8 @@ HBRUSH STDCALL Hooked_MB_DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 }
 
 // Paints the lower part of message boxes
-void (STDCALL *DrawCommandRectangle_orig)(HWND);
-void STDCALL Hooked_DrawCommandRectangle(HWND hWnd)
+void (THISCALL *DrawCommandRectangle_orig)(HWND);
+void THISCALL Hooked_DrawCommandRectangle(HWND hWnd)
 {
     PAINTSTRUCT ps{};
     HDC hdc = BeginPaint(hWnd, &ps);
@@ -5785,21 +5824,21 @@ COLORREF __fastcall HookedFillRectClr(HDC hdc, LPRECT lprect, COLORREF color)
     return color;
 }
 
-// Listbox background fill color return COLOR_WINDOW system color
+// As of Win11 26200.8655 - Listbox background fill color return COLOR_WINDOW system color
 // We return white color so the black text inside listboxes are readable on system light theme.
-HBRUSH (STDCALL *ListBox_GetBrush_orig)(struct tagLBIV*, HBRUSH*);
-HBRUSH STDCALL HookedListBox_GetBrush(struct tagLBIV *a1, HBRUSH *hbr)
+HBRUSH (__fastcall *ListBox_GetBrush_orig)(struct tagLBIV*, HBRUSH*);
+HBRUSH __fastcall HookedListBox_GetBrush(struct tagLBIV *a1, HBRUSH *hbr)
 {   
     // Default return brush: GetSysColorBrush(COLOR_WINDOW)
     HBRUSH ret = g_IsSysThemeDarkMode ? ListBox_GetBrush_orig(a1, hbr) : (HBRUSH)GetStockObject(WHITE_BRUSH);
     return ret;
 }
 
-// The ComboBox control (e.g., the Windows address bar) draws an internal rectangle using a brush with the COLOR_WINDOW system color.
+// As of Win11 26200.8655 - The ComboBox control (e.g., the Windows address bar) draws an internal rectangle using a brush with the COLOR_WINDOW system color.
 // Since the custom COLOR_WINDOW is black, whereas the rest of the ComboBox control's background is intended to be drawn in white,
 // we intervene to correct this behavior in light theme mode.
-void (STDCALL *ComboEx_OnDrawItem_orig)(struct COMBOEX*, struct tagDRAWITEMSTRUCT*);
-void STDCALL HookedComboEx_OnDrawItem(struct COMBOEX *a1, struct tagDRAWITEMSTRUCT *a2)
+void (__fastcall *ComboEx_OnDrawItem_orig)(struct COMBOEX*, struct tagDRAWITEMSTRUCT*);
+void __fastcall HookedComboEx_OnDrawItem(struct COMBOEX *a1, struct tagDRAWITEMSTRUCT *a2)
 {
     if (!g_IsSysThemeDarkMode) 
     {
@@ -5917,8 +5956,8 @@ BOOL CThemeCache::CacheNavigationDivider()
 }
 
 // Render custom D2D alpha blended navigation pane divider
-void (__thiscall *CNscTree_DrawDivider_orig)(class CNscTree* , HDC, struct _TREEITEM*);
-void __thiscall Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _TREEITEM *hTreeItem)
+void (THISCALL *CNscTree_DrawDivider_orig)(class CNscTree* , HDC, struct _TREEITEM*);
+void THISCALL Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _TREEITEM *hTreeItem)
 {
     auto Fallback = [&](LPCWSTR errorMessage = NULL) {
         if (errorMessage)
@@ -5927,7 +5966,7 @@ void __thiscall Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _T
         return;
     };
 
-    // As of Win11 26200.8737 hwnd offsets 64-bit: offset 50, 32-bit: offset 61
+    // As of Win11 26200.8737 - hwnd offsets 64-bit: offset 50, 32-bit: offset 61
     auto GetTreeViewHWND = [&__this]() 
     {
         #ifdef _WIN64
@@ -6129,6 +6168,7 @@ LRESULT STDCALL HookedCFileNameComboBox_s_ComboBoxRootSubclass(HWND hWnd, UINT u
     return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
 }
 
+// Paint the explorer dialogs editbox background
 BOOL (STDCALL *CComboBoxExBase_OnWinEvent_orig)(class CComboBoxExBase *, HWND, UINT, HDC, LPARAM, LRESULT*);
 BOOL STDCALL HookedCComboBoxExBase_OnWinEvent(class CComboBoxExBase *__this, HWND hWnd, UINT uMsg, HDC hdc, LPARAM lParam, LRESULT* pResult)
 {
