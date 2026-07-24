@@ -5,7 +5,6 @@
 // @version         1.1.1
 // @author          AKS HAY
 // @github          https://github.com/sysakshay
-// @twitter         https://twitter.com/iamtouchingyou
 // @license         GPL-3.0
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lshlwapi -lcomdlg32 -ldwmapi -lmfplat -lmfuuid -luuid -ld3d11 -ldxgi -lole32 -loleaut32 -lpsapi -lwtsapi32
@@ -19,7 +18,7 @@
 /*
 # Live Video Wallpaper
 
-**Author:** AKS HAY | **GitHub:** [sysakshay](https://github.com/sysakshay) | **Twitter / X:** [@iamtouchingyou](https://twitter.com/iamtouchingyou) | **License:** GPL-3.0
+**Author:** AKS HAY | **GitHub:** [sysakshay](https://github.com/sysakshay) | **License:** GPL-3.0
 
 Play local MP4 videos directly on your Windows desktop as a live wallpaper using
 Media Foundation and Direct3D 11, featuring a built-in real-time hardware profiler.
