@@ -78,33 +78,25 @@ Contributors are welcome! You can open Issues or Pull Requests on GitHub.
 // ==WindhawkModSettings==
 /*
 - soundEnabled: true
-  $name: |
-      Enable Sounds
-      تفعيل الصوت
-  $description: |
-      Enable or disable sound notifications
-      تفعيل أو تعطيل إشعارات الصوت
+  $name: Enable Sounds
+  $name:ar-SA: تفعيل الصوت
+  $description: Enable or disable sound notifications
+  $description:ar-SA: تفعيل أو تعطيل إشعارات الصوت
 - soundOn: C:\Windows\Media\Speech On.wav
-  $name: |
-      Sound for Pin
-      صوت للتثبيت
-  $description: |
-      When choosing a custom sound for pin, the audio file should be in .wav format
-      عند اختيار صوت مخصص لوضع التثبيت، يجب أن يكون صيغة الملف الصوتي .wav
+  $name: Sound for Pin
+  $name:ar-SA: صوت للتثبيت
+  $description: When choosing a custom sound for pin, the audio file should be in .wav format
+  $description:ar-SA: عند اختيار صوت مخصص لوضع التثبيت، يجب أن يكون صيغة الملف الصوتي .wav
 - soundOff: C:\Windows\Media\Speech Off.wav
-  $name: |
-      Sound for Unpin
-      صوت لإلغاء التثبيت
-  $description: |
-      When choosing a custom sound for unpin, the audio file should be in .wav format
-      عند اختيار صوت مخصص لوضع إلغاء التثبيت، يجب أن يكون صيغة الملف الصوتي .wav
+  $name: Sound for Unpin
+  $name:ar-SA: صوت لإلغاء التثبيت
+  $description: When choosing a custom sound for unpin, the audio file should be in .wav format
+  $description:ar-SA: عند اختيار صوت مخصص لوضع إلغاء التثبيت، يجب أن يكون صيغة الملف الصوتي .wav
 - notificationsEnabled: true
-  $name: |
-      Enable Notifications
-      تفعيل الإشعارات
-  $description: |
-      Show floating text notifications
-      إظهار إشعارات نصية عائمة
+  $name: Enable Notifications
+  $name:ar-SA: تفعيل الإشعارات
+  $description: Show floating text notifications
+  $description:ar-SA: إظهار إشعارات نصية عائمة
 */
 // ==/WindhawkModSettings==
 
@@ -137,38 +129,62 @@ HWND g_notificationHwnd = nullptr;
 // ===== Sound and notifications settings =====
 struct Settings {
     bool soundEnabled = true;
-    std::wstring soundOn = L"C:\Windows\Media\Speech On.wav";
-    std::wstring soundOff = L"C:\Windows\Media\Speech Off.wav";
+    std::wstring soundOn = L"C:\\Windows\\Media\\Speech On.wav";
+    std::wstring soundOff = L"C:\\Windows\\Media\\Speech Off.wav";
     bool notificationsEnabled = true;
 } g_settings;
 
-// ===== قراءة الإعدادات =====
-// ===== Reading settings =====
-void LoadSettings() {
-    g_settings.soundEnabled = Wh_GetIntSetting(L"soundEnabled", 1) != 0;
+// ===== تحديث الإعدادات تحت القفل =====
+// ===== Update settings under lock =====
+void UpdateSettings() {
+    EnterCriticalSection(&g_cs);
+    
+    g_settings.soundEnabled = Wh_GetIntSetting(L"soundEnabled") != 0;
 
-    PCWSTR onStr = Wh_GetStringSetting(L"soundOn", L"C:\Windows\Media\Speech On.wav");
-    if (onStr) { g_settings.soundOn = onStr; Wh_FreeStringSetting(onStr); }
+    PCWSTR onStr = Wh_GetStringSetting(L"soundOn");
+    g_settings.soundOn = (onStr && *onStr) ? onStr : L"C:\\Windows\\Media\\Speech On.wav";
+    Wh_FreeStringSetting(onStr);
 
-    PCWSTR offStr = Wh_GetStringSetting(L"soundOff", L"C:\Windows\Media\Speech Off.wav");
-    if (offStr) { g_settings.soundOff = offStr; Wh_FreeStringSetting(offStr); }
+    PCWSTR offStr = Wh_GetStringSetting(L"soundOff");
+    g_settings.soundOff = (offStr && *offStr) ? offStr : L"C:\\Windows\\Media\\Speech Off.wav";
+    Wh_FreeStringSetting(offStr);
 
-    g_settings.notificationsEnabled = Wh_GetIntSetting(L"notificationsEnabled", 1) != 0;
+    g_settings.notificationsEnabled = Wh_GetIntSetting(L"notificationsEnabled") != 0;
 
-    Wh_Log(L"✅ Settings loaded: soundEnabled=%d, soundOn='%s', soundOff='%s', notifications=%d",
+    LeaveCriticalSection(&g_cs);
+    
+    Wh_Log(L"✅ Settings updated: soundEnabled=%d, soundOn='%s', soundOff='%s', notifications=%d",
            g_settings.soundEnabled, g_settings.soundOn.c_str(), g_settings.soundOff.c_str(),
            g_settings.notificationsEnabled);
+}
+
+// ===== قراءة نسخة من الإعدادات بشكل آمن =====
+// ===== Read a copy of settings safely =====
+Settings GetSettingsCopy() {
+    Settings copy;
+    EnterCriticalSection(&g_cs);
+    copy = g_settings;
+    LeaveCriticalSection(&g_cs);
+    return copy;
+}
+
+// ===== قراءة الإعدادات (تُستدعى من الخارج) =====
+// ===== Load settings (called externally) =====
+void LoadSettings() {
+    UpdateSettings();
 }
 
 // ===== تشغيل صوت من النظام =====
 // ===== Play a sound from the system =====
 void PlaySystemSound(bool isPinned) {
-    if (!g_settings.soundEnabled) {
+    Settings settings = GetSettingsCopy();
+    
+    if (!settings.soundEnabled) {
         Wh_Log(L"🔇 Sound disabled");
         return;
     }
 
-    const std::wstring& soundStr = isPinned ? g_settings.soundOn : g_settings.soundOff;
+    const std::wstring& soundStr = isPinned ? settings.soundOn : settings.soundOff;
     if (soundStr.empty()) {
         Wh_Log(L"⚠️ Sound name is empty, skipping");
         return;
@@ -202,6 +218,7 @@ void PlaySystemSound(bool isPinned) {
     Wh_Log(L"🔊 Using MessageBeep as fallback");
     MessageBeep(isPinned ? MB_ICONASTERISK : MB_ICONEXCLAMATION);
 }
+
 
 // ===== نافذة الإشعارات العائمة =====
 // ===== Floating notification window =====
@@ -316,23 +333,33 @@ void ToggleTopMost() {
     LeaveCriticalSection(&g_cs);
 
     if (isPinned) {
-        SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        EnterCriticalSection(&g_cs);
-        for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end(); ++it) {
-            if (*it == hWnd) { g_trackedWindows.erase(it); break; }
+        // محاولة إلغاء التثبيت
+        // Attempiting unpin
+        if (SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+            EnterCriticalSection(&g_cs);
+            for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end(); ++it) {
+                if (*it == hWnd) { g_trackedWindows.erase(it); break; }
+            }
+            LeaveCriticalSection(&g_cs);
+            PlaySystemSound(false);
+            ShowNotification(L"📍 Unpinned", false);
+            Wh_Log(L"🔽 Unpinned window %p", hWnd);
+        } else {
+            Wh_Log(L"❌ Failed to unpin window %p (UIPI or other error)", hWnd);
         }
-        LeaveCriticalSection(&g_cs);
-        PlaySystemSound(false);
-        ShowNotification(L"📍 Unpinned", false);
-        Wh_Log(L"🔽 Unpinned window %p", hWnd);
     } else {
-        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        EnterCriticalSection(&g_cs);
-        g_trackedWindows.push_back(hWnd);
-        LeaveCriticalSection(&g_cs);
-        PlaySystemSound(true);
-        ShowNotification(L"📌 Pinned", true);
-        Wh_Log(L"🔼 Pinned window %p", hWnd);
+        // محاولة التثبيت
+        // Attempiting pin
+        if (SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+            EnterCriticalSection(&g_cs);
+            g_trackedWindows.push_back(hWnd);
+            LeaveCriticalSection(&g_cs);
+            PlaySystemSound(true);
+            ShowNotification(L"📌 Pinned", true);
+            Wh_Log(L"🔼 Pinned window %p", hWnd);
+        } else {
+            Wh_Log(L"❌ Failed to pin window %p (UIPI or other error)", hWnd);
+        }
     }
 }
 
@@ -560,67 +587,51 @@ void Wh_ModAfterInit() {
     WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
-    BOOL processCreated = FALSE;
-    PROCESS_INFORMATION pi = {0};
-    STARTUPINFO si = {0};
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-
-    HMODULE kernelModule = GetModuleHandle(L"kernel32.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernelbase.dll");
-    }
-
-    if (kernelModule) {
-        using CreateProcessInternalW_t = BOOL(WINAPI*)(
-            HANDLE hUserToken,
-            LPCWSTR lpApplicationName,
-            LPWSTR lpCommandLine,
-            LPSECURITY_ATTRIBUTES lpProcessAttributes,
-            LPSECURITY_ATTRIBUTES lpThreadAttributes,
-            WINBOOL bInheritHandles,
-            DWORD dwCreationFlags,
-            LPVOID lpEnvironment,
-            LPCWSTR lpCurrentDirectory,
-            LPSTARTUPINFOW lpStartupInfo,
-            LPPROCESS_INFORMATION lpProcessInformation,
-            PHANDLE hRestrictedUserToken
-        );
-
-        CreateProcessInternalW_t pCreateProcessInternalW =
-            (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
-
-        if (pCreateProcessInternalW) {
-            processCreated = pCreateProcessInternalW(
-                nullptr, currentProcessPath, commandLine, nullptr, nullptr,
-                FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr);
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
         }
     }
 
-    if (!processCreated) {
-        Wh_Log(L"⚠️ CreateProcessInternalW failed, falling back to CreateProcess");
-        processCreated = CreateProcess(
-            currentProcessPath,
-            commandLine,
-            nullptr,
-            nullptr,
-            FALSE,
-            NORMAL_PRIORITY_CLASS,
-            nullptr,
-            nullptr,
-            &si,
-            &pi
-        );
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken,
+        LPCWSTR lpApplicationName,
+        LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        WINBOOL bInheritHandles,
+        DWORD dwCreationFlags,
+        LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken
+    );
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
     }
 
-    if (!processCreated) {
-        Wh_Log(L"❌ CreateProcess failed (error: %d)", GetLastError());
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
+                                 FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    Wh_Log(L"✅ Tool mod launcher process created successfully");
 }
 
 void Wh_ModSettingsChanged() {
