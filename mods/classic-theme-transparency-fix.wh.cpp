@@ -2,11 +2,12 @@
 // @id              classic-theme-transparency-fix
 // @name            Classic theme transparency fix
 // @description     Fixes transparency glitches in Classic theme
-// @version         1.4
+// @version         1.5
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // @include         dllhost.exe
+// @compilerOptions -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,6 +29,7 @@ shadiows, turn it off.
 
 #include <windhawk_utils.h>
 #include <psapi.h>
+#include <uxtheme.h>
 
 // --- Structs and types for dialog transparency removal ---
 
@@ -56,6 +58,10 @@ typedef HRESULT (WINAPI *DwmIsCompositionEnabled_t)(BOOL *);
 DwmIsCompositionEnabled_t DwmIsCompositionEnabled_orig;
 HRESULT WINAPI DwmIsCompositionEnabled_hook(BOOL *pfEnabled)
 {
+    if (IsAppThemed()) {
+        return DwmIsCompositionEnabled_orig(pfEnabled);
+    }
+
     if (g_isAvaloniaProcess == -1) {
         g_isAvaloniaProcess = 0;
         HMODULE hMods[1024];
@@ -90,6 +96,9 @@ typedef BOOL (WINAPI *IsCompositionActive_t)(void);
 IsCompositionActive_t IsCompositionActive_orig;
 BOOL WINAPI IsCompositionActive_hook()
 {
+   if (IsAppThemed()) {
+        return IsCompositionActive_orig();
+    }
     return FALSE;
 }
 
@@ -100,7 +109,7 @@ ShowWindow_t ShowWindow_Original;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow)
 {
-    if (nCmdShow != SW_HIDE && hWnd) {
+    if (nCmdShow != SW_HIDE && hWnd && !IsAppThemed()) {
         WCHAR className[64];
         if (GetClassName(hWnd, className, 64) && !wcscmp(className, L"#32770")) {
             auto SetWCA = (pSetWindowCompositionAttribute)GetProcAddress(

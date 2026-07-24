@@ -2,7 +2,7 @@
 // @id classic-taskbar-properties
 // @name Classic Taskbar and Start Menu Properties
 // @description This mod recreates the classic "Taskbar and Start Menu Properties" dialog from Windows 7 (Taskbar, Start Menu, Toolbars tabs) in Windows 10 and 11.
-// @version 3.2.0
+// @version 3.5.0
 // @author babamohammed
 // @github https://github.com/babamohammed2022
 // @include explorer.exe
@@ -21,6 +21,8 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2 and
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7classictaskbar.png)
 ## Screenshot (with the Classic theme)
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/classichteme.PNG)
+## Screenshot (with a Windows 8-like theme)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81takbar4s.PNG)
 
 **IMPORTANT**: This mod is a best-effort recreation that works within the limitations of modern Windows.
 Some features may work partially or not at all depending on your system configuration,
@@ -30,7 +32,8 @@ Windows version, and installed modifications.
 - Lock/Unlock the taskbar
 - Auto-hide the taskbar
 - Use small icons/buttons
-- Configure taskbar button grouping (Always combine, Combine when full, Never combine)
+- Configure taskbar button grouping (Always combine, Combine when full, Never combine) - applies to
+  every taskbar on every monitor, not just the primary one
 - Configure Aero Peek
 - Address/Links/Tablet PC toolbars (Desktop toolbar is currently not functional)
 - Vertical taskbar support: only **Top** and **Bottom** positions are functional (Left and right positions could be implemented in future)
@@ -45,13 +48,15 @@ Windows version, and installed modifications.
 ## Known Issues
 - **Left/Right taskbar position**: currently disabled (greyed out, non-selectable) in the
   position combo box. Only Top and Bottom rotation is supported for now; Left/Right requires
-  more work due to the added complexity and may be added in a future version.
-- **Desktop toolbar**: Currently not available, more documentation is required for a proper implementation.
-- **Some Start Menu settings**: May not work on all Windows versions as
+  more work due to the added complexity and may be added in a future version. In addition, in some configurations the taskbar can't be moved to the top if using the ExplorerPatcher taskbar.
+- **Desktop toolbar**: The desktop toolbar is currently not available.
+- **Some Start Menu settings**: May not work on all Windows versions as it heavily depends on user's configuration (for example OpenShell, Explorer7, ExplorerPatcher and other).
 - **Tablet Input PC**: Works partially
 ## Credits 
 - Anixx - Testing on Windows 11 23H2 with Classic Theme
 - sebastian08dm08-cpu - Testing on Windows 10 1809
+- SnowyCxmet - Fixed the Taskbar buttons combine setting (Always combine / Combine when full / Never combine) to make it apply to all monitors
+- m417z - Code review
 */
 // ==/WindhawkModReadme==
 
@@ -67,6 +72,8 @@ Windows version, and installed modifications.
     - fr: Français
     - es: Español
     - ru: Русский
+    - de: Deutsch
+    - pt: Português
 */
 // ==/WindhawkModSettings==
 
@@ -321,11 +328,11 @@ static std::atomic<bool> g_modUnloading{false};
 // ---------------------------------------------------------------------------
 // Registro centrale di tutte le SetWindowSubclass installate dal mod.
 //
-// Perché esiste: la pulizia basata su EnumWindows (UnsubclassExistingTaskbars,
+// Perch esiste: la pulizia basata su EnumWindows (UnsubclassExistingTaskbars,
 // il controllo sulla toolbar Desktop, ecc.) dipende dal *ritrovare* le finestre
-// allo scarico. Se una finestra è nascosta, su un monitor secondario, su un
+// allo scarico. Se una finestra  nascosta, su un monitor secondario, su un
 // desktop virtuale diverso, o smette di rispondere ai criteri di ricerca per
-// una qualunque particolarità della configurazione dell'utente, quella pulizia
+// una qualunque particolarit della configurazione dell'utente, quella pulizia
 // la salta e la subclass resta agganciata a codice ormai scaricato -> crash di
 // explorer.exe (0xc0000005) al primo messaggio ricevuto da quella finestra.
 //
@@ -333,9 +340,9 @@ static std::atomic<bool> g_modUnloading{false};
 // installa una subclass, la annota qui; ogni volta che la rimuove (in modo
 // naturale, es. WM_NCDESTROY, o disattivando una feature) la toglie dal
 // registro. Allo scarico del mod, invece di *cercare* le finestre, si scorre
-// semplicemente questo elenco e si rimuove esattamente e solo ciò che risulta
-// ancora presente, ovunque si trovi. Nessuna finestra può sfuggire alla pulizia
-// indipendentemente da monitor, desktop virtuali, visibilità o versione di
+// semplicemente questo elenco e si rimuove esattamente e solo ci che risulta
+// ancora presente, ovunque si trovi. Nessuna finestra pu sfuggire alla pulizia
+// indipendentemente da monitor, desktop virtuali, visibilit o versione di
 // Windows.
 static std::mutex g_subclassRegistryMutex;
 static std::vector<std::pair<HWND, void*>> g_subclassRegistry;
@@ -344,7 +351,7 @@ static std::vector<std::pair<HWND, void*>> g_subclassRegistry;
 // di SUBCLASSPROC, che ha 6 parametri), esattamente il motivo per cui il resto
 // del file le forza con (SUBCLASSPROC)NomeProc quando le passa a
 // RemoveWindowSubclass. Usando un template qui, ogni puntatore a funzione viene
-// accettato così com'è e convertito internamente, senza dover mettere un cast
+// accettato cos com' e convertito internamente, senza dover mettere un cast
 // esplicito a ogni singola chiamata di Track/Untrack.
 template <typename ProcT>
 static void TrackSubclass(HWND hWnd, ProcT proc) {
@@ -352,7 +359,7 @@ static void TrackSubclass(HWND hWnd, ProcT proc) {
     void* key = reinterpret_cast<void*>(proc);
     std::lock_guard<std::mutex> lock(g_subclassRegistryMutex);
     for (auto& entry : g_subclassRegistry) {
-        if (entry.first == hWnd && entry.second == key) return; // già tracciata
+        if (entry.first == hWnd && entry.second == key) return; // gi tracciata
     }
     g_subclassRegistry.emplace_back(hWnd, key);
 }
@@ -370,7 +377,7 @@ static void UntrackSubclass(HWND hWnd, ProcT proc) {
 }
 
 // Rimuove incondizionatamente ogni subclass ancora presente nel registro.
-// Va chiamata come ultimo passo di Wh_ModUninit: è la rete di sicurezza finale,
+// Va chiamata come ultimo passo di Wh_ModUninit:  la rete di sicurezza finale,
 // indipendente da qualunque logica di ricerca/enumerazione delle finestre.
 static void RemoveAllTrackedSubclasses() {
     std::vector<std::pair<HWND, void*>> pending;
@@ -565,7 +572,18 @@ public:
     static bool GetSmallIcons() { return RegGetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarSmallIcons", 0) != 0; }
     static void SetSmallIcons(bool s) { RegSetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarSmallIcons", s ? 1 : 0); }
     static DWORD GetGlomLevel() { return RegGetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarGlomLevel", 0); }
-    static void SetGlomLevel(DWORD lvl) { RegSetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarGlomLevel", lvl); }
+
+    // Windows keeps taskbar button combining as TWO separate registry values:
+    // "TaskbarGlomLevel" governs the taskbar on the PRIMARY monitor, while
+    // "MMTaskbarGlomLevel" governs every taskbar on SECONDARY monitors. Only
+    // ever writing the first one (the original behavior here) meant the combo
+    // box worked on monitor 1 but silently did nothing on monitor 2+. Both
+    // values are now written together so the setting is uniform across every
+    // taskbar regardless of monitor.
+    static void SetGlomLevel(DWORD lvl) {
+        RegSetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"TaskbarGlomLevel", lvl);
+        RegSetDWordSafe(HKEY_CURRENT_USER, kAdvKey, L"MMTaskbarGlomLevel", lvl);
+    }
 
     static DWORD GetTaskbarEdge() {
         DWORD edge = 3;
@@ -765,53 +783,27 @@ static void SetFontAllChildren(HWND hwnd, HFONT hf) {
 static const CLSID CLSID_DesktopBand =
     {0xD82BE2B0,0x5764,0x11D0,{0xA9,0x6E,0x00,0xC0,0x4F,0xD7,0x05,0xA2}};
 
-static bool ShowDesktopToolbarViaSHLoadInProc() {
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        Wh_Log(L"[DesktopToolbar] shell32.dll not loaded");
-        return false;
-    }
-    
-    auto pSHLoadInProc = (HRESULT(WINAPI*)(REFCLSID))GetProcAddress(hShell32, "SHLoadInProc");
-    if (!pSHLoadInProc) {
-        Wh_Log(L"[DesktopToolbar] SHLoadInProc not found in shell32.dll");
-        return false;
-    }
-    
-    if (!g_windowsVersion.IsSupported()) {
-        Wh_Log(L"[DesktopToolbar] Windows version not supported for SHLoadInProc");
-        return false;
-    }
-    
-    if (g_windowsVersion.IsBuildAtLeast(22000)) {
-        Wh_Log(L"[DesktopToolbar] Windows 11 detected, SHLoadInProc may have limited functionality");
-    }
-    
-    Wh_Log(L"[DesktopToolbar] Calling SHLoadInProc...");
-    HRESULT hr = pSHLoadInProc(CLSID_DesktopBand);
-    Wh_Log(L"[DesktopToolbar] SHLoadInProc returned 0x%08X", hr);
-    
-    if (SUCCEEDED(hr)) {
-        HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-        if (hTray && IsWindow(hTray)) {
-            SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
-        }
-        SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
-        return true;
-    }
-    return false;
-}
-
 static bool IsNativeDesktopToolbarShown() {
+    // Prima controlla se la finestra  gi presente nella gerarchia.
     HWND hBand = FindDesktopToolbarWindow();
-    return (hBand != NULL && IsWindow(hBand));
+    if (hBand && IsWindow(hBand)) return true;
+
+    // In alternativa interroga ITrayDeskBand (pu restituire true anche se la
+    // finestra non  ancora stata trovata, ad es. subito dopo l'abilitazione).
+    bool shown = false;
+    if (NativeDeskBandOp(CLSID_DesktopBand, CTP_BAND_QUERY, &shown)) {
+        return shown;
+    }
+
+    // Fallback: leggi il registro (compatibilit con versioni precedenti).
+    return TaskbarSettingsProvider::GetToolbarEnabled(L"Desktop");
 }
 // Trova la finestra della Desktop Band (approccio ibrido)
 static HWND FindDesktopToolbarWindow() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (!hTray || !IsWindow(hTray)) return NULL;
     
-    // Cerca nel ReBar (approccio Win2003: la band è un figlio del ReBar)
+    // Cerca nel ReBar (approccio Win2003: la band  un figlio del ReBar)
     HWND hReBar = FindWindowExW(hTray, NULL, L"ReBarWindow32", NULL);
     if (hReBar && IsWindow(hReBar)) {
         HWND hBand = FindWindowExW(hReBar, NULL, L"ToolbarWindow32", L"Desktop");
@@ -835,7 +827,7 @@ static void ApplyClassicDesktopLayout(HWND hBand) {
     int width = rc.right - rc.left;
     int height = rc.bottom - rc.top;
     
-    // Se la taskbar è verticale (sinistra/destra), la band deve essere più alta
+    // Se la taskbar  verticale (sinistra/destra), la band deve essere pi alta
     DWORD edge = TaskbarSettingsProvider::GetTaskbarEdge();
     if (edge == 0 || edge == 2) { // Sinistra o Destra
         // Forza layout verticale (come Win2003)
@@ -900,54 +892,75 @@ static LRESULT CALLBACK DesktopBandSubclassProc(HWND hWnd, UINT uMsg,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Helper per verificare se la taskbar è verticale
+// Helper per verificare se la taskbar  verticale
 static bool IsEdgeVertical(DWORD edge) {
     return edge == 0 || edge == 2; // Sinistra o Destra
 }
 static bool ShowNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Show requested");
-    
-    bool result = ShowDesktopToolbarViaSHLoadInProc();
-    
+
+    // Passo 1: usa ITrayDeskBand::ShowDeskBand  esattamente lo stesso percorso
+    // usato per Address e Links. SHLoadInProc  uno stub su Win10/11 e non
+    // attiva nulla; il percorso COM/ITrayDeskBand  quello ancora funzionante.
+    bool result = NativeDeskBandOp(CLSID_DesktopBand, CTP_BAND_SHOW, NULL);
+
     if (result) {
-        TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
-        Wh_Log(L"[DesktopToolbar] Show successful via SHLoadInProc");
-        
-        HWND hBand = FindDesktopToolbarWindow();
-        if (hBand && IsWindow(hBand)) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hBand, DesktopBandSubclassProc, 0);
-            TrackSubclass(hBand, DesktopBandSubclassProc);
-            Wh_Log(L"[DesktopToolbar] Desktop band subclassed for classic behavior");
-            
-            ApplyClassicDesktopLayout(hBand);
-        }
-        return true;
+        Wh_Log(L"[DesktopToolbar] ShowDeskBand(CLSID_DesktopBand) riuscito");
+    } else {
+        Wh_Log(L"[DesktopToolbar] ShowDeskBand fallito, tento fallback registro");
     }
-    
-    Wh_Log(L"[DesktopToolbar] SHLoadInProc failed, using registry fallback");
+
+    // Passo 2: aggiorna il registro (sia per lo stato che per il fallback).
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", true);
-    
+
+    // Passo 3: notifica la taskbar.
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray && IsWindow(hTray)) {
         SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
     }
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
-    return true;
+
+    // Passo 4: aspetta che la finestra appaia e applica il subclassing.
+    // La band potrebbe non essere ancora visibile subito dopo ShowDeskBand,
+    // proviamo fino a 10 volte con 50 ms di intervallo.
+    HWND hBand = NULL;
+    for (int i = 0; i < 10 && !hBand; i++) {
+        hBand = FindDesktopToolbarWindow();
+        if (!hBand) Sleep(50);
+    }
+
+    if (hBand && IsWindow(hBand)) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hBand, DesktopBandSubclassProc, 0);
+        TrackSubclass(hBand, DesktopBandSubclassProc);
+        Wh_Log(L"[DesktopToolbar] Desktop band trovata e subclassata");
+        ApplyClassicDesktopLayout(hBand);
+    } else {
+        Wh_Log(L"[DesktopToolbar] Desktop band non trovata dopo ShowDeskBand");
+    }
+
+    return result;
 }
 
 static bool HideNativeDesktopToolbar() {
     Wh_Log(L"[DesktopToolbar] Hide requested");
-    
-    // Rimuovi il subclassing (approccio moderno)
+
+    // Rimuovi il subclassing prima di nascondere la finestra.
     HWND hBand = FindDesktopToolbarWindow();
     if (hBand && IsWindow(hBand)) {
-        RemoveWindowSubclass(hBand, (SUBCLASSPROC)DesktopBandSubclassProc, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hBand,
+            (WindhawkUtils::WH_SUBCLASSPROC)DesktopBandSubclassProc);
         UntrackSubclass(hBand, DesktopBandSubclassProc);
-        Wh_Log(L"[DesktopToolbar] Desktop band unsubclassed");
+        Wh_Log(L"[DesktopToolbar] Desktop band unsubclassata");
     }
-    
+
+    // Usa ITrayDeskBand::HideDeskBand  simmetrico rispetto a ShowDeskBand.
+    bool result = NativeDeskBandOp(CLSID_DesktopBand, CTP_BAND_HIDE, NULL);
+    if (!result) {
+        Wh_Log(L"[DesktopToolbar] HideDeskBand fallito (non fatale)");
+    }
+
     TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", false);
-    
+
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray && IsWindow(hTray)) {
         SendNotifyMessageW(hTray, WM_SETTINGCHANGE, 0, (LPARAM)L"Taskbar");
@@ -957,12 +970,14 @@ static bool HideNativeDesktopToolbar() {
 }
 
 static void InitLocalization() {
-    enum Lang { LANG_EN, LANG_IT, LANG_FR, LANG_ES, LANG_RU };
+    enum Lang { LANG_EN, LANG_IT, LANG_FR, LANG_ES, LANG_RU, LANG_DE, LANG_PT };
     Lang lang = LANG_EN;
     if (wcscmp(g_language, L"it") == 0) lang = LANG_IT;
     else if (wcscmp(g_language, L"fr") == 0) lang = LANG_FR;
     else if (wcscmp(g_language, L"es") == 0) lang = LANG_ES;
     else if (wcscmp(g_language, L"ru") == 0) lang = LANG_RU;
+    else if (wcscmp(g_language, L"de") == 0) lang = LANG_DE;
+    else if (wcscmp(g_language, L"pt") == 0) lang = LANG_PT;
     else if (wcscmp(g_language, L"en") == 0) lang = LANG_EN;
     else {
         DWORD uiLang = GetUserDefaultUILanguage() & 0xFF;
@@ -970,15 +985,19 @@ static void InitLocalization() {
         else if (uiLang == 0x0C) lang = LANG_FR;
         else if (uiLang == 0x0A) lang = LANG_ES;
         else if (uiLang == 0x19) lang = LANG_RU;
+        else if (uiLang == 0x07) lang = LANG_DE;
+        else if (uiLang == 0x16) lang = LANG_PT;
     }
 
     StringCchCopyW(g_str.btn_ok, 32, L"OK");
 
     switch (lang) {
         case LANG_IT: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra delle applicazioni"); StringCchCopyW(g_str.tab_start, 64, L"Menu Start"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barre degli strumenti"); break;
-        case LANG_FR: StringCchCopyW(g_str.tab_taskbar, 64, L"Barre des tâches"); StringCchCopyW(g_str.tab_start, 64, L"Menu Démarrer"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barres d'outils"); break;
+        case LANG_FR: StringCchCopyW(g_str.tab_taskbar, 64, L"Barre des t\u00e2ches"); StringCchCopyW(g_str.tab_start, 64, L"Menu D\u00e9marrer"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barres d'outils"); break;
         case LANG_ES: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra de tareas"); StringCchCopyW(g_str.tab_start, 64, L"Inicio"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barras de herramientas"); break;
-        case LANG_RU: StringCchCopyW(g_str.tab_taskbar, 64, L"Панель задач"); StringCchCopyW(g_str.tab_start, 64, L"Меню Пуск"); StringCchCopyW(g_str.tab_toolbars, 64, L"Панели инструментов"); break;
+        case LANG_RU: StringCchCopyW(g_str.tab_taskbar, 64, L"\u041f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447"); StringCchCopyW(g_str.tab_start, 64, L"\u041c\u0435\u043d\u044e \u041f\u0443\u0441\u043a"); StringCchCopyW(g_str.tab_toolbars, 64, L"\u041f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432"); break;
+        case LANG_DE: StringCchCopyW(g_str.tab_taskbar, 64, L"Taskleiste"); StringCchCopyW(g_str.tab_start, 64, L"Startmen\u00fc"); StringCchCopyW(g_str.tab_toolbars, 64, L"Symbolleisten"); break;
+        case LANG_PT: StringCchCopyW(g_str.tab_taskbar, 64, L"Barra de tarefas"); StringCchCopyW(g_str.tab_start, 64, L"Menu Iniciar"); StringCchCopyW(g_str.tab_toolbars, 64, L"Barras de ferramentas"); break;
         default: StringCchCopyW(g_str.tab_taskbar, 64, L"Taskbar"); StringCchCopyW(g_str.tab_start, 64, L"Start Menu"); StringCchCopyW(g_str.tab_toolbars, 64, L"Toolbars");
     }
 
@@ -986,7 +1005,9 @@ static void InitLocalization() {
         case LANG_IT: StringCchCopyW(g_str.title, 128, L"Propriet\u00e0 della barra delle applicazioni e del menu Start"); break;
         case LANG_FR: StringCchCopyW(g_str.title, 128, L"Propri\u00e9t\u00e9s de la barre des t\u00e2ches et du menu D\u00e9marrer"); break;
         case LANG_ES: StringCchCopyW(g_str.title, 128, L"Propiedades de la barra de tareas e Inicio"); break;
-        case LANG_RU: StringCchCopyW(g_str.title, 128, L"Свойства панели задач и меню Пуск"); break;
+        case LANG_RU: StringCchCopyW(g_str.title, 128, L"\u0421\u0432\u043e\u0439\u0441\u0442\u0432\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447 \u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a"); break;
+        case LANG_DE: StringCchCopyW(g_str.title, 128, L"Eigenschaften von Taskleiste und Startmen\u00fc"); break;
+        case LANG_PT: StringCchCopyW(g_str.title, 128, L"Propriedades da Barra de Tarefas e do Menu Iniciar"); break;
         default: StringCchCopyW(g_str.title, 128, L"Taskbar and Start Menu Properties");
     }
 
@@ -994,7 +1015,9 @@ static void InitLocalization() {
         case LANG_IT: StringCchCopyW(g_str.btn_cancel, 32, L"Annulla"); StringCchCopyW(g_str.btn_apply, 32, L"Applica"); break;
         case LANG_FR: StringCchCopyW(g_str.btn_cancel, 32, L"Annuler"); StringCchCopyW(g_str.btn_apply, 32, L"Appliquer"); break;
         case LANG_ES: StringCchCopyW(g_str.btn_cancel, 32, L"Cancelar"); StringCchCopyW(g_str.btn_apply, 32, L"Aplicar"); break;
-        case LANG_RU: StringCchCopyW(g_str.btn_cancel, 32, L"Отмена"); StringCchCopyW(g_str.btn_apply, 32, L"Применить"); break;
+        case LANG_RU: StringCchCopyW(g_str.btn_cancel, 32, L"\u041e\u0442\u043c\u0435\u043d\u0430"); StringCchCopyW(g_str.btn_apply, 32, L"\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c"); break;
+        case LANG_DE: StringCchCopyW(g_str.btn_cancel, 32, L"Abbrechen"); StringCchCopyW(g_str.btn_apply, 32, L"\u00dcbernehmen"); break;
+        case LANG_PT: StringCchCopyW(g_str.btn_cancel, 32, L"Cancelar"); StringCchCopyW(g_str.btn_apply, 32, L"Aplicar"); break;
         default: StringCchCopyW(g_str.btn_cancel, 32, L"Cancel"); StringCchCopyW(g_str.btn_apply, 32, L"Apply");
     }
 
@@ -1015,49 +1038,79 @@ static void InitLocalization() {
             StringCchCopyW(g_str.btn_never_combine, 64, L"Mai combinare");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.grp_appearance, 64, L"Apparence de la barre des tâches");
-            StringCchCopyW(g_str.chk_lock, 64, L"Verrouiller la barre des tâches");
+            StringCchCopyW(g_str.grp_appearance, 64, L"Apparence de la barre des t\u00e2ches");
+            StringCchCopyW(g_str.chk_lock, 64, L"Verrouiller la barre des t\u00e2ches");
             StringCchCopyW(g_str.chk_hide, 64, L"Masquer automatiquement la barre");
-            StringCchCopyW(g_str.chk_small, 64, L"Utiliser de petites icônes");
-            StringCchCopyW(g_str.txt_location, 64, L"Position de la barre à l'écran:");
-            StringCchCopyW(g_str.txt_buttons, 64, L"Boutons de la barre\nà l'écran:");
+            StringCchCopyW(g_str.chk_small, 64, L"Utiliser de petites ic\u00f4nes");
+            StringCchCopyW(g_str.txt_location, 64, L"Position de la barre \u00e0 l'\u00e9cran:");
+            StringCchCopyW(g_str.txt_buttons, 64, L"Boutons de la barre\n\u00e0 l'\u00e9cran:");
             StringCchCopyW(g_str.pos_bottom, 32, L"En bas");
-            StringCchCopyW(g_str.pos_left, 32, L"À gauche");
-            StringCchCopyW(g_str.pos_right, 32, L"À droite");
+            StringCchCopyW(g_str.pos_left, 32, L"\u00e0 gauche");
+            StringCchCopyW(g_str.pos_right, 32, L"\u00e0 droite");
             StringCchCopyW(g_str.pos_top, 32, L"En haut");
-            StringCchCopyW(g_str.btn_always_combine, 64, L"Toujours combiner, masquer les étiquettes");
+            StringCchCopyW(g_str.btn_always_combine, 64, L"Toujours combiner, masquer les \u00e9tiquettes");
             StringCchCopyW(g_str.btn_combine_full, 64, L"Combiner lorsque la barre est pleine");
             StringCchCopyW(g_str.btn_never_combine, 64, L"Ne jamais combiner");
             break;
         case LANG_ES:
             StringCchCopyW(g_str.grp_appearance, 64, L"Aspecto de la barra de tareas");
             StringCchCopyW(g_str.chk_lock, 64, L"Bloquear la barra de tareas");
-            StringCchCopyW(g_str.chk_hide, 64, L"Ocultar automáticamente la barra");
-            StringCchCopyW(g_str.chk_small, 64, L"Usar iconos pequeños");
-            StringCchCopyW(g_str.txt_location, 64, L"Ubicación de la barra en la pantalla:");
+            StringCchCopyW(g_str.chk_hide, 64, L"Ocultar autom\u00e1ticamente la barra");
+            StringCchCopyW(g_str.chk_small, 64, L"Usar iconos peque\u00f1os");
+            StringCchCopyW(g_str.txt_location, 64, L"Ubicaci\u00f3n de la barra en la pantalla:");
             StringCchCopyW(g_str.txt_buttons, 64, L"Botones de la barra\nde tareas:");
             StringCchCopyW(g_str.pos_bottom, 32, L"Abajo");
             StringCchCopyW(g_str.pos_left, 32, L"Izquierda");
             StringCchCopyW(g_str.pos_right, 32, L"Derecha");
             StringCchCopyW(g_str.pos_top, 32, L"Arriba");
             StringCchCopyW(g_str.btn_always_combine, 64, L"Combinar siempre, ocultar etiquetas");
-            StringCchCopyW(g_str.btn_combine_full, 64, L"Combinar cuando la barra esté llena");
+            StringCchCopyW(g_str.btn_combine_full, 64, L"Combinar cuando la barra est\u00e1 llena");
             StringCchCopyW(g_str.btn_never_combine, 64, L"No combinar nunca");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_appearance, 64, L"Вид панели задач");
-            StringCchCopyW(g_str.chk_lock, 64, L"Закрепить панель задач");
-            StringCchCopyW(g_str.chk_hide, 64, L"Автоматически скрывать панель");
-            StringCchCopyW(g_str.chk_small, 64, L"Использовать мелкие значки");
-            StringCchCopyW(g_str.txt_location, 64, L"Положение панели на экране:");
-            StringCchCopyW(g_str.txt_buttons, 64, L"Кнопки панели\nзадач:");
-            StringCchCopyW(g_str.pos_bottom, 32, L"Снизу");
-            StringCchCopyW(g_str.pos_left, 32, L"Слева");
-            StringCchCopyW(g_str.pos_right, 32, L"Справа");
-            StringCchCopyW(g_str.pos_top, 32, L"Сверху");
-            StringCchCopyW(g_str.btn_always_combine, 64, L"Всегда группировать, скрывать метки");
-            StringCchCopyW(g_str.btn_combine_full, 64, L"Группировать при заполнении");
-            StringCchCopyW(g_str.btn_never_combine, 64, L"Не группировать");
+            StringCchCopyW(g_str.grp_appearance, 64, L"\u0412\u0438\u0434 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.chk_lock, 64, L"\u0417\u0430\u043a\u0440\u0435\u043f\u0438\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.chk_hide, 64, L"\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u0441\u043a\u0440\u044b\u0432\u0430\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c");
+            StringCchCopyW(g_str.chk_small, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u043c\u0435\u043b\u043a\u0438\u0435 \u0437\u043d\u0430\u0447\u043a\u0438");
+            StringCchCopyW(g_str.txt_location, 64, L"\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u043d\u0430 \u044d\u043a\u0440\u0430\u043d\u0435:");
+            StringCchCopyW(g_str.txt_buttons, 64, L"\u041a\u043d\u043e\u043f\u043a\u0438 \u043f\u0430\u043d\u0435\u043b\u0438\n\u0437\u0430\u0434\u0430\u0447:");
+            StringCchCopyW(g_str.pos_bottom, 32, L"\u0421\u043d\u0438\u0437\u0443");
+            StringCchCopyW(g_str.pos_left, 32, L"\u0421\u043b\u0435\u0432\u0430");
+            StringCchCopyW(g_str.pos_right, 32, L"\u0421\u043f\u0440\u0430\u0432\u0430");
+            StringCchCopyW(g_str.pos_top, 32, L"\u0421\u0432\u0435\u0440\u0445\u0443");
+            StringCchCopyW(g_str.btn_always_combine, 64, L"\u0412\u0441\u0435\u0433\u0434\u0430 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c, \u0441\u043a\u0440\u044b\u0432\u0430\u0442\u044c \u043c\u0435\u0442\u043a\u0438");
+            StringCchCopyW(g_str.btn_combine_full, 64, L"\u0413\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043f\u0440\u0438 \u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0438");
+            StringCchCopyW(g_str.btn_never_combine, 64, L"\u041d\u0435 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.grp_appearance, 64, L"Erscheinungsbild der Taskleiste");
+            StringCchCopyW(g_str.chk_lock, 64, L"Taskleiste fixieren");
+            StringCchCopyW(g_str.chk_hide, 64, L"Taskleiste automatisch ausblenden");
+            StringCchCopyW(g_str.chk_small, 64, L"Kleine Symbole verwenden");
+            StringCchCopyW(g_str.txt_location, 64, L"Position der Taskleiste auf dem Bildschirm:");
+            StringCchCopyW(g_str.txt_buttons, 64, L"Schaltfl\u00e4chen der\nTaskleiste:");
+            StringCchCopyW(g_str.pos_bottom, 32, L"Unten");
+            StringCchCopyW(g_str.pos_left, 32, L"Links");
+            StringCchCopyW(g_str.pos_right, 32, L"Rechts");
+            StringCchCopyW(g_str.pos_top, 32, L"Oben");
+            StringCchCopyW(g_str.btn_always_combine, 64, L"Immer kombinieren, Beschriftungen ausblenden");
+            StringCchCopyW(g_str.btn_combine_full, 64, L"Kombinieren, wenn die Taskleiste voll ist");
+            StringCchCopyW(g_str.btn_never_combine, 64, L"Nie kombinieren");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.grp_appearance, 64, L"Apar\u00eancia da barra de tarefas");
+            StringCchCopyW(g_str.chk_lock, 64, L"Bloquear a barra de tarefas");
+            StringCchCopyW(g_str.chk_hide, 64, L"Ocultar automaticamente a barra de tarefas");
+            StringCchCopyW(g_str.chk_small, 64, L"Usar bot\u00f5es pequenos");
+            StringCchCopyW(g_str.txt_location, 64, L"Localiza\u00e7\u00e3o da barra de tarefas na tela:");
+            StringCchCopyW(g_str.txt_buttons, 64, L"Bot\u00f5es da barra\nde tarefas:");
+            StringCchCopyW(g_str.pos_bottom, 32, L"Parte inferior");
+            StringCchCopyW(g_str.pos_left, 32, L"Esquerda");
+            StringCchCopyW(g_str.pos_right, 32, L"Direita");
+            StringCchCopyW(g_str.pos_top, 32, L"Parte superior");
+            StringCchCopyW(g_str.btn_always_combine, 64, L"Sempre combinar, ocultar r\u00f3tulos");
+            StringCchCopyW(g_str.btn_combine_full, 64, L"Combinar quando a barra estiver cheia");
+            StringCchCopyW(g_str.btn_never_combine, 64, L"Nunca combinar");
             break;
         default:
             StringCchCopyW(g_str.grp_appearance, 64, L"Taskbar appearance");
@@ -1083,18 +1136,28 @@ static void InitLocalization() {
             break;
         case LANG_FR:
             StringCchCopyW(g_str.grp_notif, 64, L"Zone de notification");
-            StringCchCopyW(g_str.txt_notif, 128, L"Permet de personnaliser les icônes et les notifications affichées dans la zone de notification de la barre des tâches.");
+            StringCchCopyW(g_str.txt_notif, 128, L"Permet de personnaliser les ic\u00f4nes et les notifications affich\u00e9es dans la zone de notification de la barre des t\u00e2ches.");
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Personnaliser...");
             break;
         case LANG_ES:
-            StringCchCopyW(g_str.grp_notif, 64, L"Área de notificación");
-            StringCchCopyW(g_str.txt_notif, 128, L"Permite personalizar los iconos y notificaciones que aparecen en el área de notificación de la barra de tareas.");
+            StringCchCopyW(g_str.grp_notif, 64, L"\u00c1rea de notificaci\u00f3n");
+            StringCchCopyW(g_str.txt_notif, 128, L"Permite personalizar los iconos y notificaciones que aparecen en el \u00e1rea de notificaci\u00f3n de la barra de tareas.");
             StringCchCopyW(g_str.btn_cust_notif, 32, L"Personalizar...");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_notif, 64, L"Область уведомлений");
-            StringCchCopyW(g_str.txt_notif, 128, L"Позволяет настроить значки и уведомления, отображаемые в области уведомлений панели задач.");
-            StringCchCopyW(g_str.btn_cust_notif, 32, L"Настроить...");
+            StringCchCopyW(g_str.grp_notif, 64, L"\u041e\u0431\u043b\u0430\u0441\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439");
+            StringCchCopyW(g_str.txt_notif, 128, L"\u041f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u0437\u043d\u0430\u0447\u043a\u0438 \u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f, \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u043c\u044b\u0435 \u0432 \u043e\u0431\u043b\u0430\u0441\u0442\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.btn_cust_notif, 32, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c...");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.grp_notif, 64, L"Infobereich");
+            StringCchCopyW(g_str.txt_notif, 128, L"Legt fest, welche Symbole und Benachrichtigungen im Infobereich der Taskleiste angezeigt werden.");
+            StringCchCopyW(g_str.btn_cust_notif, 32, L"Anpassen...");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.grp_notif, 64, L"\u00c1rea de notifica\u00e7\u00e3o");
+            StringCchCopyW(g_str.txt_notif, 128, L"Personalize quais \u00edcones e notifica\u00e7\u00f5es aparecem na \u00e1rea de notifica\u00e7\u00e3o da barra de tarefas.");
+            StringCchCopyW(g_str.btn_cust_notif, 32, L"Personalizar...");
             break;
         default:
             StringCchCopyW(g_str.grp_notif, 64, L"Notification area");
@@ -1110,22 +1173,34 @@ static void InitLocalization() {
             StringCchCopyW(g_str.link_help, 128, L"<a>Come personalizzare la barra delle applicazioni?</a>");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.grp_aero, 64, L"Aperçu du bureau avec Aero Peek");
-            StringCchCopyW(g_str.txt_aero, 256, L"Permet d'afficher temporairement le bureau en plaçant le pointeur de la souris sur le bouton Afficher le bureau à l'extrémité de la barre des tâches.");
-            StringCchCopyW(g_str.chk_aero, 64, L"Utiliser Aero Peek pour afficher l'aperçu du bureau");
-            StringCchCopyW(g_str.link_help, 128, L"<a>Comment personnaliser la barre des tâches ?</a>");
+            StringCchCopyW(g_str.grp_aero, 64, L"Aper\u00e7u du bureau avec Aero Peek");
+            StringCchCopyW(g_str.txt_aero, 256, L"Permet d'afficher temporairement le bureau en pla\u00e7ant le pointeur de la souris sur le bouton Afficher le bureau \u00e0 l'extr\u00e9mit\u00e9 de la barre des t\u00e2ches.");
+            StringCchCopyW(g_str.chk_aero, 64, L"Utiliser Aero Peek pour afficher l'aper\u00e7u du bureau");
+            StringCchCopyW(g_str.link_help, 128, L"<a>Comment personnaliser la barre des t\u00e2ches ?</a>");
             break;
         case LANG_ES:
             StringCchCopyW(g_str.grp_aero, 64, L"Vista previa del escritorio con Aero Peek");
-            StringCchCopyW(g_str.txt_aero, 256, L"Permite ver temporalmente el escritorio al colocar el puntero del mouse sobre el botón Mostrar escritorio al final de la barra de tareas.");
+            StringCchCopyW(g_str.txt_aero, 256, L"Permite ver temporalmente el escritorio al colocar el puntero del mouse sobre el bot\u00f3n Mostrar escritorio al final de la barra de tareas.");
             StringCchCopyW(g_str.chk_aero, 64, L"Usar Aero Peek para obtener una vista previa del escritorio");
-            StringCchCopyW(g_str.link_help, 128, L"<a>¿Cómo personalizar la barra de tareas?</a>");
+            StringCchCopyW(g_str.link_help, 128, L"<a>\u00bfC\u00f3mo personalizar la barra de tareas?</a>");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.grp_aero, 64, L"Предпросмотр рабочего стола с Aero Peek");
-            StringCchCopyW(g_str.txt_aero, 256, L"Позволяет временно отобразить рабочий стол при наведении указателя мыши на кнопку Показать рабочий стол в конце панели задач.");
-            StringCchCopyW(g_str.chk_aero, 64, L"Использовать Aero Peek для предпросмотра рабочего стола");
-            StringCchCopyW(g_str.link_help, 128, L"<a>Как настроить панель задач?</a>");
+            StringCchCopyW(g_str.grp_aero, 64, L"\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u0441\u0442\u043e\u043b\u0430 \u0441 Aero Peek");
+            StringCchCopyW(g_str.txt_aero, 256, L"\u041f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043e\u0442\u043e\u0431\u0440\u0430\u0437\u0438\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u043f\u0440\u0438 \u043d\u0430\u0432\u0435\u0434\u0435\u043d\u0438\u0438 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f \u043c\u044b\u0448\u0438 \u043d\u0430 \u043a\u043d\u043e\u043f\u043a\u0443 \u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u0432 \u043a\u043e\u043d\u0446\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.chk_aero, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c Aero Peek \u0434\u043b\u044f \u043f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u0441\u0442\u043e\u043b\u0430");
+            StringCchCopyW(g_str.link_help, 128, L"<a>\u041a\u0430\u043a \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447?</a>");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.grp_aero, 64, L"Desktopvorschau mit Aero Peek");
+            StringCchCopyW(g_str.txt_aero, 256, L"Zeigt den Desktop vor\u00fcbergehend an, wenn Sie den Mauszeiger auf die Schaltfl\u00e4che \u201cDesktop anzeigen\u201d am Ende der Taskleiste bewegen.");
+            StringCchCopyW(g_str.chk_aero, 64, L"Aero Peek zur Desktopvorschau verwenden");
+            StringCchCopyW(g_str.link_help, 128, L"<a>Wie passe ich die Taskleiste an?</a>");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.grp_aero, 64, L"Pr\u00e9-visualizar a \u00e1rea de trabalho com o Aero Peek");
+            StringCchCopyW(g_str.txt_aero, 256, L"Exibe temporariamente a \u00e1rea de trabalho ao mover o ponteiro do mouse at\u00e9 o bot\u00e3o Mostrar \u00e1rea de trabalho, no final da barra de tarefas.");
+            StringCchCopyW(g_str.chk_aero, 64, L"Usar o Aero Peek para pr\u00e9-visualizar a \u00e1rea de trabalho");
+            StringCchCopyW(g_str.link_help, 128, L"<a>Como personalizar a barra de tarefas?</a>");
             break;
         default:
             StringCchCopyW(g_str.grp_aero, 64, L"Preview desktop with Aero Peek");
@@ -1148,40 +1223,64 @@ static void InitLocalization() {
             StringCchCopyW(g_str.chk_mru_items, 128, L"Archivia e visualizza gli elementi aperti di recente nel menu Start e nella barra delle applicazioni");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.start_info, 256, L"Pour personnaliser l'apparence des liens, des icônes et des menus dans le menu Démarrer, cliquez sur Personnaliser.");
+            StringCchCopyW(g_str.start_info, 256, L"Pour personnaliser l'apparence des liens, des ic\u00f4nes et des menus dans le menu D\u00e9marrer, cliquez sur Personnaliser.");
             StringCchCopyW(g_str.btn_start_cust, 32, L"Personnaliser...");
             StringCchCopyW(g_str.txt_power_label, 64, L"Action du bouton d'alimentation :");
-            StringCchCopyW(g_str.power_shutdown, 32, L"Arrêter"); StringCchCopyW(g_str.power_restart, 32, L"Redémarrer");
+            StringCchCopyW(g_str.power_shutdown, 32, L"Arr\u00eater"); StringCchCopyW(g_str.power_restart, 32, L"Red\u00e9marrer");
             StringCchCopyW(g_str.power_sleep, 32, L"Veille"); StringCchCopyW(g_str.power_hibernate, 32, L"Hiberner");
-            StringCchCopyW(g_str.power_logoff, 32, L"Déconnexion"); StringCchCopyW(g_str.power_lock, 32, L"Verrouiller");
+            StringCchCopyW(g_str.power_logoff, 32, L"D\u00e9connexion"); StringCchCopyW(g_str.power_lock, 32, L"Verrouiller");
             StringCchCopyW(g_str.power_switchuser, 32, L"Changer d'utilisateur");
-            StringCchCopyW(g_str.grp_privacy, 32, L"Confidentialité");
-            StringCchCopyW(g_str.chk_mru_prog, 128, L"Stocker et afficher les programmes récemment ouverts dans le menu Démarrer");
-            StringCchCopyW(g_str.chk_mru_items, 128, L"Stocker et afficher les éléments récemment ouverts dans le menu Démarrer et la barre des tâches");
+            StringCchCopyW(g_str.grp_privacy, 32, L"Confidentialit\u00e9");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"Stocker et afficher les programmes r\u00e9cemment ouverts dans le menu D\u00e9marrer");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"Stocker et afficher les \u00e9l\u00e9ments r\u00e9cemment ouverts dans le menu D\u00e9marrer et la barre des t\u00e2ches");
             break;
         case LANG_ES:
-            StringCchCopyW(g_str.start_info, 256, L"Para personalizar el aspecto de los vínculos, iconos y menús en el menú Inicio, haga clic en Personalizar.");
+            StringCchCopyW(g_str.start_info, 256, L"Para personalizar el aspecto de los v\u00ednculos, iconos y men\u00fas en el men\u00fa Inicio, haga clic en Personalizar.");
             StringCchCopyW(g_str.btn_start_cust, 32, L"Personalizar...");
-            StringCchCopyW(g_str.txt_power_label, 64, L"Acción del botón de encendido:");
+            StringCchCopyW(g_str.txt_power_label, 64, L"Acci\u00f3n del bot\u00f3n de encendido:");
             StringCchCopyW(g_str.power_shutdown, 32, L"Apagar"); StringCchCopyW(g_str.power_restart, 32, L"Reiniciar");
             StringCchCopyW(g_str.power_sleep, 32, L"Suspender"); StringCchCopyW(g_str.power_hibernate, 32, L"Hibernar");
-            StringCchCopyW(g_str.power_logoff, 32, L"Cerrar sesión"); StringCchCopyW(g_str.power_lock, 32, L"Bloquear");
+            StringCchCopyW(g_str.power_logoff, 32, L"Cerrar sesi\u00f3n"); StringCchCopyW(g_str.power_lock, 32, L"Bloquear");
             StringCchCopyW(g_str.power_switchuser, 32, L"Cambiar usuario");
             StringCchCopyW(g_str.grp_privacy, 32, L"Privacidad");
-            StringCchCopyW(g_str.chk_mru_prog, 128, L"Almacenar y mostrar programas abiertos recientemente en el menú Inicio");
-            StringCchCopyW(g_str.chk_mru_items, 128, L"Almacenar y mostrar elementos abiertos recientemente en el menú Inicio y la barra de tareas");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"Almacenar y mostrar programas abiertos recientemente en el men\u00fa Inicio");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"Almacenar y mostrar elementos abiertos recientemente en el men\u00fa Inicio y la barra de tareas");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.start_info, 256, L"Чтобы настроить вид ссылок, значков и меню в меню Пуск, нажмите Настроить.");
-            StringCchCopyW(g_str.btn_start_cust, 32, L"Настроить...");
-            StringCchCopyW(g_str.txt_power_label, 64, L"Действие кнопки питания:");
-            StringCchCopyW(g_str.power_shutdown, 32, L"Завершение работы"); StringCchCopyW(g_str.power_restart, 32, L"Перезагрузка");
-            StringCchCopyW(g_str.power_sleep, 32, L"Сон"); StringCchCopyW(g_str.power_hibernate, 32, L"Гибернация");
-            StringCchCopyW(g_str.power_logoff, 32, L"Выход"); StringCchCopyW(g_str.power_lock, 32, L"Блокировка");
-            StringCchCopyW(g_str.power_switchuser, 32, L"Смена пользователя");
-            StringCchCopyW(g_str.grp_privacy, 32, L"Конфиденциальность");
-            StringCchCopyW(g_str.chk_mru_prog, 128, L"Хранить и показывать недавно открытые программы в меню Пуск");
-            StringCchCopyW(g_str.chk_mru_items, 128, L"Хранить и показывать недавно открытые элементы в меню Пуск и на панели задач");
+            StringCchCopyW(g_str.start_info, 256, L"\u0427\u0442\u043e\u0431\u044b \u043d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c \u0432\u0438\u0434 \u0441\u0441\u044b\u043b\u043e\u043a, \u0437\u043d\u0430\u0447\u043a\u043e\u0432 \u0438 \u043c\u0435\u043d\u044e \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a, \u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c.");
+            StringCchCopyW(g_str.btn_start_cust, 32, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c...");
+            StringCchCopyW(g_str.txt_power_label, 64, L"\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043a\u043d\u043e\u043f\u043a\u0438 \u043f\u0438\u0442\u0430\u043d\u0438\u044f:");
+            StringCchCopyW(g_str.power_shutdown, 32, L"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u0435 \u0440\u0430\u0431\u043e\u0442\u044b"); StringCchCopyW(g_str.power_restart, 32, L"\u041f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430");
+            StringCchCopyW(g_str.power_sleep, 32, L"\u0421\u043e\u043d"); StringCchCopyW(g_str.power_hibernate, 32, L"\u0413\u0438\u0431\u0435\u0440\u043d\u0430\u0446\u0438\u044f");
+            StringCchCopyW(g_str.power_logoff, 32, L"\u0412\u044b\u0445\u043e\u0434"); StringCchCopyW(g_str.power_lock, 32, L"\u0411\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430");
+            StringCchCopyW(g_str.power_switchuser, 32, L"\u0421\u043c\u0435\u043d\u0430 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f");
+            StringCchCopyW(g_str.grp_privacy, 32, L"\u041a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"\u0425\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u0435 \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"\u0425\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a \u0438 \u043d\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.start_info, 256, L"Um festzulegen, wie Links, Symbole und Men\u00fcs im Startmen\u00fc aussehen, klicken Sie auf Anpassen.");
+            StringCchCopyW(g_str.btn_start_cust, 32, L"Anpassen...");
+            StringCchCopyW(g_str.txt_power_label, 64, L"Aktion der Ein/Aus-Schaltfl\u00e4che:");
+            StringCchCopyW(g_str.power_shutdown, 32, L"Herunterfahren"); StringCchCopyW(g_str.power_restart, 32, L"Neu starten");
+            StringCchCopyW(g_str.power_sleep, 32, L"Energie sparen"); StringCchCopyW(g_str.power_hibernate, 32, L"Ruhezustand");
+            StringCchCopyW(g_str.power_logoff, 32, L"Abmelden"); StringCchCopyW(g_str.power_lock, 32, L"Sperren");
+            StringCchCopyW(g_str.power_switchuser, 32, L"Benutzer wechseln");
+            StringCchCopyW(g_str.grp_privacy, 32, L"Datenschutz");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"Zuletzt ge\u00f6ffnete Programme im Startmen\u00fc speichern und anzeigen");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"Zuletzt ge\u00f6ffnete Elemente im Startmen\u00fc und in der Taskleiste speichern und anzeigen");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.start_info, 256, L"Para personalizar a apar\u00eancia de links, \u00edcones e menus no Menu Iniciar, clique em Personalizar.");
+            StringCchCopyW(g_str.btn_start_cust, 32, L"Personalizar...");
+            StringCchCopyW(g_str.txt_power_label, 64, L"A\u00e7\u00e3o do bot\u00e3o de energia:");
+            StringCchCopyW(g_str.power_shutdown, 32, L"Desligar"); StringCchCopyW(g_str.power_restart, 32, L"Reiniciar");
+            StringCchCopyW(g_str.power_sleep, 32, L"Suspender"); StringCchCopyW(g_str.power_hibernate, 32, L"Hibernar");
+            StringCchCopyW(g_str.power_logoff, 32, L"Encerrar sess\u00e3o"); StringCchCopyW(g_str.power_lock, 32, L"Bloquear");
+            StringCchCopyW(g_str.power_switchuser, 32, L"Trocar usu\u00e1rio");
+            StringCchCopyW(g_str.grp_privacy, 32, L"Privacidade");
+            StringCchCopyW(g_str.chk_mru_prog, 128, L"Armazenar e exibir programas abertos recentemente no Menu Iniciar");
+            StringCchCopyW(g_str.chk_mru_items, 128, L"Armazenar e exibir itens abertos recentemente no Menu Iniciar e na barra de tarefas");
             break;
         default:
             StringCchCopyW(g_str.start_info, 256, L"To customize how links, icons, and menus look in the Start menu, click Customize.");
@@ -1203,19 +1302,29 @@ static void InitLocalization() {
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Pannello input Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Desktop");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.toolbars_info, 128, L"Sélectionnez les barres d'outils à ajouter à la barre des tâches.");
+            StringCchCopyW(g_str.toolbars_info, 128, L"S\u00e9lectionnez les barres d'outils \u00e0 ajouter \u00e0 la barre des t\u00e2ches.");
             StringCchCopyW(g_str.toolbar_address, 32, L"Adresse"); StringCchCopyW(g_str.toolbar_links, 32, L"Liens");
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Panneau de saisie Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Bureau");
             break;
         case LANG_ES:
             StringCchCopyW(g_str.toolbars_info, 128, L"Seleccione las barras de herramientas para agregar a la barra de tareas.");
-            StringCchCopyW(g_str.toolbar_address, 32, L"Dirección"); StringCchCopyW(g_str.toolbar_links, 32, L"Vínculos");
+            StringCchCopyW(g_str.toolbar_address, 32, L"Direcci\u00f3n"); StringCchCopyW(g_str.toolbar_links, 32, L"V\u00ednculos");
             StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Panel de entrada Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Escritorio");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.toolbars_info, 128, L"Выберите панели инструментов для добавления на панель задач.");
-            StringCchCopyW(g_str.toolbar_address, 32, L"Адрес"); StringCchCopyW(g_str.toolbar_links, 32, L"Ссылки");
-            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Панель ввода планшета"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Рабочий стол");
+            StringCchCopyW(g_str.toolbars_info, 128, L"\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 \u0434\u043b\u044f \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0430 \u043f\u0430\u043d\u0435\u043b\u044c \u0437\u0430\u0434\u0430\u0447.");
+            StringCchCopyW(g_str.toolbar_address, 32, L"\u0410\u0434\u0440\u0435\u0441"); StringCchCopyW(g_str.toolbar_links, 32, L"\u0421\u0441\u044b\u043b\u043a\u0438");
+            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"\u041f\u0430\u043d\u0435\u043b\u044c \u0432\u0432\u043e\u0434\u0430 \u043f\u043b\u0430\u043d\u0448\u0435\u0442\u0430"); StringCchCopyW(g_str.toolbar_desktop, 32, L"\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.toolbars_info, 128, L"W\u00e4hlen Sie aus, welche Symbolleisten der Taskleiste hinzugef\u00fcgt werden sollen.");
+            StringCchCopyW(g_str.toolbar_address, 32, L"Adresse"); StringCchCopyW(g_str.toolbar_links, 32, L"Links");
+            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Tablet-PC-Eingabebereich"); StringCchCopyW(g_str.toolbar_desktop, 32, L"Desktop");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.toolbars_info, 128, L"Selecione quais barras de ferramentas adicionar \u00e0 barra de tarefas.");
+            StringCchCopyW(g_str.toolbar_address, 32, L"Endere\u00e7o"); StringCchCopyW(g_str.toolbar_links, 32, L"Links");
+            StringCchCopyW(g_str.toolbar_tabletpc, 32, L"Painel de Entrada do Tablet PC"); StringCchCopyW(g_str.toolbar_desktop, 32, L"\u00c1rea de trabalho");
             break;
         default:
             StringCchCopyW(g_str.toolbars_info, 128, L"Select which toolbars to add to the taskbar.");
@@ -1226,12 +1335,12 @@ static void InitLocalization() {
     switch (lang) {
         case LANG_IT:
             StringCchCopyW(g_str.about_title, 64, L"Informazioni sulla mod");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nQuesta mod per Windhawk ricrea la classica finestra \"Proprietà della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\nFunzionalità attualmente disponibili:\r\n- Blocca la barra delle applicazioni\r\n- Nascondi automaticamente la barra\r\n- Usa icone piccole\r\n- Configura la combinazione dei pulsanti\r\n- Configura Aero Peek\r\n- Accesso rapido alle impostazioni dell'area di notifica\r\n- Barre degli strumenti native (Indirizzo, Collegamenti, Tablet PC)\r\n- Rotazione barra (solo Alto/Basso)\r\n\r\nLimitazioni note:\r\n- Posizioni Sinistra e Destra non supportate\r\n- La toolbar Desktop non è disponibile attualmente\r\n- Alcune impostazioni richiedono il riavvio di Explorer.");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nQuesta mod per Windhawk ricrea la classica finestra \"Propriet\u00e0 della barra delle applicazioni e del menu Start\" ispirata alle versioni classiche di Windows.\r\n\r\nFunzionalit\u00e0 attualmente disponibili:\r\n- Blocca la barra delle applicazioni\r\n- Nascondi automaticamente la barra\r\n- Usa icone piccole\r\n- Configura la combinazione dei pulsanti\r\n- Configura Aero Peek\r\n- Accesso rapido alle impostazioni dell'area di notifica\r\n- Barre degli strumenti native (Indirizzo, Collegamenti, Tablet PC)\r\n- Rotazione barra (solo Alto/Basso)\r\n\r\nLimitazioni note:\r\n- Posizioni Sinistra e Destra non supportate\r\n- Barra degli strumenti Desktop non disponibile\r\n- Alcune impostazioni richiedono il riavvio di Explorer.");
             StringCchCopyW(g_str.warn_position_title, 64, L"Posizione barra delle applicazioni");
-            StringCchCopyW(g_str.warn_position_text, 256, L"La modifica della posizione verrà applicata al prossimo riavvio di Explorer.");
+            StringCchCopyW(g_str.warn_position_text, 256, L"La modifica della posizione verr\u00e0 applicata al prossimo riavvio di Explorer.");
             StringCchCopyW(g_str.start_custom_title, 64, L"Personalizza menu Start");
             StringCchCopyW(g_str.start_grp_tiles, 64, L"Riquadri e comportamento");
-            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mostra più riquadri nel menu Start");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mostra pi\u00f9 riquadri nel menu Start");
             StringCchCopyW(g_str.start_chk_app_list, 64, L"Mostra elenco app nel menu Start");
             StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Mostra app aggiunte di recente");
             StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Usa Start a schermo intero");
@@ -1254,91 +1363,149 @@ static void InitLocalization() {
             StringCchCopyW(g_str.start_msg_saved_title, 64, L"Impostazioni salvate");
             break;
         case LANG_FR:
-            StringCchCopyW(g_str.about_title, 64, L"À propos de cette modification");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nCette modification Windhawk recrée la fenêtre classique \"Propriétés de la barre des tâches et du menu Démarrer\" inspirée des versions classiques de Windows.\r\n\r\nFonctionnalités disponibles :\r\n- Verrouiller la barre des tâches\r\n- Masquer automatiquement\r\n- Petites icônes\r\n- Configuration du groupement des boutons\r\n- Configuration d'Aero Peek\r\n- Accès rapide aux paramètres de la zone de notification\r\n- Barres d'outils natives (Adresse, Liens, Tablet PC)\r\n- Rotation de la barre (Haut/Bas uniquement)\r\n\r\nLimitations connues :\r\n- Positions Gauche et Droite non prises en charge\r\n- Barre d'outils Bureau non disponible\r\n- Certains paramètres nécessitent un redémarrage d'Explorer.");
+            StringCchCopyW(g_str.about_title, 64, L"\u00c0 propos de cette modification");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nCette modification Windhawk recr\u00e9e la fen\u00eatre classique \"Propri\u00e9t\u00e9s de la barre des t\u00e2ches et du menu D\u00e9marrer\" inspir\u00e9e des versions classiques de Windows.\r\n\r\nFonctionnalit\u00e9s disponibles :\r\n- Verrouiller la barre des t\u00e2ches\r\n- Masquer automatiquement\r\n- Petites ic\u00f4nes\r\n- Configuration du groupement des boutons\r\n- Configuration d'Aero Peek\r\n- Acc\u00e8s rapide aux param\u00e8tres de la zone de notification\r\n- Barres d'outils natives (Adresse, Liens, Tablet PC)\r\n- Rotation de la barre (Haut/Bas uniquement)\r\n\r\nLimitations connues :\r\n- Positions Gauche et Droite non prises en charge\r\n- Barre d'outils Bureau non disponible\r\n- Certains param\u00e8tres n\u00e9cessitent un red\u00e9marrage d'Explorer.");
             StringCchCopyW(g_str.warn_position_title, 64, L"Position de la barre");
-            StringCchCopyW(g_str.warn_position_text, 256, L"Le changement de position sera appliqué après le redémarrage d'Explorer.");
-            StringCchCopyW(g_str.start_custom_title, 64, L"Personnaliser le menu Démarrer");
+            StringCchCopyW(g_str.warn_position_text, 256, L"Le changement de position sera appliqu\u00e9 apr\u00e8s le red\u00e9marrage d'Explorer.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"Personnaliser le menu D\u00e9marrer");
             StringCchCopyW(g_str.start_grp_tiles, 64, L"Vignettes et comportement");
-            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Afficher plus de vignettes dans le menu Démarrer");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Afficher plus de vignettes dans le menu D\u00e9marrer");
             StringCchCopyW(g_str.start_chk_app_list, 64, L"Afficher la liste des applications");
-            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Afficher les applications récemment ajoutées");
-            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Utiliser le menu Démarrer en plein écran");
-            StringCchCopyW(g_str.start_chk_recent_items, 64, L"Afficher les éléments récents dans les Jump Lists");
+            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Afficher les applications r\u00e9cemment ajout\u00e9es");
+            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Utiliser le menu D\u00e9marrer en plein \u00e9cran");
+            StringCchCopyW(g_str.start_chk_recent_items, 64, L"Afficher les \u00e9l\u00e9ments r\u00e9cents dans les Jump Lists");
             StringCchCopyW(g_str.start_chk_account_notif, 64, L"Afficher les notifications du compte");
             StringCchCopyW(g_str.start_grp_search, 64, L"Recherche");
             StringCchCopyW(g_str.start_chk_search_programs, 64, L"Inclure les programmes dans la recherche");
             StringCchCopyW(g_str.start_chk_search_files, 64, L"Inclure les fichiers dans la recherche");
-            StringCchCopyW(g_str.start_grp_folders, 64, L"Dossiers à afficher dans Démarrer");
-            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Paramètres");
+            StringCchCopyW(g_str.start_grp_folders, 64, L"Dossiers \u00e0 afficher dans D\u00e9marrer");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Param\u00e8tres");
             StringCchCopyW(g_str.start_chk_folder_docs, 32, L"Documents");
-            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"Téléchargements");
+            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"T\u00e9l\u00e9chargements");
             StringCchCopyW(g_str.start_chk_folder_music, 32, L"Musique");
             StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Images");
-            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"Vidéos");
-            StringCchCopyW(g_str.start_chk_folder_network, 32, L"Réseau");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"Vid\u00e9os");
+            StringCchCopyW(g_str.start_chk_folder_network, 32, L"R\u00e9seau");
             StringCchCopyW(g_str.start_chk_folder_personal, 32, L"Dossier personnel");
-            StringCchCopyW(g_str.start_info_restart, 256, L"Remarque : certaines modifications peuvent nécessiter un redémarrage d'Explorer ou une déconnexion pour prendre pleinement effet.");
-            StringCchCopyW(g_str.start_msg_saved, 512, L"Paramètres du menu Démarrer enregistrés.\n\nCertaines modifications peuvent nécessiter une déconnexion ou un redémarrage d'Explorer pour prendre pleinement effet.");
-            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Paramètres enregistrés");
+            StringCchCopyW(g_str.start_info_restart, 256, L"Remarque : certaines modifications peuvent n\u00e9cessiter un red\u00e9marrage d'Explorer ou une d\u00e9connexion pour prendre pleinement effet.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"Param\u00e8tres du menu D\u00e9marrer enregistr\u00e9s.\n\nCertaines modifications peuvent n\u00e9cessiter une d\u00e9connexion ou un red\u00e9marrage d'Explorer pour prendre pleinement effet.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Param\u00e8tres enregistr\u00e9s");
             break;
         case LANG_ES:
-            StringCchCopyW(g_str.about_title, 64, L"Acerca de esta modificación");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nEsta modificación de Windhawk recrea la ventana clásica \"Propiedades de la barra de tareas y del menú Inicio\" inspirada en las versiones clásicas de Windows.\r\n\r\nFunciones disponibles:\r\n- Bloquear la barra de tareas\r\n- Ocultar automáticamente\r\n- Iconos pequeños\r\n- Configurar agrupación de botones\r\n- Configurar Aero Peek\r\n- Acceso rápido a la configuración del área de notificación\r\n- Barras de herramientas nativas (Dirección, Vínculos, Tablet PC)\r\n- Rotación de la barra (solo Arriba/Abajo)\r\n\r\nLimitaciones conocidas:\r\n- Posiciones Izquierda y Derecha no soportadas\r\n- Barra de herramientas Escritorio no disponible\r\n- Algunas configuraciones requieren reiniciar Explorer.");
-            StringCchCopyW(g_str.warn_position_title, 64, L"Posición de la barra");
-            StringCchCopyW(g_str.warn_position_text, 256, L"El cambio de posición se aplicará después de reiniciar Explorer.");
-            StringCchCopyW(g_str.start_custom_title, 64, L"Personalizar menú Inicio");
+            StringCchCopyW(g_str.about_title, 64, L"Acerca de esta modificaci\u00f3n");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nEsta modificaci\u00f3n de Windhawk recrea la ventana cl\u00e1sica \"Propiedades de la barra de tareas y del men\u00fa Inicio\" inspirada en las versiones cl\u00e1sicas de Windows.\r\n\r\nFunciones disponibles :\r\n- Bloquear la barra de tareas\r\n- Ocultar autom\u00e1ticamente\r\n- Iconos peque\u00f1os\r\n- Configurar agrupaci\u00f3n de botones\r\n- Configurar Aero Peek\r\n- Acceso r\u00e1pido a la configuraci\u00f3n del \u00e1rea de notificaci\u00f3n\r\n- Barras de herramientas nativas (Direcci\u00f3n, V\u00ednculos, Tablet PC)\r\n- Rotaci\u00f3n de la barra (solo Arriba/Abajo)\r\n\r\nLimitaciones conocidas :\r\n- Posiciones Izquierda y Derecha no soportadas\r\n- Barra de herramientas Escritorio no disponible\r\n- Algunas configuraciones requieren reiniciar Explorer.");
+            StringCchCopyW(g_str.warn_position_title, 64, L"Posici\u00f3n de la barra");
+            StringCchCopyW(g_str.warn_position_text, 256, L"El cambio de posici\u00f3n se aplicar\u00e1 despu\u00e9s de reiniciar Explorer.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"Personalizar men\u00fa Inicio");
             StringCchCopyW(g_str.start_grp_tiles, 64, L"Mosaicos y comportamiento");
-            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mostrar más mosaicos en Inicio");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mostrar m\u00e1s mosaicos en Inicio");
             StringCchCopyW(g_str.start_chk_app_list, 64, L"Mostrar lista de aplicaciones en Inicio");
             StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Mostrar aplicaciones agregadas recientemente");
             StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Usar Inicio en pantalla completa");
             StringCchCopyW(g_str.start_chk_recent_items, 64, L"Mostrar elementos recientes en Jump Lists");
             StringCchCopyW(g_str.start_chk_account_notif, 64, L"Mostrar notificaciones de cuenta");
-            StringCchCopyW(g_str.start_grp_search, 64, L"Búsqueda");
-            StringCchCopyW(g_str.start_chk_search_programs, 64, L"Incluir programas en los resultados de búsqueda");
-            StringCchCopyW(g_str.start_chk_search_files, 64, L"Incluir archivos en los resultados de búsqueda");
+            StringCchCopyW(g_str.start_grp_search, 64, L"B\u00fasqueda");
+            StringCchCopyW(g_str.start_chk_search_programs, 64, L"Incluir programas en los resultados de b\u00fasqueda");
+            StringCchCopyW(g_str.start_chk_search_files, 64, L"Incluir archivos en los resultados de b\u00fasqueda");
             StringCchCopyW(g_str.start_grp_folders, 64, L"Carpetas para mostrar en Inicio");
-            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Configuración");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Configuraci\u00f3n");
             StringCchCopyW(g_str.start_chk_folder_docs, 32, L"Documentos");
             StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"Descargas");
-            StringCchCopyW(g_str.start_chk_folder_music, 32, L"Música");
-            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Imágenes");
-            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"Vídeos");
+            StringCchCopyW(g_str.start_chk_folder_music, 32, L"M\u00fasica");
+            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Im\u00e1genes");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"V\u00eddeos");
             StringCchCopyW(g_str.start_chk_folder_network, 32, L"Red");
             StringCchCopyW(g_str.start_chk_folder_personal, 32, L"Carpeta personal");
-            StringCchCopyW(g_str.start_info_restart, 256, L"Nota: algunos cambios pueden requerir reiniciar Explorer o cerrar sesión para que surtan efecto completo.");
-            StringCchCopyW(g_str.start_msg_saved, 512, L"Configuración del menú Inicio guardada.\n\nAlgunos cambios pueden requerir cerrar sesión o reiniciar Explorer para que surtan efecto completo.");
-            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Configuración guardada");
+            StringCchCopyW(g_str.start_info_restart, 256, L"Nota: algunos cambios pueden requerir reiniciar Explorer o cerrar sesi\u00f3n para que surtan efecto completo.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"Configuraci\u00f3n del men\u00fa Inicio guardada.\n\nAlgunos cambios pueden requerir cerrar sesi\u00f3n o reiniciar Explorer para que surtan efecto completo.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Configuraci\u00f3n guardada");
             break;
         case LANG_RU:
-            StringCchCopyW(g_str.about_title, 64, L"О данной модификации");
-            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nДанная модификация Windhawk воссоздает классическое окно \"Свойства панели задач и меню Пуск\", вдохновленное классическими версиями Windows.\r\n\r\nДоступные возможности:\r\n- Закрепление панели задач\r\n- Автоматическое скрытие\r\n- Мелкие значки\r\n- Настройка группировки кнопок\r\n- Настройка Aero Peek\r\n- Быстрый доступ к настройкам области уведомлений\r\n- Панели инструментов (Адрес, Ссылки, Планшет)\r\n- Поворот панели (только Вверх/Вниз)\r\n\r\nИзвестные ограничения:\r\n- Положения Слева и Справа не поддерживаются\r\n- Панель Рабочий стол недоступна\r\n- Некоторые настройки требуют перезапуска Explorer.");
-            StringCchCopyW(g_str.warn_position_title, 64, L"Положение панели задач");
-            StringCchCopyW(g_str.warn_position_text, 256, L"Изменение положения будет применено после перезапуска Explorer.");
-            StringCchCopyW(g_str.start_custom_title, 64, L"Настройка меню Пуск");
-            StringCchCopyW(g_str.start_grp_tiles, 64, L"Плитки и поведение");
-            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Показывать больше плиток в меню Пуск");
-            StringCchCopyW(g_str.start_chk_app_list, 64, L"Показывать список приложений в меню Пуск");
-            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Показывать недавно добавленные приложения");
-            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Использовать Пуск на весь экран");
-            StringCchCopyW(g_str.start_chk_recent_items, 64, L"Показывать недавние элементы в списках переходов");
-            StringCchCopyW(g_str.start_chk_account_notif, 64, L"Показывать уведомления учетной записи");
-            StringCchCopyW(g_str.start_grp_search, 64, L"Поиск");
-            StringCchCopyW(g_str.start_chk_search_programs, 64, L"Включать программы в результаты поиска");
-            StringCchCopyW(g_str.start_chk_search_files, 64, L"Включать файлы в результаты поиска");
-            StringCchCopyW(g_str.start_grp_folders, 64, L"Папки для отображения в Пуске");
-            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Параметры");
-            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"Документы");
-            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"Загрузки");
-            StringCchCopyW(g_str.start_chk_folder_music, 32, L"Музыка");
-            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Изображения");
-            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"Видео");
-            StringCchCopyW(g_str.start_chk_folder_network, 32, L"Сеть");
-            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"Личная папка");
-            StringCchCopyW(g_str.start_info_restart, 256, L"Примечание: некоторые изменения могут потребовать перезапуска Explorer или выхода из системы для полного применения.");
-            StringCchCopyW(g_str.start_msg_saved, 512, L"Настройки меню Пуск сохранены.\n\nНекоторые изменения могут потребовать выхода из системы или перезапуска Explorer для полного применения.");
-            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Настройки сохранены");
+            StringCchCopyW(g_str.about_title, 64, L"\u041e \u0434\u0430\u043d\u043d\u043e\u0439 \u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\n\u0414\u0430\u043d\u043d\u0430\u044f \u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f Windhawk \u0432\u043e\u0441\u0441\u043e\u0437\u0434\u0430\u0435\u0442 \u043a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u043e\u043a\u043d\u043e \"\u0421\u0432\u043e\u0439\u0441\u0442\u0432\u0430 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447 \u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a\", \u0432\u0434\u043e\u0445\u043d\u043e\u0432\u043b\u0435\u043d\u043d\u043e\u0435 \u043a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u0438\u043c\u0438 \u0432\u0435\u0440\u0441\u0438\u044f\u043c\u0438 Windows.\r\n\r\n\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u0435 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u0438:\r\n- \u0417\u0430\u043a\u0440\u0435\u043f\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447\r\n- \u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0441\u043a\u0440\u044b\u0442\u0438\u0435\r\n- \u041c\u0435\u043b\u043a\u0438\u0435 \u0437\u043d\u0430\u0447\u043a\u0438\r\n- \u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0433\u0440\u0443\u043f\u043f\u0438\u0440\u043e\u0432\u043a\u0438 \u043a\u043d\u043e\u043f\u043e\u043a\r\n- \u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 Aero Peek\r\n- \u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0434\u043e\u0441\u0442\u0443\u043f \u043a \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u043c \u043e\u0431\u043b\u0430\u0441\u0442\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439\r\n- \u041f\u0430\u043d\u0435\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432 (\u0410\u0434\u0440\u0435\u0441, \u0421\u0441\u044b\u043b\u043a\u0438, \u041f\u043b\u0430\u043d\u0448\u0435\u0442)\r\n- \u041f\u043e\u0432\u043e\u0440\u043e\u0442 \u043f\u0430\u043d\u0435\u043b\u0438 (\u0442\u043e\u043b\u044c\u043a\u043e \u0412\u0432\u0435\u0440\u0445/\u0412\u043d\u0438\u0437)\r\n\r\n\u0418\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0435 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u044f:\r\n- \u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0421\u043b\u0435\u0432\u0430 \u0438 \u0421\u043f\u0440\u0430\u0432\u0430 \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044e\u0442\u0441\u044f\r\n- \u041f\u0430\u043d\u0435\u043b\u044c \u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0441\u0442\u043e\u043b \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430\r\n- \u041d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0442\u0440\u0435\u0431\u0443\u044e\u0442 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer.");
+            StringCchCopyW(g_str.warn_position_title, 64, L"\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u043f\u0430\u043d\u0435\u043b\u0438 \u0437\u0430\u0434\u0430\u0447");
+            StringCchCopyW(g_str.warn_position_text, 256, L"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0431\u0443\u0434\u0435\u0442 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u043e \u043f\u043e\u0441\u043b\u0435 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_grp_tiles, 64, L"\u041f\u043b\u0438\u0442\u043a\u0438 \u0438 \u043f\u043e\u0432\u0435\u0434\u0435\u043d\u0438\u0435");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435 \u043f\u043b\u0438\u0442\u043e\u043a \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_app_list, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0439 \u0432 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u043e \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043d\u044b\u0435 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f");
+            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u041f\u0443\u0441\u043a \u043d\u0430 \u0432\u0435\u0441\u044c \u044d\u043a\u0440\u0430\u043d");
+            StringCchCopyW(g_str.start_chk_recent_items, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u043d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0432 \u0441\u043f\u0438\u0441\u043a\u0430\u0445 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432");
+            StringCchCopyW(g_str.start_chk_account_notif, 64, L"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u0443\u0447\u0435\u0442\u043d\u043e\u0439 \u0437\u0430\u043f\u0438\u0441\u0438");
+            StringCchCopyW(g_str.start_grp_search, 64, L"\u041f\u043e\u0438\u0441\u043a");
+            StringCchCopyW(g_str.start_chk_search_programs, 64, L"\u0412\u043a\u043b\u044e\u0447\u0430\u0442\u044c \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u044b \u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430");
+            StringCchCopyW(g_str.start_chk_search_files, 64, L"\u0412\u043a\u043b\u044e\u0447\u0430\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430");
+            StringCchCopyW(g_str.start_grp_folders, 64, L"\u041f\u0430\u043f\u043a\u0438 \u0434\u043b\u044f \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f \u0432 \u041f\u0443\u0441\u043a\u0435");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b");
+            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b");
+            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0438");
+            StringCchCopyW(g_str.start_chk_folder_music, 32, L"\u041c\u0443\u0437\u044b\u043a\u0430");
+            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"\u0412\u0438\u0434\u0435\u043e");
+            StringCchCopyW(g_str.start_chk_folder_network, 32, L"\u0421\u0435\u0442\u044c");
+            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"\u041b\u0438\u0447\u043d\u0430\u044f \u043f\u0430\u043f\u043a\u0430");
+            StringCchCopyW(g_str.start_info_restart, 256, L"\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435: \u043d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043c\u043e\u0433\u0443\u0442 \u043f\u043e\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u0442\u044c \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer \u0438\u043b\u0438 \u0432\u044b\u0445\u043e\u0434\u0430 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0434\u043b\u044f \u043f\u043e\u043b\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u043c\u0435\u043d\u044e \u041f\u0443\u0441\u043a \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b.\n\n\u041d\u0435\u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043c\u043e\u0433\u0443\u0442 \u043f\u043e\u0442\u0440\u0435\u0431\u043e\u0432\u0430\u0442\u044c \u0432\u044b\u0445\u043e\u0434\u0430 \u0438\u0437 \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a\u0430 Explorer \u0434\u043b\u044f \u043f\u043e\u043b\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b");
+            break;
+        case LANG_DE:
+            StringCchCopyW(g_str.about_title, 64, L"\u00dcber diese Mod");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nDiese Windhawk-Mod erstellt den klassischen Dialog \"Eigenschaften von Taskleiste und Startmen\u00fc\" aus \u00e4lteren Windows-Versionen nach.\r\n\r\nAktuell verf\u00fcgbare Funktionen :\r\n- Taskleiste fixieren\r\n- Taskleiste automatisch ausblenden\r\n- Kleine Symbole verwenden\r\n- Gruppierung der Taskleisten-Schaltfl\u00e4chen konfigurieren\r\n- Aero Peek konfigurieren\r\n- Schnellzugriff auf Infobereich-Einstellungen\r\n- Native Symbolleisten (Adresse, Links, Tablet PC)\r\n- Rotation der Taskleiste (nur oben/unten)\r\n\r\nBekannte Einschr\u00e4nkungen :\r\n- Links- und Rechtsposition werden nicht unterst\u00fctzt\r\n- Desktop-Symbolleiste derzeit nicht verf\u00fcgbar\r\n- Manche Einstellungen erfordern einen Explorer-Neustart.");
+            StringCchCopyW(g_str.warn_position_title, 64, L"Position der Taskleiste");
+            StringCchCopyW(g_str.warn_position_text, 256, L"Die \u00c4nderung der Position wird nach einem Neustart von Explorer wirksam.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"Startmen\u00fc anpassen");
+            StringCchCopyW(g_str.start_grp_tiles, 64, L"Kacheln und Verhalten");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mehr Kacheln im Startmen\u00fc anzeigen");
+            StringCchCopyW(g_str.start_chk_app_list, 64, L"App-Liste im Startmen\u00fc anzeigen");
+            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"K\u00fcrzlich hinzugef\u00fcgte Apps anzeigen");
+            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Startmen\u00fc im Vollbildmodus verwenden");
+            StringCchCopyW(g_str.start_chk_recent_items, 64, L"Zuletzt ge\u00f6ffnete Elemente in Sprungliste anzeigen");
+            StringCchCopyW(g_str.start_chk_account_notif, 64, L"Kontobenachrichtigungen anzeigen");
+            StringCchCopyW(g_str.start_grp_search, 64, L"Suche");
+            StringCchCopyW(g_str.start_chk_search_programs, 64, L"Programme in Suchergebnisse einbeziehen");
+            StringCchCopyW(g_str.start_chk_search_files, 64, L"Dateien in Suchergebnisse einbeziehen");
+            StringCchCopyW(g_str.start_grp_folders, 64, L"Im Startmen\u00fc anzuzeigende Ordner");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Einstellungen");
+            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"Dokumente");
+            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"Downloads");
+            StringCchCopyW(g_str.start_chk_folder_music, 32, L"Musik");
+            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Bilder");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"Videos");
+            StringCchCopyW(g_str.start_chk_folder_network, 32, L"Netzwerk");
+            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"Pers\u00f6nlicher Ordner");
+            StringCchCopyW(g_str.start_info_restart, 256, L"Hinweis: Einige \u00c4nderungen erfordern m\u00f6glicherweise einen Explorer-Neustart oder eine Abmeldung, um vollst\u00e4ndig wirksam zu werden.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"Startmen\u00fc-Einstellungen gespeichert.\n\nEinige \u00c4nderungen erfordern m\u00f6glicherweise eine Abmeldung oder einen Explorer-Neustart, um vollst\u00e4ndig wirksam zu werden.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Einstellungen gespeichert");
+            break;
+        case LANG_PT:
+            StringCchCopyW(g_str.about_title, 64, L"Sobre esta modifica\u00e7\u00e3o");
+            StringCchCopyW(g_str.about_text, 4096, L"Classic Taskbar Properties\r\n\r\nEsta modifica\u00e7\u00e3o do Windhawk recria a cl\u00e1ssica janela \"Propriedades da Barra de Tarefas e do Menu Iniciar\" inspirada nas vers\u00f5es cl\u00e1ssicas do Windows.\r\n\r\nRecursos atualmente dispon\u00edveis :\r\n- Bloquear a barra de tarefas\r\n- Ocultar automaticamente a barra de tarefas\r\n- Usar \u00edcones pequenos\r\n- Configurar o agrupamento de bot\u00f5es da barra de tarefas\r\n- Configurar o Aero Peek\r\n- Acesso r\u00e1pido \u00e0s configura\u00e7\u00f5es da \u00e1rea de notifica\u00e7\u00e3o\r\n- Barras de ferramentas nativas (Endere\u00e7o, Links, Tablet PC)\r\n- Rota\u00e7\u00e3o da barra de tarefas (apenas superior/inferior)\r\n\r\nLimita\u00e7\u00f5es conhecidas :\r\n- Posi\u00e7\u00f5es esquerda e direita n\u00e3o suportadas\r\n- Barra de ferramentas da \u00e1rea de trabalho indispon\u00edvel no momento\r\n- Algumas configura\u00e7\u00f5es exigem reiniciar o Explorer.");
+            StringCchCopyW(g_str.warn_position_title, 64, L"Posi\u00e7\u00e3o da barra de tarefas");
+            StringCchCopyW(g_str.warn_position_text, 256, L"A mudan\u00e7a de posi\u00e7\u00e3o ser\u00e1 aplicada ap\u00f3s reiniciar o Explorer.");
+            StringCchCopyW(g_str.start_custom_title, 64, L"Personalizar Menu Iniciar");
+            StringCchCopyW(g_str.start_grp_tiles, 64, L"Blocos e comportamento");
+            StringCchCopyW(g_str.start_chk_more_tiles, 64, L"Mostrar mais blocos no Menu Iniciar");
+            StringCchCopyW(g_str.start_chk_app_list, 64, L"Mostrar lista de aplicativos no Menu Iniciar");
+            StringCchCopyW(g_str.start_chk_recent_apps, 64, L"Mostrar aplicativos adicionados recentemente");
+            StringCchCopyW(g_str.start_chk_fullscreen, 64, L"Usar o Menu Iniciar em tela cheia");
+            StringCchCopyW(g_str.start_chk_recent_items, 64, L"Mostrar itens abertos recentemente nas Listas de Atalhos");
+            StringCchCopyW(g_str.start_chk_account_notif, 64, L"Mostrar notifica\u00e7\u00f5es da conta");
+            StringCchCopyW(g_str.start_grp_search, 64, L"Pesquisa");
+            StringCchCopyW(g_str.start_chk_search_programs, 64, L"Incluir programas nos resultados da pesquisa");
+            StringCchCopyW(g_str.start_chk_search_files, 64, L"Incluir arquivos nos resultados da pesquisa");
+            StringCchCopyW(g_str.start_grp_folders, 64, L"Pastas a mostrar no Menu Iniciar");
+            StringCchCopyW(g_str.start_chk_folder_settings, 32, L"Configura\u00e7\u00f5es");
+            StringCchCopyW(g_str.start_chk_folder_docs, 32, L"Documentos");
+            StringCchCopyW(g_str.start_chk_folder_downloads, 32, L"Downloads");
+            StringCchCopyW(g_str.start_chk_folder_music, 32, L"M\u00fasica");
+            StringCchCopyW(g_str.start_chk_folder_pics, 32, L"Imagens");
+            StringCchCopyW(g_str.start_chk_folder_videos, 32, L"V\u00eddeos");
+            StringCchCopyW(g_str.start_chk_folder_network, 32, L"Rede");
+            StringCchCopyW(g_str.start_chk_folder_personal, 32, L"Pasta pessoal");
+            StringCchCopyW(g_str.start_info_restart, 256, L"Nota: algumas altera\u00e7\u00f5es podem exigir reiniciar o Explorer ou encerrar a sess\u00e3o para ter efeito completo.");
+            StringCchCopyW(g_str.start_msg_saved, 512, L"Configura\u00e7\u00f5es do Menu Iniciar salvas.\n\nAlgumas altera\u00e7\u00f5es podem exigir encerrar a sess\u00e3o ou reiniciar o Explorer para ter efeito completo.");
+            StringCchCopyW(g_str.start_msg_saved_title, 64, L"Configura\u00e7\u00f5es salvas");
             break;
         default:
             StringCchCopyW(g_str.about_title, 64, L"About this mod");
@@ -1368,6 +1535,7 @@ static void InitLocalization() {
             StringCchCopyW(g_str.start_info_restart, 256, L"Note: some changes may require an Explorer restart or logout to take full effect.");
             StringCchCopyW(g_str.start_msg_saved, 512, L"Start menu settings saved.\n\nSome changes may require logout or Explorer restart to take full effect.");
             StringCchCopyW(g_str.start_msg_saved_title, 64, L"Settings saved");
+            break;
     }
 }
 
@@ -1397,8 +1565,8 @@ static void ApplyToolbars(bool addr, bool links, bool tablet, bool desk) {
     } else {
         HideNativeDesktopToolbar();
     }
-    // NOTA: non impostare più TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk)
-    // perché lo fanno già Show/HideNativeDesktopToolbar
+    // NOTA: non impostare pi TaskbarSettingsProvider::SetToolbarEnabled(L"Desktop", desk)
+    // perch lo fanno gi Show/HideNativeDesktopToolbar
     
     TaskbarSettingsProvider::SetToolbarEnabled(L"TabletPC", tablet);
     
@@ -1477,6 +1645,187 @@ static void SwitchTab(HWND hwnd, int tab) {
     ShowGroup(hwnd, kTaskbarCtls, tab == 0);
     ShowGroup(hwnd, kStartCtls, tab == 1);
     ShowGroup(hwnd, kToolbarCtls, tab == 2);
+}
+
+// Misura i testi lunghi dei groupbox (Notifica e Aero Peek) e ridimensiona
+// dinamicamente controlli e finestra in base alla lingua corrente.
+// Chiamare DOPO SetDlgItemTextW e SetFontAllChildren, cos il font  gi impostato.
+static void AutoFitGroupboxes(HWND hwnd) {
+    if (!IsWindow(hwnd)) return;
+
+    // Helper: client rect
+    auto pixToClientRect = [&](HWND hCtrl, RECT& rcOut) -> bool {
+        if (!hCtrl || !IsWindow(hCtrl)) return false;
+        GetWindowRect(hCtrl, &rcOut);
+        MapWindowPoints(NULL, hwnd, (LPPOINT)&rcOut, 2);
+        return true;
+    };
+
+    // Calcola l'altezza necessaria per un testo dato un font e una larghezza fissa.
+    auto measureTextHeight = [&](HWND hCtrl, int widthPx) -> int {
+        HFONT hFont = (HFONT)SendMessageW(hCtrl, WM_GETFONT, 0, 0);
+        if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        WCHAR buf[1024]; buf[0] = 0;
+        GetWindowTextW(hCtrl, buf, 1024);
+        HDC hdc = GetDC(hCtrl);
+        HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+        RECT rc = { 0, 0, widthPx, 0 };
+        DrawTextW(hdc, buf, -1, &rc, DT_CALCRECT | DT_WORDBREAK | DT_LEFT);
+        SelectObject(hdc, hOld);
+        ReleaseDC(hCtrl, hdc);
+        return rc.bottom - rc.top;
+    };
+
+    // Obtain standard measurements from Dialog Units (DLU) to scale perfectly with DPI
+    RECT rcDlu = { 0, 0, 0, 3 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kPad = rcDlu.bottom; // 3 DLU padding (approx 5px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 8 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kGrpTop = rcDlu.bottom; // 8 DLU top margin (approx 12px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 3 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kGap = rcDlu.bottom; // 3 DLU gap between text and controls (approx 4px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 14 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kBtnH = rcDlu.bottom; // 14 DLU standard button height (approx 21-23px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 10 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kChkH = rcDlu.bottom; // 10 DLU standard checkbox height (approx 15px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 8 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kLinkGap = rcDlu.bottom; // 8 DLU gap below Aero Peek to help link (approx 12px at 100% DPI)
+
+    rcDlu = { 0, 0, 0, 6 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kTabBottomPad = rcDlu.bottom; // 6 DLU padding from help link to bottom of tab control
+
+    rcDlu = { 0, 0, 0, 14 };
+    MapDialogRect(hwnd, &rcDlu);
+    const int kButtonGap = rcDlu.bottom; // 14 DLU gap between tab control and OK/Cancel buttons
+
+    // ---- 1. GROUPBOX NOTIFICA (IDC_GRP_NOTIF / IDC_TXT_NOTIF / IDC_BTN_CUST_NOTIF) ----
+    int deltaN = 0;
+    RECT rcGrpN;
+    HWND hGrpN = GetDlgItem(hwnd, IDC_GRP_NOTIF);
+    HWND hTxtN = GetDlgItem(hwnd, IDC_TXT_NOTIF);
+    HWND hBtnN = GetDlgItem(hwnd, IDC_BTN_CUST_NOTIF);
+    if (hGrpN && hTxtN && hBtnN && pixToClientRect(hGrpN, rcGrpN)) {
+        RECT rcTxtN, rcBtnN;
+        if (pixToClientRect(hTxtN, rcTxtN) && pixToClientRect(hBtnN, rcBtnN)) {
+            int txtW = rcTxtN.right - rcTxtN.left;
+            int neededTextH = measureTextHeight(hTxtN, txtW);
+            int innerH = std::max(neededTextH, kBtnH);
+            int newGrpH = kGrpTop + kPad + innerH + kPad;
+            deltaN = newGrpH - (rcGrpN.bottom - rcGrpN.top);
+
+            SetWindowPos(hGrpN, NULL, rcGrpN.left, rcGrpN.top,
+                         rcGrpN.right - rcGrpN.left, newGrpH,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+
+            SetWindowPos(hTxtN, NULL, rcTxtN.left, rcTxtN.top,
+                         txtW, neededTextH,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+
+            int btnY = rcGrpN.top + kGrpTop + kPad + (innerH - kBtnH) / 2;
+            SetWindowPos(hBtnN, NULL, rcBtnN.left, btnY,
+                         rcBtnN.right - rcBtnN.left, kBtnH,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
+    // ---- 2. GROUPBOX AERO PEEK (IDC_GRP_AERO / IDC_TXT_AERO / IDC_CHK_AEROPEEK) ----
+    int newGrpBottom = 0;
+    RECT rcGrpA, rcTxtA, rcChkA;
+    HWND hGrpA = GetDlgItem(hwnd, IDC_GRP_AERO);
+    HWND hTxtA = GetDlgItem(hwnd, IDC_TXT_AERO);
+    HWND hChkA = GetDlgItem(hwnd, IDC_CHK_AEROPEEK);
+    if (hGrpA && hTxtA && hChkA &&
+        pixToClientRect(hGrpA, rcGrpA) &&
+        pixToClientRect(hTxtA, rcTxtA) &&
+        pixToClientRect(hChkA, rcChkA))
+    {
+        // Calculate mathematically shifted tops based on deltaN from Groupbox 2 resizing
+        int shiftedGrpTop = rcGrpA.top + deltaN;
+        int shiftedTxtTop = rcTxtA.top + deltaN;
+
+        int txtW = rcTxtA.right - rcTxtA.left;
+        int neededTextH = measureTextHeight(hTxtA, txtW);
+        int newGrpH = kGrpTop + kPad + neededTextH + kGap + kChkH + kPad;
+        newGrpBottom = shiftedGrpTop + newGrpH;
+
+        SetWindowPos(hGrpA, NULL, rcGrpA.left, shiftedGrpTop,
+                     rcGrpA.right - rcGrpA.left, newGrpH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+
+        SetWindowPos(hTxtA, NULL, rcTxtA.left, shiftedTxtTop,
+                     txtW, neededTextH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+
+        int chkY = shiftedGrpTop + kGrpTop + kPad + neededTextH + kGap;
+        SetWindowPos(hChkA, NULL, rcChkA.left, chkY,
+                     rcChkA.right - rcChkA.left, kChkH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    // ---- 3. POSITION HELP LINK ----
+    int linkBottom = 0;
+    HWND hLink = GetDlgItem(hwnd, IDC_LINK_HELP);
+    RECT rcLink;
+    if (hLink && pixToClientRect(hLink, rcLink)) {
+        int linkH = rcLink.bottom - rcLink.top;
+        int linkY = newGrpBottom + kLinkGap;
+        SetWindowPos(hLink, NULL, rcLink.left, linkY,
+                     rcLink.right - rcLink.left, linkH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        linkBottom = linkY + linkH;
+    }
+
+    // ---- 4. RESIZE TAB CONTROL ----
+    int tabBottom = 0;
+    HWND hTab = GetDlgItem(hwnd, IDC_TAB_MAIN);
+    RECT rcTab;
+    if (hTab && pixToClientRect(hTab, rcTab)) {
+        int newTabH = (linkBottom + kTabBottomPad) - rcTab.top;
+        SetWindowPos(hTab, NULL, rcTab.left, rcTab.top,
+                     rcTab.right - rcTab.left, newTabH,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+        tabBottom = rcTab.top + newTabH;
+    }
+
+    // ---- 5. POSITION DIALOG BUTTONS ----
+    int buttonY = tabBottom + kButtonGap;
+    int idsToPos[] = { IDOK, IDCANCEL, IDC_BTN_APPLY };
+    for (int id : idsToPos) {
+        HWND hC = GetDlgItem(hwnd, id);
+        RECT rc; if (hC && pixToClientRect(hC, rc)) {
+            SetWindowPos(hC, NULL, rc.left, buttonY,
+                         rc.right - rc.left, rc.bottom - rc.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
+    // ---- 6. RESIZE DIALOG WINDOW ----
+    HWND hApply = GetDlgItem(hwnd, IDC_BTN_APPLY);
+    RECT rcApply;
+    if (hApply && pixToClientRect(hApply, rcApply)) {
+        RECT rcWin, rcClient;
+        GetWindowRect(hwnd, &rcWin);
+        GetClientRect(hwnd, &rcClient);
+        int borderH = (rcWin.bottom - rcWin.top) - (rcClient.bottom - rcClient.top);
+        int newClientH = rcApply.bottom + kPad * 2;
+        int newWinH = newClientH + borderH;
+        SetWindowPos(hwnd, NULL, 0, 0,
+                     rcWin.right - rcWin.left, newWinH,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+    }
+
+    InvalidateRect(hwnd, NULL, TRUE);
 }
 
 static void BalanceTextAndCombo(HWND hwndDlg, int idStatic, int idCombo) {
@@ -2438,8 +2787,8 @@ static void SubclassExistingTaskbars() {
 static BOOL CALLBACK UnsubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam) {
     if (IsWindow(hWnd) && IsTaskbarWindowClass(hWnd)) {
         // Ferma sempre il timer prima di rimuovere la subclass: se un WM_TIMER
-        // fosse già in coda, verrebbe comunque scartato da RemoveWindowSubclass,
-        // ma questo evita ogni ambiguità in caso di dispatch concorrente.
+        // fosse gi in coda, verrebbe comunque scartato da RemoveWindowSubclass,
+        // ma questo evita ogni ambiguit in caso di dispatch concorrente.
         KillTimer(hWnd, kTimerIdMasterLayout);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, (WindhawkUtils::WH_SUBCLASSPROC)ShellTrayWndSubclassProc);
         UntrackSubclass(hWnd, ShellTrayWndSubclassProc);
@@ -2450,6 +2799,37 @@ static BOOL CALLBACK UnsubclassExistingTaskbarsEnumProc(HWND hWnd, LPARAM lParam
 
 static void UnsubclassExistingTaskbars() {
     EnumWindows(UnsubclassExistingTaskbarsEnumProc, 0);
+}
+
+// Forces every taskbar (the primary Shell_TrayWnd AND every
+// Shell_SecondaryTrayWnd on other monitors) to immediately re-read
+// TaskbarGlomLevel/MMTaskbarGlomLevel and re-lay out its buttons. A single
+// WM_SETTINGCHANGE broadcast is enough for Explorer to update the primary bar
+// right away, but secondary-monitor bars often don't repaint until they get
+// their own resize/redraw kick, so we walk every taskbar window explicitly
+// instead of only refreshing the one found by FindWindowExW(nullptr, nullptr, ...).
+static BOOL CALLBACK RefreshTaskbarGroupingEnumProc(HWND hWnd, LPARAM lParam) {
+    if (!IsWindow(hWnd) || !IsTaskbarWindowClass(hWnd)) return TRUE;
+
+    SendMessageW(hWnd, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
+
+    HWND hReBar = FindWindowExW(hWnd, NULL, L"ReBarWindow32", NULL);
+    if (hReBar && IsWindow(hReBar)) {
+        SendMessageW(hReBar, WM_SIZE, 0, 0);
+        HWND hTaskSw = FindWindowExW(hReBar, NULL, L"MSTaskSwWClass", NULL);
+        if (hTaskSw && IsWindow(hTaskSw)) {
+            SendMessageW(hTaskSw, TB_AUTOSIZE, 0, 0);
+            InvalidateRect(hTaskSw, NULL, TRUE);
+            UpdateWindow(hTaskSw);
+        }
+    }
+    InvalidateRect(hWnd, NULL, TRUE);
+    UpdateWindow(hWnd);
+    return TRUE;
+}
+
+static void RefreshTaskbarGroupingOnAllScreens() {
+    EnumWindows(RefreshTaskbarGroupingEnumProc, 0);
 }
 
 static void UpdateStuckRectsKey(LPCWSTR keyName, DWORD newEdge, DWORD edgeOffset) {
@@ -2563,6 +2943,10 @@ static void ApplySettings(HWND hwnd) {
         ApplyToolbars(addr, links, tablet, desk);
     }
     SendNotifyMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"TraySettings");
+    // Broadcasting alone isn't enough to make "Always combine, hide labels" /
+    // "Combine when full" / "Never combine" show up on secondary-monitor
+    // taskbars right away, so explicitly kick every taskbar on every screen.
+    RefreshTaskbarGroupingOnAllScreens();
 }
 
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -2626,6 +3010,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         BalanceTextAndCombo(hwnd, IDC_TXT_LOCATION, IDC_COMBO_LOCATION);
         BalanceTextAndCombo(hwnd, IDC_TXT_BUTTONS, IDC_COMBO_BUTTONS);
         BalanceTextAndCombo(hwnd, IDC_TXT_POWER_LABEL, IDC_COMBO_POWER);
+        AutoFitGroupboxes(hwnd);
         
         HWND hCL = GetDlgItem(hwnd, IDC_COMBO_LOCATION);
         SendMessageW(hCL, CB_RESETCONTENT, 0, 0);
@@ -2974,8 +3359,8 @@ void Wh_ModUninit() {
     // Va rimossa SEMPRE e incondizionatamente, non solo quando il bordo va
     // resettato: la subclass punta a codice dentro la DLL del mod, che sta per
     // essere scaricata. Se resta agganciata, il prossimo messaggio inviato alla
-    // finestra del taskbar esegue codice non più mappato in memoria e manda in
-    // crash/instabilità explorer.exe, costringendo al riavvio.
+    // finestra del taskbar esegue codice non pi mappato in memoria e manda in
+    // crash/instabilit explorer.exe, costringendo al riavvio.
     UnsubclassExistingTaskbars();
 
     // Stessa identica falla poteva verificarsi sulla toolbar Desktop, se attiva:
@@ -2995,7 +3380,7 @@ void Wh_ModUninit() {
     // le finestre (EnumWindows/ricerca per classe), e possono saltarne alcune
     // in configurazioni particolari (monitor secondari, desktop virtuali,
     // finestre nascoste, versioni di Windows con gerarchie diverse). Questa
-    // sweep finale, invece, scorre il registro di TUTTO ciò che il mod ha
+    // sweep finale, invece, scorre il registro di TUTTO ci che il mod ha
     // effettivamente subclassato durante la sua vita e lo rimuove comunque,
     // indipendentemente da dove si trovi. Qualunque cosa sia sfuggita alle
     // pulizie mirate qui sopra viene comunque tolta.

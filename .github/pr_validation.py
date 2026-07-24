@@ -569,7 +569,12 @@ class ModMetadataValidator:
         def is_allowed_option(option: str) -> bool:
             return bool(
                 option.startswith('-l')
-                or option in ['-DWIN32_LEAN_AND_MEAN', '-fms-extensions']
+                or option
+                in [
+                    '-DWIN32_LEAN_AND_MEAN',
+                    '-fms-extensions',
+                    '-ffp-exception-behavior=maytrap',
+                ]
             )
 
         options = prop.value.split()
