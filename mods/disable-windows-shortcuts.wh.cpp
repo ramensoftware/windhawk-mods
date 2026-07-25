@@ -795,6 +795,7 @@ void PromptForExplorerRestart()
 // ============================================================================
 
 HHOOK g_hHook = NULL;
+HWINEVENTHOOK g_desktopSwitchHook = NULL;
 HANDLE g_hookThread = NULL;
 std::atomic<bool> g_hookThreadRunning{false};
 std::atomic<DWORD> g_hookThreadId{0};
@@ -802,6 +803,29 @@ bool g_suppressedKeys[256] = {false};
 bool g_keyState[256] = {false}; // Track our own key states reliably
 
 bool g_winKeyUsed = false;
+
+void RefreshKeyboardState()
+{
+    for (int vkCode = 0; vkCode < 256; vkCode++)
+    {
+        g_keyState[vkCode] = !!(GetAsyncKeyState(vkCode) & 0x8000);
+        g_suppressedKeys[vkCode] = false;
+    }
+
+    g_winKeyUsed = false;
+}
+
+void CALLBACK DesktopSwitchProc(
+    HWINEVENTHOOK hWinEventHook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD idEventThread,
+    DWORD dwmsEventTime)
+{
+    RefreshKeyboardState();
+}
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
@@ -997,6 +1021,22 @@ DWORD WINAPI HookThread(LPVOID lpParam)
     if (!g_hHook)
         return 1;
 
+    g_desktopSwitchHook = SetWinEventHook(
+        EVENT_SYSTEM_DESKTOPSWITCH,
+        EVENT_SYSTEM_DESKTOPSWITCH,
+        NULL,
+        DesktopSwitchProc,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT
+    );
+    if (!g_desktopSwitchHook)
+    {
+        UnhookWindowsHookEx(g_hHook);
+        g_hHook = NULL;
+        return 1;
+    }
+
     // Dedicated message pump to keep the hook alive and responsive
     while (GetMessage(&msg, NULL, 0, 0) > 0)
     {
@@ -1004,7 +1044,10 @@ DWORD WINAPI HookThread(LPVOID lpParam)
         DispatchMessage(&msg);
     }
 
+    UnhookWinEvent(g_desktopSwitchHook);
+    g_desktopSwitchHook = NULL;
     UnhookWindowsHookEx(g_hHook);
+    g_hHook = NULL;
     return 0;
 }
 
