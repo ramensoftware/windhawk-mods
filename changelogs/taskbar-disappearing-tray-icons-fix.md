@@ -1,3 +1,7 @@
+## 1.2 ([Jul 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/069f254f818e34abc367301c24d59e698240958a/mods/taskbar-disappearing-tray-icons-fix.wh.cpp))
+
+* Added a configurable process blacklist for TaskbarCreated rebroadcasts. system-wide broadcasting is still used when no exclusions are configured.
+
 ## 1.1 ([Jan 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/632fd7eca32052974e780235c2ba000a8e459430/mods/taskbar-disappearing-tray-icons-fix.wh.cpp))
 
 Patch GDI handle leak and disable passive mode by default.

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-24T18:23:35.000Z</updated>
+    <updated>2026-07-25T20:40:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disappearing Tray Icons Fix 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix#069f254f818e34abc367301c24d59e698240958a</id>
+        <link href="https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix"/>
+        <updated>2026-07-25T20:40:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a configurable process blacklist for TaskbarCreated rebroadcasts. system-wide broadcasting is still used when no exclusions are configured.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always On Top Windows 1.2]]></title>
         <id>https://windhawk.net/mods/always-on-top#e34eeb8947a6965e56022b2578334945b74e0ba9</id>
@@ -608,19 +621,6 @@ this is safe to do for as many or as few programs as you'd like.</p>]]></content
         <updated>2026-07-20T20:23:19.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a regression in version 1.2.3 which caused notifications to be rotated in older Windows 11 versions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.2.3]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#7babeba1ee66cca786bbabc10e6b79c53f0c5a22</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2026-07-19T23:29:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility of the animation direction option with recent Windows 11 versions.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
