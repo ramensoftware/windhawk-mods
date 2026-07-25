@@ -531,7 +531,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
 
         float startCenterX = cx;
         float startY       = (float)T;
-        float targetDockY  = (float)(SH + h);
+        float targetDockY  = taskbarY + h;
         float curCenterX   = startCenterX + ((float)dockX - startCenterX) * moveX;
         float curTopY      = startY + (targetDockY - startY) * moveY;
         // Genie positions by top (not center); express that via anchorTopLeft.
@@ -770,7 +770,7 @@ static void RunCpuAnim(GhostAnimData* data, HWND hGhost,
 // hGhost must be a full-screen WS_EX_NOREDIRECTIONBITMAP popup.
 // -------------------------------------------------------------------------
 static bool RunGpuAnim(GhostAnimData* data, HWND hGhost,
-                       int screenWidth, int screenHeight, float taskbarY) {
+                       int screenX, int screenY, int screenWidth, int screenHeight, float taskbarY) {
     const int w = data->width;
     const int h = data->height;
 
@@ -916,7 +916,7 @@ static bool RunGpuAnim(GhostAnimData* data, HWND hGhost,
         D2D_MATRIX_3X2_F m;
         m._11 = sx;          m._12 = 0.0f;
         m._21 = 0.0f;        m._22 = sy;
-        m._31 = (float)curX; m._32 = (float)curY;
+        m._31 = (float)(curX - screenX); m._32 = (float)(curY - screenY);
 
         xform->SetMatrix(m);
         effectGroup->SetOpacity(clampf(alphaFloat, 0.0f, 1.0f));
@@ -954,7 +954,7 @@ static bool RunGpuAnim(GhostAnimData* data, HWND hGhost,
 // full-screen WS_EX_NOREDIRECTIONBITMAP popup.
 // -------------------------------------------------------------------------
 static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
-                            int screenWidth, int screenHeight, float taskbarY) {
+                            int screenX, int screenY, int screenWidth, int screenHeight, float taskbarY) {
     if (!EnsureGenieGpuResources()) return false;
 
     const int w = data->width;
@@ -1106,8 +1106,8 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
             for (int i = 0; i <= GENIE_GX; i++) {
                 float u = (float)i / (float)GENIE_GX;
                 float xpx = rowCX + (u - 0.5f) * rowW;
-                verts[vi].x = xpx / (float)screenWidth * 2.0f - 1.0f;
-                verts[vi].y = 1.0f - rowY / (float)screenHeight * 2.0f;
+                verts[vi].x = (xpx - (float)screenX) / (float)screenWidth * 2.0f - 1.0f;
+                verts[vi].y = 1.0f - (rowY - (float)screenY) / (float)screenHeight * 2.0f;
                 verts[vi].u = u;
                 verts[vi].v = v;
                 vi++;
@@ -1187,12 +1187,22 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
 
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+    int screenX      = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int screenY      = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int screenWidth  = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    RECT workArea;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-    float taskbarY = (float)workArea.bottom;
+    // Use the cursor position's monitor for the taskbar reference so the genie
+    // pours to/from the same monitor the user interacted with (e.g. taskbar icon
+    // on one monitor, window on another).
+    POINT cursorPt;
+    GetCursorPos(&cursorPt);
+    HMONITOR hMon = MonitorFromPoint(cursorPt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi;
+    ZeroMemory(&mi, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(hMon, &mi);
+    float taskbarY = (float)mi.rcWork.bottom;
 
     bool useGpu = EnsureGpuDevice();
     HWND hGhost = NULL;
@@ -1204,13 +1214,13 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
                 WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
             L"STATIC", NULL, WS_POPUP,
-            0, 0, screenWidth, screenHeight, NULL, NULL, NULL, NULL);
+            screenX, screenY, screenWidth, screenHeight, NULL, NULL, NULL, NULL);
 
         bool ran = false;
         if (hGhost) {
             ran = (data->mode == MODE_GENIE)
-                    ? RunGpuGenieAnim(data, hGhost, screenWidth, screenHeight, taskbarY)
-                    : RunGpuAnim(data, hGhost, screenWidth, screenHeight, taskbarY);
+                    ? RunGpuGenieAnim(data, hGhost, screenX, screenY, screenWidth, screenHeight, taskbarY)
+                    : RunGpuAnim(data, hGhost, screenX, screenY, screenWidth, screenHeight, taskbarY);
         }
         if (!ran) {
             useGpu = false;
@@ -1251,14 +1261,17 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
     // --- SMART ICON TRACKING ---
     POINT pt;
     GetCursorPos(&pt);
-    RECT workArea;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int learnedTargetX = screenWidth / 2; // Default to center
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi;
+    ZeroMemory(&mi, sizeof(mi));
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(hMon, &mi);
+
+    int learnedTargetX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
 
     // If the mouse is outside the main desktop area (e.g. hovering over the taskbar)
-    if (!PtInRect(&workArea, pt)) {
+    if (!PtInRect(&mi.rcWork, pt)) {
         learnedTargetX = pt.x; // Steal the mouse X coordinate!
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         g_IconPositions[hWnd] = learnedTargetX; // Save it to the vault
