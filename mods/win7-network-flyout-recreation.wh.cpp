@@ -90,6 +90,9 @@ If you encounter issues, please report them on the author of the mod.
     - ru: Русский
     - de: Deutsch
     - pt: Português
+    - pl: Polski
+    - nl: Nederlands
+    - ro: Română
 - interceptNativeFlyout: true
   $name: Intercept system network flyout
   $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
@@ -248,6 +251,9 @@ void LoadSettings() {
     else if (_wcsicmp(lang.get(), L"ru") == 0) raw_language = 5;
     else if (_wcsicmp(lang.get(), L"de") == 0) raw_language = 6;
     else if (_wcsicmp(lang.get(), L"pt") == 0) raw_language = 7;
+    else if (_wcsicmp(lang.get(), L"pl") == 0) raw_language = 8;
+    else if (_wcsicmp(lang.get(), L"nl") == 0) raw_language = 9;
+    else if (_wcsicmp(lang.get(), L"ro") == 0) raw_language = 10;
 
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
@@ -2694,6 +2700,147 @@ static const LocalePack g_Locales[] = {
         L"Resolver problemas",
         L"Abrir Centro de Rede",
     }},
+    { 0x0415, {
+        L"Obecnie połączono z:",
+        L"Dostęp do Internetu",
+        L"Sieć bezprzewodowa",
+        L"Połączono",
+        L"Otwórz Centrum sieci i udostępniania",
+        L"Połącz",
+        L"Rozłącz",
+        L"Połącz",
+        L"Rozłącz",
+        L"Stan",
+        L"Właściwości",
+        L"Brak połączenia",
+        L"Dostępne połączenia",
+        L"Połącz automatycznie",
+        L"Połącz z siecią",
+        L"Wprowadź klucz zabezpieczeń sieci",
+        L"Klucz zabezpieczeń:",
+        L"Ukryj znaki",
+        L"OK",
+        L"Anuluj",
+        L"Błąd połączenia",
+        L"Klucz zabezpieczeń jest nieprawidłowy. Spróbuj ponownie.",
+        L"Nie udało się połączyć z %s",
+        L"Sieć %d",
+        L"Typ zabezpieczeń:",
+        L"Siła sygnału:",
+        L"Typ radia:",
+        L"Doskonały",
+        L"Dobry",
+        L"Przeciętny",
+        L"Słaby",
+        L"Brak sygnału",
+        L"Łączenie...",
+        L"Rozłączanie...",
+        L"Stan: Połączono",
+        L"Stan: Łączenie...",
+        L"Stan: Brak połączenia",
+        L"Błąd",
+        L"Błąd zapisu profilu sieci (kod: %lu)",
+        L"Błąd połączenia (kod: %lu)",
+        L"Przekroczono limit czasu",
+        L"Próba połączenia wygasła. Sieć może być poza zasięgiem.",
+        L"Wprowadź klucz zabezpieczeń sieci.",
+        L"Rozwiązywanie problemów",
+        L"Otwórz Centrum sieci i udostępniania",
+    }},
+    { 0x0413, {
+        L"Momenteel verbonden met:",
+        L"Internettoegang",
+        L"Draadloze netwerkverbinding",
+        L"Verbonden",
+        L"Netwerkcentrum openen",
+        L"Verbinden",
+        L"Verbreken",
+        L"Verbinden",
+        L"Verbreken",
+        L"Status",
+        L"Eigenschappen",
+        L"Niet verbonden",
+        L"Verbindingen beschikbaar",
+        L"Automatisch verbinden",
+        L"Verbinding maken met een netwerk",
+        L"Voer de netwerkbeveiligingssleutel in",
+        L"Beveiligingssleutel:",
+        L"Tekens verbergen",
+        L"OK",
+        L"Annuleren",
+        L"Verbindingsfout",
+        L"De beveiligingssleutel is onjuist. Probeer opnieuw.",
+        L"Verbinding met %s mislukt",
+        L"Netwerk %d",
+        L"Beveiligingstype:",
+        L"Signaalsterkte:",
+        L"Radiotype:",
+        L"Uitstekend",
+        L"Goed",
+        L"Redelijk",
+        L"Zwak",
+        L"Geen signaal",
+        L"Verbinden...",
+        L"Verbreken...",
+        L"Status: Verbonden",
+        L"Status: Verbinden...",
+        L"Status: Niet verbonden",
+        L"Fout",
+        L"Netwerkprofiel opslaan mislukt (code: %lu)",
+        L"Verbindingsfout (code: %lu)",
+        L"Time-out",
+        L"Verbindingspoging verlopen. Netwerk mogelijk buiten bereik.",
+        L"Voer een netwerkbeveiligingssleutel in.",
+        L"Problemen oplossen",
+        L"Netwerkcentrum openen",
+    }},
+    { 0x0418, {
+        L"Conectat în prezent la:",
+        L"Acces la Internet",
+        L"Conexiune rețea fără fir",
+        L"Conectat",
+        L"Deschide Centrul de rețea și partajare",
+        L"Conectare",
+        L"Deconectare",
+        L"Conectare",
+        L"Deconectare",
+        L"Stare",
+        L"Proprietăți",
+        L"Neconectat",
+        L"Conexiuni disponibile",
+        L"Conectare automată",
+        L"Conectare la o rețea",
+        L"Introduceți cheia de securitate a rețelei",
+        L"Cheie de securitate:",
+        L"Ascundere caractere",
+        L"OK",
+        L"Anulare",
+        L"Eroare de conectare",
+        L"Cheia de securitate este incorectă. Reîncercați.",
+        L"Conectare la %s eșuată",
+        L"Rețea %d",
+        L"Tip securitate:",
+        L"Putere semnal:",
+        L"Tip radio:",
+        L"Excelent",
+        L"Bun",
+        L"Mediu",
+        L"Slab",
+        L"Fără semnal",
+        L"Conectare...",
+        L"Deconectare...",
+        L"Stare: Conectat",
+        L"Stare: Conectare...",
+        L"Stare: Neconectat",
+        L"Eroare",
+        L"Salvare profil rețea eșuată (cod: %lu)",
+        L"Eroare de conectare (cod: %lu)",
+        L"Depășire timp",
+        L"Încercarea de conectare a expirat. Rețeaua poate fi în afara razei.",
+        L"Introduceți o cheie de securitate a rețelei.",
+        L"Remediere probleme",
+        L"Deschide Centrul de rețea și partajare",
+    }},
 };
 
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -2720,6 +2867,9 @@ void DetermineLocale() {
         case 5: g_CurrentLocalePack = FindLocalePack(0x0419); break;
         case 6: g_CurrentLocalePack = FindLocalePack(0x0407); break;
         case 7: g_CurrentLocalePack = FindLocalePack(0x0816); break;
+        case 8: g_CurrentLocalePack = FindLocalePack(0x0415); break;
+        case 9: g_CurrentLocalePack = FindLocalePack(0x0413); break;
+        case 10: g_CurrentLocalePack = FindLocalePack(0x0418); break;
         default: {
             LANGID userLangId = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(userLangId);
@@ -7222,6 +7372,27 @@ static const LangPack kLang[] = {
      L"Ver mapa de rede",
      L"Veja um mapa da sua rede e dispositivos ligados.",
      L"Ver mapa completo"},
+    {0x15, L"Połącz z siecią",
+     L"Połącz z dostępną siecią bezprzewodową, VPN lub modemową.",
+     L"Wybierz opcje grupy domowej i udostępniania",
+     L"Wyświetl lub zmień ustawienia grupy domowej i udostępniania sieci.",
+     L"Wyświetl mapę sieci",
+     L"Wyświetl mapę sieci i podłączonych urządzeń.",
+     L"Wyświetl pełną mapę"},
+    {0x13, L"Verbinding maken met een netwerk",
+     L"Verbinding maken met een beschikbare draadloos-, VPN- of inbelnetwerk.",
+     L"Heimgroep- en delensopties kiezen",
+     L"Bekijk of wijzig uw heimgroep- en netwerkinstellingen.",
+     L"Netwerkkaart weergeven",
+     L"Bekijk een kaart van uw netwerk en verbonden apparaten.",
+     L"Volledige kaart weergeven"},
+    {0x18, L"Conectare la o rețea",
+     L"Conectați-vă la o rețea fără fir, VPN sau dial-up disponibilă.",
+     L"Alegeți opțiunile de grup de domiciliu și partajare",
+     L"Vizualizați sau modificați setările grupului de domiciliu și partajarea în rețea.",
+     L"Vizualizare hartă rețea",
+     L"Vizualizați o hartă a rețelei și dispozitivelor conectate.",
+     L"Vizualizare hartă completă"},
 };
 
 static const LangPack* GetLang() {
@@ -7234,6 +7405,9 @@ static const LangPack* GetLang() {
         case 5: ui = 0x19; break;  // Russian
         case 6: ui = 0x07; break;  // German
         case 7: ui = 0x16; break;  // Portuguese
+        case 8: ui = 0x15; break;  // Polish
+        case 9: ui = 0x13; break;  // Dutch
+        case 10: ui = 0x18; break; // Romanian
         default: ui = PRIMARYLANGID(GetUserDefaultUILanguage()); break;
     }
     for (const auto& p : kLang)
