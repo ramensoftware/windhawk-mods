@@ -1,3 +1,30 @@
+## 1.8.0 ([Jul 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/109589023dde428deaee2fe80e4ce446283a7935/mods/translucent-windows.wh.cpp))
+
+* Some settings that can be considered outside the scope of translucent effects are removed due to my limited free time to maintain these features, fortunately the Windhawk community has provided some separate mods for those listed below.
+* Settings removed:
+	- Border color setting - replacement: [Window Border Customizer](https://windhawk.net/mods/window-border-customizer) by [Lockframe](https://github.com/Lockframe).
+	- Titlebar color - replacement: [Auto Custom Title Bar Colors](https://windhawk.net/mods/auto-custom-titlebar-colors) by [Louis047](https://github.com/Louis047).
+	- Window Corner Type - replacement: [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius) by [m417z](https://github.com/m417z).
+	- Titlebar text color. 
+	- Rainbow effect - Very high performance overhead, e.g. 30% usage on a modern midrange GPU.
+	- Extend effects into entire window - Will be enabled by default when a translucent effect is selected.
+	- Immersive darkmode title bar - Will be enabled by default when the system is in dark mode.
+
+* Added compatibility with [Windows 11 File Explorer Styler](https://windhawk.net/mods/windows-11-file-explorer-styler).
+* System color improvements without the need to apply the SetSysColors API - Global setting "New system colors". Related topic: [[Translucent Window] Dark/black background artifacts even for excluded apps (e.g. Office)](https://github.com/ramensoftware/windhawk-mods/issues/2010)
+* Processes launching from given subdirectories can be ruled/excluded as a whole in the mod settings.
+
+* Numerous improvements and additions to theme customization.
+	- Fixed chevron arrow scaling in treeview.
+	- Improved buttons pill (e.g. treeview, tabs)
+	- Fixed properties window background coloring without the need to restart explorer.
+	- Adjusted the size of the custom scrollbar close to the original.
+	- Recolored black text in dark mode (e.g. syslinks, address bar dropdown text, context menu icons)
+	- Alpha blended more UI elements (e.g. treeview separator, highlighted text accent background)
+	- Removed dark gray bottom part in explorer dialogs in dark mode (e.g. Open/Save dialogs)
+	- Removed Windows brand logo background in dialogs (e.g. winver.exe)
+	- Improved text composition performance.
+
 ## 1.7.4 ([Feb 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3dc62307b1a820cc2e7646d056d30ef495651ffa/mods/translucent-windows.wh.cpp))
 
 * Fix black background system colors in some programs (e.g. Office) using mods process ruled settings
