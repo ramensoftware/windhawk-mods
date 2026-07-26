@@ -73,7 +73,7 @@ apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. progra
 * ⚠️If parts of the Windows UI colors remain modified after disabling the modification, this is happening when new system colors are applied in a selected Windows custom theme.
 Changing the theme to the default and vice versa fixes the problem. As a last resort, you can delete the registry key HKEY_CURRENT_USER\Control Panel\Colors and reboot.⚠️
 
-* ⚠️From version 1.8 ARM64 system is partially supported.⚠️
+* ⚠️ARM64 system is only partially supported.⚠️
 
 * ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
 This is caused by default by the AccentBlur API.❕
@@ -5272,7 +5272,9 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
 VOID UxThemeHooks(BOOL isFlyoutEffectEnabled)
 {
     WindhawkUtils::SYMBOL_HOOK uxtheme_dll_hooks[] =
-    {    
+    {   
+        // Inlined symbol in ARM64 system, avoid hooking.
+        #ifndef _M_ARM64
         {
             {
                 #ifdef _WIN64
@@ -5285,7 +5287,7 @@ VOID UxThemeHooks(BOOL isFlyoutEffectEnabled)
             Hooked_BorderRect,
             FALSE
         },
-        
+        #endif
         {
             {
                 #ifdef _WIN64
@@ -5868,42 +5870,45 @@ VOID Comctl32Hooks()
             Hooked_SHThemeDrawText,
             FALSE
         },
-        // SHThemeFillTextRect is 64-bit only
-        // 32-bit version is implemented inside SHThemeDrawText
-        #ifdef _WIN64
-        {
+        // Symbols are inlined in ARM64, avoid hooking.
+        #ifndef _M_ARM64
+            // SHThemeFillTextRect is 64-bit only
+            // 32-bit version is implemented inside SHThemeDrawText
+            #ifdef _WIN64
             {
-                L"SHThemeFillTextRect"
+                {
+                    L"SHThemeFillTextRect"
+                },
+                &SHThemeFillTextRect_orig,
+                HookedSHThemeFillTextRect,
+                FALSE
             },
-            &SHThemeFillTextRect_orig,
-            HookedSHThemeFillTextRect,
-            FALSE
-        },
+            #endif
+            {
+                {
+                    #ifdef _WIN64
+                        L"FillRectClr"
+                    #else
+                        L"_FillRectClr@12"
+                    #endif
+                },
+                &FillRectClr_orig,
+                HookedFillRectClr,
+                FALSE
+            },
+            {
+                {
+                    #ifdef _WIN64
+                        L"struct HBRUSH__ * __cdecl ListBox_GetBrush(struct tagLBIV *,struct HBRUSH__ * *)"
+                    #else
+                        L"struct HBRUSH__ * __stdcall ListBox_GetBrush(struct tagLBIV *,struct HBRUSH__ * *)"
+                    #endif
+                },
+                &ListBox_GetBrush_orig,
+                HookedListBox_GetBrush,
+                FALSE
+            },
         #endif
-        {
-            {
-                #ifdef _WIN64
-                    L"FillRectClr"
-                #else
-                    L"_FillRectClr@12"
-                #endif
-            },
-            &FillRectClr_orig,
-            HookedFillRectClr,
-            FALSE
-        },
-        {
-            {
-                #ifdef _WIN64
-                    L"struct HBRUSH__ * __cdecl ListBox_GetBrush(struct tagLBIV *,struct HBRUSH__ * *)"
-                #else
-                    L"struct HBRUSH__ * __stdcall ListBox_GetBrush(struct tagLBIV *,struct HBRUSH__ * *)"
-                #endif
-            },
-            &ListBox_GetBrush_orig,
-            HookedListBox_GetBrush,
-            FALSE
-        },
         {
             {
                 #ifdef _WIN64
