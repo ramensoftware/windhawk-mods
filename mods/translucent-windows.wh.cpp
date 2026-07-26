@@ -5274,19 +5274,20 @@ VOID UxThemeHooks(BOOL isFlyoutEffectEnabled)
     WindhawkUtils::SYMBOL_HOOK uxtheme_dll_hooks[] =
     {   
         // Inlined symbol in ARM64 system, avoid hooking.
-        #if !defined(_M_ARM64)
-        {
+        #ifdef _M_ARM64
+        #else
             {
-                #ifdef _WIN64
-                    L"void __cdecl _BorderRect(struct HDC__ *,unsigned long,struct tagRECT const *,int,int)"
-                #else
-                    L"void __stdcall _BorderRect(struct HDC__ *,unsigned long,struct tagRECT const *,int,int)"
-                #endif
+                {
+                    #ifdef _WIN64
+                        L"void __cdecl _BorderRect(struct HDC__ *,unsigned long,struct tagRECT const *,int,int)"
+                    #else
+                        L"void __stdcall _BorderRect(struct HDC__ *,unsigned long,struct tagRECT const *,int,int)"
+                    #endif
+                },
+                &_BorderRect_orig,
+                Hooked_BorderRect,
+                FALSE
             },
-            &_BorderRect_orig,
-            Hooked_BorderRect,
-            FALSE
-        },
         #endif
         {
             {
@@ -5871,7 +5872,8 @@ VOID Comctl32Hooks()
             FALSE
         },
         // Symbols are inlined in ARM64, avoid hooking.
-        #if !defined(_M_ARM64)
+        #ifdef _M_ARM64
+        #else
             // SHThemeFillTextRect is 64-bit only
             // 32-bit version is implemented inside SHThemeDrawText
             #ifdef _WIN64
