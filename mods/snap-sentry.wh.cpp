@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.4.9
+// @version         0.5.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -20,6 +20,8 @@
 Watches **Pictures\\Screenshots** and handles new screenshots as they are saved.
 Copy the image, delete the file after a delay, or choose what to do from a
 notification.
+
+![The SnapSentry notification](https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png)
 
 ## Clipboard modes
 
@@ -112,6 +114,7 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <deque>
 #include <set>
 #include <string>
+#include <utility>
 
 // ============================================================================
 // Settings and shared state
@@ -127,10 +130,29 @@ struct Settings {
     bool logDetails;
 };
 
-static CRITICAL_SECTION g_lock;       // Guards g_settings, g_queue, g_inflight.
+static CRITICAL_SECTION g_lock;       // Guards g_settings, g_queue, g_inflight, g_recent, g_preexisting.
 static Settings g_settings;
 static std::deque<std::wstring> g_queue;   // Full paths waiting to be processed.
 static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup).
+
+// Names already present when the watched folder was opened. They are never acted
+// on, which is the literal safety invariant "never touch files that were already
+// in the folder." This is what stops a flood when OneDrive Files On-Demand
+// hydrates a folder full of old screenshots: each download surfaces as an ADDED
+// or RENAMED event for a name in this set, so it is ignored. Refreshed every time
+// the folder is (re)opened.
+static std::set<std::wstring> g_preexisting;
+
+// Names finished processing recently, each with an expiry tick. Swallows a
+// duplicate filesystem event for an already-handled screenshot that arrives
+// after the name left g_inflight. The common case is OneDrive Files On-Demand
+// rewriting the saved file into a placeholder, which fires a second ADDED or
+// RENAMED event for the same name seconds after the first notification closed;
+// an antivirus or a screenshot tool's temp-then-rename can do the same. A
+// screenshot name is unique per capture, so a same-name event inside the window
+// is always such a duplicate, never a distinct new shot.
+static std::deque<std::pair<std::wstring, ULONGLONG>> g_recent;
+static constexpr ULONGLONG kDuplicateEventWindowMs = 60000;  // Measured from when handling finished.
 
 static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
@@ -1116,10 +1138,27 @@ static bool DequeueOne(std::wstring& path) {
     return has;
 }
 
+// Caller must hold g_lock. Entries are appended in time order, so expired ones
+// are always at the front; drop them, then report whether the name is still
+// inside its dedup window.
+static bool SeenRecently(const std::wstring& name, ULONGLONG now) {
+    while (!g_recent.empty() && g_recent.front().second <= now) {
+        g_recent.pop_front();
+    }
+    for (const auto& entry : g_recent) {
+        if (entry.first == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void ReleaseInflight(const std::wstring& path) {
     std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
     g_inflight.erase(name);
+    g_recent.push_back({name, now + kDuplicateEventWindowMs});
     LeaveCriticalSection(&g_lock);
 }
 
@@ -1174,8 +1213,14 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
         return;
     }
+    ULONGLONG now = GetTickCount64();
     EnterCriticalSection(&g_lock);
-    bool added = g_inflight.insert(name).second;  // Dedup rapid duplicate events.
+    // Skip names present when watching started (g_preexisting), then dedup rapid
+    // duplicate events (g_inflight) and the delayed follow-up event for a name we
+    // just finished handling (g_recent), such as OneDrive rewriting the file as a
+    // placeholder after the first notification closed.
+    bool added = !SeenRecently(name, now) && g_preexisting.count(name) == 0 &&
+                 g_inflight.insert(name).second;
     if (added) {
         g_queue.push_back(folder + L"\\" + name);
     }
@@ -1209,6 +1254,28 @@ static void ParseNotifications(const std::wstring& folder, const BYTE* buffer) {
     }
 }
 
+// Records the folder's current file names so hydration or sync churn on files
+// that predate this watch session is never treated as a new screenshot. Called
+// each time the directory is opened, before the first change notification is
+// armed. Placeholders are enumerated like any other entry, so dehydrated old
+// screenshots are captured too.
+static void SnapshotExistingNames(const std::wstring& folder) {
+    std::set<std::wstring> names;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                names.insert(fd.cFileName);
+            }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    EnterCriticalSection(&g_lock);
+    g_preexisting = std::move(names);
+    LeaveCriticalSection(&g_lock);
+}
+
 static DWORD WINAPI WatchThread(LPVOID) {
     OVERLAPPED ov{};
     ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1235,6 +1302,10 @@ static DWORD WINAPI WatchThread(LPVOID) {
             WaitForMultipleObjects(2, idle, FALSE, 2000);  // Folder may appear later.
             continue;
         }
+
+        // Snapshot existing names before arming notifications so downloads or
+        // sync churn on pre-existing files never look like new screenshots.
+        SnapshotExistingNames(s.folder);
 
         BYTE buffer[16384];
         bool reopen = false;
@@ -1376,10 +1447,33 @@ void WhTool_ModUninit() {
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
+static HANDLE g_singleInstanceReady;       // Set once the mutex is held.
+static HANDLE g_singleInstanceLockThread;  // Owns the mutex for the process life.
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
     ExitThread(0);
+}
+
+// Owns the single-instance mutex on a thread that lives for the whole tool-mod
+// process, so ownership tracks the process rather than Windhawk's transient load
+// thread. CreateMutex's initial-owner ownership is bound to the calling thread;
+// owning it on the load thread (which exits after Wh_ModInit returns) abandoned
+// the mutex while the process kept running, so a reload's new process acquired it
+// via WAIT_ABANDONED and ran as a second live instance -> duplicate handling and
+// duplicate notifications. Holding it here keeps a running instance's mutex held
+// on a live thread, so a second instance's wait times out and it exits. On a real
+// reload the old process exits (Wh_ModUninit -> ExitProcess), releasing the mutex
+// so the new instance acquires within the timeout.
+static DWORD WINAPI SingleInstanceLockThread(LPVOID) {
+    DWORD waited = WaitForSingleObject(g_toolModProcessMutex, 5000);
+    if (waited != WAIT_OBJECT_0 && waited != WAIT_ABANDONED) {
+        Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+        ExitProcess(1);
+    }
+    SetEvent(g_singleInstanceReady);
+    Sleep(INFINITE);  // Hold the mutex until the process exits (OS then releases).
+    return 0;
 }
 
 BOOL Wh_ModInit() {
@@ -1425,24 +1519,33 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
+        // Create the single-instance mutex unowned, then take ownership on a
+        // dedicated lifetime thread (SingleInstanceLockThread) instead of on this
+        // transient load thread. That is what stops a second instance from running
+        // alongside a live one and producing duplicate notifications.
         g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            // On a reload the launcher spawns this new process before the old
-            // one has finished exiting, so the single-instance lock is briefly
-            // still held. Wait for the old instance to release it (or abandon it
-            // by exiting) before giving up, instead of quitting on the race.
-            DWORD waited = WaitForSingleObject(g_toolModProcessMutex, 5000);
-            if (waited != WAIT_OBJECT_0 && waited != WAIT_ABANDONED) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
+        g_singleInstanceReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_singleInstanceReady) {
+            Wh_Log(L"CreateEvent failed");
+            ExitProcess(1);
         }
+
+        g_singleInstanceLockThread = CreateThread(
+            nullptr, 0, SingleInstanceLockThread, nullptr, 0, nullptr);
+        if (!g_singleInstanceLockThread) {
+            Wh_Log(L"CreateThread (single-instance) failed");
+            ExitProcess(1);
+        }
+
+        // The lock thread ExitProcess()es on contention; continue only once it
+        // signals that this process holds the single-instance mutex.
+        WaitForSingleObject(g_singleInstanceReady, INFINITE);
 
         if (!WhTool_ModInit()) {
             ExitProcess(1);
