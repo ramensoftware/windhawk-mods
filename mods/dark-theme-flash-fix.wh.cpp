@@ -4,6 +4,7 @@
 // @description Eliminates white flash when opening windows in dark mode via DWM cloaking
 // @version 1.0
 // @author grandrange
+// @github https://github.com/grandrange
 // @compilerOptions -lGdi32
 // ==/WindhawkMod==
 
