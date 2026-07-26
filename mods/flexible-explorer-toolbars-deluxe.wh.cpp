@@ -306,9 +306,9 @@ BOOL HandleMenuResult(UINT cmd, bool isRet, HWND hw) {
 
 using TPM_t = BOOL(WINAPI*)(HMENU,UINT,int,int,int,HWND,CONST RECT*); TPM_t origTPM;
 BOOL WINAPI Hook_TPM(HMENU m,UINT f,int x,int y,int r,HWND hw,CONST RECT* pr) {
-    if(!HasId(m, 41484)) return origTPM(m, f, x, y, r, hw, pr);
     HWND cab = GetCabinet(hw);
-    HWND rb  = cab ? (HWND)GetPropW(cab, L"FlexTbRb") : NULL;
+    if(!cab || !HasId(m, 41484)) return origTPM(m, f, x, y, r, hw, pr);
+    HWND rb = (HWND)GetPropW(cab, L"FlexTbRb");
     SyncMenu(m, rb);
     bool isRet = f & TPM_RETURNCMD;
     UINT cmd = (UINT)origTPM(m, f | TPM_RETURNCMD, x, y, r, hw, pr);
@@ -317,9 +317,9 @@ BOOL WINAPI Hook_TPM(HMENU m,UINT f,int x,int y,int r,HWND hw,CONST RECT* pr) {
 
 using TPMEx_t = BOOL(WINAPI*)(HMENU,UINT,int,int,HWND,LPTPMPARAMS); TPMEx_t origTPMEx;
 BOOL WINAPI Hook_TPMEx(HMENU m,UINT f,int x,int y,HWND hw,LPTPMPARAMS p) {
-    if(!HasId(m, 41484)) return origTPMEx(m, f, x, y, hw, p);
     HWND cab = GetCabinet(hw);
-    HWND rb  = cab ? (HWND)GetPropW(cab, L"FlexTbRb") : NULL;
+    if(!cab || !HasId(m, 41484)) return origTPMEx(m, f, x, y, hw, p);
+    HWND rb = (HWND)GetPropW(cab, L"FlexTbRb");
     SyncMenu(m, rb);
     bool isRet = f & TPM_RETURNCMD;
     UINT cmd = (UINT)origTPMEx(m, f | TPM_RETURNCMD, x, y, hw, p);
