@@ -5274,7 +5274,7 @@ VOID UxThemeHooks(BOOL isFlyoutEffectEnabled)
     WindhawkUtils::SYMBOL_HOOK uxtheme_dll_hooks[] =
     {   
         // Inlined symbol in ARM64 system, avoid hooking.
-        #ifndef _M_ARM64
+        #if !defined(_M_ARM64)
         {
             {
                 #ifdef _WIN64
@@ -5871,7 +5871,7 @@ VOID Comctl32Hooks()
             FALSE
         },
         // Symbols are inlined in ARM64, avoid hooking.
-        #ifndef _M_ARM64
+        #if !defined(_M_ARM64)
             // SHThemeFillTextRect is 64-bit only
             // 32-bit version is implemented inside SHThemeDrawText
             #ifdef _WIN64
