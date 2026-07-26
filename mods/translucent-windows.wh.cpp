@@ -73,6 +73,8 @@ apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. progra
 * ⚠️If parts of the Windows UI colors remain modified after disabling the modification, this is happening when new system colors are applied in a selected Windows custom theme.
 Changing the theme to the default and vice versa fixes the problem. As a last resort, you can delete the registry key HKEY_CURRENT_USER\Control Panel\Colors and reboot.⚠️
 
+* ⚠️From version 1.8 ARM64 system is partially supported.⚠️
+
 * ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
 This is caused by default by the AccentBlur API.❕
 
@@ -6092,7 +6094,7 @@ void RecolorBrandingLogoBackground(HBITMAP hbm)
 // Winver loads the bitmap using LoadAboutBitmaps() routine, shutdown dialog using LoadBrandingBitmap().
 HANDLE (STDCALL *BrandingLoadImage_orig)(LPCWSTR, UINT, UINT, INT, INT, UINT);
 HANDLE STDCALL HookedBrandingLoadImage(LPCWSTR pszBrand, UINT uID, UINT type, INT cx, INT cy, UINT  fuLoad)
-{    
+{   
     auto hImage = BrandingLoadImage_orig(pszBrand, uID, type, cx, cy, fuLoad);
 
     // The image resource is fetched from basebrd.dll resource image 121.
