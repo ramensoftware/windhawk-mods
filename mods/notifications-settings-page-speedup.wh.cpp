@@ -58,6 +58,7 @@ so it may need an update after a major Windows release. Tested on Windows 11.
 #include <shlwapi.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <shared_mutex>
 #include <atomic>
 
@@ -67,29 +68,53 @@ so it may need an update after a major Windows release. Tested on Windows 11.
 static std::atomic<bool> g_skipSummary{true};
 static std::atomic<bool> g_cacheSettings{true};
 
+// Set on unload so the worker threads exit their waits at once instead of being
+// left to run into unmapped code.
+static HANDLE g_stopEvent = nullptr;
+
 // ---------------------------------------------------------------------------
 // Per-AUMID cache of each app's IAumidNotificationSettings object.
 //
 // EnumerateAppSettingItems -> _AddEntry(aumid) per app -> controller
 // ->vtable[0x70](aumid, &settings). The controller is an out-of-process COM
 // object (CoCreateInstanceAsUser / MainNotificationController), so that call is
-// a cross-process activation (~150-300ms each). We vtable-hook that slot: the
-// first visit populates the cache, revisits reuse the live objects and skip the
+// a cross-process activation (~150-300ms each). We hook that slot: the first
+// visit populates the cache, revisits reuse the live objects and skip the
 // activation. Reads still hit the broker, so edits are reflected (no staleness).
+//
+// The cached objects are apartment-bound proxies owned by the Settings UI
+// thread (the thread that runs _AddEntry / the controller call). They must be
+// released on that thread, so a flush hands them to g_pendingRelease and the
+// next _AddEntry drains it on the UI thread instead of releasing cross-apartment.
 // ---------------------------------------------------------------------------
 static const size_t CTRL_PTR_OFFSET       = 0x108; // helper -> controller ComPtr
 static const size_t GETSETTINGS_VTBL_SLOT = 14;    // 0x70 / sizeof(void*)
 
 static std::unordered_map<std::wstring, IUnknown*> g_cache; // aumid -> settings obj
+static std::vector<IUnknown*> g_pendingRelease;             // freed on the UI thread
 static std::shared_mutex g_cacheMutex;
 static void** g_vtblSlot = nullptr;
 static std::atomic<bool> g_vtblHooked{false};
-static volatile bool g_running = true;
 
+// Release proxies queued by a flush. Called from _AddEntry, i.e. the UI thread
+// that owns the objects, so the release stays inside their apartment.
+static void DrainPendingReleases() {
+    std::vector<IUnknown*> toRelease;
+    {
+        std::unique_lock lock(g_cacheMutex);
+        if (g_pendingRelease.empty()) return;
+        toRelease.swap(g_pendingRelease);
+    }
+    for (IUnknown* p : toRelease)
+        if (p) p->Release();
+}
+
+// Ctrl+Alt+R: hand the cached objects to the UI thread for release, then the
+// next page open does a full rescan.
 static void FlushCache() {
     std::unique_lock lock(g_cacheMutex);
     for (auto& kv : g_cache)
-        if (kv.second) kv.second->Release();
+        if (kv.second) g_pendingRelease.push_back(kv.second);
     g_cache.clear();
     Wh_Log(L"cache cleared (manual rescan)");
 }
@@ -114,20 +139,45 @@ HRESULT STDMETHODCALLTYPE GetSettings_Hook(void* self, PCWSTR aumid, void** out)
             IUnknown* p = reinterpret_cast<IUnknown*>(*out);
             p->AddRef();
             std::unique_lock lk(g_cacheMutex);
-            g_cache.emplace(aumid, p);
+            auto [it, inserted] = g_cache.emplace(aumid, p);
+            if (!inserted) p->Release();  // another thread cached it first
         }
         return hr;
     }
     return GetSettings_Orig(self, aumid, out);
 }
 
+// Reject a garbage controller pointer (e.g. if the +0x108 layout shifts on a
+// future build) before dereferencing it as a vtable, so a bad build no-ops
+// instead of crashing SystemSettings.
+static bool MemReadable(const void* p) {
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return false;
+    return !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD));
+}
+static bool MemExecutable(const void* p) {
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return false;
+    const DWORD exec = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                       PAGE_EXECUTE_WRITECOPY;
+    return (mbi.Protect & exec) != 0;
+}
+
 static void HookControllerVtable(void* helper) {
     if (g_vtblHooked.load()) return;
+
     void* controller = *reinterpret_cast<void**>(
         reinterpret_cast<char*>(helper) + CTRL_PTR_OFFSET);
-    if (!controller) return;                 // controller not created yet
-    if (g_vtblHooked.exchange(true)) return;
+    if (!controller || !MemReadable(controller)) return;  // not created yet / bad ptr
+
     void** vtbl = *reinterpret_cast<void***>(controller);
+    if (!vtbl || !MemReadable(vtbl)) return;
+
+    void* target = vtbl[GETSETTINGS_VTBL_SLOT];
+    if (!target || !MemExecutable(target)) return;
+
+    if (g_vtblHooked.exchange(true)) return;
+
     g_vtblSlot = &vtbl[GETSETTINGS_VTBL_SLOT];
     DWORD oldProtect;
     if (VirtualProtect(g_vtblSlot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
@@ -145,13 +195,15 @@ static void HookControllerVtable(void* helper) {
 // Symbol hooks in SettingsHandlers_Notifications.dll
 // ---------------------------------------------------------------------------
 
-// NotificationsAppListHelper::_AddEntry(aumid, ...) runs once per app. We use it
-// only as a reliable trigger: after the first entry the controller exists at
-// helper+0x108, and we patch its vtable once (the patch persists for later visits).
+// NotificationsAppListHelper::_AddEntry(aumid, ...) runs once per app on the
+// Settings UI thread. We use it as a reliable trigger: after the first entry the
+// controller exists at helper+0x108, and we patch its vtable once. It is also
+// where we drain proxies queued by a flush, since this is their owning thread.
 using AddEntry_t = HRESULT (__cdecl*)(void* helper, PCWSTR aumid, unsigned long long opt);
 static AddEntry_t AddEntry_Orig = nullptr;
 HRESULT __cdecl AddEntry_Hook(void* helper, PCWSTR aumid, unsigned long long opt) {
-    HookControllerVtable(helper); // no-op after the vtable is patched
+    DrainPendingReleases();
+    HookControllerVtable(helper);  // no-op after the vtable is patched
     return AddEntry_Orig(helper, aumid, opt);
 }
 
@@ -186,7 +238,7 @@ static void HookHandlerDll(bool applyNow) {
     };
 
     if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-        g_symHooked = false;                    // symbols not ready; watcher retries
+        g_symHooked = false;  // symbols not ready; the watcher retries
         Wh_Log(L"HookSymbols failed (symbols not ready?)");
         return;
     }
@@ -195,7 +247,11 @@ static void HookHandlerDll(bool applyNow) {
     Wh_Log(L"installed symbol hooks");
 }
 
-// The handler DLL loads on demand when the Notifications page opens.
+// The handler DLL loads on demand when the Notifications page opens. Hooking the
+// imported LoadLibraryExW catches that load; a short watcher backs it up for
+// load paths this hook misses. (Hooking kernelbase's LoadLibraryExW directly
+// would catch every path but fast-fails SystemSettings under CFG, so it is not
+// used here.)
 using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
 static LoadLibraryExW_t LoadLibraryExW_Orig;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
@@ -205,28 +261,48 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
     return m;
 }
 
-// Fallback in case the DLL loads via a path our LoadLibraryExW hook misses.
+// Backstop for a load the LoadLibraryExW hook misses. Waits on g_stopEvent so it
+// exits at once on unload instead of sleeping into unmapped code.
+static HANDLE g_watchThread = nullptr;
 DWORD WINAPI WatchThread(LPVOID) {
-    for (int i = 0; i < 600 && g_running; ++i) {
+    for (int i = 0; i < 600; ++i) {
         if (!g_symHooked.load() &&
             GetModuleHandleW(L"SettingsHandlers_Notifications.dll"))
             HookHandlerDll(true);
-        Sleep(200);
+        if (WaitForSingleObject(g_stopEvent, 200) == WAIT_OBJECT_0)
+            break;
     }
     return 0;
 }
 
-// Ctrl+Alt+R clears the cache -> next visit does a full rescan.
+// ---------------------------------------------------------------------------
+// Ctrl+Alt+R clears the cache. RegisterHotKey needs a message loop, so it runs
+// on its own thread that exits on WM_QUIT (posted from Wh_ModUninit) and is
+// joined before unload.
+// ---------------------------------------------------------------------------
+static HANDLE g_hotkeyThread = nullptr;
+static DWORD  g_hotkeyThreadId = 0;
+static HANDLE g_hotkeyReady = nullptr;  // set once the thread's queue exists
+static const int HOTKEY_ID = 1;
+
 DWORD WINAPI HotkeyThread(LPVOID) {
-    while (g_running) {
-        if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
-            (GetAsyncKeyState(VK_MENU) & 0x8000) &&
-            (GetAsyncKeyState('R') & 0x8000)) {
+    // Force the message queue to exist so Wh_ModUninit's PostThreadMessage lands.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    bool registered =
+        RegisterHotKey(nullptr, HOTKEY_ID, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'R');
+    if (!registered)
+        Wh_Log(L"RegisterHotKey failed (%lu)", GetLastError());
+
+    if (g_hotkeyReady) SetEvent(g_hotkeyReady);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID)
             FlushCache();
-            Sleep(500);
-        }
-        Sleep(50);
     }
+
+    if (registered) UnregisterHotKey(nullptr, HOTKEY_ID);
     return 0;
 }
 
@@ -239,20 +315,41 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // manual reset
+
     WindhawkUtils::SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_Hook,
                                    (void**)&LoadLibraryExW_Orig);
-    HookHandlerDll(false); // in case the DLL is already loaded
+    HookHandlerDll(false);  // in case the DLL is already loaded
 
-    CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
-    CreateThread(nullptr, 0, HotkeyThread, nullptr, 0, nullptr);
+    g_watchThread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
+
+    g_hotkeyReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hotkeyThread =
+        CreateThread(nullptr, 0, HotkeyThread, nullptr, 0, &g_hotkeyThreadId);
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
 
 void Wh_ModUninit() {
-    g_running = false;
-    Sleep(120);
+    // Stop and join the worker threads before their code can be unmapped.
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (g_hotkeyThread) {
+        if (g_hotkeyReady)
+            WaitForSingleObject(g_hotkeyReady, INFINITE);  // queue exists now
+        PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
+    }
+    HANDLE threads[2];
+    DWORD n = 0;
+    if (g_watchThread)  threads[n++] = g_watchThread;
+    if (g_hotkeyThread) threads[n++] = g_hotkeyThread;
+    if (n) WaitForMultipleObjects(n, threads, TRUE, INFINITE);
+    if (g_watchThread)  { CloseHandle(g_watchThread);  g_watchThread = nullptr; }
+    if (g_hotkeyThread) { CloseHandle(g_hotkeyThread); g_hotkeyThread = nullptr; }
+    if (g_hotkeyReady)  { CloseHandle(g_hotkeyReady);  g_hotkeyReady = nullptr; }
+    if (g_stopEvent)    { CloseHandle(g_stopEvent);    g_stopEvent = nullptr; }
+
+    // Restore the controller vtable slot.
     if (g_vtblHooked.load() && g_vtblSlot && GetSettings_Orig) {
         DWORD oldProtect;
         if (VirtualProtect(g_vtblSlot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
@@ -260,7 +357,13 @@ void Wh_ModUninit() {
             VirtualProtect(g_vtblSlot, sizeof(void*), oldProtect, &oldProtect);
         }
     }
+
+    // Release the cached proxies and anything a flush queued. At unload the
+    // owning UI thread is idle and pumping, so the release completes there.
     std::unique_lock lock(g_cacheMutex);
+    for (IUnknown* p : g_pendingRelease)
+        if (p) p->Release();
+    g_pendingRelease.clear();
     for (auto& kv : g_cache)
         if (kv.second) kv.second->Release();
     g_cache.clear();
