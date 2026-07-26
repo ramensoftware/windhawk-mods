@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              exporer-command-bar
+// @id              explorer-command-bar
 // @name            Explorer Command Bar
 // @description     Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones
 // @version         1.0.0
