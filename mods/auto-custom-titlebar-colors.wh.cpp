@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         *
 // @exclude         devenv.exe
-// @compilerOptions -ldwmapi -luxtheme -luser32
+// @compilerOptions -ldwmapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -37,9 +37,10 @@ Combines automatic dark/light titlebar switching with per-mode, per-state custom
 Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
 
 ## Notes
-- `systemsettings.exe` and `applicationframehost.exe` are excluded to avoid conflicts
+- UWP/WinUI windows and Mozilla-based browsers are now auto-detected and skipped
 - Window redraws are debounced (50ms minimum) to prevent interference with window managers
 - Visual redraws (SetWindowPos) only occur during window activation, not deactivation, to avoid focus-grabbing issues with tiling window managers
+- No forced repaint is issued while a mouse button is held (prevents drag-state corruption)
 */
 // ==/WindhawkModReadme==
 
@@ -103,6 +104,10 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
       $name: "B (0-255)"
     $name: "Inactive Window"
   $name: "Dark Mode Colours"
+
+- excludeMozilla: true
+  $name: "Exclude Mozilla Browsers"
+  $description: "Skip Firefox, Zen Browser, etc."
 */
 // ==/WindhawkModSettings==
 
@@ -111,10 +116,26 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 #include <unordered_set>
 #include <unordered_map>
 #include <mutex>
+#include <atomic>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+
+// -----------------------------------------------------------------------------
+// Settings helpers
+// -----------------------------------------------------------------------------
+
+struct ModSettings {
+    BOOL useCustomLight;
+    BOOL useCustomDark;
+    COLORREF activeLight;
+    COLORREF inactiveLight;
+    COLORREF activeDark;
+    COLORREF inactiveDark;
+    BOOL excludeMozilla;
+};
+static ModSettings g_settings;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -122,7 +143,7 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 
 typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
 static pShouldSystemUseDarkMode g_ShouldSystemUseDarkMode = nullptr;
-static BOOL g_isDarkMode = FALSE;
+static std::atomic<BOOL> g_isDarkMode = FALSE;
 
 // App-controlled window state tracking
 static std::unordered_set<HWND> g_appControlledWindows;
@@ -134,9 +155,13 @@ static std::mutex g_settingsMutex;
 static std::unordered_map<HWND, BOOL> g_eligibilityCache;
 static std::mutex g_eligibilityMutex;
 
+static std::unordered_map<HWND, BOOL> g_appDarkModeWindows;
+static std::mutex g_appDarkModeMutex;
+
 // Debounce mechanism: track last SetWindowPos time per window to prevent
 // rapid successive redraws that can interfere with window managers
-static DWORD g_lastSetWindowPosTime = 0;
+static std::unordered_map<HWND, DWORD> g_lastSetWindowPosTime;
+static std::mutex g_lastSetWindowPosMutex;
 const DWORD SETWINDOWPOS_DEBOUNCE_MS = 50;  // 50ms minimum between redraws
 
 // -----------------------------------------------------------------------------
@@ -186,8 +211,7 @@ static BOOL CALLBACK CheckXamlChildProc(HWND hwnd, LPARAM lParam) {
     if (GetClassNameW(hwnd, className, 256)) {
         if (wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
             wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
-            wcscmp(className, L"MozillaCompositorWindowClass") == 0) {
+            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0) {
             ((XamlSearchContext*)lParam)->hasXaml = TRUE;
             return FALSE; // Stop enumerating, we found it!
         }
@@ -195,7 +219,7 @@ static BOOL CALLBACK CheckXamlChildProc(HWND hwnd, LPARAM lParam) {
     return TRUE; // Continue enumerating
 }
 
-BOOL IsWindowEligible(HWND hWnd)
+BOOL IsWindowEligible(HWND hWnd, BOOL allowCacheUpdate = TRUE)
 {
     if (!hWnd || !IsWindow(hWnd)) return FALSE;
 
@@ -207,10 +231,12 @@ BOOL IsWindowEligible(HWND hWnd)
     if (style & WS_CHILD)            return FALSE;
 
     // Fast top-level check for Mozilla/Gecko browsers (Firefox, Zen, Floorp)
-    WCHAR className[256];
-    if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, L"MozillaWindowClass") == 0) {
-            return FALSE;
+    if (g_settings.excludeMozilla) {
+        WCHAR className[256];
+        if (GetClassNameW(hWnd, className, 256)) {
+            if (wcsncmp(className, L"Mozilla", 7) == 0) {
+                return FALSE;
+            }
         }
     }
 
@@ -227,7 +253,7 @@ BOOL IsWindowEligible(HWND hWnd)
     
     BOOL isEligible = !ctx.hasXaml;
     
-    {
+    if (allowCacheUpdate) {
         std::lock_guard<std::mutex> lock(g_eligibilityMutex);
         g_eligibilityCache[hWnd] = isEligible;
     }
@@ -267,26 +293,13 @@ static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
     return TRUE;
 }
 
-// -----------------------------------------------------------------------------
-// Settings helpers
-// -----------------------------------------------------------------------------
-
-struct ModSettings {
-    BOOL useCustomLight;
-    BOOL useCustomDark;
-    COLORREF activeLight;
-    COLORREF inactiveLight;
-    COLORREF activeDark;
-    COLORREF inactiveDark;
-};
-static ModSettings g_settings;
-
 static void LoadSettings()
 {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
     g_settings.useCustomLight = (BOOL)Wh_GetIntSetting(L"customColours.light");
     g_settings.useCustomDark = (BOOL)Wh_GetIntSetting(L"customColours.dark");
+    g_settings.excludeMozilla = (BOOL)Wh_GetIntSetting(L"excludeMozilla");
 
     BOOL useHexLight = (BOOL)Wh_GetIntSetting(L"lightMode.useHex");
     if (useHexLight) {
@@ -342,17 +355,22 @@ static DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
 
 HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    if (!g_inMod && dwAttribute == DWMWA_CAPTION_COLOR) {
-        std::lock_guard<std::mutex> lock(g_appControlledMutex);
-        g_appControlledWindows.insert(hwnd);
-        Wh_Log(L"App controls DWMWA_CAPTION_COLOR for hWnd=%p", hwnd);
+    if (!g_inMod) {
+        if (dwAttribute == DWMWA_CAPTION_COLOR) {
+            std::lock_guard<std::mutex> lock(g_appControlledMutex);
+            g_appControlledWindows.insert(hwnd);
+            Wh_Log(L"App controls DWMWA_CAPTION_COLOR for hWnd=%p", hwnd);
+        } else if (dwAttribute == DWMWA_USE_IMMERSIVE_DARK_MODE && pvAttribute && cbAttribute == sizeof(BOOL)) {
+            std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
+            g_appDarkModeWindows[hwnd] = *(BOOL*)pvAttribute;
+        }
     }
     return DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
-static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
+static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw, BOOL allowCacheUpdate = TRUE)
 {
-    if (!IsWindowEligible(hWnd)) return;
+    if (!IsWindowEligible(hWnd, allowCacheUpdate)) return;
 
     {
         std::lock_guard<std::mutex> lock(g_appControlledMutex);
@@ -379,12 +397,12 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
             &colour, sizeof(colour));
         Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
-            hWnd, g_isDarkMode, isActive, colour);
+            hWnd, (BOOL)g_isDarkMode, isActive, colour);
     } else {
         const COLORREF def = DWMWA_COLOR_DEFAULT;
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
         Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
-            hWnd, g_isDarkMode, isActive);
+            hWnd, (BOOL)g_isDarkMode, isActive);
     }
     
     g_inMod = false;
@@ -393,13 +411,15 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
     // Only allow redraws if enough time has passed since the last redraw.
     if (forceRedraw && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         DWORD currentTime = GetTickCount();
-        DWORD timeSinceLastRedraw = currentTime - g_lastSetWindowPosTime;
+        std::lock_guard<std::mutex> lock(g_lastSetWindowPosMutex);
+        DWORD lastTime = g_lastSetWindowPosTime[hWnd];
+        DWORD timeSinceLastRedraw = currentTime - lastTime;
         
-        if (timeSinceLastRedraw >= SETWINDOWPOS_DEBOUNCE_MS) {
+        if (timeSinceLastRedraw >= SETWINDOWPOS_DEBOUNCE_MS || lastTime == 0) {
             SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
                 SWP_NOZORDER | SWP_NOOWNERZORDER);
-            g_lastSetWindowPosTime = currentTime;
+            g_lastSetWindowPosTime[hWnd] = currentTime;
         }
     }
 }
@@ -409,9 +429,6 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL forceRedraw)
 
 static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 {
-    HWND parent = GetAncestor(hWnd, GA_PARENT);
-    if (parent && parent != GetDesktopWindow()) return TRUE;
-
     DWORD pid = 0;
     if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId())
         return TRUE;
@@ -421,11 +438,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
     // Only refresh with SetWindowPos if it's the active window to minimize
     // interference with tiling window managers
     BOOL forceRedraw = (BOOL)lParam;
-    if (forceRedraw && !isActive) {
-        ApplyTitleBar(hWnd, isActive, FALSE);
-    } else {
-        ApplyTitleBar(hWnd, isActive, forceRedraw);
-    }
+    ApplyTitleBar(hWnd, isActive, forceRedraw && isActive);
     return TRUE;
 }
 
@@ -463,6 +476,14 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
             {
                 std::lock_guard<std::mutex> lock(g_eligibilityMutex);
                 g_eligibilityCache.erase(hWnd);
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
+                g_appDarkModeWindows.erase(hWnd);
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_lastSetWindowPosMutex);
+                g_lastSetWindowPosTime.erase(hWnd);
             }
             break;
         }
@@ -553,11 +574,7 @@ static DefDlgProcW_t DefDlgProcW_orig;
 LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcW_orig(hWnd, Msg, wParam, lParam);
-    if (Msg == WM_NCACTIVATE) {
-        BOOL isActive = (BOOL)wParam;
-        // Only force redraw on activation, not deactivation
-        ApplyTitleBar(hWnd, isActive, isActive);
-    }
+    HandleWindowMessage(hWnd, Msg, wParam, lParam);
     return result;
 }
 
@@ -567,11 +584,7 @@ static DefDlgProcA_t DefDlgProcA_orig;
 LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcA_orig(hWnd, Msg, wParam, lParam);
-    if (Msg == WM_NCACTIVATE) {
-        BOOL isActive = (BOOL)wParam;
-        // Only force redraw on activation, not deactivation
-        ApplyTitleBar(hWnd, isActive, isActive);
-    }
+    HandleWindowMessage(hWnd, Msg, wParam, lParam);
     return result;
 }
 
@@ -591,7 +604,23 @@ HWND WINAPI CreateWindowExW_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
+    if (hWnd) {
+        if (lpClassName && !IS_INTRESOURCE(lpClassName) && (
+            wcscmp(lpClassName, L"DesktopWindowXamlSource") == 0 ||
+            wcscmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0 ||
+            wcscmp(lpClassName, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)) {
+            HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+            if (hRoot) {
+                {
+                    std::lock_guard<std::mutex> lock(g_eligibilityMutex);
+                    g_eligibilityCache[hRoot] = FALSE;
+                }
+                const COLORREF def = DWMWA_COLOR_DEFAULT;
+                DwmSetWindowAttribute(hRoot, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+            }
+        }
+        ApplyTitleBar(hWnd, FALSE, FALSE, FALSE);
+    }
     return hWnd;
 }
 
@@ -607,7 +636,27 @@ HWND WINAPI CreateWindowExA_hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    if (hWnd) ApplyTitleBar(hWnd, FALSE, FALSE);
+    if (hWnd) {
+        if (lpClassName && !IS_INTRESOURCE(lpClassName)) {
+            WCHAR classNameW[256];
+            if (MultiByteToWideChar(CP_ACP, 0, lpClassName, -1, classNameW, 256)) {
+                if (wcscmp(classNameW, L"DesktopWindowXamlSource") == 0 ||
+                    wcscmp(classNameW, L"Windows.UI.Core.CoreWindow") == 0 ||
+                    wcscmp(classNameW, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0) {
+                    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+                    if (hRoot) {
+                        {
+                            std::lock_guard<std::mutex> lock(g_eligibilityMutex);
+                            g_eligibilityCache[hRoot] = FALSE;
+                        }
+                        const COLORREF def = DWMWA_COLOR_DEFAULT;
+                        DwmSetWindowAttribute(hRoot, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+                    }
+                }
+            }
+        }
+        ApplyTitleBar(hWnd, FALSE, FALSE, FALSE);
+    }
     return hWnd;
 }
 
@@ -622,7 +671,7 @@ BOOL Wh_ModInit()
 
     LoadSettings();
     g_isDarkMode = IsSystemDarkMode();
-    Wh_Log(L"Initial theme: %s", g_isDarkMode ? L"DARK" : L"LIGHT");
+    Wh_Log(L"Initial theme: %s", (BOOL)g_isDarkMode ? L"DARK" : L"LIGHT");
 
     auto hook = [](void* target, void* replacement, void** orig, const wchar_t* name) {
         if (!Wh_SetFunctionHook(target, replacement, orig))
@@ -667,7 +716,7 @@ static BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM)
     DWORD pid = 0;
     if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId())
         return TRUE;
-    if (!IsWindowEligible(hWnd)) return TRUE;
+    if (!IsWindowEligible(hWnd, FALSE)) return TRUE;
 
     {
         std::lock_guard<std::mutex> lock(g_appControlledMutex);
@@ -675,6 +724,13 @@ static BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM)
     }
 
     BOOL off = FALSE;
+    {
+        std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
+        auto it = g_appDarkModeWindows.find(hWnd);
+        if (it != g_appDarkModeWindows.end()) {
+            off = it->second;
+        }
+    }
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &off, sizeof(off));
 
     const COLORREF def = DWMWA_COLOR_DEFAULT;
