@@ -40,7 +40,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Right-click context menu**: Quick access to network status and properties
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
-- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese or auto-detect
+- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian or auto-detect
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
@@ -59,7 +59,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
-## Known Limitations
+- **Control Panel refresh**
 - **Control Panel refresh**: The Network Map section in the Network and Sharing Center may not update automatically when network state changes (e.g., connecting/disconnecting from Wi-Fi). If icons, connection names, or warning indicators (red X, yellow triangle) do not appear correctly after a network transition, please close and re-open the Control Panel window to refresh the page.
 
 ## Hotkeys
@@ -124,7 +124,7 @@ If you encounter issues, please report them on the author of the mod.
 // ==/WindhawkModSettings==
 // ## Changelog
 // - 4.0.0: Enhanced the Network Sharing center Control Panel page
-// - 4.0.0: Stable Control Panel base: no synchronous F5 from WLAN callbacks.
+// - 4.0.0: Removed legacy EnumWindows-based refresh (INetworkListManagerEvents now drives live updates).
 // - 4.0.0: Control Panel Network Map layout refinements and privacy masking.
 // - 3.4.0: van.dll alignment: row height 30rp + 24rp name + padding
 //   rect(8rp,3rp,10rp,3rp), signal icon re-centered (matches the
@@ -191,6 +191,7 @@ If you encounter issues, please report them on the author of the mod.
 #include <windhawk_utils.h>
 #include <process.h>
 #include <string>
+#include <vector>
 #include <memory>
 #include <type_traits>
 #include <stdlib.h>
@@ -326,6 +327,7 @@ void RecalcDpiMetrics(UINT dpi) {
 #define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
 #define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
 #define WM_UPDATE_REFRESH_TIMER  (WM_USER + 112)
+#define WM_UPDATE_HOTKEY       (WM_USER + 113)
 
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
@@ -1963,11 +1965,21 @@ void Apply(BOOL dark) {
     pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
 }
 
+static AppMode g_initialAppMode = AppMode::Default;
+
 void Init() {
     g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_hUxtheme) {
         pSetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
         pFlushMenuThemes     = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
+        // Save the current app mode so Uninit can restore it instead of
+        // blindly resetting to Default (which would overwrite other mods'
+        // dark-mode settings like AllowDark/ForceDark).
+        if (pSetPreferredAppMode) {
+            // Call with Default to get the previous mode returned, then restore it
+            g_initialAppMode = pSetPreferredAppMode(AppMode::Default);
+            pSetPreferredAppMode(g_initialAppMode);
+        }
     }
 }
 
@@ -1976,7 +1988,14 @@ void OnSettingsChanged() {
 }
 
 void Uninit() {
-    Apply(FALSE);
+    // Restore the original app mode instead of forcing Default.
+    // Use pSetPreferredAppMode directly (not Apply()) so we restore
+    // the exact mode that was active before the mod loaded, rather
+    // than the mod's light-theme default.
+    if (pSetPreferredAppMode) {
+        pSetPreferredAppMode(g_initialAppMode);
+        if (pFlushMenuThemes) pFlushMenuThemes();
+    }
     if (g_hUxtheme) {
         FreeLibrary(g_hUxtheme);
         g_hUxtheme = NULL;
@@ -2993,6 +3012,12 @@ static BYTE* DecodeBase64W(const WCHAR* base64Str, DWORD* outLen) {
 
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0,
                                       int targetHeight = 0) {
+    // Reuse the process-wide GdiPlus instance when available
+    if (g_hGdiPlus) {
+        // Already initialized globally - skip local init
+        // The function pointers are resolved from g_hGdiPlus below.
+    }
+
     DWORD outLen = 0;
     BYTE* data = DecodeBase64W(base64Str, &outLen);
     if (!data || outLen == 0) return NULL;
@@ -3126,6 +3151,10 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
         return;
     }
     WCHAR buffer[256];
+
+    // Guard against buffer overflow
+    if (totalLen > 255) totalLen = 255;
+
     int lineStart = 0;
     int currentY = y;
     while (lineStart < totalLen) {
@@ -3162,13 +3191,18 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
 // Internet check
 // -------------------------------------------------------
 BOOL IsInternetConnected() {
-    if (!g_pNLM) {
-        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                         IID_INetworkListManager, (void**)&g_pNLM);
-    }
-    if (!g_pNLM) return FALSE;
+    // Create a local NLM instance instead of sharing g_pNLM, so that
+    // callers from the Control Panel's DUI thread (NetworkMapVisual,
+    // LoadImageW_Hook) don't cross apartments with the hotkey thread's
+    // g_pNLM or race with its Release in HotkeyThreadProc exit.
+    INetworkListManager* pNLM = NULL;
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                IID_INetworkListManager, (void**)&pNLM)) || !pNLM)
+        return FALSE;
     NLM_CONNECTIVITY connectivity;
-    if (FAILED(g_pNLM->GetConnectivity(&connectivity))) return FALSE;
+    HRESULT hr = pNLM->GetConnectivity(&connectivity);
+    pNLM->Release();
+    if (FAILED(hr)) return FALSE;
     return (connectivity & NLM_CONNECTIVITY_IPV4_INTERNET) ||
            (connectivity & NLM_CONNECTIVITY_IPV6_INTERNET);
 }
@@ -4005,7 +4039,13 @@ void PositionWindowNearTray(HWND hwnd) {
     APPBARDATA abd = { sizeof(APPBARDATA) };
     SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
     RECT rcWork;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    // Use the monitor where the taskbar is located for multi-monitor setups
+    HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (hMon && GetMonitorInfoW(hMon, &mi))
+        rcWork = mi.rcWork;
+    else
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
     int x = rcWork.right - WINDOW_WIDTH - 8;
     int y = rcWork.bottom - WINDOW_HEIGHT - 8;
     if (abd.uEdge == ABE_TOP)   y = abd.rc.bottom + 8;
@@ -4470,7 +4510,13 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
         RecalcArrowRect();
         
         RECT rcWork;
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+        // Use the near monitor instead of primary for multi-monitor setups
+        HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        if (hMon && GetMonitorInfoW(hMon, &mi))
+            rcWork = mi.rcWork;
+        else
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
         APPBARDATA abd = { sizeof(APPBARDATA) };
         SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
         
@@ -5392,31 +5438,14 @@ void CheckConnectionTimeouts() {
     }
 }
 
-static BOOL CALLBACK RefreshNetworkCenterEnumProc(HWND hwnd, LPARAM) {
-    if (!IsWindowVisible(hwnd)) return TRUE;
-    DWORD pid = 0; GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
-    WCHAR title[256] = {};
-    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-    if (wcsstr(title, L"Centro connessioni") || wcsstr(title, L"Network and Sharing Center")) {
-        PostMessageW(hwnd, WM_KEYDOWN, VK_F5, 0);
-        PostMessageW(hwnd, WM_KEYUP, VK_F5, 0);
-        Wh_Log(L"[NetMap-Live] posted refresh outside WLAN lock");
-    }
-    return TRUE;
-}
-static void RequestNetworkCenterLiveRefresh() {
-    static DWORD last = 0; DWORD now = GetTickCount();
-    if (now - last < 1500) return; last = now;
-    EnumWindows(RefreshNetworkCenterEnumProc, 0);
-}
+// Enum-based live refresh removed. Using INetworkListManagerEvents instead.
 
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
     ModContext* ctx = (ModContext*)context;
     if (!ctx || ctx->isUninitializing || !data) return;
     if (data->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM) return;
     HWND hFlyout = g_hWndFlyout;
-    BOOL refreshNetworkCenter = FALSE;
+    // refreshNetworkCenter removed — using INetworkListManagerEvents instead
     EnterCriticalSection(&ctx->csLock);
     switch (data->NotificationCode) {
         case wlan_notification_acm_connection_start:
@@ -5430,7 +5459,7 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE,
                          (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
                          (LPARAM)connData->wlanReasonCode);
-            refreshNetworkCenter = TRUE;
+            // refresh now handled by INetworkListManagerEvents
             break;
         }
         case wlan_notification_acm_connection_attempt_fail: {
@@ -5446,7 +5475,7 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
                    discData->wlanReasonCode, g_PendingConnectIndex);
             if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
-            refreshNetworkCenter = TRUE;
+            // refresh now handled by INetworkListManagerEvents
             if (g_TimeoutTimer && hFlyout) {
                 PostMessageW(hFlyout, WM_TIMER, 1002, 0);
             }
@@ -5463,7 +5492,7 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
         }
     }
     LeaveCriticalSection(&ctx->csLock);
-    if (refreshNetworkCenter) RequestNetworkCenterLiveRefresh();
+    // Live refresh now handled by INetworkListManagerEvents connectivity callback
     if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_REFRESH_DATA, 0, 0);
 }
 
@@ -5585,14 +5614,19 @@ void InitTooltip(HWND hwnd) {
     }
 }
 
+// Track the last tooltip uId so we can delete just that one instead of all 50
+static UINT_PTR g_lastTooltipId = 0;
+
 void UpdateTooltipForRow(HWND hwnd, int index) {
     if (!g_hTooltip) InitTooltip(hwnd);
-    for (int i = 0; i < 50; i++) {
+    // Delete only the previously registered tool instead of all 50
+    if (g_lastTooltipId) {
         TOOLINFOW ti = {0};
         ti.cbSize = sizeof(TOOLINFOW);
         ti.hwnd   = hwnd;
-        ti.uId    = (UINT_PTR)(i + 1);
+        ti.uId    = g_lastTooltipId;
         SendMessage(g_hTooltip, TTM_DELTOOL, 0, (LPARAM)&ti);
+        g_lastTooltipId = 0;
     }
     if (index < 0 || index >= g_NetworkCount) return;
     WifiNetworkItem* item = &g_NetworkList[index];
@@ -5621,6 +5655,7 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     ti.lpszText = g_TooltipBuffer;
     ti.rect     = rcRow;
     SendMessage(g_hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
+    g_lastTooltipId = (UINT_PTR)(index + 1);
 }
 
 static int GetTotalListHeight() {
@@ -5676,6 +5711,17 @@ typedef struct {
 static ToolbarScanCache g_ToolbarCache = {0, -1, FALSE};
 static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
+}
+
+// Cache netcenter.dll base+size for caller-module range checking (DrawTextW_Hook)
+static BYTE* g_netcenterBase = NULL;
+static BYTE* g_netcenterEnd  = NULL;
+
+
+
+static bool IsInNetCenter(void* ra) {
+    return g_netcenterBase && g_netcenterEnd &&
+           ra >= (void*)g_netcenterBase && ra < (void*)g_netcenterEnd;
 }
 
 static bool InitPniduiInfo() {
@@ -7204,6 +7250,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             ToggleFlyoutWindow();
         if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
             ToggleFlyoutWindow();
+        if (msg.message == WM_UPDATE_HOTKEY && !ctx->isUninitializing)
+            UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == WM_UPDATE_REFRESH_TIMER && !ctx->isUninitializing) {
             if (SafeToAccessUI() && g_hWndFlyout) {
                 if (g_RefreshTimer) {
@@ -7220,7 +7268,18 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             g_pniduiBase = NULL;
             g_pniduiEnd  = NULL;
             if (G_hSubclassedToolbar) RemoveTrayInterception();
-            Sleep(1000);
+            // Use a one-shot timer instead of Sleep(1000) to keep the
+            // message loop responsive to WM_QUIT during this wait
+            // (important for the 3s SafeCleanup timeout).
+            HANDLE timerEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+            if (timerEvent) {
+                // Use MsgWaitForMultipleObjects with a 1-second timeout
+                // instead of Sleep, so WM_QUIT is still processed.
+                MsgWaitForMultipleObjects(1, &timerEvent, FALSE, 1000, QS_ALLINPUT);
+                CloseHandle(timerEvent);
+            } else {
+                Sleep(1000);
+            }
             if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
@@ -7300,7 +7359,7 @@ static constexpr int kNoInternetXIconId = 0x7FF6;
 static constexpr int kOfflineNetworkIconId = 0x7FF8;
 static bool g_addConnect = true;
 static bool g_addHomegroup = true;
-static bool g_addNetworkMap = true;  // disabled: broke page load on first live test
+static bool g_addNetworkMap = true;  // Visual Network Map rectangle (now functional)
 static bool g_hookInstalled = false;
 static bool g_iconHookInstalled = false;
 
@@ -7554,19 +7613,30 @@ static std::wstring GetConnectedNetworkName() {
         return std::wstring(privateName);
     }
     
-    // Check for connected WiFi network
+    // Copy shared data under the critical section so reads are safe
+    // against RefreshWifiData() on the flyout thread.
+    EnterCriticalSection(&g_Ctx.csLock);
+    std::wstring wifiName;
     for (int i = 0; i < g_NetworkCount; i++) {
         if (g_NetworkList[i].connState == 2) { // Connected
-            return std::wstring(g_NetworkList[i].ssid);
+            wifiName = std::wstring(g_NetworkList[i].ssid);
+            break;
         }
     }
+    WCHAR ethernetName[64] = {0};
+    StringCchCopyW(ethernetName, ARRAYSIZE(ethernetName), g_EthernetNetworkName);
+    BOOL ethernetConnected = g_EthernetConnected;
+    LeaveCriticalSection(&g_Ctx.csLock);
     
-    // Check for Ethernet
-    if (g_EthernetNetworkName[0] != L'\0') {
-        return std::wstring(g_EthernetNetworkName);
-    }
+    // Check WiFi first (already copied out)
+    if (!wifiName.empty())
+        return wifiName;
     
-    return L"Rete";
+    // Check Ethernet
+    if (ethernetConnected && ethernetName[0] != L'\0')
+        return std::wstring(ethernetName);
+    
+    return L"Network";
 }
 
 static std::wstring NetworkMapVisual() {
@@ -7576,6 +7646,19 @@ static std::wstring NetworkMapVisual() {
     std::wstring pcName = g_Settings.privacyMode ? L"    PC" : GetComputerNameStr();
     std::wstring networkName = GetConnectedNetworkName();
     std::wstring internetName = L"Internet";
+    
+    // Cache connectivity once for this entire NetworkMapVisual() build,
+    // used by both the route-line rendering and the globe-icon inline check.
+    // Saves two COM round-trips per XML generation.
+    static BOOL s_cachedConnected = FALSE;
+    static DWORD s_cacheTick = 0;
+    DWORD now = GetTickCount();
+    BOOL isOnline;
+    if (now - s_cacheTick > 500) {  // 500ms cache window
+        s_cachedConnected = IsInternetConnected();
+        s_cacheTick = now;
+    }
+    isOnline = s_cachedConnected;
 
     // Windows 7's "View full map" link. The original Network Map feature
     // was removed from modern Windows, therefore open the useful native
@@ -7631,7 +7714,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
     // Use a distinct hardcoded DirectUI resource while offline: DirectUI caches
     // resource 32756, so reusing it kept the colored bench after disconnect.
-    xml += IsInternetConnected() ? L" content=\"icon(32756,36rp,36rp)\"/>"
+    xml += isOnline ? L" content=\"icon(32756,36rp,36rp)\"/>"
                                 : L" content=\"icon(32760,36rp,36rp)\"/>";
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
@@ -7645,7 +7728,7 @@ static std::wstring NetworkMapVisual() {
     // around a 16rp red X at its exact midpoint. Otherwise retain one
     // uninterrupted line. NetworkMapVisual is rebuilt by DirectUI when the
     // native Network Center refreshes after a connectivity transition.
-    if (!IsInternetConnected()) {
+    if (!isOnline) {
         xml += L"<element layoutpos=\"left\" width=\"46rp\" height=\"2rp\" ";
         xml += L"background=\"argb(255,135,195,235)\"/>";
         xml += L"<button layoutpos=\"left\" accessible=\"true\" accrole=\"graphic\" ";
@@ -7905,6 +7988,54 @@ static void EnsureConnectivityEventsAdvised() {
     }
 }
 
+// Subclass proc for the NetCenter DUI host window.
+// WM_NCDESTROY runs on the owning STA thread, so it is safe to
+// clear g_ncTarget and unadvise the COM sink there.
+// Forward declaration needed because NetCenterPageSubclass is defined
+// before UnadviseConnectivityEvents in the file.
+static void UnadviseConnectivityEvents();
+
+static LRESULT CALLBACK NetCenterPageSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+    if (uMsg == WM_NCDESTROY) {
+        Wh_Log(L"[NetMap] NetCenter page closed, cleaning up live refresh state");
+        UnadviseConnectivityEvents();
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, NetCenterPageSubclass);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Helper: find the top-level DirectUI host window for the current thread.
+// Called from SetXMLFromResource_Hook on the STA thread that owns the page.
+static HWND FindNetCenterHostWindow() {
+    // The Control Panel's NetCenter page lives inside a DirectUIHWND child
+    // of the main CabinetWClass frame. Walk the current thread's windows
+    // to locate it. The subclass only needs the top-level window so it
+    // catches WM_NCDESTROY when the Control Panel is closed.
+    struct FindInfo { HWND found; };
+    FindInfo fi = { NULL };
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND hwnd, LPARAM lp) -> BOOL {
+        FindInfo* pfi = reinterpret_cast<FindInfo*>(lp);
+        WCHAR cls[128];
+        if (GetClassNameW(hwnd, cls, 128)) {
+            if (wcscmp(cls, L"DirectUIHWND") == 0) {
+                HWND parent = GetParent(hwnd);
+                if (parent) {
+                    WCHAR pCls[128];
+                    GetClassNameW(parent, pCls, 128);
+                    if (wcscmp(pCls, L"CabinetWClass") == 0 ||
+                        wcscmp(pCls, L"CtrlPanel") == 0 ||
+                        wcscmp(pCls, L"#32770") == 0) {
+                        pfi->found = parent;
+                        return FALSE;
+                    }
+                }
+            }
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&fi));
+    return fi.found;
+}
+
 static void UnadviseConnectivityEvents() {
     if (g_ncCP) {
         if (g_ncEventsAdvised)
@@ -7965,17 +8096,33 @@ static bool MaskConnectedNetworkText(LPCWSTR text, int textLength,
         }
     };
 
+    // Copy connected network names under the critical section
+    EnterCriticalSection(&g_Ctx.csLock);
+    std::vector<std::wstring> connectedNames;
     for (int i = 0; i < g_NetworkCount; ++i) {
         if (g_NetworkList[i].connState == CONN_STATE_CONNECTED)
-            ReplaceName(g_NetworkList[i].ssid);
+            connectedNames.push_back(std::wstring(g_NetworkList[i].ssid));
     }
-    if (g_EthernetConnected)
-        ReplaceName(g_EthernetNetworkName);
+    BOOL ethernetConnected = g_EthernetConnected;
+    WCHAR ethernetName[64] = {0};
+    StringCchCopyW(ethernetName, ARRAYSIZE(ethernetName), g_EthernetNetworkName);
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    for (const auto& name : connectedNames)
+        ReplaceName(name.c_str());
+    if (ethernetConnected)
+        ReplaceName(ethernetName);
     return changed;
 }
 
 static int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, int textLength,
                                  LPRECT rect, UINT format) {
+    // Only mask text when called from netcenter.dll to avoid mangling
+    // unrelated strings process-wide (e.g. filenames containing the SSID).
+    void* ra = __builtin_return_address(0);
+    if (ra && !IsInNetCenter(ra))
+        return DrawTextW_Orig ? DrawTextW_Orig(hdc, text, textLength, rect, format) : 0;
+
     std::wstring masked;
     if (DrawTextW_Orig && MaskConnectedNetworkText(text, textLength, masked))
         return DrawTextW_Orig(hdc, masked.c_str(), (int)masked.length(), rect, format);
@@ -8023,6 +8170,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
         }
 
         if (resourceId == kComputerIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = (width  > 0) ? width  : ScaleDpi(48);
             int wantH = (height > 0) ? height : ScaleDpi(48);
             if (!g_hIconNetworkMapDUI || g_iconNetworkMapDUIW != wantW || g_iconNetworkMapDUIH != wantH) {
@@ -8041,6 +8190,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
             return NULL;
         }
         if (resourceId == kGlobeIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = (width  > 0) ? width  : ScaleDpi(48);
             int wantH = (height > 0) ? height : ScaleDpi(48);
             // The same connectivity test used by the flyout selects a gray
@@ -8062,6 +8213,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
         }
 
         if (resourceId == kNoInternetXIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = (width > 0) ? width : ScaleDpi(16);
             int wantH = (height > 0) ? height : ScaleDpi(16);
             if (!g_hIconNoInternetXDUI || g_iconNoInternetXDUIW != wantW ||
@@ -8076,6 +8229,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
         }
 
         if (resourceId == kOfflineNetworkIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = width > 0 ? width : ScaleDpi(36);
             int wantH = height > 0 ? height : ScaleDpi(36);
             Wh_Log(L"[NetMap-Icon] Returning hardcoded offline gray network icon");
@@ -8083,6 +8238,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
         }
 
         if (resourceId == kNetMapCategoryIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             // Decode at DirectUI's requested 36rp active-network size. This
             // uses the same bicubic scaling path as the PC/globe DUI caches.
             return CopyNetworkLocationIconForDUI(width, height);
@@ -8123,6 +8280,15 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         g_ncModule = m;
         g_ncP4 = p4;
         EnsureConnectivityEventsAdvised();
+
+        // Subclass the host window so we clean up when the page is closed
+        HWND hNcHost = FindNetCenterHostWindow();
+        if (hNcHost) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hNcHost, NetCenterPageSubclass, 0);
+            Wh_Log(L"[NetMap] Subclassed NetCenter host window (0x%p)", hNcHost);
+        } else {
+            Wh_Log(L"[NetMap] Could not find NetCenter host window to subclass");
+        }
     }
 
     return FAILED(hr) ? SetXMLFromResource_Orig(t, n, tp, m, p4, p5) : hr;
@@ -8293,6 +8459,9 @@ void Wh_ModSettingsChanged() {
         if (g_dwFlyoutOwnerThreadId) {
             PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
         }
+        // Update hotkey registration when the setting changes
+        if (g_Ctx.dwHotkeyThreadId)
+            PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
         // Re-prime the category on any settings change (e.g. enabling
         // "useNetworkLocationIcons"), marshaled to the flyout thread (which
         // owns g_pNLM and all the shared network state) via a force flag on
