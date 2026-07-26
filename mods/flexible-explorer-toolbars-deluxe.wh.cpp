@@ -2,7 +2,7 @@
 // @id              flexible-explorer-toolbars-deluxe
 // @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
-// @version         1.3.3
+// @version         1.3.4
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -49,7 +49,6 @@ By default, only the Search Bar is shown; the Location (breadcrumb) bar and the 
 ![screnshot](https://i.imgur.com/JXKEXL1.png)
 
 ![screnshot](https://i.imgur.com/QFFmczo.png)
-
 
 */
 // ==/WindhawkModReadme==
@@ -349,10 +348,10 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
     HWND ch = GetBandChild(mr, f);
     if(!enable && ch) {
         SaveBandPositions(mr, false);
+        SetPropW(ch, L"FlexTbIsHidden", (HANDLE)1);
         int foundIdx = -1;
         EnumBands(mr, RBBIM_CHILD, [&](int i, REBARBANDINFO& rbi){ if(rbi.hwndChild==ch) foundIdx=i; });
         if(foundIdx != -1) SendMessage(mr, RB_DELETEBAND, foundIdx, 0);
-        SetPropW(ch, L"FlexTbIsHidden", (HANDLE)1);
         ShowWindow(ch, SW_HIDE);
         SetHiddenBand(cab, type, ch);
         ForceCabinetRelayout(cab);
@@ -360,6 +359,7 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
     } else if(enable && !ch) {
         ch = GetHiddenBand(cab, type); if(!ch || !IsWindow(ch)) return;
         SetHiddenBand(cab, type, NULL);
+        RemovePropW(ch, L"FlexTbIsHidden");
         SetParent(ch, mr);
         WCHAR c[256]; GetEffClass(ch, c, 256); BandState bs; LoadBandState(c, bs);
         if(type==BandType::UpButton) { SendMessage(ch, TB_SETBITMAPSIZE, 0, MAKELONG(16,16)); SendMessage(ch, TB_SETPADDING, 0, MAKELONG(4,4)); SendMessage(ch, TB_AUTOSIZE, 0, 0); }
@@ -370,13 +370,17 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
         if(SendMessage(mr, RB_INSERTBAND, (WPARAM)-1, (LPARAM)&rbi)) {
             SetPropW(ch, L"FlexTbFlag", (HANDLE)(INT_PTR)(CF_MOVED | f));
             if(f != CF_SEARCH) HookWindow(ch, Tbar_Proc);
-            RemovePropW(ch, L"FlexTbIsHidden");
             ShowWindow(ch, SW_SHOW);
             ApplySavedLayout(mr);
             SyncGrippers(mr);
             ForceCabinetRelayout(cab);
             PostMessage(cab, g_msgFixContent, (WPARAM)ch, 0);
             SaveBandPositions(mr, false);
+        } else {
+            // вставка не удалась — вернуть в скрытое состояние
+            SetPropW(ch, L"FlexTbIsHidden", (HANDLE)1);
+            ShowWindow(ch, SW_HIDE);
+            SetHiddenBand(cab, type, ch);
         }
     }
 }
@@ -384,16 +388,17 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
 LRESULT CALLBACK Rb_Proc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if(m==WM_NCDESTROY) { { Lock L; g_hooks.erase(h); } return DefSubclassProc(h,m,w,l); }
     if(m == WM_CONTEXTMENU) {
+        HWND cab = GetCabinet(h);
+        if(!cab) return DefSubclassProc(h,m,w,l);
         POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
         if(pt.x==-1 && pt.y==-1) { RECT rc; GetWindowRect(h, &rc); pt.x=rc.left; pt.y=rc.bottom; }
-        if(HWND cab = GetCabinet(h))
-            if(HWND ww = FindByClass(FindByClass(cab,L"ShellTabWindowClass"),L"WorkerW"))
-                if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
-                    if(HMENU sub = GetSubMenu(hM, 0)) {
-                        TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, pt.x, pt.y, ww, NULL);
-                        PostMessage(ww, WM_NULL, 0, 0);
-                    } DestroyMenu(hM);
-                }
+        if(HWND ww = FindByClass(FindByClass(cab,L"ShellTabWindowClass"),L"WorkerW"))
+            if(HMENU hM = LoadMenuW(GetModuleHandleW(L"explorerframe.dll"), MAKEINTRESOURCEW(264))) {
+                if(HMENU sub = GetSubMenu(hM, 0)) {
+                    TrackPopupMenuEx(sub, TPM_RIGHTBUTTON|TPM_LEFTBUTTON, pt.x, pt.y, ww, NULL);
+                    PostMessage(ww, WM_NULL, 0, 0);
+                } DestroyMenu(hM);
+            }
         return 0;
     }
     if(m==RB_SETBANDINFO) {
@@ -548,8 +553,8 @@ void ProcessWnd(HWND h) {
     if(!wcscmp(c,L"CabinetWClass")) HookWindow(h,Cab_Proc);
     else if(!wcscmp(c,L"ShellTabWindowClass") && GetCabinet(h)) HookWindow(h,ShellTab_Proc);
     else if(!wcscmp(c,L"WorkerW") && GetCabinet(h)) { HookWindow(h,WorkerW_Proc); ForceHideWorker(h); }
-    else if(!wcscmp(c,L"ReBarWindow32")) HookWindow(h,Rb_Proc);
-    else if(!wcscmp(c,L"Address Band Root")) HookWindow(h,AddrBand_Proc);
+    else if(!wcscmp(c,L"ReBarWindow32") && GetCabinet(h)) HookWindow(h,Rb_Proc);
+    else if(!wcscmp(c,L"Address Band Root") && GetCabinet(h)) HookWindow(h,AddrBand_Proc);
 }
 
 BOOL CALLBACK EnumProcessWnd_Proc(HWND ch,LPARAM) { ProcessWnd(ch); return TRUE; }
