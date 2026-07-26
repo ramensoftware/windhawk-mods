@@ -27,8 +27,6 @@ This mod hides the Navigation Bar and instead creates the following optional too
 * The Breadcrumbs Bar
 * The Up Buton
 
-The toolbars can be enabled and disabled via context menus.
-
 The toolbars can be locked and unlocked.
 If you are using this mod together with Classic Explorer toolbar (Open Shell), enable that toolbar before enabling this mod, otherwise its enabled state will not be remembered.
 
