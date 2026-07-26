@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              flexible-explorer-toolbars-deluxe-fork
-// @name            Flexible Explorer Toolbars Deluxe - Fork
+// @id              flexible-explorer-toolbars-deluxe
+// @name            Flexible Explorer Toolbars Deluxe
 // @description     Makes Search Bar, Breadcrumb Bar and others into movable toolbars
 // @version         1.3.2
 // @author          Anixx
