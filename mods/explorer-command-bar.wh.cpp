@@ -4,7 +4,7 @@
 // @description     Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones
 // @version         1.0.0
 // @author          DanRotaru
-// @github          https://github.com/DanRotaru
+// @github          https://github.com/danrotaru
 // @homepage        https://dan13.me/
 // @include         explorer.exe
 // @architecture    x86-64
@@ -20,7 +20,7 @@ Add your own buttons and dropdown menus to the **Windows 11 File Explorer
 command bar** (the toolbar with New / Sort / View), and hide the built-in
 buttons, separators and spacing you don't want.
 
-![Explorer Command Bar demo](https://cepret.md/img/placeholder.svg)
+![Explorer Command Bar demo](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/main.gif?raw=true)
 
 Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
 Explorer.
@@ -50,17 +50,14 @@ Explorer.
 
 ## Screenshots
 
-Custom buttons on the command bar:
 
-![Buttons](https://cepret.md/img/placeholder.svg)
+Hiding built‑in buttons and separators:
 
-Dropdown menu with submenus:
+![Hide buttons](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/hide-buttons.gif?raw=true)
 
-![Dropdown menu](https://cepret.md/img/placeholder.svg)
+You may hide even all options, and use only your custom ones:
 
-Hiding built-in buttons and separators:
-
-![Hide buttons](https://cepret.md/img/placeholder.svg)
+![Hide All buttons](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/hide-all-buttons.jpg?raw=true)
 
 ## Command parameters
 
@@ -110,12 +107,23 @@ in the mod settings.
 
 ## How it works
 
-The mod injects a XAML diagnostics provider into Explorer and watches the WinUI
-3 visual tree for the File Explorer command bar. When it appears, the configured
-buttons are inserted and the visibility / spacing settings are applied. The mod
-listens for the command bar being rebuilt so the buttons stay in place across
-navigation, new tabs and new windows, and it restores the original state of any
-element it touches when disabled.
+The mod hooks a couple of functions of File Explorer's own WinUI 3 code
+(`FileExplorerExtensions.dll`) which run when the command bar is built, and
+finds the command bars from there by walking the XAML tree. The configured
+buttons are then inserted and the visibility / spacing settings are applied. The
+mod also listens for the command bar being rebuilt so the buttons stay in place
+across navigation, new tabs and new windows, and it restores the original state
+of any element it touches when disabled.
+
+Notably, the mod does **not** use XAML Diagnostics
+(`InitializeXamlDiagnosticsEx`), since only one XAML diagnostics consumer can be
+active in a process at a time. That makes it compatible with mods and tools
+which do use it, such as **Windows 11 File Explorer Styler**, ExplorerBlurMica
+and TranslucentTB.
+
+File Explorer windows which are already open when the mod is enabled are
+handled too, but if the buttons don't show up in one of them right away, opening
+a new tab or navigating to another folder makes them appear.
 
 */
 // ==/WindhawkModReadme==
@@ -386,12 +394,13 @@ element it touches when disabled.
 
 #include <windows.h>
 
+#include <windhawk_utils.h>
+
 #include <exdisp.h>
 #include <servprov.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
-#include <xamlom.h>
 
 #include <atomic>
 #include <memory>
@@ -402,15 +411,7 @@ element it touches when disabled.
 #include <unordered_set>
 #include <vector>
 
-std::atomic<bool> g_initialized;
 std::atomic<bool> g_unloading;
-
-// {7B0A0F2C-3D1E-4C8B-9A65-2E8F41D0B7A3}
-static constexpr CLSID CLSID_WindhawkTAP = {
-    0x7b0a0f2c,
-    0x3d1e,
-    0x4c8b,
-    {0x9a, 0x65, 0x2e, 0x8f, 0x41, 0xd0, 0xb7, 0xa3}};
 
 static constexpr CLSID kCLSID_ShellWindows = {
     0x9ba05972,
@@ -480,17 +481,6 @@ struct {
     std::vector<ActionItem> items;
 } g_settings;
 
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
 
@@ -523,308 +513,6 @@ namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 
 #pragma endregion  // winrt_hpp
-
-void OnCommandBarAdded(muxc::CommandBar const& commandBar);
-
-#pragma region visualtreewatcher_hpp
-
-class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
-{
-public:
-    VisualTreeWatcher(winrt::com_ptr<IUnknown> site);
-
-    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
-    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
-
-    VisualTreeWatcher(VisualTreeWatcher&&) = delete;
-    VisualTreeWatcher& operator=(VisualTreeWatcher&&) = delete;
-
-    ~VisualTreeWatcher();
-
-    void UnadviseVisualTreeChange();
-
-private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element, VisualElementState elementState, LPCWSTR context) noexcept override;
-
-    wf::IInspectable FromHandle(InstanceHandle handle)
-    {
-        wf::IInspectable obj;
-        winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-        return obj;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
-};
-
-#pragma endregion  // visualtreewatcher_hpp
-
-#pragma region visualtreewatcher_cpp
-
-VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
-    m_XamlDiagnostics(site.as<IXamlDiagnostics>())
-{
-    Wh_Log(L"Constructing VisualTreeWatcher");
-
-    // Calling AdviseVisualTreeChange from the current thread causes the app to
-    // hang sometimes. Creating a new thread and calling it from there fixes
-    // it.
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD {
-            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
-            watcher->Release();
-            if (FAILED(hr)) {
-                Wh_Log(L"Error %08X", hr);
-            }
-            return 0;
-        },
-        this, 0, nullptr);
-    if (thread) {
-        AddRef();
-        CloseHandle(thread);
-    }
-}
-
-VisualTreeWatcher::~VisualTreeWatcher()
-{
-    Wh_Log(L"Destructing VisualTreeWatcher");
-}
-
-void VisualTreeWatcher::UnadviseVisualTreeChange()
-{
-    Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
-    HRESULT hr = m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
-    if (FAILED(hr)) {
-        Wh_Log(L"UnadviseVisualTreeChange failed with error %08X", hr);
-    }
-}
-
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
-{
-    if (g_unloading)
-    {
-        return S_OK;
-    }
-
-    if (mutationType == Add)
-    {
-        const auto inspectable = FromHandle(element.Handle);
-        if (auto commandBar = inspectable.try_as<muxc::CommandBar>())
-        {
-            auto name = commandBar.Name();
-            if (name == L"FileExplorerCommandBar" ||
-                name == L"FileExplorerSecondaryCommandBar")
-            {
-                Wh_Log(L"%s added, thread %u", name.c_str(), GetCurrentThreadId());
-                OnCommandBarAdded(commandBar);
-            }
-        }
-    }
-
-    return S_OK;
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-
-    // Returning an error prevents (some?) further messages, always return
-    // success.
-    return S_OK;
-}
-
-HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementState, LPCWSTR) noexcept
-{
-    return S_OK;
-}
-
-#pragma endregion  // visualtreewatcher_cpp
-
-#pragma region tap_hpp
-
-#include <ocidl.h>
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-class WindhawkTAP : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile>
-{
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown *pUnkSite) override;
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void **ppvSite) noexcept override;
-
-private:
-    winrt::com_ptr<IUnknown> site;
-};
-
-#pragma endregion  // tap_hpp
-
-#pragma region tap_cpp
-
-HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
-{
-    // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
-    site.copy_from(pUnkSite);
-
-    if (site)
-    {
-        // Decrease refcount increased by InitializeXamlDiagnosticsEx.
-        FreeLibrary(GetCurrentModuleHandle());
-
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
-    }
-
-    return S_OK;
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-HRESULT WindhawkTAP::GetSite(REFIID riid, void **ppvSite) noexcept
-{
-    return site.as(riid, ppvSite);
-}
-
-#pragma endregion  // tap_cpp
-
-#pragma region simplefactory_hpp
-
-template<class T>
-struct SimpleFactory : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile>
-{
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppvObject) override try
-    {
-        if (!pUnkOuter)
-        {
-            *ppvObject = nullptr;
-            return winrt::make<T>().as(riid, ppvObject);
-        }
-        else
-        {
-            return CLASS_E_NOAGGREGATION;
-        }
-    }
-    catch (...)
-    {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-        return hr;
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override
-    {
-        return S_OK;
-    }
-};
-
-#pragma endregion  // simplefactory_hpp
-
-#pragma region module_cpp
-
-#include <combaseapi.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) try
-{
-    if (rclsid == CLSID_WindhawkTAP)
-    {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
-    }
-    else
-    {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow()
-{
-    if (winrt::get_module_lock())
-    {
-        return S_FALSE;
-    }
-    else
-    {
-        return S_OK;
-    }
-}
-
-#pragma clang diagnostic pop
-
-#pragma endregion  // module_cpp
-
-#pragma region api_cpp
-
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = decltype(&InitializeXamlDiagnosticsEx);
-
-HRESULT InjectWindhawkTAP() noexcept
-{
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module)
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location)))
-    {
-    case 0:
-    case ARRAYSIZE(location):
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HMODULE wux(GetModuleHandle(L"Microsoft.Internal.FrameworkUdk.dll"));
-    if (!wux) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
-    }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    // I didn't find a better way than trying many connections until one works.
-    // Reference:
-    // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
-    HRESULT hr = E_FAIL;
-    for (int i = 0; i < 10000; i++)
-    {
-        WCHAR connectionName[256];
-        wsprintf(connectionName, L"WinUIVisualDiagConnection%d", i + 1);
-
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location, CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
-        {
-            break;
-        }
-    }
-
-    return hr;
-}
-
-#pragma endregion  // api_cpp
 
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
@@ -2578,80 +2266,381 @@ void RefreshButtonsForCurrentThread() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Initialization plumbing.
+// Command bar discovery.
+//
+// The command bars are found by hooking a couple of functions of File
+// Explorer's own WinUI 3 code (FileExplorerExtensions.dll) and by walking the
+// XAML tree from there with the public VisualTreeHelper API.
+//
+// Note: XAML Diagnostics (InitializeXamlDiagnosticsEx) would be an easier way
+// to watch for the command bar, but only one XAML diagnostics consumer can be
+// active per process, which makes it conflict with other tools and mods, such
+// as Windows 11 File Explorer Styler. That's why it's not used here.
 
-void InitializeSettingsAndTap() {
-    if (g_initialized.exchange(true)) {
+// Note: the `this` pointer our hooks get is a C++/WinRT implementation object,
+// not a XAML object, and there's no supported way to turn one into the other.
+// Guessing at its layout is a good way to crash Explorer, so the hooks which
+// only have a `this` pointer are used as a signal to rescan the thread, and the
+// XAML objects themselves only ever come from typed parameters, from the
+// command bars we already know about, or from the focused element.
+
+bool IsTargetCommandBarName(std::wstring_view name) {
+    return name == L"FileExplorerCommandBar" ||
+           name == L"FileExplorerSecondaryCommandBar";
+}
+
+void CollectCommandBars(mux::DependencyObject const& root,
+                        int depth,
+                        std::vector<muxc::CommandBar>* commandBars) {
+    if (depth > 64) {
         return;
     }
 
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr)) {
-        Wh_Log(L"InjectWindhawkTAP failed: %08X", hr);
-        // Allow retrying, e.g. if the WinUI runtime wasn't loaded yet.
-        g_initialized = false;
+    int count = muxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; i++) {
+        auto child = muxm::VisualTreeHelper::GetChild(root, i);
+        if (auto commandBar = child.try_as<muxc::CommandBar>();
+            commandBar && IsTargetCommandBarName(commandBar.Name())) {
+            commandBars->push_back(std::move(commandBar));
+            // No need to descend into a command bar we already found.
+            continue;
+        }
+
+        CollectCommandBars(child, depth + 1, commandBars);
     }
 }
 
-void UninitializeSettingsAndTap() {
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+// Finds all of the File Explorer command bars of the XAML island the given
+// element belongs to. Must run on the element's UI thread.
+void ScanXamlRootForCommandBars(mux::UIElement const& element) try {
+    if (g_unloading || !element) {
+        return;
     }
 
-    g_initialized = false;
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot) {
+        return;
+    }
+
+    auto content = xamlRoot.Content();
+    if (!content) {
+        return;
+    }
+
+    std::vector<muxc::CommandBar> commandBars;
+    CollectCommandBars(content, 0, &commandBars);
+    for (auto const& commandBar : commandBars) {
+        OnCommandBarAdded(commandBar);
+    }
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
 
-bool IsTargetTriggerWindow(HWND hWnd) {
-    WCHAR className[64];
-    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-        return false;
+// Same as above, but deferred, for the cases where the command bar isn't in
+// the tree yet by the time our hook runs.
+void ScheduleXamlRootScan(mux::UIElement const& element) try {
+    if (g_unloading || !element) {
+        return;
     }
 
-    if (_wcsicmp(className, L"CabinetWClass") == 0) {
-        return true;
+    auto dispatcherQueue =
+        winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+    if (!dispatcherQueue) {
+        ScanXamlRootForCommandBars(element);
+        return;
     }
 
-    // The WinUI content bridge windows of a File Explorer window. By the time
-    // they're created, the WinUI runtime is loaded, so use them as a fallback
-    // trigger in case injection failed for the top-level window.
-    if (_wcsicmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") ==
-        0) {
-        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-        WCHAR rootClassName[64];
-        if (hRootWnd &&
-            GetClassName(hRootWnd, rootClassName, ARRAYSIZE(rootClassName)) &&
-            _wcsicmp(rootClassName, L"CabinetWClass") == 0) {
-            return true;
+    dispatcherQueue.TryEnqueue([weakElement = winrt::make_weak(element)]() {
+        if (auto element = weakElement.get()) {
+            ScanXamlRootForCommandBars(element);
+        }
+    });
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+}
+
+muxc::CommandBar GetKnownCommandBarForCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+
+    std::lock_guard<std::mutex> lock(g_entriesMutex);
+    for (auto const& entry : g_entries) {
+        if (entry.threadId != threadId) {
+            continue;
+        }
+
+        if (auto commandBar = entry.commandBar.get()) {
+            return commandBar;
         }
     }
 
-    return false;
+    return nullptr;
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && !g_unloading && IsTargetTriggerWindow(hWnd)) {
-        InitializeSettingsAndTap();
+// Looks for the command bars of the current thread's XAML island without an
+// element to start from: either from a command bar which is already known for
+// this thread, or from the focused element. Must run on the UI thread.
+void ScanCurrentThreadForCommandBars() try {
+    if (g_unloading) {
+        return;
     }
 
-    return hWnd;
+    if (auto knownCommandBar = GetKnownCommandBarForCurrentThread()) {
+        ScanXamlRootForCommandBars(knownCommandBar);
+        return;
+    }
+
+    auto focused = mux::Input::FocusManager::GetFocusedElement();
+    auto element = focused ? focused.try_as<mux::UIElement>() : nullptr;
+    if (!element) {
+        Wh_Log(L"No XAML element to start from on thread %u",
+               GetCurrentThreadId());
+        return;
+    }
+
+    ScanXamlRootForCommandBars(element);
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
+
+// Same as above, deferred to after the current layout pass.
+void ScheduleCurrentThreadScan() try {
+    if (g_unloading) {
+        return;
+    }
+
+    auto dispatcherQueue =
+        winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+    if (!dispatcherQueue) {
+        ScanCurrentThreadForCommandBars();
+        return;
+    }
+
+    dispatcherQueue.TryEnqueue([]() { ScanCurrentThreadForCommandBars(); });
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Hooks of File Explorer's WinUI 3 code.
+
+// void CommandBarManager::CommandBar(muxc::CommandBar const& value)
+//
+// Called with the command bar element itself, which is the most direct way to
+// get hold of it.
+using CommandBarManager_CommandBar_t = void(WINAPI*)(void* pThis,
+                                                     void* commandBar);
+CommandBarManager_CommandBar_t CommandBarManager_CommandBar_Original;
+void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
+    Wh_Log(L">");
+
+    CommandBarManager_CommandBar_Original(pThis, commandBar);
+
+    if (g_unloading || !commandBar) {
+        return;
+    }
+
+    try {
+        auto const& element =
+            *reinterpret_cast<muxc::CommandBar const*>(commandBar);
+        if (!element) {
+            return;
+        }
+
+        Wh_Log(L"Command bar %s, thread %u", element.Name().c_str(),
+               GetCurrentThreadId());
+        OnCommandBarAdded(element);
+
+        // The secondary command bar has no manager of its own, and the bar
+        // isn't necessarily attached to the tree yet, so also scan the island
+        // once the current layout pass is done.
+        ScheduleXamlRootScan(element);
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    }
+}
+
+// void CommandBarControl::OnApplyTemplate()
+//
+// Runs when the control which hosts the command bar builds its contents, both
+// for new windows and tabs and when Explorer rebuilds it.
+using CommandBarControl_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
+CommandBarControl_OnApplyTemplate_t CommandBarControl_OnApplyTemplate_Original;
+CommandBarControl_OnApplyTemplate_t
+    CommandBarControl_Wave1_OnApplyTemplate_Original;
+
+void WINAPI CommandBarControl_OnApplyTemplate_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    CommandBarControl_OnApplyTemplate_Original(pThis);
+    ScheduleCurrentThreadScan();
+}
+
+void WINAPI CommandBarControl_Wave1_OnApplyTemplate_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    CommandBarControl_Wave1_OnApplyTemplate_Original(pThis);
+    ScheduleCurrentThreadScan();
+}
+
+// void CommandBarControl::CommandBarControlGotFocusHandler(
+//     IInspectable const& sender, RoutedEventArgs const&)
+//
+// A cheap extra chance to pick up a command bar we haven't seen yet, e.g. in a
+// window which was already open when the mod was loaded.
+using CommandBarControl_GotFocusHandler_t = void(WINAPI*)(void* pThis,
+                                                          void* sender,
+                                                          void* args);
+CommandBarControl_GotFocusHandler_t
+    CommandBarControl_GotFocusHandler_Original;
+CommandBarControl_GotFocusHandler_t
+    CommandBarControl_Wave1_GotFocusHandler_Original;
+
+void HandleCommandBarControlGotFocus(void* sender) {
+    if (g_unloading || !sender) {
+        return;
+    }
+
+    try {
+        auto const& inspectable = *reinterpret_cast<wf::IInspectable const*>(
+            sender);
+        if (auto element = inspectable ? inspectable.try_as<mux::UIElement>()
+                                       : nullptr) {
+            ScanXamlRootForCommandBars(element);
+        }
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    }
+}
+
+void WINAPI CommandBarControl_GotFocusHandler_Hook(void* pThis,
+                                                   void* sender,
+                                                   void* args) {
+    CommandBarControl_GotFocusHandler_Original(pThis, sender, args);
+    HandleCommandBarControlGotFocus(sender);
+}
+
+void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis,
+                                                         void* sender,
+                                                         void* args) {
+    CommandBarControl_Wave1_GotFocusHandler_Original(pThis, sender, args);
+    HandleCommandBarControlGotFocus(sender);
+}
+
+std::atomic<bool> g_symbolsHooked;
+
+bool HookFileExplorerExtensionsSymbols(HMODULE module) {
+    // All hooks are optional, since the set of functions differs between
+    // Windows builds, but at least one of the discovery hooks must be found.
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const & __ptr64) __ptr64)",
+            },
+            &CommandBarManager_CommandBar_Original,
+            CommandBarManager_CommandBar_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::OnApplyTemplate(void))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::OnApplyTemplate(void) __ptr64)",
+            },
+            &CommandBarControl_OnApplyTemplate_Original,
+            CommandBarControl_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::OnApplyTemplate(void))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::OnApplyTemplate(void) __ptr64)",
+            },
+            &CommandBarControl_Wave1_OnApplyTemplate_Original,
+            CommandBarControl_Wave1_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
+            },
+            &CommandBarControl_GotFocusHandler_Original,
+            CommandBarControl_GotFocusHandler_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
+                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
+            },
+            &CommandBarControl_Wave1_GotFocusHandler_Original,
+            CommandBarControl_Wave1_GotFocusHandler_Hook,
+            true,
+        },
+    };
+
+    if (!HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    if (!CommandBarManager_CommandBar_Original &&
+        !CommandBarControl_OnApplyTemplate_Original &&
+        !CommandBarControl_Wave1_OnApplyTemplate_Original) {
+        Wh_Log(L"No command bar symbol was found");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetFileExplorerExtensionsModuleHandle() {
+    return GetModuleHandle(L"FileExplorerExtensions.dll");
+}
+
+// Returns false only if the module is loaded but hooking it failed.
+bool HookFileExplorerExtensionsIfLoaded(bool applyHooks) {
+    if (g_symbolsHooked) {
+        return true;
+    }
+
+    HMODULE module = GetFileExplorerExtensionsModuleHandle();
+    if (!module) {
+        return true;
+    }
+
+    if (g_symbolsHooked.exchange(true)) {
+        return true;
+    }
+
+    Wh_Log(L"Hooking FileExplorerExtensions.dll");
+
+    if (!HookFileExplorerExtensionsSymbols(module)) {
+        return false;
+    }
+
+    if (applyHooks) {
+        Wh_ApplyHookOperations();
+    }
+
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module && !g_unloading) {
+        HookFileExplorerExtensionsIfLoaded(/*applyHooks=*/true);
+    }
+
+    return module;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Initialization plumbing.
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
@@ -2838,8 +2827,25 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    if (GetFileExplorerExtensionsModuleHandle()) {
+        if (!HookFileExplorerExtensionsIfLoaded(/*applyHooks=*/false)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"FileExplorerExtensions.dll isn't loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        if (!pKernelBaseLoadLibraryExW) {
+            return FALSE;
+        }
+
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+    }
 
     return TRUE;
 }
@@ -2847,9 +2853,13 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!GetFileExplorerWnds().empty()) {
-        Wh_Log(L"Found existing File Explorer windows, injecting TAP");
-        InitializeSettingsAndTap();
+    HookFileExplorerExtensionsIfLoaded(/*applyHooks=*/true);
+
+    // Windows which were already open when the mod was loaded won't
+    // necessarily rebuild their command bar, so look for it explicitly.
+    for (HWND hWnd : GetFileExplorerWnds()) {
+        RunFromWindowThread(
+            hWnd, [](PVOID) { ScanCurrentThreadForCommandBars(); }, nullptr);
     }
 }
 
@@ -2857,8 +2867,6 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     g_unloading = true;
-
-    UninitializeSettingsAndTap();
 
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing buttons for window %08X", (DWORD)(ULONG_PTR)hWnd);
