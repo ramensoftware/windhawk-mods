@@ -2531,7 +2531,7 @@ std::atomic<bool> g_symbolsHooked;
 bool HookFileExplorerExtensionsSymbols(HMODULE module) {
     // All hooks are optional, since the set of functions differs between
     // Windows builds, but at least one of the discovery hooks must be found.
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
@@ -2579,7 +2579,8 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!HookSymbols(module, fileExplorerExtensionsDllHooks,
+                     ARRAYSIZE(fileExplorerExtensionsDllHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
