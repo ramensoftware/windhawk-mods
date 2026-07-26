@@ -31,9 +31,9 @@ The toolbars can be locked and unlocked.
 If you are using this mod together with Classic Explorer toolbar (Open Shell), enable that toolbar before enabling this mod, otherwise its enabled state will not be remembered.
 
 **Toolbar visibility** is controlled from the right-click context menu of any of the movable toolbars (or of the Menu Bar itself) — the same menu where "Lock the Toolbars" is located.
-Three checkable items are added there ("Search Bar", "Address" and "Up") that let you show/hide the corresponding toolbar on the fly. The choice is stored via the Windhawk Storage API.
+Three checkable items are added there ("Search Bar", "Location" and "Up Band") that let you show/hide the corresponding toolbar on the fly. The choice is stored via the Windhawk Storage API.
 
-By default, only the Search Bar is shown; the Address (breadcrumb) bar and the Up button are hidden until explicitly enabled from that context menu.
+By default, only the Search Bar is shown; the Location (breadcrumb) bar and the Up button are hidden until explicitly enabled from that context menu.
 
 # Further adjustments
 * It is recommended to install mod [Explorer Unlocked Toolbars Fix (WINAPI)](https://windhawk.net/mods/explorer-no-toolbars-bottom-gripper) to make the unlocked toolbars to appear better.
