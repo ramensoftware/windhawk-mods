@@ -27,7 +27,7 @@
 // @license         MIT
 // ==/WindhawkMod==
 
-// ==WindhawkReadme==
+// ==WindhawkModReadme==
 
 /*
 # Auto Square Corners
@@ -46,7 +46,7 @@ Automatically changes supported application windows to use square corners.
 - Restart applications or Explorer to restore the default rounded corners.
 */
 
-// ==/WindhawkReadme==
+// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <dwmapi.h>
