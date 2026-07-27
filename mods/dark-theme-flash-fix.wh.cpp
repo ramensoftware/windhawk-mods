@@ -5,7 +5,6 @@
 // @version 1.0
 // @author grandrange
 // @github https://github.com/grandrange
-// @compilerOptions -lGdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
