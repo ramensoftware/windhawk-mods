@@ -376,11 +376,6 @@ void ToggleBand(HWND cab, BandType type, bool enable) {
             ForceCabinetRelayout(cab);
             PostMessage(cab, g_msgFixContent, (WPARAM)ch, 0);
             SaveBandPositions(mr, false);
-        } else {
-            // вставка не удалась — вернуть в скрытое состояние
-            SetPropW(ch, L"FlexTbIsHidden", (HANDLE)1);
-            ShowWindow(ch, SW_HIDE);
-            SetHiddenBand(cab, type, ch);
         }
     }
 }
