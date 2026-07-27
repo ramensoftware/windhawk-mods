@@ -163,20 +163,55 @@ static bool MemExecutable(const void* p) {
     return (mbi.Protect & exec) != 0;
 }
 
+// The notification controller interface (out-of-process COM object). We find it
+// in the helper by identity rather than trusting a fixed offset. {2537d644-...}
+static const GUID IID_MainNotificationController = {
+    0x2537d644, 0x8c2f, 0x4449,
+    {0xb8, 0xb6, 0x10, 0x92, 0x88, 0x22, 0x63, 0x0c}};
+
+// If cand looks like a COM object, QueryInterface it for the controller IID.
+// The readable-object + executable-vtable[0] checks guard the one call we make
+// on an otherwise-unverified pointer. Returns an AddRef'd pointer (caller frees).
+static IUnknown* ControllerFromCandidate(void* cand) {
+    if (!cand || !MemReadable(cand)) return nullptr;
+    void** vt = *reinterpret_cast<void***>(cand);
+    if (!MemReadable(vt) || !MemExecutable(vt[0])) return nullptr;
+    IUnknown* out = nullptr;
+    if (SUCCEEDED(reinterpret_cast<IUnknown*>(cand)->QueryInterface(
+            IID_MainNotificationController, reinterpret_cast<void**>(&out))))
+        return out;
+    return nullptr;
+}
+
+// Locate the controller inside the helper object. Tries the known offset first
+// (fast path for current builds), then scans a small window around it so a
+// shifted struct layout on a future build still resolves instead of us patching
+// the wrong member. Returns an AddRef'd pointer (caller frees) or nullptr.
+static IUnknown* FindController(void* helper) {
+    char* base = reinterpret_cast<char*>(helper);
+    if (MemReadable(base + CTRL_PTR_OFFSET))
+        if (IUnknown* c = ControllerFromCandidate(
+                *reinterpret_cast<void**>(base + CTRL_PTR_OFFSET)))
+            return c;
+    for (size_t off = 0xE0; off <= 0x140; off += sizeof(void*)) {
+        if (off == CTRL_PTR_OFFSET || !MemReadable(base + off)) continue;
+        if (IUnknown* c = ControllerFromCandidate(*reinterpret_cast<void**>(base + off)))
+            return c;
+    }
+    return nullptr;
+}
+
 static void HookControllerVtable(void* helper) {
     if (g_vtblHooked.load()) return;
 
-    void* controller = *reinterpret_cast<void**>(
-        reinterpret_cast<char*>(helper) + CTRL_PTR_OFFSET);
-    if (!controller || !MemReadable(controller)) return;  // not created yet / bad ptr
+    IUnknown* controller = FindController(helper);
+    if (!controller) return;  // not created yet / layout shifted; retry next entry
 
     void** vtbl = *reinterpret_cast<void***>(controller);
-    if (!vtbl || !MemReadable(vtbl)) return;
+    void* target = (vtbl && MemReadable(vtbl)) ? vtbl[GETSETTINGS_VTBL_SLOT] : nullptr;
+    if (!target || !MemExecutable(target)) { controller->Release(); return; }
 
-    void* target = vtbl[GETSETTINGS_VTBL_SLOT];
-    if (!target || !MemExecutable(target)) return;
-
-    if (g_vtblHooked.exchange(true)) return;
+    if (g_vtblHooked.exchange(true)) { controller->Release(); return; }
 
     g_vtblSlot = &vtbl[GETSETTINGS_VTBL_SLOT];
     DWORD oldProtect;
@@ -189,6 +224,7 @@ static void HookControllerVtable(void* helper) {
         g_vtblHooked = false;
         Wh_Log(L"VirtualProtect failed; settings cache disabled");
     }
+    controller->Release();
 }
 
 // ---------------------------------------------------------------------------
