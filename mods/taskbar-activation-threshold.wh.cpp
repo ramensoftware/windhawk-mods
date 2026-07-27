@@ -1504,6 +1504,13 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR libraryFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing version 0.2.4");
 
+    if (!g_uiThreadMessage || !g_captureTaskbarObjectMessage) {
+        Wh_Log(L"RegisterWindowMessageW failed: ui=%u capture=%u",
+               g_uiThreadMessage,
+               g_captureTaskbarObjectMessage);
+        return FALSE;
+    }
+
     LoadSettings();
 
     if (!HookTaskbarUiThreadSymbol()) {
