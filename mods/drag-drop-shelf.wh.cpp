@@ -2,7 +2,7 @@
 // @id              drag-drop-shelf
 // @name            Drag & Drop Shelf
 // @description     A tray shelf you drag files, text, or images onto, then drag back out into any window
-// @version         0.8.0
+// @version         0.8.1
 // @author          Ashish
 // @github          https://github.com/ashish01-dev
 // @include         explorer.exe
@@ -1360,7 +1360,8 @@ void HidePanel() {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = nullptr;
     }
-    if (g_panelWindow) {
+    if (g_panelWindow && IsWindowVisible(g_panelWindow)) {
+        AnimateWindow(g_panelWindow, 80, AW_HIDE | AW_BLEND);
         ShowWindow(g_panelWindow, SW_HIDE);
     }
 }
@@ -1675,6 +1676,7 @@ void ShowPanelNear(POINT anchor) {
     SetWindowPos(g_panelWindow, HWND_TOPMOST, x, y, width, height,
                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
     SetPopupRegion(g_panelWindow, width, height);
+    AnimateWindow(g_panelWindow, 80, AW_BLEND);
     ShowWindow(g_panelWindow, SW_SHOWNOACTIVATE);
     if (!g_mouseHook) {
         g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, GetModuleHandleW(nullptr), 0);
@@ -1820,8 +1822,7 @@ LRESULT CALLBACK TrayWndProc(HWND window,
             UINT uMsg = LOWORD(lParam);
             switch (uMsg) {
                 case NIN_SELECT:
-                case WM_LBUTTONUP:
-                case WM_LBUTTONDBLCLK: {
+                case NIN_KEYSELECT: {
                     POINT cursor;
                     GetCursorPos(&cursor);
                     TogglePanel(cursor);
