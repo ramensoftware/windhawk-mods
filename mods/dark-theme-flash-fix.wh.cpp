@@ -52,6 +52,8 @@ App calls ShowWindow(hWnd)
 - The delay adds a small perceived latency.
   I recommend 100–200 ms it blends with the native Windows 11
   window animation and feels natural.
+- In some programs, the mod may break the window appearance animation.
+  I do not recommend applying the mod globally.
 */
 // ==/WindhawkModReadme==
 
