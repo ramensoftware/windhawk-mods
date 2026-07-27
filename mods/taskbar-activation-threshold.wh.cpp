@@ -1309,6 +1309,7 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
+    // user32.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
@@ -1362,6 +1363,7 @@ bool HookTaskbarUiThreadSymbol() {
         return false;
     }
 
+    // user32.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
