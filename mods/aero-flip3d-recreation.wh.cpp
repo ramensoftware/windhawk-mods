@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -O2 -ldwmapi -luser32 -lgdi32 -lmsimg32
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
