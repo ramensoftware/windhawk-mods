@@ -3,11 +3,11 @@
 // @name            Aero Flip 3D Recreation
 // @description     This mod recreates the Windows Vista/7 Aero Flip 3D for modern Windows versions
 // @version         1.0.0
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -O3 -DNDEBUG -fomit-frame-pointer -funroll-loops -ldwmapi -luser32 -lgdi32 -lmsimg32
+// @compilerOptions -O2 -ldwmapi -luser32 -lgdi32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -734,7 +734,13 @@ static void WriteCrashLog(DWORD code, PEXCEPTION_POINTERS ep, const char* label)
         return;
     }
 
+#if defined(_M_ARM64) || defined(_M_ARM64EC)
+    ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Pc) : 0;
+#elif defined(_M_IX86)
+    ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Eip) : 0;
+#else
     ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Rip) : 0;
+#endif
     wchar_t line[384];
     wsprintfW(line,
               L"[AeroFlip3D] fence recovered | fence=%S | code=0x%08X | rip=0x%016IX | tick=%u\r\n",
