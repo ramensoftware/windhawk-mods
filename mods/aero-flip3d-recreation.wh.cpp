@@ -1,78 +1,90 @@
 // ==WindhawkMod==
 // @id              aero-flip3d-recreation
 // @name            Aero Flip 3D Recreation
-// @description     This mod recreates the Windows Vista/7 Aero Flip 3D for modern Windows versions
+// @description     This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
-// @include         explorer.exe
+// @include         windhawk.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lmsimg32
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lmsimg32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Aero Flip 3D Recreation
 
-This mod recreates the Windows Vista/7 **Flip 3D** window switcher on Windows 10/11.
-The mod is based on live DWM thumbnails and only public, documented Windows APIs and system files are not modified.
-Note: This is a first version so it might not be 100% accurate but it will improve over time with feedback.
+This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.
+
+It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.
+
+This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
+
 The mod has been tested on Windows 10 1809.
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
-| `Win+Tab` | Open Flip 3D. Press `Tab` to cycle through windows; keep `Win` held to auto-cycle like the original. **Releasing `Win` activates** the selected window. |
-| `Ctrl+Win+Tab` | Open Flip 3D in **persistent mode**: the switcher stays open after you release the keys. |
-| `Ctrl+G` or `Ctrl+Alt+F12` | Toggle the switcher on/off (persistent mode). Useful fallback if `Win+Tab` is taken by another app. |
+| `Win+Tab` | Opens Aero Flip 3D |
+| `Ctrl+Alt+F12` | Opens or closes Flip 3D manually. Use this as a fallback. |
 
-### While the switcher is open
+### While Flip 3D is open
 
-- **Navigate**: `Tab`, the arrow keys, or the mouse wheel.
-- **Confirm**: `Enter`, `Space`, or click.
-- **Cancel**: `Esc`.
-- **Emergency exit**: `Ctrl+Shift+Esc` always reaches Task Manager.
+- Navigate: `Tab`, arrow keys, or mouse wheel.
+- Select: `Enter` or `Space`.
+- Close: `Esc`.
+- Emergency exit: `Ctrl+Shift+Esc` opens Task Manager.
 
 ## Settings
 
-- **Realistic perspective cards** (`usePerspective`, on by default): deform each
-  card into a perspective trapezoid (Windows 7-like). Uncheck it for the
-  original **flat** 2.5D card cascade. The change applies live if the switcher
-  is open.
+- Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.
+- Performance profile: This setting changes animation speed and the number of visible windows.
+
+## Performance
+
+Live DWM thumbnails are used only during animations.
+
+More thumbnail strips are used to make the edges smoother while keeping the original pseudo-3D window shape.
 
 ## Requirements
 
-- Windows 10 (64 bit) or Windows 11 (64 bit)
-- DWM composition enabled (on by default)
+- Windows 10 version 1809 or later (64-bit)
+- DWM enabled (default on Windows)
+- 2-4 GB RAM 
 
 ## Notes
 
-- The switcher is drawn on the **primary monitor**.
-- The native `Alt+Tab` switcher is never intercepted.
-- While the mod is enabled it owns the `Win+Tab` hotkey, replacing the modern
-  Task View. Disable or uninstall the mod to get Task View back.
-
-
+- Aero Flip 3D appears on the main monitor, where all available windows are displayed in the 3D switcher interface.
+- The native Alt+Tab window switcher is not modified and continues to work normally.
+- While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.
+- To restore the original Windows Task View behavior, simply disable or uninstall the mod.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - usePerspective: true
-  $name: Realistic perspective cards
-  $description: If this setting is enabled, the mod deforms each card into a perspective trapezoid using live thumbnail strips (Windows 7-like). If disabled, the mod uses the original simplified flat 2.5D card cascade (scale, offset and opacity, no perspective).
-- verboseLogging: false
-  $name: Verbose debug logging
-  $description: This setting logs detailed step-by-step diagnostics (window enumeration, thumbnail registration, hook install steps, layout computation) to the Windhawk log. Disable it for normal use; turn it on only when troubleshooting since it is more verbose than the default logging.
+  $name: Simulated 3D cards
+  $description: This setting uses the classic DWM thumbnail-strip pseudo-3D effect.
+
+- performanceProfile: auto
+  $name: Performance profile
+  $description: This setting changes the animation speed and the number of visible windows.
+
+  $options:
+  - auto: Auto
+  - high: High quality
+  - low: Low
+  - verylow: Very low
 */
 // ==/WindhawkModSettings==
 
 // -----------------------------------------------------------------------------
 // Defensive rewrite (hardened build)
 //
-// This mod runs inside explorer.exe, a critical process: any unhandled fault
-// restarts the shell. The code follows an aggressive defensive strategy:
+// This mod runs in Windhawk's dedicated tool process. The code follows a
+// conventional RAII and explicit-error-checking strategy:
 //
 //  1. RAII everywhere: HDC, HBITMAP, HBRUSH, HHOOK, HANDLE, HTHUMBNAIL and
 //     BeginPaint/EndPaint are owned by small move-only wrapper classes, so
@@ -80,14 +92,13 @@ The mod has been tested on Windows 10 1809.
 //  2. Aggressive validation: every HWND is checked with IsWindow() before use,
 //     every pointer with a null check, every Win32/DWM return value with an
 //     explicit test before its result is trusted.
-//  3. No exception escapes a Windows boundary: every callback invoked by the
-//     system (WndProcs, low-level hooks, thread proc, EnumWindows callbacks,
-//     Wh_ModInit/Wh_ModUninit) is wrapped in try/catch. On failure the mod
-//     logs, cleans up and degrades gracefully instead of crashing Explorer.
+//  3. UI and input work run on distinct threads: low-level hook callbacks
+//     only classify/post input, while enumeration, DWM and animation run on
+//     the UI thread.
 //  4. Minimal logging: Wh_Log is used only for init/uninit, unrecoverable
 //     failures and caught exceptions — never for per-frame or per-key events.
-//  5. Non-blocking init: Wh_ModInit starts a background hook thread and waits
-//     at most 200 ms, so Explorer's watchdog can never restart the shell.
+//  5. Tool-process teardown joins the UI and input threads before code is
+//     unloaded, so no hook or window procedure can outlive the module.
 //  6. Isolated components with fallbacks: if the desktop snapshot, the
 //     wallpaper bitmap or DWM thumbnails fail, the backdrop degrades to a
 //     plain Aero gradient and the mod keeps working.
@@ -97,73 +108,45 @@ The mod has been tested on Windows 10 1809.
 //     small number of failed DWM updates; failure logs are rate-limited; the
 //     overlay has a safe-destroy fallback.
 //
-// Only public, documented APIs are used: DwmRegisterThumbnail,
-// DwmUpdateThumbnailProperties, DwmUnregisterThumbnail, EnumWindows,
-// RegisterHotKey and low-level input hooks.
+// The standard fallback uses public DWM thumbnail APIs. The optional live
+// DirectComposition backend is explicitly gated to Windows 10 1809 and checks
+// its private DWM exports before it is enabled.
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
-// How the REAL Flip 3D worked (from the decompiled Windows 7 RTM dwmapi.dll)
+// How the REAL Flip 3D worked, and this public-API implementation
 //
-// dwmapi.dll was only an RPC client: the Flip 3D engine lived inside the DWM
-// compositor process (dwm.exe, managed by the uxsms service).
+// Windows 7's dwmapi.dll was an RPC client: the original Flip 3D engine lived
+// in dwm.exe and therefore had compositor-private perspective transforms. On
+// Windows 10/11 that engine no longer exists. Earlier revisions of this mod
+// approximated it by registering many cropped DWM thumbnail strips per card.
+// That design has been removed: every strip required a synchronous ALPC update,
+// could not rotate continuously, and exposed DWM's uniform-fit seams.
 //
-// - Toggling Flip 3D: exported ordinal #105 (the famous
-//   `rundll32 dwmapi #105` trick) simply sends ALPC message 0x4000002B to
-//   dwm.exe, with no window arguments. dwm.exe then rendered the 3D card
-//   stack itself, with true perspective transforms — which is exactly why it
-//   cannot be replicated 1:1 with public APIs: DWM thumbnails only support a
-//   destination rect + opacity, so this mod draws a pseudo-3D stack instead.
-// - Thumbnail APIs used by this mod and their ALPC message IDs:
-//     DwmRegisterThumbnail          -> 0x4000001D (destination must be a
-//                                        top-level window owned by the
-//                                        calling process — our overlay —
-//                                        source may be any top-level window;
-//                                        HTHUMBNAIL is a client-local ID)
-//     DwmUpdateThumbnailProperties  -> 0x4000001E (45-byte property payload;
-//                                        the real DWM rejects flags == 0 and
-//                                        inverted rects — right < left or
-//                                        bottom < top — with E_INVALIDARG;
-//                                        ApplyThumbnailProperties mirrors
-//                                        this validation exactly)
-//     DwmUnregisterThumbnail        -> 0x4000001F
-//     DwmQueryThumbnailSourceSize   -> 0x40000021
-// - Every thumbnail update is one LPC round-trip to dwm.exe: that is why
-//   updates are batched once per animation frame and z-order rebuilds happen
-//   only when the selection changes, never per-frame.
-// - The Flip 3D policy attribute was DWMWA_FLIP3D_POLICY (public id 11,
-//   internal DWM attribute 17 per the attribute translation table).
-//   DWMWA_CLOAKED (14) did not exist on Windows 7 — it is a Windows 8+
-//   attribute, used here only to skip cloaked UWP windows on modern systems.
+// The normal path uses only documented DWM thumbnails. A window is registered
+// in a small number of cropped vertical strips; their independent destination
+// heights create the original pseudo-3D trapezoid while the source remains live.
 //
-// The Windows 10/11 DWM no longer implements message 0x4000002B (and
-// Windhawk itself requires Windows 10+), so this mod re-implements the
-// switcher inside explorer.exe using only the still-supported thumbnail
-// messages listed above.
-//
-// Perspective approximation: since a thumbnail can only be scaled/moved
-// (no affine or perspective transforms), each card's live content is
-// registered up to kPerspectiveStripCount times (fewer for cards deep in
-// the stack, none beyond depth 3), each thumbnail cropped to a vertical
-// source strip via DWM_TNP_RECTSOURCE and mapped onto a destination strip
-// whose height follows the trapezoid of a card rotated around a vertical
-// axis. The tilt amount is animated and grows with stack depth (front
-// card nearly flat, deep cards angled — CoverFlow-style), so the morphs
-// are seamless and the large front card shows no visible strip
-// staircase. If DWM rejects the strips, the card falls back to a single
-// flat thumbnail. All of this stays within public, documented APIs.
+// The overlay backdrop remains a cached desktop snapshot with documented GDI
+// fallbacks. All rendering APIs used are available on Windows 10 version 1809.
+// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 #include <windows.h>
+#include <shellapi.h>
 #include <dwmapi.h>
+#include <timeapi.h>
+
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdarg>
+#include <cstdlib>
+#include <cwchar>
 #include <utility>
-#include <setjmp.h>
 #include <vector>
 
 #ifndef DWMWA_EXTENDED_FRAME_BOUNDS
@@ -197,10 +180,6 @@ The mod has been tested on Windows 10 1809.
 // Never log per-frame animation, per-key input or per-thumbnail updates.
 // -----------------------------------------------------------------------------
 
-static void LogNote(PCWSTR what) {
-    Wh_Log(L"[AeroFlip3D] %s", what);
-}
-
 // Failure logs are rate-limited to at most one per second: a recurring fault
 // (e.g. an exception in a WM_PAINT handler) must not flood the log or burn
 // CPU inside a low-level hook, where the system enforces a response timeout.
@@ -223,8 +202,7 @@ static void LogFailureCode(PCWSTR what, DWORD code) {
 // Verbose, opt-in diagnostics (the "verboseLogging" setting). These are the
 // logs to turn on when troubleshooting a specific problem (mod not
 // activating, hook install failing, thumbnails not registering, layout
-// looking wrong, etc.) — they are deliberately noisier than LogNote/
-// LogFailure and are off by default so normal use stays quiet.
+// looking wrong, etc.) — they are deliberately noisier than LogFailure and are off by default so normal use stays quiet.
 static std::atomic<bool> g_verboseLogging{false};
 
 static void LogDebug(PCWSTR what) {
@@ -620,196 +598,11 @@ static ScopeGuard<Fn> MakeScopeGuard(Fn fn) {
     return ScopeGuard<Fn>(std::move(fn));
 }
 
-// Runs fn(); if any exception escapes, logs `what` and returns failValue.
-// Used to keep exceptions from crossing system boundaries.
-template <typename R, typename Fn>
-static R SafeExec(PCWSTR what, R failValue, Fn&& fn) {
-    try {
-        return fn();
-    } catch (...) {
-        LogFailure(what);
-        return failValue;
-    }
-}
-
 // -----------------------------------------------------------------------------
-// Anti-crash "fault fence" (public Win32 APIs: AddVectoredExceptionHandler,
-// TlsAlloc/GetValue/SetValue, longjmp, kernel32 file I/O).
-//
-// Why this exists: the mod runs inside explorer.exe, so any UNHANDLED hardware
-// fault (access violation, illegal instruction, divide-by-zero, ...) on a
-// thread we own, or inside a Windows callback we installed, terminates the
-// shell. The C++ try/catch blocks elsewhere only catch *thrown* exceptions;
-// whether they also catch hardware faults depends on the compiler's exception
-// model, which we cannot control here. A Vectored Exception Handler combined
-// with setjmp/longjmp catches hardware faults regardless of that model.
-//
-// Design (kept deliberately conservative so it can never disturb explorer or
-// other mods):
-//   - A per-thread stack of "fences" (setjmp buffers + a label) is kept in TLS.
-//   - Each system boundary (WndProcs, low-level hooks, thread proc, the
-//     ActivateFlip3D path, EnumWindows callbacks, Wh_ModInit/Uninit) opens a
-//     fence with FLIP3D_FENCE_BEGIN / FLIP3D_FENCE_ELSE / FLIP3D_FENCE_END.
-//   - The VEH returns EXCEPTION_CONTINUE_SEARCH for everything EXCEPT a small
-//     set of hardware fault codes, AND only when the faulting thread currently
-//     has an active fence. In that case it appends a one-line record to
-//     %TEMP%\AeroFlip3D_crash.log (the fence label + exception code + RIP, so
-//     the offending boundary is identified) and longjmps back to the fence's
-//     recovery block, which returns a safe value. explorer.exe keeps running.
-//   - C++ thrown exceptions (0xE06D7363), breakpoints and stack overflows are
-//     NEVER intercepted here: the former are handled by the existing try/catch
-//     (so RAII destructors still run on those paths), the latter cannot be
-//     recovered from safely.
-//   - The VEH does no heap allocation and only reads the TLS slot, so it is
-//     safe to run on any thread at any time.
-//
-// Residual, accepted risk: if a fault happens *inside* a Win32/DWM call while
-// that call holds one of its own internal locks, the longjmp will not release
-// it; the worst case is that *our* hook thread later hangs (Flip 3D stops
-// working) while the rest of explorer stays alive -- which is strictly better
-// than a shell restart, and the crash log records the event.
+// No vectored exception handler or non-local fault recovery is installed. A tool
+// mod must never attempt to continue after an access violation: RAII cleanup
+// and ordinary error-return handling are the only supported recovery paths.
 // -----------------------------------------------------------------------------
-
-struct FenceFrame {
-    jmp_buf* jb;
-    const char* label;
-};
-
-struct FenceStack {
-    FenceFrame frames[16];
-    int top;
-};
-
-static DWORD g_fenceTls = TLS_OUT_OF_INDEXES;
-static PVOID g_veh = nullptr;
-
-static FenceStack* GetFenceStack(bool create) {
-    if (g_fenceTls == TLS_OUT_OF_INDEXES) {
-        return nullptr;
-    }
-    FenceStack* fs = static_cast<FenceStack*>(TlsGetValue(g_fenceTls));
-    if (!fs && create) {
-        fs = static_cast<FenceStack*>(calloc(1, sizeof(FenceStack)));
-        if (fs) {
-            TlsSetValue(g_fenceTls, fs);
-        }
-    }
-    return fs;
-}
-
-static void Flip3DFencePush(jmp_buf* jb, const char* label) {
-    FenceStack* fs = GetFenceStack(true);
-    if (fs && fs->top < 16) {
-        fs->frames[fs->top].jb = jb;
-        fs->frames[fs->top].label = label;
-        fs->top++;
-    }
-}
-
-static void Flip3DFencePop() {
-    FenceStack* fs = GetFenceStack(false);
-    if (fs && fs->top > 0) {
-        fs->top--;
-    }
-}
-
-// Auto-pop on the normal (non-recovery) return path, so a boundary with many
-// `return` statements cannot leak a fence level.
-class Flip3DFenceAutoPop {
-public:
-    ~Flip3DFenceAutoPop() {
-        Flip3DFencePop();
-    }
-};
-
-// Appends a single diagnostic line using only kernel32/user32 (no CRT heap),
-// so it is safe to call from the VEH fault path.
-static void WriteCrashLog(DWORD code, PEXCEPTION_POINTERS ep, const char* label) {
-    wchar_t path[MAX_PATH] = L"";
-    DWORD len = GetTempPathW(MAX_PATH, path);
-    if (len == 0 || len >= MAX_PATH) {
-        return;
-    }
-    if (lstrcatW(path, L"AeroFlip3D_crash.log") == nullptr) {
-        return;
-    }
-
-#if defined(_M_ARM64) || defined(_M_ARM64EC)
-    ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Pc) : 0;
-#elif defined(_M_IX86)
-    ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Eip) : 0;
-#else
-    ULONG_PTR rip = ep && ep->ContextRecord ? static_cast<ULONG_PTR>(ep->ContextRecord->Rip) : 0;
-#endif
-    wchar_t line[384];
-    wsprintfW(line,
-              L"[AeroFlip3D] fence recovered | fence=%S | code=0x%08X | rip=0x%016IX | tick=%u\r\n",
-              label ? label : "?",
-              code,
-              rip,
-              static_cast<unsigned>(GetTickCount64() & 0xFFFFFFFFu));
-
-    HANDLE h = CreateFileW(path, FILE_APPEND_DATA,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h != INVALID_HANDLE_VALUE) {
-        DWORD written = 0;
-        DWORD bytes = static_cast<DWORD>(wcslen(line) * sizeof(wchar_t));
-        WriteFile(h, line, bytes, &written, nullptr);
-        CloseHandle(h);
-    }
-}
-
-static LONG NTAPI Flip3D_Veh(PEXCEPTION_POINTERS ep) {
-    if (!ep || !ep->ExceptionRecord) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-
-    const DWORD code = ep->ExceptionRecord->ExceptionCode;
-
-    // Only recover from hardware faults we can survive. Explicitly exclude C++
-    // throws, breakpoints and stack overflows.
-    if (code != EXCEPTION_ACCESS_VIOLATION &&
-        code != EXCEPTION_ILLEGAL_INSTRUCTION &&
-        code != EXCEPTION_INT_DIVIDE_BY_ZERO &&
-        code != EXCEPTION_INT_OVERFLOW &&
-        code != EXCEPTION_DATATYPE_MISALIGNMENT &&
-        code != EXCEPTION_PRIV_INSTRUCTION &&
-        code != EXCEPTION_ARRAY_BOUNDS_EXCEEDED &&
-        code != EXCEPTION_FLT_DENORMAL_OPERAND &&
-        code != EXCEPTION_FLT_DIVIDE_BY_ZERO &&
-        code != EXCEPTION_FLT_INVALID_OPERATION) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-
-    FenceStack* fs = GetFenceStack(false);
-    if (!fs || fs->top <= 0) {
-        return EXCEPTION_CONTINUE_SEARCH;  // Not our guarded code: leave it alone.
-    }
-
-    const char* label = fs->frames[fs->top - 1].label;
-    jmp_buf* jb = fs->frames[fs->top - 1].jb;
-    if (!jb) {
-        return EXCEPTION_CONTINUE_SEARCH;
-    }
-
-    WriteCrashLog(code, ep, label);
-    longjmp(*jb, 1);  // Transfer control to the boundary's recovery block.
-}
-
-// The fence must be opened with these three macros INSIDE the boundary
-// function (setjmp has to live in the frame we longjmp back to). The recovery
-// block (between BEGIN and ELSE) must end with a `return`. The normal body
-// (between ELSE and END) may return freely; its fence level is auto-popped.
-#define FLIP3D_FENCE_BEGIN(label)        \
-    jmp_buf _flip3d_fjb;                 \
-    Flip3DFencePush(&_flip3d_fjb, label); \
-    if (setjmp(_flip3d_fjb)) {           \
-        Flip3DFencePop();
-#define FLIP3D_FENCE_ELSE                \
-    } else {                             \
-        Flip3DFenceAutoPop _flip3d_fpop;
-#define FLIP3D_FENCE_END }
 
 // -----------------------------------------------------------------------------
 // State
@@ -817,10 +610,10 @@ static LONG NTAPI Flip3D_Veh(PEXCEPTION_POINTERS ep) {
 
 struct FlipWindowEntry {
     HWND hwnd = nullptr;
-    ThumbnailHandle thumbnail;          // Used only in flat-fallback mode.
-    std::vector<ThumbnailHandle> slices;  // Perspective strips (one live thumbnail each).
-    int stripCount = 0;                   // 0 = this card uses the flat single thumbnail.
-    bool stripsHidden = false;            // True once hidden strips were told to hide (skip per-frame work).
+    ThumbnailHandle thumbnail;          // Flat fallback / simulated deep card.
+    std::vector<ThumbnailHandle> slices;  // Simulated 3D vertical DWM strips.
+    int stripCount = 0;
+    bool stripsHidden = false;
     SIZE sourceSize = {0, 0};
     RECT sourceRect = {0, 0, 0, 0};
 
@@ -839,6 +632,17 @@ struct FlipWindowEntry {
     double currentTilt = 0.0;
     double startTilt = 0.0;
     double targetTilt = 0.0;
+
+    // Last pose actually pushed to DWM. Every thumbnail update is a
+    // synchronous ALPC round-trip to dwm.exe, so a card whose geometry did
+    // not move since the previous frame must not be re-sent: on a slow
+    // machine those redundant calls are the single biggest source of stutter
+    // (the animation easing settles long before the timer stops, and hidden
+    // or unchanged deep cards would otherwise keep paying full price).
+    RECT appliedRect = {0, 0, 0, 0};
+    BYTE appliedOpacity = 0;
+    double appliedTilt = -1.0;  // -1 = nothing applied yet.
+    bool everApplied = false;
 };
 
 enum class TriggerModifier : int {
@@ -854,28 +658,32 @@ enum class FlipAnimationKind : int {
     Exit,
 };
 
-static HWND g_hControllerWnd = nullptr;  // message-only window on hook/UI thread
+static HWND g_hControllerWnd = nullptr;  // message-only window on UI thread
 static HWND g_hOverlayWnd = nullptr;     // visible fullscreen stack overlay
+static bool g_overlayClassRegistered = false;
+static bool g_controllerClassRegistered = false;
 static HWND g_hDesktopThumbnailSource = nullptr;
 static HTHUMBNAIL g_desktopThumbnail = nullptr;
-static ScopedBitmap g_desktopSnapshotBitmap;    // real desktop captured via GDI
+[[clang::no_destroy]] static ScopedBitmap g_desktopSnapshotBitmap;    // real desktop captured via GDI
 static SIZE g_desktopSnapshotSize = {0, 0};
-static ScopedBitmap g_backdropCompositeBitmap;  // snapshot + veil, pre-blended once
+[[clang::no_destroy]] static ScopedBitmap g_backdropCompositeBitmap;  // snapshot + veil, pre-blended once
 static SIZE g_backdropCompositeSize = {0, 0};
 static DWORD g_hookThreadId = 0;
 static DWORD g_overlayThreadId = 0;
-static ScopedHandle g_hookThread;
-static ScopedHandle g_hookReadyEvent;
+[[clang::no_destroy]] static ScopedHandle g_hookThread;       // UI/controller thread.
+[[clang::no_destroy]] static ScopedHandle g_inputThread;      // LL-hook-only thread.
+static DWORD g_inputThreadId = 0;
+[[clang::no_destroy]] static ScopedHandle g_hookReadyEvent;
 static std::atomic<bool> g_hookInstallOk{false};
 static std::atomic<bool> g_hookSessionActive{false};
 
-static ScopedHook g_keyboardHook;
-static ScopedHook g_mouseHook;
+[[clang::no_destroy]] static ScopedHook g_keyboardHook;
+[[clang::no_destroy]] static ScopedHook g_mouseHook;
 
-static std::vector<FlipWindowEntry> g_windows;
+[[clang::no_destroy]] static std::vector<FlipWindowEntry> g_windows;
 static int g_selectedIndex = 0;
 static bool g_desktopSelected = false;  // true = front slot empty, desktop showing (Win7-style entry)
-static bool g_persistentMode = false;   // true = Ctrl+Win+Tab or Ctrl+G: switcher stays open after key release
+static bool g_persistentMode = false;   // true = Win+Tab: switcher stays open after key release
 static int g_activeWindowIndex = -1;    // index of the foreground window at activation time
 static HWND g_initialForegroundHwnd = nullptr;
 static bool g_isActive = false;
@@ -901,35 +709,148 @@ static int g_moduleAddressAnchor = 0;
 // Settings (read from the Windhawk UI block above)
 // -----------------------------------------------------------------------------
 
+enum class PerfProfileChoice : int {
+    Auto = 0,
+    High,
+    Low,
+    VeryLow,
+};
+
 struct Flip3DSettings {
-    bool perspective = true;  // true = realistic strips; false = flat cascade.
-    bool verboseLogging = false;  // true = emit LogDebug diagnostics.
+    bool perspective = true;
+    PerfProfileChoice perfChoice = PerfProfileChoice::Auto;
 };
 
 static Flip3DSettings g_settings;
 
+// -----------------------------------------------------------------------------
+// Performance profile (auto-detected once)
+//
+// The mod has to run acceptably on low-spec machines (4 GB RAM or less, often
+// paired with a weak iGPU and a slow disk). Every knob that costs CPU, GPU
+// bandwidth or ALPC traffic is therefore scaled by a profile detected at
+// startup instead of being hard-coded for a fast PC:
+//
+//   * texture cap  -> persistent GPU/CPU capture memory
+//   * frame interval-> how often animated frames are presented
+//   * deck depth    -> how many cards are rendered at all
+//   * snapshot      -> full-screen GDI bitmaps held in RAM
+//
+// Detection is deliberately conservative: when anything is unknown the
+// machine is treated as low-end, since over-reducing quality is far less
+// harmful than making the shell stutter.
+// -----------------------------------------------------------------------------
+
+struct Flip3DPerfProfile {
+    bool lowEnd = false;        // 4 GB RAM or less / few cores.
+    bool veryLowEnd = false;    // 2 GB RAM or less: strictest budget.
+    UINT frameIntervalMs = 16;  // Animation timer period while a transition runs.
+    int maxDeckCards = 8;       // Visible cascade cap.
+    bool allowSnapshot = true;  // Full-screen desktop capture allowed.
+};
+
+static Flip3DPerfProfile g_perf;
+
+static void DetectPerformanceProfile() {
+    Flip3DPerfProfile p;
+
+    ULONGLONG totalMb = 0;
+    MEMORYSTATUSEX mem = {};
+    mem.dwLength = sizeof(mem);
+    if (GlobalMemoryStatusEx(&mem)) {
+        totalMb = mem.ullTotalPhys / (1024ULL * 1024ULL);
+    }
+
+    SYSTEM_INFO si = {};
+    GetNativeSystemInfo(&si);
+    const DWORD cores = si.dwNumberOfProcessors ? si.dwNumberOfProcessors : 1;
+
+    // totalMb == 0 means the query failed: assume the worst.
+    const bool lowRam = (totalMb == 0) || (totalMb <= 4200);   // ~4 GB (allow for reserved RAM).
+    const bool tinyRam = (totalMb != 0) && (totalMb <= 2200);  // ~2 GB.
+    const bool fewCores = cores <= 2;
+
+    p.lowEnd = lowRam || fewCores;
+    p.veryLowEnd = tinyRam || (lowRam && fewCores);
+
+    // Explicit user override wins over detection: the heuristic cannot see
+    // GPU class, thermal throttling or a busy machine, so the setting is the
+    // final say.
+    switch (g_settings.perfChoice) {
+        case PerfProfileChoice::High:
+            p.lowEnd = false;
+            p.veryLowEnd = false;
+            break;
+        case PerfProfileChoice::Low:
+            p.lowEnd = true;
+            p.veryLowEnd = false;
+            break;
+        case PerfProfileChoice::VeryLow:
+            p.lowEnd = true;
+            p.veryLowEnd = true;
+            break;
+        case PerfProfileChoice::Auto:
+        default:
+            break;
+    }
+
+    if (p.veryLowEnd) {
+        // Strictest budget: the switcher must stay responsive even if that
+        // means a visibly coarser taper. 25 fps still reads as smooth for a
+        // sub-half-second animation.
+        p.frameIntervalMs = 25;       // 40 fps: responsive even on very-low profile.
+        p.maxDeckCards = 5;
+        p.allowSnapshot = false;      // Skip the full-screen bitmaps entirely.
+    } else if (p.lowEnd) {
+        p.frameIntervalMs = 20;       // 50 fps: close to the original 60 fps feel.
+        p.maxDeckCards = 6;
+        p.allowSnapshot = true;
+    }
+
+    g_perf = p;
+
+    LogDebugFmt(L"DetectPerformanceProfile: ram=%llu MB cores=%u -> lowEnd=%d veryLowEnd=%d "
+                L"fps=%u deck=%d snapshot=%d",
+                totalMb, static_cast<unsigned>(cores),
+                p.lowEnd ? 1 : 0, p.veryLowEnd ? 1 : 0,
+                p.frameIntervalMs ? (1000u / p.frameIntervalMs) : 0u,
+                p.maxDeckCards, p.allowSnapshot ? 1 : 0);
+}
+
 static void LoadSettings() {
-    // usePerspective is a boolean setting; Wh_GetIntSetting returns 1 (on) or
-    // 0 (off) -- the canonical boolean read used by official Windhawk mods.
     g_settings.perspective = Wh_GetIntSetting(L"usePerspective") != 0;
-    g_settings.verboseLogging = Wh_GetIntSetting(L"verboseLogging") != 0;
-    g_verboseLogging.store(g_settings.verboseLogging, std::memory_order_relaxed);
-    LogDebugFmt(L"LoadSettings: perspective=%d verboseLogging=%d",
-                g_settings.perspective ? 1 : 0, g_settings.verboseLogging ? 1 : 0);
+
+    // Performance profile override. Read defensively: an unrecognised or
+    // missing value falls back to Auto rather than to an arbitrary profile.
+    g_settings.perfChoice = PerfProfileChoice::Auto;
+    if (PCWSTR choice = Wh_GetStringSetting(L"performanceProfile")) {
+        if (wcscmp(choice, L"high") == 0) {
+            g_settings.perfChoice = PerfProfileChoice::High;
+        } else if (wcscmp(choice, L"low") == 0) {
+            g_settings.perfChoice = PerfProfileChoice::Low;
+        } else if (wcscmp(choice, L"verylow") == 0) {
+            g_settings.perfChoice = PerfProfileChoice::VeryLow;
+        }
+        Wh_FreeStringSetting(choice);
+    }
+
+    LogDebugFmt(L"LoadSettings: perspective=%d perfChoice=%d",
+                g_settings.perspective ? 1 : 0,
+                static_cast<int>(g_settings.perfChoice));
 }
 
 static constexpr UINT_PTR kAnimationTimerId = 1;
 static constexpr UINT_PTR kFailsafeTimerId = 2;
 static constexpr UINT_PTR kAutoCycleTimerId = 3;
-// Runs on the CONTROLLER window (not the overlay). Windows intermittently
-// "reclaims" the Win+Tab / Ctrl+Win+Tab global grab (e.g. after Task View,
-// Xbox Game Bar, or Ink Workspace re-registers it, or after a DWM/session
-// reinit on sleep/lock). Periodically re-issuing RegisterHotKey is the
-// documented way to win it back without restarting the mod.
-static constexpr UINT_PTR kHotkeyReclaimTimerId = 4;
-static constexpr UINT kHotkeyReclaimIntervalMs = 4000;
-static constexpr UINT kAutoCycleIntervalMs = 250;  // Win7-style: cycles by itself while Win is held
-static constexpr UINT kAnimationTimerIntervalMs = 16;  // ~60 fps: smoother animation without increasing load.
+static constexpr UINT kAutoCycleIntervalMs = 250;  // Vista/7 Win-held cycle cadence.
+// Controller-window timer: a bounded startup claim for Win+Tab. It retries
+// exactly 20 times, never as a permanent reclaim/polling loop.
+static constexpr UINT_PTR kWinTabClaimTimerId = 4;
+static constexpr UINT kWinTabClaimIntervalMs = 100;
+static constexpr int kWinTabClaimAttempts = 20;
+// Baseline animation period (~60 fps). The value actually used is
+// g_perf.frameIntervalMs, which drops to 30 or 25 fps on low-end machines.
+// This limits DWM strip updates during animations.
 static constexpr DWORD kEntryAnimationDurationMs = 460;
 static constexpr DWORD kLayoutAnimationDurationMs = 400;
 static constexpr DWORD kExitAnimationDurationMs = 320;
@@ -938,9 +859,7 @@ static constexpr ULONGLONG kNavigationDebounceMs = 85;
 static constexpr UINT kFailsafeAutoCloseMs = 60000;
 static constexpr WORD kVkDummy = 0xFF;
 static constexpr int kStickyHotkeyId = 0x3D3D;
-static constexpr int kToggleHotkeyId = 0x3D3E;
 static constexpr int kHotkeyWinTab = 0x4001;      // Win+Tab (transient mode)
-static constexpr int kHotkeyCtrlWinTab = 0x4002;  // Ctrl+Win+Tab (persistent mode)
 
 // Tracks which combos RegisterHotKey currently owns. When a combo IS owned,
 // WM_HOTKEY alone must handle it: the LL hook below must NOT also trigger
@@ -952,7 +871,7 @@ static constexpr int kHotkeyCtrlWinTab = 0x4002;  // Ctrl+Win+Tab (persistent mo
 // hook remains the sole fallback trigger, so functionality never regresses.
 static std::atomic<bool> g_stickyHotkeyOwned{false};
 static std::atomic<bool> g_winTabHotkeyOwned{false};
-static std::atomic<bool> g_ctrlWinTabHotkeyOwned{false};
+static int g_winTabClaimAttempt = 0;
 
 // Crash-safe default: disabled.
 // DWM thumbnails of Progman/WorkerW/SHELLDLL_DefView desktop hosts can be
@@ -960,7 +879,6 @@ static std::atomic<bool> g_ctrlWinTabHotkeyOwned{false};
 // the safe backplate; this flag only re-enables the risky DWM path for tests.
 static constexpr bool kEnableDesktopDwmBackdrop = false;
 static constexpr bool kEnableLowLevelInputHooks = true;
-static constexpr bool kEnableMinimalHotkeyHook = true;
 
 static constexpr UINT WM_FLIP3D_ACTIVATE = WM_APP + 0x520;
 static constexpr UINT WM_FLIP3D_NAVIGATE = WM_APP + 0x521;
@@ -972,53 +890,23 @@ static constexpr UINT WM_FLIP3D_REBUILD = WM_APP + 0x524;  // Re-style the open 
 // (hundreds of windows) that would make the stack unusable and expensive.
 static constexpr size_t kMaxFlipWindows = 128;
 
-// A thumbnail that rejects this many consecutive property updates (source
-// window became a zombie/cloaked/hung) is dropped from the deck.
+// Simulated 3D: original public DWM-strip algorithm (ported unchanged from
+// message (4).txt). It is the default because it works on Win10 1809 without
+// private DWM exports or texture capture.
 static constexpr int kMaxThumbnailUpdateFailures = 5;
-
-// Perspective deformation: public DWM thumbnail APIs only accept destination
-// and source RECTs (no affine/perspective transforms — the real Flip 3D
-// perspective was computed inside dwm.exe). The closest public-API
-// approximation is to register the same live window several times, each
-// thumbnail cropped to a vertical source strip (DWM_TNP_RECTSOURCE) and
-// mapped onto a destination strip whose height follows the projected
-// trapezoid of a card rotated around a vertical axis.
-//
-// Performance note: each strip update is one ALPC round-trip to dwm.exe, and
-// the hook thread (which owns the overlay) drives the animation — so the
-// strip budget is kept small and concentrated on the front cards (where the
-// perspective is actually visible). Deep cards render flat. Cards whose
-// opacity is 0 are hidden with a single call and skipped per-frame. The
-// animation timer is also slowed a touch (50 fps) to stay well within the
-// system's low-level-hook responsiveness budget.
-// targetTilt (see the per-card projection below) already ranges only
-// 0.10-0.55, never reaching 1.0 — so this was being applied as a SECOND,
-// compounding damping factor on top of that cap, capping real far-edge
-// height loss at ~11% (0.55*0.20) even for the deepest cards: nearly flat.
-// Raised so the back of the deck actually reads as a rotated Win7-style
-// trapezoid instead of a flat cascade with a faint taper.
-// Deliberately not pushed further: the per-strip height jump between two
-// adjacent strips is roughly h*tilt/stripCount. Strength and strip count
-// have to be tuned together - raising this without enough strips is what
-// produced visible "steps" (part of a window reading as a different height
-// than the rest) instead of a smooth taper. See StripCountForDepth below.
-static constexpr double kPerspectiveStrength = 0.55;  // Far-edge height loss at full tilt.
-
-// Per-depth strip budget: the front card gets the most strips (it is large
-// and on-screen, so it needs smooth edges) while deep cards get fewer (they
-// are small/dim and their perspective is barely visible). 0 = flat thumbnail.
+static constexpr double kPerspectiveStrength = 0.68;
 inline int StripCountForDepth(int depth) {
-    if (!g_settings.perspective) {
-        return 0;  // Flat mode: every card uses a single flat thumbnail.
-    }
     switch (depth) {
-        case 0: return 14;  // was 18, then over-cut to 11 - restored for a smooth taper
-        case 1: return 10;  // was 12, then over-cut to 7
-        case 2: return 7;   // was 8, then over-cut to 5
-        case 3: return 6;   // was 6, then over-cut to 3 (the worst offender for visible steps)
-        default: return 0;  // Flat single thumbnail.
+        case 0: return 20;
+        case 1: return 14;
+        case 2: return 10;
+        case 3: return 8;
+        default: return 0;
     }
 }
+
+
+inline int ClampInt(int value, int minValue, int maxValue);  // Defined below.
 
 // Maximum time Wh_ModInit may wait for the background hook thread. Explorer
 // must never be blocked longer than this (point 5: no blocking init).
@@ -1026,11 +914,14 @@ inline int StripCountForDepth(int depth) {
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static bool TryRegisterHotkey(int id, UINT modifiers, UINT vk, PCWSTR label);
+static void ContinueWinTabClaim();
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
+static DWORD WINAPI InputThreadProc(LPVOID);
 static void FinishExitAfterAnimation();
 inline int StackDepthForIndex(int index, int selectedIndex, int count);
 inline std::vector<int> BuildBackToFrontOrder();
+
 
 // -----------------------------------------------------------------------------
 // Utility helpers
@@ -1330,7 +1221,7 @@ static HWND FindPlainDesktopWindow() {
 // can leak. Must be called BEFORE the overlay window becomes visible,
 // otherwise the overlay itself would be captured.
 static void CaptureDesktopSnapshot() {
-    // Se già abbiamo un bitmap della stessa dimensione, lo riusiamo
+    // Reuse an existing bitmap only when its dimensions still match.
     bool reuseExisting = false;
     if (g_desktopSnapshotBitmap) {
         BITMAP bm = {};
@@ -1341,7 +1232,7 @@ static void CaptureDesktopSnapshot() {
         }
     }
 
-    // Se non abbiamo un bitmap da riusare, libera e ricrea
+    // No usable bitmap: release stale state before creating a replacement.
     if (!reuseExisting) {
         ReleaseDesktopSnapshot();
     }
@@ -1355,6 +1246,14 @@ static void CaptureDesktopSnapshot() {
         return;
     }
 
+    if (!g_perf.allowSnapshot) {
+        // Very low-end profile: two full-screen 32-bit bitmaps (snapshot +
+        // composite) are ~16 MB at 1080p and must be blitted on every
+        // repaint. On a 2 GB machine that is both a memory and a bandwidth
+        // problem, so the backdrop degrades to the plain Aero gradient.
+        LogDebug(L"CaptureDesktopSnapshot: skipped (low-end profile)");
+        return;
+    }
     if (!GdiBudgetAllowsBitmaps() || !MemoryPressureAllowsSnapshot()) {
         LogFailure(L"CaptureDesktopSnapshot: resource pressure");
         return;
@@ -1373,12 +1272,12 @@ static void CaptureDesktopSnapshot() {
         return;
     }
 
-    // Se stiamo riusando un bitmap esistente, verifica che abbia le dimensioni giuste
+    // Validate the dimensions before reusing a bitmap.
     if (reuseExisting) {
         BITMAP bm = {};
         if (GetObjectW(g_desktopSnapshotBitmap.get(), sizeof(bm), &bm) == sizeof(bm)) {
             if (bm.bmWidth != width || bm.bmHeight != height) {
-                // Dimensioni diverse: ricrea
+                // Different dimensions: recreate it.
                 ReleaseDesktopSnapshot();
                 reuseExisting = false;
             }
@@ -1406,7 +1305,7 @@ static void CaptureDesktopSnapshot() {
         g_desktopSnapshotSize.cy = height;
     }
 
-    // Ora disegna il contenuto nel bitmap (nuovo o riutilizzato)
+    // Draw the current content into the new or reused bitmap.
     ScopedDc screenDc = ScopedDc::fromScreen(nullptr);
     if (!screenDc) {
         LogFailureCode(L"CaptureDesktopSnapshot: GetDC(2)", GetLastError());
@@ -1512,7 +1411,7 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
         return false;
     }
 
-    // Controllo cache con tolleranza DPI (±1 pixel)
+    // DPI-tolerant cache check (±1 pixel).
     if (g_backdropCompositeBitmap) {
         if (abs(g_backdropCompositeSize.cx - w) <= 1 &&
             abs(g_backdropCompositeSize.cy - h) <= 1) {
@@ -1520,7 +1419,7 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
         }
     }
 
-    // Ricostruisci il composite
+    // Rebuild the composite.
     g_backdropCompositeBitmap.reset();
     g_backdropCompositeSize.cx = 0;
     g_backdropCompositeSize.cy = 0;
@@ -1545,9 +1444,21 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
         ScopedSelectObject<HBITMAP> selectSnapshot(snapshotDc.get(),
                                                    g_desktopSnapshotBitmap.get());
         if (selectSnapshot.succeeded()) {
-            SetStretchBltMode(compositeDc.get(), HALFTONE);
-            StretchBlt(compositeDc.get(), 0, 0, w, h, snapshotDc.get(), 0, 0,
-                       g_desktopSnapshotSize.cx, g_desktopSnapshotSize.cy, SRCCOPY);
+            // The snapshot is normally already at the overlay's own client
+            // size (both come from the same monitor rect), so most of the
+            // time this is a 1:1 copy. Only engage HALFTONE resampling when a
+            // real scale change is happening (DPI change, monitor swap
+            // mid-session, etc.) - HALFTONE softens every pixel, so using it
+            // unconditionally on a same-size copy was quietly blurring and
+            // dulling the desktop photo for no reason. A plain BitBlt keeps
+            // the wallpaper crisp and its colors as saturated as Win7's.
+            if (w == g_desktopSnapshotSize.cx && h == g_desktopSnapshotSize.cy) {
+                BitBlt(compositeDc.get(), 0, 0, w, h, snapshotDc.get(), 0, 0, SRCCOPY);
+            } else {
+                SetStretchBltMode(compositeDc.get(), HALFTONE);
+                StretchBlt(compositeDc.get(), 0, 0, w, h, snapshotDc.get(), 0, 0,
+                           g_desktopSnapshotSize.cx, g_desktopSnapshotSize.cy, SRCCOPY);
+            }
         }
     }
 
@@ -1571,7 +1482,12 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
                     BLENDFUNCTION blend = {};
                     blend.BlendOp = AC_SRC_OVER;
                     blend.BlendFlags = 0;
-                    blend.SourceConstantAlpha = 80;
+                    // Lowered from 80: the real Win7 Flip 3D backdrop only
+                    // dims the desktop slightly so the wallpaper's own colors
+                    // (e.g. the waterfall greens/whites) still read clearly
+                    // behind the glass cards, rather than looking washed to
+                    // near-black.
+                    blend.SourceConstantAlpha = 55;
                     blend.AlphaFormat = 0;
 
                     pAlphaBlend(compositeDc.get(), 0, 0, w, h, veilDc.get(), 0, 0, w, h, blend);
@@ -1642,10 +1558,23 @@ static void PaintStaticWallpaperBackdrop(HWND hwnd, HDC hdc) {
                 if (memDc) {
                     ScopedSelectObject<HBITMAP> select(memDc.get(), wallpaper.get());
                     if (select.succeeded()) {
-                        SetStretchBltMode(hdc, HALFTONE);
-                        if (StretchBlt(hdc, rc.left, rc.top, RectWidth(rc), RectHeight(rc),
-                                       memDc.get(), 0, 0, bitmap.bmWidth, bitmap.bmHeight,
-                                       SRCCOPY)) {
+                        // Same reasoning as EnsureBackdropComposite: only
+                        // resample with HALFTONE when an actual scale change
+                        // is needed, so a wallpaper that already matches the
+                        // client rect isn't needlessly softened.
+                        bool sameSize = (RectWidth(rc) == bitmap.bmWidth &&
+                                        RectHeight(rc) == bitmap.bmHeight);
+                        BOOL blitOk;
+                        if (sameSize) {
+                            blitOk = BitBlt(hdc, rc.left, rc.top, RectWidth(rc), RectHeight(rc),
+                                            memDc.get(), 0, 0, SRCCOPY);
+                        } else {
+                            SetStretchBltMode(hdc, HALFTONE);
+                            blitOk = StretchBlt(hdc, rc.left, rc.top, RectWidth(rc), RectHeight(rc),
+                                                memDc.get(), 0, 0, bitmap.bmWidth, bitmap.bmHeight,
+                                                SRCCOPY);
+                        }
+                        if (blitOk) {
                             return;
                         }
                     }
@@ -1694,10 +1623,7 @@ static HWND g_desktopHostSearchResult = nullptr;
 static BOOL CALLBACK FindDesktopHostProc(HWND hwnd, LPARAM) {
     // Guarded: an exception (or hardware fault) here must not cross the
     // EnumWindows boundary.
-    FLIP3D_FENCE_BEGIN("FindDesktopHostProc")
-        return FALSE;
-    FLIP3D_FENCE_ELSE
-    try {
+try {
         if (!hwnd || !IsWindow(hwnd)) {
             return TRUE;  // Skip, keep enumerating.
         }
@@ -1710,7 +1636,7 @@ static BOOL CALLBACK FindDesktopHostProc(HWND hwnd, LPARAM) {
         LogFailure(L"FindDesktopHostProc");
         return FALSE;  // Stop enumeration safely.
     }
-    FLIP3D_FENCE_END
+    
     return TRUE;
 }
 
@@ -1735,88 +1661,19 @@ static HWND FindDesktopThumbnailSourceWindow() {
 
 static bool IsClassBlacklisted(HWND hwnd) {
     wchar_t cls[128] = L"";
-    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
-        return true;
-    }
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return true;
 
-    // Finestre del mod stesso
-    if (lstrcmpW(cls, L"Flip3DOverlayWndClass") == 0) return true;
-    if (lstrcmpW(cls, L"Flip3DControllerWndClass") == 0) return true;
-    
-    // Finestre di sistema
-    if (lstrcmpW(cls, L"Shell_TrayWnd") == 0) return true;
-    if (lstrcmpW(cls, L"Shell_SecondaryTrayWnd") == 0) return true;
-    if (lstrcmpW(cls, L"Progman") == 0) return true;
-    if (lstrcmpW(cls, L"WorkerW") == 0) return true;
-    if (lstrcmpW(cls, L"Shell_InputSwitchTopLevelWindow") == 0) return true;
-    if (lstrcmpW(cls, L"Windows.UI.Core.CoreWindow") == 0) return true;
-    if (lstrcmpW(cls, L"ApplicationManager_ImmersiveShellWindow") == 0) return true;
-    
-    // --- SOFTWARE DI REGISTRAZIONE SCHERMO ---
-    // Bandicam
-    if (lstrcmpW(cls, L"Bandicam") == 0) return true;
-    if (lstrcmpW(cls, L"BANDICAM") == 0) return true;
-    if (lstrcmpW(cls, L"Bandicam Window") == 0) return true;
-    
-    // Fraps
-    if (lstrcmpW(cls, L"FRAPS") == 0) return true;
-    if (lstrcmpW(cls, L"Fraps") == 0) return true;
-    if (lstrcmpW(cls, L"FRAPS_CAPTURE") == 0) return true;
-    
-    // OBS Studio
-    if (lstrcmpW(cls, L"Qt5QWindowIcon") == 0) return true;  // OBS usa Qt
-    if (lstrcmpW(cls, L"OBS") == 0) return true;
-    if (lstrcmpW(cls, L"obs") == 0) return true;
-    
-    // NVIDIA ShadowPlay / GeForce Experience
-    if (lstrcmpW(cls, L"NVIDIA Share") == 0) return true;
-    if (lstrcmpW(cls, L"ShadowPlay") == 0) return true;
-    if (lstrcmpW(cls, L"GeForce Experience") == 0) return true;
-    if (lstrcmpW(cls, L"NVContainer") == 0) return true;
-    
-    // AMD ReLive
-    if (lstrcmpW(cls, L"AMD Radeon Settings") == 0) return true;
-    if (lstrcmpW(cls, L"Radeon") == 0) return true;
-    if (lstrcmpW(cls, L"AMDRSServ") == 0) return true;
-    
-    // Xbox Game Bar / Xbox Game DVR
-    if (lstrcmpW(cls, L"Xbox Game Bar") == 0) return true;
-    if (lstrcmpW(cls, L"GameDVR") == 0) return true;
-    if (lstrcmpW(cls, L"Windows.Gaming.GameBar") == 0) return true;
-    
-    // Windows Game DVR
-    if (lstrcmpW(cls, L"Windows.Gaming.GameBar.PopupWindow") == 0) return true;
-    if (lstrcmpW(cls, L"Microsoft.Windows.Gaming.GameBar") == 0) return true;
-    
-    // Steam overlay
-    if (lstrcmpW(cls, L"Steam") == 0) return true;
-    if (lstrcmpW(cls, L"STEAM") == 0) return true;
-    if (lstrcmpW(cls, L"GameOverlayUI") == 0) return true;
-    if (lstrcmpW(cls, L"SteamOverlay") == 0) return true;
-    
-    
-    // Action! (Mirillis)
-    if (lstrcmpW(cls, L"Action") == 0) return true;
-    if (lstrcmpW(cls, L"Mirillis") == 0) return true;
-    if (lstrcmpW(cls, L"ActionOverlay") == 0) return true;
-    
-    // D3DGear
-    if (lstrcmpW(cls, L"D3DGear") == 0) return true;
-    if (lstrcmpW(cls, L"d3dgear") == 0) return true;
-    
-    // PlayClaw
-    if (lstrcmpW(cls, L"PlayClaw") == 0) return true;
-    if (lstrcmpW(cls, L"Playclaw") == 0) return true;
-    
-    // Overwolf
-    if (lstrcmpW(cls, L"Overwolf") == 0) return true;
-    if (lstrcmpW(cls, L"OverwolfBrowser") == 0) return true;
-    
-    // Mediatracker / Any other recording software
-    if (lstrcmpW(cls, L"MediaTracker") == 0) return true;
-    // ------------------------------------------
-
-    return false;
+    // Only shell infrastructure and this mod's own windows are excluded. Do
+    // not infer a product from a generic class name (e.g. Qt5QWindowIcon),
+    // otherwise ordinary apps such as VLC, VirtualBox and qBittorrent vanish.
+    return lstrcmpW(cls, L"Flip3DOverlayWndClass") == 0 ||
+           lstrcmpW(cls, L"Flip3DControllerWndClass") == 0 ||
+           lstrcmpW(cls, L"Shell_TrayWnd") == 0 ||
+           lstrcmpW(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+           lstrcmpW(cls, L"Progman") == 0 ||
+           lstrcmpW(cls, L"WorkerW") == 0 ||
+           lstrcmpW(cls, L"Shell_InputSwitchTopLevelWindow") == 0 ||
+           lstrcmpW(cls, L"ApplicationManager_ImmersiveShellWindow") == 0;
 }
 
 static bool HasUwpContent(HWND hwnd) {
@@ -1824,12 +1681,11 @@ static bool HasUwpContent(HWND hwnd) {
     if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
         return false;
     }
-    if (lstrcmpW(cls, L"ApplicationFrameWindow") != 0) {
-        return true;
+    if (lstrcmpW(cls, L"ApplicationFrameWindow") == 0) {
+        HWND core = FindWindowExW(hwnd, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+        return core != nullptr && IsWindow(core);
     }
-
-    HWND core = FindWindowExW(hwnd, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
-    return core != nullptr && IsWindow(core);
+    return true; 
 }
 
 static bool GetRepresentativeWindowRect(HWND hwnd, RECT* outRect) {
@@ -1931,10 +1787,7 @@ static bool IsFlipEligibleWindow(HWND hwnd) {
 static BOOL CALLBACK EnumWindowsForFlipProc(HWND hwnd, LPARAM lParam) {
     // Guarded: this callback is invoked by the system for every top-level
     // window; a fault here must stop enumeration, not crash Explorer.
-    FLIP3D_FENCE_BEGIN("EnumWindowsForFlipProc")
-        return FALSE;
-    FLIP3D_FENCE_ELSE
-    try {
+try {
         auto* result = reinterpret_cast<std::vector<HWND>*>(lParam);
         if (result && hwnd && IsFlipEligibleWindow(hwnd)) {
             if (result->size() >= kMaxFlipWindows) {
@@ -1946,7 +1799,7 @@ static BOOL CALLBACK EnumWindowsForFlipProc(HWND hwnd, LPARAM lParam) {
         LogFailure(L"EnumWindowsForFlipProc");
         return FALSE;  // Stop enumeration; caller validates the result.
     }
-    FLIP3D_FENCE_END
+    
     return TRUE;
 }
 
@@ -1965,18 +1818,6 @@ static std::vector<HWND> EnumerateFlipEligibleWindows() {
     return result;
 }
 
-static bool CanStartFlip3DSession() {
-    // Guarded: called from the low-level keyboard hook.
-    return SafeExec<bool>(L"CanStartFlip3DSession", false, [] {
-        BOOL compositionEnabled = FALSE;
-        if (FAILED(DwmIsCompositionEnabled(&compositionEnabled)) || !compositionEnabled) {
-            return false;
-        }
-        std::vector<HWND> eligible = EnumerateFlipEligibleWindows();
-        return eligible.size() >= 2;
-    });
-}
-
 // -----------------------------------------------------------------------------
 // Thumbnail application and animation
 // -----------------------------------------------------------------------------
@@ -1992,58 +1833,66 @@ inline int StackDepthForIndex(int index, int selectedIndex, int count) {
     return (index - selectedIndex + count) % count;
 }
 
-// Flat (single-thumbnail) property application. Used as a fallback when a
-// card cannot keep its perspective strips.
+// Flat (single-thumbnail) property application for deep cards or failed strip setup.
 static void ApplySingleThumbnailProperties(FlipWindowEntry& entry) {
-    if (!entry.thumbnail) {
+    if (!entry.thumbnail || !entry.hwnd || !IsWindow(entry.hwnd)) {
         return;
     }
-    if (!entry.hwnd || !IsWindow(entry.hwnd)) {
+
+    if (entry.everApplied && entry.currentOpacity == entry.appliedOpacity &&
+        EqualRect(&entry.currentRect, &entry.appliedRect)) {
         return;
     }
 
     DWM_THUMBNAIL_PROPERTIES props = {};
-    props.dwFlags = DWM_TNP_RECTDESTINATION |
-                    DWM_TNP_VISIBLE |
-                    DWM_TNP_OPACITY |
-                    DWM_TNP_SOURCECLIENTAREAONLY;
+    props.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE |
+                    DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
     props.rcDestination = entry.currentRect;
     props.opacity = entry.currentOpacity;
-    props.fVisible = entry.currentOpacity > 0 &&
-                     RectWidth(entry.currentRect) > 0 &&
+    props.fVisible = entry.currentOpacity > 0 && RectWidth(entry.currentRect) > 0 &&
                      RectHeight(entry.currentRect) > 0;
     props.fSourceClientAreaOnly = FALSE;
 
-    // Mirror the exact validation the real DWM performs inside
-    // DwmUpdateThumbnailProperties (Windows 7 dwmapi.dll decompilation):
-    // flags must be non-zero and, when DWM_TNP_RECTDESTINATION is set,
-    // right >= left and bottom >= top — otherwise DWM rejects the update
-    // with E_INVALIDARG. Never send a degenerate rect: hide the thumbnail
-    // instead, so an in-flight animation lerp can't waste an LPC round-trip
-    // or trip the updateFailures tripwire below.
-    if (props.rcDestination.right < props.rcDestination.left ||
-        props.rcDestination.bottom < props.rcDestination.top) {
-        props.rcDestination = {0, 0, 0, 0};
-        props.fVisible = FALSE;
+    if (entry.sourceSize.cx <= 0 || entry.sourceSize.cy <= 0) {
+        DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
     }
 
-    HRESULT hr = DwmUpdateThumbnailProperties(entry.thumbnail.get(), &props);
+    // DWM's documented thumbnail fit is uniform. Match the source aspect so
+    // the fallback is visually stable rather than stretching a card.
+    if (props.fVisible && entry.sourceSize.cx > 0 && entry.sourceSize.cy > 0) {
+        const int boxW = RectWidth(props.rcDestination);
+        const int boxH = RectHeight(props.rcDestination);
+        const double aspect = static_cast<double>(entry.sourceSize.cx) /
+                              static_cast<double>(entry.sourceSize.cy);
+        int fitW = boxW;
+        int fitH = std::max(1, static_cast<int>(std::lround(boxW / aspect)));
+        if (fitH > boxH) {
+            fitH = boxH;
+            fitW = std::max(1, static_cast<int>(std::lround(boxH * aspect)));
+        }
+        const int cx = (props.rcDestination.left + props.rcDestination.right) / 2;
+        const int cy = (props.rcDestination.top + props.rcDestination.bottom) / 2;
+        props.rcDestination = {cx - fitW / 2, cy - fitH / 2,
+                               cx - fitW / 2 + fitW, cy - fitH / 2 + fitH};
+    }
+
+    const HRESULT hr = DwmUpdateThumbnailProperties(entry.thumbnail.get(), &props);
     if (SUCCEEDED(hr)) {
         entry.updateFailures = 0;
-    } else if (++entry.updateFailures >= kMaxThumbnailUpdateFailures) {
-        // Consequence-based invalidation: a thumbnail whose source window
-        // turned into a zombie (crashed/cloaked/hung) is dropped from the
-        // deck instead of hammering DWM every frame. Not logged per-call.
+        entry.appliedRect = entry.currentRect;
+        entry.appliedOpacity = entry.currentOpacity;
+        entry.appliedTilt = entry.currentTilt;
+        entry.everApplied = true;
+    } else if (++entry.updateFailures >= 5) {
+        // A dead source must not cause synchronous DWM retries forever.
+        entry.updateFailures = 0;
         entry.thumbnail.reset();
     }
 }
 
-// Degrades one card from perspective strips to a single flat thumbnail.
-// Called when DWM refuses the strip registrations/updates. The freshly
-// registered thumbnail lands on top of the current registration order, but
-// this path is rare (DWM trouble) and self-heals on the next rebuild.
 static void FallbackToSingleThumbnail(FlipWindowEntry& entry) {
     entry.slices.clear();
+    entry.everApplied = false;
     if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || !entry.hwnd || !IsWindow(entry.hwnd)) {
         return;
     }
@@ -2092,9 +1941,20 @@ static void ApplyCardThumbnails(FlipWindowEntry& entry) {
             }
             entry.stripsHidden = true;
         }
+        entry.everApplied = false;
         return;
     }
     entry.stripsHidden = false;
+
+    // DWM updates are synchronous IPC. Once a card has exactly the same pose
+    // as the last committed frame, skip all its strips without changing shape,
+    // opacity, timing or registration order.
+    constexpr double kAppliedTiltEpsilon = 0.0005;
+    if (entry.everApplied && entry.currentOpacity == entry.appliedOpacity &&
+        EqualRect(&entry.currentRect, &entry.appliedRect) &&
+        std::fabs(entry.currentTilt - entry.appliedTilt) < kAppliedTiltEpsilon) {
+        return;
+    }
 
     SIZE src = entry.sourceSize;
     if (src.cx <= 0 || src.cy <= 0) {
@@ -2156,6 +2016,10 @@ static void ApplyCardThumbnails(FlipWindowEntry& entry) {
 
     if (failedStrips == 0) {
         entry.updateFailures = 0;
+        entry.appliedRect = entry.currentRect;
+        entry.appliedOpacity = entry.currentOpacity;
+        entry.appliedTilt = entry.currentTilt;
+        entry.everApplied = true;
     } else if (failedStrips == M && ++entry.updateFailures >= kMaxThumbnailUpdateFailures) {
         // Every strip of the card is failing: the source window is likely a
         // zombie. Abandon strips and fall back to a single flat thumbnail
@@ -2244,11 +2108,75 @@ inline std::vector<int> BuildBackToFrontOrder() {
     return order;
 }
 
+// Back-to-front order only changes on selection/list changes, not on every
+// animation tick. Cache it to eliminate per-frame allocation and sorting.
+static std::vector<int> g_cachedOrder;
+static int g_cachedOrderSelection = -1;
+static size_t g_cachedOrderCount = 0;
+
+static void InvalidateOrderCache() {
+    g_cachedOrderSelection = -1;
+    g_cachedOrderCount = 0;
+}
+
+static const std::vector<int>& GetBackToFrontOrderCached() {
+    if (g_cachedOrderSelection != g_selectedIndex ||
+        g_cachedOrderCount != g_windows.size()) {
+        g_cachedOrder = BuildBackToFrontOrder();
+        g_cachedOrderSelection = g_selectedIndex;
+        g_cachedOrderCount = g_windows.size();
+    }
+    return g_cachedOrder;
+}
+
+// Registration order determines DWM thumbnail z-order. A full rebuild is
+// necessary on opening/settings changes, but ordinary cycling needs to promote
+// only the old and new front cards; rebuilding every strip in the deck was the
+// dominant source of lag during Win-held auto-cycle.
+static bool g_simulatedDeckInitialized = false;
+static int g_lastBuiltSelectedIndex = -1;
+static bool g_lastBuiltDesktopSelected = false;
+
+static void RebuildSimulatedCard(FlipWindowEntry& entry, int depth) {
+    entry.thumbnail.reset();
+    entry.slices.clear();
+    entry.stripCount = 0;
+    entry.stripsHidden = false;
+    entry.everApplied = false;
+    if (!entry.hwnd || !IsWindow(entry.hwnd)) return;
+
+    const int stripsWanted = StripCountForDepth(depth);
+    if (stripsWanted > 0) {
+        std::vector<ThumbnailHandle> strips;
+        try { strips.reserve(stripsWanted); } catch (...) {}
+        bool ok = true;
+        for (int j = 0; j < stripsWanted; ++j) {
+            ThumbnailHandle thumbnail;
+            const HRESULT hr = DwmRegisterThumbnail(g_hOverlayWnd, entry.hwnd, thumbnail.put());
+            if (FAILED(hr) || !thumbnail) { ok = false; break; }
+            strips.push_back(std::move(thumbnail));
+        }
+        if (ok && static_cast<int>(strips.size()) == stripsWanted) {
+            entry.slices = std::move(strips);
+            entry.stripCount = stripsWanted;
+            DwmQueryThumbnailSourceSize(entry.slices[0].get(), &entry.sourceSize);
+            ApplyCardThumbnails(entry);
+            return;
+        }
+    }
+
+    const HRESULT hr = DwmRegisterThumbnail(g_hOverlayWnd, entry.hwnd, entry.thumbnail.put());
+    if (SUCCEEDED(hr) && entry.thumbnail) {
+        DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
+        ApplySingleThumbnailProperties(entry);
+    }
+}
+
 static void ApplyAllThumbnailProperties() {
     if (g_windows.empty()) {
         return;
     }
-    std::vector<int> order = BuildBackToFrontOrder();
+    const std::vector<int>& order = GetBackToFrontOrderCached();
     const int winCount = static_cast<int>(g_windows.size());
     for (int index : order) {
         if (index < 0 || index >= winCount) {
@@ -2263,6 +2191,23 @@ static void RebuildThumbnailZOrder() {
         return;
     }
 
+    const int count = static_cast<int>(g_windows.size());
+    if (g_simulatedDeckInitialized &&
+        g_lastBuiltDesktopSelected == g_desktopSelected &&
+        g_lastBuiltSelectedIndex >= 0 && g_lastBuiltSelectedIndex < count &&
+        g_lastBuiltSelectedIndex != g_selectedIndex) {
+        // Re-register the outgoing card first and the new front card second.
+        // This preserves the selected-card topmost order without touching all
+        // other thumbnails; their geometry still animates normally.
+        const int oldIndex = g_lastBuiltSelectedIndex;
+        RebuildSimulatedCard(g_windows[oldIndex],
+                             StackDepthForIndex(oldIndex, g_selectedIndex, count));
+        RebuildSimulatedCard(g_windows[g_selectedIndex], 0);
+        g_lastBuiltSelectedIndex = g_selectedIndex;
+        g_lastBuiltDesktopSelected = g_desktopSelected;
+        return;
+    }
+
     // DWM thumbnails don't expose an explicit z-order API. Updating properties
     // isn't always enough on Win10/11: re-register only when the selection
     // changes, in back-to-front order, so the selected card's strips are the
@@ -2270,15 +2215,14 @@ static void RebuildThumbnailZOrder() {
     // right so the near (left) edge renders on top. Each card's strip count
     // depends on its stack depth (front cards get perspective, deep cards go
     // flat) to keep the per-frame ALPC budget low.
-    std::vector<int> order = BuildBackToFrontOrder();
-
-    const int count = static_cast<int>(g_windows.size());
+    const std::vector<int>& order = GetBackToFrontOrderCached();
 
     for (auto& entry : g_windows) {
         entry.thumbnail.reset();
         entry.slices.clear();
         entry.stripCount = 0;
         entry.stripsHidden = false;
+        entry.everApplied = false;
     }
 
     for (int index : order) {
@@ -2342,6 +2286,42 @@ static void RebuildThumbnailZOrder() {
         // Registration failure for a single window is non-fatal: the card
         // is simply skipped (or runs flat). No per-call logging.
     }
+    g_simulatedDeckInitialized = true;
+    g_lastBuiltSelectedIndex = g_selectedIndex;
+    g_lastBuiltDesktopSelected = g_desktopSelected;
+}
+
+// The default Windows timer resolution is ~15.6 ms (~64 Hz), so a SetTimer
+// programmed for 16 ms (60 fps) actually fires on multiples of that coarser
+// tick, which makes the card motion look slightly stepped even though the
+// interpolation math above is already time-based. timeBeginPeriod(1) asks
+// the scheduler for ~1 ms resolution, which lets the animation timer land
+// much closer to its requested interval - visibly smoother motion for
+// (basically) free, since it is only requested while the switcher overlay
+// is actually visible and released the moment it closes. g_highResTimerActive
+// makes Enable/Disable idempotent, since Windows reference-counts periods
+// per-call and we must not unbalance it under any error path.
+static bool g_highResTimerActive = false;
+
+static void EnableHighResAnimationTimer() {
+    if (g_highResTimerActive) {
+        return;
+    }
+    if (timeBeginPeriod(1) == TIMERR_NOERROR) {
+        g_highResTimerActive = true;
+        LogDebug(L"EnableHighResAnimationTimer: timeBeginPeriod(1) OK");
+    } else {
+        LogFailure(L"EnableHighResAnimationTimer: timeBeginPeriod(1) failed");
+    }
+}
+
+static void DisableHighResAnimationTimer() {
+    if (!g_highResTimerActive) {
+        return;
+    }
+    timeEndPeriod(1);
+    g_highResTimerActive = false;
+    LogDebug(L"DisableHighResAnimationTimer: timeEndPeriod(1)");
 }
 
 static void UpdateRefreshTimerNow(bool enable) {
@@ -2352,7 +2332,7 @@ static void UpdateRefreshTimerNow(bool enable) {
     if (enable) {
         if (!g_animationTimerId) {
             g_animationTimerId = SetTimer(g_hOverlayWnd, kAnimationTimerId,
-                                          kAnimationTimerIntervalMs, nullptr);
+                                          g_perf.frameIntervalMs, nullptr);
             if (!g_animationTimerId) {
                 LogFailureCode(L"SetTimer(animation)", GetLastError());
             }
@@ -2395,9 +2375,12 @@ static void UpdateAnimationFrame() {
     }
 
     ApplyAllThumbnailProperties();
-    if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-        InvalidateRect(g_hOverlayWnd, nullptr, FALSE);
-    }
+
+    // The overlay's own painting is just the static backdrop (desktop
+    // snapshot or gradient) - cards and the uploaded backdrop are presented
+    // while DWM composites the thumbnail strips. Rebuilding the GDI backdrop on every animation
+    // frame would be redundant work, so it is uploaded only at initialization
+    // and resize; no per-frame invalidation is issued here.
 
     if (done) {
         FlipAnimationKind finishedKind = g_animationKind;
@@ -2428,29 +2411,23 @@ static void BeginTransitionFromCurrent(FlipAnimationKind kind, DWORD durationMs)
 static void CleanupThumbnails() {
     for (auto& entry : g_windows) {
         entry.thumbnail.reset();
-        entry.slices.clear();  // Each ThumbnailHandle unregisters its strip.
+        entry.slices.clear();
     }
     g_windows.clear();
+    g_simulatedDeckInitialized = false;
+    g_lastBuiltSelectedIndex = -1;
+    InvalidateOrderCache();
 }
 
 // -----------------------------------------------------------------------------
-// Windows 7 Flip 3D geometry
-//
-// Real Flip 3D laid the thumbnails out as cards in an actual 3D scene viewed
-// by a perspective camera: the deck recedes away from the viewer along -Z
-// and arcs toward the upper-left, with the selected card swung forward to
-// face the camera almost head-on in the lower-right foreground.
-//
-// Rather than approximate that with hand-tuned pixel offsets per depth
-// (which tends to either clump cards in the middle or fan them out
-// unnaturally at the edges), each card is placed at a 3D position and run
-// through a real perspective projection, the same way DWM's own compositor
-// would have. The on-screen offsets fall out of the projection math instead
-// of being guessed per depth level, so the foreshortening (cards shrink
-// faster the further back they are, spacing compresses toward the vanishing
-// point) matches a real camera instead of a linear/exponential ramp.
+// Reference Flip3D cascade geometry is implemented in ComputeStackLayout.
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Simulated 3D layout — copied from message (4).txt / original public-DWM
+// implementation. It intentionally produces only target RECTs and vertical
+// strip trapezoids; it does not require DirectComposition or PrintWindow.
+// -----------------------------------------------------------------------------
 namespace Flip3DGeometry {
 
 // Virtual camera tuned to match the field of view / card density visible in
@@ -2459,9 +2436,14 @@ namespace Flip3DGeometry {
 // recede) without becoming a fisheye distortion.
 constexpr double kFovYDegrees = 30.0;
 constexpr double kCameraDistance = 3.0;   // Distance from camera to Z=0 plane.
-constexpr double kCardDepthStep = 0.62;   // World-Z distance between adjacent cards.
-constexpr double kCardArcStep = 0.80;     // World-X drift per depth step (toward upper-left).
-constexpr double kCardRiseStep = 0.30;    // World-Y drift per depth step (toward the top).
+constexpr double kCardDepthStep = 0.72;   // World-Z distance between adjacent cards.
+constexpr double kCardArcStep = 0.95;     // World-X drift per depth step (toward upper-left).
+constexpr double kCardRiseStep = 0.38;    // World-Y drift per depth step (toward the top).
+// Depth/arc/rise steps raised from 0.62/0.80/0.30: the deck now fans out and
+// recedes further per card, giving the cascade more visible 3D separation
+// (closer to the Win7 reference) without touching the front card's own size
+// (kFrontCardWorldHeight, desiredFrontHeightPx) or the falloff/opacity curve,
+// so the already-tuned foreground look and fade-out are unchanged.
 constexpr double kFrontCardWorldHeight = 1.55;  // World height of the front (selected) card.
 constexpr double kMaxDepthForFalloff = 7.0;      // Depths beyond this fully fade out.
 
@@ -2486,7 +2468,7 @@ inline Projected Project(double worldX, double worldY, double worldZ, double fov
 
 }  // namespace Flip3DGeometry
 
-static void ComputeStackLayout(std::vector<FlipWindowEntry>& windows,
+static void ComputeSimulatedStackLayout(std::vector<FlipWindowEntry>& windows,
                                int selectedIndex,
                                bool desktopSelected,
                                int clientW,
@@ -2583,7 +2565,7 @@ static void ComputeStackLayout(std::vector<FlipWindowEntry>& windows,
         // roughly 30-35 degrees, matching the real fan. Disabled in flat
         // mode.
         windows[i].targetTilt = g_settings.perspective
-                                    ? std::min(0.55, 0.10 + 0.075 * d)
+                                    ? std::min(0.62, 0.10 + 0.085 * d)
                                     : 0.0;
 
         // 6. Per-card opacity gradient: fades out smoothly toward
@@ -2596,6 +2578,16 @@ static void ComputeStackLayout(std::vector<FlipWindowEntry>& windows,
             windows[i].targetOpacity = ClampByte(static_cast<int>(std::lround(180 + 75.0 * falloff)));
         }
     }
+}
+
+static void ComputeStackLayout(std::vector<FlipWindowEntry>& windows,
+                               int selectedIndex,
+                               bool desktopSelected,
+                               int clientW,
+                               int clientH,
+                               UINT dpi) {
+    ComputeSimulatedStackLayout(windows, selectedIndex, desktopSelected,
+                                clientW, clientH, dpi);
 }
 
 static void RecomputeTargetsForCurrentSelection() {
@@ -2667,14 +2659,13 @@ static void NavigateSelection(int delta) {
 // -----------------------------------------------------------------------------
 
 static HWND CreateOverlayWindow() {
-    static bool classRegistered = false;
     const wchar_t* className = L"Flip3DOverlayWndClass";
     HINSTANCE hInstance = GetCurrentModuleHandle();
     if (!hInstance) {
         return nullptr;
     }
 
-    if (!classRegistered) {
+    if (!g_overlayClassRegistered) {
         WNDCLASSEXW wc = {};
         wc.cbSize = sizeof(wc);
         wc.style = CS_DBLCLKS;
@@ -2684,8 +2675,8 @@ static HWND CreateOverlayWindow() {
         wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
         wc.lpszClassName = className;
 
-        if (RegisterClassExW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-            classRegistered = true;
+        if (RegisterClassExW(&wc)) {
+            g_overlayClassRegistered = true;
         } else {
             LogFailureCode(L"RegisterClassExW(overlay)", GetLastError());
             return nullptr;
@@ -2795,6 +2786,7 @@ static void FinishExitAfterAnimation() {
     HWND selectedHwnd = g_pendingActivateHwnd;
     HWND overlay = g_hOverlayWnd;
 
+    DisableHighResAnimationTimer();
     CleanupFlipResourcesOnOverlayThread();
 
     SafeDestroyOverlayWindow(overlay);
@@ -2910,9 +2902,9 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
         return false;
     }
 
-    // Overlay exists but is not visible yet: grab the real desktop now.
-    CaptureDesktopSnapshot();
-
+    // Overlay exists but is not visible yet. The normal DirectComposition
+    // path installs a live shell thumbnail; the GDI snapshot is captured only
+    // if that whole backend is unavailable.
     g_overlayThreadId = GetCurrentThreadId();
     g_isActive = true;
     g_triggerModifier = triggerModifier;
@@ -2920,9 +2912,14 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
     ClearPendingModifierReleaseSuppression();
     ResetWheelState();
 
+    // D3D resources are created while the overlay is still hidden, on its
+    // owner thread. Failure is non-fatal: the established flat DWM path below
+    // remains fully functional.
+    CaptureDesktopSnapshot();
     RegisterDesktopThumbnail();
 
     g_windows.clear();
+    InvalidateOrderCache();
     int skippedNoRect = 0;
     int skippedThumbnailFailed = 0;
     for (HWND hwnd : eligible) {
@@ -2937,19 +2934,19 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
             continue;
         }
 
-        HRESULT hr = DwmRegisterThumbnail(g_hOverlayWnd, hwnd, entry.thumbnail.put());
-        if (FAILED(hr) || !entry.thumbnail) {
-            ++skippedThumbnailFailed;
-            LogDebugFmt(L"ActivateFlip3D: DwmRegisterThumbnail failed for hwnd=0x%p hr=0x%08X",
-                        hwnd, static_cast<unsigned int>(hr));
-            continue;  // Skip this window; non-fatal.
-        }
+            HRESULT hr = DwmRegisterThumbnail(g_hOverlayWnd, hwnd, entry.thumbnail.put());
+            if (FAILED(hr) || !entry.thumbnail) {
+                ++skippedThumbnailFailed;
+                LogDebugFmt(L"ActivateFlip3D: DwmRegisterThumbnail failed for hwnd=0x%p hr=0x%08X",
+                            hwnd, static_cast<unsigned int>(hr));
+                continue;  // Skip this window; non-fatal.
+            }
+            DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
 
-        DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
         g_windows.push_back(std::move(entry));
     }
 
-    LogDebugFmt(L"ActivateFlip3D: %u thumbnail(s) registered (skipped: %d no-rect, %d thumbnail-failed)",
+    LogDebugFmt(L"ActivateFlip3D: %u card(s) prepared (simulated DWM; skipped: %d no-rect, %d thumbnail-failed)",
                 static_cast<unsigned>(g_windows.size()), skippedNoRect, skippedThumbnailFailed);
 
     if (g_windows.empty()) {
@@ -2996,21 +2993,20 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
         // targetTilt = 1.0 above; only the starting pose is flat here.
         entry.currentTilt = 0.0;
         entry.startTilt = 0.0;
-        entry.stripsHidden = false;
-        entry.stripCount = 0;  // Set properly by RebuildThumbnailZOrder() below.
     }
+
+    EnableHighResAnimationTimer();
 
     ShowWindow(g_hOverlayWnd, SW_SHOW);
     UpdateWindow(g_hOverlayWnd);
 
-    if (!SetTimer(g_hOverlayWnd, kFailsafeTimerId, kFailsafeAutoCloseMs, nullptr)) {
+    if (!g_persistentMode &&
+        !SetTimer(g_hOverlayWnd, kFailsafeTimerId, kFailsafeAutoCloseMs, nullptr)) {
         LogFailureCode(L"SetTimer(failsafe)", GetLastError());
     }
-    if (!g_persistentMode) {
-        // Win7-style: auto-cycle while Win stays held.
-        if (!SetTimer(g_hOverlayWnd, kAutoCycleTimerId, kAutoCycleIntervalMs, nullptr)) {
-            LogFailureCode(L"SetTimer(autocycle)", GetLastError());
-        }
+    if (!g_persistentMode &&
+        !SetTimer(g_hOverlayWnd, kAutoCycleTimerId, kAutoCycleIntervalMs, nullptr)) {
+        LogFailureCode(L"SetTimer(auto-cycle)", GetLastError());
     }
 
     SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -3027,27 +3023,12 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
 }
 
 // Guarded activation: ActivateFlip3DImpl enumerates arbitrary top-level
-// windows and registers DWM thumbnails for each of them — exactly the kind of
+// windows and captures/registers their rendering source — exactly the kind of
 // cross-process interaction that can fail in unexpected ways. Any exception
 // is caught here, logged once, cleaned up, and the switcher simply does not
 // open; explorer.exe keeps running.
 static bool ActivateFlip3D(TriggerModifier triggerModifier, int initialDelta) {
-    FLIP3D_FENCE_BEGIN("ActivateFlip3D")
-        try {
-            if (g_hOverlayWnd && IsWindow(g_hOverlayWnd) &&
-                GetCurrentThreadId() == g_overlayThreadId) {
-                CleanupFlipResourcesOnOverlayThread();
-                SafeDestroyOverlayWindow(g_hOverlayWnd);
-            }
-        } catch (...) {
-        }
-        g_hOverlayWnd = nullptr;
-        g_overlayThreadId = 0;
-        g_isActive = false;
-        g_hookSessionActive.store(false, std::memory_order_relaxed);
-        return false;
-    FLIP3D_FENCE_ELSE
-    try {
+try {
         return ActivateFlip3DImpl(triggerModifier, initialDelta);
     } catch (...) {
         LogFailure(L"ActivateFlip3D");
@@ -3065,7 +3046,7 @@ static bool ActivateFlip3D(TriggerModifier triggerModifier, int initialDelta) {
         g_hookSessionActive.store(false, std::memory_order_relaxed);
         return false;
     }
-    FLIP3D_FENCE_END
+    
 }
 
 // -----------------------------------------------------------------------------
@@ -3073,21 +3054,7 @@ static bool ActivateFlip3D(TriggerModifier triggerModifier, int initialDelta) {
 // -----------------------------------------------------------------------------
 
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    FLIP3D_FENCE_BEGIN("OverlayWndProc")
-        if (msg == WM_PAINT) {
-            ValidateRect(hwnd, nullptr);  // Prevent a WM_PAINT storm after a fault.
-            return 0;
-        }
-        if (msg == WM_NCDESTROY || msg == WM_DESTROY) {
-            if (hwnd == g_hOverlayWnd) {
-                g_hOverlayWnd = nullptr;
-                g_overlayThreadId = 0;
-            }
-            return 0;
-        }
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
-    FLIP3D_FENCE_ELSE
-        try {
+try {
             switch (msg) {
             case WM_ERASEBKGND:
                 PaintStaticWallpaperBackdrop(hwnd, reinterpret_cast<HDC>(wParam));
@@ -3105,7 +3072,14 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             }
 
             case WM_SHOWWINDOW:
+                InvalidateRect(hwnd, nullptr, TRUE);
+                return 0;
+
             case WM_SIZE:
+            case WM_DISPLAYCHANGE:
+                if (g_isActive) {
+                    RecomputeTargetsForCurrentSelection();
+                }
                 InvalidateRect(hwnd, nullptr, TRUE);
                 return 0;
 
@@ -3157,8 +3131,19 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
             case WM_FLIP3D_REBUILD:
                 // Live re-style after a settings change: recompute the deck
-                // (new tilt/strip budget) and rebuild thumbnails on this
-                // thread, then play a short layout transition.
+                // (new simulated-strip profile) and prepare the deck
+                // on this thread, then play a short layout transition.
+                //
+                // The animation timer may already be running at the OLD
+                // period, so it is dropped here: BeginTransitionFromCurrent
+                // re-arms it and it will be recreated with the new profile's
+                // frame interval.
+                if (g_animationTimerId) {
+                    KillTimer(hwnd, g_animationTimerId);
+                    g_animationTimerId = 0;
+                }
+                InvalidateOrderCache();
+                g_simulatedDeckInitialized = false;
                 RecomputeTargetsForCurrentSelection();
                 RebuildThumbnailZOrder();
                 BeginTransitionFromCurrent(FlipAnimationKind::Layout, kLayoutAnimationDurationMs);
@@ -3169,16 +3154,17 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                     UpdateAnimationFrame();
                     return 0;
                 }
-                if (wParam == kFailsafeTimerId) {
-                    DeactivateFlip3D(false);
+                if (wParam == kAutoCycleTimerId) {
+                    if (g_isActive && !g_persistentMode &&
+                        TriggerModifierStillPhysicallyDown(TriggerModifier::Win)) {
+                        NavigateSelection(1);
+                    } else {
+                        KillTimer(hwnd, kAutoCycleTimerId);
+                    }
                     return 0;
                 }
-                if (wParam == kAutoCycleTimerId) {
-                    if (g_isActive && !g_persistentMode) {
-                        NavigateSelection(1);
-                    } else if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-                        KillTimer(g_hOverlayWnd, kAutoCycleTimerId);
-                    }
+                if (wParam == kFailsafeTimerId) {
+                    DeactivateFlip3D(false);
                     return 0;
                 }
                 break;
@@ -3212,7 +3198,7 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             return 0;
         }
     }
-    FLIP3D_FENCE_END
+    
 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
@@ -3222,34 +3208,12 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 // -----------------------------------------------------------------------------
 
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    FLIP3D_FENCE_BEGIN("ControllerWndProc")
-        if (msg == WM_DESTROY) {
-            if (hwnd == g_hControllerWnd) {
-                g_hControllerWnd = nullptr;
-            }
-            return 0;
-        }
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
-    FLIP3D_FENCE_ELSE
-        try {
+try {
             switch (msg) {
+
             case WM_TIMER:
-                if (wParam == kHotkeyReclaimTimerId) {
-                    // Idempotent: re-registering an already-owned hotkey is a
-                    // harmless no-op. If Windows silently took Win+Tab back
-                    // (Task View / Game Bar / a session reinit), this wins it
-                    // back within kHotkeyReclaimIntervalMs instead of leaving
-                    // the mod stuck relying only on the racy LL-hook fallback.
-                    UnregisterHotKey(g_hControllerWnd, kHotkeyWinTab);
-                    UnregisterHotKey(g_hControllerWnd, kHotkeyCtrlWinTab);
-                    g_winTabHotkeyOwned.store(
-                        TryRegisterHotkey(kHotkeyWinTab, MOD_WIN | MOD_NOREPEAT, VK_TAB,
-                                          L"RegisterHotKey(Win+Tab) [reclaim]"),
-                        std::memory_order_relaxed);
-                    g_ctrlWinTabHotkeyOwned.store(
-                        TryRegisterHotkey(kHotkeyCtrlWinTab, MOD_CONTROL | MOD_WIN | MOD_NOREPEAT, VK_TAB,
-                                          L"RegisterHotKey(Ctrl+Win+Tab) [reclaim]"),
-                        std::memory_order_relaxed);
+                if (wParam == kWinTabClaimTimerId) {
+                    ContinueWinTabClaim();
                     return 0;
                 }
                 break;
@@ -3260,8 +3224,7 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                         // Win+Tab: transient mode. Release Win = confirm.
                         if (g_isActive) {
                             if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-                                KillTimer(g_hOverlayWnd, kAutoCycleTimerId);
-                            }
+                                                    }
                             NavigateSelection(1);
                         } else {
                             g_persistentMode = false;
@@ -3269,18 +3232,7 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                         }
                         return 0;
 
-                    case kHotkeyCtrlWinTab:
-                        // Ctrl+Win+Tab: persistent mode.
-                        if (g_isActive) {
-                            NavigateSelection(1);
-                        } else {
-                            g_persistentMode = true;
-                            ActivateFlip3D(TriggerModifier::Win, 1);
-                        }
-                        return 0;
-
                     case kStickyHotkeyId:  // Ctrl+Alt+F12
-                    case kToggleHotkeyId:  // Ctrl+G fallback toggle
                         if (g_isActive || (g_hOverlayWnd && IsWindow(g_hOverlayWnd))) {
                             DeactivateFlip3D(false);
                         } else {
@@ -3321,7 +3273,7 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             return 0;
         }
     }
-    FLIP3D_FENCE_END
+    
 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
@@ -3339,9 +3291,12 @@ static HWND CreateControllerWindow() {
     wc.hInstance = hInstance;
     wc.lpszClassName = className;
 
-    if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        LogFailureCode(L"RegisterClassExW(controller)", GetLastError());
-        return nullptr;
+    if (!g_controllerClassRegistered) {
+        if (!RegisterClassExW(&wc)) {
+            LogFailureCode(L"RegisterClassExW(controller)", GetLastError());
+            return nullptr;
+        }
+        g_controllerClassRegistered = true;
     }
 
     HWND hwnd = CreateWindowExW(0, className, L"", 0, 0, 0, 0, 0,
@@ -3352,6 +3307,19 @@ static HWND CreateControllerWindow() {
     return hwnd;
 }
 
+static void UnregisterFlipWindowClasses() {
+    HINSTANCE instance = GetCurrentModuleHandle();
+    if (!instance) return;
+    if (g_overlayClassRegistered) {
+        UnregisterClassW(L"Flip3DOverlayWndClass", instance);
+        g_overlayClassRegistered = false;
+    }
+    if (g_controllerClassRegistered) {
+        UnregisterClassW(L"Flip3DControllerWndClass", instance);
+        g_controllerClassRegistered = false;
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Low-level input hooks (guarded boundaries: must ALWAYS forward on failure)
 // -----------------------------------------------------------------------------
@@ -3360,11 +3328,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode != HC_ACTION) {
         return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
     }
-
-    FLIP3D_FENCE_BEGIN("LowLevelKeyboardProc")
-        return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
-    FLIP3D_FENCE_ELSE
-    try {
+try {
         const auto* kb = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
         if (!kb) {
             return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
@@ -3405,19 +3369,13 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         }
 
         // Safe/manual shortcuts. Ctrl+Alt+F12 is the recommended one.
-        // Ctrl+Win+F is consumed because Windows reserves it for
-        // "Find Computers". Each combo below (except Ctrl+Win+F, which has
-        // no RegisterHotKey counterpart) is skipped here entirely when
-        // RegisterHotKey currently owns it: letting both fire for the same
-        // physical keypress caused a double-activate (WM_HOTKEY activates
-        // with Desktop selected, then this path immediately re-triggers and
-        // navigates away from it before the user ever sees the desktop).
+        // Each combo below is skipped here entirely when RegisterHotKey
+        // currently owns it: letting both paths fire for one physical press
+        // caused a double activate and skipped the desktop entry.
         const bool stickyOwnedElsewhere = g_stickyHotkeyOwned.load(std::memory_order_relaxed);
-        const bool ctrlWinTabOwnedElsewhere = g_ctrlWinTabHotkeyOwned.load(std::memory_order_relaxed);
         const bool manualShortcut =
             (vk == VK_F12 && ctrlDown && altDown && !winDown && !stickyOwnedElsewhere) ||
-            (vk == VK_TAB && ctrlDown && winDown && !ctrlWinTabOwnedElsewhere) ||
-            (vk == 'F' && ctrlDown && winDown);
+            false;
         if (manualShortcut && keyDown) {
             TriggerModifier manualModifier = winDown ? TriggerModifier::Win
                                                      : (altDown ? TriggerModifier::Alt
@@ -3429,15 +3387,9 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 ResetWheelState();
                 PostToController(WM_FLIP3D_CLOSE, 0, 0);
             } else {
-                if (!CanStartFlip3DSession()) {
-                    // Don't let Windows open Find Computers if we can't start.
-                    return 1;
-                }
-
-                g_triggerModifier = TriggerModifier::None;
-                ClearPendingModifierReleaseSuppression();
-                g_hookSessionActive.store(true, std::memory_order_relaxed);
-                ResetWheelState();
+                // The hook only classifies and posts. It never enumerates
+                // windows and never marks the system keyboard as captured;
+                // the UI thread sets g_hookSessionActive only after opening.
                 PostToController(WM_FLIP3D_ACTIVATE,
                                  static_cast<WPARAM>(TriggerModifier::None), 0);
             }
@@ -3445,8 +3397,8 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         }
 
         if (active && vk == VK_TAB && winDown) {
-            // Overlay open via Ctrl+G / Ctrl+Alt+F12: swallow Win+Tab so Task
-            // View can't pop up on top of it.
+            // Overlay open via the manual fallback: swallow Win+Tab so Task
+            // View cannot pop up on top of it.
             return 1;
         }
 
@@ -3458,24 +3410,20 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
         // Only Win+Tab activates Flip3D via the LL hook (fallback path if
         // RegisterHotKey failed/was lost for this exact combo). Alt+Tab is
-        // NEVER intercepted. !ctrlDown excludes Ctrl+Win+Tab, which is its
+        // NEVER intercepted. !ctrlDown excludes Win+Tab, which is its
         // own combo (handled above / by its own WM_HOTKEY) - without this,
-        // Ctrl+Win+Tab could fall through here and get double-activated in
+        // Win+Tab could fall through here and get double-activated in
         // the wrong (transient) mode whenever Win+Tab happens to be owned
-        // while Ctrl+Win+Tab is not, or vice versa.
+        // while Win+Tab is not, or vice versa.
         const bool winTabOwnedElsewhere = g_winTabHotkeyOwned.load(std::memory_order_relaxed);
         if (vk == VK_TAB && keyDown && winDown && !altDown && !ctrlDown && !winTabOwnedElsewhere) {
             if (!active) {
-                if (!CanStartFlip3DSession()) {
-                    return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
-                }
-
-                TriggerModifier trigger = TriggerModifier::Win;
-                int initialDelta = shiftDown ? -1 : 1;
-                g_triggerModifier = trigger;
-                ClearPendingModifierReleaseSuppression();
-                g_hookSessionActive.store(true, std::memory_order_relaxed);
-                ResetWheelState();
+                const TriggerModifier trigger = TriggerModifier::Win;
+                const int initialDelta = shiftDown ? -1 : 1;
+                // No synchronous eligibility call here: EnumWindows/DWM work is
+                // performed asynchronously by the UI thread after this hook
+                // has returned. A failed post cannot lock the keyboard because
+                // g_hookSessionActive is still false.
                 PostToController(WM_FLIP3D_ACTIVATE,
                                  static_cast<WPARAM>(trigger),
                                  static_cast<LPARAM>(initialDelta));
@@ -3565,7 +3513,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         // input chain is never broken.
         LogFailure(L"LowLevelKeyboardProc");
     }
-    FLIP3D_FENCE_END
+    
 
     return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
 }
@@ -3574,12 +3522,7 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     if (nCode != HC_ACTION) {
         return CallNextHookEx(g_mouseHook.get(), nCode, wParam, lParam);
     }
-
-    FLIP3D_FENCE_BEGIN("LowLevelMouseProc")
-        return CallNextHookEx(g_mouseHook.get(), nCode, wParam, lParam);
-    FLIP3D_FENCE_ELSE
-
-    if (!g_hookSessionActive.load(std::memory_order_relaxed)) {
+if (!g_hookSessionActive.load(std::memory_order_relaxed)) {
         return CallNextHookEx(g_mouseHook.get(), nCode, wParam, lParam);
     }
 
@@ -3627,28 +3570,63 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     } catch (...) {
         LogFailure(L"LowLevelMouseProc");
     }
-    FLIP3D_FENCE_END
+    
 
     return CallNextHookEx(g_mouseHook.get(), nCode, wParam, lParam);
 }
 
 // -----------------------------------------------------------------------------
-// Hook thread: owns the controller window, hotkeys and LL hooks.
+// Dedicated low-level-input thread. It owns only the LL hooks and a message
+// queue; callbacks post lightweight commands to the UI/controller thread.
+// -----------------------------------------------------------------------------
+static DWORD WINAPI InputThreadProc(LPVOID) {
+    MSG bootstrap;
+    PeekMessageW(&bootstrap, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_inputThreadId = GetCurrentThreadId();
+
+    HMODULE module = GetCurrentModuleHandle();
+    g_keyboardHook.reset(SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, module, 0));
+    if (!g_keyboardHook) {
+        Wh_Log(L"SetWindowsHookExW(keyboard) failed: %u", GetLastError());
+    }
+    g_mouseHook.reset(SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, module, 0));
+    if (!g_mouseHook) {
+        Wh_Log(L"SetWindowsHookExW(mouse) failed: %u", GetLastError());
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    g_mouseHook.reset();
+    g_keyboardHook.reset();
+    g_inputThreadId = 0;
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
+// UI thread: owns the controller window, overlay, hotkeys and all DWM
+// work. It never executes inside the synchronous LL hook callback.
+// -----------------------------------------------------------------------------
 // A ScopeGuard guarantees full cleanup on every exit path, normal or
 // exceptional, so nothing is ever leaked or left dangling.
 // -----------------------------------------------------------------------------
 
 static void UnregisterAllHotkeys() {
     g_stickyHotkeyOwned.store(false, std::memory_order_relaxed);
-    g_winTabHotkeyOwned.store(false, std::memory_order_relaxed);
-    g_ctrlWinTabHotkeyOwned.store(false, std::memory_order_relaxed);
-    if (!g_hControllerWnd || !IsWindow(g_hControllerWnd)) {
-        return;
-    }
+    const bool wasWinTabOwned = g_winTabHotkeyOwned.exchange(false, std::memory_order_relaxed);
+    if (!g_hControllerWnd || !IsWindow(g_hControllerWnd)) return;
+    KillTimer(g_hControllerWnd, kWinTabClaimTimerId);
     UnregisterHotKey(g_hControllerWnd, kStickyHotkeyId);
-    UnregisterHotKey(g_hControllerWnd, kToggleHotkeyId);
-    UnregisterHotKey(g_hControllerWnd, kHotkeyWinTab);
-    UnregisterHotKey(g_hControllerWnd, kHotkeyCtrlWinTab);
+    if (wasWinTabOwned) {
+        const BOOL released = UnregisterHotKey(g_hControllerWnd, kHotkeyWinTab);
+        Wh_Log(L"Win+Tab released for modern Task View: %s", released ? L"confirmed" : L"not owned");
+    } else {
+        UnregisterHotKey(g_hControllerWnd, kHotkeyWinTab);
+        Wh_Log(L"Win+Tab was not registered by the mod; LL hook release restores normal handling");
+    }
 }
 
 static bool TryRegisterHotkey(int id, UINT modifiers, UINT vk, PCWSTR label) {
@@ -3661,9 +3639,41 @@ static bool TryRegisterHotkey(int id, UINT modifiers, UINT vk, PCWSTR label) {
     return true;
 }
 
-static DWORD HookThreadProcImpl(LPVOID) {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+static void BeginWinTabClaim() {
+    if (!g_hControllerWnd || !IsWindow(g_hControllerWnd)) return;
+    g_winTabClaimAttempt = 1;
+    const bool owned = RegisterHotKey(g_hControllerWnd, kHotkeyWinTab,
+                                      MOD_WIN | MOD_NOREPEAT, VK_TAB) != FALSE;
+    g_winTabHotkeyOwned.store(owned, std::memory_order_relaxed);
+    if (owned) {
+        Wh_Log(L"Win+Tab claim acquired on attempt 1 of %d", kWinTabClaimAttempts);
+        return;
+    }
+    SetTimer(g_hControllerWnd, kWinTabClaimTimerId, kWinTabClaimIntervalMs, nullptr);
+}
 
+static void ContinueWinTabClaim() {
+    if (!g_hControllerWnd || !IsWindow(g_hControllerWnd)) return;
+    if (g_winTabHotkeyOwned.load(std::memory_order_relaxed)) {
+        KillTimer(g_hControllerWnd, kWinTabClaimTimerId);
+        return;
+    }
+    ++g_winTabClaimAttempt;
+    const bool owned = RegisterHotKey(g_hControllerWnd, kHotkeyWinTab,
+                                      MOD_WIN | MOD_NOREPEAT, VK_TAB) != FALSE;
+    if (owned) {
+        g_winTabHotkeyOwned.store(true, std::memory_order_relaxed);
+        KillTimer(g_hControllerWnd, kWinTabClaimTimerId);
+        Wh_Log(L"Win+Tab claim acquired on attempt %d of %d", g_winTabClaimAttempt,
+               kWinTabClaimAttempts);
+    } else if (g_winTabClaimAttempt >= kWinTabClaimAttempts) {
+        KillTimer(g_hControllerWnd, kWinTabClaimTimerId);
+        Wh_Log(L"Win+Tab hotkey remained owned after %d attempts; LL fallback is active",
+               kWinTabClaimAttempts);
+    }
+}
+
+static DWORD HookThreadProcImpl(LPVOID) {
     MSG dummy;
     PeekMessageW(&dummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -3677,8 +3687,11 @@ static DWORD HookThreadProcImpl(LPVOID) {
         if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
             FinishExitAfterAnimation();
         }
-        g_mouseHook.reset();
-        g_keyboardHook.reset();
+        if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+        if (g_inputThread) {
+            WaitForSingleObject(g_inputThread.get(), INFINITE);
+            g_inputThread.reset();
+        }
         UnregisterAllHotkeys();
         if (g_hControllerWnd && IsWindow(g_hControllerWnd)) {
             if (!DestroyWindow(g_hControllerWnd)) {
@@ -3686,6 +3699,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
             }
         }
         g_hControllerWnd = nullptr;
+        UnregisterFlipWindowClasses();
         g_hookThreadId = 0;
         g_hookSessionActive.store(false, std::memory_order_relaxed);
     });
@@ -3697,49 +3711,22 @@ static DWORD HookThreadProcImpl(LPVOID) {
             TryRegisterHotkey(kStickyHotkeyId, MOD_CONTROL | MOD_ALT, VK_F12,
                               L"RegisterHotKey(Ctrl+Alt+F12)"),
             std::memory_order_relaxed);
-        TryRegisterHotkey(kToggleHotkeyId, MOD_CONTROL, 'G',
-                          L"RegisterHotKey(Ctrl+G)");
-        // Win+Tab / Ctrl+Win+Tab via RegisterHotKey (more stable than LL
-        // hooks). While registered, this process owns the hotkey and Task
-        // View does not appear; UnregisterHotKey on unload restores it.
-        g_winTabHotkeyOwned.store(
-            TryRegisterHotkey(kHotkeyWinTab, MOD_WIN | MOD_NOREPEAT, VK_TAB,
-                              L"RegisterHotKey(Win+Tab)"),
-            std::memory_order_relaxed);
-        g_ctrlWinTabHotkeyOwned.store(
-            TryRegisterHotkey(kHotkeyCtrlWinTab, MOD_CONTROL | MOD_WIN | MOD_NOREPEAT, VK_TAB,
-                              L"RegisterHotKey(Ctrl+Win+Tab)"),
-            std::memory_order_relaxed);
-        if (!SetTimer(g_hControllerWnd, kHotkeyReclaimTimerId, kHotkeyReclaimIntervalMs, nullptr)) {
-            LogFailureCode(L"SetTimer(hotkeyReclaim)", GetLastError());
-        }
+        // Claim modern Win+Tab at startup with a bounded 20-attempt sequence.
+        // When Windows keeps the combo reserved, the dedicated LL hook remains
+        // the fallback and blocks Task View without any permanent polling.
+        BeginWinTabClaim();
     } else {
         LogFailure(L"HookThread: controller window");
     }
 
-    if (kEnableLowLevelInputHooks || kEnableMinimalHotkeyHook) {
-        HMODULE module = GetCurrentModuleHandle();
-        g_keyboardHook.reset(SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, module, 0));
-        if (!g_keyboardHook) {
-            LogFailureCode(L"SetWindowsHookExW(keyboard)", GetLastError());
-        } else {
-            LogDebug(L"HookThread: keyboard LL hook installed");
-        }
+    // LL hooks are installed on a separate input thread. Starting it only
+    // after the controller exists guarantees PostToController has a target.
+    g_inputThread.reset(CreateThread(nullptr, 0, InputThreadProc, nullptr, 0, nullptr));
+    if (!g_inputThread) {
+        Wh_Log(L"CreateThread(input) failed: %u", GetLastError());
     }
 
-    if (kEnableLowLevelInputHooks) {
-        HMODULE module = GetCurrentModuleHandle();
-        g_mouseHook.reset(SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, module, 0));
-        if (!g_mouseHook) {
-            LogFailureCode(L"SetWindowsHookExW(mouse)", GetLastError());
-        } else {
-            LogDebug(L"HookThread: mouse LL hook installed");
-        }
-    }
-
-    bool ok = g_hControllerWnd != nullptr &&
-              (!(kEnableLowLevelInputHooks || kEnableMinimalHotkeyHook) ||
-               static_cast<bool>(g_keyboardHook));
+    bool ok = g_hControllerWnd != nullptr;
     g_hookInstallOk.store(ok, std::memory_order_release);
     if (g_hookReadyEvent) {
         SetEvent(g_hookReadyEvent.get());
@@ -3766,30 +3753,16 @@ static DWORD HookThreadProcImpl(LPVOID) {
 // alone, never take explorer.exe down. The ready event is ALWAYS signaled so
 // Wh_ModInit can never hang waiting for us.
 static DWORD WINAPI HookThreadProc(LPVOID param) {
-    FLIP3D_FENCE_BEGIN("HookThreadProc")
-        LogFailure(L"HookThreadProc (hardware fault)");
-        g_mouseHook.reset();
-        g_keyboardHook.reset();
-        UnregisterAllHotkeys();
-        if (g_hControllerWnd && IsWindow(g_hControllerWnd)) {
-            DestroyWindow(g_hControllerWnd);
-        }
-        g_hControllerWnd = nullptr;
-        g_hookThreadId = 0;
-        g_hookSessionActive.store(false, std::memory_order_relaxed);
-        g_hookInstallOk.store(false, std::memory_order_release);
-        if (g_hookReadyEvent) {
-            SetEvent(g_hookReadyEvent.get());
-        }
-        return 1;
-    FLIP3D_FENCE_ELSE
-    try {
+try {
         return HookThreadProcImpl(param);
     } catch (...) {
         LogFailure(L"HookThreadProc");
         try {
-            g_mouseHook.reset();
-            g_keyboardHook.reset();
+            if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+            if (g_inputThread) {
+                WaitForSingleObject(g_inputThread.get(), INFINITE);
+                g_inputThread.reset();
+            }
             UnregisterAllHotkeys();
             if (g_hControllerWnd && IsWindow(g_hControllerWnd)) {
                 if (!DestroyWindow(g_hControllerWnd)) {
@@ -3797,6 +3770,7 @@ static DWORD WINAPI HookThreadProc(LPVOID param) {
                 }
             }
             g_hControllerWnd = nullptr;
+            UnregisterFlipWindowClasses();
             g_hookThreadId = 0;
             g_hookSessionActive.store(false, std::memory_order_relaxed);
         } catch (...) {
@@ -3807,191 +3781,233 @@ static DWORD WINAPI HookThreadProc(LPVOID param) {
         }
         return 1;
     }
-    FLIP3D_FENCE_END
+    
 }
 
 // -----------------------------------------------------------------------------
-// Preload symbols before hook installation. Resolving addresses up front
-// avoids lazy binding while hooks are being installed (a known source of
-// load-time faults inside explorer.exe).
+// Dedicated Windhawk tool process lifecycle
 // -----------------------------------------------------------------------------
 
-static bool PreloadSymbols() {
-    // These DLLs are already mapped into explorer.exe (the mod links them
-    // implicitly via @compilerOptions), so we only resolve their handles —
-    // never LoadLibraryW here. Loading a DLL from the mod init path can run
-    // under the loader lock during injection and is a classic cause of
-    // explorer.exe deadlocks/restarts at startup.
-    HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-    HMODULE gdi32 = GetModuleHandleW(L"gdi32.dll");
-    HMODULE msimg32 = GetModuleHandleW(L"msimg32.dll");
-
-    LogDebugFmt(L"PreloadSymbols: dwmapi=%p user32=%p kernelbase=%p gdi32=%p msimg32=%p",
-                dwmapi, user32, kernelbase, gdi32, msimg32);
-
-    if (!dwmapi || !user32 || !kernelbase) {
-        LogFailure(L"PreloadSymbols: GetModuleHandle");
-        return false;
-    }
-
-    // Touch the IAT entries we use so the first real call doesn't pay a
-    // lazy-bind cost on a hot path. gdi32/msimg32 are optional here.
-    GetProcAddress(dwmapi, "DwmRegisterThumbnail");
-    GetProcAddress(dwmapi, "DwmUpdateThumbnailProperties");
-    GetProcAddress(dwmapi, "DwmUnregisterThumbnail");
-    GetProcAddress(dwmapi, "DwmQueryThumbnailSourceSize");
-    GetProcAddress(dwmapi, "DwmGetWindowAttribute");
-    GetProcAddress(dwmapi, "DwmIsCompositionEnabled");
-    if (kernelbase) {
-        GetProcAddress(kernelbase, "RegQueryValueExW");
-    }
-    GetProcAddress(user32, "RegisterHotKey");
-    GetProcAddress(user32, "UnregisterHotKey");
-    GetProcAddress(user32, "SetWindowsHookExW");
-    if (gdi32) {
-        GetProcAddress(gdi32, "GetDeviceCaps");
-    }
-    if (msimg32) {
-        GetProcAddress(msimg32, "AlphaBlend");
-    }
-
-    LogDebug(L"PreloadSymbols: OK");
-    return true;
-}
-
-// -----------------------------------------------------------------------------
-// Windhawk entry points (guarded; init is non-blocking)
-// -----------------------------------------------------------------------------
-
-static BOOL Wh_ModInitImpl() {
-    // Read user settings first (the perspective/flat choice drives both the
-    // strip budget and the tilt computed later).
+static bool WhTool_ModInitImpl() {
     LoadSettings();
-    LogDebug(L"Wh_ModInit: settings loaded");
+    DetectPerformanceProfile();
 
-    // Install the anti-crash fault fence BEFORE anything else runs, so every
-    // subsequent boundary (including the hook thread) is protected. The VEH
-    // stays inert (returns EXCEPTION_CONTINUE_SEARCH) until a thread opens a
-    // fence, so it cannot affect explorer or other mods.
-    if (g_fenceTls == TLS_OUT_OF_INDEXES) {
-        g_fenceTls = TlsAlloc();
-        LogDebugFmt(L"Wh_ModInit: TlsAlloc -> %lu", g_fenceTls);
-    }
-    if (!g_veh) {
-        g_veh = AddVectoredExceptionHandler(1, Flip3D_Veh);
-        if (!g_veh) {
-            LogFailureCode(L"Wh_ModInit: AddVectoredExceptionHandler", GetLastError());
-        } else {
-            LogDebug(L"Wh_ModInit: VEH installed");
-        }
-    }
-
-    // Step 1: preload symbols BEFORE any hook installation (no DLL loading).
-    if (!PreloadSymbols()) {
-        LogFailure(L"Wh_ModInit: PreloadSymbols");
-        return FALSE;
-    }
-
-    // Step 2: fire-and-forget. The hook thread does all the real work in the
-    // background. We do NOT wait on it here: waiting would stall explorer's
-    // thread during injection (and, in the worst case, deadlock against the
-    // loader lock), which is the most common cause of an Explorer restart at
-    // mod load. The mod simply becomes fully operational a few milliseconds
-    // later, once the thread signals g_hookInstallOk.
     g_hookInstallOk.store(false, std::memory_order_relaxed);
     g_hookThread.reset(CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr));
     if (!g_hookThread) {
-        LogFailureCode(L"Wh_ModInit: CreateThread", GetLastError());
+        Wh_Log(L"CreateThread(UI) failed: %u", GetLastError());
+        return false;
+    }
+    return true;
+}
+
+static void WhTool_ModUninitImpl() {
+    DisableHighResAnimationTimer();
+
+    // A tool process may wait indefinitely: unlike explorer.exe this cannot
+    // stall the shell. Do not unload code while a callback can still reference
+    // it, and unhook unconditionally as a final defensive action.
+    if (g_hookThreadId) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookThread.get(), INFINITE);
+        g_hookThread.reset();
+    }
+    if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+    if (g_inputThread) {
+        WaitForSingleObject(g_inputThread.get(), INFINITE);
+        g_inputThread.reset();
+    }
+    g_hookThreadId = 0;
+    g_hookSessionActive.store(false, std::memory_order_relaxed);
+}
+
+bool WhTool_ModInit() {
+    return WhTool_ModInitImpl();
+}
+
+void WhTool_ModUninit() {
+    WhTool_ModUninitImpl();
+    Wh_Log(L"uninitialized");
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    DetectPerformanceProfile();
+    if (g_isActive && g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
+        PostMessageW(g_hOverlayWnd, WM_FLIP3D_REBUILD, 0, 0);
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
-    LogDebugFmt(L"Wh_ModInit: hook thread created (tid pending), handle=%p", g_hookThread.get());
-    LogNote(L"initialized (hook thread starting in background)");
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
-static void Wh_ModUninitImpl() {
-    LogDebug(L"Wh_ModUninit: begin");
-    if (g_hookThread) {
-        if (g_hookThreadId) {
-            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        }
-
-        // Bounded wait: never block uninit indefinitely.
-        DWORD waitResult = WaitForSingleObject(g_hookThread.get(), 5000);
-        LogDebugFmt(L"Wh_ModUninit: hook thread wait result=%lu", waitResult);
-        if (waitResult == WAIT_TIMEOUT) {
-            LogFailure(L"Wh_ModUninit: hook thread did not exit within 5s");
-        }
-        g_hookThread.reset();
-    } else {
-        DeactivateFlip3D(false);
-        g_keyboardHook.reset();
-        g_mouseHook.reset();
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
     }
 
-    g_hookThreadId = 0;
-    g_hookSessionActive.store(false, std::memory_order_relaxed);
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
 
-    // Tear down the fault fence last (after the hook thread has joined, so it
-    // can no longer be inside a guarded region). The per-thread fence stack on
-    // other threads (if any) is abandoned; this only runs at mod unload.
-    if (g_veh) {
-        RemoveVectoredExceptionHandler(g_veh);
-        g_veh = nullptr;
-    }
-    if (g_fenceTls != TLS_OUT_OF_INDEXES) {
-        FenceStack* fs = static_cast<FenceStack*>(TlsGetValue(g_fenceTls));
-        if (fs) {
-            free(fs);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
         }
-        TlsFree(g_fenceTls);
-        g_fenceTls = TLS_OUT_OF_INDEXES;
     }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
-// Guarded mod entry points: a fault during load or unload fails the mod
-// cleanly instead of crashing explorer.exe.
-BOOL Wh_ModInit() {
-    BOOL ok = FALSE;
-    FLIP3D_FENCE_BEGIN("Wh_ModInit")
-        LogFailure(L"Wh_ModInit (hardware fault)");
-        return FALSE;
-    FLIP3D_FENCE_ELSE
-    ok = SafeExec<BOOL>(L"Wh_ModInit", FALSE, [] { return Wh_ModInitImpl(); });
-    FLIP3D_FENCE_END
-    return ok;
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    FLIP3D_FENCE_BEGIN("Wh_ModUninit")
-        LogFailure(L"Wh_ModUninit (hardware fault)");
+    if (g_isToolModProcessLauncher) {
         return;
-    FLIP3D_FENCE_ELSE
-    SafeExec<bool>(L"Wh_ModUninit", false, [] {
-        Wh_ModUninitImpl();
-        return true;
-    });
-    LogNote(L"uninitialized");
-    FLIP3D_FENCE_END
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
 
-// Called by the Windhawk engine when the user changes a setting in the UI.
-// Settings are reloaded immediately; if the switcher is open, the overlay
-// thread rebuilds the deck so the new card style (realistic/flat) is applied
-// live without having to close and reopen the switcher.
-void Wh_ModSettingsChanged() {
-    FLIP3D_FENCE_BEGIN("Wh_ModSettingsChanged")
-        LogFailure(L"Wh_ModSettingsChanged (hardware fault)");
-        return;
-    FLIP3D_FENCE_ELSE
-    LoadSettings();
-    LogDebug(L"Wh_ModSettingsChanged: settings reloaded");
-    if (g_isActive && g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-        LogDebug(L"Wh_ModSettingsChanged: switcher is open, requesting live rebuild");
-        PostMessageW(g_hOverlayWnd, WM_FLIP3D_REBUILD, 0, 0);
-    }
-    FLIP3D_FENCE_END
-}
