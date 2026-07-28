@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.0
+// @version         1.2
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -42,6 +42,7 @@ Windows 11 only.
 - Set each button's icon to an **emoji**, an **`.ico` / `.png` file**, or an
   **`app.exe,0`** icon resource. Leave it empty to use the folder's own icon.
 - Left click an item to open it, right click for the full Windows shell context menu.
+- Folder buttons are injected on the primary taskbar and every secondary-monitor taskbar.
 
 ## Setting up a folder
 
@@ -49,12 +50,12 @@ Each record in the **Folder shortcuts** setting has three fields:
 
 | Field | Example | Notes |
 |-------|---------|-------|
-| Name  | `Apps` | Shown in the button's tooltip |
+| Name  | `Apps` | Shown as the title at the top of the hover grid |
 | Folder path | `%USERPROFILE%\Desktop` | Environment variables are expanded. `shell:` targets such as `shell:Desktop` also work. |
 | Icon | an emoji, `C:\icons\apps.ico`, or `C:\Windows\explorer.exe,0` | Leave empty to use the folder's own icon |
 
-A good setup is to make a folder somewhere, fill it with shortcuts to the apps you
-want grouped, and point a button at it.
+A good setup is to make a folder somewhere, fill it with shortcuts to the apps
+you want grouped, and point a button at it.
 
 ## How it is positioned
 
@@ -90,7 +91,7 @@ do not conflict.
 - folders:
   - - name: Apps
       $name: Name
-      $description: Shown in the button's tooltip.
+      $description: Shown as the title at the top of the main hover grid.
     - path: '%USERPROFILE%\Desktop'
       $name: Folder path
       $description: >-
@@ -128,7 +129,9 @@ do not conflict.
 
 - closeDelayMs: 250
   $name: Close delay (ms)
-  $description: How long the grid stays open after the mouse leaves it.
+  $description: >-
+    How long the grid stays open after the mouse leaves the button and the grid.
+    Moving onto another taskbar icon counts as leaving.
 
 - columns: 0
   $name: Grid columns
@@ -154,6 +157,12 @@ do not conflict.
   $description: >-
     How long to rest on a subfolder before its menu opens. A small delay stops
     menus from firing off while you sweep across the grid. 0 is instant.
+
+- submenuCloseDelayMs: 300
+  $name: Subfolder close delay (ms)
+  $description: >-
+    How long a cascaded subfolder menu stays open after the mouse leaves the
+    cell that opened it. Gives you time to move diagonally into the submenu.
 
 - showHidden: false
   $name: Show hidden items
@@ -183,6 +192,20 @@ do not conflict.
 
 - fontSize: 12
   $name: Item label size (px)
+
+- titleFontSize: 13
+  $name: Folder title size (px)
+  $description: Size of the name shown at the top of the main hover grid.
+
+- titleAlign: center
+  $name: Folder title position
+  $description: >-
+    Horizontal position of the folder name on the main hover grid. Subfolder
+    menus never show a title.
+  $options:
+  - left: Left
+  - center: Center
+  - right: Right
 
 - cornerRadius: 8
   $name: Grid corner radius (px)
@@ -229,21 +252,21 @@ do not conflict.
 #include <shlwapi.h>
 #include <windowsx.h>
 
-#include <objidl.h>
 #include <gdiplus.h>
+#include <objidl.h>
 
-#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
-#include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.h>
 
 #include <algorithm>
 #include <atomic>
@@ -289,6 +312,7 @@ struct Settings {
     bool includeSubfolders = true;
     int maxFolderDepth = -1;
     int submenuDelayMs = 150;
+    int submenuCloseDelayMs = 300;
     bool showHidden = false;
     bool showExtensions = false;
     SortMode sortBy = SortMode::Name;
@@ -296,6 +320,8 @@ struct Settings {
     int cellHeight = 88;
     int iconSize = 32;
     int fontSize = 12;
+    int titleFontSize = 13;
+    std::wstring titleAlign = L"center";
     int cornerRadius = 8;
     int panelOpacity = 85;
     bool acrylic = true;
@@ -419,27 +445,41 @@ void LoadSettings() {
     g_settings.closeDelayMs =
         std::clamp<int>(Wh_GetIntSetting(L"closeDelayMs"), 0, 5000);
     g_settings.columns = std::clamp<int>(Wh_GetIntSetting(L"columns"), 0, 24);
-    g_settings.maxItems = std::clamp<int>(Wh_GetIntSetting(L"maxItems"), 0, 400);
+    g_settings.maxItems =
+        std::clamp<int>(Wh_GetIntSetting(L"maxItems"), 0, 400);
     g_settings.includeSubfolders = Wh_GetIntSetting(L"includeSubfolders");
     g_settings.maxFolderDepth =
         std::clamp<int>(Wh_GetIntSetting(L"maxFolderDepth"), -1, 32);
     g_settings.submenuDelayMs =
         std::clamp<int>(Wh_GetIntSetting(L"submenuDelayMs"), 0, 5000);
+    g_settings.submenuCloseDelayMs =
+        std::clamp<int>(Wh_GetIntSetting(L"submenuCloseDelayMs"), 0, 5000);
     g_settings.showHidden = Wh_GetIntSetting(L"showHidden");
     g_settings.showExtensions = Wh_GetIntSetting(L"showExtensions");
-    g_settings.cellWidth = std::clamp<int>(Wh_GetIntSetting(L"cellWidth"), 32, 400);
+    g_settings.cellWidth =
+        std::clamp<int>(Wh_GetIntSetting(L"cellWidth"), 32, 400);
     g_settings.cellHeight =
         std::clamp<int>(Wh_GetIntSetting(L"cellHeight"), 32, 400);
-    g_settings.iconSize = std::clamp<int>(Wh_GetIntSetting(L"iconSize"), 8, 256);
+    g_settings.iconSize =
+        std::clamp<int>(Wh_GetIntSetting(L"iconSize"), 8, 256);
     g_settings.fontSize = std::clamp<int>(Wh_GetIntSetting(L"fontSize"), 6, 48);
+    g_settings.titleFontSize =
+        std::clamp<int>(Wh_GetIntSetting(L"titleFontSize"), 6, 48);
+    g_settings.titleAlign = GetStringSetting(L"titleAlign");
+    if (g_settings.titleAlign != L"left" && g_settings.titleAlign != L"right") {
+        g_settings.titleAlign = L"center";
+    }
     g_settings.cornerRadius =
         std::clamp<int>(Wh_GetIntSetting(L"cornerRadius"), 0, 32);
     g_settings.panelOpacity =
         std::clamp<int>(Wh_GetIntSetting(L"panelOpacity"), 5, 100);
     g_settings.acrylic = Wh_GetIntSetting(L"acrylic");
-    g_settings.gapAbove = std::clamp<int>(Wh_GetIntSetting(L"gapAbove"), 0, 200);
-    g_settings.gapBefore = std::clamp<int>(Wh_GetIntSetting(L"gapBefore"), 0, 200);
-    g_settings.gapAfter = std::clamp<int>(Wh_GetIntSetting(L"gapAfter"), 0, 200);
+    g_settings.gapAbove =
+        std::clamp<int>(Wh_GetIntSetting(L"gapAbove"), 0, 200);
+    g_settings.gapBefore =
+        std::clamp<int>(Wh_GetIntSetting(L"gapBefore"), 0, 200);
+    g_settings.gapAfter =
+        std::clamp<int>(Wh_GetIntSetting(L"gapAfter"), 0, 200);
     g_settings.buttonIconSize =
         std::clamp<int>(Wh_GetIntSetting(L"buttonIconSize"), 0, 128);
     g_settings.openFolderOnClick = Wh_GetIntSetting(L"openFolderOnClick");
@@ -449,11 +489,16 @@ void LoadSettings() {
 ////////////////////////////////////////////////////////////////////////////////
 // taskbar.dll plumbing
 //
-// Shared boilerplate from the Windhawk taskbar mods: reach the taskbar's XamlRoot
-// through CTaskBand -> TaskbarHost, and marshal work onto the taskbar UI thread.
+// Shared boilerplate from the Windhawk taskbar mods: reach the taskbar's
+// XamlRoot through CTaskBand -> TaskbarHost, and marshal work onto the taskbar
+// UI thread.
 
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void* result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void* result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
 TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original;
@@ -462,6 +507,7 @@ using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 
 void* CTaskBand_ITaskListWndSite_vftable;
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -484,10 +530,49 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+    if (!TaskbarHost_FrameHeight_Original ||
+        !std__Ref_count_base__Decref_Original) {
+        return nullptr;
+    }
+
+    // TaskbarHost::FrameHeight starts with `sub rsp,28` then `add
+    // rcx,<offset>`, which is how the offset of the host's FrameworkElement is
+    // recovered.
+    size_t taskbarElementIUnknownOffset = 0x48;
+    {
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(
+                L"Unsupported TaskbarHost::FrameHeight, using default offset");
+        }
+    }
+
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    if (taskbarElementIUnknown) {
+        taskbarElementIUnknown->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElement));
+    }
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+XamlRoot GetPrimaryTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!CTaskBand_GetTaskbarHost_Original ||
-        !TaskbarHost_FrameHeight_Original ||
-        !std__Ref_count_base__Decref_Original ||
         !CTaskBand_ITaskListWndSite_vftable) {
         return nullptr;
     }
@@ -515,38 +600,54 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
                                       taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
+    if (!CSecondaryTaskBand_GetTaskbarHost_Original ||
+        !CSecondaryTaskBand_ITaskListWndSite_vftable) {
         return nullptr;
     }
 
-    // TaskbarHost::FrameHeight starts with `sub rsp,28` then `add rcx,<offset>`,
-    // which is how the offset of the host's FrameworkElement is recovered.
-    size_t taskbarElementIUnknownOffset = 0x48;
-    {
-        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-            taskbarElementIUnknownOffset = b[7];
-        } else {
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight, using default offset");
+    HWND hTaskSwWnd =
+        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    if (!taskBand) {
+        return nullptr;
+    }
+
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
         }
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
 
-    auto* taskbarElementIUnknown =
-        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      taskbarElementIUnknownOffset);
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
 
-    FrameworkElement taskbarElement = nullptr;
-    if (taskbarElementIUnknown) {
-        taskbarElementIUnknown->QueryInterface(
-            winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElement));
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    WCHAR className[32];
+    if (!GetClassName(hTaskbarWnd, className, ARRAYSIZE(className))) {
+        return nullptr;
     }
-
-    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-
-    return result;
+    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        return GetPrimaryTaskbarXamlRoot(hTaskbarWnd);
+    }
+    if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        return GetSecondaryTaskbarXamlRoot(hTaskbarWnd);
+    }
+    return nullptr;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
@@ -692,7 +793,8 @@ Gdiplus::Color GetAccentGdipColor(BYTE alpha) {
     }
 }
 
-// DrawIconEx into a 32bpp DIB, then copy into a GDI+ bitmap that owns its pixels.
+// DrawIconEx into a 32bpp DIB, then copy into a GDI+ bitmap that owns its
+// pixels.
 std::shared_ptr<Gdiplus::Bitmap> HIconToBitmap(HICON hIcon, int size) {
     if (!hIcon || size <= 0) {
         return nullptr;
@@ -750,8 +852,8 @@ std::shared_ptr<Gdiplus::Bitmap> HIconToBitmap(HICON hIcon, int size) {
 
     std::shared_ptr<Gdiplus::Bitmap> result;
     try {
-        result = std::make_shared<Gdiplus::Bitmap>(size, size,
-                                                   PixelFormat32bppARGB);
+        result =
+            std::make_shared<Gdiplus::Bitmap>(size, size, PixelFormat32bppARGB);
         if (result->GetLastStatus() == Gdiplus::Ok) {
             Gdiplus::BitmapData bd{};
             Gdiplus::Rect lockRect(0, 0, size, size);
@@ -817,8 +919,8 @@ HICON GetShellIconForPath(const std::wstring& path, int pixelSize) {
 
     if (!hIcon) {
         SHFILEINFOW sfi2{};
-        UINT flags = SHGFI_ICON | (pixelSize <= 16 ? SHGFI_SMALLICON
-                                                   : SHGFI_LARGEICON);
+        UINT flags =
+            SHGFI_ICON | (pixelSize <= 16 ? SHGFI_SMALLICON : SHGFI_LARGEICON);
         if (SHGetFileInfoW(path.c_str(), 0, &sfi2, sizeof(sfi2), flags)) {
             hIcon = sfi2.hIcon;
         }
@@ -866,8 +968,8 @@ HICON ExtractIconFromResourceSpec(const std::wstring& spec, int pixelSize) {
 struct GridItem {
     std::wstring displayName;
     std::wstring fullPath;
-    // When a .lnk points at a folder we cascade against the target path, but keep
-    // the shortcut itself here so its custom icon still shows.
+    // When a .lnk points at a folder we cascade against the target path, but
+    // keep the shortcut itself here so its custom icon still shows.
     std::wstring iconPath;
     bool isFolder = false;
     ULONGLONG modified = 0;
@@ -904,13 +1006,13 @@ std::wstring CacheKey(const std::wstring& path) {
     return key;
 }
 
-// A `shell:` target is resolved to a filesystem path so the plain directory walk
-// below can handle every configured folder the same way.
+// A `shell:` target is resolved to a filesystem path so the plain directory
+// walk below can handle every configured folder the same way.
 std::wstring ResolveFolderPath(const std::wstring& raw) {
     if (raw.size() > 6 && _wcsnicmp(raw.c_str(), L"shell:", 6) == 0) {
         PIDLIST_ABSOLUTE pidl = nullptr;
-        if (SUCCEEDED(SHParseDisplayName(raw.c_str(), nullptr, &pidl, 0,
-                                         nullptr)) &&
+        if (SUCCEEDED(
+                SHParseDisplayName(raw.c_str(), nullptr, &pidl, 0, nullptr)) &&
             pidl) {
             WCHAR buf[MAX_PATH]{};
             bool ok = SHGetPathFromIDListW(pidl, buf);
@@ -938,7 +1040,8 @@ std::wstring MakeDisplayName(const std::wstring& fileName, bool isFolder) {
         return fileName;
     }
     std::wstring ext = fileName.substr(dot);
-    // Windows always hides shortcut extensions, regardless of the user's setting.
+    // Windows always hides shortcut extensions, regardless of the user's
+    // setting.
     if (_wcsicmp(ext.c_str(), L".lnk") == 0 ||
         _wcsicmp(ext.c_str(), L".url") == 0) {
         return fileName.substr(0, dot);
@@ -949,8 +1052,9 @@ std::wstring MakeDisplayName(const std::wstring& fileName, bool isFolder) {
     return fileName;
 }
 
-// Folder shortcuts (.lnk whose target is a directory) are files to FindFirstFile,
-// but Explorer treats them as folders. Resolve the target so they can cascade.
+// Folder shortcuts (.lnk whose target is a directory) are files to
+// FindFirstFile, but Explorer treats them as folders. Resolve the target so
+// they can cascade.
 std::wstring ResolveFolderShortcutTarget(const std::wstring& path) {
     size_t len = path.size();
     if (len < 5 || _wcsicmp(path.c_str() + (len - 4), L".lnk") != 0) {
@@ -978,7 +1082,8 @@ std::wstring ResolveFolderShortcutTarget(const std::wstring& path) {
         return {};
     }
 
-    // Skip Resolve(): it can hang on unreachable network targets and may show UI.
+    // Skip Resolve(): it can hang on unreachable network targets and may show
+    // UI.
     WCHAR target[MAX_PATH]{};
     hr = link->GetPath(target, ARRAYSIZE(target), nullptr, SLGP_RAWPATH);
     if (FAILED(hr) || !target[0]) {
@@ -1030,7 +1135,8 @@ void ScanFolderInto(const std::wstring& path,
         if (g_unloading) {
             break;
         }
-        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) {
+        if (wcscmp(fd.cFileName, L".") == 0 ||
+            wcscmp(fd.cFileName, L"..") == 0) {
             continue;
         }
 
@@ -1073,8 +1179,8 @@ void ScanFolderInto(const std::wstring& path,
 
     FindClose(hFind);
 
-    // Folders always lead, so the things that cascade sit together at the top of
-    // the grid. The sort setting then orders within each group.
+    // Folders always lead, so the things that cascade sit together at the top
+    // of the grid. The sort setting then orders within each group.
     std::sort(out->items.begin(), out->items.end(),
               [](const GridItem& a, const GridItem& b) {
                   if (a.isFolder != b.isFolder) {
@@ -1114,9 +1220,8 @@ void ScanThreadMain() {
         ScanRequest request;
         {
             std::unique_lock<std::mutex> lock(g_scanMutex);
-            g_scanCv.wait(lock, [] {
-                return g_scanThreadStop || !g_scanQueue.empty();
-            });
+            g_scanCv.wait(
+                lock, [] { return g_scanThreadStop || !g_scanQueue.empty(); });
             if (g_scanThreadStop) {
                 break;
             }
@@ -1177,8 +1282,8 @@ std::shared_ptr<FolderData> GetFolderData(const std::wstring& path) {
     return found == g_folderCache.end() ? nullptr : found->second;
 }
 
-// Returns the cached contents, queueing a scan when the entry is missing, stale,
-// or was rendered at a different icon size. Never blocks.
+// Returns the cached contents, queueing a scan when the entry is missing,
+// stale, or was rendered at a different icon size. Never blocks.
 std::shared_ptr<FolderData> GetFolderDataAndRefresh(const std::wstring& path,
                                                     int iconPixelSize) {
     auto data = GetFolderData(path);
@@ -1219,8 +1324,8 @@ void ResetFolderData() {
 //
 // A XAML Popup would be clipped to the taskbar's XAML island, which is only as
 // tall as the taskbar, so the grid is a real top-level layered window instead.
-// Per-pixel alpha gives antialiased rounded corners and makes hit testing outside
-// the panel fall through automatically.
+// Per-pixel alpha gives antialiased rounded corners and makes hit testing
+// outside the panel fall through automatically.
 
 constexpr PCWSTR kPopupClassName = L"WH_TaskbarFolderHoverTray_Grid";
 constexpr PCWSTR kMenuOwnerClassName = L"WH_TaskbarFolderHoverTray_MenuOwner";
@@ -1229,16 +1334,16 @@ constexpr UINT_PTR kOpenTimerId = 2;
 constexpr UINT kTickTimerMs = 30;
 // Hard cap on cascade depth so a symlink loop cannot exhaust window handles.
 constexpr int kMaxLevels = 16;
-// Grace period before a deeper level closes once the cursor moves off the cell
-// that opened it, so sweeping diagonally into a submenu does not dismiss it.
-constexpr ULONGLONG kCloseDeeperGraceMs = 400;
 
-// One grid in the cascade. Level 0 hangs off a taskbar button; deeper levels hang
-// off the cell in their parent that opened them.
+// One grid in the cascade. Level 0 hangs off a taskbar button; deeper levels
+// hang off the cell in their parent that opened them.
 struct PopupLevel {
     HWND hwnd = nullptr;
     int depth = 0;
     std::wstring path;
+    // Only filled for the root (taskbar) grid; subfolder menus leave this
+    // empty.
+    std::wstring title;
     std::vector<GridItem> items;
     std::vector<RECT> cellRects;
     RECT rect{};
@@ -1263,6 +1368,7 @@ bool g_menuActive = false;
 ULONGLONG g_outsideSinceTick = 0;
 
 std::wstring g_pendingRootPath;
+std::wstring g_pendingRootTitle;
 RECT g_pendingRootRect{};
 
 int g_pendingSubDepth = -1;
@@ -1274,7 +1380,7 @@ IContextMenu2* g_activeContextMenu2 = nullptr;
 
 // Both take their arguments by value: reopening a level destroys the PopupLevel
 // the caller may have read them from.
-void OpenRootLevel(std::wstring path, RECT anchorRect);
+void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title);
 void OpenSubLevel(int parentDepth, int cell);
 void CloseLevelsFrom(int depth);
 void CloseChain();
@@ -1314,8 +1420,8 @@ void ApplyBackdrop(HWND hWnd) {
         return;
     }
 
-    // ACCENT_ENABLE_ACRYLICBLURBEHIND with a nearly transparent tint; the visible
-    // panel colour is painted by us so the blur only adds depth.
+    // ACCENT_ENABLE_ACRYLICBLURBEHIND with a nearly transparent tint; the
+    // visible panel colour is painted by us so the blur only adds depth.
     AccentPolicy policy{};
     policy.accentState = 4;
     policy.accentFlags = 0;
@@ -1347,7 +1453,8 @@ void AddRoundedRect(Gdiplus::GraphicsPath* path,
 
 // A minimal folder silhouette: a body whose top edge steps up on the left to
 // form the tab. Kept as straight edges so it stays crisp at badge sizes.
-void AddFolderGlyphPath(Gdiplus::GraphicsPath* path, const Gdiplus::RectF& box) {
+void AddFolderGlyphPath(Gdiplus::GraphicsPath* path,
+                        const Gdiplus::RectF& box) {
     Gdiplus::REAL step = box.Height * 0.24f;
     Gdiplus::PointF pts[6] = {
         {box.X, box.Y},
@@ -1360,12 +1467,23 @@ void AddFolderGlyphPath(Gdiplus::GraphicsPath* path, const Gdiplus::RectF& box) 
     path->AddPolygon(pts, 6);
 }
 
-// Fills level->cellRects and returns the required window size in physical pixels.
+// Extra top band reserved for the root folder title. Subfolder menus skip this.
+int RootTitleBandHeight(const PopupLevel* level) {
+    if (!level || level->depth != 0 || level->title.empty()) {
+        return 0;
+    }
+    return ScaleForPopup(8) + ScaleForPopup(g_settings.titleFontSize) +
+           ScaleForPopup(10);
+}
+
+// Fills level->cellRects and returns the required window size in physical
+// pixels.
 SIZE ComputeLevelLayout(PopupLevel* level) {
     int itemCount = (int)level->items.size();
     int padding = ScaleForPopup(8);
     int cellW = ScaleForPopup(g_settings.cellWidth);
     int cellH = ScaleForPopup(g_settings.cellHeight);
+    int titleBand = RootTitleBandHeight(level);
 
     int count = std::max<int>(itemCount, 1);
     int cols;
@@ -1385,7 +1503,7 @@ SIZE ComputeLevelLayout(PopupLevel* level) {
         int c = i % cols;
         RECT cell;
         cell.left = padding + c * cellW;
-        cell.top = padding + r * cellH;
+        cell.top = padding + titleBand + r * cellH;
         cell.right = cell.left + cellW;
         cell.bottom = cell.top + cellH;
         level->cellRects.push_back(cell);
@@ -1393,10 +1511,11 @@ SIZE ComputeLevelLayout(PopupLevel* level) {
 
     SIZE size;
     size.cx = padding * 2 + cols * cellW;
-    size.cy = padding * 2 + rows * cellH;
+    size.cy = padding * 2 + titleBand + rows * cellH;
     if (itemCount == 0) {
         // Leave room for the "Loading" / "Empty folder" message.
         size.cx = padding * 2 + cellW * 2;
+        size.cy = std::max<int>(size.cy, padding * 2 + titleBand + cellH);
     }
     return size;
 }
@@ -1451,19 +1570,19 @@ void PaintLevel(PopupLevel* level) {
     HGDIOBJ hOldBmp = SelectObject(hMemDC, hBmp);
 
     bool dark = IsDarkTheme();
-    BYTE panelAlpha = (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100,
-                                            10, 255);
-    Gdiplus::Color panelColor =
-        dark ? Gdiplus::Color(panelAlpha, 43, 43, 43)
-             : Gdiplus::Color(panelAlpha, 249, 249, 249);
-    Gdiplus::Color borderColor = dark ? Gdiplus::Color(40, 255, 255, 255)
-                                      : Gdiplus::Color(28, 0, 0, 0);
+    BYTE panelAlpha =
+        (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100, 10, 255);
+    Gdiplus::Color panelColor = dark
+                                    ? Gdiplus::Color(panelAlpha, 43, 43, 43)
+                                    : Gdiplus::Color(panelAlpha, 249, 249, 249);
+    Gdiplus::Color borderColor =
+        dark ? Gdiplus::Color(40, 255, 255, 255) : Gdiplus::Color(28, 0, 0, 0);
     Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
                                     : Gdiplus::Color(255, 26, 26, 26);
-    Gdiplus::Color hoverColor = dark ? Gdiplus::Color(28, 255, 255, 255)
-                                     : Gdiplus::Color(18, 0, 0, 0);
-    Gdiplus::Color pressColor = dark ? Gdiplus::Color(46, 255, 255, 255)
-                                     : Gdiplus::Color(32, 0, 0, 0);
+    Gdiplus::Color hoverColor =
+        dark ? Gdiplus::Color(28, 255, 255, 255) : Gdiplus::Color(18, 0, 0, 0);
+    Gdiplus::Color pressColor =
+        dark ? Gdiplus::Color(46, 255, 255, 255) : Gdiplus::Color(32, 0, 0, 0);
     // The cascade badge is filled with the system accent so it reads as a
     // deliberate affordance and stays legible over any icon art. Its marks flip
     // to dark if the accent itself is light.
@@ -1473,14 +1592,14 @@ void PaintLevel(PopupLevel* level) {
     Gdiplus::Color badgeMarkColor = lightAccent
                                         ? Gdiplus::Color(255, 20, 20, 20)
                                         : Gdiplus::Color(255, 255, 255, 255);
-    Gdiplus::Color badgeRingColor = dark ? Gdiplus::Color(160, 0, 0, 0)
-                                         : Gdiplus::Color(70, 255, 255, 255);
+    Gdiplus::Color badgeRingColor =
+        dark ? Gdiplus::Color(160, 0, 0, 0) : Gdiplus::Color(70, 255, 255, 255);
 
     {
         // A PARGB surface over the DIB bits is exactly the premultiplied format
         // UpdateLayeredWindow wants, and lets GDI+ blend correctly into it.
-        Gdiplus::Bitmap surface(width, height, width * 4,
-                                PixelFormat32bppPARGB, (BYTE*)bits);
+        Gdiplus::Bitmap surface(width, height, width * 4, PixelFormat32bppPARGB,
+                                (BYTE*)bits);
         Gdiplus::Graphics g(&surface);
         g.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1518,13 +1637,40 @@ void PaintLevel(PopupLevel* level) {
         format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
         format.SetFormatFlags(Gdiplus::StringFormatFlagsLineLimit);
 
+        int titleBand = RootTitleBandHeight(level);
+        if (titleBand > 0) {
+            Gdiplus::Font titleFont(
+                &family, (Gdiplus::REAL)ScaleForPopup(g_settings.titleFontSize),
+                Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+            Gdiplus::StringFormat titleFormat;
+            if (g_settings.titleAlign == L"left") {
+                titleFormat.SetAlignment(Gdiplus::StringAlignmentNear);
+            } else if (g_settings.titleAlign == L"right") {
+                titleFormat.SetAlignment(Gdiplus::StringAlignmentFar);
+            } else {
+                titleFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
+            }
+            titleFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            titleFormat.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+            titleFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+            int pad = ScaleForPopup(12);
+            Gdiplus::RectF titleRect(
+                (Gdiplus::REAL)pad, (Gdiplus::REAL)ScaleForPopup(4),
+                (Gdiplus::REAL)(width - pad * 2),
+                (Gdiplus::REAL)(titleBand - ScaleForPopup(4)));
+            g.DrawString(level->title.c_str(), -1, &titleFont, titleRect,
+                         &titleFormat, &textBrush);
+        }
+
         if (level->items.empty()) {
             Gdiplus::StringFormat centered;
             centered.SetAlignment(Gdiplus::StringAlignmentCenter);
             centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
             PCWSTR message = level->loading ? L"Loading..." : L"Empty folder";
-            Gdiplus::RectF area(0.0f, 0.0f, (Gdiplus::REAL)width,
-                                (Gdiplus::REAL)height);
+            Gdiplus::RectF area(0.0f, (Gdiplus::REAL)titleBand,
+                                (Gdiplus::REAL)width,
+                                (Gdiplus::REAL)(height - titleBand));
             g.DrawString(message, -1, &font, area, &centered, &textBrush);
         }
 
@@ -1540,10 +1686,9 @@ void PaintLevel(PopupLevel* level) {
             int cellH = cell.bottom - cell.top;
 
             if ((int)i == level->pressedCell || (int)i == level->hoverCell) {
-                Gdiplus::Rect highlight(cell.left + ScaleForPopup(2),
-                                        cell.top + ScaleForPopup(2),
-                                        cellW - ScaleForPopup(4),
-                                        cellH - ScaleForPopup(4));
+                Gdiplus::Rect highlight(
+                    cell.left + ScaleForPopup(2), cell.top + ScaleForPopup(2),
+                    cellW - ScaleForPopup(4), cellH - ScaleForPopup(4));
                 Gdiplus::GraphicsPath highlightPath;
                 AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
                 Gdiplus::SolidBrush highlightBrush(
@@ -1610,8 +1755,8 @@ void PaintLevel(PopupLevel* level) {
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
-    UpdateLayeredWindow(level->hwnd, hScreenDC, &ptDst, &size, hMemDC, &ptSrc, 0,
-                        &blend, ULW_ALPHA);
+    UpdateLayeredWindow(level->hwnd, hScreenDC, &ptDst, &size, hMemDC, &ptSrc,
+                        0, &blend, ULW_ALPHA);
 
     SelectObject(hMemDC, hOldBmp);
     DeleteObject(hBmp);
@@ -1629,8 +1774,8 @@ PopupLevel* LevelFromHwnd(HWND hWnd) {
 }
 
 int CellFromClientPoint(PopupLevel* level, POINT pt) {
-    for (size_t i = 0;
-         i < level->cellRects.size() && i < level->items.size(); i++) {
+    for (size_t i = 0; i < level->cellRects.size() && i < level->items.size();
+         i++) {
         if (PtInRect(&level->cellRects[i], pt)) {
             return (int)i;
         }
@@ -1674,9 +1819,47 @@ RECT BridgingRect(const RECT& a, const RECT& b) {
     return bridge;
 }
 
+// The dead-zone-free path from the taskbar button up into the root grid. Only
+// the gap BETWEEN them counts - the taskbar strip itself is excluded, so moving
+// to another app on the taskbar closes the menu instead of keeping it stuck
+// open.
+bool CursorInRootCorridor(POINT pt) {
+    if (g_levels.empty()) {
+        return false;
+    }
+
+    const RECT& anchor = g_rootAnchorRect;
+    const RECT& popup = g_levels[0]->rect;
+
+    RECT gap{};
+    gap.left = std::min<LONG>(anchor.left, popup.left);
+    gap.right = std::max<LONG>(anchor.right, popup.right);
+
+    if (popup.bottom <= anchor.top) {
+        // Normal bottom taskbar: popup sits above the button.
+        gap.top = popup.bottom;
+        gap.bottom = anchor.top;
+    } else if (popup.top >= anchor.bottom) {
+        // Top taskbar: popup sits below the button.
+        gap.top = anchor.bottom;
+        gap.bottom = popup.top;
+    } else {
+        return false;
+    }
+
+    // PtInRect excludes the bottom edge; inflate a zero-height seam so a
+    // gapAbove of 0 still lets the cursor cross into the grid.
+    if (gap.bottom <= gap.top) {
+        gap.bottom = gap.top + 1;
+    }
+
+    return PtInRect(&gap, pt);
+}
+
 // The cascade stays open while the cursor is over the taskbar button, over any
-// open grid, or in the band bridging two consecutive grids. That band is what
-// makes moving up from the taskbar, and sideways into a submenu, dead-zone free.
+// open grid, in the gap from the button up into the root grid, or in the band
+// bridging two consecutive grids. The taskbar strip outside the button is NOT
+// part of the live path.
 bool CursorIsInLivePath() {
     POINT pt;
     if (!GetCursorPos(&pt) || g_levels.empty()) {
@@ -1693,13 +1876,12 @@ bool CursorIsInLivePath() {
         }
     }
 
-    RECT bridge = BridgingRect(g_rootAnchorRect, g_levels[0]->rect);
-    if (PtInRect(&bridge, pt)) {
+    if (CursorInRootCorridor(pt)) {
         return true;
     }
 
     for (size_t i = 1; i < g_levels.size(); i++) {
-        bridge = BridgingRect(g_levels[i - 1]->rect, g_levels[i]->rect);
+        RECT bridge = BridgingRect(g_levels[i - 1]->rect, g_levels[i]->rect);
         if (PtInRect(&bridge, pt)) {
             return true;
         }
@@ -1756,10 +1938,11 @@ void ShowItemContextMenu(const std::wstring& path, POINT screenPt) {
 
                 g_menuActive = true;
                 SetForegroundWindow(g_menuOwnerWnd);
-                UINT cmd = TrackPopupMenuEx(
-                    menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN |
-                              TPM_BOTTOMALIGN,
-                    screenPt.x, screenPt.y, g_menuOwnerWnd, nullptr);
+                UINT cmd = TrackPopupMenuEx(menu,
+                                            TPM_RETURNCMD | TPM_RIGHTBUTTON |
+                                                TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+                                            screenPt.x, screenPt.y,
+                                            g_menuOwnerWnd, nullptr);
                 g_menuActive = false;
 
                 if (g_activeContextMenu2) {
@@ -1811,12 +1994,13 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
                                   UINT uMsg,
                                   WPARAM wParam,
                                   LPARAM lParam) {
-    // Shell context menus need these forwarded so they can draw their own items.
+    // Shell context menus need these forwarded so they can draw their own
+    // items.
     if (g_activeContextMenu2 &&
         (uMsg == WM_INITMENUPOPUP || uMsg == WM_DRAWITEM ||
          uMsg == WM_MEASUREITEM)) {
-        if (SUCCEEDED(g_activeContextMenu2->HandleMenuMsg(uMsg, wParam,
-                                                          lParam))) {
+        if (SUCCEEDED(
+                g_activeContextMenu2->HandleMenuMsg(uMsg, wParam, lParam))) {
             return uMsg == WM_INITMENUPOPUP ? 0 : TRUE;
         }
     }
@@ -1837,10 +2021,11 @@ void RefreshLoadingLevels() {
         }
         // Copied out first: reopening destroys the level these came from.
         std::wstring path = level->path;
+        std::wstring title = level->title;
         RECT anchorRect = level->anchorRect;
         int spawnerCell = level->spawnerCell;
         if (i == 0) {
-            OpenRootLevel(std::move(path), anchorRect);
+            OpenRootLevel(std::move(path), anchorRect, std::move(title));
         } else {
             OpenSubLevel((int)i - 1, spawnerCell);
         }
@@ -1868,9 +2053,9 @@ void PrefetchSubfolders(PopupLevel* level) {
     }
 }
 
-// Drives the cascade: opens a pending submenu once its dwell time elapses, retires
-// levels the cursor has moved away from, and dismisses the chain when the cursor
-// leaves the live path. Runs on level 0's window only.
+// Drives the cascade: opens a pending submenu once its dwell time elapses,
+// retires levels the cursor has moved away from, and dismisses the chain when
+// the cursor leaves the live path. Runs on level 0's window only.
 void OnTick() {
     RefreshLoadingLevels();
 
@@ -1895,17 +2080,19 @@ void OnTick() {
 
     int cursorLevel = LevelIndexUnderCursor();
 
-    // Retire anything deeper than the grid the cursor is in, unless the cursor is
-    // still resting on the cell that opened the next one down.
+    // Retire anything deeper than the grid the cursor is in, unless the cursor
+    // is still resting on the cell that opened the next one down.
     if (cursorLevel >= 0 && (int)g_levels.size() > cursorLevel + 1) {
         auto* level = g_levels[cursorLevel].get();
-        bool onSpawner = level->hoverCell >= 0 &&
-                         level->hoverCell == g_levels[cursorLevel + 1]->spawnerCell;
+        bool onSpawner =
+            level->hoverCell >= 0 &&
+            level->hoverCell == g_levels[cursorLevel + 1]->spawnerCell;
         if (onSpawner) {
             g_closeDeeperSinceTick = 0;
         } else if (g_closeDeeperSinceTick == 0) {
             g_closeDeeperSinceTick = now;
-        } else if (now - g_closeDeeperSinceTick >= kCloseDeeperGraceMs) {
+        } else if (now - g_closeDeeperSinceTick >=
+                   (ULONGLONG)g_settings.submenuCloseDelayMs) {
             CloseLevelsFrom(cursorLevel + 1);
         }
     } else {
@@ -1926,17 +2113,19 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
                               UINT uMsg,
                               WPARAM wParam,
                               LPARAM lParam) {
-    // The open-delay timer fires before any level exists, so it is handled before
-    // the level lookup.
+    // The open-delay timer fires before any level exists, so it is handled
+    // before the level lookup.
     if (uMsg == WM_TIMER && wParam == kOpenTimerId) {
         KillTimer(hWnd, kOpenTimerId);
         std::wstring path = std::move(g_pendingRootPath);
+        std::wstring title = std::move(g_pendingRootTitle);
         g_pendingRootPath.clear();
+        g_pendingRootTitle.clear();
         POINT cursor{};
         // The cursor may have moved on during the delay.
         if (!path.empty() && GetCursorPos(&cursor) &&
             PtInRect(&g_pendingRootRect, cursor)) {
-            OpenRootLevel(path, g_pendingRootRect);
+            OpenRootLevel(std::move(path), g_pendingRootRect, std::move(title));
         }
         return 0;
     }
@@ -1959,14 +2148,12 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
                 level->hoverCell = cell;
                 PaintLevel(level);
 
-                bool expandable = cell >= 0 &&
-                                  cell < (int)level->items.size() &&
-                                  level->items[cell].isFolder &&
-                                  CanExpand(level->depth);
-                int alreadyOpen =
-                    (int)g_levels.size() > level->depth + 1
-                        ? g_levels[level->depth + 1]->spawnerCell
-                        : -1;
+                bool expandable =
+                    cell >= 0 && cell < (int)level->items.size() &&
+                    level->items[cell].isFolder && CanExpand(level->depth);
+                int alreadyOpen = (int)g_levels.size() > level->depth + 1
+                                      ? g_levels[level->depth + 1]->spawnerCell
+                                      : -1;
                 if (expandable && cell != alreadyOpen) {
                     g_pendingSubDepth = level->depth;
                     g_pendingSubCell = cell;
@@ -2063,15 +2250,15 @@ HWND EnsureLevelWindow(int depth) {
     if (!g_menuOwnerWnd) {
         // A separate, activatable owner window: shell context menus misbehave
         // when owned by a WS_EX_NOACTIVATE window.
-        g_menuOwnerWnd =
-            CreateWindowExW(WS_EX_TOOLWINDOW, kMenuOwnerClassName, L"", WS_POPUP,
-                            0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
+        g_menuOwnerWnd = CreateWindowExW(WS_EX_TOOLWINDOW, kMenuOwnerClassName,
+                                         L"", WS_POPUP, 0, 0, 0, 0, nullptr,
+                                         nullptr, instance, nullptr);
     }
 
     HWND hWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-        kPopupClassName, L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, instance,
-        nullptr);
+        kPopupClassName, L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr,
+        instance, nullptr);
     if (!hWnd) {
         Wh_Log(L"Failed to create the hover grid window (error %u)",
                GetLastError());
@@ -2098,8 +2285,9 @@ void UpdatePopupDpi() {
     }
 }
 
-// Seats a level at its depth and retires anything deeper. The window at this depth
-// stays mapped, so reopening the same depth resizes in place instead of blinking.
+// Seats a level at its depth and retires anything deeper. The window at this
+// depth stays mapped, so reopening the same depth resizes in place instead of
+// blinking.
 PopupLevel* InstallLevel(std::unique_ptr<PopupLevel> level) {
     int depth = level->depth;
     CloseLevelsFrom(depth + 1);
@@ -2122,7 +2310,7 @@ void PresentLevel(PopupLevel* level, const SIZE& size) {
     PaintLevel(level);
 }
 
-void OpenRootLevel(std::wstring path, RECT anchorRect) {
+void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     if (g_unloading || path.empty()) {
         return;
     }
@@ -2138,9 +2326,11 @@ void OpenRootLevel(std::wstring path, RECT anchorRect) {
     level->hwnd = hWnd;
     level->depth = 0;
     level->path = path;
+    level->title = std::move(title);
     level->anchorRect = anchorRect;
 
-    auto data = GetFolderDataAndRefresh(path, ScaleForPopup(g_settings.iconSize));
+    auto data =
+        GetFolderDataAndRefresh(path, ScaleForPopup(g_settings.iconSize));
     level->loading = true;
     if (data && data->ready) {
         level->items = data->items;
@@ -2161,10 +2351,9 @@ void OpenRootLevel(std::wstring path, RECT anchorRect) {
     int gap = ScaleForPopup(g_settings.gapAbove);
     int centerX = (anchorRect.left + anchorRect.right) / 2;
     int left = centerX - size.cx / 2;
-    left = std::clamp<int>(left, screen.left + ScaleForPopup(4),
-                           std::max<int>(screen.left,
-                                         screen.right - size.cx -
-                                             ScaleForPopup(4)));
+    left = std::clamp<int>(
+        left, screen.left + ScaleForPopup(4),
+        std::max<int>(screen.left, screen.right - size.cx - ScaleForPopup(4)));
 
     if (anchorRect.top - gap - size.cy >= screen.top) {
         level->rect.top = anchorRect.top - gap - size.cy;
@@ -2185,8 +2374,7 @@ void OpenRootLevel(std::wstring path, RECT anchorRect) {
 // Opens the grid for the subfolder in `cell` of the level at `parentDepth`,
 // cascading to the side of the parent like a normal submenu.
 void OpenSubLevel(int parentDepth, int cell) {
-    if (g_unloading || parentDepth < 0 ||
-        parentDepth >= (int)g_levels.size()) {
+    if (g_unloading || parentDepth < 0 || parentDepth >= (int)g_levels.size()) {
         return;
     }
 
@@ -2212,8 +2400,8 @@ void OpenSubLevel(int parentDepth, int cell) {
     OffsetRect(&cellScreenRect, parent->rect.left, parent->rect.top);
     level->anchorRect = cellScreenRect;
 
-    auto data =
-        GetFolderDataAndRefresh(level->path, ScaleForPopup(g_settings.iconSize));
+    auto data = GetFolderDataAndRefresh(level->path,
+                                        ScaleForPopup(g_settings.iconSize));
     level->loading = true;
     if (data && data->ready) {
         level->items = data->items;
@@ -2232,9 +2420,9 @@ void OpenSubLevel(int parentDepth, int cell) {
     int left = parent->rect.right + seam;
     if (left + size.cx > screen.right) {
         int flipped = parent->rect.left - seam - size.cx;
-        left = flipped >= screen.left ? flipped
-                                      : std::max<int>(screen.left,
-                                                      screen.right - size.cx);
+        left = flipped >= screen.left
+                   ? flipped
+                   : std::max<int>(screen.left, screen.right - size.cx);
     }
 
     // Top-aligned with the cell that opened it, kept fully on screen.
@@ -2260,20 +2448,27 @@ struct ButtonState {
     Button button{nullptr};
     winrt::event_token clickToken{};
     winrt::event_token enterToken{};
+    winrt::event_token exitToken{};
     int folderIndex = -1;
+    HWND taskbarWnd = nullptr;
 };
 
-[[clang::no_destroy]] Grid g_hostGrid{nullptr};
-[[clang::no_destroy]] Grid g_trackedRootGrid{nullptr};
-[[clang::no_destroy]] FrameworkElement g_anchor{nullptr};
-[[clang::no_destroy]] std::vector<ButtonState> g_buttonStates;
+// One injected host per taskbar window (primary + each secondary monitor).
+struct TaskbarHost {
+    HWND hwnd = nullptr;
+    Grid hostGrid{nullptr};
+    Grid trackedRootGrid{nullptr};
+    FrameworkElement anchor{nullptr};
+    std::vector<ButtonState> buttonStates;
+    Thickness anchorOriginalMargin{};
+    bool hasAnchorOriginalMargin = false;
+    winrt::event_token layoutUpdatedToken{};
+    double buttonWidth = kFallbackButtonSize;
+    double buttonHeight = kFallbackButtonSize;
+    ULONGLONG lastAnchorResolveTick = 0;
+};
 
-Thickness g_anchorOriginalMargin{};
-bool g_hasAnchorOriginalMargin = false;
-winrt::event_token g_layoutUpdatedToken{};
-double g_buttonWidth = kFallbackButtonSize;
-double g_buttonHeight = kFallbackButtonSize;
-ULONGLONG g_lastAnchorResolveTick = 0;
+[[clang::no_destroy]] std::vector<std::unique_ptr<TaskbarHost>> g_taskbarHosts;
 
 std::atomic<bool> g_injectionLive{false};
 // Retry workers are detached and validated against this counter rather than
@@ -2308,7 +2503,7 @@ ImageSource HIconToImageSource(HICON hIcon, int size) {
     }
 
     winrt::Windows::UI::Xaml::Media::Imaging::WriteableBitmap writeable(size,
-                                                                       size);
+                                                                        size);
     try {
         auto buffer = writeable.PixelBuffer();
         IBufferByteAccess* byteAccess = nullptr;
@@ -2350,17 +2545,20 @@ void SetButtonBrush(Button const& button, PCWSTR key, Brush const& brush) {
 }
 
 Brush MakeBrush(BYTE a, BYTE r, BYTE g, BYTE b) {
-    return SolidColorBrush(winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b));
+    return SolidColorBrush(
+        winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b));
 }
 
 void ApplyNativeButtonStyle(Button const& button) {
     bool dark = IsDarkTheme();
 
     SetButtonBrush(button, L"ButtonBackground", MakeBrush(0, 0, 0, 0));
-    SetButtonBrush(button, L"ButtonBackgroundPointerOver",
-                   dark ? MakeBrush(28, 255, 255, 255) : MakeBrush(18, 0, 0, 0));
-    SetButtonBrush(button, L"ButtonBackgroundPressed",
-                   dark ? MakeBrush(46, 255, 255, 255) : MakeBrush(32, 0, 0, 0));
+    SetButtonBrush(
+        button, L"ButtonBackgroundPointerOver",
+        dark ? MakeBrush(28, 255, 255, 255) : MakeBrush(18, 0, 0, 0));
+    SetButtonBrush(
+        button, L"ButtonBackgroundPressed",
+        dark ? MakeBrush(46, 255, 255, 255) : MakeBrush(32, 0, 0, 0));
     SetButtonBrush(button, L"ButtonBackgroundDisabled", MakeBrush(0, 0, 0, 0));
 
     for (PCWSTR key : {L"ButtonBorderBrush", L"ButtonBorderBrushPointerOver",
@@ -2455,8 +2653,8 @@ UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
         }
     }
 
-    // No icon configured, or the configured one failed: fall back to the folder's
-    // own shell icon.
+    // No icon configured, or the configured one failed: fall back to the
+    // folder's own shell icon.
     if (!loaded) {
         std::wstring resolved = ResolveFolderPath(entry.path);
         if (!resolved.empty()) {
@@ -2523,7 +2721,9 @@ FrameworkElement FindTaskbarRepeater(Grid const& rootGrid) {
 
 // Matching a live taskbar button means the folder buttons stay the right size
 // across taskbar-size changes, DPI changes, and the small-icons setting.
-void UpdateButtonSizeFromTaskbar(FrameworkElement const& repeater) {
+void UpdateButtonSizeFromTaskbar(FrameworkElement const& repeater,
+                                 double* outWidth,
+                                 double* outHeight) {
     std::vector<FrameworkElement> children;
     EnumRepeaterChildren(repeater, &children);
 
@@ -2561,8 +2761,12 @@ void UpdateButtonSizeFromTaskbar(FrameworkElement const& repeater) {
         return;
     }
 
-    g_buttonWidth = width;
-    g_buttonHeight = height;
+    if (outWidth) {
+        *outWidth = width;
+    }
+    if (outHeight) {
+        *outHeight = height;
+    }
 }
 
 FrameworkElement ResolveAnchor(FrameworkElement const& repeater,
@@ -2575,8 +2779,7 @@ FrameworkElement ResolveAnchor(FrameworkElement const& repeater,
 
     bool before = g_settings.position != L"afterApps";
 
-    auto findByClass = [&](PCWSTR className,
-                           int skip) -> FrameworkElement {
+    auto findByClass = [&](PCWSTR className, int skip) -> FrameworkElement {
         int seen = 0;
         for (const auto& child : children) {
             if (winrt::get_class_name(child) != className) {
@@ -2640,44 +2843,68 @@ FrameworkElement ResolveAnchor(FrameworkElement const& repeater,
     return nullptr;
 }
 
-double DesiredHostWidth() {
-    if (g_buttonStates.empty()) {
+double DesiredHostWidth(TaskbarHost* host) {
+    if (!host || host->buttonStates.empty()) {
         return 0.0;
     }
-    return g_buttonWidth * (double)g_buttonStates.size();
+    return host->buttonWidth * (double)host->buttonStates.size();
 }
 
-void RestoreAnchorMargin() {
-    if (g_anchor && g_hasAnchorOriginalMargin) {
-        try {
-            g_anchor.Margin(g_anchorOriginalMargin);
-        } catch (...) {
-        }
-    }
-    g_anchor = nullptr;
-    g_hasAnchorOriginalMargin = false;
-}
-
-void AdoptAnchor(FrameworkElement const& anchor) {
-    if (g_anchor == anchor) {
+void RestoreAnchorMargin(TaskbarHost* host) {
+    if (!host) {
         return;
     }
-    RestoreAnchorMargin();
-    g_anchor = anchor;
-    if (anchor) {
+    if (host->anchor && host->hasAnchorOriginalMargin) {
         try {
-            g_anchorOriginalMargin = anchor.Margin();
-            g_hasAnchorOriginalMargin = true;
+            host->anchor.Margin(host->anchorOriginalMargin);
         } catch (...) {
-            g_hasAnchorOriginalMargin = false;
         }
     }
+    host->anchor = nullptr;
+    host->hasAnchorOriginalMargin = false;
+}
+
+void AdoptAnchor(TaskbarHost* host, FrameworkElement const& anchor) {
+    if (!host) {
+        return;
+    }
+    if (host->anchor == anchor) {
+        return;
+    }
+    RestoreAnchorMargin(host);
+    host->anchor = anchor;
+    if (anchor) {
+        try {
+            host->anchorOriginalMargin = anchor.Margin();
+            host->hasAnchorOriginalMargin = true;
+        } catch (...) {
+            host->hasAnchorOriginalMargin = false;
+        }
+    }
+}
+
+TaskbarHost* FindTaskbarHost(HWND hwnd) {
+    for (auto& host : g_taskbarHosts) {
+        if (host && host->hwnd == hwnd) {
+            return host.get();
+        }
+    }
+    return nullptr;
+}
+
+TaskbarHost* FindTaskbarHostByRootGrid(Grid const& rootGrid) {
+    for (auto& host : g_taskbarHosts) {
+        if (host && host->trackedRootGrid == rootGrid) {
+            return host.get();
+        }
+    }
+    return nullptr;
 }
 
 // The vertical extent comes from the taskbar window rather than the button, so
-// the corridor covers the whole taskbar height under the button. Horizontally the
-// XAML transform is trusted only if it lands inside the taskbar; otherwise the
-// cursor position, which is definitely over the button, is used instead.
+// the corridor covers the whole taskbar height under the button. Horizontally
+// the XAML transform is trusted only if it lands inside the taskbar; otherwise
+// the cursor position, which is definitely over the button, is used instead.
 RECT ComputeHoverAnchorRect(Button const& button) {
     RECT taskbarRect{};
     if (!g_taskbarWnd || !GetWindowRect(g_taskbarWnd, &taskbarRect)) {
@@ -2693,7 +2920,7 @@ RECT ComputeHoverAnchorRect(Button const& button) {
         if (!GetCursorPos(&cursor)) {
             return RECT{};
         }
-        LONG half = width > 0 ? width / 2 : (LONG)std::lround(g_buttonWidth / 2);
+        LONG half = width > 0 ? width / 2 : 22;
         if (half <= 0) {
             half = 22;
         }
@@ -2715,15 +2942,29 @@ std::wstring FolderPathForButton(int folderIndex) {
     return path.empty() ? g_settings.folders[folderIndex].path : path;
 }
 
-void OnPointerEnteredButton(int folderIndex, Button const& button) {
+std::wstring FolderNameForButton(int folderIndex) {
+    if (folderIndex < 0 || folderIndex >= (int)g_settings.folders.size()) {
+        return L"";
+    }
+    return g_settings.folders[folderIndex].name;
+}
+
+void OnPointerEnteredButton(int folderIndex,
+                             Button const& button,
+                             HWND taskbarWnd) {
     if (g_unloading) {
         return;
+    }
+
+    if (taskbarWnd) {
+        g_taskbarWnd = taskbarWnd;
     }
 
     std::wstring path = FolderPathForButton(folderIndex);
     if (path.empty()) {
         return;
     }
+    std::wstring title = FolderNameForButton(folderIndex);
 
     RECT buttonRect = ComputeHoverAnchorRect(button);
     if (buttonRect.right <= buttonRect.left) {
@@ -2731,7 +2972,7 @@ void OnPointerEnteredButton(int folderIndex, Button const& button) {
     }
 
     if (g_settings.hoverDelayMs <= 0) {
-        OpenRootLevel(path, buttonRect);
+        OpenRootLevel(std::move(path), buttonRect, std::move(title));
         return;
     }
 
@@ -2739,9 +2980,23 @@ void OnPointerEnteredButton(int folderIndex, Button const& button) {
     if (!hWnd) {
         return;
     }
-    g_pendingRootPath = path;
+    g_pendingRootPath = std::move(path);
+    g_pendingRootTitle = std::move(title);
     g_pendingRootRect = buttonRect;
     SetTimer(hWnd, kOpenTimerId, (UINT)g_settings.hoverDelayMs, nullptr);
+}
+
+// Leaving the button cancels a pending delayed open. Closing an already-open
+// cascade is left to OnTick so moving up into the grid does not dismiss it.
+void OnPointerExitedButton() {
+    if (g_pendingRootPath.empty()) {
+        return;
+    }
+    g_pendingRootPath.clear();
+    g_pendingRootTitle.clear();
+    if (!g_levelWindows.empty() && g_levelWindows[0]) {
+        KillTimer(g_levelWindows[0], kOpenTimerId);
+    }
 }
 
 void OnButtonClicked(int folderIndex) {
@@ -2756,66 +3011,75 @@ void OnButtonClicked(int folderIndex) {
     LaunchPath(path);
 }
 
-Grid BuildHostGrid() {
-    Grid host;
-    host.Name(kHostGridName);
-    host.HorizontalAlignment(HorizontalAlignment::Left);
-    host.VerticalAlignment(VerticalAlignment::Center);
-    host.Height(g_buttonHeight);
+Grid BuildHostGrid(TaskbarHost* host) {
+    Grid hostGrid;
+    hostGrid.Name(kHostGridName);
+    hostGrid.HorizontalAlignment(HorizontalAlignment::Left);
+    hostGrid.VerticalAlignment(VerticalAlignment::Center);
+    hostGrid.Height(host->buttonHeight);
 
-    g_buttonStates.clear();
+    host->buttonStates.clear();
 
     for (size_t i = 0; i < g_settings.folders.size(); i++) {
         const auto& entry = g_settings.folders[i];
 
         ColumnDefinition column;
         column.Width({1.0, GridUnitType::Auto});
-        host.ColumnDefinitions().Append(column);
+        hostGrid.ColumnDefinitions().Append(column);
 
         Button button;
         button.Name(L"FolderHoverTrayButton_" + winrt::to_hstring((int)i));
-        button.Width(g_buttonWidth);
-        button.Height(g_buttonHeight);
+        button.Width(host->buttonWidth);
+        button.Height(host->buttonHeight);
         ApplyNativeButtonStyle(button);
-        button.Content(MakeButtonContent(entry, g_buttonHeight));
+        button.Content(MakeButtonContent(entry, host->buttonHeight));
 
-        std::wstring tooltip = entry.name;
-        if (!entry.path.empty() && entry.path != entry.name) {
-            tooltip += L"\n" + entry.path;
-        }
-        ToolTipService::SetToolTip(button, winrt::box_value(
-                                               winrt::hstring(tooltip)));
+        // No taskbar-button tooltip; the folder name is shown in the hover
+        // grid.
+        ToolTipService::SetToolTip(button, nullptr);
 
         Grid::SetColumn(button, (int)i);
-        host.Children().Append(button);
+        hostGrid.Children().Append(button);
 
         ButtonState state;
         state.button = button;
         state.folderIndex = (int)i;
+        state.taskbarWnd = host->hwnd;
 
         int folderIndex = (int)i;
+        HWND taskbarWnd = host->hwnd;
         state.clickToken = button.Click(
             [folderIndex](winrt::Windows::Foundation::IInspectable const&,
                           RoutedEventArgs const&) {
                 OnButtonClicked(folderIndex);
             });
         state.enterToken = button.PointerEntered(
-            [folderIndex](winrt::Windows::Foundation::IInspectable const& sender,
-                          winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) {
+            [folderIndex, taskbarWnd](
+                winrt::Windows::Foundation::IInspectable const& sender,
+                winrt::Windows::UI::Xaml::Input::
+                    PointerRoutedEventArgs const&) {
                 if (auto button = sender.try_as<Button>()) {
-                    OnPointerEnteredButton(folderIndex, button);
+                    OnPointerEnteredButton(folderIndex, button, taskbarWnd);
                 }
             });
+        state.exitToken = button.PointerExited(
+            [](winrt::Windows::Foundation::IInspectable const&,
+               winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) {
+                OnPointerExitedButton();
+            });
 
-        g_buttonStates.push_back(std::move(state));
+        host->buttonStates.push_back(std::move(state));
     }
 
-    host.Width(DesiredHostWidth());
-    return host;
+    hostGrid.Width(DesiredHostWidth(host));
+    return hostGrid;
 }
 
-void ClearButtonState() {
-    for (auto& state : g_buttonStates) {
+void ClearButtonState(TaskbarHost* host) {
+    if (!host) {
+        return;
+    }
+    for (auto& state : host->buttonStates) {
         if (!state.button) {
             continue;
         }
@@ -2826,29 +3090,36 @@ void ClearButtonState() {
             if (state.enterToken.value) {
                 state.button.PointerEntered(state.enterToken);
             }
+            if (state.exitToken.value) {
+                state.button.PointerExited(state.exitToken);
+            }
             ToolTipService::SetToolTip(state.button, nullptr);
             state.button.Content(nullptr);
         } catch (...) {
         }
     }
-    g_buttonStates.clear();
+    host->buttonStates.clear();
 }
 
-void RemoveHostGrid() {
-    if (g_trackedRootGrid && g_layoutUpdatedToken.value) {
+void RemoveHostGrid(TaskbarHost* host) {
+    if (!host) {
+        return;
+    }
+
+    if (host->trackedRootGrid && host->layoutUpdatedToken.value) {
         try {
-            g_trackedRootGrid.LayoutUpdated(g_layoutUpdatedToken);
+            host->trackedRootGrid.LayoutUpdated(host->layoutUpdatedToken);
         } catch (...) {
         }
     }
-    g_layoutUpdatedToken = {};
+    host->layoutUpdatedToken = {};
 
-    RestoreAnchorMargin();
-    ClearButtonState();
+    RestoreAnchorMargin(host);
+    ClearButtonState(host);
 
-    if (g_trackedRootGrid) {
+    if (host->trackedRootGrid) {
         try {
-            auto children = g_trackedRootGrid.Children();
+            auto children = host->trackedRootGrid.Children();
             for (int i = (int)children.Size() - 1; i >= 0; i--) {
                 auto child = children.GetAt(i).try_as<FrameworkElement>();
                 if (child && child.Name() == kHostGridName) {
@@ -2859,107 +3130,110 @@ void RemoveHostGrid() {
         }
     }
 
-    g_hostGrid = nullptr;
-    g_trackedRootGrid = nullptr;
+    host->hostGrid = nullptr;
+    host->trackedRootGrid = nullptr;
+}
+
+void RemoveAllHostGrids() {
+    for (auto& host : g_taskbarHosts) {
+        RemoveHostGrid(host.get());
+    }
+    g_taskbarHosts.clear();
     g_injectionLive = false;
 }
 
 // Runs on every layout pass, so every branch is guarded by a tolerance check to
 // avoid feeding layout back into itself.
-void OnRootGridLayoutUpdated() {
-    if (g_unloading || !g_hostGrid || !g_trackedRootGrid) {
+void OnRootGridLayoutUpdated(TaskbarHost* host) {
+    if (g_unloading || !host || !host->hostGrid || !host->trackedRootGrid) {
         return;
     }
 
     try {
-        auto repeater = FindTaskbarRepeater(g_trackedRootGrid);
+        auto repeater = FindTaskbarRepeater(host->trackedRootGrid);
         if (!repeater) {
             return;
         }
 
-        double previousWidth = g_buttonWidth;
-        double previousHeight = g_buttonHeight;
-        UpdateButtonSizeFromTaskbar(repeater);
+        double previousWidth = host->buttonWidth;
+        double previousHeight = host->buttonHeight;
+        UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
+                                    &host->buttonHeight);
 
-        if (std::abs(previousWidth - g_buttonWidth) > 0.5 ||
-            std::abs(previousHeight - g_buttonHeight) > 0.5) {
-            for (auto& state : g_buttonStates) {
+        if (std::abs(previousWidth - host->buttonWidth) > 0.5 ||
+            std::abs(previousHeight - host->buttonHeight) > 0.5) {
+            for (auto& state : host->buttonStates) {
                 if (state.button) {
-                    state.button.Width(g_buttonWidth);
-                    state.button.Height(g_buttonHeight);
+                    state.button.Width(host->buttonWidth);
+                    state.button.Height(host->buttonHeight);
                 }
             }
-            g_hostGrid.Height(g_buttonHeight);
-            g_hostGrid.Width(DesiredHostWidth());
+            host->hostGrid.Height(host->buttonHeight);
+            host->hostGrid.Width(DesiredHostWidth(host));
         }
 
         ULONGLONG now = GetTickCount64();
-        bool anchorLooksDead = !g_anchor || g_anchor.ActualWidth() <= 1.0;
-        if (anchorLooksDead || now - g_lastAnchorResolveTick > 250) {
-            g_lastAnchorResolveTick = now;
-            if (auto resolved = ResolveAnchor(repeater, g_trackedRootGrid)) {
-                AdoptAnchor(resolved);
+        bool anchorLooksDead =
+            !host->anchor || host->anchor.ActualWidth() <= 1.0;
+        if (anchorLooksDead || now - host->lastAnchorResolveTick > 250) {
+            host->lastAnchorResolveTick = now;
+            if (auto resolved =
+                    ResolveAnchor(repeater, host->trackedRootGrid)) {
+                AdoptAnchor(host, resolved);
             }
         }
 
-        if (!g_anchor || !g_hasAnchorOriginalMargin) {
+        if (!host->anchor || !host->hasAnchorOriginalMargin) {
             return;
         }
 
         bool before = g_settings.position != L"afterApps";
-        double desiredGap = DesiredHostWidth() + g_settings.gapBefore +
-                            g_settings.gapAfter;
+        double desiredGap =
+            DesiredHostWidth(host) + g_settings.gapBefore + g_settings.gapAfter;
 
-        auto currentMargin = g_anchor.Margin();
-        auto target = g_anchorOriginalMargin;
+        auto currentMargin = host->anchor.Margin();
+        auto target = host->anchorOriginalMargin;
         if (before) {
-            target.Left = g_anchorOriginalMargin.Left + desiredGap;
+            target.Left = host->anchorOriginalMargin.Left + desiredGap;
             if (std::abs(currentMargin.Left - target.Left) > 1.0) {
-                g_anchor.Margin(target);
+                host->anchor.Margin(target);
             }
         } else {
-            target.Right = g_anchorOriginalMargin.Right + desiredGap;
+            target.Right = host->anchorOriginalMargin.Right + desiredGap;
             if (std::abs(currentMargin.Right - target.Right) > 1.0) {
-                g_anchor.Margin(target);
+                host->anchor.Margin(target);
             }
         }
 
-        auto point =
-            g_anchor.TransformToVisual(g_trackedRootGrid).TransformPoint({0, 0});
+        auto point = host->anchor.TransformToVisual(host->trackedRootGrid)
+                         .TransformPoint({0, 0});
         double left;
         if (before) {
             left = point.X - desiredGap + g_settings.gapBefore;
         } else {
-            left = point.X + g_anchor.ActualWidth() + g_settings.gapBefore;
+            left = point.X + host->anchor.ActualWidth() + g_settings.gapBefore;
         }
 
-        auto hostMargin = g_hostGrid.Margin();
+        auto hostMargin = host->hostGrid.Margin();
         if (std::abs(hostMargin.Left - left) > 1.0) {
-            g_hostGrid.Margin({left, 0, 0, 0});
+            host->hostGrid.Margin({left, 0, 0, 0});
         }
     } catch (...) {
         // The anchor was recycled out from under us; drop it and re-resolve on
         // the next pass.
-        g_anchor = nullptr;
-        g_hasAnchorOriginalMargin = false;
+        host->anchor = nullptr;
+        host->hasAnchorOriginalMargin = false;
     }
 }
 
-bool InjectHostGrid() {
-    if (g_settings.folders.empty()) {
-        LOGV(L"No folders configured, nothing to inject");
-        return true;
-    }
-
-    HWND taskbarWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
-    if (!taskbarWnd) {
+bool InjectHostGridForTaskbar(HWND taskbarWnd) {
+    if (!taskbarWnd || g_settings.folders.empty()) {
         return false;
     }
-    g_taskbarWnd = taskbarWnd;
 
     auto xamlRoot = GetTaskbarXamlRoot(taskbarWnd);
     if (!xamlRoot) {
-        LOGV(L"No taskbar XamlRoot yet");
+        LOGV(L"No taskbar XamlRoot yet for %p", taskbarWnd);
         return false;
     }
 
@@ -2970,50 +3244,111 @@ bool InjectHostGrid() {
 
     auto rootGrid = FindTaskbarRootGrid(root);
     if (!rootGrid) {
-        LOGV(L"Taskbar RootGrid not found yet");
+        LOGV(L"Taskbar RootGrid not found yet for %p", taskbarWnd);
         return false;
     }
 
     auto repeater = FindTaskbarRepeater(rootGrid);
     if (!repeater) {
-        LOGV(L"TaskbarFrameRepeater not found yet");
+        LOGV(L"TaskbarFrameRepeater not found yet for %p", taskbarWnd);
         return false;
     }
 
-    RemoveHostGrid();
+    // Replace an existing host for this HWND if we are re-injecting.
+    if (auto* existing = FindTaskbarHost(taskbarWnd)) {
+        RemoveHostGrid(existing);
+        g_taskbarHosts.erase(
+            std::remove_if(g_taskbarHosts.begin(), g_taskbarHosts.end(),
+                           [taskbarWnd](const std::unique_ptr<TaskbarHost>& h) {
+                               return h && h->hwnd == taskbarWnd;
+                           }),
+            g_taskbarHosts.end());
+    }
 
-    UpdateButtonSizeFromTaskbar(repeater);
+    auto host = std::make_unique<TaskbarHost>();
+    host->hwnd = taskbarWnd;
+    UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
+                                &host->buttonHeight);
 
-    g_trackedRootGrid = rootGrid;
-    g_hostGrid = BuildHostGrid();
+    host->trackedRootGrid = rootGrid;
+    host->hostGrid = BuildHostGrid(host.get());
 
-    Grid::SetColumn(g_hostGrid, 0);
-    Canvas::SetZIndex(g_hostGrid, 1000);
-    g_hostGrid.Margin({0, 0, 0, 0});
-    rootGrid.Children().Append(g_hostGrid);
+    Grid::SetColumn(host->hostGrid, 0);
+    Canvas::SetZIndex(host->hostGrid, 1000);
+    host->hostGrid.Margin({0, 0, 0, 0});
+    rootGrid.Children().Append(host->hostGrid);
 
     if (auto anchor = ResolveAnchor(repeater, rootGrid)) {
-        AdoptAnchor(anchor);
+        AdoptAnchor(host.get(), anchor);
     }
-    g_lastAnchorResolveTick = GetTickCount64();
+    host->lastAnchorResolveTick = GetTickCount64();
 
-    g_layoutUpdatedToken = rootGrid.LayoutUpdated(
-        [](winrt::Windows::Foundation::IInspectable const&,
-           winrt::Windows::Foundation::IInspectable const&) {
-            OnRootGridLayoutUpdated();
+    TaskbarHost* raw = host.get();
+    host->layoutUpdatedToken = rootGrid.LayoutUpdated(
+        [raw](winrt::Windows::Foundation::IInspectable const&,
+              winrt::Windows::Foundation::IInspectable const&) {
+            OnRootGridLayoutUpdated(raw);
         });
 
-    // Warm the caches so the very first hover has something to draw.
-    UpdatePopupDpi();
-    int iconPixelSize = ScaleForPopup(g_settings.iconSize);
-    for (size_t i = 0; i < g_settings.folders.size(); i++) {
-        RequestScan(FolderPathForButton((int)i), iconPixelSize);
+    Wh_Log(L"Injected %d folder button(s) on taskbar %p, size %.1fx%.1f",
+           (int)host->buttonStates.size(), taskbarWnd, host->buttonWidth,
+           host->buttonHeight);
+
+    g_taskbarHosts.push_back(std::move(host));
+    return true;
+}
+
+bool InjectHostGridsOnTaskbarThread() {
+    if (g_settings.folders.empty()) {
+        LOGV(L"No folders configured, nothing to inject");
+        RemoveAllHostGrids();
+        return true;
     }
 
-    g_injectionLive = true;
-    Wh_Log(L"Injected %d folder button(s), button size %.1fx%.1f",
-           (int)g_buttonStates.size(), g_buttonWidth, g_buttonHeight);
-    return true;
+    RemoveAllHostGrids();
+
+    struct EnumState {
+        int found = 0;
+        int injected = 0;
+    } state;
+
+    // Primary and secondary tray windows share the explorer taskbar UI thread
+    // on Windows 11, matching other Windhawk taskbar mods.
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* state = reinterpret_cast<EnumState*>(lParam);
+            WCHAR className[32];
+            if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+                return TRUE;
+            }
+            if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+                _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+                return TRUE;
+            }
+            state->found++;
+            if (InjectHostGridForTaskbar(hWnd)) {
+                state->injected++;
+            } else {
+                Wh_Log(L"Inject failed for %s %p", className, hWnd);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&state));
+
+    if (!g_taskbarHosts.empty()) {
+        g_taskbarWnd = g_taskbarHosts[0]->hwnd;
+        UpdatePopupDpi();
+        int iconPixelSize = ScaleForPopup(g_settings.iconSize);
+        for (size_t i = 0; i < g_settings.folders.size(); i++) {
+            RequestScan(FolderPathForButton((int)i), iconPixelSize);
+        }
+    }
+
+    g_injectionLive = state.found > 0 && state.injected == state.found;
+    Wh_Log(L"Taskbar inject: %d/%d windows, %d hosts", state.injected,
+           state.found, (int)g_taskbarHosts.size());
+    return g_injectionLive;
 }
 
 void ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
@@ -3021,18 +3356,21 @@ void ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
     if (!taskbarWnd) {
         return;
     }
-    g_taskbarWnd = taskbarWnd;
+    if (!g_taskbarWnd) {
+        g_taskbarWnd = taskbarWnd;
+    }
     RunFromWindowThread(taskbarWnd, proc, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Injection retries
 //
-// The taskbar is rebuilt on theme changes, Explorer restarts and DPI changes, so
-// injection is retried with a backoff until it sticks.
+// The taskbar is rebuilt on theme changes, Explorer restarts and DPI changes,
+// so injection is retried with a backoff until it sticks.
 
 void RetryLoop(uint32_t generation) {
-    static const DWORD delays[] = {0, 500, 1000, 2000, 4000, 8000, 15000, 30000};
+    static const DWORD delays[] = {0,    500,  1000,  2000,
+                                   4000, 8000, 15000, 30000};
 
     auto superseded = [generation] {
         return g_unloading || g_retryGeneration.load() != generation;
@@ -3049,7 +3387,7 @@ void RetryLoop(uint32_t generation) {
             return;
         }
 
-        ApplyOnWindowThread([](void*) { InjectHostGrid(); });
+        ApplyOnWindowThread([](void*) { InjectHostGridsOnTaskbarThread(); });
 
         if (g_injectionLive) {
             return;
@@ -3114,6 +3452,14 @@ bool HookTaskbarDllSymbols() {
             &CTaskBand_GetTaskbarHost_Original,
         },
         {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+        },
+        {
             {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
             &TaskbarHost_FrameHeight_Original,
         },
@@ -3149,7 +3495,8 @@ BOOL Wh_ModInit() {
     }
 
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"Failed to hook taskbar.dll, the taskbar XamlRoot is unreachable");
+        Wh_Log(
+            L"Failed to hook taskbar.dll, the taskbar XamlRoot is unreachable");
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
         return FALSE;
@@ -3169,12 +3516,13 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
 
     RetireRetryWorkers(2000);
-    // The scan thread reads g_settings, so it has to be parked before reloading.
+    // The scan thread reads g_settings, so it has to be parked before
+    // reloading.
     StopScanThread();
 
     ApplyOnWindowThread([](void*) {
         CloseChain();
-        RemoveHostGrid();
+        RemoveAllHostGrids();
     });
 
     LoadSettings();
@@ -3193,7 +3541,7 @@ void Wh_ModUninit() {
 
     ApplyOnWindowThread([](void*) {
         CloseChain();
-        RemoveHostGrid();
+        RemoveAllHostGrids();
 
         for (HWND hWnd : g_levelWindows) {
             if (hWnd) {
@@ -3214,7 +3562,8 @@ void Wh_ModUninit() {
         g_folderCache.clear();
     }
 
-    // The window procedures live in this DLL, so the classes must not outlive it.
+    // The window procedures live in this DLL, so the classes must not outlive
+    // it.
     HINSTANCE instance = GetModuleHandleW(nullptr);
     UnregisterClassW(kPopupClassName, instance);
     UnregisterClassW(kMenuOwnerClassName, instance);
@@ -3224,6 +3573,3 @@ void Wh_ModUninit() {
         g_gdiplusToken = 0;
     }
 }
-
-
-
