@@ -39,6 +39,9 @@ A set of visual tweaks for File Explorer's dark theme:
   `previewPaneBgColor` so the frame and the text view always match. Text
   color adjusts automatically for contrast against whatever background
   color is set, so it stays readable even if you set a light background.
+  Its scrollbar is switched between the normal and `DarkMode_Explorer`
+  visual style based on that same light/dark check, since native scrollbars
+  aren't affected by `EM_SETBKGNDCOLOR`.
 
 The selection-highlight styling also applies inside Open/Save dialogs
 (`IFileDialog`) hosted in other applications, since those reuse Explorer's
@@ -168,19 +171,28 @@ constexpr wchar_t kOuterContainerClassName[] = L"Shell Preview Extension Host";
 constexpr wchar_t kRichEditClassName[] = L"RICHEDIT50W";
 constexpr wchar_t kPropLayoutDone[] = L"Wh_InitLayoutDone";
 
-// Background color is shared with the Preview Pane fix below via
-// previewPaneBgColor (see ApplySettings / UpdateBackgroundColor) so both
-// features always show the same color instead of two separate literals.
+// Shared with the Preview Pane fix via previewPaneBgColor (see ApplySettings /
+// UpdateBackgroundColor).
 std::atomic<COLORREF> g_targetBgColor{ RGB(0x19, 0x19, 0x19) };
 
-// [KEEP] Auto contrast for the Preview Pane text color — do not replace with
-// a fixed color literal. Picks light or dark text based on the background's
-// perceived luminance (standard broadcast-luma weights), so the text stays
-// readable no matter what previewPaneBgColor is set to in Settings. Also
-// documented in the readme above ("Preview Pane text view (dark)").
-COLORREF ContrastingTextColor(COLORREF bg) {
+// Single luminance check decides both text color and scrollbar theme.
+void ApplyRichEditTextColor(HWND hWnd) {
+    COLORREF bg = g_targetBgColor.load(std::memory_order_relaxed);
     int luminance = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
-    return luminance > 128 ? RGB(0x20, 0x20, 0x20) : RGB(0xD4, 0xD4, 0xD4);
+    bool isDark = luminance <= 128;
+
+    CHARFORMAT2W cf = {};
+    cf.cbSize = sizeof(cf);
+    cf.dwMask = CFM_COLOR;
+    cf.dwEffects = 0;
+    cf.crTextColor = isDark ? RGB(0xD4, 0xD4, 0xD4) : RGB(0x20, 0x20, 0x20);
+    SendMessageW(hWnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
+
+    // Scrollbar is non-client, so EM_SETBKGNDCOLOR doesn't reach it.
+    SetWindowTheme(hWnd, isDark ? L"DarkMode_Explorer" : nullptr, nullptr);
+    SendMessageW(hWnd, WM_THEMECHANGED, 0, 0);
+    SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
 HBRUSH g_containerBrush = nullptr;
@@ -366,15 +378,6 @@ bool TryApplyOuterContainerBrush(HWND hWnd) {
     return true;
 }
 
-void ApplyRichEditTextColor(HWND hWnd) {
-    CHARFORMAT2W cf = {};
-    cf.cbSize = sizeof(cf);
-    cf.dwMask = CFM_COLOR;
-    cf.dwEffects = 0;
-    cf.crTextColor = ContrastingTextColor(g_targetBgColor.load(std::memory_order_relaxed));
-    SendMessageW(hWnd, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
-}
-
 LRESULT CALLBACK RichEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_SETTEXT:
@@ -397,7 +400,8 @@ bool TrySetupIfRichEdit(HWND hWnd) {
     if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) || wcscmp(className, kRichEditClassName) != 0) return false;
     if (!IsOwnedByCurrentProcess(hWnd)) return false;
 
-    SendMessageW(hWnd, EM_SETBKGNDCOLOR, 0, (LPARAM)g_targetBgColor.load(std::memory_order_relaxed));
+    COLORREF bg = g_targetBgColor.load(std::memory_order_relaxed);
+    SendMessageW(hWnd, EM_SETBKGNDCOLOR, 0, (LPARAM)bg);
     ApplyRichEditTextColor(hWnd);
 
     if (g_unloading) return false;
@@ -526,8 +530,7 @@ void Uninit() {
 }
 
 // Called from the host mod's Wh_ModSettingsChanged whenever previewPaneBgColor
-// changes, so this module's RichEdit background stays in sync with the DUI70
-// Preview Pane fix instead of drifting apart.
+// changes, to keep this module's RichEdit background in sync.
 void UpdateBackgroundColor(COLORREF newColor) {
     if (g_unloading) return;
     if (g_targetBgColor.exchange(newColor, std::memory_order_relaxed) == newColor) return;
@@ -679,29 +682,6 @@ static COLORREF ParseHexColorRef(const wchar_t* name, COLORREF fallback) {
 static int GetIntOr(const wchar_t* name, int def) {
     int v = Wh_GetIntSetting(name);
     return (v != 0) ? v : def;
-}
-
-// ── Theme diagnostics (log only — does not gate any feature) ──────────────────
-//
-// Selection/progress colors and the Preview Pane fix are dark-theme defaults
-// and don't branch on the actual theme at runtime. This log exists only so
-// a "light theme + colors look off" report can be correlated — the fix is
-// the user setting colors manually in Settings, not a code path.
-
-static void LogCurrentTheme() {
-    DWORD value = 1; // if the read fails, assume light (safer label for an unknown state)
-    DWORD size = sizeof(value);
-    LONG res = RegGetValueW(HKEY_CURRENT_USER,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
-
-    if (res != ERROR_SUCCESS) {
-        Wh_Log(L"Theme: unknown (registry read failed, error=%ld)", res);
-        return;
-    }
-    Wh_Log(L"Theme: %s (mod defaults are tuned for dark; in light theme set "
-           L"selection/progress colors manually in Settings)",
-           value == 0 ? L"dark" : L"light");
 }
 
 // ── Resource lifecycle ────────────────────────────────────────────────────────
@@ -1374,6 +1354,14 @@ void __fastcall PaintBackgroundHook(
 
 // ── DUI70 Dynamic Installation ──────────────────────────────────────────────
 
+static std::atomic<bool> g_readyLogged{ false };
+static void LogReadyOnce() {
+    if (!g_readyLogged.exchange(true)) {
+        Wh_Log(L"Explorer Visual Tweaks Dark v1.0.0 ready — theme hooks installed, "
+               L"DirectUI atoms resolved, Preview Pane fix active.");
+    }
+}
+
 static bool TryInstallPreviewPaneFix() {
     if (pOrigPaintBackground) return true;
 
@@ -1417,6 +1405,8 @@ static VOID NTAPI DllNotificationCallback(
                 if (!g_hookInstalled.exchange(true)) {
                     if (!TryInstallPreviewPaneFix()) {
                         g_hookInstalled.store(false, std::memory_order_release);
+                    } else {
+                        LogReadyOnce();
                     }
                 }
             }
@@ -1691,19 +1681,11 @@ static void ApplySettings() {
     g_prog.progressFillEnd       = ParseHexColorRef(L"progressFillColorEnd",       RGB(0x00, 0x94, 0xFE));
     g_prog.progressFillFullStart = ParseHexColorRef(L"progressFillColorFullStart", RGB(0xE4, 0x30, 0x60));
     g_prog.progressFillFullEnd   = ParseHexColorRef(L"progressFillColorFullEnd",   RGB(0xED, 0x60, 0x50));
-
-    Wh_Log(L"Settings: cornerRadius=%d (m=%d), borderWidth=%d, "
-           L"pill=#%02X%02X%02X, detailsPaneBgMatch=%s, progressRadius=%d",
-           vr, m, bw, pR, pG, pB,
-           g_prog.detailsBgMatchEnabled ? L"on" : L"off",
-           g_prog.progressCornerRadius);
 }
 
 // ── Mod lifecycle ─────────────────────────────────────────────────────────────
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Init Explorer Visual Tweaks Dark v1.0.0 ===");
-
     // Cache whether we are running inside explorer.exe.
     // Used by IsShellHwnd (skip parent walk in explorer.exe).
     wchar_t exePath[MAX_PATH] = {};
@@ -1729,21 +1711,13 @@ BOOL Wh_ModInit() {
             g_hasDesktopAccess = false;
         }
     }
-    Wh_Log(L"Host process: %s (%s, desktop=%s)", exeName,
-           g_hostIsExplorer ? L"explorer.exe" : L"foreign",
-           g_hasDesktopAccess ? L"yes" : L"no (sandboxed)");
 
     // Nothing here can render without a desktop (selection/progress/pill all
     // need GDI; Preview Pane match is explorer.exe-only anyway). Sandboxed
     // child processes never own a visible themed dialog themselves — an
     // unsandboxed broker does — so skip hook installation entirely rather
     // than installing hooks that can only ever no-op.
-    if (!g_hasDesktopAccess) {
-        Wh_Log(L"No desktop access — nothing for this mod to do in this process, skipping init");
-        return TRUE;
-    }
-
-    LogCurrentTheme();
+    if (!g_hasDesktopAccess) return TRUE;
 
     // GDI resources are needed in any process that may render IFileDialog shell content.
     ApplySettings();
@@ -1802,6 +1776,8 @@ BOOL Wh_ModInit() {
     if (g_hostIsExplorer) {
         if (!TryInstallPreviewPaneFix()) {
             RegisterDllNotification();
+        } else {
+            LogReadyOnce();
         }
     }
 
@@ -1817,8 +1793,6 @@ BOOL Wh_ModInit() {
         EnumWindows(SeedProc, 0);
     }
 
-    Wh_Log(L"=== Init complete ===");
-
     // Set only once Wh_ModInit is about to return, so TryInstallPreviewPaneFix
     // can tell (via this flag) whether a later, notification-triggered
     // install happened after Windhawk's normal end-of-Wh_ModInit hook
@@ -1833,14 +1807,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed — rebuilding resources");
     ApplySettings();
     TextPreviewDark::UpdateBackgroundColor(g_prog.previewPaneBgColor);
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"=== Uninit Explorer Visual Tweaks Dark ===");
-
     TextPreviewDark::Uninit();
 
     // Cancel a pending DUI70 load watch (if the hook was never installed)
