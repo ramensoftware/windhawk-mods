@@ -4,6 +4,7 @@
 // @description     Redirects any msedge.exe launch triggered by OUTLOOK.EXE to a custom Chromium-based browser, extracting the real target URL along the way
 // @version         1.0
 // @author          somebudyelse-ka
+// @github          https://github.com/somebudyelse-ka
 // @include         OUTLOOK.EXE
 // ==/WindhawkMod==
 
