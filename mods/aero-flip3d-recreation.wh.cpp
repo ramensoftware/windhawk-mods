@@ -3823,7 +3823,7 @@ static void WhTool_ModUninitImpl() {
     g_hookSessionActive.store(false, std::memory_order_relaxed);
 }
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     return WhTool_ModInitImpl();
 }
 
