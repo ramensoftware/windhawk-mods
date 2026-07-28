@@ -274,7 +274,7 @@ static void HookHandlerDll(bool applyNow) {
     };
 
     if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
-        g_symHooked = false;  // symbols not ready; the watcher retries
+        g_symHooked = false;  // symbols not ready yet
         Wh_Log(L"HookSymbols failed (symbols not ready?)");
         return;
     }
@@ -283,29 +283,59 @@ static void HookHandlerDll(bool applyNow) {
     Wh_Log(L"installed symbol hooks");
 }
 
-// The handler DLL loads on demand when the Notifications page opens. Hooking the
-// imported LoadLibraryExW catches that load; a short watcher backs it up for
-// load paths this hook misses. (Hooking kernelbase's LoadLibraryExW directly
-// would catch every path but fast-fails SystemSettings under CFG, so it is not
-// used here.)
-using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
-static LoadLibraryExW_t LoadLibraryExW_Orig;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
-    HMODULE m = LoadLibraryExW_Orig(name, file, flags);
-    if (m && name && StrStrIW(name, L"SettingsHandlers_Notifications"))
-        HookHandlerDll(true);
-    return m;
+// The handler DLL loads on demand when the Notifications page opens. Rather than
+// detour a load function (which misses load paths that don't go through it, and
+// hooking kernelbase's LoadLibraryExW directly fast-fails SystemSettings under
+// CFG), ask the loader to notify us. LdrRegisterDllNotification fires for every
+// load path, needs no detour, and lets the polling backstop go away.
+typedef struct _WH_UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} WH_UNICODE_STRING;
+typedef struct _WH_LDR_DLL_NOTIFICATION_DATA {
+    ULONG Flags;
+    const WH_UNICODE_STRING* FullDllName;
+    const WH_UNICODE_STRING* BaseDllName;
+    PVOID DllBase;
+    ULONG SizeOfImage;
+} WH_LDR_DLL_NOTIFICATION_DATA;
+typedef VOID(CALLBACK* WH_LDR_DLL_NOTIFICATION_FUNCTION)(
+    ULONG, const WH_LDR_DLL_NOTIFICATION_DATA*, PVOID);
+typedef LONG(NTAPI* LdrRegisterDllNotification_t)(
+    ULONG, WH_LDR_DLL_NOTIFICATION_FUNCTION, PVOID, PVOID*);
+typedef LONG(NTAPI* LdrUnregisterDllNotification_t)(PVOID);
+static const ULONG WH_LDR_DLL_NOTIFICATION_REASON_LOADED = 1;
+
+static PVOID  g_ldrCookie = nullptr;
+static HANDLE g_dllLoadedEvent = nullptr;    // signalled by the loader callback
+static HANDLE g_hookWorkerThread = nullptr;
+
+// Runs under the loader lock, so keep it minimal: check the name and signal. The
+// actual hooking (HookSymbols downloads a PDB) happens on the worker thread.
+static VOID CALLBACK DllNotification(ULONG reason,
+                                     const WH_LDR_DLL_NOTIFICATION_DATA* data, PVOID) {
+    if (reason != WH_LDR_DLL_NOTIFICATION_REASON_LOADED || !data ||
+        !data->BaseDllName || !data->BaseDllName->Buffer)
+        return;
+    const WH_UNICODE_STRING* n = data->BaseDllName;
+    USHORT chars = n->Length / sizeof(WCHAR);
+    if (chars == 0 || chars > MAX_PATH) return;
+    wchar_t name[MAX_PATH + 1];
+    memcpy(name, n->Buffer, chars * sizeof(WCHAR));
+    name[chars] = L'\0';
+    if (StrStrIW(name, L"SettingsHandlers_Notifications") && g_dllLoadedEvent)
+        SetEvent(g_dllLoadedEvent);
 }
 
-// Backstop for a load the LoadLibraryExW hook misses. Waits on g_stopEvent so it
-// exits at once on unload instead of sleeping into unmapped code.
-static HANDLE g_watchThread = nullptr;
-DWORD WINAPI WatchThread(LPVOID) {
-    for (int i = 0; i < 600; ++i) {
-        if (!g_symHooked.load() &&
-            GetModuleHandleW(L"SettingsHandlers_Notifications.dll"))
+// Installs the symbol hooks off the loader lock once the handler DLL appears.
+DWORD WINAPI HookWorkerThread(LPVOID) {
+    HANDLE waits[2] = {g_stopEvent, g_dllLoadedEvent};
+    for (;;) {
+        DWORD w = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        if (w == WAIT_OBJECT_0 + 1)      // g_dllLoadedEvent
             HookHandlerDll(true);
-        if (WaitForSingleObject(g_stopEvent, 200) == WAIT_OBJECT_0)
+        else                             // g_stopEvent, or an error
             break;
     }
     return 0;
@@ -351,13 +381,21 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // manual reset
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);        // manual reset
+    g_dllLoadedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto reset
 
-    WindhawkUtils::SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_Hook,
-                                   (void**)&LoadLibraryExW_Orig);
     HookHandlerDll(false);  // in case the DLL is already loaded
 
-    g_watchThread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
+    // Catch future loads of the handler DLL through any path.
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto reg = ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
+                           ntdll, "LdrRegisterDllNotification")
+                     : nullptr;
+    if (!reg || reg(0, DllNotification, nullptr, &g_ldrCookie) != 0)
+        Wh_Log(L"LdrRegisterDllNotification unavailable");
+
+    g_hookWorkerThread =
+        CreateThread(nullptr, 0, HookWorkerThread, nullptr, 0, nullptr);
 
     g_hotkeyReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hotkeyThread =
@@ -368,6 +406,16 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() { LoadSettings(); }
 
 void Wh_ModUninit() {
+    // Unregister the loader callback first so it can't fire during teardown.
+    if (g_ldrCookie) {
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto unreg = ntdll ? (LdrUnregisterDllNotification_t)GetProcAddress(
+                                 ntdll, "LdrUnregisterDllNotification")
+                           : nullptr;
+        if (unreg) unreg(g_ldrCookie);
+        g_ldrCookie = nullptr;
+    }
+
     // Stop and join the worker threads before their code can be unmapped.
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_hotkeyThread) {
@@ -377,13 +425,14 @@ void Wh_ModUninit() {
     }
     HANDLE threads[2];
     DWORD n = 0;
-    if (g_watchThread)  threads[n++] = g_watchThread;
-    if (g_hotkeyThread) threads[n++] = g_hotkeyThread;
+    if (g_hookWorkerThread) threads[n++] = g_hookWorkerThread;
+    if (g_hotkeyThread)     threads[n++] = g_hotkeyThread;
     if (n) WaitForMultipleObjects(n, threads, TRUE, INFINITE);
-    if (g_watchThread)  { CloseHandle(g_watchThread);  g_watchThread = nullptr; }
-    if (g_hotkeyThread) { CloseHandle(g_hotkeyThread); g_hotkeyThread = nullptr; }
-    if (g_hotkeyReady)  { CloseHandle(g_hotkeyReady);  g_hotkeyReady = nullptr; }
-    if (g_stopEvent)    { CloseHandle(g_stopEvent);    g_stopEvent = nullptr; }
+    if (g_hookWorkerThread) { CloseHandle(g_hookWorkerThread); g_hookWorkerThread = nullptr; }
+    if (g_hotkeyThread)     { CloseHandle(g_hotkeyThread);     g_hotkeyThread = nullptr; }
+    if (g_hotkeyReady)      { CloseHandle(g_hotkeyReady);      g_hotkeyReady = nullptr; }
+    if (g_dllLoadedEvent)   { CloseHandle(g_dllLoadedEvent);   g_dllLoadedEvent = nullptr; }
+    if (g_stopEvent)        { CloseHandle(g_stopEvent);        g_stopEvent = nullptr; }
 
     // Restore the controller vtable slot.
     if (g_vtblHooked.load() && g_vtblSlot && GetSettings_Orig) {
