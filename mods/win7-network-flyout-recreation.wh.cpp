@@ -45,7 +45,6 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
 - **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
-- **Fast & Lightweight**: The mod is built on Win32 (the same architecture as the original Windows 7 flyout), making it faster than the modern Windows 10/11 flyout since it skips the complex animations and reduces resource usage.
 - **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
 - **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
 - **Restored classic network map**: Restores the Windows 7-style visual map in the Network and Sharing Center, with PC/network/Internet icons, connection lines, and Home/Public/Work location icons.
@@ -60,8 +59,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
-- **Control Panel refresh**
-- **Control Panel refresh**: The Network Map section in the Network and Sharing Center may not update automatically when network state changes (e.g., connecting/disconnecting from Wi-Fi). If icons, connection names, or warning indicators (red X, yellow triangle) do not appear correctly after a network transition, please close and re-open the Control Panel window to refresh the page.
+- **Control Panel refresh**: Live refresh is now driven by `INetworkListManagerEvents`, so the Network Map section normally updates automatically on connectivity changes. In rare cases (e.g. very rapid transitions) it may lag slightly behind; closing and re-opening the Control Panel window always shows the current state.
 
 ## Hotkeys
 | Key | Action |
@@ -74,7 +72,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **sebastian08dm08-cpu** - Testing on Windows 10 1809
 - **Kichura** - Visual analysis
 
-If you encounter issues, please report them on the author of the mod.
+If you encounter issues, please report them to the author of the mod.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -1984,10 +1982,6 @@ void Init() {
     }
 }
 
-void OnSettingsChanged() {
-    return;
-}
-
 void Uninit() {
     // Restore the original app mode instead of forcing Default.
     // Use pSetPreferredAppMode directly (not Apply()) so we restore
@@ -2129,10 +2123,10 @@ static void DetectWindowsVersion() {
         } else {
             Wh_Log(L"Win11: Shell_TrayWnd not found - taskbar not ready yet");
         }
-        WCHAR epPniduiPath[MAX_PATH];
-        StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
-                         L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-        if (GetFileAttributesW(epPniduiPath) != INVALID_FILE_ATTRIBUTES) {
+        // Plain literal is enough here; this is purely an informational log
+        // line, not a path used to load anything.
+        static const WCHAR* kEpPniduiPath = L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll";
+        if (GetFileAttributesW(kEpPniduiPath) != INVALID_FILE_ATTRIBUTES) {
             Wh_Log(L"ExplorerPatcher detected: pnidui.dll found");
         } else {
             Wh_Log(L"ExplorerPatcher not detected");
@@ -2231,6 +2225,11 @@ static HICON g_hIconNetLocDUI = NULL;
 static int   g_iconNetLocDUIW = 0, g_iconNetLocDUIH = 0;
 static HICON g_hIconNoInternetXDUI = NULL;
 static int   g_iconNoInternetXDUIW = 0, g_iconNoInternetXDUIH = 0;
+// Size-keyed cache for the offline gray network icon, matching the pattern
+// used by every other LoadImageW_Hook branch instead of re-decoding
+// NETLOC_PUBLIC_OFFLINE_ICON_BASE64 on every DirectUI request.
+static HICON g_hIconOfflineNetworkDUI = NULL;
+static int   g_iconOfflineNetworkDUIW = 0, g_iconOfflineNetworkDUIH = 0;
 static int   g_iconNetLocDUICategory = -1;
 HICON g_hIconSignalBars[6] = { NULL };
 HICON g_hIconRefreshWin7 = NULL;
@@ -2317,6 +2316,11 @@ typedef int (WINAPI *GdipSetPixelOffsetModeFunc)(void*, int);
 typedef int (WINAPI *GdipGraphicsClearFunc)(void*, unsigned int);
 typedef int (WINAPI *GdipCreateHBITMAPFromBitmapFunc)(void*, HBITMAP*, unsigned int);
 typedef int (WINAPI *GdipDisposeImageFunc)(void*);
+// Used by CreateIconFromBase64PNG, which reuses the process-wide GDI+
+// instance/token from InitGdiPlusRendering() instead of loading gdiplus.dll
+// and starting/stopping its own GDI+ session on every call.
+typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
+typedef int (WINAPI *GdipCreateHICONFromBitmapFunc)(void*, HICON*);
 
 static GdipCreateBitmapFromHICONFunc pGdipCreateBitmapFromHICON = NULL;
 static GdipSetInterpolationModeFunc pGdipSetInterpolationMode = NULL;
@@ -2328,6 +2332,8 @@ static GdipSetPixelOffsetModeFunc pGdipSetPixelOffsetMode = NULL;
 static GdipGraphicsClearFunc pGdipGraphicsClear = NULL;
 static GdipCreateHBITMAPFromBitmapFunc pGdipCreateHBITMAPFromBitmap = NULL;
 static GdipDisposeImageFunc pGdipDisposeImage = NULL;
+static GdipCreateBitmapFromStreamFunc pGdipCreateBitmapFromStream = NULL;
+static GdipCreateHICONFromBitmapFunc pGdipCreateHICONFromBitmap = NULL;
 
 static BOOL g_inPasswordPrompt = FALSE;
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
@@ -3011,13 +3017,19 @@ static BYTE* DecodeBase64W(const WCHAR* base64Str, DWORD* outLen) {
     return data;
 }
 
+static BOOL InitGdiPlusRendering();
+
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0,
                                       int targetHeight = 0) {
-    // Reuse the process-wide GdiPlus instance when available
-    if (g_hGdiPlus) {
-        // Already initialized globally - skip local init
-        // The function pointers are resolved from g_hGdiPlus below.
-    }
+    // Reuse the process-wide GDI+ instance/token and the function pointers
+    // already resolved by InitGdiPlusRendering(), instead of doing a fresh
+    // LoadLibraryExW(gdiplus.dll) + GdiplusStartup + ... + GdiplusShutdown +
+    // FreeLibrary on every single icon decode. InitGdiPlusRendering() is
+    // idempotent and returns immediately if already initialized, so calling
+    // it here also makes this function safe to use before the mod's own
+    // one-time init call happens to run.
+    if (!InitGdiPlusRendering() || !pGdipCreateBitmapFromStream || !pGdipCreateHICONFromBitmap)
+        return NULL;
 
     DWORD outLen = 0;
     BYTE* data = DecodeBase64W(base64Str, &outLen);
@@ -3035,69 +3047,36 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0
     if (!stream) { GlobalFree(hMem); return NULL; }
 
     HICON hIcon = NULL;
-    HMODULE hGdi = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hGdi) {
-        typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
-        typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
-        typedef int (WINAPI *GdipCreateHICONFromBitmapFunc)(void*, HICON*);
-        typedef int (WINAPI *GdipDisposeImageFunc)(void*);
-        typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
-        GdiplusStartupFunc pStartup = (GdiplusStartupFunc)GetProcAddress(hGdi, "GdiplusStartup");
-        GdipCreateBitmapFromStreamFunc pFromStream = (GdipCreateBitmapFromStreamFunc)GetProcAddress(hGdi, "GdipCreateBitmapFromStream");
-        GdipCreateHICONFromBitmapFunc pToHICON = (GdipCreateHICONFromBitmapFunc)GetProcAddress(hGdi, "GdipCreateHICONFromBitmap");
-        GdipDisposeImageFunc pDispose = (GdipDisposeImageFunc)GetProcAddress(hGdi, "GdipDisposeImage");
-        GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(hGdi, "GdiplusShutdown");
-        GdipCreateBitmapFromScan0Func pCreateBitmap =
-            (GdipCreateBitmapFromScan0Func)GetProcAddress(hGdi, "GdipCreateBitmapFromScan0");
-        GdipGetImageGraphicsContextFunc pGetGraphics =
-            (GdipGetImageGraphicsContextFunc)GetProcAddress(hGdi, "GdipGetImageGraphicsContext");
-        GdipSetInterpolationModeFunc pSetInterpolation =
-            (GdipSetInterpolationModeFunc)GetProcAddress(hGdi, "GdipSetInterpolationMode");
-        GdipSetPixelOffsetModeFunc pSetPixelOffset =
-            (GdipSetPixelOffsetModeFunc)GetProcAddress(hGdi, "GdipSetPixelOffsetMode");
-        GdipGraphicsClearFunc pClear =
-            (GdipGraphicsClearFunc)GetProcAddress(hGdi, "GdipGraphicsClear");
-        GdipDrawImageRectIFunc pDraw =
-            (GdipDrawImageRectIFunc)GetProcAddress(hGdi, "GdipDrawImageRectI");
-        GdipDeleteGraphicsFunc pDeleteGraphics =
-            (GdipDeleteGraphicsFunc)GetProcAddress(hGdi, "GdipDeleteGraphics");
-
-        if (pStartup && pFromStream && pToHICON && pDispose && pShutdown) {
-            ULONG_PTR token = 0;
-            struct { DWORD Version; void* Callback; BOOL Suppress; } input = {1, NULL, FALSE};
-            if (pStartup(&token, &input, NULL) == 0) {
-                void* srcBitmap = NULL;
-                if (pFromStream(stream, &srcBitmap) == 0 && srcBitmap) {
-                    bool scaled = false;
-                    if (targetWidth > 0 && targetHeight > 0 && pCreateBitmap && pGetGraphics &&
-                        pSetInterpolation && pSetPixelOffset && pClear && pDraw && pDeleteGraphics) {
-                        void* dstBitmap = NULL;
-                        if (pCreateBitmap(targetWidth, targetHeight, 0, 0x00E200B, NULL, &dstBitmap) == 0 &&
-                            dstBitmap) {
-                            void* graphics = NULL;
-                            if (pGetGraphics(dstBitmap, &graphics) == 0 && graphics) {
-                                // 7 is GDI+'s HighQualityBicubic mode; 3 matches the
-                                // pixel-offset mode used by DrawIconBicubic below.
-                                pSetInterpolation(graphics, 7);
-                                pSetPixelOffset(graphics, 3);
-                                pClear(graphics, 0);
-                                scaled = pDraw(graphics, srcBitmap, 0, 0,
-                                               targetWidth, targetHeight) == 0;
-                                pDeleteGraphics(graphics);
-                            }
-                            if (scaled)
-                                pToHICON(dstBitmap, &hIcon);
-                            pDispose(dstBitmap);
-                        }
-                    }
-                    if (!scaled)
-                        pToHICON(srcBitmap, &hIcon);
-                    pDispose(srcBitmap);
+    void* srcBitmap = NULL;
+    if (pGdipCreateBitmapFromStream(stream, &srcBitmap) == 0 && srcBitmap) {
+        bool scaled = false;
+        if (targetWidth > 0 && targetHeight > 0 && pGdipCreateBitmapFromScan0 &&
+            pGdipGetImageGraphicsContext && pGdipSetInterpolationMode &&
+            pGdipSetPixelOffsetMode && pGdipGraphicsClear && pGdipDrawImageRectI &&
+            pGdipDeleteGraphics) {
+            void* dstBitmap = NULL;
+            if (pGdipCreateBitmapFromScan0(targetWidth, targetHeight, 0, 0x00E200B, NULL,
+                                            &dstBitmap) == 0 &&
+                dstBitmap) {
+                void* graphics = NULL;
+                if (pGdipGetImageGraphicsContext(dstBitmap, &graphics) == 0 && graphics) {
+                    // 7 is GDI+'s HighQualityBicubic mode; 3 matches the
+                    // pixel-offset mode used by DrawIconBicubic below.
+                    pGdipSetInterpolationMode(graphics, 7);
+                    pGdipSetPixelOffsetMode(graphics, 3);
+                    pGdipGraphicsClear(graphics, 0);
+                    scaled = pGdipDrawImageRectI(graphics, srcBitmap, 0, 0,
+                                                  targetWidth, targetHeight) == 0;
+                    pGdipDeleteGraphics(graphics);
                 }
-                pShutdown(token);
+                if (scaled)
+                    pGdipCreateHICONFromBitmap(dstBitmap, &hIcon);
+                pGdipDisposeImage(dstBitmap);
             }
         }
-        FreeLibrary(hGdi);
+        if (!scaled)
+            pGdipCreateHICONFromBitmap(srcBitmap, &hIcon);
+        pGdipDisposeImage(srcBitmap);
     }
     stream->Release();
     return hIcon;
@@ -3881,11 +3860,29 @@ static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
 void LoadSystemIcons() {
     if (!g_hIconNetworkMap)
         g_hIconNetworkMap = CreateIconFromBase64PNG(PC_ICON_BASE64, ScaleDpi(48), ScaleDpi(48));
+
+    // Build an absolute System32 path instead of relying on the default
+    // DLL search order for bare file names. The mod only ever injects into
+    // explorer.exe/control.exe (both launched from protected system
+    // directories), so this was already low-risk, but an absolute path is
+    // tidier and removes any doubt.
+    WCHAR sysDir[MAX_PATH];
+    UINT sysDirLen = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    WCHAR netshellPath[MAX_PATH] = {0};
+    WCHAR shell32Path[MAX_PATH] = {0};
+    if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(sysDir)) {
+        StringCchCopyW(netshellPath, ARRAYSIZE(netshellPath), sysDir);
+        StringCchCatW(netshellPath, ARRAYSIZE(netshellPath), L"\\netshell.dll");
+        StringCchCopyW(shell32Path, ARRAYSIZE(shell32Path), sysDir);
+        StringCchCatW(shell32Path, ARRAYSIZE(shell32Path), L"\\shell32.dll");
+    }
     for (int i = 0; i < 6; i++)
         if (!g_hIconSignalBars[i])
-            ExtractIconExW(L"netshell.dll", 152 + i, &g_hIconSignalBars[i], NULL, 1);
+            ExtractIconExW(netshellPath[0] ? netshellPath : L"netshell.dll",
+                           152 + i, &g_hIconSignalBars[i], NULL, 1);
     if (!g_hIconRefreshWin7)
-        ExtractIconExW(L"shell32.dll", 238, &g_hIconRefreshWin7, NULL, 1);
+        ExtractIconExW(shell32Path[0] ? shell32Path : L"shell32.dll",
+                       238, &g_hIconRefreshWin7, NULL, 1);
     if (!g_hIconGlobe)
         g_hIconGlobe = CreateIconFromBase64PNG(GLOBE_ICON_BASE64, ScaleDpi(48), ScaleDpi(48));
     // Keep this cache at the exact header render size. Unlike the 48px map
@@ -3915,10 +3912,12 @@ static BOOL InitGdiPlusRendering() {
     pGdipGraphicsClear = (GdipGraphicsClearFunc)GetProcAddress(g_hGdiPlus, "GdipGraphicsClear");
     pGdipCreateHBITMAPFromBitmap = (GdipCreateHBITMAPFromBitmapFunc)GetProcAddress(g_hGdiPlus, "GdipCreateHBITMAPFromBitmap");
     pGdipDisposeImage = (GdipDisposeImageFunc)GetProcAddress(g_hGdiPlus, "GdipDisposeImage");
+    pGdipCreateBitmapFromStream = (GdipCreateBitmapFromStreamFunc)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromStream");
+    pGdipCreateHICONFromBitmap = (GdipCreateHICONFromBitmapFunc)GetProcAddress(g_hGdiPlus, "GdipCreateHICONFromBitmap");
     if (!pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode || !pGdipDrawImageRectI ||
         !pGdipDeleteGraphics || !pGdipCreateBitmapFromScan0 || !pGdipGetImageGraphicsContext ||
         !pGdipSetPixelOffsetMode || !pGdipGraphicsClear || !pGdipCreateHBITMAPFromBitmap ||
-        !pGdipDisposeImage) {
+        !pGdipDisposeImage || !pGdipCreateBitmapFromStream || !pGdipCreateHICONFromBitmap) {
         Wh_Log(L"GDI+: missing function pointers");
         FreeLibrary(g_hGdiPlus);
         g_hGdiPlus = NULL;
@@ -4005,6 +4004,8 @@ void FreeSystemIcons() {
     g_iconNetLocDUIW = g_iconNetLocDUIH = 0;
     if (g_hIconNoInternetXDUI) { DestroyIcon(g_hIconNoInternetXDUI); g_hIconNoInternetXDUI = NULL; }
     g_iconNoInternetXDUIW = g_iconNoInternetXDUIH = 0;
+    if (g_hIconOfflineNetworkDUI) { DestroyIcon(g_hIconOfflineNetworkDUI); g_hIconOfflineNetworkDUI = NULL; }
+    g_iconOfflineNetworkDUIW = g_iconOfflineNetworkDUIH = 0;
     g_iconNetLocDUICategory = -1;
     for (int i = 0; i < 6; i++)
         if (g_hIconSignalBars[i]) { DestroyIcon(g_hIconSignalBars[i]); g_hIconSignalBars[i] = NULL; }
@@ -4294,10 +4295,13 @@ void RefreshWifiData(HANDLE hClient) {
     if (tempCount > 0) {
         lastValidRefresh = now;
     }
-    LeaveCriticalSection(&g_Ctx.csLock);
+    // This write belongs inside the lock, like the rest of the list update
+    // above: g_NetworkList is shared with the flyout thread, and writing to
+    // it after LeaveCriticalSection raced with any concurrent reader.
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
         g_NetworkList[0].hasInternetAccess = IsInternetConnected();
     }
+    LeaveCriticalSection(&g_Ctx.csLock);
     Wh_Log(L"Refresh complete: %d network(s) found, connected: %s, g_PendingConnectIndex=%d",
            g_NetworkCount,
            (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
@@ -5718,36 +5722,50 @@ static void InvalidateToolbarCache() {
 static BYTE* g_netcenterBase = NULL;
 static BYTE* g_netcenterEnd  = NULL;
 
+// netcenter.dll is loaded on demand (only once the Network and Sharing
+// Center page is actually opened), so g_netcenterBase/g_netcenterEnd can't
+// be resolved once up front in Wh_ModInit like g_pniduiBase is - at that
+// point the module usually isn't loaded yet, so they were previously left
+// permanently NULL and IsInNetCenter() always returned false. Retry the
+// lookup lazily instead, the same way InitPniduiInfo() resolves pnidui.dll,
+// caching the result once it succeeds.
+static bool EnsureNetCenterRange() {
+    if (g_netcenterBase && g_netcenterEnd)
+        return true;
 
+    HMODULE h = GetModuleHandleW(L"netcenter.dll");
+    if (!h)
+        return false;
+
+    MODULEINFO mi{};
+    if (!GetModuleInformation(GetCurrentProcess(), h, &mi, sizeof(mi)))
+        return false;
+
+    g_netcenterBase = (BYTE*)mi.lpBaseOfDll;
+    g_netcenterEnd  = g_netcenterBase + mi.SizeOfImage;
+    return true;
+}
 
 static bool IsInNetCenter(void* ra) {
-    return g_netcenterBase && g_netcenterEnd &&
-           ra >= (void*)g_netcenterBase && ra < (void*)g_netcenterEnd;
+    if (!(g_netcenterBase && g_netcenterEnd) && !EnsureNetCenterRange())
+        return false;
+    return ra >= (void*)g_netcenterBase && ra < (void*)g_netcenterEnd;
 }
 
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
-    
-    HMODULE hPnidui = NULL;
-    
-    // Try standard ExplorerPatcher installation path (64-bit) first: this is
-    // mainly informational logging, since GetModuleHandleW with a bare name
-    // below already matches a loaded module by base name regardless of the
-    // directory it was actually loaded from.
-    hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-    if (hPnidui) {
-        Wh_Log(L"pnidui.dll found at: C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-        goto found;
-    }
-    
+
     // Bare-name lookup: matches pnidui.dll regardless of where it was loaded
-    // from (AppData, ProgramData, mod folder, System32, or native on Win10).
-    hPnidui = GetModuleHandleW(L"pnidui.dll");
+    // from (AppData, ProgramData, mod folder, System32, or native on Win10),
+    // so there's no need to also probe the ExplorerPatcher install path
+    // first - GetModuleHandleW matches by base name, not by the directory
+    // the module actually loaded from.
+    HMODULE hPnidui = GetModuleHandleW(L"pnidui.dll");
     if (hPnidui) {
         Wh_Log(L"pnidui.dll found via simple name lookup");
         goto found;
     }
-    
+
     // Not found in any location - log gracefully and continue without icon detection
     Wh_Log(L"pnidui.dll not found in any known location");
     Wh_Log(L"Network icon detection will be unavailable");
@@ -7380,6 +7398,10 @@ static bool g_textHookInstalled = false;
 struct LangPack {
     WORD lang;
     const wchar_t *cTitle, *cDesc, *hTitle, *hDesc, *mTitle, *mDesc, *fullMap;
+    // Fallback label used by GetConnectedNetworkName() when neither Wi-Fi
+    // nor Ethernet report a name, and the Network Map's Internet node label
+    // in NetworkMapVisual() - both were previously hardcoded in English.
+    const wchar_t *networkFallback, *internetLabel;
 };
 
 static const LangPack kLang[] = {
@@ -7389,70 +7411,70 @@ static const LangPack kLang[] = {
      L"View or change your homegroup settings and network sharing preferences.",
      L"View Network Map",
      L"See a map of your network and connected devices.",
-     L"View full map"},
+     L"View full map", L"Network", L"Internet"},
     {0x10, L"Connessione a una rete",
      L"Connettere o riconnettere una rete wireless, VPN o di accesso remoto disponibile.",
      L"Selezione delle opzioni del gruppo home e della condivisione",
      L"Accedere alle impostazioni del gruppo home e configurare le opzioni di condivisione della rete.",
      L"Visualizza mappa di rete",
      L"Visualizza una mappa della rete e dei dispositivi connessi.",
-     L"Visualizza mappa completa"},
+     L"Visualizza mappa completa", L"Rete", L"Internet"},
     {0x0c, L"Se connecter \u00e0 un r\u00e9seau",
      L"Connectez-vous aux r\u00e9seaux sans fil, VPN ou distants disponibles.",
      L"Choisir les options de groupe r\u00e9sidentiel et de partage",
      L"Affichez ou modifiez les param\u00e8tres de groupe r\u00e9sidentiel et de partage.",
      L"Afficher la carte du r\u00e9seau",
      L"Voir une carte de votre r\u00e9seau et des appareils connect\u00e9s.",
-     L"Afficher la carte compl\u00e8te"},
+     L"Afficher la carte compl\u00e8te", L"R\u00e9seau", L"Internet"},
     {0x0a, L"Conectar a una red",
      L"Con\u00e9ctese a redes inal\u00e1mbricas, VPN o de acceso telef\u00f3nico disponibles.",
      L"Elegir opciones de grupo en el hogar y uso compartido",
      L"Vea o cambie la configuraci\u00f3n del grupo en el hogar y uso compartido de red.",
      L"Ver mapa de red",
      L"Vea un mapa de su red y los dispositivos conectados.",
-     L"Ver mapa completo"},
+     L"Ver mapa completo", L"Red", L"Internet"},
     {0x19, L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0441\u0435\u0442\u0438",
      L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u043c \u0431\u0435\u0441\u043f\u0440\u043e\u0432\u043e\u0434\u043d\u044b\u043c \u0441\u0435\u0442\u044f\u043c, VPN \u0438\u043b\u0438 \u0441\u0435\u0442\u044f\u043c \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
      L"\u0412\u044b\u0431\u043e\u0440 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0441\u0435\u0442\u0438.",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438 \u0438 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u044b\u0445 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432.",
-     L"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u043e\u043b\u043d\u0443\u044e \u043a\u0430\u0440\u0442\u0443"},
+     L"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u043e\u043b\u043d\u0443\u044e \u043a\u0430\u0440\u0442\u0443", L"\u0421\u0435\u0442\u044c", L"\u0418\u043d\u0442\u0435\u0440\u043d\u0435\u0442"},
     {0x07, L"Mit einem Netzwerk verbinden",
      L"Verbindung mit verf\u00fcgbaren Drahtlos-, VPN- oder DF\u00dc-Netzwerken herstellen.",
      L"Heimnetzgruppen- und Freigabeoptionen ausw\u00e4hlen",
      L"Einstellungen f\u00fcr Heimnetzgruppen und Netzwerkfreigaben anzeigen oder \u00e4ndern.",
      L"Netzwerkkarte anzeigen",
      L"Zeigen Sie eine Karte Ihres Netzwerks und der verbundenen Ger\u00e4te an.",
-     L"Vollst\u00e4ndige Karte anzeigen"},
+     L"Vollst\u00e4ndige Karte anzeigen", L"Netzwerk", L"Internet"},
     {0x16, L"Ligar a uma rede",
      L"Ligue-se a redes sem fios, VPN ou de acesso telef\u00f3nico dispon\u00edveis.",
      L"Escolher op\u00e7\u00f5es de Grupo Dom\u00e9stico e partilha",
      L"Veja ou altere as defini\u00e7\u00f5es do Grupo Dom\u00e9stico e da partilha de rede.",
      L"Ver mapa de rede",
      L"Veja um mapa da sua rede e dispositivos ligados.",
-     L"Ver mapa completo"},
+     L"Ver mapa completo", L"Rede", L"Internet"},
     {0x15, L"Połącz z siecią",
      L"Połącz z dostępną siecią bezprzewodową, VPN lub modemową.",
      L"Wybierz opcje grupy domowej i udostępniania",
      L"Wyświetl lub zmień ustawienia grupy domowej i udostępniania sieci.",
      L"Wyświetl mapę sieci",
      L"Wyświetl mapę sieci i podłączonych urządzeń.",
-     L"Wyświetl pełną mapę"},
+     L"Wyświetl pełną mapę", L"Sieć", L"Internet"},
     {0x13, L"Verbinding maken met een netwerk",
      L"Verbinding maken met een beschikbare draadloos-, VPN- of inbelnetwerk.",
      L"Heimgroep- en delensopties kiezen",
      L"Bekijk of wijzig uw heimgroep- en netwerkinstellingen.",
      L"Netwerkkaart weergeven",
      L"Bekijk een kaart van uw netwerk en verbonden apparaten.",
-     L"Volledige kaart weergeven"},
+     L"Volledige kaart weergeven", L"Netwerk", L"Internet"},
     {0x18, L"Conectare la o rețea",
      L"Conectați-vă la o rețea fără fir, VPN sau dial-up disponibilă.",
      L"Alegeți opțiunile de grup de domiciliu și partajare",
      L"Vizualizați sau modificați setările grupului de domiciliu și partajarea în rețea.",
      L"Vizualizare hartă rețea",
      L"Vizualizați o hartă a rețelei și dispozitivelor conectate.",
-     L"Vizualizare hartă completă"},
+     L"Vizualizare hartă completă", L"Rețea", L"Internet"},
 };
 
 static const LangPack* GetLang() {
@@ -7636,8 +7658,8 @@ static std::wstring GetConnectedNetworkName() {
     // Check Ethernet
     if (ethernetConnected && ethernetName[0] != L'\0')
         return std::wstring(ethernetName);
-    
-    return L"Network";
+
+    return GetLang()->networkFallback;
 }
 
 static std::wstring NetworkMapVisual() {
@@ -7646,7 +7668,7 @@ static std::wstring NetworkMapVisual() {
     // without using the unsupported contentalign="center" token.
     std::wstring pcName = g_Settings.privacyMode ? L"    PC" : GetComputerNameStr();
     std::wstring networkName = GetConnectedNetworkName();
-    std::wstring internetName = L"Internet";
+    std::wstring internetName = GetLang()->internetLabel;
     
     // Cache connectivity once for this entire NetworkMapVisual() build,
     // used by both the route-line rendering and the globe-icon inline check.
@@ -7700,7 +7722,7 @@ static std::wstring NetworkMapVisual() {
     // Keep DirectUI's known-valid endellipsis token. Centering is handled by
     // the icon/container geometry; this avoids an unsupported XML value.
     xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + pcName + L"\"/>";
+    xml += L"content=\"" + Esc(pcName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
 
@@ -7721,7 +7743,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
     xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + networkName + L"\"/>";
+    xml += L"content=\"" + Esc(networkName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
 
@@ -7752,7 +7774,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
     xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
-    xml += L"content=\"" + internetName + L"\"/>";
+    xml += L"content=\"" + Esc(internetName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
 
@@ -7896,6 +7918,15 @@ static IConnectionPoint* g_ncCP = nullptr;
 static DWORD g_ncCookie = 0;
 static bool g_ncEventsAdvised = false;
 
+// The DirectUIHWND that currently hosts the patched Network Center XML, i.e.
+// the window NetCenterPageSubclass is installed on. Tracked separately from
+// g_ncTarget so Wh_ModUninit can marshal teardown to the thread that owns
+// the (unmarshalled) COM connection point instead of touching it directly.
+static HWND g_ncHostWindow = nullptr;
+// Registered lazily: private message used to ask NetCenterPageSubclass to
+// run cleanup on its own (STA) thread when the mod is being unloaded.
+static UINT g_ncTeardownMsg = 0;
+
 static void RefreshNetworkCenterXml() {
     if (!g_ncTarget || !SetXML || g_inHook)
         return;
@@ -7989,48 +8020,72 @@ static void EnsureConnectivityEventsAdvised() {
     }
 }
 
-// Subclass proc for the NetCenter DUI host window.
-// WM_NCDESTROY runs on the owning STA thread, so it is safe to
-// clear g_ncTarget and unadvise the COM sink there.
+// Subclass proc for the NetCenter DirectUIHWND itself (not the top-level
+// frame: the frame survives navigation, so if the user navigates away from
+// the Network and Sharing Center inside the same Control Panel window, the
+// page's DUIXmlParser is destroyed while g_ncTarget would still point at it
+// - the same use-after-free described below, without the window ever being
+// closed. Subclassing the DirectUIHWND child means WM_NCDESTROY fires both
+// on navigation-away and on the whole window closing.
+//
+// WM_NCDESTROY and the private teardown message both run on the owning STA
+// thread (the former because DefWindowProc/DestroyWindow dispatch it there,
+// the latter because it is only ever posted to hWnd), so it is safe to
+// unadvise the COM sink - a pointer obtained on that same thread - from
+// this callback.
 // Forward declaration needed because NetCenterPageSubclass is defined
 // before UnadviseConnectivityEvents in the file.
 static void UnadviseConnectivityEvents();
+static UINT GetNcTeardownMessage();
 
 static LRESULT CALLBACK NetCenterPageSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
-    if (uMsg == WM_NCDESTROY) {
-        Wh_Log(L"[NetMap] NetCenter page closed, cleaning up live refresh state");
+    if (uMsg == WM_NCDESTROY || (g_ncTeardownMsg && uMsg == g_ncTeardownMsg)) {
+        Wh_Log(L"[NetMap] NetCenter page closed/torn down, cleaning up live refresh state");
         UnadviseConnectivityEvents();
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, NetCenterPageSubclass);
+        if (g_ncHostWindow == hWnd)
+            g_ncHostWindow = nullptr;
+        if (uMsg != WM_NCDESTROY)
+            return 0;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Helper: find the top-level DirectUI host window for the current thread.
-// Called from SetXMLFromResource_Hook on the STA thread that owns the page.
+// Helper: find the DirectUIHWND that actually hosts the NetCenter page for
+// the current thread. Called from SetXMLFromResource_Hook on the STA thread
+// that owns the page.
+//
+// EnumThreadWindows() only enumerates top-level (non-child) windows of the
+// thread, and DirectUIHWND is a child window, so it never shows up there.
+// Walk the expected child chain explicitly instead, the way
+// classic-explorer-statusbar does: CabinetWClass -> ShellTabWindowClass ->
+// DUIViewWndClassName -> DirectUIHWND. The Control Panel's standalone host
+// (#32770 / CtrlPanel) doesn't have a ShellTabWindowClass in between, so
+// fall back to searching directly for DUIViewWndClassName/DirectUIHWND
+// under it.
 static HWND FindNetCenterHostWindow() {
-    // The Control Panel's NetCenter page lives inside a DirectUIHWND child
-    // of the main CabinetWClass frame. Walk the current thread's windows
-    // to locate it. The subclass only needs the top-level window so it
-    // catches WM_NCDESTROY when the Control Panel is closed.
     struct FindInfo { HWND found; };
     FindInfo fi = { NULL };
-    EnumThreadWindows(GetCurrentThreadId(), [](HWND hwnd, LPARAM lp) -> BOOL {
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND hwndFrame, LPARAM lp) -> BOOL {
         FindInfo* pfi = reinterpret_cast<FindInfo*>(lp);
         WCHAR cls[128];
-        if (GetClassNameW(hwnd, cls, 128)) {
-            if (wcscmp(cls, L"DirectUIHWND") == 0) {
-                HWND parent = GetParent(hwnd);
-                if (parent) {
-                    WCHAR pCls[128];
-                    GetClassNameW(parent, pCls, 128);
-                    if (wcscmp(pCls, L"CabinetWClass") == 0 ||
-                        wcscmp(pCls, L"CtrlPanel") == 0 ||
-                        wcscmp(pCls, L"#32770") == 0) {
-                        pfi->found = parent;
-                        return FALSE;
-                    }
-                }
-            }
+        if (!GetClassNameW(hwndFrame, cls, 128))
+            return TRUE;
+
+        HWND shellTab = nullptr;
+        if (wcscmp(cls, L"CabinetWClass") == 0)
+            shellTab = FindWindowExW(hwndFrame, NULL, L"ShellTabWindowClass", NULL);
+
+        HWND duiView = shellTab
+            ? FindWindowExW(shellTab, NULL, L"DUIViewWndClassName", NULL)
+            : (wcscmp(cls, L"CabinetWClass") != 0
+                   ? FindWindowExW(hwndFrame, NULL, L"DUIViewWndClassName", NULL)
+                   : nullptr);
+
+        HWND directUI = duiView ? FindWindowExW(duiView, NULL, L"DirectUIHWND", NULL) : nullptr;
+        if (directUI) {
+            pfi->found = directUI;
+            return FALSE;
         }
         return TRUE;
     }, reinterpret_cast<LPARAM>(&fi));
@@ -8049,6 +8104,31 @@ static void UnadviseConnectivityEvents() {
     g_ncTarget = nullptr;
     g_ncModule = nullptr;
     g_ncP4 = nullptr;
+}
+
+// Registers (once) the private message used to ask NetCenterPageSubclass to
+// tear down from Wh_ModUninit, running on an arbitrary Windhawk thread, by
+// marshaling the request to the page's own STA thread via SendMessage.
+static UINT GetNcTeardownMessage() {
+    if (!g_ncTeardownMsg)
+        g_ncTeardownMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcTeardown");
+    return g_ncTeardownMsg;
+}
+
+// Called from Wh_ModUninit. Marshals the subclass removal and the COM
+// Unadvise/Release to the STA thread that owns g_ncCP, instead of touching
+// that raw, unmarshalled pointer from whatever thread Windhawk calls
+// Wh_ModUninit on.
+static void TeardownNetCenterHost() {
+    HWND host = g_ncHostWindow;
+    if (host && IsWindow(host)) {
+        SendMessageW(host, GetNcTeardownMessage(), 0, 0);
+    } else {
+        // No live host window (e.g. hook never fired, or it was already
+        // destroyed): still clear any leftover state directly.
+        UnadviseConnectivityEvents();
+    }
+    g_ncHostWindow = nullptr;
 }
 
 static bool IsNetCenter(HMODULE h) {
@@ -8234,8 +8314,19 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                 return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = width > 0 ? width : ScaleDpi(36);
             int wantH = height > 0 ? height : ScaleDpi(36);
-            Wh_Log(L"[NetMap-Icon] Returning hardcoded offline gray network icon");
-            return CreateIconFromBase64PNG(NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+            if (!g_hIconOfflineNetworkDUI || g_iconOfflineNetworkDUIW != wantW ||
+                g_iconOfflineNetworkDUIH != wantH) {
+                if (g_hIconOfflineNetworkDUI) {
+                    DestroyIcon(g_hIconOfflineNetworkDUI);
+                    g_hIconOfflineNetworkDUI = NULL;
+                }
+                g_hIconOfflineNetworkDUI = CreateIconFromBase64PNG(
+                    NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+                g_iconOfflineNetworkDUIW = wantW;
+                g_iconOfflineNetworkDUIH = wantH;
+                Wh_Log(L"[NetMap-Icon] Decoded offline gray network icon at %dx%d", wantW, wantH);
+            }
+            return g_hIconOfflineNetworkDUI ? CopyIcon(g_hIconOfflineNetworkDUI) : NULL;
         }
 
         if (resourceId == kNetMapCategoryIconId) {
@@ -8282,9 +8373,20 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         g_ncP4 = p4;
         EnsureConnectivityEventsAdvised();
 
-        // Subclass the host window so we clean up when the page is closed
+        // Subclass the DirectUIHWND that actually hosts the page (not the
+        // top-level frame, which survives navigation to other Control Panel
+        // pages) so cleanup happens both when the Control Panel window is
+        // closed and when this page's DirectUIHWND itself goes away.
         HWND hNcHost = FindNetCenterHostWindow();
         if (hNcHost) {
+            if (g_ncHostWindow && g_ncHostWindow != hNcHost) {
+                // A different DirectUIHWND is hosting the page now (e.g. the
+                // previous one was torn down and recreated); drop the old
+                // subclass explicitly rather than leaving it to rely solely
+                // on WM_NCDESTROY racing with this call.
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NetCenterPageSubclass);
+            }
+            g_ncHostWindow = hNcHost;
             WindhawkUtils::SetWindowSubclassFromAnyThread(hNcHost, NetCenterPageSubclass, 0);
             Wh_Log(L"[NetMap] Subclassed NetCenter host window (0x%p)", hNcHost);
         } else {
@@ -8345,7 +8447,11 @@ static bool HookAll() {
         if (!g_iconHookInstalled)
             Wh_Log(L"Network Center links: custom icon hook unavailable; using Windows icons");
     }
-    if (g_hookInstalled && !g_textHookInstalled) {
+    // DrawTextW is one of the hottest user32 entry points in the shell.
+    // Only install this hook when privacy mode is actually in use, instead
+    // of unconditionally in every explorer.exe/control.exe process where it
+    // would otherwise do nothing but a pointer-range check on every call.
+    if (g_hookInstalled && g_Settings.privacyMode && !g_textHookInstalled) {
         g_textHookInstalled = WindhawkUtils::SetFunctionHook(
             DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
         if (!g_textHookInstalled)
@@ -8365,10 +8471,14 @@ static bool Init() {
     // Windhawk API, all hooks should be set in Wh_ModInit, since
     // Wh_ApplyHookOperations() is called automatically right after it;
     // hooks registered later (e.g. from Wh_ModSettingsChanged) stay pending
-    // and never actually activate. g_addConnect/g_addHomegroup already make
-    // Patch() a no-op when the feature is off, so installing the hooks
-    // unconditionally has no behavioral effect while it's disabled, and lets
-    // it turn on and off correctly at runtime without a mod reload.
+    // until the mod explicitly calls Wh_ApplyHookOperations() itself, which
+    // SettingsChanged() below does when privacy mode is turned on at
+    // runtime. g_addConnect/g_addHomegroup already make Patch() a no-op
+    // when the feature is off, so installing the hooks unconditionally has
+    // no behavioral effect while it's disabled, and lets it turn on and off
+    // correctly at runtime without a mod reload. The DrawTextW hook is the
+    // one exception: it's gated on privacyMode in HookAll() above since,
+    // unlike the others, it sits on a very hot user32 path.
     if (!HookAll()) {
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
         return false;
@@ -8381,6 +8491,19 @@ static void SettingsChanged() {
     g_addConnect = enabled;
     g_addHomegroup = enabled;
     g_addNetworkMap = enabled;  // Visual Network Map rectangle
+
+    // Privacy mode may have just been turned on at runtime: install the
+    // DrawTextW hook now (it was skipped in HookAll() while privacy mode
+    // was off) and explicitly apply it, since hooks registered outside
+    // Wh_ModInit stay pending until Wh_ApplyHookOperations() is called.
+    if (g_Settings.privacyMode && g_hookInstalled && !g_textHookInstalled) {
+        g_textHookInstalled = WindhawkUtils::SetFunctionHook(
+            DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
+        if (g_textHookInstalled)
+            Wh_ApplyHookOperations();
+        else
+            Wh_Log(L"Network Center links: privacy text hook unavailable");
+    }
 }
 
 #undef NCL_THISCALL
@@ -8394,6 +8517,17 @@ BOOL Wh_ModInit() {
     LoadSettings();
     DetermineLocale();
 
+    // g_Ctx.csLock must be ready before Win7NetworkCenterLinks::Init() below
+    // installs its DirectUI/DrawTextW hooks: those hooks run in control.exe
+    // too (via SetXMLFromResource_Hook / DrawTextW_Hook -> 
+    // GetConnectedNetworkName() / MaskConnectedNetworkText(), both of which
+    // take this lock), and control.exe never reaches the g_IsExplorerHost
+    // branch that used to initialize this critical section. Entering an
+    // uninitialized CRITICAL_SECTION there was undefined behavior that, in
+    // practice, deadlocked the Control Panel page.
+    ZeroMemory(&g_Ctx, sizeof(g_Ctx));
+    InitializeCriticalSection(&g_Ctx.csLock);
+
     if (!Win7NetworkCenterLinks::Init()) {
         // The flyout does not depend on this optional Control Panel feature.
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
@@ -8406,8 +8540,6 @@ BOOL Wh_ModInit() {
     }
 
     DarkContextMenu::Init();
-    ZeroMemory(&g_Ctx, sizeof(g_Ctx));
-    InitializeCriticalSection(&g_Ctx.csLock);
     g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
@@ -8443,8 +8575,6 @@ void Wh_ModSettingsChanged() {
     if (!g_IsExplorerHost)
         return;
 
-    DarkContextMenu::OnSettingsChanged();
-
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
                      || (oldTheme          != g_Settings.theme);
 
@@ -8476,12 +8606,17 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     if (!g_IsExplorerHost) {
         // control.exe can create only the in-memory Network Center icons.
-        Win7NetworkCenterLinks::UnadviseConnectivityEvents();
+        // Marshal the subclass removal + COM Unadvise/Release to the STA
+        // thread that owns them (this callback can run on an arbitrary
+        // Windhawk thread), instead of touching the raw, unmarshalled
+        // IConnectionPoint pointer from here directly.
+        Win7NetworkCenterLinks::TeardownNetCenterHost();
         FreeSystemIcons();
+        DeleteCriticalSection(&g_Ctx.csLock);
         return;
     }
 
-    Win7NetworkCenterLinks::UnadviseConnectivityEvents();
+    Win7NetworkCenterLinks::TeardownNetCenterHost();
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
     DarkContextMenu::Uninit();
