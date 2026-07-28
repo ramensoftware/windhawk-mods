@@ -648,9 +648,9 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
+#if defined(_M_X64)
     size_t taskbarElementIUnknownOffset = 0x48;
 
-#if defined(_M_X64)
     const BYTE* code = static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
         code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
@@ -659,9 +659,6 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     } else {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight prologue");
     }
-#else
-#error "Unsupported architecture"
-#endif
 
     auto* taskbarElementIUnknown =
         *reinterpret_cast<IUnknown**>(
@@ -681,6 +678,12 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     }
 
     return result;
+#else
+    if (taskbarHostSharedPtr[1]) {
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+    }
+    return nullptr;
+#endif
 }
 
 XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
@@ -3339,7 +3342,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -3358,7 +3361,7 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols for taskbar.dll failed");
         return false;
     }
@@ -3367,7 +3370,7 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -3375,7 +3378,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, taskbarViewDllHooks,
+                     ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
