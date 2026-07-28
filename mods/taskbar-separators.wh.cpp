@@ -411,6 +411,9 @@ bool ParseColor(PCWSTR text, winrt::Windows::UI::Color* result) {
 }
 
 DividerStyle ParseDividerStyle(PCWSTR text) {
+    if (text && wcscmp(text, L"solid") == 0) {
+        return DividerStyle::solid;
+    }
     if (text && wcscmp(text, L"rounded") == 0) {
         return DividerStyle::rounded;
     }
