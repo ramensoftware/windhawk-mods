@@ -21,6 +21,10 @@ straight up and click an item. No clicking the taskbar first.
 
 Windows 11 only.
 
+![Hover tray with cascading subfolders](https://raw.githubusercontent.com/Kiploom/images/main/taskbar-folder-hover-tray-cascade.png)
+
+![Folder grid above the taskbar](https://raw.githubusercontent.com/Kiploom/images/main/taskbar-folder-hover-tray-grid.png)
+
 ## Features
 
 - Buttons are sized from a live taskbar button, so they match your app icons
