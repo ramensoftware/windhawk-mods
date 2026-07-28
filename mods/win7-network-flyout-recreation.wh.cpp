@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations
-// @version        3.2.0
+// @version        3.4.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -19,7 +19,7 @@ This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, re
 
 Screenshot of the light theme:
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/pic.PNG)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/networkflyoutwin7.PNG)
 
 Screenshot of the dark theme:
 
@@ -36,7 +36,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Wi-Fi network list**: Shows all available networks with live signal strength
 - **Connect/Disconnect**: Connect to secured and open networks with password support
 - **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
-- **Windows 7 style tooltips**: Full network info on hover (SSID, signal, security type)
+- **Classic tooltips**: Full network info on hover (SSID, signal, security type)
 - **Right-click context menu**: Quick access to network status and properties
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
@@ -44,8 +44,9 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
-- **NEW: Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
-- **NEW: Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
+- **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
+- **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
+- **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
 
 
 ## Requirements
@@ -65,9 +66,9 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 | **Ctrl+H** | Toggle network flyout (disabled by default) |
 
 ## Credits
-- **m417z** — Code review
-- **Anixx** — Testing on Windows 11 23H2 and feedback
-- **sebastian08dm08-cpu** — Testing on Windows 10 1809
+- **m417z** - Code review
+- **Anixx** - Testing on Windows 11 23H2 and providing feedback
+- **sebastian08dm08-cpu** - Testing on Windows 10 1809
 
 If you encounter issues, please report them on the author of the mod.
 */
@@ -104,6 +105,9 @@ If you encounter issues, please report them on the author of the mod.
 - restoreClassicNetworkCenterLinks: true
   $name: Restore classic Network Center links
   $description: Add the Windows 7 “Connect to a network” and HomeGroup/sharing links to the ''Network and Sharing Center'' page in the Control Panel.
+- useNetworkLocationIcons: true
+  $name: Network location icons (Home / Public / Work)
+  $description: Show the classic Windows 7 network location icon in the flyout header based on the active network profile (house = Home, bench = Public, buildings = Work). Disable to restore the original generic network icon.
 - theme: light
   $name: Theme
   $description: Select the network flyout's theme
@@ -112,19 +116,51 @@ If you encounter issues, please report them on the author of the mod.
     - dark: Dark (Custom)
 */
 // ==/WindhawkModSettings==
-// ## Changelog 
-// - 3.2.0: Fixed "Restore classic Network Center links" not taking effect at runtime
-//   until a reload (hooks are now installed unconditionally in Wh_ModInit and gated
-//   by the existing enable/disable flags).
-// - 3.2.0: Removed a dead #ifndef UNICODE preprocessor block (Windhawk always compiles
-//   with UNICODE defined, and <psapi.h> was already included unconditionally below).
-// - 3.1.0: Network Center artwork is now handled safely in memory.
-// - 3.1.0: Saved this source as UTF-8 and corrected the Russian language name in settings.
-// - 3.1.0: Added supplied Network Center PNG artwork as in-memory Base64 icons; no DLL or temporary file is used.
-// - Added full Ethernet / wired LAN connection detection and classic Windows 7 UI support
-// - Added compact flyout layout when no Wi-Fi networks are available (or Ethernet only), matching original Windows 7 LAN design
-// - Enhanced system stability by supporting systems without Wi-Fi adapters
-// - Restored the 2 links inside the "Network and Sharing Center" control panel page like in Windows 7
+// ## Changelog
+// - 3.4.0: van.dll alignment: row height 30rp + 24rp name + padding
+//   rect(8rp,3rp,10rp,3rp), signal icon re-centered (matches the
+//   real Windows 7 van.dll UIFILE). Refresh button, footer link
+//   alignment, separator and all hover effects left unchanged.
+// - 3.4.0: Network location detection now only runs while the flyout is
+//   visible (it was previously re-run on every 3s auto-refresh tick even
+//   while hidden), and the last detected category is kept instead of reset
+//   while hidden, avoiding a generic-icon flash on reopen.
+// - 3.4.0: Category detection now joins on the exact network GUID
+//   (adapter -> INetwork::GetNetworkId() -> NetworkList\Profiles\{GUID})
+//   instead of matching on profile display name, which isn't a unique key
+//   and could pick a stale profile. This also fixes Wi-Fi being checked
+//   before Ethernet when the Ethernet registry lookup missed.
+// - 3.4.0: Header network-location icon is now decoded at its actual draw
+//   size instead of being upscaled ~5%, removing a slight blur.
+// - 3.4.0: Normal (non-hover) refresh icon is now decoded at ScaleDpi(16)
+//   instead of a fixed 16px, so it no longer jumps disproportionately
+//   relative to the hover icon at higher DPI.
+// - 3.4.0: Registry profile name reads now use RegGetValueW, which
+//   guarantees null termination, instead of RegQueryValueExW.
+// - 3.4.0: The fallback network scan now fetches the adapter table once per
+//   scan instead of once per connection examined.
+// - 3.4.0: Corrected Public vs Work icon artwork mapping: Public now uses
+//   the public/bench-style icon, while Domain/Work uses the buildings icon.
+// - 3.4.0: Moved the refresh button 2.5% back to the right from the previous
+//   release (net offset: 0.5% left from the original position).
+// - 3.4.0: Prefer the exact registry profile category before NLM adapter
+//   category, so a Public profile stays Public even if NLM reports another
+//   connected/domain network elsewhere.
+// - 3.4.0: Hardened network location icon detection by matching the exact
+//   active adapter and registry profile before falling back, preventing a
+//   domain/work network from overriding a Public profile.
+// - 3.4.0: Moved the refresh button 3% further left in both light and dark themes.
+// - 3.4.0: Removed external artwork credit wording; icons are treated as classic Windows 7-style assets.
+// - 3.4.0: Integrated cleaned classic PNG assets for the refresh button and
+//   Home/Public/Work network location icons, embedded safely as Base64.
+// - 3.4.0: Saved source as UTF-8 and added a padding-safe Base64 decoder so
+//   settings names such as Español, Français, Русский and Português render correctly.
+// - 3.4.0: Added Ethernet support so the flyout now shows properly for
+//   Ethernet connections, not just Wi-Fi.
+// - 3.4.0: Added the option to restore classic Windows 7 "Connect to a
+//   network" and HomeGroup/sharing links in the Network and Sharing Center.
+// - 3.1.0: Earlier maintenance release predating this changelog's detailed
+//   entries; history prior to 3.1.0 was not preserved.
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -136,7 +172,8 @@ If you encounter issues, please report them on the author of the mod.
 #include <uxtheme.h>
 #include <dwmapi.h>
 #include <psapi.h>
-
+#include <shlobj.h>
+#include <shlwapi.h>
 #include <strsafe.h>
 #include <shellapi.h>
 #include <commctrl.h>
@@ -144,8 +181,8 @@ If you encounter issues, please report them on the author of the mod.
 #include <netlistmgr.h>
 #include <windhawk_utils.h>
 #include <process.h>
-#include <shlwapi.h>
 #include <string>
+#include <stdlib.h>
 
 // =========================================================
 // Dark context menu support (right-click menu only)
@@ -153,7 +190,7 @@ If you encounter issues, please report them on the author of the mod.
 #define WINDOW_HEIGHT_BASE       405
 #define HEADER_HEIGHT_BASE       105
 #define FOOTER_HEIGHT_BASE       60
-#define ROW_HEIGHT_NORMAL_BASE   26
+#define ROW_HEIGHT_NORMAL_BASE   30
 #define ROW_HEIGHT_EXPANDED_BASE 74
 
 static UINT g_dpi = 96;
@@ -171,6 +208,13 @@ static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
 }
 
+// Shared by InitRefreshButtonRect (hit-testing) and the paint handler
+// (drawing), so the two can't drift apart the way two copies of this
+// expression could.
+static inline int GetRefreshButtonLeftOffset() {
+    return (WINDOW_WIDTH * 7) / 1000;
+}
+
 // Define settings early so they are available to RecalcDpiMetrics and UI helpers
 struct ModSettings {
     BOOL interceptNativeFlyout;
@@ -179,8 +223,9 @@ struct ModSettings {
     int  language;
     BOOL enableHotkey;
     BOOL useRoundedCorners;
+    BOOL useNetworkLocationIcons;  // TRUE = show Home/Public/Work icons; FALSE = original generic icon
     int  theme;          // 0=light, 1=dark
-} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, TRUE, 0 };
+} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, TRUE, TRUE, 0 };
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
@@ -198,6 +243,7 @@ void LoadSettings() {
 
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
+    int raw_netLocIcons = Wh_GetIntSetting(L"useNetworkLocationIcons");
     WindhawkUtils::StringSetting theme = WindhawkUtils::StringSetting::make(L"theme");
     int raw_theme = (_wcsicmp(theme.get(), L"dark") == 0) ? 1 : 0;
     
@@ -207,6 +253,7 @@ void LoadSettings() {
     g_Settings.language                 = raw_language;
     g_Settings.enableHotkey             = raw_enableHotkey != 0;
     g_Settings.useRoundedCorners        = raw_roundedCorners != 0;
+    g_Settings.useNetworkLocationIcons  = raw_netLocIcons != 0;
     g_Settings.theme                    = raw_theme;
 
     if (g_Settings.refreshInterval > 0 && g_Settings.refreshInterval < 1000) {
@@ -222,6 +269,9 @@ void FreeGlobalFonts();
 void InitRefreshButtonRect(void);
 void RecalcArrowRect();
 void ApplyNativeControlsTheme();
+
+void FreeSystemIcons();
+void LoadSystemIcons();
 
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
@@ -239,6 +289,14 @@ void RecalcDpiMetrics(UINT dpi) {
     WIFI_LABEL_Y        = HEADER_HEIGHT - ScaleDpi(24);
     ROW_HEIGHT_NORMAL   = ScaleDpi(ROW_HEIGHT_NORMAL_BASE);
     ROW_HEIGHT_EXPANDED = ScaleDpi(ROW_HEIGHT_EXPANDED_BASE);
+
+    // Cached icons/bitmaps (Home/Public/Work, chevrons, refresh, signal bars,
+    // etc.) were decoded at the DPI in effect on first use and never freed
+    // until unload, so moving the flyout to a monitor with a different DPI
+    // left them stretched/blurry. Freeing them here forces LoadSystemIcons /
+    // GetNetworkLocationIcon to lazily re-decode at the new DPI on next use.
+    FreeSystemIcons();
+    LoadSystemIcons();
 
     InitGlobalFonts();
     InitRefreshButtonRect();
@@ -272,7 +330,41 @@ static HANDLE g_hConnectThread = NULL;
 #define WLAN_REASON_CODE_INVALID_PROFILE    0x00038001  // 229377
 
 // Base64 resources
-static const WCHAR* REFRESH_ICON_NORMAL_BASE64 = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAN9JREFUOE9joAkw3nrrPwhDuaSB6Ree/zddcZVozUxQGg4WHn/OkKLAB+URBigGzDzy8D/j9z8MPEyMDNeuXVtx9epVMagUToBiwILDTxkYfv5hePr2O4OWllaEtrb2K6gUGFi2H8PwGiOIsKw/hNPPxxvtMNTAxEAAzrCs2IthyPEOZ4hmPHJwA0DAsnAHwpZ+D4hmJDF0AFODAiyzN2HV0LX8wn+QHC55ooB54rL/M9aeJ8+AqcuO/zcMmYKhGSMh4QJTF25nSPTRgPJIAIdPXFZXME/6D8JQoUEFGBgAn8daV7VTN5UAAAAASUVORK5CYII=////v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT07u7u9vb2+iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABRUExURev0/TO12pfQ5zWo1TiXzpnI45nE4TmOyqfL5Orz/DmHxo663Dl/wkuKyESGxTl4vTlxuDlrsoqn0Ddhppitz5WmxzFUlCpHfpKgvMPI0yA3YglAoVgAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAFRJREFUKFN9yEkSgDAIRFHibJyIs7n/QS2goxvLt2h+Qd+cQ0CWI5KiREBVNy3SeN/Z1aVeDKOGfSbxHMHMOsI+QXcOdl/LioBtRyTHiTBXjKh/RDeDBAMcwXjgKAAAAABJRU5ErkJggg==//9T3qpBX7Ilk83uLCM4kMlo+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhGETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQAAAAASUVORK5CYII=";
+// Classic Windows 7-style refresh artwork.
+// PNG RGBA/P 16x16; SHA-256: e3120b592ba3df0d2081edcc5cfba6d10cb287ed494b9d4dfc01e2523d683837
+static const WCHAR* REFRESH_ICON_NORMAL_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAADGUExURf//"
+    L"//v7+/r6+vj4+Pz8/P7+/v39/TO12sjo8fHx8fn5+ZfQ5zWo1erq6ubm5vf398jh7jiXzpnI4+Li4tLS0unp6ZnE4TmOyqXK"
+    L"5NbW1tXV1e/v7zmHxoq32/Pz8/T09Pb29jl/wvDw8Dl4vTlxuDlrstjY2Iqn0Ofn5+Pj48/Pz9/f3+jo6KS21Tdhppitz9PT"
+    L"07u7u9vb2+3t7ZWmxzFUlMfP4MXFxSpHfpKgvN7e3svLy8PI0yA3Yt3d3dnZ2ezs7OTk5LJJUwwAAAAJcEhZcwAADsMAAA7D"
+    L"AcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAA"
+    L"GwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWlu"
+    L"dC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIA"
+    L"BwAEAAAAMDEwMAAAAADZp5qVybcLXwAAALVJREFUKFNNj4cOgkAQRO9GOPQs2LCBgAhWrNi7//9T3qpBX7Ilk83uLCM4kMlo"
+    L"+rsnBAwjm0Mq6DJfQLFkpoJWrlRrdes3IRvNVrtjaxySi/dCx+kCroQDzxcMvQ+gBoHPJPoEviVg3EMYhqBEgAk/QIRBDRhG"
+    L"ETBStpQynkyteDZfLFdrdVb4ySjxTHez3e2XCRkRHFzF4Xg6xyCB0C7XK843Vzn7oEu18P74+xB26ZmYOnsBTi4RDe3fqLQA"
+    L"AAAASUVORK5CYII=";
+
+// PNG RGBA 22x22; SHA-256: 68489408513c7524a3a9e70e81dfe753c46d59e3cb2ed240faee35b619d166bb
+static const WCHAR* REFRESH_ICON_HOVER_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAA"
+    L"DsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEA"
+    L"AABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEA"
+    L"AABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAA"
+    L"Ujk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAA5hJREFUSEulVF1oFFcU/u7szO7s7O7sZmMajaIFf4KQh4APvlhpfbBa"
+    L"SgVpBUHBxyIIPogvgti+iD8PloL00VJCnwxWRRSKgdA+WGgRxZhsG1E3k0Sz2WR3s//z4zl3f7KzUgrpYb+Zvfee891vvntm"
+    L"BCi+vn7fSy3WUbNdHq45gqqCHb0afjh5QIijV255iWQvzn4xjI3JSDNlbWFli7h8+zGWs4sQey/c9n46tQ8fmAYKda+ZsraI"
+    L"aQJv8yUc//4hFNfzsD5hIEekbEQnVDgIC1tCODVUqlXUHQcO1XTnMpiDuZhToTFAQt1uuC404eHjh68kJgs12LUqbMd9P7cD"
+    L"zMUhifk/79KCQ6QBz8aN51kohTrG9m3BBreM5cIKbNv25XajybtK7NClBVDC1EIJI4/mcGKzidfWPKZn5ik7INGZ2w36yWhY"
+    L"QdG5SKV4MrMCUbYRUQQpLVCmAkULwhUKdOEiHnCgedSidZt8d9u1rWgopgn2JywcJFUHBvXjyO8WULUxu1jG0OB27B4aRELX"
+    L"YCgudBJ+8Ls/ZV7QpUOtrHrPXBw+K2TBpUcSqNgSd/6Ya8/FIzoMTWmv8900QtBRR5k6hjmavA3iGvWKVRKwih5Gz+wmpfX3"
+    L"wPMVB/js29988zyORCKwyRLmYC6Otsccc2WBN9RWo+f2+IrlmOLw+THffAs8P0D92xkdHtNFkOoyqV8qYvSbT+hRaBO6P516"
+    L"gb9fz8v/jIO71su11jrjxVym0W5NL1Y9JuddCATUIGarKtJEfvPip0il5/FPpoiX+TrGpzOYsBbRH1Phllbw1d5N+OvZJH68"
+    L"O4bUm4Lk8HnMA5u2YjikmtvKqgYw/nIJ6YpAcmATIj29CEZjiEXp9c/lUStksfPDHqQzOZh9/QjHE7LeR8z6ebcWWLlCykNG"
+    L"DJF4Ut7VoI4tZhADpo4bI/dx5MAgAiEbJU9FtGcd5URlbcsLnxXd5I03TZX3cMDDzOQU9uw/idLyDI59+REm0gswzB5oepg4"
+    L"FFnnU8ybdBN3I0dn1b9tK8YfXJdIWQtQ9ChCUVM+nXzzKK8puEMx2/EfmM47+HV6CfcmZpFaqkrfpVp6Im5fzmkrVuhb8Ha5"
+    L"iF19Gn0qyYJ/AdVAkC1hUhjv7UeibwOMWAIBLSTXOIc5mIs5xbGrv3g6HdDpz4exzgw391tbZPJlXLv7GJVclk8IOErk1opo"
+    L"vCT/IxRq1Y1RDz+fOSTeATe7heJTThHzAAAAAElFTkSuQmCC";
 
 
 // Network Center artwork supplied with this mod. These are data-only PNGs,
@@ -555,10 +647,179 @@ static const WCHAR* NETWORK_CENTER_HOMEGROUP_ICON_BASE64 =
     L"tCkQszCZtqhvKMqConQYDXQtj4bFufkPnrWpet+zf+DhV7/oRd9xDJDhcHjvDyP8VldAh1oPzfLy8uks5a1vv+WcT9x44xNDXe/72MdvSqWbf/T81oWHt/Wo"
     L"vvmzd77jnLMW4gMfcNZGUS7+9q/84v6/P/U+X62/PyNn5IyckTNyRs7IGTkjZ+SMnJEzckbOyBn5V5b/DYLeM4xFt4qLAAAAAElFTkSuQmCC";
 
+
+
+// ============================================================================
+// Network Location Profile Icons (Home / Public / Work)
+// Mutually exclusive: only one icon is shown at a time in the flyout header,
+// based on the active network location category detected via NLM.
+// Source: imageres.dll / pnidui.dll (Windows 7 style)
+// ============================================================================
+
+// ID_0 - Home Network (house icon) - NLM_NETWORK_CATEGORY_PRIVATE
+// Classic Windows 7-style Home/private network icon, downsampled to 64x64 for compact embedding.
+// PNG RGBA 64x64; SHA-256: 27448081d0b495754e822f2ced309856d61b167b9bbca8715e8160c63a52a05c
+static const WCHAR* NETLOC_HOME_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAJxklEQVR4AdRWe3BU1Rn/3cfefSe7ZDe7YEJICCTBEEiCQTBGkgzaovUxNUqlo45anFCt1VFH"
+    L"rSjVWgmKT6zvqaiFGgwQIEEDKhW1hDThKUmEBIQkkucm+7q799lvV2fLMFF0+kenZ/fce+453/2+3/l9j3NZ/I/b/x+A4QcvXt95Z7Fef122/shsh6//9yXz"
+    L"/hsSfxID+ppfzmUUeTGrBLCxpRuv7R911HaOmZeX5c58eEHOXX8oz/loeUVuiHr9jwX1kwAwd9Q1d+45Vr2rowcmuxNV87OiAxE06JzezLHMc2ZoFQ5NtDjl"
+    L"wJUvX1mw/seAOCeAKoB7qDz3sofLc1Y9XJnX1sCn/OW4OgmZqS4UuyzGGSbdNNOimWeaNUy3sfAk2WG12eAfHlz84lWzN50LxA8CuPuyGROmXzrrC4Fh3jVF"
+    L"xPvcqlhYYpSZaxwsLjEqyFHD8HIqLJoORtehKho0WQbPMkhOTkZocODqNdcU7f4hEN8L4MHKwhlOo+NYefUDJTf9+RXXAl8fik+egFeLIhoJQdFkBCQFig6w"
+    L"YCCwLDgDdTLO0jPLaLA5kjA2cLr0+UX5H6+IiY2DhB1nDg9Vnr/YlZ5+cPl7G52zKi/FlFk5yKlrAUwsogN9YA0CjIIJNosVJo6HgQcYVQZLaAwcAyNNCAYD"
+    L"OJaDw+lEIOAvT7m68LPaqnlmnNXYs57xwIKcd6dffOm6Javf4I588h5Ch3biwLa1cGVNRPbf9sCos+CHvwHHcRA4je46zCYeglGAycCBSACrqRB0hsAx5A4W"
+    L"TocDoyND805L4b3PnAWCxXft3gKP9aGFM7srfrt8ycKldzLDzeuQml2IjAsqkeyeFAfhyZ2M9Dd2gQtHYAwNwu40w2rhwekgowyxoIMj+gWOBU9McAwDaAo4"
+    L"VoPDkYJQKJCv+IZa/3rzAge+a3EA987PuNwxLXf4hmfXZeYW5sLXthmeaXPgyi6ALEnw5JUkQHjzpyHt1U/AhUagD/eCNxhppyysZgZGngEPnWJCI/U6OJ4n"
+    L"VsgVDAtagslkgSrLecMDpztfryrJBDX23vmZL2UUlW675c0tRnPka/g7P4U3pwQpWedD8g1BDY2BoYDy5BUnQKTOzoOzpgn60CAMgSHaIUs71UgOMNDuLQJP"
+    L"hjnwtHsWAEsZwtOdJ0CCLQlKKJwqRULdW+9fXMlOyr9g2bV/egnBA5sgDZ/A1OJKMj4D4lAflGgQmi5DUyXoFPXu6QUJEJ6ifDgeb0Sk6xQkAsIyPMwUfDwZ"
+    L"U2WV5PV4arIcA4IGVVfBy1FYlTFig0F378C+1n0HjGzhgzXmrqZXG6FEKNrLYHKnIzLcA10OA4pCdzHeY+usJsE9NS8BwnthEdxPb4VhaACqbwRRWYKqknGV"
+    L"TFJG6FQfVJozaxEkk2E5JGLYPB3+jPnXrm4bLFqxo72RLc/MjKih/kUmixtGhwvB3mPQIkGilBTJIjQpDEYRoStRkD/iY09Gxn9AXHQB3CtroZ3sA3yjoBAg"
+    L"ORVyVIRNj8CjhKCJEtqj6ehJL4d77hw8tnZ9Hb5rMRfFh85J54Ghn81OuW21UiBJ4MhxsYjW1SgBiECPSgSA7kSlK92bADGprBQZz9TCHhyFFBiBRQ0hXQ3Q"
+    L"WEWrlIZDaeVwls5F6VwL8lz9qH2mKlEPEgBYjoMmM2jfU4/IqTYKojGYJnCI5TUUCTwxZJkyAWZvMizJPKjsI2ViSgJEWkUZuudUIaNvEKJfwQ4lC19MWQBL"
+    L"6RyUFgsodJ9GrteASZMyYeO9WnzXdGGpx/9cjGIavbX1K7xQdwgvv/kRXlm5Bro0BqvVQCvA9TfW4MU1a3Hk6FEMRkdhZhWkpCZjVsV8fPnPDdh0SkdDehla"
+    L"8iuQtHAeKkoElKQOYSqdHbkzSzC1qBJObxr2jhxS4wrpkgAgiWP0CHAp06C6ZmHvoBPP1XdC1KMgJ8bX2ro5bNjlx+XV7+OKm14gXw+BtgttdBQTrHZcMpPD"
+    L"xEWFuOQiD0pTA5hs1TA9vwR5Fy6CzZUOWY6Ao4Bc8fwBa1whXRIAImIALM/Cd7oTTQ112F7/HjoPtyKqyCQmUQdSz/Pi+usuR37JfPTw08BTijFSEBHKgIgY"
+    L"RXaagPwUEW6DjImTM5BdvBAWdxb8AT8CAR+iQT/kcBAes3ORp6DAGlOaACAGx6AFB7Dm8Xuw8eXleOOpB3B/9Q2UuzoQiYEAvjrRj927d1ONOAa7oIJiFgzL"
+    L"go4HqBT1Rl6H0WjBhNQ02JIoo8J+hHy9iIb8EAOkn+pJWJLB8GxOiiKcD4Depmvsr1CEjx1vxmBXK1W3LlxRloma55+gYLQh7PPHRJCRmY2mw2Ec7NPpvHeC"
+    L"AgRyNApNVyBL0Xgd0DkDAv4ARqk2RP0+RMIBOr4pO8QQjAaFipUMnudMLKsFSKmWYEAlJRxnpDkVobER9HccwKnPt6GvpxsiFRVu6F945FdWcPaJsKYVQae7"
+    L"Fo2A4VhwREXs/TAdUmI4TIRJCIZCCBPdkhgmkDI8DgGifwQ7m7vHWEbYcPhwWzsZQwJAkt2OJJeDVAFR2lVUJeoZFgJvJMQUb645eHRtNyxWCwzke7ACWAML"
+    L"mSpd7MBSiQGDIEAjDSLFQ0TTIJIeA9USl53DiZPfoK5x3/a3d3VMPtl1qDVmPNbjALrau6o6O46g6/hx2G0mTMnPhtvlROxjQ6caLoZDMVn0R7ww0onG8Aby"
+    L"OweJGBCjKsKSApUMgmHIHToUAq+qCibYBOhUxP7R3B7euefokqU1mxdt3978rT/jGvEtA7esqn+/9eD+tB2bt924ub7x4y0btgSPUq7bkgSkuuzwUo/JK4wF"
+    L"MmOiamsAQ8RztN/YDk0CR4a0uHGZYtNq4eBONqDv9Ag+3N2xpXfEl3bfmsZ1GKfFGYjN3/Psx73Vz334zpJH/l65767Xk5v3tlz/1tt1L23YuP3Yl+3HYyKo"
+    L"yLdgNGzGcNSOMMzQ6ZBXNQbhGOXkApbR4XEaYGQZtBzsCbYcOXXz0pWbrlq2ssEXVzDOJQHgzLUVgLa0prF22eptd4T6js1Y+8H+wqbaXx949fYNaHm0Dk+U"
+    L"7USW0EcV2givU8B5HicmptiRSl9IPf1BfL6v54Nevy9r2aota8/UO954XABnCt7+Wqv81Fs79l9195ez77xvIKvjs6P3X5Ry8NGrk/f+8Z31uxoaP22TurtP"
+    L"UNT70XFijOJo6LZbn3z/5797cvvgmXq+b3xOAGe++M7WzuO/uKfzqYIbWx+7ddWWFUtrNl3R29eb3rRr78/2tHUtESVtym9WbX7zzHfONf5JAMZTVv1000D1"
+    L"6oYPb6+pX3fbExu/PlvmXM//BgAA//9XJbi9AAAABklEQVQDAOY6Rn3kHfDOAAAAAElFTkSuQmCC";
+
+// Classic Windows 7-style Public network icon, downsampled to 64x64 for compact embedding.
+// PNG RGBA 64x64; SHA-256: 113c9bc77b957ba3836f01c61c2ea0ae24493cbdd05ce55e15ed2ae1f8219630
+static const WCHAR* NETLOC_PUBLIC_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAKRklEQVR4AeyTaXQUVRbHb1VX9b4kvSVmIQRE9hEFEhRwQBQyCYswQhQOyqpsihBlVQgHXAYi"
+    L"oIgRDEQQyCirAVwAkSEQEpJgWBIICSEkTdJLOkt3dXX1UlXzXh+aycyYMzNnPsyX6VO/vq/eu8u/7q0i4X/8+7+ATjvQejEroeHoWyOq982Jc14/Fu8Iimer"
+    L"HGLR0V9urs3MzOw07j+daKeJJM4bLwmWwrMS5u7F1qKdPzHfrxjJFW9J5m4dWzSld1NKw4+b9agYgfivrk4FuOQ9Sp2C6XCbO2hjWpwxnquHQXn1Uxjk2msU"
+    L"60tOsjX5FdU5aedu507ZVbPv1dXV+2dPrsh7Lbkmb0H81b3TVR1V2e12dUObf3ZFvWtCyTVrt45nnQqQ0nKjKFU0eOQx2e0xYw/Ze74NpcoXoYLvV+ClzPvd"
+    L"HqHV5bAmuy03ZzF1pRu4htJvRcuv5322WxeoNtsPVbnpuVV7Zqyo+CJ1Alv1/WIx2JpDUtTROpvtk39LANF6K0nlqlpi9lXvjrTmv2Kw5YNZaAC5lOJ4pbnI"
+    L"q++7iYsePterf3weo+m7hpH3yGVAV+jxeIFtb36KsVTO8DZc+ZBwWY8xxdkb2vNeAe7kPMJQ9UnS7b2vrq7cN3diYe5r/TvtgJs0HrOqk5Y2K/u/59H0vcWK"
+    L"MojgLRDtq3yetv+6TeMo2q1svpyl8t+fqZQEexFKTV1A0zXPYxq8nDElz2QNTy5ya3pvbKPiD7h4rYNj3CCxX4EYd6EZdWuDYCk+4rPd/bxTATKfdb7SVbmI"
+    L"4ByPBSijnzU/C8XBoWIVPXi7x5T0Vps0Mcfll1a425hYX3PdFNJ6ZZ3CdnmHxnZxl9pVmUl7bamkhJSIKtMFT+zouubus+G67iXxDp2cy2r7ZrklpnOgMF/t"
+    L"VADjo6pZTvAFnXXp/I19A6mSD6C/J58weq6niS77SJGUOgOKRw75I/qsYKOGzWK1vZe6FAnbGInxLIsC+famFMJ2NYO2XPw8snrXYNOdHIhniwgVtMcFaUWL"
+    L"T5WYB9qEnE4F5NV+uY4l9EOI+NFJsuc+LHd3nw5WIpH3cxwdbKlNAXv5contynaJozRHYi9dSzCNo4CgOL/C/GPANHCd2zBoOmNInsfqn8h26Yd4GFEJMk+D"
+    L"EOGtfV7rvPKBrPH8Dq61MeU3Bfy0aboqMxPE1MwfmHaNqb5n2gx5bOp6qH7kdY7tkZ7uVfcaJkQNmRnQ9dgsqGPP8wIvEdiWNNJR8Q5tLflMcr9gj9R5bT3F"
+    L"1I8D3i8XTY8HPN1egnLVOHujauAbbm3vzGBkn4OUNur63wm4lD2ja+muORk8ayk8tC7luwPvpi3hvb4VDTdqHnPcvwMUKToyNuwsS3v38NVRS77aP3rVieXf"
+    L"XHJOtHujhnqjhz/lNyfN9SniPwvIowqCAsgDLmsad69wJl22MSLi+hboyZ42qLz1k3nOY+QVUQVCgC8JCbj5bcbAS9sm5bRZb/9yq/xS1n1L0++cltpx7baa"
+    L"rIbCfcsubptEVn2zCLSNR6h3p/Z7fevi1BGZ81Ji0fdM7TxeJry8Mb859c3sstFv79uTknl6yZd/bhzjoOKHc7qezyqSF+5oj5sITioO/H6fSPsdz8iYe4sE"
+    L"a9kWt6ulC2nLX7iGaygubK6vnM0xbV2lNAUKlRRkUhpklAQUyBK8F4j2WuDrC+LYpttbZX7LkThp6885S4Ye/WrV2DU5mVMnffTGmD5zxifrAYA6WFlJTMs8"
+    L"Ypmw+siFfpMyqmLHfQT0qI+hqefSo6wh6Rmv6tHlvCpmc4S+ewPp4uCuTKX7untiYnHXWGMwIZKHbkYCuhhoMGkkoFFSEKlRQoROC2q1GgmiQPT71KzL2c3X"
+    L"5khhmqpW+hrK8nQB2+kh3en8r1al7sjOSFu0ccGzI9bPH9/NbmdS1VoN0CojKKMH3HjuzZyiEcuObX5+ef7K5+audpA9pmw/0Gfeyfm2iOEztJNy62TD18B9"
+    L"ohf4STU8YtZBj2g5dDWSYFbzoFcRSIwUItRSZBWgUctBIZcBJZGAGPSa2FZrEtNU8wow97J0ROuRWFnzqcIvF/y+/Nv3wFL2HbC1PwYXvzxKHxcHNACQGPxH"
+    L"oAUxcuqqe3WNvmV2xZN7aiJfbC2QpMNhxzA45x4EjdIBYEzoL8ZFR0J3EwHxBgp1hwSNXAStggQt6pJOKQNDhAq0GgUoKJSWD6oYNGNP/WW6uWQvsEWbwH/j"
+    L"63cGxnI/bXh1/LaVCxdqAYBAnoB/BPojRz3d5+zat6avfmH00Nqx48YDaLvBNSbB2xCRtqN9wBq2ImoR/CqfxHnlsQeNhsgLCTFRjniTKhinp8CoFkBD82hE"
+    L"ADRFgFohgWiDGowmA6h1elAoVcCzjL7FYesr1Xe5e6qoKIhqSkj0h4uHIadNmxFFyxQm1FWgIABdo9Qlf1r7Zk6A856URXaxtGgGfDd62YmsQRnnlm76ofm1"
+    L"EqtqWTvdZafGlFAQFxft7KInIVEfhBg0MjUdBCUtgEpOgkoqAqU12Vhd71lTMz7LLisrE1FtEgtA9m9XQrdHjRKpIpLnAX02QZDJyNKmpib/y5NGZx3YvWX+"
+    L"xhWztz3wJvJOlTe98cmZwrErj+1+Yc3Zla7H5v4sRW871W8G+JSJYDIaINGsgBhNADxBCojfLahc9enxsyieQuDaD0cgog2MoFRq0BdISwBEoKRScLlctegs"
+    L"6HQ6uaOHvrHY7XYvuucRIf8HFuxub/DImWsnLKz+BNM13VuiSIe/SKZCmXwytBjGANFrGpD6Xlqd2SxDMbg4JiQAJ8II6IBXKpVAUiRqGAEkmhDj5pwA4PsH"
+    L"Aujej8BzxGBBwqcfv1+Vs3V9tkz0towYNhiMcT2gRd4HmMSpII8fBoTfxRN+P66D62FCnwJeYPCBwAs+hygKdwiSBH2k7kzTveprqBD3APz0eB22YWFYDCYw"
+    L"fPgzJrlCFalCLx2IPOik3GngHNvktFDMsa25bW1tWDyuhWuKuA14gTcw/B8npF6/UnT+RdHvmnK7vOj1gwf3N/1GcSwAw6IzbDFYGNe7b3+zXKlSkCQFPC9A"
+    L"a4vtePrEMdtXLZ0za97M9JPIH3crjIAFoD00cICQAJvN5h87ZmT104P6Hs/O3mpFh/4H4KcNFUH3uGBHHgrRm6N1MpmcEAkSCCA5p9NRA2iElZWVLmTx02Me"
+    L"jo1Em7gDYbAIDHbAYGdMWAS2WEiYsCBsQ4LUWq2cROMLCjwIotBy8+ZN/BLjcxyD43E+3AFcJ9SBjsXxOnSAhGGLHTFYDAYHh8HJwuDkGE6pUCoEUYRggAcp"
+    L"TVdeLjjTgnKFBWAfHI9z4bwhAej84YUFhBHQLl5jGwYH4eCO4ISYkBhXm/0A8L4vpFLiFCF43rdarXg8oTOULxyH82BCLyHa7/TCAsKEReD78BonCScN2Sf6"
+    L"9br8aJxu8cBeMeOmT/5DIcqMxWGwLyYci/P8SwEo/p+uUCDa7ZgIr3HyMFhMaI38OlrshwnnEP8KAAD//5R9kyoAAAAGSURBVAMA/JzslxJ7OeIAAAAASUVO"
+    L"RK5CYII=";
+
+// Classic Windows 7-style Work/domain network icon, downsampled to 64x64 for compact embedding.
+// PNG RGBA 64x64; SHA-256: aa799df96ae1d1e683945c367f3ba4b1c776f0c719af808b7b3e9dd47442c81a
+static const WCHAR* NETLOC_WORK_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAIcklEQVR4AexWe4xcZRX/3e8+Z+7M7Ozs7OzOLrN9UErBwgZIMKBACpqIwaB/iImJJmpSkRQx"
+    L"iiAlIhKpgjxqCyVosVQKuhRpaQVa267ddsHtY7ev7cN9tdvZ92te99657+vZjTVFEmxXE/7h5jv3u9+93znnd37nnG+G4WO+PgHw8TPw+FvHala88f6ipza1"
+    L"Xbd8w57blr/cfNcDa3cs+/7zW36xbPXmF+559s3N96566/C9Kzf2f+XxpqY7HnnlvtuWv7rk5h/+PvP/KB+m2uNvN4TclpTktKRlb2eYs5sCfWq1wSIPa1L1"
+    L"3cNS6s6SkmpkqtxwdO4VdxUT8ZVSFM1yTWXLrctf2vTFh9f95PLvrbl6tmCYEDhXXtPYmMosvEqNzL0K0br5iKdqUTPnMqRq61FfW4d0VRUCUUFvqArtkRTe"
+    L"jdZhR1XDvOaK6i+/k5r3S02fvHvWADwwy5cU2EwEkwRURkTEwzzmVCloSIYwPyGjvlICh2DGR3XgYeZxekk6YDJK/vTLmc8XfWO6YWDwTDdGs93wps6CMyah"
+    L"+GWEjCHEjLNIesOo8seheiZuz/dhsZXD59wCbrBzaPQ0zHHyiLDZ1zLLWR6KgQRdiEATVRiCgjJ42KEY+IokpMoU4ul6WGIYLUoSJ1kInYGAv0NEp8/Q7wOO"
+    L"71505OcUmOYxjIfSsNQUHBJPqYAnheCpSdjhJBxaB5IK8AIMJQZHDGFEjgJiBJ4QprkC47P3DyZQQu3SJGDkwRs5CHYZvOfC0fIkU3D0InStBEZRLrA1ZAIb"
+    L"18LGPOZgseAhzJlI8OwcBG7F+p1Vf9zcknnxta3JR1dtiD366Dpl6dIXRYqYI/nQYLbjwTRNFHUdmmGgbJmwHAemUYJZ1lHWSzB0DTzVWcbVobg24DowaN+w"
+    L"ZcEwHVwhGDd9Y9n967++7MGDp4+/1727raXrRFdXr8h7PeFMqCt9dajzwWdear9vxer3lz78RPOtSx9bTUhmADGf4yEn6sAn6uHE07CVOExegVlRDzNWDyNW"
+    L"B5taT6ec/y1Ui0NiFB28ilFOwaRmAJoGy9Suy5fK35zKF66dLGhxNVIp1damI3JITboelyGSF5aLhWtGiu4NO+3EkmZTXoJ/XUwiamNU1RE7j5BdAufZgB+g"
+    L"ZJgouz5sKjKL1hxjpOKDkbUap4wq18ACmUeNKqPkBvqZkl0eZarDFn2mrDYssOKZS826uhp7YSblGh78Y0IaTZHLoCsRzBOmnZA5GkwgahOUz2qUUeeXkHTz"
+    L"CPsGuOFusPHTEAvD8IsTEMnpZ7VhfNqcwvWU+8vgQBYEjDIJAeMkSeAlh5fEXqrMwUBVctULQuH5jVL9wk8JQTzN3FgKt5tDSJt5nHZcck2R0J1Nx5RI1SGW"
+    L"ugRiMoOCmIBJVa6HEhjKGWChCERZhiBKKMgx9MpxbOVUtDEVx30eCHj4jk1M2lwisHAN8lCMSS6X7eay/b1c7+A4RGMKtVM9OMXHcJjJuNIY4QAoJIx5roUI"
+    L"V4YQuMhqLooeB9P2YDERectF3vTgESDN53BMVCn306kIgMDHPFdDozkGXhD5MhNZnsD0OiIKpKdTzQzqNvomC7A4EVn1EkQJyJJAg+5hLuoW3wl1borcBBjo"
+    L"OomOw4cwOdCNgOjmCZRM9aASzVMTY7C9AIwXAHo/h1rxxsIQPl8eQUKScSRUNfNdJEa5IIATcCgQwyWezpKKNMZCKRQJjFoaQl1QxqlAgZwfzELgB6ELBpvy"
+    L"ePQnroRZPR9SOAY1JEOCh1rORJrTwY31otR/AkzP4wsTPUjTkaxFq7EjmkE7ZGIC1KI+BPiIcR4uJ3fVdExX5M5CnsqCK4yB0RwyC+iINqC6c9d4V1/fc3Ds"
+    L"LNBjsQmieMQEHKLZiqZgCCpMKYKRyCUYJCd+/SJYFA2vhHE4tRCHQkkcpeMaFO0V5UlcR85AxWgyEXlORDci0MQItW4SoPqJSjw4KYz+yvnI7HuzePTosZVE"
+    L"WSuGJyYBOCzsW0iMHQcGTwD5EXDTHUKdQSkHI6eerMJXKzFdEyM8FSNpNeaHcZM5TvYr0R6updOyFMj6lK961ky36KRshhKBk5yDYjwDM5xAsnefeeTI/nWk"
+    L"/g5MYwgYp7DhM4MKh9VeingiiYinQynnoVpFxCb6EDEmECbKJS4AR0W3OJfF1YVBxENh7I2k0SHEAGLNGhuYamvd+0Zn665Vwy1vvjzS8tbbZ5qeautqWtVd"
+    L"PLBtMndwm9Gx/c+vSXLVBpQGziJ/Ricg9LsOMIvjFY1XkVNSMKrmw61MwwtXIFyTof8GEVRxFiqJ5ohTRg1cjJPDFokcy3FUEtDFW1cMjmT71yI39DXtdOd9"
+    L"p5q3fqvjnT/dseeVNTduevqRhX944NvJLevWqIVsz3eMvv0HUSyWyLlLEpCAhcb+caB8+qgtkXGe5+FzAp2AQFGMw0nMgZlcAKuSaFSi2FXRgCyTAFHG9ad2"
+    L"OcGrT+7u7B38MXhl/bSxC5R/O5/ez0Z69n9p73M/u2Xfk/fce+b1Z97IHdlT4CiXgsDA8QyMcTQTPN8HRBEZHli8+enRjtd/tyYvRH8KS98Lf/zstLELlJnI"
+    L"z+1l7Tt3Ft7bvbNt++aNz7369M+/+vbLzy5q2/DCnb2v/erJgXfX7jO62/XANSFFKnDLoS1u//P3t3Zmxx5yJWUt+k6eRM++cYyOls8ZvNiZ/afCiQMHRrZt"
+    L"2biladUTD+5Yu3LJoVeevbn51z/4buuLj7XuX/+bVWOIPARd24WT3WdQGiyQvk1C9NB9FuNDAM63MTAwUG7e/peOv27e+Nv97266qXz6+I/Qvq0Vfe2j1EYG"
+    L"7f1APml90eMjAXyEtf8p6vPtzhbABwrpfIMX+zxbABfs579t/CcAAAD//yOSCIUAAAAGSURBVAMAJ07tbrBZnd0AAAAASUVORK5CYII=";
+
+// Network location category values (from netlistmgr.h enum NLM_NETWORK_CATEGORY).
+// NLM_NETWORK_CATEGORY_PUBLIC       = 0  -> Public Network  (bench icon, ID_1)
+// NLM_NETWORK_CATEGORY_PRIVATE      = 1  -> Home Network    (house icon, ID_0)
+// NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED = 2  -> Work Network    (buildings icon, ID_2)
+// NOTE: Do NOT use #define here; netlistmgr.h already provides the enum type.
+// Using #define would shadow the enum members with int literals and break compilation.
+
+// Cached HICONs for the three network-location icons
+static HICON g_hIconNetLocHome   = NULL;  // ID_0 - house
+static HICON g_hIconNetLocPublic = NULL;  // ID_1 - bench
+static HICON g_hIconNetLocWork   = NULL;  // ID_2 - buildings
+
+// Current detected network location category for the active connection
+static int g_CurrentNetworkCategory = -1;  // -1 = unknown/not connected
+static int g_LastReliableNetworkCategory = -1;
+static DWORD g_LastReliableNetworkCategoryTick = 0;
+
+// ============================================================================
+// Chevron arrow icons for the expand/collapse button (light theme only).
+// Dark theme continues to use the Marlett font character.
+// ============================================================================
+
+// Chevron Up (list collapsed) - normal state
+static const WCHAR* CHEVRON_UP_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAYAAAA71pVKAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAADtJREFUOE9jGAXUBExJ/6EsrIARSmMCZI3/5mFVh10zNhuxGMAEpREAl41YDMTUDAMwjTicPApIBgwMAJGcDwcTcpGvAAAAAElFTkSuQmCC";
+
+// Chevron Up (list collapsed) - highlight/hover state
+static const WCHAR* CHEVRON_UP_HL_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAYAAAA71pVKAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAAkRJREFUOE9tU89rE1EQ/rJJNiTZzW5rpdo2tDWlKT2oJ6neFG/FqwfPatB68P9QUW8iePUgCBVBL0JPLRa8iIitTUwk6Y9Uk2azDUl2s+85s0nENg58vN03883Mm/e9AP5jz99uyPyujdqhA1NTkRrXcXNxbiD2yMarlR9ys2hhcSGJ6VM6TF1FzXaQo0Tv14tIJw1cv3xmsOC9p2vyzWpBuh1PSikGwPvsX3qyKnuUbuWXH3IyrkWwcHYUISWAAEHpO8k4miGExNqXPdhWGzeupgIcg28lC6cnTJQbHvZbHqpOB9WOwME/qDjka3uYnBrBdzoGm/Li3aacnhyCJwU8jyFBC6gIprQMVVTgUQ8ebQjyCSEwlzoB5inZUh2GEYXrSnQogIMYM3rGzz6t3fLbZbCfmsDwUAzMU+ymi1BIAU2lCyLMD9/1iX2bTXAH3QnQ8KCqQTBP0aNhVKwWqk0HlYaD86NLfhDb8tbD3hcnvIMK3TujbDXBPGVmIoHi/iH26m3s1lu9UOD1xgN/Xd565K9s2zRljslvW2Ce38v9Z+syfW4c0UgQEUIoHEQ4rEDhy6BziICA6wh0XIF2y8XnTyU8zlzoXtWl9EnUyja0mAotGkEiFoYeV2GQwkxDpX/ai4d9f3nHxsXZEab5WvAlVywcoJSvUkAICRKMSWSTkhgM0rcWVfEz+wuF7O+/Eu2LyDfW9lfS9hXSdnJMh0YJbBpiiaqtfCxi/pi2j5D7xq8qt1NHveH67abGErh97firAv4AgAcsCQrs69wAAAAASUVORK5CYII=";
+
+// Chevron Down (list expanded) - normal state
+static const WCHAR* CHEVRON_DOWN_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAYAAAA71pVKAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAAD1JREFUOE9jGAWUAqak/2CMDLCJAQETlMYEMMVYNMEAI5RGBdg0/JuHoRa7ZhBANgCLRsIAj5NHAcmAgQEA7m0PukT+CfYAAAAASUVORK5CYII=";
+
+// Chevron Down (list expanded) - highlight/hover state
+static const WCHAR* CHEVRON_DOWN_HL_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAYAAAA71pVKAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAPJ2AQDoAwAA8nYBAOgDAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACDfy8cctDT3wAAAjpJREFUOE9tUztv01AU/uzYDkns2EALNBBRCCKFAYmtsIGYqJiQGFhBMNCVn4EKqAWBxMrAxEOCBakDalU2JFRoIWmDYrU1bZyHG9L6kcu5lxqRhiN9OrrnnO/cx/muhP/Y0zcLbHnVQ2PTh6VrKBw2cHNspK+2J/BieoktVpsYG83j2CEDlqGh4fkoU6N3H6so5k1cu3C8f8PxB7Ps1UyFBWHEGOv2gcd5/s79GbZD+bPz8/dlltGTGD1zEIosQSLIcZKMV3N0uwyzn9fgNbdx/VJB4jX4ajcxdMSC047wcyuC64dwwy7q/6DmU247wtHhAXyja3CTnr1dZFJKw6kT+7FHVXA2Ny4Slc0nwnMb1m8LP7/xCEHQxUK5hnbjF+SS3YJppijIENKxYosJsefG83QI7NubBufJXieAosigVxH45EztlPYSv7iPhafHg6YlwHmykVJRa27B7fiotQk02w/2Q1EY29zaJOUDkeNwmh1wnriz3YlwYMhAkjoqhKRCXpFwdeQuXn6/hyii44YMfhAhDEI4qy0MJmgiNy4Xpfo6vZ5ECxqRyoNETKgyXi9NUExGQuMxiIZUBmelBc4TozpfHETD8aCnNeipJLJpFUZGg0kKs0yN1hTLqCLvrHg4d3JAXEeQueSqlTrsZZcKFGRJMBaRLWpicpC+dRrnj9I6KqWNvxLt0SnX9jxp+yJpO58zoFMDjx7Rpt2m56o4vUvbPeTY+K8q071a7UAct5DL4taV3b8K+A2cwxTpxQY7TAAAAABJRU5ErkJggg==";
+
+// Cached HICONs for the chevron arrow states (light theme)
+static HICON g_hIconChevronUp      = NULL;
+static HICON g_hIconChevronUpHL    = NULL;
+static HICON g_hIconChevronDown    = NULL;
+static HICON g_hIconChevronDownHL  = NULL;
+static BOOL  g_chevronsLoaded      = FALSE;
+
+// Forward declaration (full definition is later in the file)
+static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth, int targetHeight);
+
+static void EnsureChevronIcons() {
+    if (g_chevronsLoaded) return;
+    g_chevronsLoaded = TRUE;
+    int sz = ScaleDpi(16);
+    g_hIconChevronUp     = CreateIconFromBase64PNG(CHEVRON_UP_BASE64, sz, sz);
+    g_hIconChevronUpHL   = CreateIconFromBase64PNG(CHEVRON_UP_HL_BASE64, sz, sz);
+    g_hIconChevronDown   = CreateIconFromBase64PNG(CHEVRON_DOWN_BASE64, sz, sz);
+    g_hIconChevronDownHL = CreateIconFromBase64PNG(CHEVRON_DOWN_HL_BASE64, sz, sz);
+}
+
+
+
+
 static HICON g_hIconNetworkCenterConnect = NULL;
 static HICON g_hIconNetworkCenterHomegroup = NULL;
 
 static HICON g_hIconRefreshNormal = NULL;
+static HICON g_hIconRefreshHover  = NULL;
 static INetworkListManager* g_pNLM = NULL;
 
 // -------------------------------------------------------
@@ -621,7 +882,7 @@ void Uninit() {
 // Theme color helper functions
 // -------------------------------------------------------
 COLORREF GetHeaderBgColor() {
-    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(255, 255, 255);
+    return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
 
 COLORREF GetContentBgColor() {
@@ -734,13 +995,13 @@ static void DetectWindowsVersion() {
             int btnCount = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
             Wh_Log(L"Win11: Win10 legacy taskbar detected (ToolbarWindow32 found, %d buttons)", btnCount);
         } else if (hSysPager) {
-            Wh_Log(L"Win11: SysPager found but no ToolbarWindow32 — partial legacy taskbar");
+            Wh_Log(L"Win11: SysPager found but no ToolbarWindow32 - partial legacy taskbar");
         } else if (hNotify) {
-            Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager — modern taskbar only");
+            Wh_Log(L"Win11: TrayNotifyWnd found but no SysPager - modern taskbar only");
         } else if (hTray) {
-            Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd — unusual configuration");
+            Wh_Log(L"Win11: Shell_TrayWnd found but no TrayNotifyWnd - unusual configuration");
         } else {
-            Wh_Log(L"Win11: Shell_TrayWnd not found — taskbar not ready yet");
+            Wh_Log(L"Win11: Shell_TrayWnd not found - taskbar not ready yet");
         }
         WCHAR epPniduiPath[MAX_PATH];
         StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
@@ -830,15 +1091,29 @@ UINT_PTR g_TimeoutTimer = 0;
 HWND G_hSubclassedToolbar = nullptr;
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
-static HANDLE g_hConnectMutex = NULL;
+// RAII deleter for HANDLE, used below for the connect mutex.
+struct HandleDeleter {
+    void operator()(HANDLE h) const {
+        if (h && h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+};
+using WinHandle = std::unique_ptr<std::remove_pointer<HANDLE>::type, HandleDeleter>;
+
+static WinHandle g_hConnectMutex;
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
 static void* g_pBitmapSignalBars[6] = { NULL };
+static void* g_pBitmapNetLocHome   = NULL;  // GDI+ cache for bicubic draw
+static void* g_pBitmapNetLocPublic = NULL;
+static void* g_pBitmapNetLocWork   = NULL;
+static void* g_pBitmapNetworkMap   = NULL;  // GDI+ cache for the fallback PC icon
 
 // Ethernet status variables
 static BOOL  g_EthernetConnected = FALSE;
 static WCHAR g_EthernetNetworkName[64] = {0};
 static BOOL  g_EthernetHasInternet = FALSE;
+static GUID  g_EthernetAdapterGuid = {0};
+static BOOL  g_HasEthernetAdapterGuid = FALSE;
 
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
@@ -997,12 +1272,12 @@ static const LocalePack g_Locales[] = {
         L"Connessione a %s fallita",
         L"Rete %d",
         L"Tipo di sicurezza:",
-        L"Intensit\u00E0 del segnale:",
+        L"Potenza segnale:",
         L"Tipo di radio:",
         L"Eccellente",
-        L"Buono",
-        L"Discreto",
-        L"Scarso",
+        L"Buona",
+        L"Sufficiente",
+        L"Scarsa",
         L"Nessun segnale",
         L"Connessione in corso...",
         L"Disconnessione in corso...",
@@ -1015,7 +1290,7 @@ static const LocalePack g_Locales[] = {
         L"Timeout durante la connessione",
         L"Il tentativo di connessione \u00E8 scaduto. La rete potrebbe essere fuori portata.",
         L"Inserire una chiave di sicurezza di rete.",
-        L"Risoluzione dei problemi",
+        L"Risoluzione problemi",
         L"Apri Centro connessioni di rete e condivisione",
     }},
     { 0x040A, {
@@ -1337,26 +1612,80 @@ static void LogSsidSafe(const WCHAR* prefix, const WCHAR* ssid) {
     Wh_Log(L"%s %s", prefix, safe);
 }
 
+static int Base64CharValue(WCHAR ch) {
+    if (ch >= L'A' && ch <= L'Z') return ch - L'A';
+    if (ch >= L'a' && ch <= L'z') return ch - L'a' + 26;
+    if (ch >= L'0' && ch <= L'9') return ch - L'0' + 52;
+    if (ch == L'+') return 62;
+    if (ch == L'/') return 63;
+    return -1;
+}
+
+static BYTE* DecodeBase64W(const WCHAR* base64Str, DWORD* outLen) {
+    if (!base64Str || !outLen) return NULL;
+    *outLen = 0;
+
+    int len = lstrlenW(base64Str);
+    DWORD allocLen = (DWORD)((len * 3) / 4 + 4);
+    BYTE* data = (BYTE*)malloc(allocLen);
+    if (!data) return NULL;
+
+    DWORD val = 0;
+    int bits = -8;
+    DWORD pos = 0;
+    BOOL seenPadding = FALSE;
+
+    for (int i = 0; i < len; i++) {
+        WCHAR ch = base64Str[i];
+        if (ch == L'=' ) {
+            seenPadding = TRUE;
+            continue;
+        }
+        if (ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n') {
+            continue;
+        }
+        if (seenPadding) {
+            // Padding marks the end of one Base64 payload. Stop here instead
+            // of accidentally appending garbage or a second PNG to the stream.
+            break;
+        }
+        int digit = Base64CharValue(ch);
+        if (digit < 0) {
+            continue;
+        }
+        val = ((val << 6) | (DWORD)digit) & 0x00FFFFFF;
+        bits += 6;
+        if (bits >= 0) {
+            if (pos >= allocLen) {
+                BYTE* grown = (BYTE*)realloc(data, allocLen + 1024);
+                if (!grown) { free(data); return NULL; }
+                data = grown;
+                allocLen += 1024;
+            }
+            data[pos++] = (BYTE)((val >> bits) & 0xFF);
+            bits -= 8;
+        }
+    }
+
+    if (pos == 0) {
+        free(data);
+        return NULL;
+    }
+    *outLen = pos;
+    return data;
+}
+
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0,
                                       int targetHeight = 0) {
-    static const WCHAR* tbl = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    int len = lstrlenW(base64Str);
-    while (len > 0 && base64Str[len-1] == L'=') len--;
-    DWORD outLen = (len * 3) / 4;
-    BYTE* data = (BYTE*)malloc(outLen);
-    if (!data) return NULL;
-    DWORD val = 0;
-    int bits = -8, pos = 0;
-    for (int i = 0; i < len; i++) {
-        const WCHAR* p = wcschr(tbl, base64Str[i]);
-        if (!p) continue;
-        val = (val << 6) | (DWORD)(p - tbl);
-        bits += 6;
-        if (bits >= 0) { data[pos++] = (val >> bits) & 0xFF; bits -= 8; }
-    }
+    DWORD outLen = 0;
+    BYTE* data = DecodeBase64W(base64Str, &outLen);
+    if (!data || outLen == 0) return NULL;
+
     HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, outLen);
     if (!hMem) { free(data); return NULL; }
-    memcpy(GlobalLock(hMem), data, outLen);
+    void* pMem = GlobalLock(hMem);
+    if (!pMem) { GlobalFree(hMem); free(data); return NULL; }
+    memcpy(pMem, data, outLen);
     GlobalUnlock(hMem);
     free(data);
     IStream* stream = NULL;
@@ -1528,9 +1857,555 @@ BOOL IsInternetConnected() {
            (connectivity & NLM_CONNECTIVITY_IPV6_INTERNET);
 }
 
+
+
 // -------------------------------------------------------
-// Keyboard focus
+// Network Location Category Detection
+// Detects whether the active network is Home, Public, or Work.
+// Robustness goals:
+//  1) Never let an unrelated connected/VPN/domain network override the icon.
+//  2) Prefer the exact adapter used by the flyout header (Ethernet first,
+//     otherwise the connected Wi-Fi interface).
+//  3) Fall back to the NetworkList registry profile name, then to a safe
+//     public-first scan of connected NLM networks.
 // -------------------------------------------------------
+static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name);
+static void SafeSysFreeString(BSTR bstr);
+static BOOL IsZeroGuidValue(const GUID* guid);
+
+// Fetched once per fallback scan (rather than once per connection examined)
+// to avoid a repeated 15 KB alloc + GetAdaptersAddresses enumeration.
+struct AdapterIgnoreTable {
+    PIP_ADAPTER_ADDRESSES pAddresses;
+};
+
+static BOOL AdapterIgnoreTable_Init(AdapterIgnoreTable* table) {
+    table->pAddresses = NULL;
+    ULONG outBufLen = 15000;
+    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+    if (!pAddresses) return FALSE;
+
+    ULONG res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                     NULL, pAddresses, &outBufLen);
+    if (res == ERROR_BUFFER_OVERFLOW) {
+        free(pAddresses);
+        pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(outBufLen);
+        if (!pAddresses) return FALSE;
+        res = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                                   NULL, pAddresses, &outBufLen);
+    }
+    if (res != NO_ERROR) {
+        free(pAddresses);
+        return FALSE;
+    }
+    table->pAddresses = pAddresses;
+    return TRUE;
+}
+
+static void AdapterIgnoreTable_Free(AdapterIgnoreTable* table) {
+    if (table && table->pAddresses) {
+        free(table->pAddresses);
+        table->pAddresses = NULL;
+    }
+}
+
+static BOOL AdapterIgnoreTable_IsIgnored(const AdapterIgnoreTable* table, const GUID* adapterGuid) {
+    if (!table || !table->pAddresses || IsZeroGuidValue(adapterGuid)) return FALSE;
+    for (PIP_ADAPTER_ADDRESSES pCurr = table->pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
+        GUID parsedAdapterGuid = {0};
+        BOOL haveParsedGuid = FALSE;
+        if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
+            WCHAR wAdapterName[128];
+            int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
+                                               wAdapterName, ARRAYSIZE(wAdapterName));
+            if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
+                haveParsedGuid = TRUE;
+            }
+        }
+        if (haveParsedGuid && IsEqualGUID(parsedAdapterGuid, *adapterGuid)) {
+            return IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName);
+        }
+    }
+    return FALSE;
+}
+
+static BOOL IsZeroGuidValue(const GUID* guid) {
+    static const GUID zeroGuid = {0};
+    return !guid || IsEqualGUID(*guid, zeroGuid);
+}
+
+static BOOL IsValidNetworkCategoryValue(int category) {
+    return category == (int)NLM_NETWORK_CATEGORY_PUBLIC ||
+           category == (int)NLM_NETWORK_CATEGORY_PRIVATE ||
+           category == (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED;
+}
+
+static BOOL ConnectivityIsActive(NLM_CONNECTIVITY connectivity) {
+    return connectivity != NLM_CONNECTIVITY_DISCONNECTED;
+}
+
+static int StabilizeNetworkCategoryResult(int detectedCategory) {
+    DWORD now = GetTickCount();
+    if (IsValidNetworkCategoryValue(detectedCategory)) {
+        g_LastReliableNetworkCategory = detectedCategory;
+        g_LastReliableNetworkCategoryTick = now;
+        return detectedCategory;
+    }
+
+    // Avoid a one-refresh flicker to the generic icon if NLM/registry is
+    // temporarily unavailable while the network stack is settling.
+    if (IsValidNetworkCategoryValue(g_LastReliableNetworkCategory) &&
+        now - g_LastReliableNetworkCategoryTick < 30000) {
+        return g_LastReliableNetworkCategory;
+    }
+    return -1;
+}
+
+static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
+                                     const GUID* adapterGuid,
+                                     int* outCategory,
+                                     LPCWSTR reason) {
+    if (!pNLM || IsZeroGuidValue(adapterGuid) || !outCategory) return FALSE;
+
+    IEnumNetworks* pEnum = NULL;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+        return FALSE;
+
+    BOOL found = FALSE;
+    INetwork* pNet = NULL;
+    ULONG fetched = 0;
+    while (!found && pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+        NLM_NETWORK_CATEGORY category;
+        if (SUCCEEDED(pNet->GetCategory(&category)) &&
+            IsValidNetworkCategoryValue((int)category)) {
+            IEnumNetworkConnections* pEnumConn = NULL;
+            if (SUCCEEDED(pNet->GetNetworkConnections(&pEnumConn)) && pEnumConn) {
+                INetworkConnection* pConn = NULL;
+                ULONG fetchedConn = 0;
+                while (!found && pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+                    GUID connAdapterId = {0};
+                    if (SUCCEEDED(pConn->GetAdapterId(&connAdapterId)) &&
+                        IsEqualGUID(connAdapterId, *adapterGuid)) {
+                        NLM_CONNECTIVITY connConnectivity = NLM_CONNECTIVITY_DISCONNECTED;
+                        HRESULT hrConn = pConn->GetConnectivity(&connConnectivity);
+                        if (FAILED(hrConn) || ConnectivityIsActive(connConnectivity)) {
+                            *outCategory = (int)category;
+                            found = TRUE;
+                            Wh_Log(L"Network category exact adapter match (%s): %d",
+                                   reason ? reason : L"unknown", *outCategory);
+                        }
+                    }
+                    pConn->Release();
+                }
+                pEnumConn->Release();
+            }
+        }
+        pNet->Release();
+    }
+    pEnum->Release();
+    return found;
+}
+
+// Robust join that removes name matching entirely: given the exact adapter
+// GUID used by the flyout header, find its INetwork via the matching
+// INetworkConnection::GetAdapterId(), then read that network's own GUID via
+// INetwork::GetNetworkId() and look up NetworkList\Profiles\{that GUID}
+// directly (the Profiles subkey names ARE the network GUIDs). This yields
+// the exact Category for the exact network - profile *names* aren't unique
+// (a machine that has seen several networks named "Network"/"Network 2" can
+// have stale profiles whose name collides with the current NLM friendly
+// name, and the first name match would win), so this avoids that ambiguity
+// while keeping the same "registry wins over NLM" property as the name-based
+// path below. Checking Ethernet before Wi-Fi here (see call site) also fixes
+// the case where the Ethernet name-based registry lookup misses and the
+// Wi-Fi lookup would otherwise run first, potentially showing the Wi-Fi
+// network's icon even though the header displays the Ethernet connection.
+static BOOL TryGetCategoryFromRegistryProfileGuid(const GUID* profileGuid, int* outCategory) {
+    if (!profileGuid || IsZeroGuidValue(profileGuid) || !outCategory) return FALSE;
+
+    LPOLESTR guidStr = NULL;
+    if (FAILED(StringFromCLSID(*profileGuid, &guidStr)) || !guidStr) return FALSE;
+
+    WCHAR keyPath[256];
+    StringCchPrintfW(keyPath, ARRAYSIZE(keyPath),
+                     L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Profiles\\%s",
+                     guidStr);
+    CoTaskMemFree(guidStr);
+
+    HKEY hProfile = NULL;
+    LONG openRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, keyPath, 0, KEY_READ | KEY_WOW64_64KEY, &hProfile);
+    if (openRes != ERROR_SUCCESS) {
+        openRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, keyPath, 0, KEY_READ, &hProfile);
+    }
+    if (openRes != ERROR_SUCCESS || !hProfile) return FALSE;
+
+    DWORD category = 0;
+    DWORD categorySize = sizeof(category);
+    DWORD type = 0;
+    BOOL found = FALSE;
+    if (RegQueryValueExW(hProfile, L"Category", NULL, &type,
+                         (LPBYTE)&category, &categorySize) == ERROR_SUCCESS &&
+        type == REG_DWORD && IsValidNetworkCategoryValue((int)category)) {
+        *outCategory = (int)category;
+        found = TRUE;
+        Wh_Log(L"Network category registry profile GUID join: %d", *outCategory);
+    }
+    RegCloseKey(hProfile);
+    return found;
+}
+
+static BOOL TryGetCategoryByAdapterProfileGuid(INetworkListManager* pNLM,
+                                               const GUID* adapterGuid,
+                                               int* outCategory,
+                                               LPCWSTR reason) {
+    if (!pNLM || IsZeroGuidValue(adapterGuid) || !outCategory) return FALSE;
+
+    IEnumNetworks* pEnum = NULL;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+        return FALSE;
+
+    BOOL found = FALSE;
+    INetwork* pNet = NULL;
+    ULONG fetched = 0;
+    while (!found && pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+        BOOL adapterMatched = FALSE;
+        IEnumNetworkConnections* pEnumConn = NULL;
+        if (SUCCEEDED(pNet->GetNetworkConnections(&pEnumConn)) && pEnumConn) {
+            INetworkConnection* pConn = NULL;
+            ULONG fetchedConn = 0;
+            while (!adapterMatched && pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+                GUID connAdapterId = {0};
+                if (SUCCEEDED(pConn->GetAdapterId(&connAdapterId)) &&
+                    IsEqualGUID(connAdapterId, *adapterGuid)) {
+                    adapterMatched = TRUE;
+                }
+                pConn->Release();
+            }
+            pEnumConn->Release();
+        }
+
+        if (adapterMatched) {
+            GUID networkId = {0};
+            if (SUCCEEDED(pNet->GetNetworkId(&networkId)) &&
+                TryGetCategoryFromRegistryProfileGuid(&networkId, outCategory)) {
+                found = TRUE;
+                Wh_Log(L"Network category exact GUID join (%s): %d",
+                       reason ? reason : L"unknown", *outCategory);
+            }
+        }
+        pNet->Release();
+    }
+    pEnum->Release();
+    return found;
+}
+
+static BOOL TryGetCategoryFromRegistryProfileName(LPCWSTR profileName, int* outCategory) {
+    if (!profileName || profileName[0] == L'\0' || !outCategory) return FALSE;
+
+    HKEY hProfiles = NULL;
+    LONG openRes = RegOpenKeyExW(
+        HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Profiles",
+        0, KEY_READ | KEY_WOW64_64KEY, &hProfiles);
+    if (openRes != ERROR_SUCCESS) {
+        openRes = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Profiles",
+            0, KEY_READ, &hProfiles);
+    }
+    if (openRes != ERROR_SUCCESS || !hProfiles) return FALSE;
+
+    BOOL found = FALSE;
+    for (DWORD index = 0; !found; index++) {
+        WCHAR subKeyName[128];
+        DWORD subKeyLen = ARRAYSIZE(subKeyName);
+        if (RegEnumKeyExW(hProfiles, index, subKeyName, &subKeyLen, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+
+        HKEY hProfile = NULL;
+        if (RegOpenKeyExW(hProfiles, subKeyName, 0, KEY_READ, &hProfile) != ERROR_SUCCESS)
+            continue;
+
+        WCHAR storedName[256];
+        DWORD storedNameSize = sizeof(storedName);
+        DWORD type = 0;
+        // RegGetValueW (unlike RegQueryValueExW) guarantees the returned
+        // REG_SZ buffer is null-terminated, which _wcsicmp below relies on.
+        if (RegGetValueW(hProfile, NULL, L"ProfileName",
+                        RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND, &type,
+                        (LPBYTE)storedName, &storedNameSize) == ERROR_SUCCESS &&
+            _wcsicmp(storedName, profileName) == 0) {
+            DWORD category = 0;
+            DWORD categorySize = sizeof(category);
+            type = 0;
+            if (RegQueryValueExW(hProfile, L"Category", NULL, &type,
+                                 (LPBYTE)&category, &categorySize) == ERROR_SUCCESS &&
+                type == REG_DWORD && IsValidNetworkCategoryValue((int)category)) {
+                *outCategory = (int)category;
+                found = TRUE;
+                Wh_Log(L"Network category registry profile match '%s': %d", profileName, *outCategory);
+            }
+        }
+        RegCloseKey(hProfile);
+    }
+
+    RegCloseKey(hProfiles);
+    return found;
+}
+
+static BOOL TryGetCategoryByNlmName(INetworkListManager* pNLM, LPCWSTR networkName, int* outCategory) {
+    if (!pNLM || !networkName || networkName[0] == L'\0' || !outCategory) return FALSE;
+
+    IEnumNetworks* pEnum = NULL;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+        return FALSE;
+
+    BOOL found = FALSE;
+    INetwork* pNet = NULL;
+    ULONG fetched = 0;
+    while (!found && pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+        BSTR bstrName = NULL;
+        if (SUCCEEDED(pNet->GetName(&bstrName)) && bstrName) {
+            if (_wcsicmp(bstrName, networkName) == 0) {
+                NLM_NETWORK_CATEGORY category;
+                if (SUCCEEDED(pNet->GetCategory(&category)) &&
+                    IsValidNetworkCategoryValue((int)category)) {
+                    *outCategory = (int)category;
+                    found = TRUE;
+                    Wh_Log(L"Network category NLM name match '%s': %d", networkName, *outCategory);
+                }
+            }
+            SafeSysFreeString(bstrName);
+        }
+        pNet->Release();
+    }
+    pEnum->Release();
+    return found;
+}
+
+static BOOL NetworkHasUsableNonIgnoredConnection(INetwork* pNet, const AdapterIgnoreTable* ignoreTable) {
+    if (!pNet) return FALSE;
+
+    IEnumNetworkConnections* pEnumConn = NULL;
+    if (FAILED(pNet->GetNetworkConnections(&pEnumConn)) || !pEnumConn) {
+        // If NLM doesn't expose connections, don't discard the network.
+        return TRUE;
+    }
+
+    BOOL hasUsable = FALSE;
+    INetworkConnection* pConn = NULL;
+    ULONG fetchedConn = 0;
+    while (!hasUsable && pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+        NLM_CONNECTIVITY connConnectivity = NLM_CONNECTIVITY_DISCONNECTED;
+        HRESULT hrConn = pConn->GetConnectivity(&connConnectivity);
+        if (FAILED(hrConn) || ConnectivityIsActive(connConnectivity)) {
+            GUID connAdapterId = {0};
+            if (FAILED(pConn->GetAdapterId(&connAdapterId)) ||
+                !AdapterIgnoreTable_IsIgnored(ignoreTable, &connAdapterId)) {
+                hasUsable = TRUE;
+            }
+        }
+        pConn->Release();
+    }
+    pEnumConn->Release();
+    return hasUsable;
+}
+
+static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* outCategory) {
+    if (!pNLM || !outCategory) return FALSE;
+
+    BOOL sawPublic = FALSE;
+    BOOL sawPrivate = FALSE;
+    BOOL sawDomain = FALSE;
+    int firstInternetCategory = -1;
+    int firstActiveCategory = -1;
+
+    IEnumNetworks* pEnum = NULL;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+        return FALSE;
+
+    // Fetch the adapter table once for this whole scan instead of once per
+    // connection examined - GetAdaptersAddresses is a ~15 KB alloc + kernel
+    // enumeration each time.
+    AdapterIgnoreTable ignoreTable;
+    AdapterIgnoreTable_Init(&ignoreTable);
+
+    INetwork* pNet = NULL;
+    ULONG fetched = 0;
+    while (pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+        NLM_NETWORK_CATEGORY category;
+        NLM_CONNECTIVITY connectivity = NLM_CONNECTIVITY_DISCONNECTED;
+        BOOL usable = NetworkHasUsableNonIgnoredConnection(pNet, &ignoreTable);
+        if (usable &&
+            SUCCEEDED(pNet->GetCategory(&category)) &&
+            IsValidNetworkCategoryValue((int)category) &&
+            SUCCEEDED(pNet->GetConnectivity(&connectivity)) &&
+            ConnectivityIsActive(connectivity)) {
+            int cat = (int)category;
+            if (firstActiveCategory == -1) firstActiveCategory = cat;
+            if ((connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) &&
+                firstInternetCategory == -1) {
+                firstInternetCategory = cat;
+            }
+            if (cat == (int)NLM_NETWORK_CATEGORY_PUBLIC) sawPublic = TRUE;
+            else if (cat == (int)NLM_NETWORK_CATEGORY_PRIVATE) sawPrivate = TRUE;
+            else if (cat == (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED) sawDomain = TRUE;
+        }
+        pNet->Release();
+    }
+    pEnum->Release();
+    AdapterIgnoreTable_Free(&ignoreTable);
+
+    // Safe order for fallback: Public must never be overridden by a separate
+    // domain/VPN/work network. Exact adapter matching above still allows a real
+    // domain-authenticated active adapter to show the Work icon.
+    if (sawPublic) *outCategory = (int)NLM_NETWORK_CATEGORY_PUBLIC;
+    else if (sawPrivate) *outCategory = (int)NLM_NETWORK_CATEGORY_PRIVATE;
+    else if (sawDomain) *outCategory = (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED;
+    else if (firstInternetCategory != -1) *outCategory = firstInternetCategory;
+    else if (firstActiveCategory != -1) *outCategory = firstActiveCategory;
+    else return FALSE;
+
+    Wh_Log(L"Network category safe fallback scan: %d", *outCategory);
+    return TRUE;
+}
+
+static int DetectNetworkLocationCategory() {
+    INetworkListManager* pNLM = g_pNLM;
+    if (!pNLM) {
+        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                         IID_INetworkListManager, (void**)&pNLM);
+        if (pNLM && !g_pNLM) g_pNLM = pNLM;
+    }
+
+    int detected = -1;
+
+    // Exact GUID join first: no name-matching ambiguity, and Ethernet is
+    // checked before Wi-Fi to match the header's display priority (fixes the
+    // case where a missed Ethernet registry lookup let a Wi-Fi lookup run
+    // first and show the wrong network's icon).
+    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
+        TryGetCategoryByAdapterProfileGuid(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+        return StabilizeNetworkCategoryResult(detected);
+    }
+    if (pNLM && !g_EthernetConnected) {
+        for (int i = 0; i < g_NetworkCount; i++) {
+            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByAdapterProfileGuid(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+                return StabilizeNetworkCategoryResult(detected);
+            }
+        }
+    }
+
+    // The registry profile is the most stable source for the icon Windows shows
+    // in Network and Sharing Center. Prefer it before NLM exact-adapter data so
+    // a Public profile cannot be overridden by a separate domain/VPN network.
+    if (g_EthernetConnected &&
+        TryGetCategoryFromRegistryProfileName(g_EthernetNetworkName, &detected)) {
+        return StabilizeNetworkCategoryResult(detected);
+    }
+
+    for (int i = 0; i < g_NetworkCount; i++) {
+        if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
+            TryGetCategoryFromRegistryProfileName(g_NetworkList[i].ssid, &detected)) {
+            return StabilizeNetworkCategoryResult(detected);
+        }
+    }
+
+    // The header shows Ethernet before Wi-Fi when both are present, so use the
+    // same priority for the exact-adapter NLM fallback.
+    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
+        TryGetCategoryForAdapter(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+        return StabilizeNetworkCategoryResult(detected);
+    }
+
+    if (pNLM && !g_EthernetConnected) {
+        for (int i = 0; i < g_NetworkCount; i++) {
+            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryForAdapter(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+                return StabilizeNetworkCategoryResult(detected);
+            }
+        }
+    }
+
+    if (pNLM && g_EthernetConnected &&
+        TryGetCategoryByNlmName(pNLM, g_EthernetNetworkName, &detected)) {
+        return StabilizeNetworkCategoryResult(detected);
+    }
+
+    if (pNLM) {
+        for (int i = 0; i < g_NetworkCount; i++) {
+            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByNlmName(pNLM, g_NetworkList[i].ssid, &detected)) {
+                return StabilizeNetworkCategoryResult(detected);
+            }
+        }
+
+        if (TryGetCategoryBySafeFallbackScan(pNLM, &detected)) {
+            return StabilizeNetworkCategoryResult(detected);
+        }
+    }
+
+    Wh_Log(L"Network category detection failed; using stable fallback if available");
+    return StabilizeNetworkCategoryResult(-1);
+}
+
+// Get the appropriate icon for the current network location.
+// If the base64-decoded icon for the detected category failed to load,
+// falls back to g_hIconNetworkMap (the generic PC/computer icon).
+// The corresponding GDI+ bitmap cache pointer is stored in *pppOutCache
+// so the caller can pass it to DrawIconBicubic for high-quality scaling.
+static HICON GetNetworkLocationIcon(void*** pppOutCache) {
+    // Lazily create icons from base64 (scaled to current DPI)
+    if (!g_hIconNetLocHome)
+        g_hIconNetLocHome = CreateIconFromBase64PNG(NETLOC_HOME_ICON_BASE64, ScaleDpi(35), ScaleDpi(35));
+    if (!g_hIconNetLocPublic)
+        g_hIconNetLocPublic = CreateIconFromBase64PNG(NETLOC_PUBLIC_ICON_BASE64, ScaleDpi(35), ScaleDpi(35));
+    if (!g_hIconNetLocWork)
+        g_hIconNetLocWork = CreateIconFromBase64PNG(NETLOC_WORK_ICON_BASE64, ScaleDpi(35), ScaleDpi(35));
+    
+    HICON hIcon = NULL;
+    void** ppCache = NULL;
+    
+    // Use the stable reliable category when the current one is momentarily
+    // unknown (e.g. during a reconnect).  This keeps the correct Home/Public/Work
+    // icon on screen instead of briefly flashing the generic PC icon.
+    int effectiveCategory = g_CurrentNetworkCategory;
+    if (!IsValidNetworkCategoryValue(effectiveCategory) &&
+        IsValidNetworkCategoryValue(g_LastReliableNetworkCategory)) {
+        DWORD now = GetTickCount();
+        if (now - g_LastReliableNetworkCategoryTick < 30000)
+            effectiveCategory = g_LastReliableNetworkCategory;
+    }
+    
+    switch (effectiveCategory) {
+        case (int)NLM_NETWORK_CATEGORY_PRIVATE:
+            hIcon   = g_hIconNetLocHome;
+            ppCache = &g_pBitmapNetLocHome;
+            break;
+        case (int)NLM_NETWORK_CATEGORY_PUBLIC:
+            hIcon   = g_hIconNetLocPublic;
+            ppCache = &g_pBitmapNetLocPublic;
+            break;
+        case (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED:
+            hIcon   = g_hIconNetLocWork;
+            ppCache = &g_pBitmapNetLocWork;
+            break;
+        default:
+            break;
+    }
+    
+    // Last resort: if even the reliable fallback failed and we have the
+    // generic PC icon loaded, use that so the flyout never shows a blank area.
+    if (!hIcon && g_hIconNetworkMap) {
+        hIcon   = g_hIconNetworkMap;
+        ppCache = &g_pBitmapNetworkMap;
+    }
+    
+    if (pppOutCache) *pppOutCache = ppCache;
+    return hIcon;
+}
+
 void SetKeyboardFocus(int index) {
     if (index < -1 || index >= g_NetworkCount) return;
     ClearKeyboardFocus();
@@ -1568,7 +2443,8 @@ void InitRefreshButtonRect(void) {
     int totalListHeight = GetTotalListHeight();
     int availableHeight = LIST_Y_END - LIST_Y_START;
     BOOL hasScrollbar = (totalListHeight > availableHeight);
-    int baseX = WINDOW_WIDTH - margin - buttonSize;
+    int refreshLeftOffset = GetRefreshButtonLeftOffset();
+    int baseX = WINDOW_WIDTH - margin - buttonSize - refreshLeftOffset;
     if (!hasScrollbar) {
         baseX += (WINDOW_WIDTH * 4) / 100;     
         baseX -= (WINDOW_WIDTH * 13) / 1000;   
@@ -1662,6 +2538,11 @@ static void ShutdownGdiPlusRendering() {
             g_pBitmapSignalBars[i] = NULL;
         }
     }
+    // Free network location icon bitmap caches
+    if (g_pBitmapNetLocHome)   { pGdipDisposeImage(g_pBitmapNetLocHome);   g_pBitmapNetLocHome = NULL; }
+    if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
+    if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
+    if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
     if (g_hGdiPlus) {
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
@@ -1673,6 +2554,16 @@ static void ShutdownGdiPlusRendering() {
 }
 
 void FreeSystemIcons() {
+    // Free network location icons
+    if (g_hIconNetLocHome)   { DestroyIcon(g_hIconNetLocHome);   g_hIconNetLocHome = NULL; }
+    if (g_hIconNetLocPublic) { DestroyIcon(g_hIconNetLocPublic); g_hIconNetLocPublic = NULL; }
+    if (g_hIconNetLocWork)   { DestroyIcon(g_hIconNetLocWork);   g_hIconNetLocWork = NULL; }
+    // Free chevron arrow icons
+    if (g_hIconChevronUp)     { DestroyIcon(g_hIconChevronUp);     g_hIconChevronUp = NULL; }
+    if (g_hIconChevronUpHL)   { DestroyIcon(g_hIconChevronUpHL);   g_hIconChevronUpHL = NULL; }
+    if (g_hIconChevronDown)   { DestroyIcon(g_hIconChevronDown);   g_hIconChevronDown = NULL; }
+    if (g_hIconChevronDownHL) { DestroyIcon(g_hIconChevronDownHL); g_hIconChevronDownHL = NULL; }
+    g_chevronsLoaded = FALSE;
     if (g_hGdiPlus && pGdipDisposeImage) {
         for (int i = 0; i < 6; i++) {
             if (g_pBitmapSignalBars[i]) {
@@ -1680,8 +2571,14 @@ void FreeSystemIcons() {
                 g_pBitmapSignalBars[i] = NULL;
             }
         }
+        // Free network location icon bitmap caches
+        if (g_pBitmapNetLocHome)   { pGdipDisposeImage(g_pBitmapNetLocHome);   g_pBitmapNetLocHome = NULL; }
+        if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
+        if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
+        if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
     }
     if (g_hIconRefreshNormal) { DestroyIcon(g_hIconRefreshNormal); g_hIconRefreshNormal = NULL; }
+    if (g_hIconRefreshHover)  { DestroyIcon(g_hIconRefreshHover);  g_hIconRefreshHover = NULL; }
     if (g_hIconNetworkCenterConnect) { DestroyIcon(g_hIconNetworkCenterConnect); g_hIconNetworkCenterConnect = NULL; }
     if (g_hIconNetworkCenterHomegroup) { DestroyIcon(g_hIconNetworkCenterHomegroup); g_hIconNetworkCenterHomegroup = NULL; }
     if (g_hIconNetworkMap) { DestroyIcon(g_hIconNetworkMap); g_hIconNetworkMap = NULL; }
@@ -2035,10 +2932,13 @@ void UpdateEthernetStatus() {
     g_EthernetConnected = FALSE;
     g_EthernetNetworkName[0] = L'\0';
     g_EthernetHasInternet = FALSE;
+    ZeroMemory(&g_EthernetAdapterGuid, sizeof(g_EthernetAdapterGuid));
+    g_HasEthernetAdapterGuid = FALSE;
 
     // 1. Find physical operational Ethernet adapter GUID via GetAdaptersAddresses
     BOOL foundPhysicalEthernet = FALSE;
     GUID physicalEthernetGuid = {0};
+    BOOL physicalEthernetGuidReliable = FALSE;
     WCHAR fallbackName[64] = L"Ethernet";
     
     ULONG outBufLen = 15000;
@@ -2091,6 +2991,7 @@ void UpdateEthernetStatus() {
 
                     foundPhysicalEthernet = TRUE;
                     physicalEthernetGuid = haveParsedGuid ? parsedAdapterGuid : pCurr->NetworkGuid;
+                    physicalEthernetGuidReliable = haveParsedGuid;
                     if (pCurr->FriendlyName && pCurr->FriendlyName[0] != L'\0') {
                         StringCchCopyW(fallbackName, ARRAYSIZE(fallbackName), pCurr->FriendlyName);
                     }
@@ -2108,6 +3009,10 @@ void UpdateEthernetStatus() {
 
     g_EthernetConnected = TRUE;
     g_EthernetHasInternet = IsInternetConnected();
+    if (physicalEthernetGuidReliable && !IsZeroGuidValue(&physicalEthernetGuid)) {
+        g_EthernetAdapterGuid = physicalEthernetGuid;
+        g_HasEthernetAdapterGuid = TRUE;
+    }
     StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), fallbackName);
 
     // 2. Query COM INetworkListManager to get the exact friendly network name (e.g. "Rete 2")
@@ -2197,7 +3102,7 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
     }
 }
 
-void RefreshNetworkData() {
+void RefreshNetworkData(BOOL forceDetection = FALSE) {
     if (g_Ctx.hWlanClient) {
         RefreshWifiData(g_Ctx.hWlanClient);
     } else {
@@ -2206,6 +3111,32 @@ void RefreshNetworkData() {
         LeaveCriticalSection(&g_Ctx.csLock);
     }
     UpdateEthernetStatus();
+    
+    // Detect network location category (Home / Public / Work).
+    // Skip the COM query entirely when the feature is disabled, and also
+    // while the flyout isn't visible: the result is only consumed at paint
+    // time, so running the registry enumeration (and, on a name-match miss,
+    // up to four NLM/COM calls plus a GetAdaptersAddresses pass) on every
+    // auto-refresh tick while hidden would be wasted work. WM_SHOW_FLYOUT
+    // already calls RefreshNetworkData() when the flyout opens, so gating on
+    // visibility here is safe. forceDetection bypasses this gate for the
+    // one-off priming calls at mod startup and after a settings change, so
+    // the category is already known (instead of falling back to the generic
+    // PC icon) the first time the flyout is actually shown.
+    BOOL isAnyConnected = (g_EthernetConnected || 
+                           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED));
+    BOOL flyoutVisible = forceDetection ||
+                         (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
+    if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
+        g_CurrentNetworkCategory = DetectNetworkLocationCategory();
+    } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
+        // Don't wipe the reliable fallback just because the connection is
+        // momentarily settling (e.g. during a reconnect). While the flyout is
+        // merely hidden, g_CurrentNetworkCategory is left untouched below so
+        // the first paint after reopening doesn't flash the generic icon.
+        g_CurrentNetworkCategory = -1;
+    }
+    
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         UpdateFlyoutWindowSize(g_hWndFlyout);
     }
@@ -2762,7 +3693,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
     AsyncConnectContext* ctx = (AsyncConnectContext*)pParam;
     if (!ctx) return 1;
     
-    DWORD waitResult = WaitForSingleObject(g_hConnectMutex, 10000);
+    DWORD waitResult = WaitForSingleObject(g_hConnectMutex.get(), 10000);
     if (waitResult != WAIT_OBJECT_0) {
         Wh_Log(L"AsyncConnectThreadProc: Could not acquire mutex (timeout or error %lu)", waitResult);
         if (ctx->hWndNotify) {
@@ -2796,7 +3727,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
             if (ctx->hWndNotify) {
                 PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)dwResult);
             }
-            ReleaseMutex(g_hConnectMutex);
+            ReleaseMutex(g_hConnectMutex.get());
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return 1;
@@ -2830,7 +3761,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
         PostMessageW(ctx->hWndNotify, WM_ASYNC_CONNECT_COMPLETE, (dwResult == ERROR_SUCCESS), (LPARAM)dwResult);
     }
     
-    ReleaseMutex(g_hConnectMutex);
+    ReleaseMutex(g_hConnectMutex.get());
     SecureZeroMemory(ctx->password, sizeof(ctx->password));
     free(ctx);
     return 0;
@@ -3189,7 +4120,7 @@ void DrawNativeSignalIcon(HDC hdc, int right, int top, ULONG quality) {
     else if (quality > 0)  idx = 1;
     int iconSize = ScaleDpi(20);
     int xPos = right - iconSize - 4;
-    int yPos = top + (ScaleDpi(26) - iconSize) / 2;
+    int yPos = top + (ScaleDpi(30) - iconSize) / 2;  // ROW_HEIGHT_NORMAL_BASE=30 (van.dll)
     if (g_hIconSignalBars[idx]) {
         DrawIconBicubic(hdc, xPos, yPos, iconSize, iconSize,
                         g_hIconSignalBars[idx], &g_pBitmapSignalBars[idx]);
@@ -3338,22 +4269,45 @@ static void InvalidateToolbarCache() {
 
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
-    HMODULE hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-    if (!hPnidui) {
-        hPnidui = GetModuleHandleW(L"pnidui.dll");
+    
+    HMODULE hPnidui = NULL;
+    
+    // Try standard ExplorerPatcher installation path (64-bit) first: this is
+    // mainly informational logging, since GetModuleHandleW with a bare name
+    // below already matches a loaded module by base name regardless of the
+    // directory it was actually loaded from.
+    hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
+    if (hPnidui) {
+        Wh_Log(L"pnidui.dll found at: C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
+        goto found;
     }
-    if (!hPnidui) {
-        Wh_Log(L"pnidui.dll not loaded — network icon detection unavailable");
-        return false;
+    
+    // Bare-name lookup: matches pnidui.dll regardless of where it was loaded
+    // from (AppData, ProgramData, mod folder, System32, or native on Win10).
+    hPnidui = GetModuleHandleW(L"pnidui.dll");
+    if (hPnidui) {
+        Wh_Log(L"pnidui.dll found via simple name lookup");
+        goto found;
     }
+    
+    // Not found in any location - log gracefully and continue without icon detection
+    Wh_Log(L"pnidui.dll not found in any known location");
+    Wh_Log(L"Network icon detection will be unavailable");
+    return false;
+
+found:
+    // Get module information (base address and size)
     MODULEINFO mi{};
     if (!GetModuleInformation(GetCurrentProcess(), hPnidui, &mi, sizeof(mi))) {
-        Wh_Log(L"GetModuleInformation failed for pnidui.dll");
+        Wh_Log(L"GetModuleInformation failed for pnidui.dll (error: %lu)", GetLastError());
         return false;
     }
+    
     g_pniduiBase = (BYTE*)mi.lpBaseOfDll;
     g_pniduiEnd  = g_pniduiBase + mi.SizeOfImage;
-    Wh_Log(L"pnidui.dll found at %p-%p", g_pniduiBase, g_pniduiEnd);
+    Wh_Log(L"pnidui.dll loaded at %p-%p (size: %lu bytes)", 
+           g_pniduiBase, g_pniduiEnd, mi.SizeOfImage);
+    
     return true;
 }
 
@@ -3386,7 +4340,7 @@ static BOOL IsNetworkButton(HWND hToolbar, int buttonIndex) {
 
 void RecalcArrowRect() {
     int labelMidY = WIFI_LABEL_Y + (HEADER_HEIGHT - WIFI_LABEL_Y) / 2;
-    int btnH = ScaleDpi(16), btnW = ScaleDpi(22);
+    int btnH = ScaleDpi(16), btnW = ScaleDpi(16);
     int totalHeight = GetTotalListHeight();
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(15) : 0;
@@ -3457,18 +4411,23 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         }
     }
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
+        // Keep the button's rect fixed across all three states (only the
+        // text/enabled state changes). Previously the "connecting" state
+        // used a smaller, shifted rect (btnX+50, width 40) while
+        // Connect/Disconnect used the full rect (btnX, width 92) - resizing
+        // between them briefly exposed the parent's background (white)
+        // before the button repainted, since MoveWindow uncovers the old
+        // area for one frame. A fixed rect means there's nothing to expose.
+        MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
         if (isConnecting) {
-            MoveWindow(g_hWndButtonConnect, btnX + 50, btnY, 40, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, L"...");
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, FALSE);
         } else if (isConnected) {
-            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_DISCONNECT));
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, TRUE);
         } else {
-            MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
             SetWindowTextW(g_hWndButtonConnect, LOC(STR_BTN_CONNECT));
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
             EnableWindow(g_hWndButtonConnect, TRUE);
@@ -3629,7 +4588,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         InvalidateRect(hwnd, NULL, TRUE);
         break;
     case WM_REFRESH_DATA: {
-        RefreshNetworkData();
+        RefreshNetworkData(/*forceDetection=*/(BOOL)wParam);
         ClampScrollPos();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
@@ -3674,6 +4633,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 KillTimer(hwnd, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
             }
+            // Windows handles the "Set Network Location" prompt natively for
+            // new networks and writes the category to the registry.  We just
+            // re-detect on the next refresh and show the correct icon.
         } else {
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
@@ -3692,7 +4654,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     }
                 }
                 if (isAuthFailure && item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) — saved password likely wrong, resetting profile", 
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile", 
                            item->ssid, errorCode);
                     item->hasProfile = FALSE;
                     item->connState = CONN_STATE_ERROR;
@@ -3700,14 +4662,14 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
                                MB_OK | MB_ICONERROR);
                 } else if (isAuthFailure && !item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) — user-entered password was wrong", 
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong", 
                            item->ssid, errorCode);
                     item->connState = CONN_STATE_ERROR;
                     item->operationStartTime = 0;
                     MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
                                MB_OK | MB_ICONERROR);
                 } else {
-                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) — keeping profile intact", 
+                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact", 
                            item->ssid, errorCode);
                     item->connState = CONN_STATE_ERROR;
                     item->operationStartTime = 0;
@@ -3843,9 +4805,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
         }
 
+        // Separator line between connection info and the WiFi list header label.
+        // Drawn ABOVE the "Wireless Network Connection" label.
+        int separatorY = showWifiList ? (WIFI_LABEL_Y - ScaleDpi(4)) : HEADER_HEIGHT;
         HPEN hPenSep = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
-        MoveToEx(hdc, 0, HEADER_HEIGHT, NULL); LineTo(hdc, WINDOW_WIDTH, HEADER_HEIGHT);
+        MoveToEx(hdc, 0, separatorY, NULL); LineTo(hdc, WINDOW_WIDTH, separatorY);
         SelectObject(hdc, hOldPen); DeleteObject(hPenSep);
         
         HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
@@ -3864,7 +4829,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         
         if (isAnyConnected) {
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
-            TextOutW(hdc, 8, 8, LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
+            TextOutW(hdc, ScaleDpi(10), ScaleDpi(10), LOC(STR_CURRENT_CONNECTED), lstrlenW(LOC(STR_CURRENT_CONNECTED)));
             SelectObject(hdc, g_hFontBold);
             SetTextColor(hdc, GetTextColor());
             
@@ -3883,21 +4848,44 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 GetDisplaySSID(0, displayName, 33);
             }
             
-            DrawTextWithWrap(hdc, displayName, 56, ScaleDpi(36), WINDOW_WIDTH - 70, 18);
-            SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
-            TextOutW(hdc, 56, ScaleDpi(54), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
+            DrawTextWithWrap(hdc, displayName, ScaleDpi(56), ScaleDpi(36), WINDOW_WIDTH - ScaleDpi(70), ScaleDpi(18));
+            SelectObject(hdc, g_hFontNormal);
+            SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(200, 200, 200) : RGB(0, 0, 0));
+            TextOutW(hdc, ScaleDpi(56), ScaleDpi(52), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
         } else {
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
-            TextOutW(hdc, 8, 8, LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
+            TextOutW(hdc, ScaleDpi(10), ScaleDpi(10), LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
             SelectObject(hdc, g_hFontBold);
             SetTextColor(hdc, GetTextColor());
-            TextOutW(hdc, 56, ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
+            TextOutW(hdc, ScaleDpi(56), ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
         }
         
-        int iconSize = ScaleDpi(35*1.05); 
-        HICON hLargeIcon = isAnyConnected ? g_hIconNetworkMap : g_hIconSignalBars[0];
-        if (hLargeIcon) DrawIconEx(hdc, 14, 37, hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-
+        int iconSize = ScaleDpi(35); 
+        HICON hLargeIcon = NULL;
+        if (isAnyConnected) {
+            if (g_Settings.useNetworkLocationIcons) {
+                // Show the network location icon (Home / Public / Work) based on
+                // the active NLM_NETWORK_CATEGORY detected via INetworkListManager.
+                // Mutually exclusive: exactly one icon per active connection.
+                // If base64 decoding failed, falls back to the PC icon.
+                hLargeIcon = GetNetworkLocationIcon(NULL);
+            } else {
+                // User prefers the original generic PC/network icon
+                hLargeIcon = g_hIconNetworkMap;
+            }
+        } else {
+            hLargeIcon = g_hIconSignalBars[0];  // No connection - show empty signal bars
+        }
+        // ICON_HEADER_Y_OFFSET is the -3 fine-tune used since the original
+        // layout; kept as a named constant rather than a bare magic number so
+        // it stays self-explanatory. Drawn via plain DrawIconEx: bicubic
+        // GDI+ scaling was tried here but corrupted the Home/Public/Work
+        // (bench) icon artwork, so this reverts to the original draw path.
+        const int ICON_HEADER_Y_OFFSET = -3;
+        if (hLargeIcon) {
+            DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37) + ICON_HEADER_Y_OFFSET,
+                       hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        }
         if (showWifiList) {
             int totalHeight = GetTotalListHeight();
             int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -3905,7 +4893,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
             int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
             int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH  *4) / 100) - ((WINDOW_WIDTH*  13) / 1000));
-            g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift;
+            int refreshLeftOffset = GetRefreshButtonLeftOffset();
+            g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift - refreshLeftOffset;
             g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
             if (g_rcRefreshButton.right > WINDOW_WIDTH) {
                 int overflow = g_rcRefreshButton.right - WINDOW_WIDTH;
@@ -3913,7 +4902,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 g_rcRefreshButton.left  -= overflow;
             }
 
-            if (g_IsHoveringRefresh) {
+            BOOL drewRefreshHoverImage = FALSE;
+            if (g_IsHoveringRefresh && g_Settings.theme == 0) {
+                if (!g_hIconRefreshHover)
+                    g_hIconRefreshHover = CreateIconFromBase64PNG(REFRESH_ICON_HOVER_BASE64, ScaleDpi(22), ScaleDpi(22));
+                if (g_hIconRefreshHover) {
+                    DrawIconEx(hdc, g_rcRefreshButton.left, g_rcRefreshButton.top,
+                               g_hIconRefreshHover, ScaleDpi(22), ScaleDpi(22), 0, NULL, DI_NORMAL);
+                    drewRefreshHoverImage = TRUE;
+                }
+            }
+            if (g_IsHoveringRefresh && !drewRefreshHoverImage) {
                 RECT rcBtn = g_rcRefreshButton;
                 COLORREF refreshHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
                 COLORREF refreshHoverBorder = (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
@@ -3928,58 +4927,64 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 DeleteObject(hPenBorder);
             }
             
-            if (!g_hIconRefreshNormal) g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64);
-            if (g_hIconRefreshNormal) {
-                if (g_Settings.theme == 0) {
-                    DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
-                               g_hIconRefreshNormal, 0, 0, 0, NULL, DI_NORMAL);
-                } else {
-                    ICONINFO ii = {0};
-                    GetIconInfo(g_hIconRefreshNormal, &ii);
-                    BITMAP bm = {0};
-                    GetObject(ii.hbmColor, sizeof(bm), &bm);
-                    int iw = bm.bmWidth, ih = bm.bmHeight;
-                    HDC hdcTmp = CreateCompatibleDC(hdc);
-                    BITMAPINFO bmi = {{0}};
-                    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-                    bmi.bmiHeader.biWidth       = iw;
-                    bmi.bmiHeader.biHeight      = -ih;
-                    bmi.bmiHeader.biPlanes      = 1;
-                    bmi.bmiHeader.biBitCount    = 32;
-                    bmi.bmiHeader.biCompression = BI_RGB;
-                    DWORD* pixels = NULL;
-                    HBITMAP hBmpTmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&pixels, NULL, 0);
-                    HBITMAP hOldBmpTmp = (HBITMAP)SelectObject(hdcTmp, hBmpTmp);
-                    COLORREF bgCol = GetHeaderBgColor();
-                    BYTE bgR = GetRValue(bgCol), bgG = GetGValue(bgCol), bgB = GetBValue(bgCol);
-                    HBRUSH hBrTmp = CreateSolidBrush(bgCol);
-                    RECT rcTmp = {0, 0, iw, ih};
-                    FillRect(hdcTmp, &rcTmp, hBrTmp);
-                    DeleteObject(hBrTmp);
-                    DrawIconEx(hdcTmp, 0, 0, g_hIconRefreshNormal, iw, ih, 0, NULL, DI_NORMAL);
-                    for (int p = 0; p < iw * ih; p++) {
-                        BYTE pb = (pixels[p])       & 0xFF;
-                        BYTE pg = (pixels[p] >> 8)  & 0xFF;
-                        BYTE pr = (pixels[p] >> 16) & 0xFF;
-                        if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
-                            continue;
-                        int lum = ((int)pr  *299 + (int)pg*  587 + (int)pb * 114) / 1000;
-                        int t = 255 - lum; 
-                        BYTE nr = (BYTE)(100 * t / 255);
-                        BYTE ng = (BYTE)(200 * t / 255);
-                        BYTE nb = (BYTE)(255 * t / 255);
-                        pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
+            if (!drewRefreshHoverImage) {
+                if (!g_hIconRefreshNormal)
+                    g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64,
+                                                                   ScaleDpi(16), ScaleDpi(16));
+                if (g_hIconRefreshNormal) {
+                    if (g_Settings.theme == 0) {
+                        int normalIconSize = ScaleDpi(16);
+                        DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
+                                   g_hIconRefreshNormal, normalIconSize, normalIconSize, 0, NULL, DI_NORMAL);
+                    } else {
+                        ICONINFO ii = {0};
+                        GetIconInfo(g_hIconRefreshNormal, &ii);
+                        BITMAP bm = {0};
+                        GetObject(ii.hbmColor, sizeof(bm), &bm);
+                        int iw = bm.bmWidth, ih = bm.bmHeight;
+                        HDC hdcTmp = CreateCompatibleDC(hdc);
+                        BITMAPINFO bmi = {{0}};
+                        bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+                        bmi.bmiHeader.biWidth       = iw;
+                        bmi.bmiHeader.biHeight      = -ih;
+                        bmi.bmiHeader.biPlanes      = 1;
+                        bmi.bmiHeader.biBitCount    = 32;
+                        bmi.bmiHeader.biCompression = BI_RGB;
+                        DWORD* pixels = NULL;
+                        HBITMAP hBmpTmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**)&pixels, NULL, 0);
+                        HBITMAP hOldBmpTmp = (HBITMAP)SelectObject(hdcTmp, hBmpTmp);
+                        COLORREF bgCol = GetHeaderBgColor();
+                        BYTE bgR = GetRValue(bgCol), bgG = GetGValue(bgCol), bgB = GetBValue(bgCol);
+                        HBRUSH hBrTmp = CreateSolidBrush(bgCol);
+                        RECT rcTmp = {0, 0, iw, ih};
+                        FillRect(hdcTmp, &rcTmp, hBrTmp);
+                        DeleteObject(hBrTmp);
+                        DrawIconEx(hdcTmp, 0, 0, g_hIconRefreshNormal, iw, ih, 0, NULL, DI_NORMAL);
+                        for (int p = 0; p < iw * ih; p++) {
+                            BYTE pb = (pixels[p])       & 0xFF;
+                            BYTE pg = (pixels[p] >> 8)  & 0xFF;
+                            BYTE pr = (pixels[p] >> 16) & 0xFF;
+                            if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
+                                continue;
+                            int lum = ((int)pr  *299 + (int)pg*  587 + (int)pb * 114) / 1000;
+                            int t = 255 - lum; 
+                            BYTE nr = (BYTE)(100 * t / 255);
+                            BYTE ng = (BYTE)(200 * t / 255);
+                            BYTE nb = (BYTE)(255 * t / 255);
+                            pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
+                        }
+                        BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
+                        SelectObject(hdcTmp, hOldBmpTmp);
+                        DeleteObject(hBmpTmp);
+                        DeleteDC(hdcTmp);
+                        if (ii.hbmColor) DeleteObject(ii.hbmColor);
+                        if (ii.hbmMask)  DeleteObject(ii.hbmMask);
                     }
-                    BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
-                    SelectObject(hdcTmp, hOldBmpTmp);
-                    DeleteObject(hBmpTmp);
-                    DeleteDC(hdcTmp);
-                    if (ii.hbmColor) DeleteObject(ii.hbmColor);
-                    if (ii.hbmMask)  DeleteObject(ii.hbmMask);
                 }
             }
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetSecondaryTextColor());
-            TextOutW(hdc, 14, HEADER_HEIGHT - 24, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
+int wifiLabelY = separatorY + ScaleDpi(7);
+TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
             
             if (g_IsHoveringArrow) {
                 COLORREF arrowHoverBg = (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
@@ -3994,10 +4999,42 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 DeleteObject(hBrA); DeleteObject(hPenA);
             }
             RecalcArrowRect();
-            SelectObject(hdc, g_hFontArrow); SetTextColor(hdc, (g_Settings.theme == 1) ? RGB(180, 180, 180) : RGB(50, 50, 50));
-            LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
-            RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
-            DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+            if (g_Settings.theme == 1) {
+                // Dark theme: use Marlett font character (manual style)
+                SelectObject(hdc, g_hFontArrow);
+                SetTextColor(hdc, RGB(180, 180, 180));
+                LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
+                RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
+                DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+            } else {
+                // Light theme: use PNG chevron icons (with Marlett fallback)
+                EnsureChevronIcons();
+                HICON hChevron = NULL;
+                if (g_bListExpanded) {
+                    // List is visible -> show UP chevron (▲)
+                    hChevron = g_IsHoveringArrow ? g_hIconChevronUpHL : g_hIconChevronUp;
+                } else {
+                    // List is hidden -> show DOWN chevron (▼)
+                    hChevron = g_IsHoveringArrow ? g_hIconChevronDownHL : g_hIconChevronDown;
+                }
+                if (hChevron) {
+                    // Draw the chevron at its natural square aspect ratio,
+                    // centered within the arrow button rect.
+                    int btnW = g_rcArrowButton.right - g_rcArrowButton.left;
+                    int btnH = g_rcArrowButton.bottom - g_rcArrowButton.top;
+                    int chevSize = (btnH < btnW) ? btnH : btnW;  // square fit
+                    int chevX = g_rcArrowButton.left + (btnW - chevSize) / 2;
+                    int chevY = g_rcArrowButton.top + (btnH - chevSize) / 2;
+                    DrawIconEx(hdc, chevX, chevY, hChevron, chevSize, chevSize, 0, NULL, DI_NORMAL);
+                } else {
+                    // Fallback: Marlett font if PNG decoding failed
+                    SelectObject(hdc, g_hFontArrow);
+                    SetTextColor(hdc, RGB(50, 50, 50));
+                    LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
+                    RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
+                    DrawTextW(hdc, arrowChar, 1, &rcArrowText, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                }
+            }
             
             if (g_bListExpanded) {
                 HRGN hRgnClip = CreateRectRgn(0, LIST_Y_START, WINDOW_WIDTH, LIST_Y_END);
@@ -4013,7 +5050,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     BOOL isSelected = (i == g_SelectedRowIndex);
                     BOOL isHovered  = (i == g_HoveredRowIndex);
                     BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
-                    
+
                     if (isSelected || isHovered) {
                         RECT rcFullRow = rcRow; rcFullRow.left = 0; rcFullRow.right = WINDOW_WIDTH - 5;
                         COLORREF bgColor = isSelected ? GetRowSelectedColor() : GetRowHoverColor();
@@ -4033,8 +5070,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
                     SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
                     SetTextColor(hdc, GetNetworkNameColor());
-                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top+6, 
-                                     rcRow.right - rcRow.left - 10, 18);       
+                    // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
+                    // WINDOW_HEIGHT*1.01/100 float math); WINDOW_HEIGHT is
+                    // already DPI-scaled, so ScaleDpi(4) (~1% of the base
+                    // 405px window height) keeps this DPI-consistent.
+                    const int ROW_TEXT_Y_OFFSET = ScaleDpi(4);
+                    DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + ROW_TEXT_Y_OFFSET,
+                                     rcRow.right - rcRow.left - 10, ScaleDpi(24));
                     WifiNetworkItem* item = &g_NetworkList[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
@@ -4044,7 +5086,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                         RECT rcStatus;
                         rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
                         rcStatus.left   = rcRow.left + 80;
-                        rcStatus.top    = rcRow.top + 6;
+                        rcStatus.top    = rcRow.top + 6 + ROW_TEXT_Y_OFFSET;
                         rcStatus.bottom = rcStatus.top + 18;
                         DrawTextW(hdc, LOC(STR_CONNECTED_TEXT), -1, &rcStatus,
                                   DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
@@ -4501,15 +5543,26 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         g_ToolbarCache.valid = TRUE;
                     }
                     if (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId) {
+                        // Record flyout visibility at button-DOWN time, before
+                        // WM_ACTIVATE can hide it. This prevents the race where
+                        // the flyout deactivates and hides itself, then the
+                        // button-UP handler sees it as hidden and reopens it.
+                        static BOOL s_flyoutWasVisibleOnDown = FALSE;
+                        if (msg == WM_LBUTTONDOWN) {
+                            s_flyoutWasVisibleOnDown = (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
+                        }
                         if (msg == WM_LBUTTONUP) {
                             static DWORD lastClickTime = 0;
                             DWORD currentTime = GetTickCount();
                             if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
                                 lastClickTime = currentTime;
-                                if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout)) {
-                                    ShowWindow(g_hWndFlyout, SW_HIDE);
+                                if (s_flyoutWasVisibleOnDown) {
+                                    // Flyout was open when user pressed -> close it
+                                    if (g_hWndFlyout && IsWindow(g_hWndFlyout))
+                                        ShowWindow(g_hWndFlyout, SW_HIDE);
                                     ClearKeyboardFocus();
                                 } else {
+                                    // Flyout was closed -> open it
                                     ToggleFlyoutWindow();
                                 }
                             }
@@ -4643,7 +5696,12 @@ void ToggleFlyoutWindow() {
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
             
-            RefreshNetworkData();
+            // This runs before ShowWindow below, so the window isn't
+            // IsWindowVisible() yet - force detection here instead of
+            // relying on the visibility gate, which would otherwise skip it
+            // on every single open (not just at startup) and always fall
+            // back to the generic PC icon.
+            RefreshNetworkData(/*forceDetection=*/TRUE);
             RecalcArrowRect();
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
@@ -4659,6 +5717,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    // Prime Ethernet/registry state and the Home/Public/Work category once at
+    // startup (bypassing the visibility gate) so the very first time the
+    // flyout is shown it already has fresh data instead of momentarily
+    // falling back to the generic PC icon while everything is uninitialized.
+    // This must happen here (COM-initialized, STA hotkey thread) rather than
+    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
+    // apartment that later uses it.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -4673,7 +5739,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             if (attempt == 0) Sleep(500);
         }
         if (!ctx->hWlanClient) {
-            Wh_Log(L"WLAN service unavailable — will retry lazily on first flyout open");
+            Wh_Log(L"WLAN service unavailable - will retry lazily on first flyout open");
         }
     }
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
@@ -4748,8 +5814,7 @@ void SafeCleanup() {
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-    if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
-    if (g_hConnectThread) {
+        if (g_hConnectThread) {
         Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
         DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
         Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
@@ -5166,7 +6231,7 @@ static void SettingsChanged() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v3.2.0 ===");
+    Wh_Log(L"=== Wh_ModInit v3.4.0 ===");
     DetectWindowsVersion();
     LoadSettings();
     DetermineLocale();
@@ -5185,7 +6250,7 @@ BOOL Wh_ModInit() {
     DarkContextMenu::Init();
     ZeroMemory(&g_Ctx, sizeof(g_Ctx));
     InitializeCriticalSection(&g_Ctx.csLock);
-    g_hConnectMutex = CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex");
+    g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
     InitGdiPlusRendering();
@@ -5193,9 +6258,15 @@ BOOL Wh_ModInit() {
     InitRefreshButtonRect();
     RecalcArrowRect();
     InstallTrayInterceptionInternal();
+    // Priming of Ethernet/registry state and the Home/Public/Work category is
+    // done on the hotkey thread (right after CoInitializeEx), not here: this
+    // is the Windhawk init thread, which has no COM apartment, so calling
+    // RefreshNetworkData(TRUE) here would silently no-op the NLM half of the
+    // detection (CO_E_NOTINITIALIZED) while still paying the synchronous
+    // GetAdaptersAddresses + registry enumeration cost during explorer
+    // startup, and risks creating g_pNLM in the wrong apartment.
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
-        if (g_hConnectMutex) { CloseHandle(g_hConnectMutex); g_hConnectMutex = NULL; }
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -5231,7 +6302,12 @@ void Wh_ModSettingsChanged() {
         if (g_dwFlyoutOwnerThreadId) {
             PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
         }
-        PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, 0, 0);
+        // Re-prime the category on any settings change (e.g. enabling
+        // "useNetworkLocationIcons"), marshaled to the flyout thread (which
+        // owns g_pNLM and all the shared network state) via a force flag on
+        // WM_REFRESH_DATA, instead of calling RefreshNetworkData() directly
+        // from this (Windhawk callback) thread.
+        PostMessageW(g_hWndFlyout, WM_REFRESH_DATA, /*forceDetection=*/TRUE, 0);
         InvalidateRect(g_hWndFlyout, NULL, TRUE);
     }
 }
