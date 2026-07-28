@@ -2,16 +2,18 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  macOS magnifying cursor
-// @version      1.2.1
+// @version      1.4.1
 // @author       Jaali
 // @include      explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-macOS magnifying cursor
+macOS magnifying cursor 
 */
 // ==/WindhawkModReadme==
+
+
 
 #define OEMRESOURCE
 #include <windows.h>
@@ -19,9 +21,87 @@ macOS magnifying cursor
 #include <cmath>
 #include <windhawk_api.h>
 
+
 #ifndef OCR_NORMAL
 #define OCR_NORMAL 32512
 #endif
+#ifndef OCR_IBEAM
+#define OCR_IBEAM 32513
+#endif
+#ifndef OCR_WAIT
+#define OCR_WAIT 32514
+#endif
+#ifndef OCR_CROSS
+#define OCR_CROSS 32515
+#endif
+#ifndef OCR_UP
+#define OCR_UP 32516
+#endif
+#ifndef OCR_SIZENWSE
+#define OCR_SIZENWSE 32642
+#endif
+#ifndef OCR_SIZENESW
+#define OCR_SIZENESW 32643
+#endif
+#ifndef OCR_SIZEWE
+#define OCR_SIZEWE 32644
+#endif
+#ifndef OCR_SIZENS
+#define OCR_SIZENS 32645
+#endif
+#ifndef OCR_SIZEALL
+#define OCR_SIZEALL 32646
+#endif
+#ifndef OCR_NO
+#define OCR_NO 32648
+#endif
+#ifndef OCR_HAND
+#define OCR_HAND 32649
+#endif
+#ifndef OCR_APPSTARTING
+#define OCR_APPSTARTING 32650
+#endif
+
+
+const DWORD g_cursorIds[13] = {
+    OCR_NORMAL,
+    OCR_IBEAM,
+    OCR_WAIT,
+    OCR_CROSS,
+    OCR_UP,
+    OCR_SIZENWSE,
+    OCR_SIZENESW,
+    OCR_SIZEWE,
+    OCR_SIZENS,
+    OCR_SIZEALL,
+    OCR_NO,
+    OCR_HAND,
+    OCR_APPSTARTING
+};
+
+
+struct Settings {
+    float maxScale       = 4.0f;
+    float minScale       = 1.0f;
+    float lerpSpeedUp    = 0.40f;
+    float lerpSpeedDown  = 0.15f;
+    float shakeThreshold = 4500.0f;
+    int   shakeWindowMs  = 500;
+} g_settings;
+
+void LoadSettings() {
+    int maxScalePct = Wh_GetIntSetting(L"maxScalePercent");
+    if (maxScalePct > 0) g_settings.maxScale = maxScalePct / 100.0f;
+
+    int thresh = Wh_GetIntSetting(L"shakeThreshold");
+    if (thresh > 0) g_settings.shakeThreshold = static_cast<float>(thresh);
+
+    int speedUp = Wh_GetIntSetting(L"lerpSpeedUpPercent");
+    if (speedUp > 0) g_settings.lerpSpeedUp = speedUp / 100.0f;
+
+    int speedDown = Wh_GetIntSetting(L"lerpSpeedDownPercent");
+    if (speedDown > 0) g_settings.lerpSpeedDown = speedDown / 100.0f;
+}
 
 
 typedef int (WINAPI *pfn_GetObjectW)(HANDLE, int, LPVOID);
@@ -30,6 +110,8 @@ typedef HBITMAP (WINAPI *pfn_CreateDIBSection)(HDC, CONST BITMAPINFO *, UINT, VO
 typedef HGDIOBJ (WINAPI *pfn_SelectObject)(HDC, HGDIOBJ);
 typedef BOOL (WINAPI *pfn_DeleteObject)(HGDIOBJ);
 typedef BOOL (WINAPI *pfn_DeleteDC)(HDC);
+typedef BOOL (WINAPI *pfn_SetWindowBand)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
+typedef BOOL (WINAPI *pfn_SetThreadDpiAwarenessContext)(HANDLE);
 
 struct GdiApi {
     pfn_GetObjectW pGetObjectW = nullptr;
@@ -56,38 +138,6 @@ struct GdiApi {
     }
 } g_gdi;
 
-
-struct Settings {
-    float maxScale       = 4.0f;
-    float minScale       = 1.0f;
-    float lerpSpeedUp    = 0.40f;
-    float lerpSpeedDown  = 0.15f;
-    float shakeThreshold = 4500.0f;
-    int   shakeWindowMs  = 500;
-} g_settings;
-
-
-constexpr float MAX_SCALE        = 4.0f;   // Максимальный размер курсора (3.5x)
-constexpr float MIN_SCALE        = 1.0f;   // Обычный размер (1x)
-constexpr float LERP_SPEED_UP    = 0.30f;  // Скорость плавного увеличения
-constexpr float LERP_SPEED_DOWN  = 0.15f;  // Скорость плавного уменьшения
-constexpr int   SHAKE_WINDOW_MS  = 500;    // Окно анализа движений (мс)
-constexpr float SHAKE_THRESHOLD  = 4500.0f; // Порог чувствительности
-
-void LoadSettings() {
-    int maxScalePct = Wh_GetIntSetting(L"maxScalePercent");
-    if (maxScalePct > 0) g_settings.maxScale = maxScalePct / 100.0f;
-
-    int thresh = Wh_GetIntSetting(L"shakeThreshold");
-    if (thresh > 0) g_settings.shakeThreshold = static_cast<float>(thresh);
-
-    int speedUp = Wh_GetIntSetting(L"lerpSpeedUpPercent");
-    if (speedUp > 0) g_settings.lerpSpeedUp = speedUp / 100.0f;
-
-    int speedDown = Wh_GetIntSetting(L"lerpSpeedDownPercent");
-    if (speedDown > 0) g_settings.lerpSpeedDown = speedDown / 100.0f;
-}
-
 struct PointTime {
     POINT pt;
     DWORD time;
@@ -104,7 +154,6 @@ struct ModState {
     HCURSOR hSavedCursor = NULL;
 } g_state;
 
-
 HCURSOR CreateBlankCursor() {
     int w = GetSystemMetrics(SM_CXCURSOR);
     int h = GetSystemMetrics(SM_CYCURSOR);
@@ -115,17 +164,20 @@ HCURSOR CreateBlankCursor() {
     return CreateCursor(GetModuleHandle(NULL), 0, 0, w, h, andMask.data(), xorMask.data());
 }
 
-void HideSystemCursor() {
+void HideAllSystemCursors() {
     if (!g_state.cursorHidden) {
         HCURSOR hBlank = CreateBlankCursor();
         if (hBlank) {
-            SetSystemCursor(hBlank, OCR_NORMAL);
+            for (int i = 0; i < 13; ++i) {
+                SetSystemCursor(CopyIcon(hBlank), g_cursorIds[i]);
+            }
+            DestroyIcon(hBlank);
             g_state.cursorHidden = true;
         }
     }
 }
 
-void RestoreSystemCursor() {
+void RestoreAllSystemCursors() {
     if (g_state.cursorHidden) {
         SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
         g_state.cursorHidden = false;
@@ -154,6 +206,13 @@ float GetDistance(POINT a, POINT b) {
 }
 
 DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    
+    if (hUser32) {
+        auto pSetDpi = (pfn_SetThreadDpiAwarenessContext)GetProcAddress(hUser32, "SetThreadDpiAwarenessContext");
+        if (pSetDpi) pSetDpi((HANDLE)-4);
+    }
+
     if (!g_gdi.Init()) return 0;
 
     WNDCLASSEX wc = { sizeof(WNDCLASSEX) };
@@ -171,6 +230,13 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
 
     if (!g_state.hwndOverlay) return 0;
 
+    if (hUser32) {
+        auto pSetWindowBand = (pfn_SetWindowBand)GetProcAddress(hUser32, "SetWindowBand");
+        if (pSetWindowBand) {
+            pSetWindowBand(g_state.hwndOverlay, NULL, 2);
+        }
+    }
+
     DWORD lastTime = GetTickCount();
 
     while (g_state.running) {
@@ -187,7 +253,7 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
 
         g_state.history.push_back({ pt, now });
 
-        while (!g_state.history.empty() && (now - g_state.history.front().time > SHAKE_WINDOW_MS)) {
+        while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<DWORD>(g_settings.shakeWindowMs))) {
             g_state.history.erase(g_state.history.begin());
         }
 
@@ -198,23 +264,24 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
             }
             float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
 
-            if (totalPath > SHAKE_THRESHOLD && (totalPath / (netDisp + 1.0f) > 1.3f)) {
-                g_state.targetScale = MAX_SCALE;
+            if (totalPath > g_settings.shakeThreshold && (totalPath / (netDisp + 1.0f) > 1.3f)) {
+                g_state.targetScale = g_settings.maxScale;
             } else if (totalPath < 80.0f) {
-                g_state.targetScale = MIN_SCALE;
+                g_state.targetScale = g_settings.minScale;
             }
         }
 
-        float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? LERP_SPEED_UP : LERP_SPEED_DOWN;
+        float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp : g_settings.lerpSpeedDown;
         g_state.currentScale += (g_state.targetScale - g_state.currentScale) * lerpSpeed;
 
         if (g_state.currentScale > 1.02f) {
             if (!g_state.cursorHidden) {
                 CURSORINFO ci = { sizeof(CURSORINFO) };
-                if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING)) {
+                if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) && ci.hCursor) {
+                    if (g_state.hSavedCursor) DestroyIcon(g_state.hSavedCursor);
                     g_state.hSavedCursor = CopyIcon(ci.hCursor);
                 }
-                HideSystemCursor();
+                HideAllSystemCursors();
             }
 
             if (g_state.hSavedCursor) {
@@ -272,16 +339,17 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
                     if (ii.hbmMask) g_gdi.pDeleteObject(ii.hbmMask);
                     if (ii.hbmColor) g_gdi.pDeleteObject(ii.hbmColor);
 
-                    ShowWindow(g_state.hwndOverlay, SW_SHOWNOACTIVATE);
+                    SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, winX, winY, scaledW, scaledH,
+                                 SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
                 }
             }
         } else {
             ShowWindow(g_state.hwndOverlay, SW_HIDE);
-            RestoreSystemCursor();
+            RestoreAllSystemCursors();
         }
     }
 
-    RestoreSystemCursor();
+    RestoreAllSystemCursors();
 
     if (g_state.hwndOverlay) {
         DestroyWindow(g_state.hwndOverlay);
@@ -291,9 +359,14 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
 }
 
 BOOL Wh_ModInit() {
+    LoadSettings();
     g_state.running = true;
     g_state.hThread = CreateThread(NULL, 0, CursorMonitorThread, NULL, 0, NULL);
     return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
 }
 
 void Wh_ModUninit() {
@@ -303,5 +376,5 @@ void Wh_ModUninit() {
         CloseHandle(g_state.hThread);
         g_state.hThread = NULL;
     }
-    RestoreSystemCursor();
+    RestoreAllSystemCursors();
 }
