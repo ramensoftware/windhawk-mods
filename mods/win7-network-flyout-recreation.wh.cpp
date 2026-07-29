@@ -3748,9 +3748,17 @@ static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
     for (int i = 0; i < g_NetworkCount; ++i)
         if (g_NetworkList[i].connState == CONN_STATE_CONNECTED) { hasConnectedNetwork = true; break; }
     if (!hasConnectedNetwork && !g_EthernetConnected) {
-        int wantW = targetWidth > 0 ? targetWidth : ScaleDpi(36);
-        int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(36);
-        return CreateIconFromBase64PNG(NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+        // Last-ditch live check: the flyout-side refresh state can be
+        // empty/stale in this process (page opened without the flyout having
+        // run). Never show the gray offline bench while the machine is
+        // actually online. IsInternetConnected() creates its own local NLM
+        // instance, so it is safe to call from any thread here.
+        if (!IsInternetConnected()) {
+            int wantW = targetWidth > 0 ? targetWidth : ScaleDpi(36);
+            int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(36);
+            return CreateIconFromBase64PNG(NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+        }
+        hasConnectedNetwork = true;
     }
     int category = g_CurrentNetworkCategory;
     if (!IsValidNetworkCategoryValue(category) &&
@@ -3765,7 +3773,15 @@ static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
         case (int)NLM_NETWORK_CATEGORY_PRIVATE:              png = NETLOC_HOME_ICON_BASE64;   break;
         case (int)NLM_NETWORK_CATEGORY_PUBLIC:               png = NETLOC_PUBLIC_ICON_BASE64; break;
         case (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED: png = NETLOC_WORK_ICON_BASE64;   break;
-        default:                                             return NULL;
+        default:
+            // Category still unknown even after the reliable-category fallback
+            // above, but we know a network IS connected (checked earlier).
+            // Never return NULL here: DirectUI would render no icon at all,
+            // which shows up as the generic gray icon in the Network Center
+            // map. Fall back to Public, mirroring GetNetworkLocationIcon's
+            // behavior for the flyout header.
+            png = NETLOC_PUBLIC_ICON_BASE64;
+            break;
     }
 
     int wantW = targetWidth  > 0 ? targetWidth  : ScaleDpi(48);
@@ -7223,14 +7239,6 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    // Prime Ethernet/registry state and the Home/Public/Work category once at
-    // startup (bypassing the visibility gate) so the very first time the
-    // flyout is shown it already has fresh data instead of momentarily
-    // falling back to the generic PC icon while everything is uninitialized.
-    // This must happen here (COM-initialized, STA hotkey thread) rather than
-    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
-    // apartment that later uses it.
-    RefreshNetworkData(/*forceDetection=*/TRUE);
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -7248,6 +7256,20 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             Wh_Log(L"WLAN service unavailable - will retry lazily on first flyout open");
         }
     }
+    // Prime Wi-Fi/Ethernet state and the Home/Public/Work category once at
+    // startup (bypassing the visibility gate) so the very first time the
+    // flyout is shown it already has fresh data instead of momentarily
+    // falling back to the generic PC icon while everything is uninitialized.
+    // This must happen here (COM-initialized, STA hotkey thread) rather than
+    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
+    // apartment that later uses it.
+    // NOTE: keep this AFTER the WlanOpenHandle block above. Running it
+    // before the handle existed made RefreshNetworkData() take the
+    // "no WLAN handle" path, leaving g_NetworkList empty on Wi-Fi machines
+    // until the first flyout open - the root cause of the gray Network
+    // Center icon when the page was opened via Win+R / the native context
+    // menu without the flyout.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
         UnregisterHotKey(NULL, HOTKEY_ID);
         if (shouldRegister) RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H');
@@ -7662,6 +7684,11 @@ static std::wstring GetConnectedNetworkName() {
     return GetLang()->networkFallback;
 }
 
+// Defined further down alongside the rest of the NetCenter live-refresh
+// state; forward-declared here since NetworkMapVisual() (used well before
+// that point in the file) needs to check it.
+extern bool g_ncForceFreshConnectivity;
+
 static std::wstring NetworkMapVisual() {
     // DirectUI's valid endellipsis layout is left-aligned. In privacy mode,
     // two leading spaces visually center the short "PC" label beneath its icon
@@ -7677,7 +7704,11 @@ static std::wstring NetworkMapVisual() {
     static DWORD s_cacheTick = 0;
     DWORD now = GetTickCount();
     BOOL isOnline;
-    if (now - s_cacheTick > 500) {  // 500ms cache window
+    // g_ncForceFreshConnectivity is set by RefreshNetworkCenterXml() right
+    // after a ConnectivityChanged notification, so a live-refresh push always
+    // re-queries NLM instead of reusing a value that may predate the change
+    // by up to 500ms (see g_ncForceFreshConnectivity's declaration for why).
+    if (g_ncForceFreshConnectivity || now - s_cacheTick > 500) {
         s_cachedConnected = IsInternetConnected();
         s_cacheTick = now;
     }
@@ -7819,9 +7850,30 @@ static std::wstring AddActiveNetworkLocationIcon(const std::wstring& in) {
     return out;
 }
 
+// Defined below, next to PrimeNetworkCategoryForNetCenterHost().
+static void EnsureNetCenterNetworkDataFresh();
+
 static std::wstring Patch(const std::wstring& in) {
     if (!g_addConnect && !g_addHomegroup && !g_addNetworkMap)
         return in;
+
+    // The Network Map and the active-network icon render from the mod's
+    // SHARED network state (g_NetworkList / g_EthernetConnected /
+    // g_CurrentNetworkCategory). In explorer.exe that state is refreshed
+    // ONLY by the flyout side (flyout show / flyout timer / WLAN
+    // notifications to the flyout window), and the hotkey-thread startup
+    // prime even ran before the WLAN handle existed - so on Wi-Fi it stayed
+    // empty until the flyout was opened once. This page is also hosted in an
+    // explorer.exe frame when opened via Win+R or the native tray context
+    // menu (control.exe just delegates to the shell), so those entry points
+    // rendered from the empty state: gray offline bench + generic "Network"
+    // label, while IsInternetConnected() (its own local NLM query) still
+    // colored the globe. PrimeNetworkCategoryForNetCenterHost() deliberately
+    // skips explorer hosts, so it never covered this case - this refresh is
+    // the host-agnostic equivalent, safe on the Control Panel's DirectUI
+    // thread.
+    EnsureNetCenterNetworkDataFresh();
+
     std::wstring xml = in;
 
     // Add the profile-specific icon before the active connection name, matching
@@ -7927,8 +7979,23 @@ static HWND g_ncHostWindow = nullptr;
 // run cleanup on its own (STA) thread when the mod is being unloaded.
 static UINT g_ncTeardownMsg = 0;
 
+// NLM sometimes fires ConnectivityChanged a moment before its own internal
+// connectivity property has actually settled, so a query made right inside
+// the event handler can still observe the pre-change state. Set for the
+// duration of a forced refresh so NetworkMapVisual()'s 500ms connectivity
+// cache is bypassed instead of possibly reusing a stale cached value.
+bool g_ncForceFreshConnectivity = false;
+
+// Timer id used to schedule a short-delay second refresh after
+// ConnectivityChanged, to catch the rare case where NLM's internal state was
+// still stale during the immediate refresh. Installed on g_ncHostWindow,
+// which is already subclassed by NetCenterPageSubclass, so WM_TIMER is
+// handled there and torn down automatically with the rest of that state.
+static const UINT_PTR kNcDelayedRefreshTimerId = 0x4E430001; // 'NC' + 0001
+static const UINT kNcDelayedRefreshDelayMs = 350;
+
 static void RefreshNetworkCenterXml() {
-    if (!g_ncTarget || !SetXML || g_inHook)
+    if (!g_ncTarget || !g_ncModule || !SetXML || g_inHook)
         return;
 
     std::wstring xml = LoadUifile(g_ncModule, (PCWSTR)MAKEINTRESOURCE(110), L"UIFILE");
@@ -7943,6 +8010,14 @@ static void RefreshNetworkCenterXml() {
     SetXML(g_ncTarget, patched.c_str(), g_ncModule, g_ncP4);
     g_inHook--;
     Wh_Log(L"[NetMap] Live refresh pushed after connectivity change");
+}
+
+// Forces IsInternetConnected() to be re-queried (rather than served from
+// NetworkMapVisual()'s 500ms cache) for the duration of one refresh push.
+static void RefreshNetworkCenterXmlForced() {
+    g_ncForceFreshConnectivity = true;
+    RefreshNetworkCenterXml();
+    g_ncForceFreshConnectivity = false;
 }
 
 class NetworkEventsSink : public INetworkListManagerEvents {
@@ -7980,7 +8055,14 @@ class NetworkEventsSink : public INetworkListManagerEvents {
     }
 
     STDMETHODIMP ConnectivityChanged(NLM_CONNECTIVITY) override {
-        RefreshNetworkCenterXml();
+        RefreshNetworkCenterXmlForced();
+        // NLM occasionally reports the change before its own connectivity
+        // state has fully settled, which the immediate refresh above can
+        // miss. Schedule one more forced refresh shortly after to catch that
+        // case; harmless no-op if the page has since closed/navigated away
+        // (RefreshNetworkCenterXml() checks g_ncTarget itself).
+        if (g_ncTarget && g_ncHostWindow && IsWindow(g_ncHostWindow))
+            SetTimer(g_ncHostWindow, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
         return S_OK;
     }
 
@@ -8039,8 +8121,17 @@ static void UnadviseConnectivityEvents();
 static UINT GetNcTeardownMessage();
 
 static LRESULT CALLBACK NetCenterPageSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+    if (uMsg == WM_TIMER && wParam == kNcDelayedRefreshTimerId) {
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        // Belt-and-suspenders: only push if this is still the live page
+        // (RefreshNetworkCenterXml() also checks g_ncTarget on its own).
+        if (g_ncTarget)
+            RefreshNetworkCenterXmlForced();
+        return 0;
+    }
     if (uMsg == WM_NCDESTROY || (g_ncTeardownMsg && uMsg == g_ncTeardownMsg)) {
         Wh_Log(L"[NetMap] NetCenter page closed/torn down, cleaning up live refresh state");
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
         UnadviseConnectivityEvents();
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, NetCenterPageSubclass);
         if (g_ncHostWindow == hWnd)
@@ -8213,6 +8304,12 @@ static int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, int textLength,
 // DirectUI loads icon() graphics through LoadImageW. Only the two private
 // IDs emitted by IconAttr are replaced, leaving Configure a Network and
 // Troubleshoot (and every other stock page icon) untouched.
+// Forward-declared here; defined further down alongside the rest of the
+// non-explorer-host NetCenter state. Called both here and in
+// SetXMLFromResource_Hook since the category icon can in principle be
+// requested by DirectUI (e.g. on a DPI change) without a fresh SetXML pass.
+static void PrimeNetworkCategoryForNetCenterHost();
+
 static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                                      int width, int height, UINT flags) {
     if (type == IMAGE_ICON && hInst && name) {
@@ -8332,12 +8429,156 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
         if (resourceId == kNetMapCategoryIconId) {
             if (!IsNetCenter(hInst))
                 return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            PrimeNetworkCategoryForNetCenterHost();
             // Decode at DirectUI's requested 36rp active-network size. This
             // uses the same bicubic scaling path as the PC/globe DUI caches.
             return CopyNetworkLocationIconForDUI(width, height);
         }
     }
     return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+}
+
+// Tracks whether we've attempted the one-time priming below, and whether we
+// were the ones who opened g_Ctx.hWlanClient (so Wh_ModUninit's
+// non-explorer-host branch knows it's safe/necessary to close it).
+static bool g_ncCategoryPrimeAttempted = false;
+static bool g_ncOwnsWlanHandleInNonExplorerHost = false;
+// Tracks whether we personally called CoInitializeEx on this thread (S_OK or
+// S_FALSE), as opposed to it already having an apartment (RPC_E_CHANGED_MODE)
+// or us not having tried. Only ever call CoUninitialize() when this is true,
+// and only once, from the same thread - paired in NetCenterPageSubclass's
+// teardown branch, which runs on this same STA thread whether the page is
+// closed normally or the mod is being unloaded.
+static bool g_ncComInitializedByUs = false;
+
+// Wh_ModInit() deliberately skips all WLAN/NLM priming when the mod is
+// injected into a non-explorer host (see the g_IsExplorerHost branch there):
+// that infrastructure was designed to run only inside explorer.exe's own
+// tray flyout + hotkey thread. But Network and Sharing Center can also be
+// opened directly as a standalone control.exe process (e.g. via the tray
+// icon's right-click context menu), which never touches that code path at
+// all. Without this, g_CurrentNetworkCategory stays "unknown" for that
+// process's whole lifetime, and CopyNetworkLocationIconForDUI always falls
+// back to the generic Public icon instead of the real Home/Public/Work one.
+// Confirmed by testing: without a real COM apartment on this thread,
+// IsInternetConnected() (used both for the network-map's online/offline icon
+// and inside category detection's NLM path) fails silently and always
+// reports offline, which is why the map row was still always showing the
+// gray offline icon even after WLAN/category priming was added.
+//
+// This is a best-effort, one-shot, defensive addition: it runs at most once
+// per process, and any failure anywhere in it (COM unavailable, WLAN service
+// unavailable, etc.) just leaves the existing Public/offline fallback in
+// place rather than risking the host process. Everything here is wrapped in
+// try/catch per request, even though the Win32/COM calls involved report
+// failure via return codes rather than exceptions - this is extra insurance
+// against an unexpected std::bad_alloc or similar from the helper functions
+// it calls into (LoadUifile, RefreshWifiData, etc.), not a substitute for
+// checking those return codes, which are still checked individually below.
+static void PrimeNetworkCategoryForNetCenterHost() {
+    if (g_ncCategoryPrimeAttempted || g_IsExplorerHost)
+        return;
+    g_ncCategoryPrimeAttempted = true;
+
+    try {
+        // COINIT_APARTMENTTHREADED matches how the flyout side uses COM
+        // (CoCreateInstance for NLM, no free-threaded marshaling needed).
+        // S_OK: we initialized a fresh apartment on this thread - must pair
+        //   with CoUninitialize() later, on this same thread.
+        // S_FALSE: COM was already initialized on this thread with a
+        //   compatible model - our call added a refcount, so it still needs
+        //   a matching CoUninitialize() to release it.
+        // RPC_E_CHANGED_MODE: an incompatible apartment already exists here;
+        //   we didn't change anything and must NOT call CoUninitialize().
+        // Anything else: leave COM alone; NLM calls will simply keep failing
+        //   gracefully, same as before this fix.
+        HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        if (hrCo == S_OK || hrCo == S_FALSE) {
+            g_ncComInitializedByUs = true;
+        } else if (hrCo == RPC_E_CHANGED_MODE) {
+            Wh_Log(L"[NetMap] COM already initialized with a different concurrency "
+                   L"model on this thread; continuing without re-initializing it");
+        } else {
+            Wh_Log(L"[NetMap] CoInitializeEx failed (hr=0x%08X); NLM-based detection "
+                   L"and online/offline state may stay on their fallback values", hrCo);
+        }
+
+        if (!g_Ctx.hWlanClient) {
+            DWORD dwMaxClient = 2, dwCurVer = 0;
+            HANDLE hClient = NULL;
+            DWORD wlanResult = WlanOpenHandle(dwMaxClient, NULL, &dwCurVer, &hClient);
+            if (wlanResult == ERROR_SUCCESS && hClient) {
+                g_Ctx.hWlanClient = hClient;
+                g_ncOwnsWlanHandleInNonExplorerHost = true;
+            } else {
+                Wh_Log(L"[NetMap] WlanOpenHandle failed in non-explorer host (error=%lu); "
+                       L"Wi-Fi name/category detection will be skipped, Ethernet/registry paths still tried",
+                       wlanResult);
+            }
+        }
+
+        RefreshNetworkData(/*forceDetection=*/TRUE);
+        Wh_Log(L"[NetMap] One-time priming in non-explorer host finished "
+               L"(category=%d, online=%d)",
+               g_CurrentNetworkCategory, (int)IsInternetConnected());
+    } catch (...) {
+        Wh_Log(L"[NetMap] Exception during non-explorer-host category priming; "
+               L"leaving the Public-icon fallback in place");
+    }
+}
+
+// Refreshes the shared Wi-Fi/Ethernet/category state from whichever process
+// and thread is rendering the Network Center page. Throttled to once every
+// 2 seconds because Patch() can run several times per page load (initial
+// parse, DirectUI re-layouts, live-refresh pushes). Host-agnostic
+// counterpart of PrimeNetworkCategoryForNetCenterHost(): it also runs in
+// explorer.exe, where the priming helper returns early by design and where
+// the flyout-side machinery is otherwise the only thing keeping
+// g_NetworkList / g_EthernetConnected up to date.
+static void EnsureNetCenterNetworkDataFresh() {
+    static DWORD s_lastRefreshTick = 0;
+    DWORD now = GetTickCount();
+    if (now - s_lastRefreshTick < 2000)
+        return;
+    s_lastRefreshTick = now;
+
+    try {
+        // Reuse the process-wide WLAN handle if the flyout/hotkey side (or
+        // the non-explorer priming) already opened it. wlanapi handles are
+        // RPC-based and usable from any thread in the process. A handle
+        // opened HERE is ours to close at uninit only in non-explorer hosts;
+        // in explorer the hotkey/flyout path owns the lifecycle (it also
+        // registers notifications on the handle it opens itself).
+        if (!g_Ctx.hWlanClient) {
+            DWORD dwCurVer = 0;
+            HANDLE hClient = NULL;
+            DWORD wlanResult = WlanOpenHandle(2, NULL, &dwCurVer, &hClient);
+            if (wlanResult == ERROR_SUCCESS && hClient) {
+                g_Ctx.hWlanClient = hClient;
+                if (!g_IsExplorerHost)
+                    g_ncOwnsWlanHandleInNonExplorerHost = true;
+                Wh_Log(L"[NetMap] WLAN handle opened for NetCenter data refresh");
+            } else {
+                Wh_Log(L"[NetMap] WlanOpenHandle failed during NetCenter data "
+                       L"refresh (error=%lu)", wlanResult);
+            }
+        }
+
+        if (g_Ctx.hWlanClient)
+            RefreshWifiData(g_Ctx.hWlanClient);  // serializes the g_NetworkList swap internally
+        UpdateEthernetStatus();                  // lock-free, same pattern as the hotkey thread
+
+        // Category only if still unknown. Failures are non-fatal: the icon
+        // then falls back to the colored Public icon, never the gray one.
+        BOOL isAnyConnected = g_EthernetConnected ||
+            (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
+        if (isAnyConnected && g_Settings.useNetworkLocationIcons &&
+            !IsValidNetworkCategoryValue(g_CurrentNetworkCategory)) {
+            g_CurrentNetworkCategory = DetectNetworkLocationCategory();
+        }
+    } catch (...) {
+        Wh_Log(L"[NetMap] Exception during NetCenter data refresh; keeping previous state");
+    }
 }
 
 static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp, HMODULE m,
@@ -8350,6 +8591,12 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
         (UINT)(UINT_PTR)n != 110)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    // One-shot, best-effort: only does anything the first time, and only in
+    // a non-explorer host (see PrimeNetworkCategoryForNetCenterHost's
+    // comment). Must run before Patch() below so the freshly-detected
+    // category is what the network map icon logic actually sees.
+    PrimeNetworkCategoryForNetCenterHost();
 
     std::wstring xml = LoadUifile(m, n, tp);
     if (xml.empty() || xml.find(L"atom(NetworkCenter)") == std::wstring::npos ||
@@ -8611,6 +8858,20 @@ void Wh_ModUninit() {
         // Windhawk thread), instead of touching the raw, unmarshalled
         // IConnectionPoint pointer from here directly.
         Win7NetworkCenterLinks::TeardownNetCenterHost();
+        // Only closes a handle PrimeNetworkCategoryForNetCenterHost() opened
+        // itself in this same (non-explorer-host) process; SafeCleanup()
+        // below (explorer-host branch) already owns the equivalent handle
+        // for the normal flyout case. Best-effort: WlanCloseHandle failing
+        // here just leaks the handle for this short-lived process's
+        // remaining lifetime, which the OS reclaims on exit regardless.
+        if (Win7NetworkCenterLinks::g_ncOwnsWlanHandleInNonExplorerHost && g_Ctx.hWlanClient) {
+            try {
+                WlanCloseHandle(g_Ctx.hWlanClient, NULL);
+            } catch (...) {
+                Wh_Log(L"[NetMap] Exception closing WLAN handle in non-explorer-host uninit");
+            }
+            g_Ctx.hWlanClient = NULL;
+        }
         FreeSystemIcons();
         DeleteCriticalSection(&g_Ctx.csLock);
         return;
