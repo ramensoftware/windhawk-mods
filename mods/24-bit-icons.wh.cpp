@@ -34,6 +34,23 @@ Forces 24-bit icons like Windows 2000 and before.
 
 #define LR_CREATEREALDIB 0x0800 
 
+typedef struct tagICONDIR
+{
+    BYTE  Width;
+    BYTE  Height;
+    BYTE  ColorCount;
+    BYTE  reserved;
+} ICONDIR;
+
+typedef struct tagRESDIR
+{
+    ICONDIR Icon;
+    WORD    Planes;
+    WORD    BitCount;
+    DWORD   BytesInRes;
+    WORD    idIcon;
+} RESDIR, *LPRESDIR;
+
 thread_local bool g_fIcon = false;
 
 bool IsExplorerProcess() {
@@ -79,11 +96,12 @@ void InvalidateIconCache()
     }
 }
 
-DWORD (__thiscall *GetIcoCurBpp_orig)(UINT);
-DWORD __thiscall GetIcoCurBpp_hook(UINT LR_flags)
+UINT (__fastcall *GetBestImage_orig)(LPRESDIR, UINT, int, int, UINT, BOOL);
+UINT __fastcall GetBestImage_hook(LPRESDIR lprd, UINT uCount, int cxDesired, int cyDesired, UINT bppDesired, BOOL fIcon)
 {
-    DWORD curBpp = GetIcoCurBpp_orig(LR_flags);
-    return curBpp ? curBpp : 8;
+    if (lprd->Icon.ColorCount == 16)
+        bppDesired = 8;
+    return GetBestImage_orig(lprd, uCount, cxDesired, cyDesired, bppDesired, fIcon);
 }
 
 HICON (__fastcall *ConvertDIBIcon_orig)(
@@ -160,10 +178,10 @@ BOOL Wh_ModInit()
     {
         {
             {
-                L"unsigned long " SSTDCALL L" GetIcoCurBpp(unsigned int)",
+                L"unsigned int " SSTDCALL " GetBestImage(struct tagRESDIR *,unsigned int,int,int,unsigned int,int)"
             },
-            &GetIcoCurBpp_orig,
-            GetIcoCurBpp_hook,
+            &GetBestImage_orig,
+            GetBestImage_hook,
             false
         },
         {
