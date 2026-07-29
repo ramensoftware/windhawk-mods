@@ -331,6 +331,12 @@ void RecalcDpiMetrics(UINT dpi) {
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
 static HANDLE g_hConnectThread = NULL; 
+// Handle of the short-lived thread that waits for a superseded connect
+// thread to finish and closes its handle (see ReapConnectThreadHandleProc).
+// Tracked so SafeCleanup() can join it before Wh_ModUninit returns; both
+// this and the connect thread run code in the mod's own image, so leaving
+// either alive when Windhawk unloads the DLL crashes the process on return.
+static HANDLE g_hReapThread = NULL;
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -3596,9 +3602,14 @@ static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* out
     return TRUE;
 }
 
-static int DetectNetworkLocationCategory() {
-    INetworkListManager* pNLM = g_pNLM;
-    if (!pNLM) {
+// pNLMOverride: same convention as UpdateEthernetStatus() above - null (the
+// default) preserves the original g_pNLM-sharing behavior for the flyout/
+// hotkey thread; a caller-supplied instance is used exclusively instead,
+// without ever reading, creating, or publishing g_pNLM, so the DirectUI/
+// Control-Panel thread never touches the hotkey thread's NLM instance.
+static int DetectNetworkLocationCategory(INetworkListManager* pNLMOverride = nullptr) {
+    INetworkListManager* pNLM = pNLMOverride ? pNLMOverride : g_pNLM;
+    if (!pNLM && !pNLMOverride) {
         CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
                          IID_INetworkListManager, (void**)&pNLM);
         if (pNLM && !g_pNLM) g_pNLM = pNLM;
@@ -4378,12 +4389,29 @@ static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
     return FALSE;
 }
 
-void UpdateEthernetStatus() {
-    g_EthernetConnected = FALSE;
-    g_EthernetNetworkName[0] = L'\0';
-    g_EthernetHasInternet = FALSE;
-    ZeroMemory(&g_EthernetAdapterGuid, sizeof(g_EthernetAdapterGuid));
-    g_HasEthernetAdapterGuid = FALSE;
+// pNLMOverride: optional INetworkListManager instance owned and released by
+// the caller. When null (the default, used by the flyout/hotkey thread which
+// already legitimately owns g_pNLM), behavior is unchanged from before -
+// g_pNLM is created/reused/shared as before. When non-null (used by
+// EnsureNetCenterNetworkDataFresh() on the DirectUI/Control-Panel thread),
+// that instance is used exclusively and g_pNLM is never read, created, or
+// published from this call, avoiding the cross-apartment sharing / use-after-
+// free race with HotkeyThreadProc's exit-time Release() of g_pNLM.
+void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr) {
+    // Staged locally and published to the g_Ethernet* globals in a single
+    // locked block at the end of this function. Previously these globals
+    // were written directly, with no lock at all, while
+    // GetConnectedNetworkName()/MaskConnectedNetworkText() read them under
+    // g_Ctx.csLock - so the lock protected nothing, and a torn/garbled name
+    // was reachable if this function ran concurrently with itself (e.g. once
+    // on the flyout thread, once on the NetCenter DirectUI thread). The
+    // blocking WLAN/adapter/COM work itself is unchanged and still runs
+    // without holding the lock, so this doesn't add any new stall.
+    BOOL  localConnected = FALSE;
+    WCHAR localNetworkName[64] = L"";
+    BOOL  localHasInternet = FALSE;
+    GUID  localAdapterGuid = {0};
+    BOOL  localHasAdapterGuid = FALSE;
 
     // 1. Find physical operational Ethernet adapter GUID via GetAdaptersAddresses
     BOOL foundPhysicalEthernet = FALSE;
@@ -4453,27 +4481,40 @@ void UpdateEthernetStatus() {
     }
 
     if (!foundPhysicalEthernet) {
-        // No real physical Ethernet cable connected!
+        // No real physical Ethernet cable connected! Publish the
+        // "disconnected" reset under the lock too, so a reader never
+        // observes a half-reset state.
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_EthernetConnected = FALSE;
+        g_EthernetNetworkName[0] = L'\0';
+        g_EthernetHasInternet = FALSE;
+        ZeroMemory(&g_EthernetAdapterGuid, sizeof(g_EthernetAdapterGuid));
+        g_HasEthernetAdapterGuid = FALSE;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
 
-    g_EthernetConnected = TRUE;
-    g_EthernetHasInternet = IsInternetConnected();
+    localConnected = TRUE;
+    localHasInternet = IsInternetConnected();
     if (physicalEthernetGuidReliable && !IsZeroGuidValue(&physicalEthernetGuid)) {
-        g_EthernetAdapterGuid = physicalEthernetGuid;
-        g_HasEthernetAdapterGuid = TRUE;
+        localAdapterGuid = physicalEthernetGuid;
+        localHasAdapterGuid = TRUE;
     }
-    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), fallbackName);
+    StringCchCopyW(localNetworkName, ARRAYSIZE(localNetworkName), fallbackName);
 
     // 2. Query COM INetworkListManager to get the exact friendly network name (e.g. "Rete 2")
-    if (!g_pNLM) {
-        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                         IID_INetworkListManager, (void**)&g_pNLM);
+    INetworkListManager* pNLM = pNLMOverride;
+    if (!pNLM) {
+        if (!g_pNLM) {
+            CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                             IID_INetworkListManager, (void**)&g_pNLM);
+        }
+        pNLM = g_pNLM;
     }
-    
-    if (g_pNLM) {
+
+    if (pNLM) {
         IEnumNetworks* pEnum = NULL;
-        if (SUCCEEDED(g_pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) && pEnum) {
+        if (SUCCEEDED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) && pEnum) {
             INetwork* pNet = NULL;
             ULONG fetched = 0;
             BOOL matchedNlm = FALSE;
@@ -4488,13 +4529,13 @@ void UpdateEthernetStatus() {
                             if (IsEqualGUID(connAdapterId, physicalEthernetGuid)) {
                                 BSTR bstrName = NULL;
                                 if (SUCCEEDED(pNet->GetName(&bstrName)) && bstrName) {
-                                    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), bstrName);
+                                    StringCchCopyW(localNetworkName, ARRAYSIZE(localNetworkName), bstrName);
                                     SafeSysFreeString(bstrName);
                                     matchedNlm = TRUE;
                                 }
                                 NLM_CONNECTIVITY conn = NLM_CONNECTIVITY_DISCONNECTED;
                                 pNet->GetConnectivity(&conn);
-                                g_EthernetHasInternet = (conn & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
+                                localHasInternet = (conn & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
                             }
                         }
                         pConn->Release();
@@ -4508,6 +4549,14 @@ void UpdateEthernetStatus() {
             pEnum->Release();
         }
     }
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    g_EthernetConnected = localConnected;
+    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), localNetworkName);
+    g_EthernetHasInternet = localHasInternet;
+    g_EthernetAdapterGuid = localAdapterGuid;
+    g_HasEthernetAdapterGuid = localHasAdapterGuid;
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
 
 void UpdateFlyoutWindowSize(HWND hwnd) {
@@ -5322,7 +5371,13 @@ static BOOL AskForPasswordAndConnect(int index) {
         HANDLE hReaper = (HANDLE)_beginthreadex(NULL, 0,
             ReapConnectThreadHandleProc, hOldThread, 0, NULL);
         if (hReaper) {
-            CloseHandle(hReaper);
+            // Drop our reference to any previous reaper's handle (it has
+            // long since finished by the time a new connect is started) and
+            // track this one instead, so SafeCleanup() can join it at
+            // unload rather than leaving it untracked and potentially still
+            // running mod code when the DLL is unmapped.
+            if (g_hReapThread) CloseHandle(g_hReapThread);
+            g_hReapThread = hReaper;
         } else {
             // Couldn't spin up a reaper thread; fall back to closing the
             // handle immediately. This does not terminate the still-running
@@ -6075,6 +6130,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_SHOW_FLYOUT:
         ShowWindow(hwnd, SW_SHOW);
         SetForegroundWindow(hwnd);
+        if (!g_RefreshTimer && g_Settings.refreshInterval > 0) {
+            g_RefreshTimer = SetTimer(hwnd, 1000, g_Settings.refreshInterval, NULL);
+        }
         RefreshNetworkData();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
@@ -6986,6 +7044,12 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             if (!g_inPasswordPrompt) {
                 ClearKeyboardFocus();
                 ShowWindow(hwnd, SW_HIDE);
+                // The flyout is only hidden here, not destroyed, so without
+                // this the timer would otherwise keep running a full
+                // RefreshWifiData()/UpdateEthernetStatus() every tick with
+                // nothing on screen to consume it until explorer restarts.
+                // Re-armed in WM_SHOW_FLYOUT.
+                if (g_RefreshTimer) { KillTimer(hwnd, g_RefreshTimer); g_RefreshTimer = 0; }
             }
         }
         break;
@@ -7352,6 +7416,10 @@ void SafeCleanup() {
         for (int i = 0; i < 50 && IsWindow(g_hWndFlyout); i++) {
             MSG msg;
             while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+            // Wait briefly instead of a tight spin; still wakes immediately
+            // on any new message so WM_SAFE_CLOSE's DestroyWindow is
+            // processed as soon as it's posted.
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
@@ -7363,6 +7431,13 @@ void SafeCleanup() {
         g_hConnectThread = NULL;
     } else {
         Wh_Log(L"SafeCleanup: No pending connect thread");
+    }
+    if (g_hReapThread) {
+        // Same reasoning as the connect thread above: this also runs code
+        // in the mod's image, so it must finish before Wh_ModUninit returns.
+        WaitForSingleObject(g_hReapThread, 5000);
+        CloseHandle(g_hReapThread);
+        g_hReapThread = NULL;
     }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient, NULL); g_Ctx.hWlanClient = NULL; }
     ShutdownGdiPlusRendering();
@@ -7959,10 +8034,28 @@ static thread_local int g_inHook = 0;
 // only showed the fresh state the next time the page was reopened.
 //
 // Fix: remember the DUI target/module/instance from the last successful
-// SetXML() call, subscribe to INetworkListManager connectivity events (which
-// fire on this same STA thread via control.exe's normal message pump, no
-// extra window or timer needed), and on each notification reload+re-Patch()
-// the resource and push it again with SetXML().
+// SetXML() call and subscribe to INetworkListManager connectivity events.
+//
+// IConnectionPoint::Advise on an in-process sink does NOT marshal - netprofm
+// invokes ConnectivityChanged on its own notification/RPC thread, not on
+// whatever thread happened to call Advise. DirectUI has hard thread
+// affinity, so calling SetXML() directly from that handler could corrupt or
+// crash the page's actual UI thread. All refresh work is therefore
+// marshaled through a message-only window that the mod creates itself, on
+// the page's own thread, instead of ever touching g_ncTarget from the NLM
+// callback thread.
+//
+// That message-only window also replaces the previous approach of finding
+// and subclassing some existing DirectUIHWND: every ordinary Explorer folder
+// window has the exact same child chain (CabinetWClass -> ShellTabWindowClass
+// -> DUIViewWndClassName -> DirectUIHWND), and Explorer windows normally
+// share one thread, so a thread-wide EnumThreadWindows search would usually
+// land on an unrelated folder window - subclassing/timering a window that
+// has nothing to do with Network Center, and tearing down on that window's
+// WM_NCDESTROY instead of the page's, leaving g_ncTarget dangling into freed
+// memory. Owning a private window sidesteps that: it is created on the exact
+// thread that owns the page, so there is nothing to search for and nothing
+// foreign to subclass.
 static void* g_ncTarget = nullptr;
 static HMODULE g_ncModule = nullptr;
 static HINSTANCE g_ncP4 = nullptr;
@@ -7970,13 +8063,21 @@ static IConnectionPoint* g_ncCP = nullptr;
 static DWORD g_ncCookie = 0;
 static bool g_ncEventsAdvised = false;
 
-// The DirectUIHWND that currently hosts the patched Network Center XML, i.e.
-// the window NetCenterPageSubclass is installed on. Tracked separately from
-// g_ncTarget so Wh_ModUninit can marshal teardown to the thread that owns
-// the (unmarshalled) COM connection point instead of touching it directly.
-static HWND g_ncHostWindow = nullptr;
-// Registered lazily: private message used to ask NetCenterPageSubclass to
-// run cleanup on its own (STA) thread when the mod is being unloaded.
+// The mod's own message-only window, created on the page's STA thread the
+// first time that thread parses the NetCenter UIFILE. Everything that needs
+// to run on the page's thread (the marshaled refresh, the delayed-refresh
+// timer, and teardown) is routed through it instead of through a foreign
+// DirectUIHWND.
+static HWND g_ncMsgWindow = nullptr;
+static bool g_ncMsgClassRegistered = false;
+static const PCWSTR kNcMsgClassName = L"Win7NetFlyout_NcMsgWnd";
+
+// Private message posted from ConnectivityChanged (which may run on an
+// arbitrary NLM thread) to ask the message-only window - which lives on the
+// correct DirectUI thread - to perform the actual refresh.
+static UINT g_ncRefreshMsg = 0;
+// Private message used to ask the message-only window to tear itself down
+// from Wh_ModUninit, which can run on an arbitrary Windhawk thread.
 static UINT g_ncTeardownMsg = 0;
 
 // NLM sometimes fires ConnectivityChanged a moment before its own internal
@@ -7988,9 +8089,7 @@ bool g_ncForceFreshConnectivity = false;
 
 // Timer id used to schedule a short-delay second refresh after
 // ConnectivityChanged, to catch the rare case where NLM's internal state was
-// still stale during the immediate refresh. Installed on g_ncHostWindow,
-// which is already subclassed by NetCenterPageSubclass, so WM_TIMER is
-// handled there and torn down automatically with the rest of that state.
+// still stale during the immediate refresh. Installed on g_ncMsgWindow.
 static const UINT_PTR kNcDelayedRefreshTimerId = 0x4E430001; // 'NC' + 0001
 static const UINT kNcDelayedRefreshDelayMs = 350;
 
@@ -8018,6 +8117,102 @@ static void RefreshNetworkCenterXmlForced() {
     g_ncForceFreshConnectivity = true;
     RefreshNetworkCenterXml();
     g_ncForceFreshConnectivity = false;
+}
+
+static void UnadviseConnectivityEvents() {
+    if (g_ncCP) {
+        if (g_ncEventsAdvised)
+            g_ncCP->Unadvise(g_ncCookie);
+        g_ncCP->Release();
+        g_ncCP = nullptr;
+    }
+    g_ncEventsAdvised = false;
+    g_ncCookie = 0;
+    g_ncTarget = nullptr;
+    g_ncModule = nullptr;
+    g_ncP4 = nullptr;
+}
+
+static UINT GetNcRefreshMessage() {
+    if (!g_ncRefreshMsg)
+        g_ncRefreshMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcRefresh");
+    return g_ncRefreshMsg;
+}
+
+static UINT GetNcTeardownMessage() {
+    if (!g_ncTeardownMsg)
+        g_ncTeardownMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcTeardown");
+    return g_ncTeardownMsg;
+}
+
+// WndProc for the mod's own message-only window. Runs entirely on the STA
+// thread that owns the NetCenter page, so it is always safe to touch
+// g_ncTarget / g_ncCP here.
+static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == g_ncRefreshMsg && g_ncRefreshMsg) {
+        // Posted from ConnectivityChanged, possibly from an arbitrary NLM
+        // thread; we're on the right thread now, so it's safe to refresh.
+        if (g_ncTarget) {
+            RefreshNetworkCenterXmlForced();
+            // NLM occasionally reports the change before its own
+            // connectivity state has fully settled, which the immediate
+            // refresh above can miss. Schedule one more forced refresh
+            // shortly after to catch that case.
+            SetTimer(hWnd, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
+        }
+        return 0;
+    }
+    if (uMsg == WM_TIMER && wParam == kNcDelayedRefreshTimerId) {
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        if (g_ncTarget)
+            RefreshNetworkCenterXmlForced();
+        return 0;
+    }
+    if (uMsg == g_ncTeardownMsg && g_ncTeardownMsg) {
+        Wh_Log(L"[NetMap] NetCenter live-refresh window tearing down");
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        UnadviseConnectivityEvents();
+        if (g_ncMsgWindow == hWnd)
+            g_ncMsgWindow = nullptr;
+        DestroyWindow(hWnd);
+        return 0;
+    }
+    if (uMsg == WM_NCDESTROY) {
+        // Reached if the window is destroyed some other way than the
+        // teardown message above (shouldn't normally happen, since only
+        // this code ever destroys it, but keep state consistent either way).
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        if (g_ncMsgWindow == hWnd)
+            g_ncMsgWindow = nullptr;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+// Creates (if needed) the mod's message-only window on the current thread.
+// Must be called from SetXMLFromResource_Hook, i.e. on the STA thread that
+// owns the NetCenter page - never from the NLM callback thread.
+static HWND EnsureNcMsgWindow() {
+    if (g_ncMsgWindow && IsWindow(g_ncMsgWindow))
+        return g_ncMsgWindow;
+    g_ncMsgWindow = nullptr; // stale handle from a destroyed window, if any
+
+    HINSTANCE hInst = GetModuleHandleW(NULL);
+    if (!g_ncMsgClassRegistered) {
+        WNDCLASSW wc = {0};
+        wc.lpfnWndProc   = NcMsgWndProc;
+        wc.hInstance     = hInst;
+        wc.lpszClassName = kNcMsgClassName;
+        if (RegisterClassW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS)
+            g_ncMsgClassRegistered = true;
+    }
+    if (!g_ncMsgClassRegistered)
+        return nullptr;
+
+    GetNcRefreshMessage();
+    GetNcTeardownMessage();
+    g_ncMsgWindow = CreateWindowExW(0, kNcMsgClassName, L"", 0, 0, 0, 0, 0,
+                                     HWND_MESSAGE, NULL, hInst, NULL);
+    return g_ncMsgWindow;
 }
 
 class NetworkEventsSink : public INetworkListManagerEvents {
@@ -8054,15 +8249,13 @@ class NetworkEventsSink : public INetworkListManagerEvents {
         return E_NOTIMPL;
     }
 
+    // Runs on NLM's own notification/RPC thread, not on the DirectUI page's
+    // thread - IConnectionPoint::Advise on an in-process sink does not
+    // marshal. Never touch g_ncTarget/SetXML from here: just hand off to the
+    // message-only window that lives on the correct thread.
     STDMETHODIMP ConnectivityChanged(NLM_CONNECTIVITY) override {
-        RefreshNetworkCenterXmlForced();
-        // NLM occasionally reports the change before its own connectivity
-        // state has fully settled, which the immediate refresh above can
-        // miss. Schedule one more forced refresh shortly after to catch that
-        // case; harmless no-op if the page has since closed/navigated away
-        // (RefreshNetworkCenterXml() checks g_ncTarget itself).
-        if (g_ncTarget && g_ncHostWindow && IsWindow(g_ncHostWindow))
-            SetTimer(g_ncHostWindow, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
+        if (g_ncMsgWindow && g_ncRefreshMsg)
+            PostMessageW(g_ncMsgWindow, g_ncRefreshMsg, 0, 0);
         return S_OK;
     }
 
@@ -8102,125 +8295,22 @@ static void EnsureConnectivityEventsAdvised() {
     }
 }
 
-// Subclass proc for the NetCenter DirectUIHWND itself (not the top-level
-// frame: the frame survives navigation, so if the user navigates away from
-// the Network and Sharing Center inside the same Control Panel window, the
-// page's DUIXmlParser is destroyed while g_ncTarget would still point at it
-// - the same use-after-free described below, without the window ever being
-// closed. Subclassing the DirectUIHWND child means WM_NCDESTROY fires both
-// on navigation-away and on the whole window closing.
-//
-// WM_NCDESTROY and the private teardown message both run on the owning STA
-// thread (the former because DefWindowProc/DestroyWindow dispatch it there,
-// the latter because it is only ever posted to hWnd), so it is safe to
-// unadvise the COM sink - a pointer obtained on that same thread - from
-// this callback.
-// Forward declaration needed because NetCenterPageSubclass is defined
-// before UnadviseConnectivityEvents in the file.
-static void UnadviseConnectivityEvents();
-static UINT GetNcTeardownMessage();
-
-static LRESULT CALLBACK NetCenterPageSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
-    if (uMsg == WM_TIMER && wParam == kNcDelayedRefreshTimerId) {
-        KillTimer(hWnd, kNcDelayedRefreshTimerId);
-        // Belt-and-suspenders: only push if this is still the live page
-        // (RefreshNetworkCenterXml() also checks g_ncTarget on its own).
-        if (g_ncTarget)
-            RefreshNetworkCenterXmlForced();
-        return 0;
-    }
-    if (uMsg == WM_NCDESTROY || (g_ncTeardownMsg && uMsg == g_ncTeardownMsg)) {
-        Wh_Log(L"[NetMap] NetCenter page closed/torn down, cleaning up live refresh state");
-        KillTimer(hWnd, kNcDelayedRefreshTimerId);
-        UnadviseConnectivityEvents();
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, NetCenterPageSubclass);
-        if (g_ncHostWindow == hWnd)
-            g_ncHostWindow = nullptr;
-        if (uMsg != WM_NCDESTROY)
-            return 0;
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-// Helper: find the DirectUIHWND that actually hosts the NetCenter page for
-// the current thread. Called from SetXMLFromResource_Hook on the STA thread
-// that owns the page.
-//
-// EnumThreadWindows() only enumerates top-level (non-child) windows of the
-// thread, and DirectUIHWND is a child window, so it never shows up there.
-// Walk the expected child chain explicitly instead, the way
-// classic-explorer-statusbar does: CabinetWClass -> ShellTabWindowClass ->
-// DUIViewWndClassName -> DirectUIHWND. The Control Panel's standalone host
-// (#32770 / CtrlPanel) doesn't have a ShellTabWindowClass in between, so
-// fall back to searching directly for DUIViewWndClassName/DirectUIHWND
-// under it.
-static HWND FindNetCenterHostWindow() {
-    struct FindInfo { HWND found; };
-    FindInfo fi = { NULL };
-    EnumThreadWindows(GetCurrentThreadId(), [](HWND hwndFrame, LPARAM lp) -> BOOL {
-        FindInfo* pfi = reinterpret_cast<FindInfo*>(lp);
-        WCHAR cls[128];
-        if (!GetClassNameW(hwndFrame, cls, 128))
-            return TRUE;
-
-        HWND shellTab = nullptr;
-        if (wcscmp(cls, L"CabinetWClass") == 0)
-            shellTab = FindWindowExW(hwndFrame, NULL, L"ShellTabWindowClass", NULL);
-
-        HWND duiView = shellTab
-            ? FindWindowExW(shellTab, NULL, L"DUIViewWndClassName", NULL)
-            : (wcscmp(cls, L"CabinetWClass") != 0
-                   ? FindWindowExW(hwndFrame, NULL, L"DUIViewWndClassName", NULL)
-                   : nullptr);
-
-        HWND directUI = duiView ? FindWindowExW(duiView, NULL, L"DirectUIHWND", NULL) : nullptr;
-        if (directUI) {
-            pfi->found = directUI;
-            return FALSE;
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&fi));
-    return fi.found;
-}
-
-static void UnadviseConnectivityEvents() {
-    if (g_ncCP) {
-        if (g_ncEventsAdvised)
-            g_ncCP->Unadvise(g_ncCookie);
-        g_ncCP->Release();
-        g_ncCP = nullptr;
-    }
-    g_ncEventsAdvised = false;
-    g_ncCookie = 0;
-    g_ncTarget = nullptr;
-    g_ncModule = nullptr;
-    g_ncP4 = nullptr;
-}
-
-// Registers (once) the private message used to ask NetCenterPageSubclass to
-// tear down from Wh_ModUninit, running on an arbitrary Windhawk thread, by
-// marshaling the request to the page's own STA thread via SendMessage.
-static UINT GetNcTeardownMessage() {
-    if (!g_ncTeardownMsg)
-        g_ncTeardownMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcTeardown");
-    return g_ncTeardownMsg;
-}
-
-// Called from Wh_ModUninit. Marshals the subclass removal and the COM
-// Unadvise/Release to the STA thread that owns g_ncCP, instead of touching
-// that raw, unmarshalled pointer from whatever thread Windhawk calls
-// Wh_ModUninit on.
+// Called from Wh_ModUninit. Marshals the subclass/timer cleanup and the COM
+// Unadvise/Release to the STA thread that owns g_ncCP and g_ncMsgWindow,
+// instead of touching that raw, unmarshalled pointer from whatever thread
+// Windhawk calls Wh_ModUninit on.
 static void TeardownNetCenterHost() {
-    HWND host = g_ncHostWindow;
+    HWND host = g_ncMsgWindow;
     if (host && IsWindow(host)) {
         SendMessageW(host, GetNcTeardownMessage(), 0, 0);
     } else {
-        // No live host window (e.g. hook never fired, or it was already
+        // No live message window (e.g. hook never fired, or it was already
         // destroyed): still clear any leftover state directly.
         UnadviseConnectivityEvents();
     }
-    g_ncHostWindow = nullptr;
+    g_ncMsgWindow = nullptr;
 }
+
 
 static bool IsNetCenter(HMODULE h) {
     if (!h)
@@ -8446,9 +8536,9 @@ static bool g_ncOwnsWlanHandleInNonExplorerHost = false;
 // Tracks whether we personally called CoInitializeEx on this thread (S_OK or
 // S_FALSE), as opposed to it already having an apartment (RPC_E_CHANGED_MODE)
 // or us not having tried. Only ever call CoUninitialize() when this is true,
-// and only once, from the same thread - paired in NetCenterPageSubclass's
-// teardown branch, which runs on this same STA thread whether the page is
-// closed normally or the mod is being unloaded.
+// and only once, from the same thread - paired in the message-only window's
+// teardown branch (NcMsgWndProc), which runs on this same STA thread whether
+// the page is closed normally or the mod is being unloaded.
 static bool g_ncComInitializedByUs = false;
 
 // Wh_ModInit() deliberately skips all WLAN/NLM priming when the mod is
@@ -8566,7 +8656,19 @@ static void EnsureNetCenterNetworkDataFresh() {
 
         if (g_Ctx.hWlanClient)
             RefreshWifiData(g_Ctx.hWlanClient);  // serializes the g_NetworkList swap internally
-        UpdateEthernetStatus();                  // lock-free, same pattern as the hotkey thread
+
+        // This runs on the Control Panel/DirectUI thread, a different COM
+        // apartment from the flyout/hotkey thread that owns g_pNLM. Create
+        // and use a local instance instead of sharing g_pNLM: the hotkey
+        // thread releases g_pNLM unconditionally on exit, so touching it
+        // from here was reachable as a use-after-free during unload, on top
+        // of using/publishing an interface pointer created in the wrong
+        // apartment.
+        ComPtr<INetworkListManager> localNlm;
+        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                          IID_INetworkListManager, (void**)localNlm.put());
+
+        UpdateEthernetStatus(localNlm.get());  // lock-free COM/WLAN work, locked publish of g_Ethernet*
 
         // Category only if still unknown. Failures are non-fatal: the icon
         // then falls back to the colored Public icon, never the gray one.
@@ -8574,7 +8676,7 @@ static void EnsureNetCenterNetworkDataFresh() {
             (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
         if (isAnyConnected && g_Settings.useNetworkLocationIcons &&
             !IsValidNetworkCategoryValue(g_CurrentNetworkCategory)) {
-            g_CurrentNetworkCategory = DetectNetworkLocationCategory();
+            g_CurrentNetworkCategory = DetectNetworkLocationCategory(localNlm.get());
         }
     } catch (...) {
         Wh_Log(L"[NetMap] Exception during NetCenter data refresh; keeping previous state");
@@ -8612,6 +8714,21 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     g_inHook--;
 
     if (SUCCEEDED(hr)) {
+        // If a different page instance was previously tracked, it's now
+        // stale: either this is a fresh page-open (the old page/window is
+        // gone) or the same DirectUIHWND navigated to a new instance of this
+        // page. Either way the old DUIXmlParser this thread advised for is
+        // no longer the live one, so drop the old registration before
+        // installing the new one rather than leaving g_ncTarget pointing at
+        // a parser that may be destroyed at any time (the same use-after-
+        // free a foreign-window subclass was previously trying to guard
+        // against). This is a cheap approximation - it only catches the case
+        // where *this* thread parses again - but is exact for the normal
+        // single-page-per-thread case and requires no window at all to know
+        // about the parser's lifetime.
+        if (g_ncTarget && g_ncTarget != t)
+            UnadviseConnectivityEvents();
+
         // Remember this page instance so connectivity-change notifications
         // can re-push a freshly patched XML into it later (live refresh),
         // instead of only ever showing the state from when the page opened.
@@ -8620,25 +8737,14 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         g_ncP4 = p4;
         EnsureConnectivityEventsAdvised();
 
-        // Subclass the DirectUIHWND that actually hosts the page (not the
-        // top-level frame, which survives navigation to other Control Panel
-        // pages) so cleanup happens both when the Control Panel window is
-        // closed and when this page's DirectUIHWND itself goes away.
-        HWND hNcHost = FindNetCenterHostWindow();
-        if (hNcHost) {
-            if (g_ncHostWindow && g_ncHostWindow != hNcHost) {
-                // A different DirectUIHWND is hosting the page now (e.g. the
-                // previous one was torn down and recreated); drop the old
-                // subclass explicitly rather than leaving it to rely solely
-                // on WM_NCDESTROY racing with this call.
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NetCenterPageSubclass);
-            }
-            g_ncHostWindow = hNcHost;
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hNcHost, NetCenterPageSubclass, 0);
-            Wh_Log(L"[NetMap] Subclassed NetCenter host window (0x%p)", hNcHost);
-        } else {
-            Wh_Log(L"[NetMap] Could not find NetCenter host window to subclass");
-        }
+        // Create (once per thread) the mod's own message-only window here,
+        // i.e. on the exact STA thread that owns this page - no searching
+        // for or subclassing of some other, possibly unrelated, Explorer
+        // window is needed. ConnectivityChanged (which can fire on an
+        // arbitrary NLM thread) posts to this window, and the actual
+        // SetXML() refresh always then runs on the right thread.
+        if (!EnsureNcMsgWindow())
+            Wh_Log(L"[NetMap] Could not create NetCenter live-refresh window");
     }
 
     return FAILED(hr) ? SetXMLFromResource_Orig(t, n, tp, m, p4, p5) : hr;
@@ -8833,13 +8939,19 @@ void Wh_ModSettingsChanged() {
         }
         return;
     }
+    // Update hotkey registration when the setting changes. This must not
+    // depend on the flyout window existing: refCount (and therefore
+    // SafeToAccessUI()) is only incremented in the flyout's WM_CREATE, so on
+    // a fresh session - where the user is enabling the hotkey specifically
+    // in order to open the flyout for the first time - the guard below would
+    // never be true and the hotkey would silently stay unregistered.
+    if (g_Ctx.dwHotkeyThreadId)
+        PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
+
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_dwFlyoutOwnerThreadId) {
             PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
         }
-        // Update hotkey registration when the setting changes
-        if (g_Ctx.dwHotkeyThreadId)
-            PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
         // Re-prime the category on any settings change (e.g. enabling
         // "useNetworkLocationIcons"), marshaled to the flyout thread (which
         // owns g_pNLM and all the shared network state) via a force flag on
