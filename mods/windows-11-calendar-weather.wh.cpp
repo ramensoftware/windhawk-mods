@@ -830,6 +830,8 @@ void ClearAncestorClips(wux::DependencyObject const& start, int maxDepth) {
     }
 }
 
+std::atomic<int> g_insideLayoutEnforce{0};
+
 // After the weather Border measures, raise MaxHeight if needed so Bottom
 // alignment cannot clip the top chrome.
 void EnsureGridFitsWeatherContent(wuxc::Grid const& grid,
@@ -858,6 +860,76 @@ void EnsureGridFitsWeatherContent(wuxc::Grid const& grid,
         Wh_Log(L"EnsureGridFitsWeatherContent failed %08X",
                winrt::to_hresult());
     }
+}
+
+// Shell notification updates often restore NotificationCenterGrid to Stretch
+// (and/or a large Height/MinHeight) so the card jumps to the top of the star
+// slot — huge gap above the calendar, top of the weather card clipped.
+void EnforceWeatherNotificationLayout(wuxc::Grid const& grid,
+                                      wuxc::Border const& weatherRoot) {
+    if (!grid || g_insideLayoutEnforce.load() > 0) {
+        return;
+    }
+    g_insideLayoutEnforce.fetch_add(1);
+    try {
+        bool drifted = false;
+        try {
+            if (grid.VerticalAlignment() !=
+                wux::VerticalAlignment::Bottom) {
+                grid.VerticalAlignment(wux::VerticalAlignment::Bottom);
+                drifted = true;
+            }
+            auto heightLocal =
+                grid.ReadLocalValue(wux::FrameworkElement::HeightProperty());
+            if (heightLocal != wux::DependencyProperty::UnsetValue()) {
+                grid.ClearValue(wux::FrameworkElement::HeightProperty());
+                drifted = true;
+            }
+            auto minLocal = grid.ReadLocalValue(
+                wux::FrameworkElement::MinHeightProperty());
+            if (minLocal != wux::DependencyProperty::UnsetValue()) {
+                grid.ClearValue(wux::FrameworkElement::MinHeightProperty());
+                drifted = true;
+            }
+            auto margin = grid.Margin();
+            if (margin.Top != 0.0 || margin.Bottom != 4.0) {
+                margin.Top = 0;
+                margin.Bottom = 4;
+                grid.Margin(margin);
+                drifted = true;
+            }
+            if (grid.Visibility() != wux::Visibility::Visible) {
+                grid.Visibility(wux::Visibility::Visible);
+                drifted = true;
+            }
+        } catch (...) {
+            grid.ClearValue(wux::FrameworkElement::HeightProperty());
+            grid.ClearValue(wux::FrameworkElement::MinHeightProperty());
+            grid.VerticalAlignment(wux::VerticalAlignment::Bottom);
+            drifted = true;
+        }
+
+        if (weatherRoot) {
+            try {
+                if (weatherRoot.VerticalAlignment() !=
+                    wux::VerticalAlignment::Top) {
+                    weatherRoot.VerticalAlignment(
+                        wux::VerticalAlignment::Top);
+                    drifted = true;
+                }
+            } catch (...) {
+            }
+            EnsureGridFitsWeatherContent(grid, weatherRoot);
+        }
+
+        if (drifted) {
+            Wh_Log(L"Re-asserted weather grid layout after shell drift");
+        }
+    } catch (...) {
+        Wh_Log(L"EnforceWeatherNotificationLayout failed %08X",
+               winrt::to_hresult());
+    }
+    g_insideLayoutEnforce.fetch_sub(1);
 }
 
 void SavePropertyOnce(wux::DependencyObject const& element,
@@ -1134,40 +1206,39 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
         ClearAncestorClips(notificationGrid, 8);
         ApplyWeatherCardShadow(weatherRoot, notificationGrid);
 
-        instance.gridSizeChangedRevoker = {};
-        instance.weatherSizeChangedRevoker = weatherRoot.SizeChanged(
-            winrt::auto_revoke,
+        auto onLayoutDrift =
             [gridWeak = winrt::make_weak(notificationGrid),
              rootWeak = winrt::make_weak(weatherRoot),
-             handle = instance.gridHandle](
-                wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+             handle = instance.gridHandle](wf::IInspectable const&,
+                                           wux::SizeChangedEventArgs const&) {
                 if (auto grid = gridWeak.get()) {
-                    if (auto root = rootWeak.get()) {
-                        EnsureGridFitsWeatherContent(grid, root);
-                        // Theme / layout passes can restore grid chrome —
-                        // keep the under-card transparent (shadow stays on
-                        // the weather Border, not this grid).
-                        try {
-                            grid.Background(wuxm::SolidColorBrush(
-                                winrt::Windows::UI::Colors::Transparent()));
-                            grid.Shadow(nullptr);
-                        } catch (...) {
-                        }
-                        // Focus Assist / DND often reappears on SizeChanged
-                        // after logon — keep native chrome collapsed.
-                        try {
-                            std::lock_guard lock(g_mountMutex);
-                            for (auto& mounted : g_mounted) {
-                                if (mounted.gridHandle == handle) {
-                                    CollapseNativeChildren(grid, mounted);
-                                    break;
-                                }
+                    auto root = rootWeak.get();
+                    // Notification arrivals resize this slot and often restore
+                    // Stretch/Height — pin layout back before the gap appears.
+                    EnforceWeatherNotificationLayout(grid, root);
+                    try {
+                        grid.Background(wuxm::SolidColorBrush(
+                            winrt::Windows::UI::Colors::Transparent()));
+                        grid.Shadow(nullptr);
+                    } catch (...) {
+                    }
+                    try {
+                        std::lock_guard lock(g_mountMutex);
+                        for (auto& mounted : g_mounted) {
+                            if (mounted.gridHandle == handle) {
+                                CollapseNativeChildren(grid, mounted);
+                                break;
                             }
-                        } catch (...) {
                         }
+                    } catch (...) {
                     }
                 }
-            });
+            };
+
+        instance.weatherSizeChangedRevoker = weatherRoot.SizeChanged(
+            winrt::auto_revoke, onLayoutDrift);
+        instance.gridSizeChangedRevoker = notificationGrid.SizeChanged(
+            winrt::auto_revoke, onLayoutDrift);
 
         // System theme toggles re-theme NotificationCenterGrid (opaque acrylic
         // + shadow) under our weather Border. Re-strip and rematch brushes.
@@ -4484,6 +4555,13 @@ void CollapseNativeChildren(wuxc::Grid const& grid,
         }
     } catch (...) {
     }
+
+    // New toasts resize the notification slot; re-pin content-sized Bottom
+    // layout so the weather card cannot float to the top of a tall star row.
+    try {
+        EnforceWeatherNotificationLayout(grid, instance.weatherRoot.get());
+    } catch (...) {
+    }
 }
 
 void RestoreNativeChildren(MountedWeatherInstance& instance) {
@@ -4643,6 +4721,10 @@ void ConfigureNotificationGrid(wuxc::Grid const& grid,
         grid.Clip(nullptr);
         ClearCompositionClip(grid);
         ClearAncestorClips(grid, 8);
+        // Same constraints SizeChanged will keep fighting for after toasts.
+        if (auto root = instance.weatherRoot.get()) {
+            EnforceWeatherNotificationLayout(grid, root);
+        }
 
         Wh_Log(L"Weather layout: auto-height, max=%g, align=Bottom",
                maxHeight);
@@ -4670,6 +4752,7 @@ bool MountWeatherIntoGrid(InstanceHandle handle, wuxc::Grid const& grid) {
                         // and opaque NotificationCenterGrid while closed.
                         CollapseNativeChildren(grid, mounted);
                         if (auto border = fe.try_as<wuxc::Border>()) {
+                            EnforceWeatherNotificationLayout(grid, border);
                             ApplyCalendarMatchedChrome(mounted, grid, border);
                         }
                         break;
