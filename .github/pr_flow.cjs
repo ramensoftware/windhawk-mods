@@ -585,27 +585,6 @@ async function runReadyForReviewer({
 }
 
 /**
- * @param {object} params
- * @param {Github} params.github
- * @param {string} params.owner
- * @param {string} params.repo
- * @param {number} params.prNumber
- * @param {number} params.commentId
- * @returns {Promise<boolean>} Whether the comment is the most recent one.
- */
-async function isLastComment({ github, owner, repo, prNumber, commentId }) {
-  /** @type {RestComment[]} */
-  const comments = await github.paginate(github.rest.issues.listComments, {
-    owner,
-    repo,
-    issue_number: prNumber,
-    per_page: 100,
-  });
-
-  return comments.length > 0 && comments[comments.length - 1].id === commentId;
-}
-
-/**
  * Handles issue_comment. Runs the flow commands on behalf of the pull request
  * author and of any trusted commenter, ignores everyone else, and handles a
  * review left as an ordinary comment by a trusted reviewer.
@@ -687,19 +666,24 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
     return;
   }
 
-  // Editing an older comment is a correction to the conversation rather than a
-  // new instruction, so only the most recent comment acts on an edit.
+  // An edit acts only on an instruction that the comment didn't carry before,
+  // which is what makes it possible to add one to a comment after posting it.
+  // An instruction that was already there was acted on when the comment was
+  // posted, and reworking the prose around it doesn't ask for it again.
   if (payload.action === 'edited') {
-    const isLast = await isLastComment({
-      github,
-      owner,
-      repo,
-      prNumber: issue.number,
-      commentId: comment.id,
-    });
+    const previousBody = payload.changes.body?.from;
 
-    if (!isLast) {
-      core.info(`Ignoring an edit to comment ${comment.id}, which is not the most recent one`);
+    if (previousBody === undefined) {
+      core.info(`Ignoring an edit to comment ${comment.id}, which left the body as it was`);
+      return;
+    }
+
+    const wasAlreadyThere = command
+      ? parseCommand(previousBody) === command
+      : HUMAN_REVIEW_MARKER_PATTERN.test(previousBody);
+
+    if (wasAlreadyThere) {
+      core.info(`Ignoring an edit to comment ${comment.id}, which was already acted on`);
       return;
     }
   }
