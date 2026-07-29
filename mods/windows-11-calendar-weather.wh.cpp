@@ -544,7 +544,9 @@ struct ForecastData {
     std::vector<HourlyEntry> hourly;
     std::vector<DailyEntry> daily;
     std::wstring temperatureUnit;
-    std::chrono::steady_clock::time_point fetchedAt{};
+    // Wall clock — steady_clock does not advance across sleep, so wake would
+    // treat multi-hour-old data as still fresh.
+    std::chrono::system_clock::time_point fetchedAtWall{};
 };
 
 struct ResolvedLocation {
@@ -559,10 +561,12 @@ ForecastData g_forecast;
 ResolvedLocation g_resolvedLocation;
 std::wstring g_resolvedKey;
 std::atomic<bool> g_fetchInProgress{false};
+std::atomic<bool> g_forceRefreshPending{false};
 std::atomic<uint64_t> g_fetchGeneration{0};
 
 PTP_TIMER g_refreshTimer = nullptr;
 std::mutex g_timerMutex;
+HANDLE g_suspendResumeNotify = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Mounted UI state
@@ -576,6 +580,7 @@ struct ChildVisibilityRecord {
     winrt::weak_ref<wux::UIElement> element;
     wux::Visibility original = wux::Visibility::Visible;
     double originalOpacity = 1.0;
+    int64_t visibilityCookie = -1;
 };
 
 struct WeatherUiControls {
@@ -652,6 +657,8 @@ struct MountedDaylightInstance {
 };
 
 std::vector<MountedDaylightInstance> g_daylightMounted;
+std::recursive_mutex g_mountMutex;
+std::vector<MountedWeatherInstance> g_mounted;
 
 // Match CalendarCenterGrid / Win11 flyout card radius.
 constexpr double kWeatherCardCornerRadius = 8.0;
@@ -876,6 +883,8 @@ void RefreshWeatherChromeForHandle(InstanceHandle handle);
 void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
                                 wuxc::Grid const& notificationGrid,
                                 wuxc::Border const& weatherRoot);
+void CollapseNativeChildren(wuxc::Grid const& grid,
+                            MountedWeatherInstance& instance);
 
 // ThemeShadow belongs on the painted weather Border — not the transparent
 // NotificationCenterGrid (that was the ghost under-card). Needs Z > 0.
@@ -1129,7 +1138,8 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
         instance.weatherSizeChangedRevoker = weatherRoot.SizeChanged(
             winrt::auto_revoke,
             [gridWeak = winrt::make_weak(notificationGrid),
-             rootWeak = winrt::make_weak(weatherRoot)](
+             rootWeak = winrt::make_weak(weatherRoot),
+             handle = instance.gridHandle](
                 wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
                 if (auto grid = gridWeak.get()) {
                     if (auto root = rootWeak.get()) {
@@ -1141,6 +1151,18 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
                             grid.Background(wuxm::SolidColorBrush(
                                 winrt::Windows::UI::Colors::Transparent()));
                             grid.Shadow(nullptr);
+                        } catch (...) {
+                        }
+                        // Focus Assist / DND often reappears on SizeChanged
+                        // after logon — keep native chrome collapsed.
+                        try {
+                            std::lock_guard lock(g_mountMutex);
+                            for (auto& mounted : g_mounted) {
+                                if (mounted.gridHandle == handle) {
+                                    CollapseNativeChildren(grid, mounted);
+                                    break;
+                                }
+                            }
                         } catch (...) {
                         }
                     }
@@ -1193,9 +1215,6 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
         Wh_Log(L"ApplyCalendarMatchedChrome failed %08X", winrt::to_hresult());
     }
 }
-
-std::recursive_mutex g_mountMutex;
-std::vector<MountedWeatherInstance> g_mounted;
 
 void RefreshWeatherChromeForHandle(InstanceHandle handle) {
     if (g_shuttingDown.load()) {
@@ -2078,7 +2097,7 @@ std::optional<ForecastData> ParseForecastJson(std::wstring const& body,
             data.todaySunsetMinute = data.daily.front().sunsetMinute;
         }
         data.valid = true;
-        data.fetchedAt = std::chrono::steady_clock::now();
+        data.fetchedAtWall = std::chrono::system_clock::now();
         return data;
     } catch (...) {
         Wh_Log(L"ParseForecastJson error %08X", winrt::to_hresult());
@@ -2292,24 +2311,31 @@ void WeatherWorker(uint64_t generation) {
         return;
     }
 
-    struct ClearFlag {
-        ~ClearFlag() { g_fetchInProgress = false; }
-    } clearFlag;
+    {
+        struct ClearFlag {
+            ~ClearFlag() { g_fetchInProgress = false; }
+        } clearFlag;
 
-    try {
-        const bool ok = FetchForecastNetwork(generation);
-        if (!ok) {
-            Wh_Log(L"Weather fetch failed or superseded (gen=%llu)",
-                   static_cast<unsigned long long>(generation));
-        }
-        // Always refresh UI so we leave the "Loading..." state on failure.
-        UpdateAllWeatherUIs();
-    } catch (...) {
-        Wh_Log(L"WeatherWorker exception %08X", winrt::to_hresult());
         try {
+            const bool ok = FetchForecastNetwork(generation);
+            if (!ok) {
+                Wh_Log(L"Weather fetch failed or superseded (gen=%llu)",
+                       static_cast<unsigned long long>(generation));
+            }
+            // Always refresh UI so we leave the "Loading..." state on failure.
             UpdateAllWeatherUIs();
         } catch (...) {
+            Wh_Log(L"WeatherWorker exception %08X", winrt::to_hresult());
+            try {
+                UpdateAllWeatherUIs();
+            } catch (...) {
+            }
         }
+    }
+
+    if (!g_shuttingDown.load() && g_forceRefreshPending.exchange(false)) {
+        Wh_Log(L"Running queued forced weather refresh");
+        RequestWeatherRefresh(true);
     }
 }
 
@@ -2321,7 +2347,11 @@ void RequestWeatherRefresh(bool forceNetwork) {
     // Coalesce: never bump the fetch generation while a worker is running —
     // that used to invalidate the in-flight result and leave the UI empty.
     if (g_fetchInProgress.load()) {
-        Wh_Log(L"Weather refresh skipped — fetch already in progress");
+        if (forceNetwork) {
+            g_forceRefreshPending.store(true);
+        }
+        Wh_Log(L"Weather refresh skipped — fetch already in progress%s",
+               forceNetwork ? L" (queued)" : L"");
         return;
     }
 
@@ -2333,16 +2363,22 @@ void RequestWeatherRefresh(bool forceNetwork) {
             needsFetch = true;
             Wh_Log(L"Weather refresh: no cached forecast");
         } else {
-            auto age = std::chrono::steady_clock::now() - g_forecast.fetchedAt;
+            // Use system_clock so sleep/hibernate/logon gaps count as age.
+            auto age =
+                std::chrono::system_clock::now() - g_forecast.fetchedAtWall;
             auto limit = std::chrono::minutes(settings.refreshMinutes);
             auto ageMin =
                 std::chrono::duration_cast<std::chrono::minutes>(age).count();
-            if (age >= limit) {
+            if (age < std::chrono::minutes(0)) {
+                // Clock went backwards — refetch.
+                needsFetch = true;
+                Wh_Log(L"Weather refresh: wall clock moved backwards");
+            } else if (age >= limit) {
                 needsFetch = true;
                 Wh_Log(L"Weather refresh: cache age %lld min >= interval %d",
                        static_cast<long long>(ageMin), settings.refreshMinutes);
             } else if (forceNetwork) {
-                Wh_Log(L"Weather refresh: forced (timer); cache age %lld min",
+                Wh_Log(L"Weather refresh: forced; cache age %lld min",
                        static_cast<long long>(ageMin));
             } else {
                 Wh_Log(L"Weather refresh: using cache (age %lld min, interval %d)",
@@ -2435,6 +2471,95 @@ void StopRefreshTimer() {
 void StopRefreshTimerLocked() {
     std::lock_guard lock(g_timerMutex);
     StopRefreshTimer();
+}
+
+#ifndef DEVICE_NOTIFY_CALLBACK
+#define DEVICE_NOTIFY_CALLBACK 2
+#endif
+
+// Local copy of DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS — avoids depending on
+// which Windows SDK headers Windhawk's toolchain exposes.
+struct SuspendResumeNotifyParams {
+    ULONG(CALLBACK* Callback)(PVOID, ULONG, PVOID);
+    PVOID Context;
+};
+
+void OnSystemResumeRefresh() {
+    if (g_shuttingDown.load()) {
+        return;
+    }
+    Wh_Log(L"System resume — forcing weather + daylight refresh");
+    // Reschedule the periodic timer; relative due times stall across sleep.
+    EnsureRefreshTimer();
+    try {
+        UpdateAllDaylightUIs();
+    } catch (...) {
+    }
+    RequestWeatherRefresh(true);
+}
+
+ULONG CALLBACK SuspendResumeNotifyCallback(PVOID /*context*/,
+                                           ULONG type,
+                                           PVOID /*setting*/) {
+    switch (type) {
+        case PBT_APMRESUMEAUTOMATIC:
+        case PBT_APMRESUMESUSPEND:
+#ifdef PBT_APMRESUMECRITICAL
+        case PBT_APMRESUMECRITICAL:
+#endif
+            OnSystemResumeRefresh();
+            break;
+        default:
+            break;
+    }
+    return ERROR_SUCCESS;
+}
+
+void RegisterSuspendResumeRefresh() {
+    if (g_suspendResumeNotify) {
+        return;
+    }
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        return;
+    }
+
+    using RegisterFn = HANDLE(WINAPI*)(HANDLE, DWORD);
+    auto registerFn = reinterpret_cast<RegisterFn>(
+        GetProcAddress(user32, "RegisterSuspendResumeNotification"));
+    if (!registerFn) {
+        Wh_Log(L"RegisterSuspendResumeNotification unavailable");
+        return;
+    }
+
+    SuspendResumeNotifyParams params{};
+    params.Callback = SuspendResumeNotifyCallback;
+    params.Context = nullptr;
+    g_suspendResumeNotify = registerFn(&params, DEVICE_NOTIFY_CALLBACK);
+    if (!g_suspendResumeNotify) {
+        Wh_Log(L"RegisterSuspendResumeNotification failed (%lu)",
+               GetLastError());
+        return;
+    }
+    Wh_Log(L"Registered suspend/resume weather refresh");
+}
+
+void UnregisterSuspendResumeRefresh() {
+    if (!g_suspendResumeNotify) {
+        return;
+    }
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        using UnregisterFn = BOOL(WINAPI*)(HANDLE);
+        auto unregisterFn = reinterpret_cast<UnregisterFn>(
+            GetProcAddress(user32, "UnregisterSuspendResumeNotification"));
+        if (unregisterFn) {
+            unregisterFn(g_suspendResumeNotify);
+        }
+    }
+    g_suspendResumeNotify = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4105,23 +4230,67 @@ wuxc::Border BuildWeatherRoot(WeatherUiControls& ui) {
     return root;
 }
 
-void CollapseNativeChildren(wuxc::Grid const& grid,
-                            MountedWeatherInstance& instance) {
-    instance.childVisibility.clear();
+bool IsWeatherInjectedRoot(wux::FrameworkElement const& fe) {
+    try {
+        return fe.Name() == L"WindhawkWeatherRoot";
+    } catch (...) {
+        return false;
+    }
+}
 
-    // Hide all native children — weather Border owns acrylic + rounded corners.
-    auto children = grid.Children();
-    for (auto const& child : children) {
-        auto fe = child.try_as<wux::FrameworkElement>();
-        if (fe && fe.Name() == L"WindhawkWeatherRoot") {
+bool IsShellNotificationChromeName(std::wstring_view name) {
+    return name == L"DoNotDisturbSubtext" || name == L"DoNotDisturbButton" ||
+           name == L"NotificationCenterTopBanner" || name == L"ListContent" ||
+           name == L"NotificationListView" ||
+           name == L"FlexibleNormalToastView";
+}
+
+std::atomic<int> g_insideNativeCollapse{0};
+
+void UnregisterChildVisibilityWatchers(MountedWeatherInstance& instance) {
+    for (auto& record : instance.childVisibility) {
+        if (record.visibilityCookie < 0) {
             continue;
         }
-
-        auto ui = child.try_as<wux::UIElement>();
-        if (!ui) {
-            continue;
+        if (auto element = record.element.get()) {
+            try {
+                element.UnregisterPropertyChangedCallback(
+                    wux::UIElement::VisibilityProperty(),
+                    record.visibilityCookie);
+            } catch (...) {
+            }
         }
+        record.visibilityCookie = -1;
+    }
+}
 
+// Shell re-shows DND / notification chrome after login or Focus Assist changes.
+// Keep forcing Collapsed while weather owns the slot.
+void SuppressNativeChild(wux::UIElement const& ui,
+                         MountedWeatherInstance& instance) {
+    if (!ui) {
+        return;
+    }
+    try {
+        if (auto fe = ui.try_as<wux::FrameworkElement>()) {
+            if (IsWeatherInjectedRoot(fe)) {
+                return;
+            }
+        }
+    } catch (...) {
+    }
+
+    ChildVisibilityRecord* existing = nullptr;
+    for (auto& record : instance.childVisibility) {
+        if (auto el = record.element.get()) {
+            if (el == ui) {
+                existing = &record;
+                break;
+            }
+        }
+    }
+
+    if (!existing) {
         ChildVisibilityRecord record;
         record.element = winrt::make_weak(ui);
         try {
@@ -4134,22 +4303,171 @@ void CollapseNativeChildren(wuxc::Grid const& grid,
         } catch (...) {
             record.originalOpacity = 1.0;
         }
-        instance.childVisibility.push_back(record);
+        instance.childVisibility.push_back(std::move(record));
+        existing = &instance.childVisibility.back();
+    }
+
+    {
+        g_insideNativeCollapse.fetch_add(1);
         try {
             ui.Visibility(wux::Visibility::Collapsed);
         } catch (...) {
         }
+        g_insideNativeCollapse.fetch_sub(1);
+    }
+
+    if (existing->visibilityCookie < 0) {
+        try {
+            existing->visibilityCookie = ui.RegisterPropertyChangedCallback(
+                wux::UIElement::VisibilityProperty(),
+                wux::DependencyPropertyChangedCallback(
+                    [](wux::DependencyObject const& sender,
+                       wux::DependencyProperty const&) {
+                        if (g_insideNativeCollapse.load() > 0 ||
+                            g_shuttingDown.load()) {
+                            return;
+                        }
+                        auto element = sender.try_as<wux::UIElement>();
+                        if (!element) {
+                            return;
+                        }
+                        try {
+                            if (element.Visibility() ==
+                                wux::Visibility::Collapsed) {
+                                return;
+                            }
+                            if (auto fe =
+                                    element.try_as<wux::FrameworkElement>()) {
+                                if (IsWeatherInjectedRoot(fe)) {
+                                    return;
+                                }
+                            }
+                        } catch (...) {
+                            return;
+                        }
+                        g_insideNativeCollapse.fetch_add(1);
+                        try {
+                            element.Visibility(wux::Visibility::Collapsed);
+                            Wh_Log(L"Re-collapsed shell notification chrome "
+                                   L"after Visibility restore");
+                        } catch (...) {
+                        }
+                        g_insideNativeCollapse.fetch_sub(1);
+                    }));
+        } catch (...) {
+            existing->visibilityCookie = -1;
+        }
+    }
+}
+
+void CollapseNamedShellChrome(wux::DependencyObject const& root,
+                              MountedWeatherInstance& instance,
+                              int depth = 0) {
+    if (!root || depth > 12) {
+        return;
+    }
+    try {
+        if (auto fe = root.try_as<wux::FrameworkElement>()) {
+            if (IsWeatherInjectedRoot(fe)) {
+                return;
+            }
+            auto name = fe.Name();
+            if (!name.empty() && IsShellNotificationChromeName(name)) {
+                if (auto ui = fe.try_as<wux::UIElement>()) {
+                    SuppressNativeChild(ui, instance);
+                }
+            }
+        }
+    } catch (...) {
+    }
+
+    try {
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            CollapseNamedShellChrome(
+                wuxm::VisualTreeHelper::GetChild(root, i), instance,
+                depth + 1);
+        }
+    } catch (...) {
+    }
+}
+
+void CollapseNativeChildren(wuxc::Grid const& grid,
+                            MountedWeatherInstance& instance) {
+    // Hide all native children — weather Border owns acrylic + rounded corners.
+    // Also pin Visibility so Focus Assist / DND cannot re-expand the slot and
+    // clip the weather header after a logoff/login.
+    auto children = grid.Children();
+    for (auto const& child : children) {
+        auto fe = child.try_as<wux::FrameworkElement>();
+        if (fe && IsWeatherInjectedRoot(fe)) {
+            continue;
+        }
+
+        auto ui = child.try_as<wux::UIElement>();
+        if (!ui) {
+            continue;
+        }
+        SuppressNativeChild(ui, instance);
+    }
+
+    CollapseNamedShellChrome(grid, instance);
+
+    // After logon, DoNotDisturbSubtext can sit as a sibling between
+    // NotificationCenterGrid and CalendarCenterGrid.
+    try {
+        if (auto parent = wuxm::VisualTreeHelper::GetParent(grid)) {
+            const int32_t count =
+                wuxm::VisualTreeHelper::GetChildrenCount(parent);
+            for (int32_t i = 0; i < count; ++i) {
+                auto sibling = wuxm::VisualTreeHelper::GetChild(parent, i);
+                if (auto fe = sibling.try_as<wux::FrameworkElement>()) {
+                    auto name = fe.Name();
+                    if (name == L"NotificationCenterGrid" ||
+                        name == L"CalendarCenterGrid" ||
+                        name == L"WindhawkWeatherRoot") {
+                        continue;
+                    }
+                    if (IsShellNotificationChromeName(name)) {
+                        if (auto ui = fe.try_as<wux::UIElement>()) {
+                            SuppressNativeChild(ui, instance);
+                        }
+                    }
+                }
+                // Shallow scan only — avoid touching the calendar subtree.
+                try {
+                    const int32_t nested =
+                        wuxm::VisualTreeHelper::GetChildrenCount(sibling);
+                    for (int32_t j = 0; j < nested; ++j) {
+                        auto child =
+                            wuxm::VisualTreeHelper::GetChild(sibling, j);
+                        if (auto fe = child.try_as<wux::FrameworkElement>()) {
+                            if (IsShellNotificationChromeName(fe.Name())) {
+                                if (auto ui = fe.try_as<wux::UIElement>()) {
+                                    SuppressNativeChild(ui, instance);
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {
+                }
+            }
+        }
+    } catch (...) {
     }
 }
 
 void RestoreNativeChildren(MountedWeatherInstance& instance) {
+    UnregisterChildVisibilityWatchers(instance);
     for (auto const& record : instance.childVisibility) {
         if (auto element = record.element.get()) {
+            g_insideNativeCollapse.fetch_add(1);
             try {
                 element.Visibility(record.original);
                 element.Opacity(record.originalOpacity);
             } catch (...) {
             }
+            g_insideNativeCollapse.fetch_sub(1);
         }
     }
     instance.childVisibility.clear();
@@ -4158,10 +4476,11 @@ void RestoreNativeChildren(MountedWeatherInstance& instance) {
 void ForceShowNativeNotificationChildren(wuxc::Grid const& grid) {
     // Belt-and-suspenders: weak-ref restore can miss if the shell rebuilt
     // nodes, leaving Collapsed children and an empty acrylic slot.
+    g_insideNativeCollapse.fetch_add(1);
     try {
         for (auto const& child : grid.Children()) {
             auto fe = child.try_as<wux::FrameworkElement>();
-            if (fe && fe.Name() == L"WindhawkWeatherRoot") {
+            if (fe && IsWeatherInjectedRoot(fe)) {
                 continue;
             }
             if (auto ui = child.try_as<wux::UIElement>()) {
@@ -4173,6 +4492,7 @@ void ForceShowNativeNotificationChildren(wuxc::Grid const& grid) {
         }
     } catch (...) {
     }
+    g_insideNativeCollapse.fetch_sub(1);
 }
 
 void UnmountInstance(MountedWeatherInstance& instance) {
@@ -4317,16 +4637,22 @@ bool MountWeatherIntoGrid(InstanceHandle handle, wuxc::Grid const& grid) {
                 std::lock_guard lock(g_mountMutex);
                 for (auto& mounted : g_mounted) {
                     if (mounted.gridHandle == handle) {
-                        // Theme changes while the flyout was closed can restore
-                        // opaque NotificationCenterGrid chrome; refresh it.
+                        // Theme changes / Focus Assist can restore DND chrome
+                        // and opaque NotificationCenterGrid while closed.
+                        CollapseNativeChildren(grid, mounted);
                         if (auto border = fe.try_as<wuxc::Border>()) {
                             ApplyCalendarMatchedChrome(mounted, grid, border);
                         }
-                        return true;
+                        break;
                     }
                 }
-                Wh_Log(L"Warning: WindhawkWeatherRoot exists without registry "
-                       L"entry");
+                // Flyout reopened after sleep: wall-clock age may require a
+                // fetch; daylight "now" marker always needs a fresh paint.
+                RequestWeatherRefresh(false);
+                try {
+                    UpdateAllDaylightUIs();
+                } catch (...) {
+                }
                 return true;
             }
         }
@@ -4665,9 +4991,31 @@ void HandleVisualTreeAdd(InstanceHandle handle,
         }
 
         // If a native child is re-added under a mounted notification grid,
-        // collapse it so the weather card keeps the slot.
-        auto parent = element.Parent().try_as<wuxc::Grid>();
-        if (!parent || parent.Name() != L"NotificationCenterGrid") {
+        // collapse it so the weather card keeps the slot (DND banner after
+        // logon is the common case).
+        wuxc::Grid notificationParent{nullptr};
+        try {
+            auto name = element.Name();
+            if (IsShellNotificationChromeName(name)) {
+                wux::DependencyObject walk = element;
+                for (int depth = 0; depth < 10 && walk; ++depth) {
+                    auto fe = walk.try_as<wux::FrameworkElement>();
+                    if (fe && fe.Name() == L"NotificationCenterGrid") {
+                        notificationParent = fe.try_as<wuxc::Grid>();
+                        break;
+                    }
+                    walk = wuxm::VisualTreeHelper::GetParent(walk);
+                }
+            }
+        } catch (...) {
+        }
+        if (!notificationParent) {
+            auto parent = element.Parent().try_as<wuxc::Grid>();
+            if (parent && parent.Name() == L"NotificationCenterGrid") {
+                notificationParent = parent;
+            }
+        }
+        if (!notificationParent) {
             return;
         }
         if (element.Name() == L"WindhawkWeatherRoot") {
@@ -4677,20 +5025,8 @@ void HandleVisualTreeAdd(InstanceHandle handle,
         std::lock_guard lock(g_mountMutex);
         for (auto& mounted : g_mounted) {
             auto grid = mounted.notificationGrid.get();
-            if (grid && grid == parent) {
-                auto ui = element.try_as<wux::UIElement>();
-                if (!ui) {
-                    break;
-                }
-                ChildVisibilityRecord record;
-                record.element = winrt::make_weak(ui);
-                try {
-                    record.original = ui.Visibility();
-                } catch (...) {
-                    record.original = wux::Visibility::Visible;
-                }
-                mounted.childVisibility.push_back(record);
-                ui.Visibility(wux::Visibility::Collapsed);
+            if (grid && grid == notificationParent) {
+                CollapseNativeChildren(notificationParent, mounted);
                 break;
             }
         }
@@ -4706,6 +5042,7 @@ void HandleVisualTreeRemove(InstanceHandle handle) {
             if (it->gridHandle == handle) {
                 Wh_Log(L"NotificationCenterGrid removed, dropping instance");
                 // Tree is going away; avoid touching dead elements.
+                UnregisterChildVisibilityWatchers(*it);
                 it->weatherRoot = nullptr;
                 it->notificationGrid = nullptr;
                 it->ui = {};
@@ -5098,6 +5435,7 @@ void Wh_ModAfterInit() {
     // Requesting refresh here raced with mount and could cancel the in-flight
     // result (generation bump), leaving the card stuck on "Loading...".
     EnsureRefreshTimer();
+    RegisterSuspendResumeRefresh();
 }
 
 void Wh_ModSettingsChanged() {
@@ -5187,6 +5525,9 @@ void Wh_ModUninit() {
     Wh_Log(L"> Wh_ModUninit");
     g_shuttingDown = true;
     ++g_fetchGeneration;
+    g_forceRefreshPending.store(false);
+
+    UnregisterSuspendResumeRefresh();
 
     // Cancel timer; do not hang forever if a callback is stuck.
     {
