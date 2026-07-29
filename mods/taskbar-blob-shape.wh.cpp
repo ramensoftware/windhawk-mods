@@ -112,6 +112,8 @@ struct BlobEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> anchor;
     winrt::event_token sizeToken{};
+    winrt::event_token unloadToken{};
+    bool unloadAttached = false;
 
     // Whether the blob's Translation is glued to its button's offset chain,
     // and the adjustment constant it was bound with. The blob stays hidden
@@ -674,6 +676,25 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
 
     auto entry = FindOrCreateEntry(button);
 
+    // Button removal (window moved to another monitor, app closed, container
+    // recycled) is a LIFECYCLE event, not a state change — UpdateVisualStates
+    // never fires a final "inactive" for it. Without this, the blob stays
+    // visible, glued to a detached offset chain that no longer updates:
+    // a frozen ghost. On Unloaded: hide the blob and invalidate the grid
+    // cache and expression binding so the next use re-resolves everything.
+    if (!entry->unloadAttached) {
+        entry->unloadAttached = true;
+        std::weak_ptr<BlobEntry> weakEntry = entry;
+        entry->unloadToken = button.Unloaded([weakEntry](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto e = weakEntry.lock();
+            if (!e) return;
+            e->bound = false;
+            e->grid = nullptr;
+            if (auto blob = e->blobShape.get()) blob.Opacity(0.0);
+        });
+    }
+
     auto grid = entry->grid.get();
     if (!grid) {
         grid = GetTaskbarRootGrid(button);
@@ -708,6 +729,28 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         entry->boundAdjX = -1e9f;
         entry->boundAdjY = -1e9f;
         entry->geoW = -1.0;
+    } else {
+        // If the button was re-hosted under a different taskbar's grid
+        // (containers recycled across monitors), move the blob with it and
+        // force a rebind against the new chain.
+        auto parent = VisualTreeHelper::GetParent(blobShape);
+        auto parentGrid = parent ? parent.try_as<Grid>() : nullptr;
+        if (parentGrid != grid) {
+            if (parentGrid) {
+                uint32_t oldIndex;
+                if (parentGrid.Children().IndexOf(blobShape, oldIndex)) {
+                    parentGrid.Children().RemoveAt(oldIndex);
+                }
+            }
+            auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
+            uint32_t index = 0;
+            if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
+                grid.Children().InsertAt(index, blobShape);
+            } else {
+                grid.Children().Append(blobShape);
+            }
+            entry->bound = false;
+        }
     }
 
     // Track the anchor's size so late layout (buttons created before their
@@ -937,6 +980,9 @@ void Wh_ModBeforeUninit() {
                 }
                 // Restore the native background indicator on this button.
                 if (auto btn = entry->button.get()) {
+                    if (entry->unloadAttached) {
+                        try { btn.Unloaded(entry->unloadToken); } catch (...) {}
+                    }
                     auto iconPanel = FindChildByName(btn, L"IconPanel");
                     auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
                     if (bg) {
