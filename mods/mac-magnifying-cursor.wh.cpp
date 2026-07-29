@@ -2,7 +2,7 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.2
+// @version      1.4.2.1
 // @github       https://github.com/alivca
 // @author       Jaali
 // @include      explorer.exe
@@ -11,6 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.
+![Preview](https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif)
 */
 // ==/WindhawkModReadme==
 
