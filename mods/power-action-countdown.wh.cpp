@@ -40,7 +40,6 @@ countdown for the corresponding action and executes it immediately.
   $name: Hibernation countdown in seconds
 */
 // ==/WindhawkModSettings==
-
 #include <windows.h>
 #include <powrprof.h>
 #include <winreg.h>
@@ -208,10 +207,11 @@ bool IsStartMenuWindow(HWND hWnd) {
 }
 
 // The Windows 11 Start menu is an immersive shell surface in a separate
-// Z-order band. A regular WS_EX_TOPMOST window can't reliably cover it while
-// the shell thread is synchronously blocked inside the intercepted power API.
-// Hide visible Start-menu shell surfaces before creating the overlay.
-void HideStartMenuWindow(HWND hWnd) {
+// Z-order band. Don't hide its window with ShowWindow(SW_HIDE): that bypasses
+// the Start menu's internal XAML state transition and can leave the Start
+// button unresponsive after resume. Instead, request a normal dismissal with
+// Escape and give the shell a short opportunity to process it.
+void RequestStartMenuDismiss(HWND hWnd) {
     HWND rootWindow = GetAncestor(hWnd, GA_ROOTOWNER);
     if (!rootWindow) {
         rootWindow = hWnd;
@@ -223,22 +223,58 @@ void HideStartMenuWindow(HWND hWnd) {
 
     wchar_t className[128]{};
     GetClassNameW(rootWindow, className, std::size(className));
-    Wh_Log(L"Dismissing Start menu window %p (%ls)", rootWindow,
+    Wh_Log(L"Requesting Start menu dismissal for %p (%ls)", rootWindow,
            className[0] ? className : L"unknown class");
 
-    PostMessageW(rootWindow, WM_CANCELMODE, 0, 0);
+    const DWORD windowThread =
+        GetWindowThreadProcessId(rootWindow, nullptr);
 
-    const DWORD windowThread = GetWindowThreadProcessId(rootWindow, nullptr);
-    if (windowThread == GetCurrentThreadId()) {
-        ShowWindow(rootWindow, SW_HIDE);
-    } else {
-        ShowWindowAsync(rootWindow, SW_HIDE);
+    HWND keyTarget = rootWindow;
+    GUITHREADINFO guiThreadInfo{
+        .cbSize = sizeof(guiThreadInfo),
+    };
+
+    if (windowThread && GetGUIThreadInfo(windowThread, &guiThreadInfo)) {
+        if (guiThreadInfo.hwndFocus &&
+            (guiThreadInfo.hwndFocus == rootWindow ||
+             IsChild(rootWindow, guiThreadInfo.hwndFocus))) {
+            keyTarget = guiThreadInfo.hwndFocus;
+        } else if (guiThreadInfo.hwndActive &&
+                   IsStartMenuWindow(guiThreadInfo.hwndActive)) {
+            keyTarget = guiThreadInfo.hwndActive;
+        }
     }
+
+    PostMessageW(rootWindow, WM_CANCELMODE, 0, 0);
+    PostMessageW(keyTarget, WM_KEYDOWN, VK_ESCAPE, 1);
+    PostMessageW(keyTarget, WM_KEYUP, VK_ESCAPE,
+                 static_cast<LPARAM>(0xC0000001UL));
+}
+
+struct VisibleStartMenuSearch {
+    bool found;
+};
+
+BOOL CALLBACK FindVisibleStartMenuEnumProc(HWND hWnd, LPARAM lParam) {
+    auto* search = reinterpret_cast<VisibleStartMenuSearch*>(lParam);
+    if (IsWindowVisible(hWnd) && IsStartMenuWindow(hWnd)) {
+        search->found = true;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+bool IsAnyStartMenuWindowVisible() {
+    VisibleStartMenuSearch search{};
+    EnumWindows(FindVisibleStartMenuEnumProc,
+                reinterpret_cast<LPARAM>(&search));
+    return search.found;
 }
 
 BOOL CALLBACK DismissStartMenuEnumProc(HWND hWnd, LPARAM) {
     if (IsWindowVisible(hWnd) && IsStartMenuWindow(hWnd)) {
-        HideStartMenuWindow(hWnd);
+        RequestStartMenuDismiss(hWnd);
     }
 
     return TRUE;
@@ -250,14 +286,21 @@ void DismissStartMenu() {
     // focus to RuntimeBroker by the time the API hook is entered.
     HWND foregroundWindow = GetForegroundWindow();
     if (foregroundWindow && IsStartMenuWindow(foregroundWindow)) {
-        HideStartMenuWindow(foregroundWindow);
+        RequestStartMenuDismiss(foregroundWindow);
     }
 
     EnumWindows(DismissStartMenuEnumProc, 0);
 
-    // Give shell UI threads a short chance to apply SW_HIDE before the overlay
-    // is shown. No keyboard or mouse input is generated or consumed here.
-    Sleep(100);
+    // Wait briefly for the shell's own close transition. Never force-hide the
+    // host window: leaving the menu visible for a few frames is safer than
+    // corrupting its internal open/closed state.
+    constexpr DWORD kDismissWaitMs = 300;
+    constexpr DWORD kDismissPollMs = 20;
+    for (DWORD elapsed = 0;
+         elapsed < kDismissWaitMs && IsAnyStartMenuWindowVisible();
+         elapsed += kDismissPollMs) {
+        Sleep(kDismissPollMs);
+    }
 }
 
 // Reassert the topmost state instead of relying only on WS_EX_TOPMOST at
