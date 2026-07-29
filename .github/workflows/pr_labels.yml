@@ -20,12 +20,22 @@ on:
 permissions:
   contents: read
 
+# One run at a time per pull request, so that two events don't act on the same
+# labels at once. Runs aren't cancelled, so that one isn't stopped between adding
+# the new label and removing the old one.
+concurrency:
+  group: pr-flow-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # Only the flow script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
 
       - name: Generate an app token
         id: app-token

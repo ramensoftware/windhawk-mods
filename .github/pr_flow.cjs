@@ -54,9 +54,11 @@ const AI_REVIEW_MARKER_PATTERN = /<!--\s*ai-review\s+sha=([0-9a-f]{40})\s*-->/g;
 // Not global, so that the pattern doesn't carry state between test() calls.
 const HUMAN_REVIEW_MARKER_PATTERN = /<!--\s*human-review\s*-->/;
 
-// Comments from these association levels are treated as coming from someone
-// with write access. Taken from the event payload, which avoids an extra API
-// call and an extra app permission.
+// Comments and reviews from these association levels are trusted to drive the
+// flow. The association comes from the event payload, which avoids an extra API
+// call and an extra app permission, and is only an approximation of write
+// access: an organization member, or a collaborator invited with read or triage
+// access, is included as well.
 /** @type {AuthorAssociation[]} */
 const PRIVILEGED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -90,6 +92,29 @@ function flowLabelsOf(labels) {
   return labels
     .map((label) => label.name)
     .filter((name) => FLOW_LABELS.includes(name));
+}
+
+/**
+ * Reads the flow labels that are on the pull request right now. An event payload
+ * carries the labels from the moment the event fired, which another run of the
+ * flow may have changed by the time this one starts.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {number} params.prNumber
+ * @returns {Promise<string[]>}
+ */
+async function getCurrentFlowLabels({ github, owner, repo, prNumber }) {
+  const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+    owner,
+    repo,
+    issue_number: prNumber,
+    per_page: 100,
+  });
+
+  return flowLabelsOf(labels);
 }
 
 /**
@@ -335,7 +360,7 @@ async function handlePullRequestEvent({ github, context, core }) {
     return;
   }
 
-  const currentFlowLabels = flowLabelsOf(pullRequest.labels ?? []);
+  const currentFlowLabels = await getCurrentFlowLabels({ github, owner, repo, prNumber });
 
   const args = { github, core, owner, repo, prNumber, currentFlowLabels };
 
@@ -405,6 +430,13 @@ async function handleReviewEvent({ github, context, core }) {
     return;
   }
 
+  // A closed pull request is out of the flow, and its labels are removed. A
+  // review can still be submitted on one.
+  if (payload.pull_request.state !== 'open') {
+    core.info(`Ignoring a review on closed pull request #${payload.pull_request.number}`);
+    return;
+  }
+
   if (review.state !== 'changes_requested') {
     core.info(`Ignoring a review in the ${review.state} state`);
     return;
@@ -415,23 +447,23 @@ async function handleReviewEvent({ github, context, core }) {
     return;
   }
 
-  // Anyone can submit a review on a pull request, so only a reviewer with write
-  // access takes it out of the queue.
+  // Anyone can submit a review on a pull request, so only a trusted reviewer
+  // takes it out of the queue.
   if (!PRIVILEGED_ASSOCIATIONS.includes(review.author_association)) {
-    core.info(`Ignoring a review by ${review.user.login}, who has no write access`);
+    core.info(`Ignoring a review by ${review.user.login} (${review.author_association})`);
     return;
   }
 
   const { owner, repo } = context.repo;
-  const pullRequest = payload.pull_request;
+  const prNumber = payload.pull_request.number;
 
   await setFlowLabel({
     github,
     core,
     owner,
     repo,
-    prNumber: pullRequest.number,
-    currentFlowLabels: flowLabelsOf(pullRequest.labels ?? []),
+    prNumber,
+    currentFlowLabels: await getCurrentFlowLabels({ github, owner, repo, prNumber }),
     label: WAITING_FOR_AUTHOR,
   });
 }
@@ -575,8 +607,8 @@ async function isLastComment({ github, owner, repo, prNumber, commentId }) {
 
 /**
  * Handles issue_comment. Runs the flow commands on behalf of the pull request
- * author and of anyone with write access, ignores everyone else, and handles a
- * review left as an ordinary comment by a reviewer with write access.
+ * author and of any trusted commenter, ignores everyone else, and handles a
+ * review left as an ordinary comment by a trusted reviewer.
  *
  * @param {object} params
  * @param {Github} params.github
@@ -681,7 +713,12 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
       owner,
       repo,
       prNumber: issue.number,
-      currentFlowLabels: flowLabelsOf(issue.labels ?? []),
+      currentFlowLabels: await getCurrentFlowLabels({
+        github,
+        owner,
+        repo,
+        prNumber: issue.number,
+      }),
       label: WAITING_FOR_AUTHOR,
     });
     await react({ github, owner, repo, commentId: comment.id, content: 'eyes' });

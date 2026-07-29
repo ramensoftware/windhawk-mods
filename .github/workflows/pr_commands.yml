@@ -14,9 +14,12 @@ permissions:
 jobs:
   run:
     # A cheap prefilter, so that an ordinary comment doesn't start a runner. The
-    # comment is parsed properly in pr_flow.cjs.
+    # comment is parsed properly in pr_flow.cjs. Unlike the workflow token, an
+    # app token triggers workflows, so the app's own comments, which quote the
+    # commands, are filtered out here too.
     if: >-
       github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
       (contains(github.event.comment.body, '/ai-review') ||
        contains(github.event.comment.body, '/ready-for-reviewer') ||
        contains(github.event.comment.body, 'human-review'))
@@ -24,6 +27,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # Only the flow script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
 
       - name: Generate an app token
         id: app-token
