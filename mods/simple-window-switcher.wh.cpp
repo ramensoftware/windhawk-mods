@@ -475,6 +475,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Alt+Backtick Behavior
       $description: Action to perform when pressing Alt+` (Backtick).
       $options:
+      - none: Disabled / Do Nothing
       - backward: Cycle Backward
       - sameApp: Cycle Between Windows of Current Application
     - switcherDisplayBehavior: cursorMonitor
@@ -1017,12 +1018,11 @@ static bool ShouldListInAltTab(HWND hwnd) {
 
     // Native Alt+Tab usually prefers the active popup (child dialog).
     // However, as requested, we want to show the PARENT window instead of the child.
-    // If a window has an owner, it is a child/popup. We skip it unless it explicitly requests to be an app window.
-    // We also do not check IsWindowEnabled(own), so even if the parent is disabled by a modal popup, it still appears.
+    // Owner chain: if window has a visible, enabled owner, exclude it
+    // unless WS_EX_APPWINDOW forces inclusion
     HWND own = GetWindow(hwnd, GW_OWNER);
-    if (IsWindow(own) && IsReallyVisible(own) && !(ex & WS_EX_APPWINDOW)) {
-        return false;
-    }
+    bool ownVis = IsWindow(own) && IsWindowEnabled(own) && IsReallyVisible(own);
+    if (ownVis && !(ex & WS_EX_APPWINDOW)) return false;
 
     // Check if an ancestor in the owner chain is a tool window
     if (IsOwnerToolWindow(hwnd)) return false;
@@ -1371,10 +1371,13 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (aumid.empty() && pid) {
                 // First try window/class icons via WM_GETICON / GetClassLongPtr — sometimes available on Win10
                 HICON hWinIcon = NULL;
-                HICON hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_BIG, 0);
-                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL, 0);
-                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL2, 0);
-                if (hTmp) hWinIcon = hTmp;
+                DWORD_PTR iconRes = 0;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
                 if (!hWinIcon) {
                     HICON hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICON);
                     if (!hClassIcon) hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICONSM);
@@ -1444,7 +1447,7 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
     wc.lpszClassName = L"WindhawkSWS_IpcWindow";
     RegisterClassW(&wc);
     
-    CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+    HWND hIpcWnd = CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
     
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
@@ -1452,6 +1455,9 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
         DispatchMessageW(&msg);
     }
     
+    if (hIpcWnd) DestroyWindow(hIpcWnd);
+    UnregisterClassW(L"WindhawkSWS_IpcWindow", wc.hInstance);
+
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
@@ -3000,46 +3006,47 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
             visibleCount++;
         }
         
-        bool hasPrev = (g_layoutStartIndex > 0);
-        bool hasNext = ((g_layoutStartIndex + visibleCount) < n);
+        bool anyTruncated = visibleCount < n;
+        bool hasPrev = anyTruncated && (g_layoutStartIndex > 0);
+        bool hasNext = anyTruncated && ((g_layoutStartIndex + visibleCount) < n);
         
         if (hasPrev || hasNext) {
-            SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
-            
             bool verticalLayout = LayoutIsVertical();
-            int padTop = DpiScale(SWS_PAD_TOP, g_dpiY);
-            int padBot = DpiScale(SWS_PAD_BOTTOM, g_dpiY);
-            int padLeft = DpiScale(SWS_PAD_LEFT, g_dpiX);
-            int padRight = DpiScale(SWS_PAD_RIGHT, g_dpiX);
+            int masterPadX = DpiScale(SWS_MASTER_PADDING, g_dpiX);
+            int masterPadY = DpiScale(SWS_MASTER_PADDING, g_dpiY);
+            
+            auto DrawChevronText = [&](LPCWSTR text, RECT& rc, UINT flags) {
+                if (g_hTheme) {
+                    DTTOPTS opts = { sizeof(DTTOPTS) };
+                    opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
+                    opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+                    DrawThemeTextEx(g_hTheme, hdc, 0, 0, text, -1, flags | DT_NOCLIP, &rc, &opts);
+                } else {
+                    SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
+                    DrawTextW(hdc, text, -1, &rc, flags | DT_NOCLIP);
+                }
+            };
             
             if (hasPrev) {
                 RECT rcPrev = rcClient;
                 LPCWSTR textPrev = verticalLayout ? L"\x25C0" /* Left */ : L"\x25B2" /* Up */;
                 if (verticalLayout) {
-                    rcPrev.right = rcPrev.left + padLeft;
-                    rcPrev.left += DpiScale(6, g_dpiX);
-                    rcPrev.right += DpiScale(6, g_dpiX);
-                    DrawTextW(hdc, textPrev, -1, &rcPrev, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+                    rcPrev.right = rcPrev.left + masterPadX;
+                    DrawChevronText(textPrev, rcPrev, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
                 } else {
-                    rcPrev.bottom = rcPrev.top + padTop;
-                    rcPrev.top += DpiScale(6, g_dpiY);
-                    rcPrev.bottom += DpiScale(6, g_dpiY);
-                    DrawTextW(hdc, textPrev, -1, &rcPrev, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+                    rcPrev.bottom = rcPrev.top + masterPadY;
+                    DrawChevronText(textPrev, rcPrev, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
                 }
             }
             if (hasNext) {
                 RECT rcNext = rcClient;
                 LPCWSTR textNext = verticalLayout ? L"\x25B6" /* Right */ : L"\x25BC" /* Down */;
                 if (verticalLayout) {
-                    rcNext.left = rcNext.right - padRight;
-                    rcNext.left -= DpiScale(6, g_dpiX);
-                    rcNext.right -= DpiScale(6, g_dpiX);
-                    DrawTextW(hdc, textNext, -1, &rcNext, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+                    rcNext.left = rcNext.right - masterPadX;
+                    DrawChevronText(textNext, rcNext, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
                 } else {
-                    rcNext.top = rcNext.bottom - padBot;
-                    rcNext.top -= DpiScale(6, g_dpiY);
-                    rcNext.bottom -= DpiScale(6, g_dpiY);
-                    DrawTextW(hdc, textNext, -1, &rcNext, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+                    rcNext.top = rcNext.bottom - masterPadY;
+                    DrawChevronText(textNext, rcNext, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
                 }
             }
         }
@@ -3811,27 +3818,18 @@ static void SwitchToSelected() {
         groupWindows = g_windows[g_selectedIndex].groupWindows;
     }
     
-    // Switch to the selected window FIRST while we still have foreground rights
-    if (IsWindow(hT)) {
-        HWND hP = GetLastActivePopup(hT);
-        HWND hF = IsWindowVisible(hP) ? hP : hT;
-        if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
-        
-        // Forcefully attach thread input to guarantee SetForegroundWindow succeeds
-        DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), NULL);
-        DWORD myThread = GetCurrentThreadId();
-        if (fgThread != myThread) AttachThreadInput(myThread, fgThread, TRUE);
-        
-        SetForegroundWindow(hF);
-        
-        if (fgThread != myThread) AttachThreadInput(myThread, fgThread, FALSE);
-    }
-
+    // Restore sibling windows first so SW_RESTORE doesn't steal focus from target
     for (HWND hw : groupWindows) {
         if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
     }
     
-    // Hide the switcher AFTER we've successfully transferred focus and updated the Z-order
+    if (IsWindow(hT)) {
+        HWND hP = GetLastActivePopup(hT);
+        HWND hF = IsWindowVisible(hP) ? hP : hT;
+        if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
+        SetForegroundWindow(hF);
+    }
+    
     HideSwitcher();
 }
 
@@ -3845,7 +3843,6 @@ static bool IsWindowTruncated(int idx) {
 // Helper: recompute layout and reposition switcher window
 static void RecomputeAndReposition() {
     UnregisterThumbnails();
-    DestroyMirrorSwitchers();
     RegisterThumbnailsEarly();
     HMONITOR hMon = MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
     g_hCurrentMonitor = hMon;
@@ -3884,8 +3881,12 @@ static void RecomputeAndReposition() {
         SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH,
                      SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE | SWP_NOREDRAW);
     }
-    if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
-        EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (!IsWindow(hMirror)) continue;
+        MONITORINFO mInfo = { sizeof(mInfo) };
+        GetMonitorInfoW(MonitorFromWindow(hMirror, MONITOR_DEFAULTTONEAREST), &mInfo);
+        int mx, my; GetSwitcherPosition(mInfo.rcWork, &mx, &my);
+        SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
     }
     if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -4763,11 +4764,12 @@ static HANDLE g_hHotkeyMutex = NULL;
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
+    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
     BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
     BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
     BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    BOOL r5 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
+    BOOL r5 = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3) : TRUE;
     BOOL r6 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
     BOOL r7 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
     if (r1 && r2 && r3 && r4 && r5 && r6 && r7) {
@@ -4782,7 +4784,7 @@ static void SWS_RegisterHotkeys() {
         if (r2) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
         if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
         if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-        if (r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        if (wantAltBacktick && r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
         if (r6) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
         if (r7) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
@@ -4792,11 +4794,12 @@ static void SWS_RegisterHotkeys() {
 static void SWS_UnregisterHotkeys() {
     KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     if (!g_hotkeysRegistered || !g_hSwitcher) return;
+    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+    if (wantAltBacktick) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
     g_hotkeysRegistered = false;
@@ -4900,7 +4903,12 @@ static void LoadSettings() {
     }
     
     v = Wh_GetStringSetting(L"Accessibility.altBacktickBehavior");
-    wcscpy_s(g_settings.altBacktickBehavior, v ? v : L"backward"); Wh_FreeStringSetting(v);
+    wcscpy_s(g_settings.altBacktickBehavior, (v && *v) ? v : L"backward"); Wh_FreeStringSetting(v);
+    if (wcscmp(g_settings.altBacktickBehavior, L"none") != 0 &&
+        wcscmp(g_settings.altBacktickBehavior, L"backward") != 0 &&
+        wcscmp(g_settings.altBacktickBehavior, L"sameApp") != 0) {
+        wcscpy_s(g_settings.altBacktickBehavior, L"backward");
+    }
 
     v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
     wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"allDesktops");
