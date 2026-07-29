@@ -2,18 +2,15 @@
 // @id              alt-tab-plus
 // @name            Alt+Tab Plus
 // @description     Adds common programs and recently modified files to the Windows 11 Alt+Tab overlay
-// @version         0.3.1
+// @version         0.4.1
 // @author          BlueFinch
 // @github          https://github.com/BlueFinch3000
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lversion -ldwmapi -lgdi32
+// @compilerOptions -lole32 -lshell32 -lversion -ldwmapi -lgdi32
 // ==/WindhawkMod==
 
 // SPDX-License-Identifier: GPL-3.0-only
-//
-// The XAML diagnostics attachment pattern is adapted from Windows 11 Taskbar
-// Styler by m417z and the ExplorerTAP work it credits.
 
 // ==WindhawkModReadme==
 /*
@@ -52,10 +49,9 @@ files are skipped.
 This mod supports the Windows 11 XAML Alt+Tab experience. It doesn't support the
 classic Windows 10 switcher or third-party switcher replacements.
 
-The default companion-window renderer doesn't use XAML diagnostics and can
-coexist with Windows 11 Taskbar Styler, File Explorer Styler, UWPSpy,
-ExplorerBlurMica, and TranslucentTB. An optional integrated XAML renderer is
-available, but Windows allows only one XAML diagnostics consumer per process.
+The companion panels don't use XAML diagnostics and can coexist with Windows 11
+Taskbar Styler, File Explorer Styler, UWPSpy, ExplorerBlurMica, and
+TranslucentTB.
 
 After installing the source as a local Windhawk mod, restart Explorer once if
 the cards don't appear on the first Alt+Tab invocation.
@@ -64,12 +60,6 @@ the cards don't appear on the first Alt+Tab invocation.
 
 // ==WindhawkModSettings==
 /*
-- renderMode: companion
-  $name: Renderer
-  $description: Companion is compatible with other XAML styling mods. Integrated XAML is experimental and requires exclusive access to XAML diagnostics.
-  $options:
-  - companion: Compatible companion panels
-  - xaml: Integrated XAML panels (experimental)
 - layout: columns
   $name: Layout
   $description: Placement of common programs, open windows, and recent files.
@@ -148,6 +138,39 @@ the cards don't appear on the first Alt+Tab invocation.
 
 // ==WindhawkModChangelog==
 /*
+## 0.4.1
+
+- Added the fully qualified Windows 11 symbol spelling used by the native
+  thumbnail-position hook on newer builds.
+
+## 0.4.0
+
+- Removed the experimental integrated XAML renderer. The companion panels
+  provide the same features without occupying Explorer's single XAML
+  diagnostics connection, so Alt+Tab Plus can coexist with Windows 11 Taskbar
+  Styler and other XAML customization tools.
+
+## 0.3.4
+
+- Switches the program-specific recent-files carousel when a program selector
+  is hovered, without requiring a click.
+
+## 0.3.3
+
+- Prevents pinned programs from also appearing as automatically ranked
+  programs.
+- Shows program-specific recent files in a selectable program carousel with
+  prominent program names and icons.
+
+## 0.3.2
+
+- Fixed Explorer shutdown by preventing the worker thread object from being
+  destroyed while still joinable during process termination.
+- Launches entries asynchronously from an STA COM helper thread.
+- Replaced continuous foreground and companion-panel polling with event-driven
+  tracking and a timer that only runs while the panels are visible.
+- Stops initialization when the native Alt+Tab hook isn't available.
+
 ## 0.3.1
 
 - Fixed adjusted column boundaries by constraining the actual native Alt+Tab
@@ -179,9 +202,8 @@ the cards don't appear on the first Alt+Tab invocation.
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <shobjidl.h>
-#include <xamlom.h>
-
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -194,6 +216,7 @@ the cards don't appear on the first Alt+Tab invocation.
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -201,36 +224,12 @@ the cards don't appear on the first Alt+Tab invocation.
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Text.h>
-#include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/base.h>
-
-namespace wf = winrt::Windows::Foundation;
-namespace wut = winrt::Windows::UI::Text;
-namespace wuv = winrt::Windows::UI::ViewManagement;
-namespace wux = winrt::Windows::UI::Xaml;
-namespace wuxa = winrt::Windows::UI::Xaml::Automation;
-namespace wuxc = winrt::Windows::UI::Xaml::Controls;
-namespace wuxm = winrt::Windows::UI::Xaml::Media;
-
 using namespace std::string_view_literals;
 
 enum class LayoutMode {
     Columns,
     Top,
     Bottom,
-};
-
-enum class RenderMode {
-    Companion,
-    Xaml,
 };
 
 enum class ColumnThumbnailArea {
@@ -257,7 +256,6 @@ struct RecentProgramSetting {
 };
 
 struct Settings {
-    RenderMode renderMode = RenderMode::Companion;
     LayoutMode layout = LayoutMode::Columns;
     ColumnThumbnailArea columnThumbnailArea =
         ColumnThumbnailArea::Adjusted;
@@ -288,6 +286,7 @@ struct LaunchEntry {
 
 struct RecentFileGroup {
     std::wstring title;
+    std::wstring appId;
     std::vector<LaunchEntry> entries;
 };
 
@@ -312,7 +311,7 @@ std::wstring g_lastForegroundProgram;
 
 std::atomic<bool> g_stopWorker = false;
 HANDLE g_workerWakeEvent = nullptr;
-std::thread g_worker;
+[[clang::no_destroy]] std::optional<std::thread> g_worker;
 
 template <auto Fn>
 struct FunctionDeleter {
@@ -523,10 +522,6 @@ std::unordered_set<std::wstring> ParseExtensions(
 void LoadSettings() {
     Settings settings;
 
-    if (GetStringSetting(L"renderMode") == L"xaml") {
-        settings.renderMode = RenderMode::Xaml;
-    }
-
     std::wstring layout = GetStringSetting(L"layout");
     if (layout == L"top") {
         settings.layout = LayoutMode::Top;
@@ -724,14 +719,13 @@ ULONGLONG CurrentFileTime() {
     return value.QuadPart;
 }
 
-std::wstring GetForegroundProgramPath() {
-    HWND foreground = GetForegroundWindow();
-    if (!foreground) {
+std::wstring GetProgramPathForWindow(HWND window) {
+    if (!window) {
         return {};
     }
 
     DWORD processId = 0;
-    GetWindowThreadProcessId(foreground, &processId);
+    GetWindowThreadProcessId(window, &processId);
     if (!processId) {
         return {};
     }
@@ -755,8 +749,8 @@ std::wstring GetForegroundProgramPath() {
     return path;
 }
 
-void TrackForegroundProgram() {
-    std::wstring path = GetForegroundProgramPath();
+void TrackForegroundProgram(HWND window) {
+    std::wstring path = GetProgramPathForWindow(window);
     if (path.empty() || IsIgnoredProgram(path)) {
         return;
     }
@@ -798,10 +792,24 @@ void TrackForegroundProgram() {
     }
 }
 
+void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK,
+                                     DWORD event,
+                                     HWND window,
+                                     LONG,
+                                     LONG,
+                                     DWORD,
+                                     DWORD) {
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        TrackForegroundProgram(window);
+    }
+}
+
 std::vector<LaunchEntry> DiscoverCommonPrograms(
     const Settings& settings) {
     std::vector<LaunchEntry> result;
     std::unordered_set<std::wstring> seen;
+    std::unordered_set<std::wstring> pinnedNames;
+    std::unordered_set<std::wstring> pinnedExecutableNames;
 
     for (const auto& configured : settings.commonPrograms) {
         std::wstring dedupeKey = ToLower(configured.command);
@@ -818,8 +826,24 @@ std::vector<LaunchEntry> DiscoverCommonPrograms(
         entry.arguments = configured.arguments;
         entry.workingDirectory = configured.workingDirectory;
         entry.score = std::numeric_limits<ULONGLONG>::max();
+        pinnedNames.insert(ToLower(entry.title));
+        pinnedNames.insert(
+            ToLower(FriendlyProgramName(configured.command)));
+        std::wstring executableName =
+            ToLower(FileNameFromPath(configured.command));
+        if (executableName.ends_with(L".exe")) {
+            pinnedExecutableNames.insert(std::move(executableName));
+        }
         result.push_back(std::move(entry));
     }
+
+    const size_t configuredCount = result.size();
+    auto isPinnedProgram = [&pinnedNames, &pinnedExecutableNames](
+                               const std::wstring& path) {
+        return pinnedNames.contains(ToLower(FriendlyProgramName(path))) ||
+               pinnedExecutableNames.contains(
+                   ToLower(FileNameFromPath(path)));
+    };
 
     if (settings.learnFromWindowsUsage) {
         HKEY key = nullptr;
@@ -853,6 +877,9 @@ std::vector<LaunchEntry> DiscoverCommonPrograms(
                 if (!PathIsExistingFile(path) || IsIgnoredProgram(path)) {
                     continue;
                 }
+                if (isPinnedProgram(path)) {
+                    continue;
+                }
 
                 std::wstring dedupeKey = ToLower(path);
                 if (!seen.insert(dedupeKey).second) {
@@ -872,6 +899,9 @@ std::vector<LaunchEntry> DiscoverCommonPrograms(
         for (const auto& usage : CopyUsageRecords()) {
             if (!PathIsExistingFile(usage.path) ||
                 IsIgnoredProgram(usage.path)) {
+                continue;
+            }
+            if (isPinnedProgram(usage.path)) {
                 continue;
             }
 
@@ -902,7 +932,6 @@ std::vector<LaunchEntry> DiscoverCommonPrograms(
         }
     }
 
-    const size_t configuredCount = settings.commonPrograms.size();
     if (configuredCount < result.size()) {
         std::stable_sort(
             result.begin() +
@@ -1099,6 +1128,7 @@ RecentFileGroup DiscoverProgramRecentFiles(
     const RecentProgramSetting& program) {
     RecentFileGroup group{
         .title = program.name,
+        .appId = program.appId,
         .entries = {},
     };
     if (program.recentFileCount <= 0) {
@@ -1190,6 +1220,7 @@ std::vector<RecentFileGroup> DiscoverRecentFileGroups(
     if (settings.recentFilesSource == RecentFilesSource::All) {
         groups.push_back({
             .title = L"Recent files",
+            .appId = {},
             .entries = DiscoverRecentFiles(settings),
         });
         return groups;
@@ -1240,13 +1271,11 @@ void StartWorker() {
         return;
     }
 
-    g_worker = std::thread([] {
+    g_worker.emplace([] {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         ULONGLONG nextRefresh = 0;
 
         while (!g_stopWorker.load()) {
-            TrackForegroundProgram();
-
             ULONGLONG now = GetTickCount64();
             if (now >= nextRefresh) {
                 RefreshEntries();
@@ -1259,7 +1288,12 @@ void StartWorker() {
                               1000;
             }
 
-            WaitForSingleObject(g_workerWakeEvent, 2000);
+            now = GetTickCount64();
+            DWORD waitMilliseconds =
+                now >= nextRefresh
+                    ? 0
+                    : static_cast<DWORD>(nextRefresh - now);
+            WaitForSingleObject(g_workerWakeEvent, waitMilliseconds);
         }
 
         SaveUsageRecords();
@@ -1272,9 +1306,10 @@ void StopWorker() {
     if (g_workerWakeEvent) {
         SetEvent(g_workerWakeEvent);
     }
-    if (g_worker.joinable()) {
-        g_worker.join();
+    if (g_worker && g_worker->joinable()) {
+        g_worker->join();
     }
+    g_worker.reset();
     if (g_workerWakeEvent) {
         CloseHandle(g_workerWakeEvent);
         g_workerWakeEvent = nullptr;
@@ -1300,38 +1335,49 @@ EntrySnapshot GetEntrySnapshot() {
     return result;
 }
 
-wuxm::SolidColorBrush MakeBrush(BYTE alpha,
-                                BYTE red,
-                                BYTE green,
-                                BYTE blue) {
-    wuxm::SolidColorBrush brush;
-    brush.Color({alpha, red, green, blue});
-    return brush;
-}
-
-bool IsDarkTheme(const wux::FrameworkElement& element) {
+void Launch(LaunchEntry entry) {
     try {
-        return element.ActualTheme() != wux::ElementTheme::Light;
-    } catch (...) {
-        return true;
+        std::thread([entry = std::move(entry)] {
+            HRESULT initializeResult = CoInitializeEx(
+                nullptr,
+                COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            if (FAILED(initializeResult)) {
+                Wh_Log(L"Failed to initialize COM for launching %s: 0x%08X",
+                       entry.command.c_str(),
+                       static_cast<unsigned int>(initializeResult));
+                return;
+            }
+
+            HINSTANCE result = ShellExecuteW(
+                nullptr, L"open", entry.command.c_str(),
+                entry.arguments.empty() ? nullptr
+                                        : entry.arguments.c_str(),
+                entry.workingDirectory.empty()
+                    ? nullptr
+                    : entry.workingDirectory.c_str(),
+                SW_SHOWNORMAL);
+            if (reinterpret_cast<INT_PTR>(result) <= 32) {
+                Wh_Log(L"ShellExecute failed for %s: %Id",
+                       entry.command.c_str(),
+                       reinterpret_cast<INT_PTR>(result));
+            }
+
+            CoUninitialize();
+        }).detach();
+    } catch (const std::system_error& error) {
+        Wh_Log(L"Failed to create launch thread for %s: %hs",
+               entry.command.c_str(), error.what());
     }
 }
 
-void Launch(const LaunchEntry& entry) {
-    HINSTANCE result = ShellExecuteW(
-        nullptr, L"open", entry.command.c_str(),
-        entry.arguments.empty() ? nullptr : entry.arguments.c_str(),
-        entry.workingDirectory.empty()
-            ? nullptr
-            : entry.workingDirectory.c_str(),
-        SW_SHOWNORMAL);
-    if (reinterpret_cast<INT_PTR>(result) <= 32) {
-        Wh_Log(L"ShellExecute failed for %s: %Id", entry.command.c_str(),
-               reinterpret_cast<INT_PTR>(result));
-    }
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle), &module);
+    return module;
 }
-
-HMODULE GetCurrentModuleHandle();
 
 constexpr UINT WM_ALT_TAB_PLUS_SHOW = WM_APP + 0x4A1;
 constexpr UINT WM_ALT_TAB_PLUS_HIDE = WM_APP + 0x4A2;
@@ -1340,14 +1386,18 @@ constexpr UINT_PTR kCompanionTimerId = 0x415450;
 struct CompanionWindowState {
     bool programs = false;
     bool dark = true;
-    bool showGroupHeadings = false;
+    bool programCarousel = false;
     int hoveredIndex = -1;
+    int hoveredCarouselIndex = -1;
     int scrollOffset = 0;
     int contentHeight = 0;
+    size_t selectedGroupIndex = 0;
     std::vector<LaunchEntry> entries;
     std::vector<RecentFileGroup> groups;
     std::vector<RECT> hitRects;
     std::vector<LaunchEntry> hitEntries;
+    std::vector<RECT> carouselHitRects;
+    std::vector<size_t> carouselHitGroups;
 };
 
 HANDLE g_companionThread = nullptr;
@@ -1359,7 +1409,7 @@ std::atomic<HMONITOR> g_companionMonitor = nullptr;
 std::atomic<ULONGLONG> g_companionShowTick = 0;
 std::atomic<ULONGLONG> g_companionGeneration = 0;
 std::atomic<bool> g_companionVisible = false;
-std::atomic<int> g_xamlPanelCount = 0;
+UINT_PTR g_companionTimerId = 0;
 std::atomic<DWORD> g_altTabShowThreadId = 0;
 std::atomic<HWND> g_nativeAltTabHostWindow = nullptr;
 
@@ -1381,8 +1431,7 @@ int ScaleForDpi(HWND window, int value) {
 
 bool GetAdjustedAltTabCorridor(RECT* corridor) {
     Settings settings = CopySettings();
-    if (settings.renderMode != RenderMode::Companion ||
-        settings.layout != LayoutMode::Columns ||
+    if (settings.layout != LayoutMode::Columns ||
         settings.columnThumbnailArea !=
             ColumnThumbnailArea::Adjusted) {
         return false;
@@ -1426,27 +1475,48 @@ HFONT CreateCompanionFont(HWND window, int points, bool bold) {
                        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 }
 
+HICON LoadCommandIcon(const std::wstring& command, bool small) {
+    SHFILEINFOW fileInfo{};
+    UINT flags = SHGFI_ICON |
+                 (small ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+
+    if (command.rfind(L"shell:", 0) == 0) {
+        PIDLIST_ABSOLUTE itemIdList = nullptr;
+        if (SUCCEEDED(SHParseDisplayName(
+                command.c_str(), nullptr, &itemIdList, 0, nullptr)) &&
+            itemIdList) {
+            SHGetFileInfoW(reinterpret_cast<PCWSTR>(itemIdList), 0,
+                           &fileInfo, sizeof(fileInfo),
+                           flags | SHGFI_PIDL);
+            CoTaskMemFree(itemIdList);
+            if (fileInfo.hIcon) {
+                return fileInfo.hIcon;
+            }
+        }
+    }
+
+    DWORD attributes = FILE_ATTRIBUTE_NORMAL;
+    if (!PathIsExistingFile(command)) {
+        flags |= SHGFI_USEFILEATTRIBUTES;
+    }
+    SHGetFileInfoW(command.c_str(), attributes, &fileInfo,
+                   sizeof(fileInfo), flags);
+    return fileInfo.hIcon;
+}
+
 void DrawEntryIcon(HWND window,
                    HDC dc,
                    const LaunchEntry& entry,
                    const RECT& itemRect,
                    int iconSize,
                    bool dark) {
-    SHFILEINFOW fileInfo{};
-    UINT flags = SHGFI_ICON | SHGFI_SMALLICON;
-    DWORD attributes = FILE_ATTRIBUTE_NORMAL;
-    if (!PathIsExistingFile(entry.command)) {
-        flags |= SHGFI_USEFILEATTRIBUTES;
-    }
-
-    if (SHGetFileInfoW(entry.command.c_str(), attributes, &fileInfo,
-                       sizeof(fileInfo), flags) &&
-        fileInfo.hIcon) {
+    HICON icon = LoadCommandIcon(entry.command, iconSize <= 24);
+    if (icon) {
         int x = itemRect.left + ScaleForDpi(window, 12);
         int y = itemRect.top + (itemRect.bottom - itemRect.top - iconSize) / 2;
-        DrawIconEx(dc, x, y, fileInfo.hIcon, iconSize, iconSize, 0, nullptr,
+        DrawIconEx(dc, x, y, icon, iconSize, iconSize, 0, nullptr,
                    DI_NORMAL);
-        DestroyIcon(fileInfo.hIcon);
+        DestroyIcon(icon);
         return;
     }
 
@@ -1470,6 +1540,52 @@ void DrawEntryIcon(HWND window,
         L'\0'};
     HFONT font = CreateCompanionFont(window, 9, true);
     HGDIOBJ oldFont = SelectObject(dc, font);
+    DrawTextW(dc, letter, -1, &badgeRect,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, oldFont);
+    DeleteObject(font);
+}
+
+void DrawProgramGroupIcon(HWND window,
+                          HDC dc,
+                          const RecentFileGroup& group,
+                          const RECT& selectorRect,
+                          int iconSize,
+                          bool dark) {
+    std::wstring command = L"shell:AppsFolder\\" + group.appId;
+    HICON icon = LoadCommandIcon(command, iconSize <= 24);
+    const int x = selectorRect.left +
+                  (selectorRect.right - selectorRect.left - iconSize) / 2;
+    const int y = selectorRect.top + ScaleForDpi(window, 5);
+    if (icon) {
+        DrawIconEx(dc, x, y, icon, iconSize, iconSize, 0, nullptr,
+                   DI_NORMAL);
+        DestroyIcon(icon);
+        return;
+    }
+
+    const COLORREF badge =
+        dark ? RGB(74, 106, 176) : RGB(55, 86, 158);
+    HBRUSH badgeBrush = CreateSolidBrush(badge);
+    HGDIOBJ oldBrush = SelectObject(dc, badgeBrush);
+    HPEN nullPen = static_cast<HPEN>(GetStockObject(NULL_PEN));
+    HGDIOBJ oldPen = SelectObject(dc, nullPen);
+    Ellipse(dc, x, y, x + iconSize, y + iconSize);
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(badgeBrush);
+
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    WCHAR letter[2] = {
+        group.title.empty()
+            ? L'A'
+            : static_cast<WCHAR>(
+                  std::towupper(group.title.front())),
+        L'\0'};
+    HFONT font = CreateCompanionFont(window, 9, true);
+    HGDIOBJ oldFont = SelectObject(dc, font);
+    RECT badgeRect{x, y, x + iconSize, y + iconSize};
     DrawTextW(dc, letter, -1, &badgeRect,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(dc, oldFont);
@@ -1524,25 +1640,145 @@ void PaintCompanionWindow(HWND window,
 
     state.hitRects.clear();
     state.hitEntries.clear();
+    state.carouselHitRects.clear();
+    state.carouselHitGroups.clear();
     const int itemLeft = ScaleForDpi(window, 10);
     const int itemRight = client.right - ScaleForDpi(window, 10);
     const int itemHeight = ScaleForDpi(window, 54);
     const int itemGap = ScaleForDpi(window, 4);
     const int itemStride = itemHeight + itemGap;
-    const int sectionHeight = ScaleForDpi(window, 24);
-    const int contentTop = ScaleForDpi(window, 45);
+    const int contentTop = ScaleForDpi(
+        window, state.programCarousel ? 119 : 45);
+
+    if (state.programCarousel && !state.groups.empty()) {
+        state.selectedGroupIndex =
+            std::min(state.selectedGroupIndex,
+                     state.groups.size() - 1);
+        const int selectorTop = ScaleForDpi(window, 46);
+        const int selectorBottom = ScaleForDpi(window, 112);
+        const int selectorGap = ScaleForDpi(window, 4);
+        const int selectorLeft = ScaleForDpi(window, 10);
+        const int selectorRight =
+            client.right - ScaleForDpi(window, 10);
+        const int selectorWidth = selectorRight - selectorLeft;
+
+        auto drawSelector = [&](size_t groupIndex,
+                                const RECT& selectorRect,
+                                bool active) {
+            const int hitIndex = static_cast<int>(
+                state.carouselHitRects.size());
+            state.carouselHitRects.push_back(selectorRect);
+            state.carouselHitGroups.push_back(groupIndex);
+
+            const COLORREF selectorBackground =
+                active
+                    ? (state.dark ? RGB(60, 79, 112)
+                                  : RGB(208, 222, 246))
+                    : (state.hoveredCarouselIndex == hitIndex
+                           ? itemHover
+                           : itemBackground);
+            HBRUSH selectorBrush =
+                CreateSolidBrush(selectorBackground);
+            HPEN nullPen =
+                static_cast<HPEN>(GetStockObject(NULL_PEN));
+            HGDIOBJ oldBrush =
+                SelectObject(bufferDc, selectorBrush);
+            HGDIOBJ oldPen = SelectObject(bufferDc, nullPen);
+            const int radius = ScaleForDpi(window, active ? 10 : 8);
+            RoundRect(bufferDc, selectorRect.left, selectorRect.top,
+                      selectorRect.right, selectorRect.bottom, radius,
+                      radius);
+            SelectObject(bufferDc, oldPen);
+            SelectObject(bufferDc, oldBrush);
+            DeleteObject(selectorBrush);
+
+            const int iconSize =
+                ScaleForDpi(window, active ? 27 : 19);
+            DrawProgramGroupIcon(window, bufferDc,
+                                 state.groups[groupIndex], selectorRect,
+                                 iconSize, state.dark);
+
+            RECT nameRect{
+                selectorRect.left + ScaleForDpi(window, 4),
+                selectorRect.top +
+                    ScaleForDpi(window, active ? 34 : 29),
+                selectorRect.right - ScaleForDpi(window, 4),
+                selectorRect.bottom - ScaleForDpi(window, 3)};
+            HFONT nameFont = CreateCompanionFont(
+                window, active ? 10 : 8, true);
+            HGDIOBJ previousFont =
+                SelectObject(bufferDc, nameFont);
+            SetTextColor(bufferDc, active ? primary : secondary);
+            DrawTextW(bufferDc,
+                      state.groups[groupIndex].title.c_str(), -1,
+                      &nameRect,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE |
+                          DT_END_ELLIPSIS | DT_NOPREFIX);
+            SelectObject(bufferDc, previousFont);
+            DeleteObject(nameFont);
+        };
+
+        if (state.groups.size() == 1) {
+            drawSelector(
+                0,
+                {selectorLeft, selectorTop, selectorRight,
+                 selectorBottom},
+                true);
+        } else {
+            const int sideWidth = std::max(
+                ScaleForDpi(window, 48),
+                (selectorWidth - selectorGap * 2) * 22 / 100);
+            const int centerLeft =
+                selectorLeft + sideWidth + selectorGap;
+            const int centerRight =
+                selectorRight - sideWidth - selectorGap;
+            drawSelector(
+                state.selectedGroupIndex,
+                {centerLeft, selectorTop, centerRight, selectorBottom},
+                true);
+            if (state.groups.size() == 2) {
+                const size_t other = 1 - state.selectedGroupIndex;
+                if (state.selectedGroupIndex == 0) {
+                    drawSelector(
+                        other,
+                        {selectorRight - sideWidth, selectorTop,
+                         selectorRight, selectorBottom},
+                        false);
+                } else {
+                    drawSelector(
+                        other,
+                        {selectorLeft, selectorTop,
+                         selectorLeft + sideWidth, selectorBottom},
+                        false);
+                }
+            } else {
+                const size_t previous =
+                    (state.selectedGroupIndex +
+                     state.groups.size() - 1) %
+                    state.groups.size();
+                const size_t next =
+                    (state.selectedGroupIndex + 1) %
+                    state.groups.size();
+                drawSelector(
+                    previous,
+                    {selectorLeft, selectorTop,
+                     selectorLeft + sideWidth, selectorBottom},
+                    false);
+                drawSelector(
+                    next,
+                    {selectorRight - sideWidth, selectorTop,
+                     selectorRight, selectorBottom},
+                    false);
+            }
+        }
+    }
+
     const int availableHeight =
         std::max(0, static_cast<int>(client.bottom) - contentTop);
-    int groupHeadingHeight = 0;
-    if (state.showGroupHeadings && !state.entries.empty()) {
-        groupHeadingHeight =
-            static_cast<int>(state.groups.size()) * sectionHeight;
-    }
     state.contentHeight =
         state.entries.empty()
             ? ScaleForDpi(window, 58)
-            : static_cast<int>(state.entries.size()) * itemStride +
-                  groupHeadingHeight;
+            : static_cast<int>(state.entries.size()) * itemStride;
     state.scrollOffset = std::clamp(
         state.scrollOffset, 0,
         std::max(0, state.contentHeight - availableHeight));
@@ -1630,30 +1866,8 @@ void PaintCompanionWindow(HWND window,
         top += itemStride;
     };
 
-    if (state.showGroupHeadings && !state.entries.empty()) {
-        HFONT sectionFont = CreateCompanionFont(window, 8, true);
-        for (const auto& group : state.groups) {
-            RECT sectionRect{
-                ScaleForDpi(window, 16), top,
-                client.right - ScaleForDpi(window, 12),
-                top + sectionHeight};
-            oldFont = SelectObject(bufferDc, sectionFont);
-            SetTextColor(bufferDc, secondary);
-            DrawTextW(bufferDc, group.title.c_str(), -1,
-                      &sectionRect,
-                      DT_LEFT | DT_VCENTER | DT_SINGLELINE |
-                          DT_END_ELLIPSIS | DT_NOPREFIX);
-            SelectObject(bufferDc, oldFont);
-            top += sectionHeight;
-            for (const auto& entry : group.entries) {
-                drawEntry(entry);
-            }
-        }
-        DeleteObject(sectionFont);
-    } else {
-        for (const auto& entry : state.entries) {
-            drawEntry(entry);
-        }
+    for (const auto& entry : state.entries) {
+        drawEntry(entry);
     }
     RestoreDC(bufferDc, savedDc);
 
@@ -1665,6 +1879,10 @@ void PaintCompanionWindow(HWND window,
 }
 
 void HideCompanionPanels() {
+    if (g_companionTimerId) {
+        KillTimer(nullptr, g_companionTimerId);
+        g_companionTimerId = 0;
+    }
     if (g_programsCompanionWindow) {
         ShowWindow(g_programsCompanionWindow, SW_HIDE);
     }
@@ -1673,6 +1891,8 @@ void HideCompanionPanels() {
     }
     g_companionVisible = false;
 }
+
+void ShowCompanionPanels();
 
 LRESULT CALLBACK CompanionWindowProc(HWND window,
                                      UINT message,
@@ -1708,6 +1928,7 @@ LRESULT CALLBACK CompanionWindowProc(HWND window,
             if (state) {
                 POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 int hoveredIndex = -1;
+                int hoveredCarouselIndex = -1;
                 for (size_t index = 0; index < state->hitRects.size();
                      index++) {
                     if (PtInRect(&state->hitRects[index], point)) {
@@ -1715,9 +1936,38 @@ LRESULT CALLBACK CompanionWindowProc(HWND window,
                         break;
                     }
                 }
-                if (hoveredIndex != state->hoveredIndex) {
+                for (size_t index = 0;
+                     index < state->carouselHitRects.size(); index++) {
+                    if (PtInRect(
+                            &state->carouselHitRects[index], point)) {
+                        hoveredCarouselIndex =
+                            static_cast<int>(index);
+                        break;
+                    }
+                }
+                const bool enteredCarouselSelector =
+                    hoveredCarouselIndex !=
+                    state->hoveredCarouselIndex;
+                if (hoveredIndex != state->hoveredIndex ||
+                    enteredCarouselSelector) {
                     state->hoveredIndex = hoveredIndex;
+                    state->hoveredCarouselIndex =
+                        hoveredCarouselIndex;
                     InvalidateRect(window, nullptr, FALSE);
+                }
+                if (enteredCarouselSelector &&
+                    hoveredCarouselIndex >= 0 &&
+                    static_cast<size_t>(hoveredCarouselIndex) <
+                        state->carouselHitGroups.size()) {
+                    const size_t groupIndex =
+                        state->carouselHitGroups[
+                            hoveredCarouselIndex];
+                    if (groupIndex !=
+                        state->selectedGroupIndex) {
+                        state->selectedGroupIndex = groupIndex;
+                        state->scrollOffset = 0;
+                        ShowCompanionPanels();
+                    }
                 }
                 TRACKMOUSEEVENT track{};
                 track.cbSize = sizeof(track);
@@ -1728,8 +1978,11 @@ LRESULT CALLBACK CompanionWindowProc(HWND window,
             return 0;
 
         case WM_MOUSELEAVE:
-            if (state && state->hoveredIndex != -1) {
+            if (state &&
+                (state->hoveredIndex != -1 ||
+                 state->hoveredCarouselIndex != -1)) {
                 state->hoveredIndex = -1;
+                state->hoveredCarouselIndex = -1;
                 InvalidateRect(window, nullptr, FALSE);
             }
             return 0;
@@ -1738,7 +1991,8 @@ LRESULT CALLBACK CompanionWindowProc(HWND window,
             if (state) {
                 RECT client{};
                 GetClientRect(window, &client);
-                const int contentTop = ScaleForDpi(window, 45);
+                const int contentTop = ScaleForDpi(
+                    window, state->programCarousel ? 119 : 45);
                 const int maxOffset = std::max(
                     0, state->contentHeight -
                            std::max(
@@ -1811,14 +2065,24 @@ void ShowCompanionPanels() {
     if (!programState || !fileState) {
         return;
     }
+    const bool preserveCarouselHover = g_companionVisible.load();
 
     programState->entries = snapshot.programs;
-    fileState->entries = snapshot.files;
     fileState->groups = snapshot.fileGroups;
-    fileState->showGroupHeadings =
+    fileState->programCarousel =
         snapshot.settings.recentFilesSource ==
             RecentFilesSource::ProgramSpecific &&
-        snapshot.settings.layout == LayoutMode::Columns;
+        !fileState->groups.empty();
+    if (fileState->programCarousel) {
+        fileState->selectedGroupIndex =
+            std::min(fileState->selectedGroupIndex,
+                     fileState->groups.size() - 1);
+        fileState->entries =
+            fileState->groups[fileState->selectedGroupIndex].entries;
+    } else {
+        fileState->selectedGroupIndex = 0;
+        fileState->entries = snapshot.files;
+    }
     if (snapshot.settings.layout != LayoutMode::Columns) {
         constexpr size_t maximumStripEntries = 3;
         if (programState->entries.size() > maximumStripEntries) {
@@ -1827,10 +2091,13 @@ void ShowCompanionPanels() {
         if (fileState->entries.size() > maximumStripEntries) {
             fileState->entries.resize(maximumStripEntries);
         }
-        fileState->groups.clear();
     }
     programState->hoveredIndex = -1;
     fileState->hoveredIndex = -1;
+    programState->hoveredCarouselIndex = -1;
+    if (!preserveCarouselHover || !fileState->programCarousel) {
+        fileState->hoveredCarouselIndex = -1;
+    }
     programState->scrollOffset = 0;
     fileState->scrollOffset = 0;
     programState->dark = fileState->dark = IsSystemDarkMode();
@@ -1866,10 +2133,7 @@ void ShowCompanionPanels() {
         int height = ScaleForDpi(
             g_programsCompanionWindow,
             51 + visibleCount * 58 +
-                (state.showGroupHeadings &&
-                         !state.entries.empty()
-                     ? static_cast<int>(state.groups.size()) * 24
-                     : 0));
+                (state.programCarousel ? 74 : 0));
         return std::min(height, workHeight - margin * 2);
     };
     int programsHeight = panelHeight(*programState);
@@ -1917,10 +2181,34 @@ void ShowCompanionPanels() {
 
     g_companionGeneration = snapshot.generation;
     g_companionVisible = true;
+    if (!g_companionTimerId) {
+        g_companionTimerId =
+            SetTimer(nullptr, kCompanionTimerId, 50, nullptr);
+        if (!g_companionTimerId) {
+            Wh_Log(L"Failed to create companion timer: %u",
+                   GetLastError());
+        }
+    }
 }
 
 DWORD WINAPI CompanionThreadProc(void*) {
     PeekMessageW(nullptr, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    HRESULT initializeResult = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(initializeResult)) {
+        Wh_Log(L"Failed to initialize COM on the companion thread: 0x%08X",
+               static_cast<unsigned int>(initializeResult));
+    }
+
+    HWINEVENTHOOK foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        ForegroundWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!foregroundHook) {
+        Wh_Log(L"Failed to install foreground event hook: %u",
+               GetLastError());
+    } else {
+        TrackForegroundProgram(GetForegroundWindow());
+    }
 
     HINSTANCE instance = GetCurrentModuleHandle();
     constexpr PCWSTR kCompanionClassName =
@@ -1967,8 +2255,6 @@ DWORD WINAPI CompanionThreadProc(void*) {
     g_filesCompanionWindow =
         createCompanionWindow(L"Recent files", &fileState);
 
-    UINT_PTR timerId =
-        SetTimer(nullptr, kCompanionTimerId, 50, nullptr);
     SetEvent(g_companionThreadReady);
 
     MSG message;
@@ -1982,7 +2268,8 @@ DWORD WINAPI CompanionThreadProc(void*) {
             continue;
         }
         if (!message.hwnd && message.message == WM_TIMER &&
-            message.wParam == timerId) {
+            g_companionTimerId &&
+            message.wParam == g_companionTimerId) {
             if (g_companionVisible.load()) {
                 const ULONGLONG elapsed =
                     GetTickCount64() - g_companionShowTick.load();
@@ -2014,8 +2301,9 @@ DWORD WINAPI CompanionThreadProc(void*) {
         DispatchMessageW(&message);
     }
 
-    if (timerId) {
-        KillTimer(nullptr, timerId);
+    HideCompanionPanels();
+    if (foregroundHook) {
+        UnhookWinEvent(foregroundHook);
     }
     if (g_programsCompanionWindow) {
         DestroyWindow(g_programsCompanionWindow);
@@ -2026,6 +2314,9 @@ DWORD WINAPI CompanionThreadProc(void*) {
         g_filesCompanionWindow = nullptr;
     }
     UnregisterClassW(kCompanionClassName, instance);
+    if (SUCCEEDED(initializeResult)) {
+        CoUninitialize();
+    }
     return 0;
 }
 
@@ -2062,9 +2353,7 @@ void StopCompanionThread() {
 }
 
 void RequestCompanionPanels() {
-    Settings settings = CopySettings();
-    if (settings.renderMode != RenderMode::Companion ||
-        !g_companionThreadId) {
+    if (!g_companionThreadId) {
         return;
     }
 
@@ -2073,724 +2362,6 @@ void RequestCompanionPanels() {
         MonitorFromWindow(foreground, MONITOR_DEFAULTTOPRIMARY);
     g_companionShowTick = GetTickCount64();
     PostThreadMessageW(g_companionThreadId, WM_ALT_TAB_PLUS_SHOW, 0, 0);
-}
-
-wuxc::Button CreateEntryButton(const LaunchEntry& entry,
-                               bool dark,
-                               double width) {
-    auto primaryBrush = dark ? MakeBrush(0xFF, 0xF5, 0xF5, 0xF5)
-                             : MakeBrush(0xFF, 0x18, 0x18, 0x18);
-    auto secondaryBrush = dark ? MakeBrush(0xB8, 0xFF, 0xFF, 0xFF)
-                               : MakeBrush(0xA8, 0x00, 0x00, 0x00);
-    auto surfaceBrush = dark ? MakeBrush(0x25, 0xFF, 0xFF, 0xFF)
-                             : MakeBrush(0x16, 0x00, 0x00, 0x00);
-
-    wuxc::Button button;
-    button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
-    button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
-    button.Padding({10, 8, 10, 8});
-    button.Margin({0, 0, 0, 6});
-    button.MinHeight(52);
-    if (width > 0) {
-        button.Width(width);
-    }
-    button.Background(surfaceBrush);
-    button.BorderThickness({0, 0, 0, 0});
-    button.CornerRadius({8, 8, 8, 8});
-
-    wuxc::Grid row;
-    wuxc::ColumnDefinition iconColumn;
-    iconColumn.Width({34, wux::GridUnitType::Pixel});
-    wuxc::ColumnDefinition textColumn;
-    textColumn.Width({1, wux::GridUnitType::Star});
-    row.ColumnDefinitions().Append(iconColumn);
-    row.ColumnDefinitions().Append(textColumn);
-
-    wuxc::FontIcon icon;
-    icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
-    icon.Glyph(entry.file ? L"\uE8A5" : L"\uE71D");
-    icon.FontSize(18);
-    icon.Foreground(primaryBrush);
-    icon.VerticalAlignment(wux::VerticalAlignment::Center);
-    wuxc::Grid::SetColumn(icon, 0);
-    row.Children().Append(icon);
-
-    wuxc::StackPanel textStack;
-    wuxc::TextBlock title;
-    title.Text(entry.title);
-    title.Foreground(primaryBrush);
-    title.FontSize(13);
-    title.FontWeight(wut::FontWeights::SemiBold());
-    title.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    textStack.Children().Append(title);
-
-    if (!entry.subtitle.empty()) {
-        wuxc::TextBlock subtitle;
-        subtitle.Text(entry.subtitle);
-        subtitle.Foreground(secondaryBrush);
-        subtitle.FontSize(11);
-        subtitle.Margin({0, 2, 0, 0});
-        subtitle.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-        textStack.Children().Append(subtitle);
-    }
-
-    wuxc::Grid::SetColumn(textStack, 1);
-    row.Children().Append(textStack);
-    button.Content(row);
-
-    wuxa::AutomationProperties::SetName(
-        button, entry.file ? L"Recent file: " + entry.title
-                           : L"Common program: " + entry.title);
-    wuxc::ToolTipService::SetToolTip(
-        button, winrt::box_value(entry.command));
-
-    button.Click([entry](const wf::IInspectable&,
-                         const wux::RoutedEventArgs&) { Launch(entry); });
-    return button;
-}
-
-wuxc::Border CreateSectionCard(
-    const std::wstring& heading,
-    const std::vector<LaunchEntry>& entries,
-    bool dark,
-    double width,
-    size_t maximumEntries) {
-    auto primaryBrush = dark ? MakeBrush(0xFF, 0xF5, 0xF5, 0xF5)
-                             : MakeBrush(0xFF, 0x18, 0x18, 0x18);
-    auto secondaryBrush = dark ? MakeBrush(0xA8, 0xFF, 0xFF, 0xFF)
-                               : MakeBrush(0x98, 0x00, 0x00, 0x00);
-    auto cardBrush = dark ? MakeBrush(0xEC, 0x20, 0x20, 0x20)
-                          : MakeBrush(0xF2, 0xF4, 0xF4, 0xF4);
-    auto borderBrush = dark ? MakeBrush(0x25, 0xFF, 0xFF, 0xFF)
-                            : MakeBrush(0x20, 0x00, 0x00, 0x00);
-
-    wuxc::Border card;
-    card.Width(width);
-    card.Padding({12, 12, 12, 8});
-    card.Background(cardBrush);
-    card.BorderBrush(borderBrush);
-    card.BorderThickness({1, 1, 1, 1});
-    card.CornerRadius({12, 12, 12, 12});
-
-    wuxc::StackPanel content;
-    wuxc::TextBlock headingText;
-    headingText.Text(heading);
-    headingText.Foreground(primaryBrush);
-    headingText.FontSize(14);
-    headingText.FontWeight(wut::FontWeights::SemiBold());
-    headingText.Margin({2, 0, 2, 10});
-    content.Children().Append(headingText);
-
-    const size_t count = std::min(entries.size(), maximumEntries);
-    for (size_t index = 0; index < count; index++) {
-        content.Children().Append(
-            CreateEntryButton(entries[index], dark, 0));
-    }
-
-    if (!count) {
-        wuxc::TextBlock empty;
-        empty.Text(heading == L"Common programs"
-                       ? L"No ranked programs yet"
-                       : L"No matching recent files");
-        empty.Foreground(secondaryBrush);
-        empty.FontSize(12);
-        empty.TextWrapping(wux::TextWrapping::Wrap);
-        empty.Margin({4, 8, 4, 12});
-        content.Children().Append(empty);
-    }
-
-    card.Child(content);
-    return card;
-}
-
-struct NativeLayoutState {
-    wux::Thickness margin{};
-    wux::HorizontalAlignment horizontalAlignment =
-        wux::HorizontalAlignment::Stretch;
-    wux::VerticalAlignment verticalAlignment =
-        wux::VerticalAlignment::Stretch;
-    double maxWidth = std::numeric_limits<double>::infinity();
-};
-
-struct PanelRefreshState {
-    winrt::weak_ref<wuxc::Grid> root;
-    winrt::weak_ref<wux::FrameworkElement> panel;
-    ULONGLONG generation = 0;
-    bool refreshing = false;
-};
-
-struct AugmentedRoot {
-    winrt::weak_ref<wuxc::Grid> root;
-    winrt::weak_ref<wux::FrameworkElement> nativeBackground;
-    winrt::weak_ref<wux::FrameworkElement> panel;
-    winrt::event_token layoutUpdatedToken{};
-    std::shared_ptr<PanelRefreshState> refreshState;
-    NativeLayoutState original;
-};
-
-thread_local bool g_initializedForThread = false;
-thread_local std::vector<AugmentedRoot> g_augmentedRoots;
-
-std::optional<std::pair<wuxc::Grid, wux::FrameworkElement>>
-FindAltTabRootAndBackground(const wux::FrameworkElement& element) {
-    wux::DependencyObject current = element;
-    wuxc::Grid modalRoot{nullptr};
-    wux::FrameworkElement background{nullptr};
-    bool isAltTab = false;
-
-    for (int level = 0; current && level < 32; level++) {
-        auto frameworkElement = current.try_as<wux::FrameworkElement>();
-        if (frameworkElement) {
-            auto grid = frameworkElement.try_as<wuxc::Grid>();
-            if (grid && frameworkElement.Name() == L"ModalRootGrid") {
-                modalRoot = grid;
-            }
-            if (frameworkElement.Name() == L"BackgroundElement") {
-                background = frameworkElement;
-            }
-        }
-
-        try {
-            std::wstring className = winrt::get_class_name(current).c_str();
-            if (className.find(
-                    L"ComposableShell.Experiences.Switcher.AltTab") !=
-                std::wstring::npos) {
-                isAltTab = true;
-            }
-        } catch (...) {
-        }
-
-        current = wuxm::VisualTreeHelper::GetParent(current);
-    }
-
-    if (!isAltTab || !modalRoot || !background) {
-        return std::nullopt;
-    }
-    return std::make_pair(modalRoot, background);
-}
-
-bool IsAlreadyAugmented(const wuxc::Grid& root) {
-    for (auto iterator = g_augmentedRoots.begin();
-         iterator != g_augmentedRoots.end();) {
-        auto existingRoot = iterator->root.get();
-        if (!existingRoot) {
-            iterator = g_augmentedRoots.erase(iterator);
-            continue;
-        }
-        if (existingRoot == root) {
-            return true;
-        }
-        ++iterator;
-    }
-    return false;
-}
-
-void ApplyNativeLayout(
-    const EntrySnapshot& snapshot,
-    const wuxc::Grid& root,
-    const wux::FrameworkElement& nativeBackground) {
-    const double screenWidth =
-        root.ActualWidth() > 0 ? root.ActualWidth()
-                              : static_cast<double>(GetSystemMetrics(SM_CXSCREEN));
-
-    if (snapshot.settings.layout == LayoutMode::Columns) {
-        const double reserved =
-            2.0 * (snapshot.settings.panelWidth + 52.0);
-        nativeBackground.HorizontalAlignment(
-            wux::HorizontalAlignment::Center);
-        nativeBackground.VerticalAlignment(
-            wux::VerticalAlignment::Center);
-        nativeBackground.MaxWidth(
-            std::max(440.0, screenWidth - reserved));
-    } else if (snapshot.settings.layout == LayoutMode::Top) {
-        nativeBackground.HorizontalAlignment(
-            wux::HorizontalAlignment::Center);
-        nativeBackground.VerticalAlignment(
-            wux::VerticalAlignment::Bottom);
-        nativeBackground.Margin({36, 232, 36, 36});
-        nativeBackground.MaxWidth(std::max(520.0, screenWidth - 72.0));
-    } else {
-        nativeBackground.HorizontalAlignment(
-            wux::HorizontalAlignment::Center);
-        nativeBackground.VerticalAlignment(wux::VerticalAlignment::Top);
-        nativeBackground.Margin({36, 36, 36, 232});
-        nativeBackground.MaxWidth(std::max(520.0, screenWidth - 72.0));
-    }
-}
-
-wuxc::Grid BuildAugmentationPanel(const EntrySnapshot& snapshot,
-                                  const wuxc::Grid& root) {
-    bool dark = IsDarkTheme(root);
-    wuxc::Grid overlay;
-    overlay.Name(L"WindhawkAltTabPlusPanel");
-    overlay.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
-    overlay.VerticalAlignment(wux::VerticalAlignment::Stretch);
-    wuxc::Canvas::SetZIndex(overlay, 100);
-    wuxa::AutomationProperties::SetName(
-        overlay, L"Alt+Tab Plus shortcuts");
-
-    if (snapshot.settings.layout == LayoutMode::Columns) {
-        auto programs = CreateSectionCard(
-            L"Common programs", snapshot.programs, dark,
-            snapshot.settings.panelWidth, snapshot.programs.size());
-        programs.HorizontalAlignment(wux::HorizontalAlignment::Left);
-        programs.VerticalAlignment(wux::VerticalAlignment::Center);
-        programs.Margin({24, 24, 0, 24});
-        overlay.Children().Append(programs);
-
-        auto files = CreateSectionCard(
-            L"Recent files", snapshot.files, dark,
-            snapshot.settings.panelWidth, snapshot.files.size());
-        files.HorizontalAlignment(wux::HorizontalAlignment::Right);
-        files.VerticalAlignment(wux::VerticalAlignment::Center);
-        files.Margin({0, 24, 24, 24});
-        overlay.Children().Append(files);
-    } else {
-        wuxc::StackPanel strip;
-        strip.Orientation(wuxc::Orientation::Horizontal);
-        strip.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        strip.VerticalAlignment(
-            snapshot.settings.layout == LayoutMode::Top
-                ? wux::VerticalAlignment::Top
-                : wux::VerticalAlignment::Bottom);
-        strip.Margin({24, 24, 24, 24});
-
-        const double cardWidth =
-            std::clamp(root.ActualWidth() / 2.0 - 42.0, 260.0, 560.0);
-        const size_t stripCount = 3;
-
-        auto programs =
-            CreateSectionCard(L"Common programs", snapshot.programs, dark,
-                              cardWidth, stripCount);
-        programs.Margin({0, 0, 8, 0});
-        strip.Children().Append(programs);
-
-        auto files = CreateSectionCard(L"Recent files", snapshot.files, dark,
-                                       cardWidth, stripCount);
-        files.Margin({8, 0, 0, 0});
-        strip.Children().Append(files);
-
-        overlay.Children().Append(strip);
-    }
-
-    return overlay;
-}
-
-void RefreshPanelIfNeeded(
-    const std::shared_ptr<PanelRefreshState>& state) {
-    const ULONGLONG generation = g_entriesGeneration.load();
-    if (state->refreshing || state->generation == generation) {
-        return;
-    }
-
-    auto root = state->root.get();
-    if (!root) {
-        return;
-    }
-
-    state->refreshing = true;
-    try {
-        auto oldPanel = state->panel.get();
-        if (oldPanel) {
-            uint32_t index = 0;
-            if (root.Children().IndexOf(oldPanel, index)) {
-                root.Children().RemoveAt(index);
-            }
-        }
-
-        EntrySnapshot snapshot = GetEntrySnapshot();
-        auto newPanel = BuildAugmentationPanel(snapshot, root);
-        root.Children().Append(newPanel);
-        state->panel =
-            winrt::make_weak(newPanel.as<wux::FrameworkElement>());
-        state->generation = snapshot.generation;
-    } catch (...) {
-        Wh_Log(L"Failed to refresh Alt+Tab Plus panel: %08X",
-               winrt::to_hresult());
-    }
-    state->refreshing = false;
-}
-
-void AttachAugmentation(const wux::FrameworkElement& switchItemList) {
-    auto rootAndBackground =
-        FindAltTabRootAndBackground(switchItemList);
-    if (!rootAndBackground) {
-        return;
-    }
-
-    auto [root, nativeBackground] = *rootAndBackground;
-    if (IsAlreadyAugmented(root)) {
-        return;
-    }
-
-    EntrySnapshot snapshot = GetEntrySnapshot();
-    NativeLayoutState original{
-        .margin = nativeBackground.Margin(),
-        .horizontalAlignment = nativeBackground.HorizontalAlignment(),
-        .verticalAlignment = nativeBackground.VerticalAlignment(),
-        .maxWidth = nativeBackground.MaxWidth(),
-    };
-
-    ApplyNativeLayout(snapshot, root, nativeBackground);
-    wuxc::Grid panel = BuildAugmentationPanel(snapshot, root);
-    root.Children().Append(panel);
-
-    auto refreshState = std::make_shared<PanelRefreshState>();
-    refreshState->root = winrt::make_weak(root);
-    refreshState->panel =
-        winrt::make_weak(panel.as<wux::FrameworkElement>());
-    refreshState->generation = snapshot.generation;
-    winrt::event_token layoutUpdatedToken = root.LayoutUpdated(
-        [refreshState](const wf::IInspectable&,
-                       const wf::IInspectable&) {
-            RefreshPanelIfNeeded(refreshState);
-        });
-
-    g_augmentedRoots.push_back({
-        .root = winrt::make_weak(root),
-        .nativeBackground = winrt::make_weak(nativeBackground),
-        .panel = winrt::make_weak(panel.as<wux::FrameworkElement>()),
-        .layoutUpdatedToken = layoutUpdatedToken,
-        .refreshState = std::move(refreshState),
-        .original = original,
-    });
-    g_xamlPanelCount++;
-
-    Wh_Log(L"Attached Alt+Tab Plus panel");
-}
-
-void RemoveAugmentationsForCurrentThread() {
-    const int panelCount =
-        static_cast<int>(g_augmentedRoots.size());
-    for (const auto& augmented : g_augmentedRoots) {
-        try {
-            auto root = augmented.root.get();
-            if (root && augmented.layoutUpdatedToken.value) {
-                root.LayoutUpdated(augmented.layoutUpdatedToken);
-            }
-
-            auto panel = augmented.refreshState
-                             ? augmented.refreshState->panel.get()
-                             : augmented.panel.get();
-            if (root && panel) {
-                uint32_t index = 0;
-                if (root.Children().IndexOf(panel, index)) {
-                    root.Children().RemoveAt(index);
-                }
-            }
-
-            auto nativeBackground = augmented.nativeBackground.get();
-            if (nativeBackground) {
-                nativeBackground.Margin(augmented.original.margin);
-                nativeBackground.HorizontalAlignment(
-                    augmented.original.horizontalAlignment);
-                nativeBackground.VerticalAlignment(
-                    augmented.original.verticalAlignment);
-                nativeBackground.MaxWidth(augmented.original.maxWidth);
-            }
-        } catch (...) {
-            Wh_Log(L"Failed to remove an Alt+Tab Plus panel: %08X",
-                   winrt::to_hresult());
-        }
-    }
-    g_augmentedRoots.clear();
-    if (panelCount) {
-        g_xamlPanelCount.fetch_sub(panelCount);
-    }
-}
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle), &module);
-    return module;
-}
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-   public:
-    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : xamlDiagnostics_(site.as<IXamlDiagnostics>()) {
-        HANDLE thread = CreateThread(
-            nullptr, 0,
-            [](LPVOID parameter) -> DWORD {
-                auto watcher =
-                    static_cast<VisualTreeWatcher*>(parameter);
-                HRESULT result =
-                    watcher->xamlDiagnostics_.as<IVisualTreeService3>()
-                        ->AdviseVisualTreeChange(watcher);
-                watcher->Release();
-                if (FAILED(result)) {
-                    Wh_Log(L"AdviseVisualTreeChange failed: %08X", result);
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (thread) {
-            AddRef();
-            CloseHandle(thread);
-        }
-    }
-
-    void Unadvise() {
-        HRESULT result =
-            xamlDiagnostics_.as<IVisualTreeService3>()
-                ->UnadviseVisualTreeChange(this);
-        if (FAILED(result)) {
-            Wh_Log(L"UnadviseVisualTreeChange failed: %08X", result);
-        }
-    }
-
-   private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
-        ParentChildRelation,
-        VisualElement element,
-        VisualMutationType mutationType) override try {
-        if (mutationType != Add || !g_initializedForThread ||
-            !element.Type ||
-            !wcsstr(element.Type, L"SwitchItemList")) {
-            return S_OK;
-        }
-
-        wf::IInspectable inspectable;
-        winrt::check_hresult(
-            xamlDiagnostics_->GetIInspectableFromHandle(
-                element.Handle,
-                reinterpret_cast<::IInspectable**>(
-                    winrt::put_abi(inspectable))));
-        auto frameworkElement =
-            inspectable.try_as<wux::FrameworkElement>();
-        if (frameworkElement) {
-            AttachAugmentation(frameworkElement);
-        }
-        return S_OK;
-    } catch (...) {
-        Wh_Log(L"Visual tree callback failed: %08X", winrt::to_hresult());
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(
-        InstanceHandle,
-        VisualElementState,
-        LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> xamlDiagnostics_;
-};
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {D56AC3EE-3764-4EB0-AEB2-B52A93D1392D}
-static constexpr CLSID CLSID_AltTabPlusTap = {
-    0xd56ac3ee,
-    0x3764,
-    0x4eb0,
-    {0xae, 0xb2, 0xb5, 0x2a, 0x93, 0xd1, 0x39, 0x2d}};
-
-class AltTabPlusTap
-    : public winrt::implements<AltTabPlusTap,
-                               IObjectWithSite,
-                               winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
-        if (g_visualTreeWatcher) {
-            g_visualTreeWatcher->Unadvise();
-            g_visualTreeWatcher = nullptr;
-        }
-
-        site_.copy_from(site);
-        if (site_) {
-            FreeLibrary(GetCurrentModuleHandle());
-            g_visualTreeWatcher =
-                winrt::make_self<VisualTreeWatcher>(site_);
-        }
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID iid,
-                                      void** result) noexcept override {
-        return site_.as(iid, result);
-    }
-
-   private:
-    winrt::com_ptr<IUnknown> site_;
-};
-
-template <typename T>
-class SimpleFactory
-    : public winrt::implements<SimpleFactory<T>,
-                               IClassFactory,
-                               winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE CreateInstance(
-        IUnknown* outer,
-        REFIID iid,
-        void** result) override try {
-        if (outer) {
-            return CLASS_E_NOAGGREGATION;
-        }
-        *result = nullptr;
-        return winrt::make<T>().as(iid, result);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
-        return S_OK;
-    }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport) STDAPI DllGetClassObject(REFCLSID clsid,
-                                               REFIID iid,
-                                               void** result) try {
-    if (clsid != CLSID_AltTabPlusTap) {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-    *result = nullptr;
-    return winrt::make<SimpleFactory<AltTabPlusTap>>().as(iid, result);
-} catch (...) {
-    return winrt::to_hresult();
-}
-
-__declspec(dllexport) STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
-
-#pragma clang diagnostic pop
-
-std::atomic<bool> g_tapInitialized = false;
-bool g_inInjectTap = false;
-
-using InitializeXamlDiagnosticsEx_t =
-    decltype(&InitializeXamlDiagnosticsEx);
-
-HRESULT InjectTap() noexcept {
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR modulePath[MAX_PATH];
-    DWORD length =
-        GetModuleFileNameW(module, modulePath, ARRAYSIZE(modulePath));
-    if (!length || length == ARRAYSIZE(modulePath)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    HMODULE xamlModule = LoadLibraryExW(
-        L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!xamlModule) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    auto initialize = reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
-        GetProcAddress(xamlModule, "InitializeXamlDiagnosticsEx"));
-    if (!initialize) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    g_inInjectTap = true;
-    HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-    for (int index = 1; index <= 10000; index++) {
-        WCHAR connectionName[64];
-        _snwprintf_s(connectionName, _TRUNCATE,
-                     L"VisualDiagConnection%d", index);
-        result = initialize(connectionName, GetCurrentProcessId(), L"",
-                            modulePath, CLSID_AltTabPlusTap, nullptr);
-        if (result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
-        }
-    }
-    g_inInjectTap = false;
-    return result;
-}
-
-void InitializeForCurrentThread() {
-    g_initializedForThread = true;
-}
-
-void UninitializeForCurrentThread() {
-    RemoveAugmentationsForCurrentThread();
-    g_initializedForThread = false;
-}
-
-void InitializeTap() {
-    if (g_tapInitialized.exchange(true)) {
-        return;
-    }
-
-    HRESULT result = InjectTap();
-    if (FAILED(result)) {
-        g_tapInitialized = false;
-        Wh_Log(L"InitializeXamlDiagnosticsEx failed: %08X", result);
-    }
-}
-
-void UninitializeTap() {
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->Unadvise();
-        g_visualTreeWatcher = nullptr;
-    }
-    g_tapInitialized = false;
-}
-
-using RunFromWindowThreadProc =
-    void(WINAPI*)(void* parameter);
-
-bool RunFromWindowThread(HWND window,
-                         RunFromWindowThreadProc procedure,
-                         void* procedureParameter) {
-    static const UINT runMessage = RegisterWindowMessageW(
-        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RunParameter {
-        RunFromWindowThreadProc procedure;
-        void* parameter;
-    };
-
-    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId) {
-        return false;
-    }
-    if (threadId == GetCurrentThreadId()) {
-        procedure(procedureParameter);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_CALLWNDPROC,
-        [](int code, WPARAM, LPARAM parameter) -> LRESULT {
-            if (code == HC_ACTION) {
-                const auto* message =
-                    reinterpret_cast<const CWPSTRUCT*>(parameter);
-                if (message->message == runMessage) {
-                    auto* run = reinterpret_cast<RunParameter*>(
-                        message->lParam);
-                    run->procedure(run->parameter);
-                }
-            }
-            return CallNextHookEx(nullptr, code, 0, parameter);
-        },
-        nullptr, threadId);
-    if (!hook) {
-        return false;
-    }
-
-    RunParameter parameter{procedure, procedureParameter};
-    SendMessageW(window, runMessage, 0,
-                 reinterpret_cast<LPARAM>(&parameter));
-    UnhookWindowsHookEx(hook);
-    return true;
 }
 
 bool IsXamlHostWindow(HWND window, LPCWSTR suppliedClassName) {
@@ -2820,11 +2391,6 @@ void OnWindowCreated(HWND window, LPCWSTR suppliedClassName) {
         g_nativeAltTabHostWindow = window;
         ConstrainNativeAltTabWindow();
     }
-    if (CopySettings().renderMode != RenderMode::Xaml) {
-        return;
-    }
-    InitializeForCurrentThread();
-    InitializeTap();
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -3025,23 +2591,6 @@ void ConstrainNativeAltTabWindow() {
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER);
 }
 
-void InitializeExistingXamlHosts() {
-    if (CopySettings().renderMode != RenderMode::Xaml) {
-        return;
-    }
-
-    bool foundHost = false;
-    for (HWND window : GetXamlHostWindows()) {
-        foundHost = true;
-        RunFromWindowThread(
-            window,
-            [](void*) { InitializeForCurrentThread(); }, nullptr);
-    }
-    if (foundHost) {
-        InitializeTap();
-    }
-}
-
 using XamlAltTabViewHost_Show_t =
     HRESULT(WINAPI*)(void* instance,
                      void* immersiveMonitor,
@@ -3049,13 +2598,20 @@ using XamlAltTabViewHost_Show_t =
                      void* initialView);
 XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original;
 
+struct AltTabRect {
+    float X;
+    float Y;
+    float Width;
+    float Height;
+};
+
 using ITaskGroupWindowInformation_Position_t =
-    HRESULT(WINAPI*)(void* instance, wf::Rect* rect);
+    HRESULT(WINAPI*)(void* instance, AltTabRect* rect);
 ITaskGroupWindowInformation_Position_t
     ITaskGroupWindowInformation_Position_Original;
 
-bool GetAdjustedAltTabRect(const wf::Rect& original,
-                           wf::Rect* adjusted) {
+bool GetAdjustedAltTabRect(const AltTabRect& original,
+                           AltTabRect* adjusted) {
     RECT corridor{};
     if (!GetAdjustedAltTabCorridor(&corridor)) {
         return false;
@@ -3070,14 +2626,14 @@ bool GetAdjustedAltTabRect(const wf::Rect& original,
 
 HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
     void* instance,
-    wf::Rect* rect) {
+    AltTabRect* rect) {
     if (g_altTabShowThreadId.load() != GetCurrentThreadId()) {
         return ITaskGroupWindowInformation_Position_Original(instance,
                                                               rect);
     }
 
     g_altTabShowThreadId = 0;
-    wf::Rect adjusted{};
+    AltTabRect adjusted{};
     if (rect && GetAdjustedAltTabRect(*rect, &adjusted)) {
         return ITaskGroupWindowInformation_Position_Original(
             instance, &adjusted);
@@ -3110,8 +2666,9 @@ bool HookAltTabShow() {
         Wh_Log(L"Couldn't load twinui.pcshell.dll: %u", GetLastError());
         return false;
     }
-// twinui.pcshell.dll
-WindhawkUtils::SYMBOL_HOOK hooks[] = {
+
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &XamlAltTabViewHost_Show_Original,
@@ -3121,20 +2678,26 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation::Position(struct winrt::Windows::Foundation::Rect const &)const )",
                 LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation::Position(struct winrt::Windows::Foundation::Rect const &)const)",
+                // The space before the raw-string delimiter is significant.
+                LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )",
                 LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const)",
             },
             &ITaskGroupWindowInformation_Position_Original,
             ITaskGroupWindowInformation_Position_Hook,
+            // Host-window resizing remains the fallback on builds where no
+            // known Position symbol is published.
             true,
         },
     };
-if (!WindhawkUtils::HookSymbols(twinui, hooks,
-                                ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(twinui, hooks,
+                                    ARRAYSIZE(hooks))) {
         Wh_Log(L"Couldn't hook XamlAltTabViewHost::Show");
         return false;
     }
     if (!ITaskGroupWindowInformation_Position_Original) {
         Wh_Log(L"Native thumbnail adjustment isn't available on this Windows build");
+    } else {
+        Wh_Log(L"Native thumbnail adjustment hook is available");
     }
     return true;
 }
@@ -3143,9 +2706,13 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing");
     LoadSettings();
     LoadUsageRecords();
+    if (!HookAltTabShow()) {
+        Wh_Log(L"Alt+Tab hook isn't available; initialization aborted");
+        return FALSE;
+    }
+
     StartWorker();
     StartCompanionThread();
-    HookAltTabShow();
 
     WindhawkUtils::SetFunctionHook(
         CreateWindowExW, CreateWindowExW_Hook,
@@ -3176,22 +2743,11 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    InitializeExistingXamlHosts();
-}
-
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Reloading settings");
     StopWorker();
-    UninitializeTap();
     if (g_companionThreadId) {
         PostThreadMessageW(g_companionThreadId, WM_ALT_TAB_PLUS_HIDE, 0, 0);
-    }
-
-    for (HWND window : GetXamlHostWindows()) {
-        RunFromWindowThread(
-            window,
-            [](void*) { UninitializeForCurrentThread(); }, nullptr);
     }
 
     LoadSettings();
@@ -3202,18 +2758,10 @@ void Wh_ModSettingsChanged() {
         g_recentFileGroups.clear();
     }
     StartWorker();
-    InitializeExistingXamlHosts();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing");
     StopWorker();
-    UninitializeTap();
     StopCompanionThread();
-
-    for (HWND window : GetXamlHostWindows()) {
-        RunFromWindowThread(
-            window,
-            [](void*) { UninitializeForCurrentThread(); }, nullptr);
-    }
 }
