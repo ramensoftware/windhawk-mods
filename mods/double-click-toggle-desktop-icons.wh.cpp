@@ -1,12 +1,20 @@
 // ==WindhawkMod==
-// @id              double-click-toggle-desktop-icons-fork
-// @name            Double Click to Toggle Desktop Icons - Fork
+// @id              double-click-toggle-desktop-icons
+// @name            Double Click to Toggle Desktop Icons
 // @description     Hides or shows desktop icons when double-clicking on an empty space on the desktop.
 // @version         1.2
-// @author          [YAS]
-// @github          [YAS221D]
+// @author          YAS221D
 // @include         explorer.exe
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+# Double Click to Toggle Desktop Icons
+
+Hides or shows your desktop icons when you double-click on any empty space on the desktop. 
+
+- **Smart Hit Testing:** Double-clicking on actual files, folders, or shortcut icons will still open them normally.
+- **Bi-directional:** Works seamlessly both ways—hiding the icons and bringing them back on a double-click.
+// ==WindhawkModReadme==
 
 #include <windows.h>
 #include <windowsx.h>
@@ -15,7 +23,6 @@
 
 HHOOK g_hMouseHook = NULL;
 
-// Helper to find the desktop background layer dynamically
 HWND FindDesktopDefView() {
     HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
     HWND hDefView = FindWindowExW(hProgman, NULL, L"SHELLDLL_DefView", NULL);
@@ -29,14 +36,12 @@ HWND FindDesktopDefView() {
     return hDefView;
 }
 
-// Global thread hook to catch all mouse events before Windows processes them
 LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         MOUSEHOOKSTRUCT* mhs = (MOUSEHOOKSTRUCT*)lParam;
         wchar_t className[256];
         GetClassNameW(mhs->hwnd, className, 256);
 
-        // 1. NATIVE DOUBLE CLICK (Usually fires when icons are visible)
         if (wParam == WM_LBUTTONDBLCLK) {
             if (wcscmp(className, L"SysListView32") == 0) {
                 HWND hParent = GetParent(mhs->hwnd);
@@ -49,13 +54,12 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     lvhti.pt = pt;
                     int index = (int)SendMessage(mhs->hwnd, LVM_HITTEST, 0, (LPARAM)&lvhti);
                     
-                    if (index == -1) { // -1 means you clicked empty space
+                    if (index == -1) {
                         SendMessage(hParent, WM_COMMAND, 0x7402, 0);
-                        return 1; // Block default Windows action
+                        return 1;
                     }
                 }
             }
-            // Just in case Windows natively allows a double click on the wallpaper layer
             else if (wcscmp(className, L"WorkerW") == 0 || 
                      wcscmp(className, L"Progman") == 0 || 
                      wcscmp(className, L"SHELLDLL_DefView") == 0) {
@@ -64,8 +68,6 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 return 1;
             }
         } 
-        
-        // 2. MANUAL DOUBLE CLICK (Catches clicks when icons are hidden and Windows stops sending Double Clicks)
         else if (wParam == WM_LBUTTONDOWN) {
             if (wcscmp(className, L"WorkerW") == 0 || 
                 wcscmp(className, L"Progman") == 0 || 
@@ -77,25 +79,21 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 DWORD currentTime = GetTickCount();
                 POINT currentPt = mhs->pt;
                 
-                // If clicked within the Windows double-click time limit...
                 if (currentTime - lastClickTime <= GetDoubleClickTime()) {
                     int cx = GetSystemMetrics(SM_CXDOUBLECLK) / 2;
                     int cy = GetSystemMetrics(SM_CYDOUBLECLK) / 2;
                     
-                    // ...and the mouse didn't move too far between the two clicks
                     if (abs(currentPt.x - lastClickPt.x) <= cx && 
                         abs(currentPt.y - lastClickPt.y) <= cy) {
                         
-                        // We caught a manual double click! Toggle the icons back on.
                         HWND hDefView = FindDesktopDefView();
                         if (hDefView) SendMessage(hDefView, WM_COMMAND, 0x7402, 0);
                         
-                        lastClickTime = 0; // Reset to prevent rapid clicking glitches
-                        return 1; // Block default Windows action
+                        lastClickTime = 0;
+                        return 1;
                     }
                 }
                 
-                // Save click info for the next check
                 lastClickTime = currentTime;
                 lastClickPt = currentPt;
             }
@@ -107,7 +105,6 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Double Click Toggle Desktop Icons v1.2...");
     
-    // Find the desktop and hook the specific thread handling it
     HWND hDefView = FindDesktopDefView();
     if (hDefView) {
         DWORD threadId = GetWindowThreadProcessId(hDefView, NULL);
@@ -122,7 +119,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    // Remove the hook cleanly when disabling the mod
     if (g_hMouseHook) {
         UnhookWindowsHookEx(g_hMouseHook);
     }
