@@ -64,7 +64,7 @@ const PRIVILEGED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
 // The flow is limited to these pull requests while it's being tried out on a
 // few of them. Empty the list to apply it to every pull request.
-const ENABLED_PR_NUMBERS = [4776, 4797, 4903, 4909, 4927, 4935];
+const ENABLED_PR_NUMBERS = [4776, 4797, 4903, 4909, 4914, 4927, 4935];
 
 /**
  * @param {number} prNumber
