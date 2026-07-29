@@ -657,6 +657,21 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     auto bg = FindChildByName(iconPanel, L"BackgroundElement");
     FrameworkElement anchor = bg ? bg : iconPanel;
 
+    // Suppress the native background at the composition level. A plain
+    // Opacity(0) is a LOCAL value, and the RunningIndicatorStates transition
+    // storyboards hold ANIMATED values on BackgroundElement — which outrank
+    // local values in XAML's precedence — letting the native pill reappear
+    // on top of the blob (seen on cross-monitor activations, where the
+    // existing button transitions with storyboards; freshly created buttons
+    // apply their initial state without transitions, hence the asymmetry).
+    // The hand-off visual's IsVisible flag is outside the XAML property
+    // system, so no storyboard can override it.
+    if (bg) {
+        try {
+            ElementCompositionPreview::GetElementVisual(bg).IsVisible(!isActive);
+        } catch (...) {}
+    }
+
     auto entry = FindOrCreateEntry(button);
 
     auto grid = entry->grid.get();
@@ -810,11 +825,6 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             auto currentState = group ? group.CurrentState() : nullptr;
             bool isActive = (currentState && currentState.Name() == L"ActiveRunningIndicator");
 
-            auto bgElement = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
-            if (bgElement) {
-                bgElement.Opacity(isActive ? 0.0 : 1.0);
-            }
-
             EnsureBlobOnButton(button, isActive, localSettings);
         } catch (...) {
             Wh_Log(L"Exception in UpdateVisualStates hook");
@@ -929,7 +939,10 @@ void Wh_ModBeforeUninit() {
                 if (auto btn = entry->button.get()) {
                     auto iconPanel = FindChildByName(btn, L"IconPanel");
                     auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
-                    if (bg) bg.Opacity(1.0);
+                    if (bg) {
+                        try { ElementCompositionPreview::GetElementVisual(bg).IsVisible(true); } catch (...) {}
+                        bg.Opacity(1.0);
+                    }
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
         };
