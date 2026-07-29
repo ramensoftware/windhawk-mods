@@ -2692,16 +2692,19 @@ std::wstring FormatDaylightDuration(int sunriseMinute, int sunsetMinute) {
 wuxc::Viewbox MakeSunHalfIcon(bool sunrise,
                               double size,
                               wuxm::Brush const& brush) {
+    // Tight canvas so Viewbox centers the glyph with adjacent text. A tall
+    // 16x16 canvas left empty space under the sunrise arc and made it sit high.
     wuxc::Canvas canvas;
     canvas.Width(16);
-    canvas.Height(16);
+    canvas.Height(10);
     canvas.IsHitTestVisible(false);
 
     try {
-        // Sunrise: upper semicircle on a horizon. Sunset: flipped (lower).
+        // Sunrise: upper semicircle on a horizon. Sunset: lower (flipped).
+        // Both packed into the same 16x10 box so optical centers match.
         std::wstring data =
-            sunrise ? L"M2,10 A6,6 0 0 1 14,10 Z M1.5,10.5 L14.5,10.5"
-                    : L"M2,6 A6,6 0 0 0 14,6 Z M1.5,5.5 L14.5,5.5";
+            sunrise ? L"M2,8 A6,6 0 0 1 14,8 Z M1.5,8.5 L14.5,8.5"
+                    : L"M2,2 A6,6 0 0 0 14,2 Z M1.5,1.5 L14.5,1.5";
         std::wstring xaml =
             L"<Path xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
             L"presentation' Data='";
@@ -2719,8 +2722,9 @@ wuxc::Viewbox MakeSunHalfIcon(bool sunrise,
 
     wuxc::Viewbox viewbox;
     viewbox.Width(size);
-    viewbox.Height(size);
+    viewbox.Height(size * 0.72);
     viewbox.Stretch(wuxm::Stretch::Uniform);
+    viewbox.VerticalAlignment(wux::VerticalAlignment::Center);
     viewbox.Child(canvas);
     viewbox.IsHitTestVisible(false);
     return viewbox;
@@ -2835,6 +2839,7 @@ wux::FrameworkElement BuildDaylightRoot(DaylightUiControls& ui) {
     wuxc::TextBlock sunriseText;
     sunriseText.FontSize(12);
     sunriseText.FontFamily(wuxm::FontFamily(L"Segoe UI"));
+    sunriseText.VerticalAlignment(wux::VerticalAlignment::Center);
     sunriseText.Text(L"--:--");
     ui.sunriseText = sunriseText;
     sunriseStack.Children().Append(sunriseText);
@@ -2859,6 +2864,7 @@ wux::FrameworkElement BuildDaylightRoot(DaylightUiControls& ui) {
     wuxc::TextBlock sunsetText;
     sunsetText.FontSize(12);
     sunsetText.FontFamily(wuxm::FontFamily(L"Segoe UI"));
+    sunsetText.VerticalAlignment(wux::VerticalAlignment::Center);
     sunsetText.Text(L"--:--");
     ui.sunsetText = sunsetText;
     sunsetStack.Children().Append(MakeSunHalfIcon(false, 14, primary));
@@ -3249,7 +3255,15 @@ void HideCalendarClocksContent(wuxc::Grid const& section,
 void EnsureCalendarStructuralVisible(wuxc::Grid const& section) {
     // Repair calendar chrome if an earlier same-row hide (or shell race)
     // collapsed the month ScrollViewer / header.
+    //
+    // Do NOT force CalendarHeaderMinimizedOverlay visible — that border is
+    // only for the collapsed-calendar state. Showing it while expanded paints
+    // a wrong solid plate over the clock/daylight header until the user
+    // toggles expand/collapse (which restores the shell's real visibility).
     try {
+        wux::UIElement calendarScroll{nullptr};
+        wux::UIElement minimizedOverlay{nullptr};
+
         for (auto const& child : section.Children()) {
             auto fe = child.try_as<wux::FrameworkElement>();
             if (!fe) {
@@ -3259,14 +3273,20 @@ void EnsureCalendarStructuralVisible(wuxc::Grid const& section) {
             if (IsWorldClocksElementName(name) || IsDaylightRootName(name)) {
                 continue;
             }
+            if (name == L"CalendarHeaderMinimizedOverlay") {
+                minimizedOverlay = child.try_as<wux::UIElement>();
+                continue;
+            }
             if (name != L"CalendarControlScrollViewer" &&
                 name != L"CalendarHeader" &&
-                name != L"CalendarHeaderMinimizedOverlay" &&
                 name != L"ExpandCollapseButton" &&
                 name != L"FocusSessionControl") {
                 continue;
             }
             if (auto ui = child.try_as<wux::UIElement>()) {
+                if (name == L"CalendarControlScrollViewer") {
+                    calendarScroll = ui;
+                }
                 if (ui.Visibility() != wux::Visibility::Visible) {
                     ui.Visibility(wux::Visibility::Visible);
                 }
@@ -3283,6 +3303,15 @@ void EnsureCalendarStructuralVisible(wuxc::Grid const& section) {
                     fe.ClearValue(wux::FrameworkElement::MinHeightProperty());
                     fe.ClearValue(wux::FrameworkElement::MaxHeightProperty());
                 }
+            } catch (...) {
+            }
+        }
+
+        // Month grid visible ⇒ header must not use the minimized overlay plate.
+        if (calendarScroll && minimizedOverlay &&
+            calendarScroll.Visibility() == wux::Visibility::Visible) {
+            try {
+                minimizedOverlay.Visibility(wux::Visibility::Collapsed);
             } catch (...) {
             }
         }
