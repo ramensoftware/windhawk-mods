@@ -1,0 +1,990 @@
+// ==WindhawkMod==
+// @id              taskbar-blob-shape
+// @name            Taskbar Blob Shape
+// @description     Injects a customizable blob shape behind active taskbar items.
+// @version         0.2.0
+// @author          Deen-0x
+// @github          https://github.com/Deen-0x
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Taskbar Blob Shape
+
+Adds a blob shape behind active taskbar buttons.
+
+Every taskbar button gets its own blob shape, shown or hidden as the
+button's running indicator state changes. The shapes are hosted in the
+taskbar's RootGrid (above the task list's clipping region, so the flares
+render fully) and each one is glued to its button with a composition
+expression, so it follows the button through reordering, reflow, and
+animations on the render thread.
+
+The blob shape is a rounded rectangle whose top extends upward and flares
+outward with concave (outside) corner radii, ending in a flat top edge:
+
+- **Width / Height**: the main area of the blob shape ('auto' matches the
+  button's background element). The blob shape is anchored so this area is
+  centered on it.
+- **Top corner radius**: the radius of the concave top flares. The flares
+  are circular quarter arcs, so this also sets how far the blob shape
+  extends upward and outward. Total size is
+  (Width + 2*TopRadius) x (Height + TopRadius).
+- **Bottom corner radius**: the convex bottom corners of the blob shape.
+
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- BlobShape:
+  - Dimensions: 'auto, auto'
+    $name: Custom blob shape dimensions (Width, Height)
+    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32').
+  - Margins: '0, 0, 0, 0'
+    $name: Custom blob shape margin (Left, Top, Right, Bottom)
+    $description: Offset the blob shape (e.g. '0, 4, 0, 0' pushes it down 4px). Leave empty to disable.
+  - BottomRadius: '4.0'
+    $name: Bottom corner radius
+    $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
+  - TopRadius: '6.0'
+    $name: Top corner radius
+    $description: The radius of the concave top flare corners. The blob shape extends upward and sideways by this amount. Set to 0 to disable the flare.
+  $name: Blob Shape Settings
+- Colors:
+  - BgOpacity: '1.0, 1.0'
+    $name: Background opacity (Light, Dark)
+    $description: Multiplier for the background fill opacity (e.g. 0.8, 0.5). Set to 1.0 to keep original alpha.
+  - CustomColor: ""
+    $name: Custom blob shape color
+    $description: Hex color code. Supports multi-color gradients (e.g. '#FF0000, #00FF00') and light|dark separation (e.g. 'light1, light2 | dark1, dark2'). Leave empty to use the system accent color.
+  $name: Color Settings
+*/
+// ==/WindhawkModSettings==
+
+#include <thread>
+#include <windhawk_utils.h>
+#undef GetCurrentTime
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/base.h>
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <vector>
+#include <optional>
+#include <cmath>
+#include <memory>
+
+struct Settings {
+    double BottomRadius = 4.0;
+    double TopRadius = 6.0;
+
+    double CustomWidth = -1.0;
+    double CustomHeight = -1.0;
+    winrt::Windows::UI::Xaml::Thickness CustomMargin = {0,0,0,0};
+    bool HasCustomMargin = false;
+
+    double BgOpacityLight = 1.0;
+    double BgOpacityDark = 1.0;
+
+    std::vector<winrt::Windows::UI::Color> ParsedLightColor;
+    std::vector<winrt::Windows::UI::Color> ParsedDarkColor;
+} g_settings;
+
+std::mutex g_settingsMutex;
+
+// One entry per taskbar button that received a blob shape. The blob lives
+// inside the button's IconPanel, so the XAML tree keeps it positioned; the
+// entry only caches lookups and last-applied parameters.
+struct BlobEntry {
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> button;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Path> blobShape;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> anchor;
+    winrt::event_token sizeToken{};
+
+    // Whether the blob's Translation is glued to its button's offset chain,
+    // and the adjustment constant it was bound with. The blob stays hidden
+    // until the binding succeeds.
+    bool bound = false;
+    float boundAdjX = -1e9f, boundAdjY = -1e9f;
+
+    // Last applied geometry, so state changes (hover, press) don't rebuild.
+    double geoW = -1.0, geoH = -1.0, geoRt = -1.0, geoRb = -1.0;
+};
+std::mutex g_blobEntriesMutex;
+std::vector<std::shared_ptr<BlobEntry>>* g_blobEntries = new std::vector<std::shared_ptr<BlobEntry>>();
+std::atomic<bool> g_unloading{false};
+
+std::atomic<bool> g_taskbarViewDllLoaded{false};
+HMODULE g_taskbarViewModule = nullptr;
+
+std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring_view hexView) {
+    if (hexView.empty()) return std::nullopt;
+    std::wstring hex(hexView);
+    hex.erase(0, hex.find_first_not_of(L" \t\r\n"));
+    if (hex.empty()) return std::nullopt;
+    hex.erase(hex.find_last_not_of(L" \t\r\n") + 1);
+    if (hex[0] == L'#') hex.erase(0, 1);
+    if (hex.length() == 6) hex = L"FF" + hex;
+    if (hex.length() != 8) return std::nullopt;
+    try {
+        uint32_t val = std::stoul(hex, nullptr, 16);
+        return winrt::Windows::UI::Color{
+            (uint8_t)((val >> 24) & 0xFF),
+            (uint8_t)((val >> 16) & 0xFF),
+            (uint8_t)((val >> 8) & 0xFF),
+            (uint8_t)(val & 0xFF)
+        };
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+void ParseDoublePair(PCWSTR str, double& outLight, double& outDark, double defaultVal = 1.0) {
+    outLight = defaultVal; outDark = defaultVal;
+    if (!str || !str[0]) return;
+    std::wstring ws(str);
+    size_t comma = ws.find(L',');
+    if (comma != std::wstring::npos) {
+        try { outLight = std::stod(ws.substr(0, comma)); } catch (...) {}
+        try { outDark = std::stod(ws.substr(comma + 1)); } catch (...) {}
+    } else {
+        try {
+            outLight = std::stod(ws);
+            outDark = outLight;
+        } catch (...) {}
+    }
+}
+
+double ParseDouble(PCWSTR str, double defaultVal, double minVal = 0.0) {
+    if (!str || !str[0]) return defaultVal;
+    try {
+        double val = std::stod(str);
+        if (std::isnan(val) || val < minVal) return defaultVal;
+        return val;
+    } catch (...) {
+        return defaultVal;
+    }
+}
+
+void ParseThickness(PCWSTR str, winrt::Windows::UI::Xaml::Thickness& outThickness) {
+    double outL = 0.0, outT = 0.0, outR = 0.0, outB = 0.0;
+    outThickness = winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, 0, 0);
+    if (!str) return;
+    std::wstring ws(str);
+    if (ws.empty()) return;
+
+    std::vector<double> vals;
+    size_t pos = 0;
+    while (pos < ws.length()) {
+        while (pos < ws.length() && (ws[pos] == L' ' || ws[pos] == L',')) pos++;
+        if (pos >= ws.length()) break;
+        size_t nextComma = ws.find(L',', pos);
+        if (nextComma == std::wstring::npos) nextComma = ws.length();
+        try {
+            double val = std::stod(ws.substr(pos, nextComma - pos));
+            if (std::isnan(val)) val = 0.0;
+            vals.push_back(val);
+        } catch (...) {}
+        pos = nextComma + 1;
+    }
+
+    if (vals.size() == 1) {
+        outL = outT = outR = outB = vals[0];
+    } else if (vals.size() == 2) {
+        outT = outB = vals[0];
+        outL = outR = vals[1];
+    } else if (vals.size() >= 4) {
+        outL = vals[0]; outT = vals[1]; outR = vals[2]; outB = vals[3];
+    } else if (vals.size() > 0) {
+        outL = outT = outR = outB = vals[0];
+    }
+
+    outThickness = winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(outL, outT, outR, outB);
+}
+
+void ParseGradientColorPair(PCWSTR str, std::vector<winrt::Windows::UI::Color>& light, std::vector<winrt::Windows::UI::Color>& dark) {
+    light.clear(); dark.clear();
+    if (!str || !str[0]) return;
+    std::wstring ws(str);
+
+    size_t pipe = ws.find(L'|');
+    std::wstring lightStr = (pipe != std::wstring::npos) ? ws.substr(0, pipe) : ws;
+    std::wstring darkStr = (pipe != std::wstring::npos) ? ws.substr(pipe + 1) : ws;
+
+    auto parseColors = [](std::wstring s, std::vector<winrt::Windows::UI::Color>& outList) {
+        size_t pos = 0;
+        while (pos < s.length()) {
+            size_t next = s.find(L',', pos);
+            std::wstring part = (next == std::wstring::npos) ? s.substr(pos) : s.substr(pos, next - pos);
+            size_t start = part.find_first_not_of(L" \t\r\n");
+            if (start != std::wstring::npos) part.erase(0, start);
+            size_t end = part.find_last_not_of(L" \t\r\n");
+            if (end != std::wstring::npos) part.erase(end + 1);
+            if (!part.empty()) {
+                auto c = ParseHexColor(part);
+                if (c.has_value()) outList.push_back(c.value());
+            }
+            if (next == std::wstring::npos) break;
+            pos = next + 1;
+        }
+    };
+
+    parseColors(lightStr, light);
+    parseColors(darkStr, dark);
+}
+
+void LoadSettings() {
+    std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+
+    WindhawkUtils::StringSetting dimStr(Wh_GetStringSetting(L"BlobShape.Dimensions"));
+    g_settings.CustomWidth = -1.0;
+    g_settings.CustomHeight = -1.0;
+    if (dimStr.get()[0]) {
+        std::wstring ws(dimStr.get());
+        size_t comma = ws.find(L',');
+        auto parseDim = [](std::wstring s) -> double {
+            size_t start = s.find_first_not_of(L" \t\r\n");
+            if (start != std::wstring::npos) s.erase(0, start);
+            size_t end = s.find_last_not_of(L" \t\r\n");
+            if (end != std::wstring::npos) s.erase(end + 1);
+            if (s == L"auto" || s.empty()) return -1.0;
+            try { return std::stod(s); } catch (...) { return -1.0; }
+        };
+        if (comma != std::wstring::npos) {
+            g_settings.CustomWidth = parseDim(ws.substr(0, comma));
+            g_settings.CustomHeight = parseDim(ws.substr(comma + 1));
+        } else {
+            g_settings.CustomWidth = parseDim(ws);
+            g_settings.CustomHeight = g_settings.CustomWidth;
+        }
+    }
+
+    WindhawkUtils::StringSetting marginStr(Wh_GetStringSetting(L"BlobShape.Margins"));
+    g_settings.HasCustomMargin = false;
+    if (marginStr.get()[0]) {
+        ParseThickness(marginStr.get(), g_settings.CustomMargin);
+        std::wstring ms(marginStr.get());
+        size_t start = ms.find_first_not_of(L" \t\r\n");
+        if (start != std::wstring::npos) g_settings.HasCustomMargin = true;
+    }
+
+    WindhawkUtils::StringSetting radiusStr(Wh_GetStringSetting(L"BlobShape.BottomRadius"));
+    g_settings.BottomRadius = ParseDouble(radiusStr.get(), 4.0);
+
+    WindhawkUtils::StringSetting topRadiusStr(Wh_GetStringSetting(L"BlobShape.TopRadius"));
+    g_settings.TopRadius = ParseDouble(topRadiusStr.get(), 6.0);
+
+    WindhawkUtils::StringSetting customCStr(Wh_GetStringSetting(L"Colors.CustomColor"));
+    ParseGradientColorPair(customCStr.get(), g_settings.ParsedLightColor, g_settings.ParsedDarkColor);
+
+    WindhawkUtils::StringSetting bgOpStr(Wh_GetStringSetting(L"Colors.BgOpacity"));
+    ParseDoublePair(bgOpStr.get(), g_settings.BgOpacityLight, g_settings.BgOpacityDark, 1.0);
+}
+
+inline winrt::Windows::UI::Color ApplyOpacity(winrt::Windows::UI::Color c, double opacity) {
+    if (opacity < 0.0) opacity = 0.0;
+    if (opacity > 1.0) opacity = 1.0;
+    c.A = static_cast<uint8_t>(c.A * opacity);
+    return c;
+}
+
+std::vector<winrt::Windows::UI::Color> GetBlobShapeColors(const Settings& localSettings) {
+    bool isLight = (winrt::Windows::UI::Xaml::Application::Current().RequestedTheme() == winrt::Windows::UI::Xaml::ApplicationTheme::Light);
+    double opacity = isLight ? localSettings.BgOpacityLight : localSettings.BgOpacityDark;
+
+    auto c = isLight ? localSettings.ParsedLightColor : localSettings.ParsedDarkColor;
+    if (!c.empty()) {
+        for (auto& col : c) col = ApplyOpacity(col, opacity);
+        return c;
+    }
+
+    // No custom color configured: fall back to the system accent color.
+    auto res = winrt::Windows::UI::Xaml::Application::Current().Resources();
+    auto resName = isLight ? L"SystemAccentColorDark1" : L"SystemAccentColorLight2";
+    if (res.HasKey(winrt::box_value(resName))) {
+        return {ApplyOpacity(winrt::unbox_value<winrt::Windows::UI::Color>(res.Lookup(winrt::box_value(resName))), opacity)};
+    }
+    return {ApplyOpacity({255, 0, 120, 212}, opacity)};
+}
+
+winrt::Windows::UI::Xaml::Media::Brush CreateBrush(const std::vector<winrt::Windows::UI::Color>& colors) {
+    if (colors.empty()) return nullptr;
+    if (colors.size() == 1) {
+        return winrt::Windows::UI::Xaml::Media::SolidColorBrush(colors[0]);
+    }
+
+    // Multi-color values render as a horizontal gradient.
+    winrt::Windows::UI::Xaml::Media::LinearGradientBrush brush;
+    brush.StartPoint({0.0, 0.5});
+    brush.EndPoint({1.0, 0.5});
+
+    auto stops = brush.GradientStops();
+    for (size_t i = 0; i < colors.size(); i++) {
+        winrt::Windows::UI::Xaml::Media::GradientStop stop;
+        stop.Color(colors[i]);
+        stop.Offset(colors.size() > 1 ? static_cast<double>(i) / (colors.size() - 1) : 0.0);
+        stops.Append(stop);
+    }
+    return brush;
+}
+
+// Builds the blob shape:
+//
+//   ___________________________________
+//   \                                 /   <- concave flares (Rt x Rt, circular)
+//    |                               |
+//    |          main area            |    <- W x H
+//    \_______________________________/    <- convex bottom corners (Rb)
+//
+// Coordinate space: (0,0) is the top-left flare tip. The extension height
+// equals the top corner radius, so the total size is
+// (W + 2*Rt) x (H + Rt).
+winrt::Windows::UI::Xaml::Media::PathGeometry BuildBlobShapeGeometry(double W, double H, double Rt, double Rb) {
+    using winrt::Windows::UI::Xaml::Media::PathFigure;
+    using winrt::Windows::UI::Xaml::Media::PathGeometry;
+    using winrt::Windows::UI::Xaml::Media::LineSegment;
+    using winrt::Windows::UI::Xaml::Media::ArcSegment;
+    using winrt::Windows::UI::Xaml::Media::SweepDirection;
+
+    if (W < 1.0) W = 1.0;
+    if (H < 1.0) H = 1.0;
+    if (Rt < 0.0) Rt = 0.0;
+    Rb = std::clamp(Rb, 0.0, std::min(W / 2.0, H));
+
+    double Wt = W + 2.0 * Rt; // total width including the flare tips
+    double Ht = H + Rt;       // total height including the extension
+
+    PathFigure fig;
+    fig.StartPoint({0.0f, 0.0f});
+    fig.IsClosed(true);
+    fig.IsFilled(true);
+    auto segs = fig.Segments();
+
+    auto addLine = [&](double x, double y) {
+        LineSegment s;
+        s.Point({(float)x, (float)y});
+        segs.Append(s);
+    };
+    auto addArc = [&](double x, double y, double rx, double ry, bool clockwise) {
+        if (rx <= 0.0 || ry <= 0.0) { addLine(x, y); return; }
+        ArcSegment s;
+        s.Point({(float)x, (float)y});
+        s.Size({(float)rx, (float)ry});
+        s.SweepDirection(clockwise ? SweepDirection::Clockwise : SweepDirection::Counterclockwise);
+        s.IsLargeArc(false);
+        segs.Append(s);
+    };
+
+    addLine(Wt, 0.0);                            // top edge, left tip -> right tip
+    addArc(Wt - Rt, Rt, Rt, Rt, false);          // top-right concave flare
+    addLine(Wt - Rt, Ht - Rb);                   // right side down
+    addArc(Wt - Rt - Rb, Ht, Rb, Rb, true);      // bottom-right convex corner
+    addLine(Rt + Rb, Ht);                        // bottom edge
+    addArc(Rt, Ht - Rb, Rb, Rb, true);           // bottom-left convex corner
+    addLine(Rt, Rt);                             // left side up
+    addArc(0.0, 0.0, Rt, Rt, false);             // top-left concave flare, back to start
+
+    PathGeometry geo;
+    geo.Figures().Append(fig);
+    return geo;
+}
+
+using namespace winrt::Windows::UI::Xaml;
+using namespace winrt::Windows::UI::Xaml::Controls;
+using namespace winrt::Windows::UI::Xaml::Media;
+using namespace winrt::Windows::UI::Xaml::Hosting;
+using namespace winrt::Windows::UI::Composition;
+
+bool IsSafeComPointer(void* p) {
+    if (!p) return false;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
+    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+
+    void* vtable = *(void**)p;
+    if (!vtable) return false;
+    if (!VirtualQuery(vtable, &mbi, sizeof(mbi))) return false;
+    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+
+    void* qi = *(void**)vtable;
+    if (!qi) return false;
+    if (!VirtualQuery(qi, &mbi, sizeof(mbi))) return false;
+    if (mbi.State != MEM_COMMIT || !(mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return false;
+
+    return true;
+}
+
+volatile thread_local bool g_inSafeComCall = false;
+volatile thread_local bool g_safeComCrashed = false;
+thread_local CONTEXT g_safeComContext;
+
+LONG CALLBACK SafeComCallVEH(PEXCEPTION_POINTERS ExceptionInfo) {
+    if (g_inSafeComCall && ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        g_inSafeComCall = false;
+        g_safeComCrashed = true;
+        RtlRestoreContext(&g_safeComContext, nullptr);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+bool SafeProbeHelper(void* pPtr, const GUID& iid, void** finalOutPtr) {
+    ::IUnknown* pUnk = (::IUnknown*)pPtr;
+    PVOID veh = AddVectoredExceptionHandler(1, SafeComCallVEH);
+    if (!veh) return false;
+
+    bool success = false;
+    g_safeComCrashed = false;
+
+    RtlCaptureContext(&g_safeComContext);
+
+    if (g_safeComCrashed) {
+        RemoveVectoredExceptionHandler(veh);
+        return false;
+    }
+
+    g_inSafeComCall = true;
+    void* tempPtr = nullptr;
+    if (SUCCEEDED(pUnk->QueryInterface(iid, &tempPtr)) && tempPtr) {
+        // Test if the returned pointer is actually a valid COM object
+        // by calling AddRef and Release under VEH protection.
+        ((::IUnknown*)tempPtr)->AddRef();
+        ((::IUnknown*)tempPtr)->Release();
+
+        *finalOutPtr = tempPtr;
+        success = true;
+    }
+    g_inSafeComCall = false;
+
+    RemoveVectoredExceptionHandler(veh);
+    return success;
+}
+
+bool ProbeForFrameworkElement(void* pThis, int offset, winrt::Windows::UI::Xaml::FrameworkElement& outElem) {
+    void* pPtr = (void**)pThis + offset;
+    if (!IsSafeComPointer(pPtr)) return false;
+
+    void* outPtr = nullptr;
+    if (SafeProbeHelper(pPtr, winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), &outPtr)) {
+        winrt::copy_from_abi(outElem, outPtr);
+        ((::IUnknown*)outPtr)->Release();
+        return true;
+    }
+    return false;
+}
+
+FrameworkElement GetFrameworkElementFromNative(void* pThis) {
+    if (!pThis) return nullptr;
+    winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
+    for (int i = 1; i <= 6; i++) {
+        if (ProbeForFrameworkElement(pThis, i, result)) return result;
+    }
+    return nullptr;
+}
+
+FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_view name, int depth = 0) {
+    if (!parent || depth > 5) return nullptr;
+    int count = VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; i++) {
+        auto child = VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
+        if (child) {
+            if (child.Name() == name) return child;
+            auto result = FindChildByName(child, name, depth + 1);
+            if (result) return result;
+        }
+    }
+    return nullptr;
+}
+
+VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_view groupName) {
+    auto groups = VisualStateManager::GetVisualStateGroups(root);
+    for (auto const& group : groups) {
+        if (group.Name() == groupName) return group;
+    }
+    return nullptr;
+}
+
+// Reads a button's current running indicator state.
+bool IsButtonActive(winrt::Windows::UI::Xaml::FrameworkElement const& btn) {
+    if (!btn) return false;
+    try {
+        auto iconPanel = FindChildByName(btn, L"IconPanel");
+        auto grp = iconPanel ? GetVisualStateGroup(iconPanel, L"RunningIndicatorStates") : nullptr;
+        auto st = grp ? grp.CurrentState() : nullptr;
+        return st && st.Name() == L"ActiveRunningIndicator";
+    } catch (...) {
+        return false;
+    }
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings);
+
+std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
+    std::vector<winrt::Windows::UI::Xaml::Shapes::Path> orphans;
+    std::shared_ptr<BlobEntry> result;
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+
+        // Prune entries whose button died. Their blob elements live in the
+        // RootGrid, so they must be removed explicitly.
+        if (g_blobEntries->size() > 100) {
+            for (auto it = g_blobEntries->begin(); it != g_blobEntries->end(); ) {
+                if ((*it)->button.get() == nullptr) {
+                    if (auto blob = (*it)->blobShape.get()) orphans.push_back(blob);
+                    it = g_blobEntries->erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        for (auto& e : *g_blobEntries) {
+            if (e->button.get() == button) { result = e; break; }
+        }
+        if (!result) {
+            result = std::make_shared<BlobEntry>();
+            result->button = winrt::make_weak(button);
+            g_blobEntries->push_back(result);
+        }
+    }
+
+    for (auto& blob : orphans) {
+        if (auto dispatcher = blob.Dispatcher()) {
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [blob]() {
+                try {
+                    if (auto parent = VisualTreeHelper::GetParent(blob)) {
+                        if (auto panel = parent.try_as<Panel>()) {
+                            uint32_t index;
+                            if (panel.Children().IndexOf(blob, index)) {
+                                panel.Children().RemoveAt(index);
+                            }
+                        }
+                    }
+                } catch (...) {}
+            });
+        }
+    }
+    return result;
+}
+
+// Locates the RootGrid of the taskbar hosting this button by walking up to
+// Taskbar.TaskbarFrame. Returns nullptr while the button isn't rooted yet —
+// the next state change or SizeChanged retries.
+Grid GetTaskbarRootGrid(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
+    FrameworkElement current = button;
+    int depth = 0;
+    while (current && depth < 20) {
+        if (winrt::get_class_name(current) == L"Taskbar.TaskbarFrame") {
+            auto rootGrid = FindChildByName(current, L"RootGrid");
+            return rootGrid ? rootGrid.try_as<Grid>() : nullptr;
+        }
+        auto parent = VisualTreeHelper::GetParent(current);
+        current = parent ? parent.try_as<FrameworkElement>() : nullptr;
+        depth++;
+    }
+    return nullptr;
+}
+
+// Glues the blob's Translation to its button's visual offset chain with a
+// composition ExpressionAnimation:
+//   Translation = sum(chain offsets up to RootGrid) + adj - self.Offset
+// Bound once per blob and never retargeted; the render thread then moves the
+// blob with the button through every taskbar animation. Returns false while
+// the chain can't be resolved (button not fully in the tree yet).
+bool BindBlobExpression(
+    winrt::Windows::UI::Xaml::Shapes::Path const& blobShape,
+    Grid const& grid,
+    winrt::Windows::UI::Xaml::FrameworkElement const& button,
+    float adjX, float adjY)
+{
+    try {
+        FrameworkElement gridElem = grid;
+        std::vector<winrt::Windows::UI::Composition::Visual> chain;
+        FrameworkElement e = button;
+        int depth = 0;
+        while (e && e != gridElem && depth < 15) {
+            chain.push_back(ElementCompositionPreview::GetElementVisual(e));
+            auto parent = VisualTreeHelper::GetParent(e);
+            e = parent ? parent.try_as<FrameworkElement>() : nullptr;
+            depth++;
+        }
+        if (!e || e != gridElem || chain.empty()) return false;
+
+        auto vis = ElementCompositionPreview::GetElementVisual(blobShape);
+
+        std::wstring expr;
+        for (size_t i = 0; i < chain.size(); i++) {
+            expr += L"p" + std::to_wstring(i) + L".Offset + ";
+        }
+        expr += L"adj - self.Offset";
+
+        auto exp = vis.Compositor().CreateExpressionAnimation(winrt::hstring(expr));
+        for (size_t i = 0; i < chain.size(); i++) {
+            exp.SetReferenceParameter(winrt::hstring(L"p" + std::to_wstring(i)), chain[i]);
+        }
+        exp.SetVector3Parameter(L"adj", winrt::Windows::Foundation::Numerics::float3(adjX, adjY, 0.0f));
+        exp.SetReferenceParameter(L"self", vis);
+        vis.Properties().StartAnimation(L"Translation", exp);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Creates (or updates) the blob shape for a single button. The shape is
+// hosted in the taskbar's RootGrid — above the task list's clipping region,
+// so the flare tips render fully — and glued to its button with a one-time
+// composition expression. Activation is purely an opacity toggle on the
+// button's own blob.
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings) {
+    auto iconPanel = FindChildByName(button, L"IconPanel");
+    if (!iconPanel) return;
+
+    auto bg = FindChildByName(iconPanel, L"BackgroundElement");
+    FrameworkElement anchor = bg ? bg : iconPanel;
+
+    auto entry = FindOrCreateEntry(button);
+
+    auto grid = entry->grid.get();
+    if (!grid) {
+        grid = GetTaskbarRootGrid(button);
+        if (!grid) return; // not rooted yet; retried on the next event
+        entry->grid = winrt::make_weak(grid);
+    }
+
+    auto blobShape = entry->blobShape.get();
+    if (!blobShape) {
+        blobShape = winrt::Windows::UI::Xaml::Shapes::Path();
+        blobShape.Name(L"BlobShape");
+        blobShape.IsHitTestVisible(false);
+        blobShape.Stretch(winrt::Windows::UI::Xaml::Media::Stretch::None);
+        blobShape.HorizontalAlignment(HorizontalAlignment::Left);
+        blobShape.VerticalAlignment(VerticalAlignment::Top);
+        blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
+        blobShape.Opacity(0.0);
+
+        // Below the task list in z-order so the shapes render behind the
+        // buttons, like the native indicator.
+        auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
+        uint32_t index = 0;
+        if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
+            grid.Children().InsertAt(index, blobShape);
+        } else {
+            grid.Children().Append(blobShape);
+        }
+        ElementCompositionPreview::SetIsTranslationEnabled(blobShape, true);
+
+        entry->blobShape = winrt::make_weak(blobShape);
+        entry->bound = false;
+        entry->boundAdjX = -1e9f;
+        entry->boundAdjY = -1e9f;
+        entry->geoW = -1.0;
+    }
+
+    // Track the anchor's size so late layout (buttons created before their
+    // first measure) and size changes re-apply geometry and binding. This is
+    // a plain XAML event — no timers.
+    if (entry->anchor.get() != anchor) {
+        if (auto oldAnchor = entry->anchor.get()) {
+            try { oldAnchor.SizeChanged(entry->sizeToken); } catch (...) {}
+        }
+        entry->anchor = winrt::make_weak(anchor);
+        std::weak_ptr<BlobEntry> weakEntry = entry;
+        entry->sizeToken = anchor.SizeChanged([weakEntry](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto e = weakEntry.lock();
+            if (!e) return;
+            auto btn = e->button.get();
+            if (!btn) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try {
+                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+            } catch (...) {}
+        });
+    }
+
+    // Fill color (cheap no-op when unchanged).
+    std::vector<winrt::Windows::UI::Color> newColors = GetBlobShapeColors(localSettings);
+    auto existingSolidBrush = blobShape.Fill().try_as<winrt::Windows::UI::Xaml::Media::SolidColorBrush>();
+    bool sameColor = false;
+    if (existingSolidBrush && newColors.size() == 1) {
+        auto c = existingSolidBrush.Color();
+        auto n = newColors[0];
+        sameColor = (c.A == n.A && c.R == n.R && c.G == n.G && c.B == n.B);
+    }
+    if (!sameColor) blobShape.Fill(CreateBrush(newColors));
+
+    // Geometry and expression binding, once the anchor has a real size.
+    double bW = anchor.ActualWidth();
+    double bH = anchor.ActualHeight();
+    if (bW > 0.001) {
+        double W = localSettings.CustomWidth >= 0.0 ? localSettings.CustomWidth : bW;
+        double H = localSettings.CustomHeight >= 0.0 ? localSettings.CustomHeight : bH;
+        double W2 = std::max(1.0, W);
+        double H2 = std::max(1.0, H);
+        double Rt = std::max(0.0, localSettings.TopRadius);
+        double Rb = localSettings.BottomRadius;
+
+        if (std::abs(entry->geoW - W2) > 0.01 || std::abs(entry->geoH - H2) > 0.01 ||
+            std::abs(entry->geoRt - Rt) > 0.01 || std::abs(entry->geoRb - Rb) > 0.01 ||
+            !blobShape.Data()) {
+            blobShape.Data(BuildBlobShapeGeometry(W2, H2, Rt, Rb));
+            blobShape.Width(W2 + 2.0 * Rt);
+            blobShape.Height(H2 + Rt);
+            entry->geoW = W2; entry->geoH = H2;
+            entry->geoRt = Rt; entry->geoRb = Rb;
+        }
+
+        // Adjustment relative to the button's top-left corner: the anchor's
+        // offset within the button (rounded, so intra-button render
+        // transforms can't jitter it), centering for custom dimensions,
+        // custom margins, and the flare tip offset.
+        float adjX = (float)(-Rt);
+        float adjY = (float)(-Rt);
+        if (localSettings.CustomWidth >= 0.0)  adjX += (float)((bW - W) / 2.0);
+        if (localSettings.CustomHeight >= 0.0) adjY += (float)((bH - H) / 2.0);
+        if (localSettings.HasCustomMargin) {
+            adjX += (float)localSettings.CustomMargin.Left;
+            adjY += (float)localSettings.CustomMargin.Top;
+        }
+        if (anchor != button) {
+            try {
+                auto intra = anchor.TransformToVisual(button).TransformPoint({0, 0});
+                adjX += std::round(intra.X);
+                adjY += std::round(intra.Y);
+            } catch (...) {}
+        }
+
+        if (!entry->bound ||
+            std::abs(entry->boundAdjX - adjX) > 0.5f ||
+            std::abs(entry->boundAdjY - adjY) > 0.5f) {
+            if (BindBlobExpression(blobShape, grid, button, adjX, adjY)) {
+                entry->bound = true;
+                entry->boundAdjX = adjX;
+                entry->boundAdjY = adjY;
+            }
+        }
+    }
+
+    // Hidden until the expression is glued, so the shape can never render at
+    // a stale or unbound position.
+    blobShape.Opacity((isActive && entry->bound) ? 1.0 : 0.0);
+}
+
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    TaskListButton_UpdateVisualStates_Original(pThis);
+    if (g_unloading) return;
+
+    auto elem = GetFrameworkElementFromNative(pThis);
+    if (!elem) return;
+
+    auto dispatcher = elem.Dispatcher();
+    auto weakElem = winrt::make_weak(elem);
+
+    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakElem]() {
+        if (g_unloading) return;
+        try {
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+
+            auto button = weakElem.get();
+            if (!button) return;
+
+            auto iconPanel = FindChildByName(button, L"IconPanel");
+            auto group = iconPanel ? GetVisualStateGroup(iconPanel, L"RunningIndicatorStates") : nullptr;
+            auto currentState = group ? group.CurrentState() : nullptr;
+            bool isActive = (currentState && currentState.Name() == L"ActiveRunningIndicator");
+
+            auto bgElement = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
+            if (bgElement) {
+                bgElement.Opacity(isActive ? 0.0 : 1.0);
+            }
+
+            EnsureBlobOnButton(button, isActive, localSettings);
+        } catch (...) {
+            Wh_Log(L"Exception in UpdateVisualStates hook");
+        }
+    });
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE m = GetModuleHandle(L"Taskbar.View.dll");
+    return m ? m : GetModuleHandle(L"ExplorerExtensions.dll");
+}
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+            false
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
+        return false;
+    }
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
+            g_taskbarViewModule = module;
+            Wh_Log(L"Taskbar View DLL loaded: %s", lpLibFileName);
+            std::thread([]() {
+                Sleep(2000);
+                HMODULE safeModule = nullptr;
+                if (!GetModuleHandleExW(0, L"Taskbar.View.dll", &safeModule)) return;
+                HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\WindhawkElasticModsHookMutex");
+                if (hMutex) WaitForSingleObject(hMutex, INFINITE);
+                if (HookTaskbarViewDllSymbols(safeModule)) Wh_ApplyHookOperations();
+                if (hMutex) { ReleaseMutex(hMutex); CloseHandle(hMutex); }
+                FreeLibrary(safeModule);
+            }).detach();
+        }
+    }
+    return module;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Initializing Taskbar Blob Shape Mod");
+    LoadSettings();
+
+    HMODULE m = GetTaskbarViewModuleHandle();
+    if (m) {
+        g_taskbarViewDllLoaded = true;
+        g_taskbarViewModule = m;
+        if (!HookTaskbarViewDllSymbols(m)) return FALSE;
+    } else {
+        HMODULE kb = GetModuleHandle(L"kernelbase.dll");
+        auto pLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW");
+        if (!WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original)) {
+            Wh_Log(L"Failed to hook LoadLibraryExW");
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"Uninitializing Taskbar Blob Shape Mod (Before)");
+    g_unloading = true;
+
+    std::vector<std::shared_ptr<BlobEntry>> localEntries;
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        localEntries = *g_blobEntries;
+        g_blobEntries->clear();
+    }
+    if (localEntries.empty()) return;
+
+    std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if(h) CloseHandle(h); });
+    auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size());
+
+    for (auto& entry : localEntries) {
+        auto blobShape = entry->blobShape.get();
+
+        auto cleanup = [entry, blobShape]() {
+            try {
+                if (auto anchor = entry->anchor.get()) {
+                    try { anchor.SizeChanged(entry->sizeToken); } catch (...) {}
+                }
+                if (blobShape) {
+                    auto vis = ElementCompositionPreview::GetElementVisual(blobShape);
+                    vis.Properties().StopAnimation(L"Translation");
+                    if (auto parent = VisualTreeHelper::GetParent(blobShape)) {
+                        if (auto panel = parent.try_as<winrt::Windows::UI::Xaml::Controls::Panel>()) {
+                            uint32_t index;
+                            if (panel.Children().IndexOf(blobShape, index)) {
+                                panel.Children().RemoveAt(index);
+                            }
+                        }
+                    }
+                }
+                // Restore the native background indicator on this button.
+                if (auto btn = entry->button.get()) {
+                    auto iconPanel = FindChildByName(btn, L"IconPanel");
+                    auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
+                    if (bg) bg.Opacity(1.0);
+                }
+            } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
+        };
+
+        auto dispatcher = blobShape ? blobShape.Dispatcher() : nullptr;
+        if (dispatcher) {
+            if (dispatcher.HasThreadAccess()) {
+                cleanup();
+                if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+            } else {
+                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [cleanup, pending, eventLifetime]() {
+                    cleanup();
+                    if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+                });
+            }
+        } else {
+            if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+        }
+    }
+
+    if (pending->load() > 0 && eventLifetime.get()) {
+        WaitForSingleObject(eventLifetime.get(), 2000);
+    }
+
+    Sleep(50); // Let layout settle
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninitializing Taskbar Blob Shape Mod");
+    delete g_blobEntries;
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    std::vector<std::shared_ptr<BlobEntry>> localEntries;
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        localEntries = *g_blobEntries;
+    }
+    for (auto& entry : localEntries) {
+        auto blobShape = entry->blobShape.get();
+        auto dispatcher = blobShape ? blobShape.Dispatcher() : nullptr;
+        if (!dispatcher) continue;
+        std::weak_ptr<BlobEntry> weakEntry = entry;
+        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [weakEntry]() {
+            if (g_unloading) return;
+            auto e = weakEntry.lock();
+            if (!e) return;
+            auto btn = e->button.get();
+            if (!btn) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try {
+                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+            } catch (...) {}
+        });
+    }
+}
