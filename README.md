@@ -1,5 +1,3 @@
-<img width="1280" height="720" alt="github" src="https://github.com/user-attachments/assets/35d6ebc5-7f36-452a-822f-12ef4721c0fa" />
-
 # Windhawk Mods
 
 The official collection of Windhawk mods. The mods can be viewed on the [online mods catalog](https://windhawk.net/mods), and can be viewed and installed with [Windhawk](https://windhawk.net/).
