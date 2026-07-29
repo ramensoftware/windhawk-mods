@@ -1,27 +1,41 @@
 // ==WindhawkMod==
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
-// @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.1
-// @author       Jaali
+// @description  macOS magnifying cursor
+// @version      1.4.2
 // @github       https://github.com/alivca
+// @author       Jaali
 // @include      explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-macOS magnifying cursor 
+Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.
 */
 // ==/WindhawkModReadme==
 
-
+// ==WindhawkModSettings==
+/*
+- maxScalePercent: 400
+  $name: Maximum size (%)
+  $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
+- shakeThreshold: 3500
+  $name: Shake sensitivity threshold
+  $description: "Total mouse movement distance required to trigger the effect (recommended: 3500)."
+- lerpSpeedUpPercent: 40
+  $name: Enlarge speed (%)
+  $description: "How fast the cursor expands (recommended: 20-40)."
+- lerpSpeedDownPercent: 15
+  $name: Shrink speed (%)
+  $description: "How fast the cursor shrinks back (recommended: 10-20)."
+*/
+// ==/WindhawkModSettings==
 
 #define OEMRESOURCE
 #include <windows.h>
 #include <vector>
 #include <cmath>
 #include <windhawk_api.h>
-
 
 #ifndef OCR_NORMAL
 #define OCR_NORMAL 32512
@@ -63,23 +77,11 @@ macOS magnifying cursor
 #define OCR_APPSTARTING 32650
 #endif
 
-
 const DWORD g_cursorIds[13] = {
-    OCR_NORMAL,
-    OCR_IBEAM,
-    OCR_WAIT,
-    OCR_CROSS,
-    OCR_UP,
-    OCR_SIZENWSE,
-    OCR_SIZENESW,
-    OCR_SIZEWE,
-    OCR_SIZENS,
-    OCR_SIZEALL,
-    OCR_NO,
-    OCR_HAND,
-    OCR_APPSTARTING
+    OCR_NORMAL, OCR_IBEAM, OCR_WAIT, OCR_CROSS, OCR_UP,
+    OCR_SIZENWSE, OCR_SIZENESW, OCR_SIZEWE, OCR_SIZENS,
+    OCR_SIZEALL, OCR_NO, OCR_HAND, OCR_APPSTARTING
 };
-
 
 struct Settings {
     float maxScale       = 4.0f;
@@ -103,7 +105,6 @@ void LoadSettings() {
     int speedDown = Wh_GetIntSetting(L"lerpSpeedDownPercent");
     if (speedDown > 0) g_settings.lerpSpeedDown = speedDown / 100.0f;
 }
-
 
 typedef int (WINAPI *pfn_GetObjectW)(HANDLE, int, LPVOID);
 typedef HDC (WINAPI *pfn_CreateCompatibleDC)(HDC);
