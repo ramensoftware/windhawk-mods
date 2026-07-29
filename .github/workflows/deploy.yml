@@ -66,7 +66,10 @@ jobs:
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Install dependencies
-        run: npm install
+        # The dev dependencies are type declarations, used by editors and by
+        # type checking. Nothing here consumes them, as tsx strips types without
+        # checking them.
+        run: npm install --omit=dev
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
