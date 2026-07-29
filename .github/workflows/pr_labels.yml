@@ -1,0 +1,48 @@
+name: PR flow labels
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - converted_to_draft
+      - closed
+    branches:
+      - main
+  pull_request_review:
+    types:
+      - submitted
+
+# Everything is done with the windhawk-reviewer app token, so the workflow token
+# only needs to check out the base branch. Nothing from the pull request itself
+# is checked out or run.
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Generate an app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          # The windhawk-reviewer app.
+          app-id: '4425681'
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Update the flow label
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const flow = require('${{ github.workspace }}/.github/pr_flow.cjs');
+            if (context.eventName === 'pull_request_review') {
+              await flow.handleReviewEvent({ github, context, core });
+            } else {
+              await flow.handlePullRequestEvent({ github, context, core });
+            }

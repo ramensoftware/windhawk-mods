@@ -1,12 +1,14 @@
 {
   "type": "module",
   "devDependencies": {
+    "@actions/github-script": "github:actions/github-script#v9.0.0",
+    "@octokit/webhooks-types": "^7.6.1",
     "@types/node": "^25.6.0",
-    "@types/showdown": "^2.0.6",
-    "tsx": "^4.21.0"
+    "@types/showdown": "^2.0.6"
   },
   "dependencies": {
     "feed": "^5.2.0",
-    "showdown": "^2.1.0"
+    "showdown": "^2.1.0",
+    "tsx": "^4.21.0"
   }
 }
