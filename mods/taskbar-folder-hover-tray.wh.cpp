@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.13
+// @version         1.14
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -268,9 +268,7 @@ do not conflict.
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cmath>
-#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1519,16 +1517,20 @@ std::unordered_map<std::wstring, std::shared_ptr<FolderData>>& FolderCache() {
 }
 
 std::mutex g_scanMutex;
-std::condition_variable g_scanCv;
 std::vector<ScanRequest> g_scanQueue;
-bool g_scanThreadStop = false;
+// Atomic: ScanFolderInto reads this outside the mutex during icon extraction.
+std::atomic<bool> g_scanThreadStop{false};
+// Manual-reset stop + auto-reset work. Idle wait is MsgWaitForMultipleObjects
+// with QS_ALLINPUT (no 50 ms poll). Created lazily with the scan thread.
+HANDLE g_scanStopEvent = nullptr;
+HANDLE g_scanWorkEvent = nullptr;
 // optional + no_destroy: a bare std::thread aborts Explorer on process exit if
 // it is still joinable when globals are destroyed.
 [[clang::no_destroy]] std::optional<std::thread> g_scanThread;
 
 // Shell icon handlers on an STA thread may create windows and post messages.
 // Pump while idle/between extractions so a wait without a message loop cannot
-// hang forever; stop still wakes via g_scanCv + g_scanThreadStop.
+// hang forever; stop still wakes via g_scanStopEvent + g_scanThreadStop.
 void PumpScanThreadMessages() {
     MSG msg;
     while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -1753,34 +1755,51 @@ void ScanFolderInto(const std::wstring& path,
     }
 }
 
+void StartScanThread();
+
 void ScanThreadMain() {
     // Shell icon extractors (SHGetFileInfo / IExtractIcon) expect STA. MTA
     // causes many extractions to fail with the generic document icon.
     winrt::init_apartment(winrt::apartment_type::single_threaded);
+
+    // Capture event handles once; StopScanThread closes them only after join.
+    HANDLE stopEvent = g_scanStopEvent;
+    HANDLE workEvent = g_scanWorkEvent;
 
     for (;;) {
         ScanRequest request;
         {
             std::unique_lock<std::mutex> lock(g_scanMutex);
             for (;;) {
-                if (g_scanThreadStop || !g_scanQueue.empty()) {
+                if (g_scanThreadStop.load(std::memory_order_relaxed)) {
+                    winrt::uninit_apartment();
+                    return;
+                }
+                if (!g_scanQueue.empty()) {
                     break;
                 }
-                // Timed wait so a pumpless STA cannot stall forever when a
-                // shell handler creates windows / expects posted messages.
-                if (g_scanCv.wait_for(
-                        lock, std::chrono::milliseconds(50), [] {
-                            return g_scanThreadStop || !g_scanQueue.empty();
-                        })) {
-                    break;
-                }
+
                 lock.unlock();
-                PumpScanThreadMessages();
+                // Event-driven idle: sleep until stop, work, or an STA message.
+                // No timed poll — keeps Explorer out of a permanent 20 Hz wake.
+                HANDLE waits[] = {stopEvent, workEvent};
+                DWORD w = MsgWaitForMultipleObjects(2, waits, FALSE, INFINITE,
+                                                    QS_ALLINPUT);
+                if (w == WAIT_OBJECT_0) {
+                    winrt::uninit_apartment();
+                    return;
+                }
+                if (w == WAIT_OBJECT_0 + 2) {
+                    PumpScanThreadMessages();
+                } else if (w == WAIT_FAILED) {
+                    Wh_Log(L"Scan thread MsgWaitForMultipleObjects failed (%u)",
+                           GetLastError());
+                    Sleep(10);
+                }
+                // WAIT_OBJECT_0+1 (work) or after pump: re-check the queue.
                 lock.lock();
             }
-            if (g_scanThreadStop) {
-                break;
-            }
+
             request = g_scanQueue.front();
             g_scanQueue.erase(g_scanQueue.begin());
         }
@@ -1794,7 +1813,8 @@ void ScanThreadMain() {
         fresh->ready = true;
         fresh->scannedAtTick = GetTickCount64();
 
-        if (g_unloading) {
+        if (g_unloading ||
+            g_scanThreadStop.load(std::memory_order_relaxed)) {
             break;
         }
 
@@ -1811,12 +1831,17 @@ void ScanThreadMain() {
 }
 
 void RequestScan(const std::wstring& path, int iconPixelSize) {
-    if (path.empty()) {
+    if (path.empty() || g_unloading) {
         return;
     }
 
+    // Lazy start (and restart after StopScanThread). Safe from the UI thread:
+    // StartScanThread only creates the worker; Stop during uninit sets
+    // g_unloading / g_scanThreadStop first so a raced enqueue is dropped.
+    StartScanThread();
+
     std::lock_guard<std::mutex> lock(g_scanMutex);
-    if (g_scanThreadStop) {
+    if (g_unloading || g_scanThreadStop.load(std::memory_order_relaxed)) {
         return;
     }
     for (const auto& queued : g_scanQueue) {
@@ -1826,7 +1851,9 @@ void RequestScan(const std::wstring& path, int iconPixelSize) {
         }
     }
     g_scanQueue.push_back({path, iconPixelSize});
-    g_scanCv.notify_one();
+    if (g_scanWorkEvent) {
+        SetEvent(g_scanWorkEvent);
+    }
 }
 
 std::shared_ptr<FolderData> GetFolderData(const std::wstring& path) {
@@ -1852,23 +1879,60 @@ std::shared_ptr<FolderData> GetFolderDataAndRefresh(const std::wstring& path,
 
 void StartScanThread() {
     std::lock_guard<std::mutex> lock(g_scanMutex);
-    g_scanThreadStop = false;
-    if (!g_scanThread) {
-        g_scanThread.emplace(ScanThreadMain);
+    if (g_unloading) {
+        return;
     }
+    // Already running (or StopScanThread is joining). Never clear stop while
+    // a join is in progress — RequestScan drops work via g_scanThreadStop.
+    if (g_scanThread) {
+        return;
+    }
+
+    if (!g_scanStopEvent) {
+        g_scanStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_scanStopEvent) {
+            Wh_Log(L"CreateEventW for scan stop failed (%u)", GetLastError());
+            return;
+        }
+    } else {
+        ResetEvent(g_scanStopEvent);
+    }
+    if (!g_scanWorkEvent) {
+        g_scanWorkEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!g_scanWorkEvent) {
+            Wh_Log(L"CreateEventW for scan work failed (%u)", GetLastError());
+            CloseHandle(g_scanStopEvent);
+            g_scanStopEvent = nullptr;
+            return;
+        }
+    }
+
+    g_scanThreadStop.store(false, std::memory_order_relaxed);
+    g_scanThread.emplace(ScanThreadMain);
 }
 
 void StopScanThread() {
     {
         std::lock_guard<std::mutex> lock(g_scanMutex);
-        g_scanThreadStop = true;
+        g_scanThreadStop.store(true, std::memory_order_relaxed);
         g_scanQueue.clear();
+        if (g_scanStopEvent) {
+            SetEvent(g_scanStopEvent);
+        }
     }
-    g_scanCv.notify_all();
     if (g_scanThread && g_scanThread->joinable()) {
         g_scanThread->join();
     }
     g_scanThread.reset();
+
+    if (g_scanStopEvent) {
+        CloseHandle(g_scanStopEvent);
+        g_scanStopEvent = nullptr;
+    }
+    if (g_scanWorkEvent) {
+        CloseHandle(g_scanWorkEvent);
+        g_scanWorkEvent = nullptr;
+    }
 }
 
 void ResetFolderData() {
@@ -3339,15 +3403,14 @@ std::vector<std::unique_ptr<TaskbarHost>>& TaskbarHosts() {
 
 std::atomic<bool> g_injectionLive{false};
 
-// Joinable retry thread + stop event. A HANDLE has no destructor that aborts at
-// process exit. StartRetryThread is non-blocking (no join) so window procs can
-// call it safely; StopRetryThread joins with MsgWaitForMultipleObjects so
-// settings/uninit can wait without deadlocking on inbound SendMessage.
-// g_retryAgain asks a live worker to run another inject pass after its current
-// one instead of joining and restarting from a UI thread.
-std::atomic<bool> g_retryAgain{false};
+// Lifetime retry worker: stays alive until StopRetryThread (settings/uninit).
+// StartRetryThread ensures the worker exists and SetEvent(kick) — never joins
+// from a window proc. A HANDLE has no destructor that aborts at process exit.
+// StopRetryThread joins with MsgWaitForMultipleObjects so settings/uninit can
+// wait without deadlocking on inbound SendMessage.
 HANDLE g_retryThread = nullptr;
-HANDLE g_retryStopEvent = nullptr;
+HANDLE g_retryStopEvent = nullptr;   // manual-reset
+HANDLE g_retryKickEvent = nullptr;   // auto-reset
 SRWLOCK g_retryLock = SRWLOCK_INIT;
 
 // WriteableBitmap's backing store is reachable only through this interop
@@ -4298,11 +4361,23 @@ bool ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
 
 DWORD WINAPI RetryThreadProc(void* param) {
     HANDLE stopEvent = static_cast<HANDLE>(param);
+    // Capture kick once; StopRetryThread closes it only after this thread joins.
+    HANDLE kickEvent = g_retryKickEvent;
     static const DWORD delays[] = {0,    500,  1000,  2000,
                                    4000, 8000, 15000, 30000};
 
     for (;;) {
-        g_retryAgain.store(false, std::memory_order_relaxed);
+        HANDLE waits[] = {stopEvent, kickEvent};
+        DWORD wake = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        if (wake == WAIT_OBJECT_0 || wake == WAIT_FAILED) {
+            return 0;  // stop (or wait failed)
+        }
+        if (g_unloading ||
+            WaitForSingleObject(stopEvent, 0) != WAIT_TIMEOUT) {
+            return 0;
+        }
+
+        g_injectionLive = false;
 
         for (size_t i = 0; i < ARRAYSIZE(delays) && !g_unloading; i++) {
             if (delays[i] &&
@@ -4319,25 +4394,9 @@ DWORD WINAPI RetryThreadProc(void* param) {
                 break;
             }
         }
-
-        if (g_unloading ||
-            WaitForSingleObject(stopEvent, 0) != WAIT_TIMEOUT) {
-            return 0;
-        }
-
-        // Another StartRetryThread arrived while we were working (e.g. a new
-        // monitor). Exchange under the lock so a concurrent Start cannot miss
-        // the flag between our check and return.
-        AcquireSRWLockExclusive(&g_retryLock);
-        bool again = g_retryAgain.exchange(false, std::memory_order_relaxed);
-        if (again && !g_unloading &&
-            WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT) {
-            g_injectionLive = false;
-            ReleaseSRWLockExclusive(&g_retryLock);
-            continue;
-        }
-        ReleaseSRWLockExclusive(&g_retryLock);
-        return 0;
+        // Success or exhaustion: wait for the next kick (e.g. secondary
+        // TrayUI::StartTaskbar) instead of exiting — avoids the one-shot
+        // exit race that could drop a re-injection request.
     }
 }
 
@@ -4345,9 +4404,10 @@ void StopRetryThread() {
     AcquireSRWLockExclusive(&g_retryLock);
     HANDLE retryThread = g_retryThread;
     HANDLE retryStopEvent = g_retryStopEvent;
+    HANDLE retryKickEvent = g_retryKickEvent;
     g_retryThread = nullptr;
     g_retryStopEvent = nullptr;
-    g_retryAgain.store(false, std::memory_order_relaxed);
+    g_retryKickEvent = nullptr;
     if (retryStopEvent) {
         SetEvent(retryStopEvent);
     }
@@ -4371,11 +4431,13 @@ void StopRetryThread() {
     if (retryStopEvent) {
         CloseHandle(retryStopEvent);
     }
+    if (retryKickEvent) {
+        CloseHandle(retryKickEvent);
+    }
 }
 
-// Non-blocking: safe from window procedures. If a worker is already alive,
-// request another inject pass instead of joining. StopRetryThread still joins
-// for Wh_ModSettingsChanged / Wh_ModUninit.
+// Non-blocking: safe from window procedures. Ensures the lifetime worker exists
+// and kicks it. StopRetryThread still joins for Wh_ModSettingsChanged / uninit.
 void StartRetryThread() {
     AcquireSRWLockExclusive(&g_retryLock);
     if (g_unloading) {
@@ -4383,38 +4445,41 @@ void StartRetryThread() {
         return;
     }
 
-    if (g_retryThread) {
-        if (WaitForSingleObject(g_retryThread, 0) == WAIT_TIMEOUT) {
-            g_retryAgain.store(true, std::memory_order_relaxed);
+    if (!g_retryStopEvent) {
+        g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_retryStopEvent) {
+            Wh_Log(L"CreateEventW for retry stop failed (%u)", GetLastError());
             ReleaseSRWLockExclusive(&g_retryLock);
             return;
         }
-        // Previous worker finished; reap without blocking.
-        CloseHandle(g_retryThread);
-        g_retryThread = nullptr;
-        if (g_retryStopEvent) {
+    }
+    if (!g_retryKickEvent) {
+        g_retryKickEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!g_retryKickEvent) {
+            Wh_Log(L"CreateEventW for retry kick failed (%u)", GetLastError());
             CloseHandle(g_retryStopEvent);
             g_retryStopEvent = nullptr;
+            ReleaseSRWLockExclusive(&g_retryLock);
+            return;
         }
     }
 
-    g_retryAgain.store(false, std::memory_order_relaxed);
-    g_injectionLive = false;
-    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_retryStopEvent) {
-        Wh_Log(L"CreateEventW for retry stop failed (%u)", GetLastError());
-        ReleaseSRWLockExclusive(&g_retryLock);
-        return;
+    if (!g_retryThread) {
+        HANDLE stopEvent = g_retryStopEvent;
+        g_retryThread =
+            CreateThread(nullptr, 0, RetryThreadProc, stopEvent, 0, nullptr);
+        if (!g_retryThread) {
+            Wh_Log(L"CreateThread for retry failed (%u)", GetLastError());
+            CloseHandle(g_retryStopEvent);
+            CloseHandle(g_retryKickEvent);
+            g_retryStopEvent = nullptr;
+            g_retryKickEvent = nullptr;
+            ReleaseSRWLockExclusive(&g_retryLock);
+            return;
+        }
     }
 
-    HANDLE stopEvent = g_retryStopEvent;
-    g_retryThread =
-        CreateThread(nullptr, 0, RetryThreadProc, stopEvent, 0, nullptr);
-    if (!g_retryThread) {
-        Wh_Log(L"CreateThread for retry failed (%u)", GetLastError());
-        CloseHandle(g_retryStopEvent);
-        g_retryStopEvent = nullptr;
-    }
+    SetEvent(g_retryKickEvent);
     ReleaseSRWLockExclusive(&g_retryLock);
 }
 
@@ -4500,8 +4565,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    StartScanThread();
-
+    // Scan thread starts lazily on the first RequestScan (hover / inject).
     return TRUE;
 }
 
@@ -4538,7 +4602,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     ResetFolderData();
 
-    StartScanThread();
+    // Scan thread restarts lazily on the next RequestScan.
     StartRetryThread();
 }
 
