@@ -1277,7 +1277,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(public: __cdecl winrt::impl::consume_Taskbar_ITaskbarAppItemViewModel<struct winrt::Taskbar::ITaskbarAppItemViewModel>::HasLabel(void)const )"},
             &ITaskbarAppItemViewModel_HasLabels_Original,
@@ -1372,8 +1373,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     return HookSymbols(
         module,
-        taskbarViewDllHooks,
-        ARRAYSIZE(taskbarViewDllHooks));
+        taskbarViewHooks,
+        ARRAYSIZE(taskbarViewHooks));
 }
 
 bool HookTaskbarDllSymbols() {
