@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer menus, tooltips, and popups
-// @version         0.1.2
+// @version         0.1.3
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -54,7 +54,8 @@ keyboard shortcut text are also preserved.
 - Windows 11 XAML/WinUI popup text uses an experimental, display-only
   DirectWrite hook. This includes context menus, tooltips, and other Explorer
   flyouts. Tracking is scoped to the popup's UI thread so it doesn't enable
-  rewriting on unrelated Explorer or taskbar threads.
+  rewriting on unrelated Explorer or taskbar threads. Taskbar thumbnail
+  previews are explicitly excluded.
 
 The modern path is intentionally conservative and can miss text if a Windows
 build uses a different popup window class. Disable `modernUiText` if it causes
@@ -927,30 +928,49 @@ ShowWindow_t g_originalShowWindow;
 SetWindowPos_t g_originalSetWindowPos;
 DestroyWindow_t g_originalDestroyWindow;
 
-struct TrackedModernPopup {
-    DWORD threadId;
+enum class ModernWindowKind {
+    Other,
+    Popup,
+    TaskbarThumbnail,
 };
 
-std::mutex g_trackedModernPopupsMutex;
-std::unordered_map<HWND, TrackedModernPopup>
-    g_trackedModernPopups;
-std::atomic_uint g_trackedModernPopupCount{0};
+struct TrackedModernWindow {
+    DWORD threadId;
+    ModernWindowKind kind;
+};
 
-bool IsModernPopupClassName(LPCWSTR className) {
-    return className &&
-           (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
-           _wcsicmp(className,
-                    L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0);
+std::mutex g_trackedModernWindowsMutex;
+std::unordered_map<HWND, TrackedModernWindow>
+    g_trackedModernWindows;
+std::atomic_uint g_trackedModernWindowCount{0};
+
+ModernWindowKind ClassifyModernWindowClassName(LPCWSTR className) {
+    if (!className) {
+        return ModernWindowKind::Other;
+    }
+
+    if (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
+        _wcsicmp(className,
+                 L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0) {
+        return ModernWindowKind::Popup;
+    }
+
+    if (_wcsicmp(className, L"TaskListThumbnailWnd") == 0) {
+        return ModernWindowKind::TaskbarThumbnail;
+    }
+
+    return ModernWindowKind::Other;
 }
 
-bool IsModernPopupWindow(HWND window) {
+ModernWindowKind ClassifyModernWindow(HWND window) {
     wchar_t className[128];
     const int length = GetClassNameW(window, className, ARRAYSIZE(className));
-    return length > 0 && IsModernPopupClassName(className);
+    return length > 0 ? ClassifyModernWindowClassName(className)
+                      : ModernWindowKind::Other;
 }
 
-bool TrackModernPopup(HWND window) {
-    if (!window) {
+bool TrackModernWindow(HWND window, ModernWindowKind kind) {
+    if (!window || kind == ModernWindowKind::Other) {
         return false;
     }
 
@@ -962,71 +982,85 @@ bool TrackModernPopup(HWND window) {
 
     {
         std::lock_guard<std::mutex> guard(
-            g_trackedModernPopupsMutex);
-        g_trackedModernPopups[window] = {threadId};
-        g_trackedModernPopupCount.store(
+            g_trackedModernWindowsMutex);
+        g_trackedModernWindows[window] = {threadId, kind};
+        g_trackedModernWindowCount.store(
             static_cast<unsigned int>(
-                g_trackedModernPopups.size()),
+                g_trackedModernWindows.size()),
             std::memory_order_relaxed);
     }
 
-    Wh_Log(L"Tracking modern popup");
+    Wh_Log(kind == ModernWindowKind::TaskbarThumbnail
+               ? L"Tracking excluded taskbar thumbnail"
+               : L"Tracking modern popup");
     return true;
 }
 
-void UntrackModernPopup(HWND window) {
+bool TrackModernWindowIfRelevant(HWND window) {
+    const ModernWindowKind kind = ClassifyModernWindow(window);
+    return TrackModernWindow(window, kind);
+}
+
+void UntrackModernWindow(HWND window) {
     std::lock_guard<std::mutex> guard(
-        g_trackedModernPopupsMutex);
-    g_trackedModernPopups.erase(window);
-    g_trackedModernPopupCount.store(
-        static_cast<unsigned int>(g_trackedModernPopups.size()),
+        g_trackedModernWindowsMutex);
+    g_trackedModernWindows.erase(window);
+    g_trackedModernWindowCount.store(
+        static_cast<unsigned int>(g_trackedModernWindows.size()),
         std::memory_order_relaxed);
 }
 
-bool IsModernPopupTracked(HWND window) {
-    if (g_trackedModernPopupCount.load(
+bool IsModernWindowTracked(HWND window) {
+    if (g_trackedModernWindowCount.load(
             std::memory_order_relaxed) == 0) {
         return false;
     }
 
     std::lock_guard<std::mutex> guard(
-        g_trackedModernPopupsMutex);
-    return g_trackedModernPopups.contains(window);
+        g_trackedModernWindowsMutex);
+    return g_trackedModernWindows.contains(window);
 }
 
-void ClearTrackedModernPopups() {
+void ClearTrackedModernWindows() {
     std::lock_guard<std::mutex> guard(
-        g_trackedModernPopupsMutex);
-    g_trackedModernPopups.clear();
-    g_trackedModernPopupCount.store(0, std::memory_order_relaxed);
+        g_trackedModernWindowsMutex);
+    g_trackedModernWindows.clear();
+    g_trackedModernWindowCount.store(0, std::memory_order_relaxed);
 }
 
 bool IsModernPopupActiveForCurrentThread() {
     const DWORD currentThreadId = GetCurrentThreadId();
-    bool active = false;
+    bool popupActive = false;
+    bool taskbarThumbnailActive = false;
 
     std::lock_guard<std::mutex> guard(
-        g_trackedModernPopupsMutex);
-    for (auto iterator = g_trackedModernPopups.begin();
-         iterator != g_trackedModernPopups.end();) {
+        g_trackedModernWindowsMutex);
+    for (auto iterator = g_trackedModernWindows.begin();
+         iterator != g_trackedModernWindows.end();) {
         if (!IsWindow(iterator->first)) {
-            iterator = g_trackedModernPopups.erase(iterator);
-            g_trackedModernPopupCount.store(
+            iterator = g_trackedModernWindows.erase(iterator);
+            g_trackedModernWindowCount.store(
                 static_cast<unsigned int>(
-                    g_trackedModernPopups.size()),
+                    g_trackedModernWindows.size()),
                 std::memory_order_relaxed);
             continue;
         }
 
         if (iterator->second.threadId == currentThreadId &&
             IsWindowVisible(iterator->first)) {
-            active = true;
+            if (iterator->second.kind ==
+                ModernWindowKind::TaskbarThumbnail) {
+                taskbarThumbnailActive = true;
+            } else if (iterator->second.kind ==
+                       ModernWindowKind::Popup) {
+                popupActive = true;
+            }
         }
 
         ++iterator;
     }
 
-    return active;
+    return popupActive && !taskbarThumbnailActive;
 }
 
 BOOL WINAPI ShowWindowHook(HWND window, int command) {
@@ -1034,20 +1068,22 @@ BOOL WINAPI ShowWindowHook(HWND window, int command) {
         g_modernUiText.load(std::memory_order_relaxed);
     const bool showing = command != SW_HIDE;
     if (!modernUiEnabled &&
-        g_trackedModernPopupCount.load(
+        g_trackedModernWindowCount.load(
             std::memory_order_relaxed) == 0) {
         return g_originalShowWindow(window, command);
     }
 
-    bool tracked = IsModernPopupTracked(window);
+    bool tracked = IsModernWindowTracked(window);
 
     if (!tracked) {
-        if (!modernUiEnabled || !showing ||
-            !IsModernPopupWindow(window)) {
+        if (!modernUiEnabled || !showing) {
             return g_originalShowWindow(window, command);
         }
 
-        tracked = TrackModernPopup(window);
+        tracked = TrackModernWindowIfRelevant(window);
+        if (!tracked) {
+            return g_originalShowWindow(window, command);
+        }
     }
 
     const BOOL result = g_originalShowWindow(window, command);
@@ -1055,7 +1091,7 @@ BOOL WINAPI ShowWindowHook(HWND window, int command) {
     if (tracked &&
         (!showing || !IsWindow(window) ||
          !IsWindowVisible(window))) {
-        UntrackModernPopup(window);
+        UntrackModernWindow(window);
     }
 
     return result;
@@ -1072,22 +1108,26 @@ BOOL WINAPI SetWindowPosHook(HWND window,
         g_modernUiText.load(std::memory_order_relaxed);
     const bool showing = (flags & SWP_SHOWWINDOW) != 0;
     if ((!modernUiEnabled || !showing) &&
-        g_trackedModernPopupCount.load(
+        g_trackedModernWindowCount.load(
             std::memory_order_relaxed) == 0) {
         return g_originalSetWindowPos(
             window, insertAfter, x, y, width, height, flags);
     }
 
-    bool tracked = IsModernPopupTracked(window);
+    bool tracked = IsModernWindowTracked(window);
 
     if (!tracked) {
-        if (!modernUiEnabled || !showing ||
-            !IsModernPopupWindow(window)) {
+        if (!modernUiEnabled ||
+            (!showing && !IsWindowVisible(window))) {
             return g_originalSetWindowPos(
                 window, insertAfter, x, y, width, height, flags);
         }
 
-        tracked = TrackModernPopup(window);
+        tracked = TrackModernWindowIfRelevant(window);
+        if (!tracked) {
+            return g_originalSetWindowPos(
+                window, insertAfter, x, y, width, height, flags);
+        }
     }
 
     const BOOL result = g_originalSetWindowPos(
@@ -1095,16 +1135,15 @@ BOOL WINAPI SetWindowPosHook(HWND window,
 
     if (tracked &&
         (!result || (flags & SWP_HIDEWINDOW) ||
-         !IsWindow(window) ||
-         (showing && !IsWindowVisible(window)))) {
-        UntrackModernPopup(window);
+         !IsWindow(window) || !IsWindowVisible(window))) {
+        UntrackModernWindow(window);
     }
 
     return result;
 }
 
 BOOL WINAPI DestroyWindowHook(HWND window) {
-    UntrackModernPopup(window);
+    UntrackModernWindow(window);
     return g_originalDestroyWindow(window);
 }
 
@@ -1485,7 +1524,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
-    ClearTrackedModernPopups();
+    ClearTrackedModernWindows();
     Wh_Log(L"CJK Spacer uninitialized");
 }
 
@@ -1502,7 +1541,7 @@ void Wh_ModSettingsChanged() {
     }
     if (modernUiWasEnabled &&
         !g_modernUiText.load(std::memory_order_relaxed)) {
-        ClearTrackedModernPopups();
+        ClearTrackedModernWindows();
     }
 
     Wh_Log(L"CJK Spacer settings changed (classicMenus=%d, "
