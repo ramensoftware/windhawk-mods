@@ -1112,9 +1112,26 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
 }
 
 // --- Persistent taskbar icon cache (by HWND and by process+monitor) ---
-static std::unordered_map<HWND, int> g_TaskbarDockXs;
-static std::unordered_map<std::wstring, int> g_ProcessDockXs;
+struct TbIconPos {
+    int x, y, width;
+};
+static std::unordered_map<HWND, TbIconPos> g_TaskbarIconCache;
+static std::unordered_map<std::wstring, TbIconPos> g_ProcessIconCache;
 static std::mutex g_TbCacheMutex;
+
+// Guard: only one animation at a time per window.
+static std::unordered_set<HWND> g_animInProgress;
+static std::mutex g_animMtx;
+
+static bool AnimIsInProgress(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_animMtx);
+    return g_animInProgress.count(hWnd) != 0;
+}
+static void AnimSetInProgress(HWND hWnd, bool set) {
+    std::lock_guard<std::mutex> lock(g_animMtx);
+    if (set) g_animInProgress.insert(hWnd);
+    else     g_animInProgress.erase(hWnd);
+}
 
 static HWND FindTaskbarForMonitor(HMONITOR hMon) {
     HWND hMainTray = FindWindowW(L"Shell_TrayWnd", NULL);
@@ -1138,9 +1155,11 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     // Quick cache hit by HWND.
     {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        auto it = g_TaskbarDockXs.find(hWnd);
-        if (it != g_TaskbarDockXs.end()) {
-            *outX = it->second;
+        auto it = g_TaskbarIconCache.find(hWnd);
+        if (it != g_TaskbarIconCache.end()) {
+            *outX = it->second.x;
+            *outY = it->second.y;
+            if (outWidth) *outWidth = it->second.width;
             return TRUE;
         }
     }
@@ -1166,10 +1185,12 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     std::wstring processKey = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
     {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        auto it = g_ProcessDockXs.find(processKey);
-        if (it != g_ProcessDockXs.end()) {
-            *outX = it->second;
-            g_TaskbarDockXs[hWnd] = it->second;
+        auto it = g_ProcessIconCache.find(processKey);
+        if (it != g_ProcessIconCache.end()) {
+            *outX = it->second.x;
+            *outY = it->second.y;
+            if (outWidth) *outWidth = it->second.width;
+            g_TaskbarIconCache[hWnd] = it->second;
             return TRUE;
         }
     }
@@ -1366,8 +1387,9 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     // Cache the result.
     {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        g_TaskbarDockXs[hWnd] = targetX;
-        if (!processKey.empty()) g_ProcessDockXs[processKey] = targetX;
+        TbIconPos pos = { targetX, targetY, targetW };
+        g_TaskbarIconCache[hWnd] = pos;
+        if (!processKey.empty()) g_ProcessIconCache[processKey] = pos;
     }
     *outX = targetX;
     *outY = targetY;
@@ -1450,11 +1472,15 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     if (hGhost) DestroyWindow(hGhost);
     DeleteObject(data->hBitmap);
     if (data->hReady) CloseHandle(data->hReady);
+    AnimSetInProgress(data->hRealWnd, false);
     delete data;
     return 0;
 }
 
 void StartGenieAnim(HWND hWnd, BOOL rising) {
+    if (AnimIsInProgress(hWnd)) return;
+    AnimSetInProgress(hWnd, true);
+
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
@@ -1668,8 +1694,8 @@ void Wh_ModUninit() {
     }
     {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        g_TaskbarDockXs.clear();
-        g_ProcessDockXs.clear();
+        g_TaskbarIconCache.clear();
+        g_ProcessIconCache.clear();
     }
     ReleaseGenieGpuResources();
     ReleaseGpuDevice();
