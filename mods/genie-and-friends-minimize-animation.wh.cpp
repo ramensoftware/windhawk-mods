@@ -1097,8 +1097,9 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
 }
 
 // Find the centre and full clickable width of the taskbar icon for hWnd.
-// outWidth receives the button width (including padding) so the animation can
-// scale down to exactly the icon block's size.
+// outWidth receives the icon button width only when a specific icon is found;
+// when only the taskbar-centre fallback is used, *outWidth is set to 0 so the
+// caller falls back to the built-in minimum scale.
 // Returns FALSE when a position could not be determined.
 static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
@@ -1112,9 +1113,10 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
         HMONITOR hTbMon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL);
         if (hTbMon != hMon) continue;
 
+        // Fallback: the centre of the taskbar itself (width unknown).
         *outX = (tbRect.left + tbRect.right) / 2;
         *outY = (tbRect.top + tbRect.bottom) / 2;
-        if (outWidth) *outWidth = tbRect.right - tbRect.left;
+        if (outWidth) *outWidth = 0;
 
         HWND hToolbar = NULL;
         HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
@@ -1146,7 +1148,7 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
             }
         }
 
-        return TRUE;
+        return TRUE; // Taskbar-centre fallback with outWidth = 0.
     }
     return FALSE;
 }
