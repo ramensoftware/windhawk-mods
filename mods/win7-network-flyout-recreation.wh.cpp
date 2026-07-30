@@ -2239,13 +2239,12 @@ RECT g_rcArrowButton   = { 0 };
 RECT g_rcCheckboxLabel = { 0 };
 BOOL g_bShowCheckboxLabel = FALSE;
 HICON g_hIconNetworkMap  = NULL;
-HICON g_hIconGlobe       = NULL;
 HICON g_hIconDisconnected = NULL;
 HICON g_hIconAvailable = NULL;
 // Separate cache for the DirectUI Network Map visual: LoadImageW_Hook is asked
 // for these icons at whatever size DirectUI's icon() markup requests (e.g.
 // 36rp, which varies with DPI), which does NOT match the fixed 48x48
-// g_hIconNetworkMap/g_hIconGlobe used elsewhere (tray flyout header icon).
+// g_hIconNetworkMap is used by the tray flyout header icon.
 // Returning a CopyIcon() of the fixed 48x48 bitmap forced DirectUI to stretch
 // it to 36x36 (or upscale it at >100% DPI), blurring otherwise sharp artwork.
 // These are re-decoded from the same Base64 PNGs whenever the requested size
@@ -2268,7 +2267,6 @@ static HICON g_hIconOfflineNetworkDUI = NULL;
 static int   g_iconOfflineNetworkDUIW = 0, g_iconOfflineNetworkDUIH = 0;
 static int   g_iconNetLocDUICategory = -1;
 HICON g_hIconSignalBars[6] = { NULL };
-HICON g_hIconRefreshWin7 = NULL;
 int   g_PendingConnectIndex = -1;
 HWND  g_hTooltip = NULL;
 UINT_PTR g_RefreshTimer = 0;
@@ -3926,22 +3924,14 @@ void LoadSystemIcons() {
     WCHAR sysDir[MAX_PATH];
     UINT sysDirLen = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
     WCHAR netshellPath[MAX_PATH] = {0};
-    WCHAR shell32Path[MAX_PATH] = {0};
     if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(sysDir)) {
         StringCchCopyW(netshellPath, ARRAYSIZE(netshellPath), sysDir);
         StringCchCatW(netshellPath, ARRAYSIZE(netshellPath), L"\\netshell.dll");
-        StringCchCopyW(shell32Path, ARRAYSIZE(shell32Path), sysDir);
-        StringCchCatW(shell32Path, ARRAYSIZE(shell32Path), L"\\shell32.dll");
     }
     for (int i = 0; i < 6; i++)
         if (!g_hIconSignalBars[i])
             ExtractIconExW(netshellPath[0] ? netshellPath : L"netshell.dll",
                            152 + i, &g_hIconSignalBars[i], NULL, 1);
-    if (!g_hIconRefreshWin7)
-        ExtractIconExW(shell32Path[0] ? shell32Path : L"shell32.dll",
-                       238, &g_hIconRefreshWin7, NULL, 1);
-    if (!g_hIconGlobe)
-        g_hIconGlobe = CreateIconFromBase64PNG(GLOBE_ICON_BASE64, ScaleDpi(48), ScaleDpi(48));
     // Keep this cache at the exact header render size. Unlike the 48px map
     // artwork it is never resampled by DrawIconEx at normal DPI.
     if (!g_hIconDisconnected)
@@ -4045,7 +4035,6 @@ void FreeSystemIcons() {
     if (g_hIconNetworkCenterConnect) { DestroyIcon(g_hIconNetworkCenterConnect); g_hIconNetworkCenterConnect = NULL; }
     if (g_hIconNetworkCenterHomegroup) { DestroyIcon(g_hIconNetworkCenterHomegroup); g_hIconNetworkCenterHomegroup = NULL; }
     if (g_hIconNetworkMap) { DestroyIcon(g_hIconNetworkMap); g_hIconNetworkMap = NULL; }
-    if (g_hIconGlobe) { DestroyIcon(g_hIconGlobe); g_hIconGlobe = NULL; }
     if (g_hIconDisconnected) { DestroyIcon(g_hIconDisconnected); g_hIconDisconnected = NULL; }
     if (g_hIconAvailable) { DestroyIcon(g_hIconAvailable); g_hIconAvailable = NULL; }
     if (g_hIconNetworkMapDUI) { DestroyIcon(g_hIconNetworkMapDUI); g_hIconNetworkMapDUI = NULL; }
@@ -4062,7 +4051,6 @@ void FreeSystemIcons() {
     g_iconNetLocDUICategory = -1;
     for (int i = 0; i < 6; i++)
         if (g_hIconSignalBars[i]) { DestroyIcon(g_hIconSignalBars[i]); g_hIconSignalBars[i] = NULL; }
-    if (g_hIconRefreshWin7) { DestroyIcon(g_hIconRefreshWin7); g_hIconRefreshWin7 = NULL; }
 }
 
 void InitGlobalFonts() {
@@ -4365,12 +4353,13 @@ void RefreshWifiData(HANDLE hClient) {
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
         g_NetworkList[0].hasInternetAccess = hasInternet;
     }
+    int loggedNetworkCount = g_NetworkCount;
+    BOOL loggedConnected = loggedNetworkCount > 0 &&
+                           g_NetworkList[0].connState == CONN_STATE_CONNECTED;
+    int loggedPendingIndex = g_PendingConnectIndex;
     LeaveCriticalSection(&g_Ctx.csLock);
     Wh_Log(L"Refresh complete: %d network(s) found, connected: %s, g_PendingConnectIndex=%d",
-           g_NetworkCount,
-           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
-               ? L"yes" : L"no",
-           g_PendingConnectIndex);
+           loggedNetworkCount, loggedConnected ? L"yes" : L"no", loggedPendingIndex);
 }
 
 // -------------------------------------------------------
@@ -4411,8 +4400,8 @@ static BOOL ContainsKeywordCI(LPCWSTR str, LPCWSTR keyword) {
     return FALSE;
 }
 
-static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
-    if (!desc && !name) return FALSE;
+static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR /*name*/) {
+    if (!desc) return FALSE;
     const WCHAR* ignoreKeywords[] = {
         L"vmware", L"virtualbox", L"virtual", L"hyper-v", L"vethernet",
         L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth", L"wireguard",
@@ -4420,8 +4409,7 @@ static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
         L"wireless", L"wlan", L"wi-fi", L"802.11"
     };
     for (size_t i = 0; i < ARRAYSIZE(ignoreKeywords); i++) {
-        if (desc && ContainsKeywordCI(desc, ignoreKeywords[i])) return TRUE;
-        if (name && ContainsKeywordCI(name, ignoreKeywords[i])) return TRUE;
+        if (ContainsKeywordCI(desc, ignoreKeywords[i])) return TRUE;
     }
     return FALSE;
 }
@@ -4473,38 +4461,30 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr) {
                     pCurr->OperStatus == IfOperStatusUp &&
                     pCurr->FirstUnicastAddress != NULL) {
                     
-                    // Check if this adapter GUID belongs to a Wi-Fi card
-                    BOOL isWifiGuid = FALSE;
-                    EnterCriticalSection(&g_Ctx.csLock);
-                    for (int w = 0; w < g_WlanInterfaceCount; w++) {
-                        if (IsEqualGUID(pCurr->NetworkGuid, g_WlanInterfaceGuids[w])) {
-                            isWifiGuid = TRUE;
-                            break;
-                        }
-                    }
-                    LeaveCriticalSection(&g_Ctx.csLock);
-                    if (isWifiGuid) continue;
-                    
-                    // Check if description or friendly name indicates a virtual/Bluetooth/wireless adapter
-                    if (IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName)) {
-                        continue;
-                    }
-                    
-                    // NOTE: pCurr->NetworkGuid is an NLM-internal network identifier and is
-                    // NOT the same GUID as INetworkConnection::GetAdapterId(). The adapter's
-                    // real device GUID is embedded (as a string, e.g. "{4D36E972-...}") in
-                    // pCurr->AdapterName. Parse that instead, or the COM name lookup below
-                    // will never match and we'll silently keep the generic fallback name.
+                    // AdapterName contains the interface/device GUID; NetworkGuid
+                    // is an unrelated NLM network identifier and cannot be compared
+                    // to WLAN_INTERFACE_INFO::InterfaceGuid.
                     GUID parsedAdapterGuid = {0};
                     BOOL haveParsedGuid = FALSE;
                     if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
                         WCHAR wAdapterName[128];
                         int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
                                                            wAdapterName, ARRAYSIZE(wAdapterName));
-                        if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
-                            haveParsedGuid = TRUE;
+                        haveParsedGuid = convRes > 0 &&
+                            SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid));
+                    }
+                    BOOL isWifiGuid = FALSE;
+                    EnterCriticalSection(&g_Ctx.csLock);
+                    for (int w = 0; haveParsedGuid && w < g_WlanInterfaceCount; w++) {
+                        if (IsEqualGUID(parsedAdapterGuid, g_WlanInterfaceGuids[w])) {
+                            isWifiGuid = TRUE;
+                            break;
                         }
                     }
+                    LeaveCriticalSection(&g_Ctx.csLock);
+                    if (isWifiGuid) continue;
+                    if (IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName))
+                        continue;
 
                     foundPhysicalEthernet = TRUE;
                     physicalEthernetGuid = haveParsedGuid ? parsedAdapterGuid : pCurr->NetworkGuid;
@@ -4781,6 +4761,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             if (hIconBig) {
                 SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
             }
+            // LR_SHARED icons remain valid after releasing the module.
+            FreeLibrary(hVanDll);
         }
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -5080,10 +5062,20 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
     ShowWindow(hDlg, SW_SHOW);
     EnableWindow(hParent, FALSE);
     
-    MSG msg;
-    while (IsWindow(hDlg) && GetMessageW(&msg, NULL, 0, 0)) {
+    MSG msg = {};
+    BOOL quitting = FALSE;
+    while (IsWindow(hDlg)) {
+        BOOL got = GetMessageW(&msg, NULL, 0, 0);
+        if (got == 0) { quitting = TRUE; break; }
+        if (got == -1) break;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+    }
+    if (quitting) {
+        if (IsWindow(hDlg)) DestroyWindow(hDlg);
+        // Preserve WM_QUIT for HotkeyThreadProc; otherwise it would remain
+        // blocked in GetMessage after this nested modal loop returns.
+        PostQuitMessage((int)msg.wParam);
     }
     
     EnableWindow(hParent, TRUE);
@@ -5592,6 +5584,8 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             Wh_Log(L"WLAN: Connection Start");
             break;
         case wlan_notification_acm_connection_complete: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
@@ -5603,6 +5597,8 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
         }
         case wlan_notification_acm_connection_attempt_fail: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Connection Attempt Failed (intermediate), Reason: %lu", 
@@ -5610,6 +5606,8 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
         }
         case wlan_notification_acm_disconnected: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA discData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
@@ -7289,6 +7287,8 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
 // Network icon detection via pnidui.dll & toolbar subclassing
 // =====================================================================
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
+    // pnidui.dll can arrive after Explorer's toolbar; retry until cached.
+    InitPniduiInfo();
     *outButtonId = -1;
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"[Discovery] Toolbar has %d buttons", count);
@@ -7642,8 +7642,13 @@ void SafeCleanup() {
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
         if (g_hProfileDialogThread) {
-        // Never unload mod code while WlanUIEditProfile's modal UI is still
-        // executing it. This may wait for the user to close the dialog.
+        // Ask the modal native profile UI to close before joining its worker.
+        if (DWORD tid = GetThreadId(g_hProfileDialogThread)) {
+            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
+                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                return TRUE;
+            }, 0);
+        }
         WaitForSingleObject(g_hProfileDialogThread, INFINITE);
         CloseHandle(g_hProfileDialogThread);
         g_hProfileDialogThread = NULL;
@@ -9125,7 +9130,7 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
     if (comInitializedHere)
         CoUninitialize();
 
-    InterlockedExchange(&g_ncRefreshInFlight, 0);
+    // Keep the in-flight guard until notification posting is complete.
 
     // Nudge a re-render now that fresher data is available. Same
     // immediate-plus-later-catch-up shape as the connectivity-event path.
@@ -9138,6 +9143,8 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
             PostMessageW(item.msgWindow, g_ncRefreshMsg, 0, 0);
         }
     }
+    InterlockedExchange(&g_ncRefreshInFlight, 0);
+
     return 0;
 }
 
