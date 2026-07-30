@@ -1302,7 +1302,22 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
             }
         }
         if (!fromCache) {
+            // The window may be cloaked (the restore hook cloaks before
+            // calling us).  Temporarily uncloak so PrintWindow captures real
+            // content instead of black.
+            BOOL wasCloaked = FALSE;
+            DwmGetWindowAttribute(hWnd, DWMWA_CLOAK, &wasCloaked, sizeof(wasCloaked));
+            if (wasCloaked) {
+                BOOL uncloak = FALSE;
+                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak, sizeof(uncloak));
+                DwmFlush();
+            }
             PrintWindow(hWnd, hMemDC, PW_CLIENTONLY | 0x00000002);
+            if (wasCloaked) {
+                BOOL recloak = TRUE;
+                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &recloak, sizeof(recloak));
+                DwmFlush();
+            }
         }
     } else {
         BitBlt(hMemDC, 0, 0, w, h, hScreenDC, rect.left, rect.top, SRCCOPY);
