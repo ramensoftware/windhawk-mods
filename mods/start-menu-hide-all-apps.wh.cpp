@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              start-menu-hide-all-apps
-// @name            Start Menu - Hide All Apps Section
-// @description     Oculta a seção "Todos" do menu Iniciar do Windows 11, mostrando apenas apps fixados
+// @name            Windows 11 Start Menu Complete Styler
+// @description     Mod visual completo para personalizar o menu Iniciar do Windows 11, ocultando seções indesejadas e ajustando aparência
 // @version         1.0
 // @author          Dznas
 // @github          https://github.com/Dznas
@@ -9,21 +9,27 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme/*
-# Start Menu - Hide All Apps
+# Windows 11 Start Menu Complete Styler
 
-Oculta a seção "Todos" do menu Iniciar do Windows 11, mostrando apenas os apps que você fixou manualmente.
+Mod visual completo para personalizar o menu Iniciar do Windows 11.
 
 ## Funcionalidades
-- Remove a seção "Todos" com categorias (Acessibilidade, Criatividade, etc)
+- Oculta a seção "Todos" (All Apps)
 - Remove o título "Todos"
-- Remove o grid de apps não fixados
-- Remove categorias automáticas
+- Remove categorias automáticas (Acessibilidade, Criatividade, etc)
+- Remove barra de pesquisa
+- Personaliza cantos arredondados (CornerRadius=30)
+- Ajusta efeitos acrílicos e cores
+- Modifica margens e posições dos elementos
 - Mantém apenas os apps fixados (Pinned)
+
+## Diferença do pinned-only-on-start-menu
+Este mod oferece **personalização visual completa** do Start Menu, enquanto o `pinned-only-on-start-menu` usa políticas nativas do sistema para esconder seções.
 
 ## Como usar
 1. Instale o Windhawk
 2. Instale este mod
-3. A seção "Todos" será ocultada automaticamente
+3. Reinicie o Explorer ou o computador
 
 ## Nota
 Este mod funciona apenas no Windows 11 com o menu Iniciar padrão.
