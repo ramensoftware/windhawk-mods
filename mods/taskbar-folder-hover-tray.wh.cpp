@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.7
+// @version         1.11
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -266,6 +266,7 @@ do not conflict.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <memory>
@@ -822,13 +823,393 @@ PCWSTR PopupFontName() {
                                               : L"Segoe UI";
 }
 
-// DrawIconEx into a 32bpp DIB, then copy into a GDI+ bitmap that owns its
-// pixels.
+// True when the alpha channel carries real transparency (partial alpha, or a
+// mix of fully transparent and opaque). All-0 or all-255 means the AND mask
+// must supply transparency instead — common for classic XOR+mask icons.
+bool IconPixelsHaveUsefulAlpha(const BYTE* bgra,
+                               int width,
+                               int height,
+                               int stride) {
+    if (!bgra || width <= 0 || height <= 0) {
+        return false;
+    }
+    bool sawTransparent = false;
+    bool sawOpaque = false;
+    bool sawPartial = false;
+    for (int y = 0; y < height; y++) {
+        const BYTE* row = bgra + (size_t)y * stride;
+        for (int x = 0; x < width; x++) {
+            BYTE a = row[(size_t)x * 4 + 3];
+            if (a == 0) {
+                sawTransparent = true;
+            } else if (a == 255) {
+                sawOpaque = true;
+            } else {
+                sawPartial = true;
+            }
+            if (sawPartial || (sawTransparent && sawOpaque)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// AND mask bit: 1/white = transparent, 0/black = opaque. Bits are MSB-first
+// within each byte; rows are DWORD-aligned.
+bool IconMaskBitTransparent(const BYTE* maskBits,
+                            int maskWidthBytes,
+                            int x,
+                            int y) {
+    const BYTE* row = maskBits + (size_t)y * maskWidthBytes;
+    BYTE b = row[x >> 3];
+    return (b & (0x80 >> (x & 7))) != 0;
+}
+
+// Pull a top-down 32bpp BGRA copy of an HBITMAP via GetDIBits (preserves the
+// alpha byte for existing 32bpp sources on modern Windows).
+bool CopyHbitmapToBgra32(HBITMAP hbm,
+                         std::vector<BYTE>* out,
+                         int* outW,
+                         int* outH) {
+    if (!hbm || !out || !outW || !outH) {
+        return false;
+    }
+    BITMAP bm{};
+    if (!GetObject(hbm, sizeof(bm), &bm) || bm.bmWidth <= 0 ||
+        bm.bmHeight <= 0) {
+        return false;
+    }
+    const int w = bm.bmWidth;
+    const int h = bm.bmHeight;
+
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;  // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    out->assign((size_t)w * h * 4, 0);
+    HDC hdc = GetDC(nullptr);
+    if (!hdc) {
+        return false;
+    }
+    int got = GetDIBits(hdc, hbm, 0, h, out->data(), &bi, DIB_RGB_COLORS);
+    ReleaseDC(nullptr, hdc);
+    if (got != h) {
+        return false;
+    }
+    *outW = w;
+    *outH = h;
+    return true;
+}
+
+// Clear junk RGB under transparent pixels and premultiply for PARGB drawing.
+// Classic XOR icons often leave white/gray in alpha==0 cells; SourceOver onto a
+// dark PARGB panel then reads as a faint lighter veil. Near-zero alpha with
+// near-white/near-black RGB (mask/DrawIconEx noise) is treated as fully clear
+// so soft edges of modern icons are preserved.
+void SanitizeAndPremultiplyBgra(BYTE* bgra,
+                                int width,
+                                int height,
+                                int stride) {
+    if (!bgra || width <= 0 || height <= 0) {
+        return;
+    }
+    for (int y = 0; y < height; y++) {
+        BYTE* row = bgra + (size_t)y * stride;
+        for (int x = 0; x < width; x++) {
+            BYTE* p = row + (size_t)x * 4;
+            BYTE b = p[0], g = p[1], r = p[2], a = p[3];
+            if (a == 0) {
+                p[0] = p[1] = p[2] = 0;
+                continue;
+            }
+            if (a < 8) {
+                const int mx = (std::max)((int)r, (std::max)((int)g, (int)b));
+                const int mn = (std::min)((int)r, (std::min)((int)g, (int)b));
+                const bool nearWhite = mn >= 220;
+                const bool nearBlack = mx <= 35;
+                if (nearWhite || nearBlack) {
+                    p[0] = p[1] = p[2] = p[3] = 0;
+                    continue;
+                }
+            }
+            p[0] = (BYTE)((int)b * a / 255);
+            p[1] = (BYTE)((int)g * a / 255);
+            p[2] = (BYTE)((int)r * a / 255);
+        }
+    }
+}
+
+// After scaling/filtering a PARGB bitmap, re-clear fully transparent pixels and
+// clamp channels so rgb never exceeds alpha (invalid premul from bicubic).
+void SanitizeParGbBitmap(Gdiplus::Bitmap* bmp) {
+    if (!bmp) {
+        return;
+    }
+    const int w = (int)bmp->GetWidth();
+    const int h = (int)bmp->GetHeight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    Gdiplus::BitmapData bd{};
+    Gdiplus::Rect lockRect(0, 0, w, h);
+    if (bmp->LockBits(&lockRect,
+                      (Gdiplus::ImageLockMode)(Gdiplus::ImageLockModeRead |
+                                               Gdiplus::ImageLockModeWrite),
+                      PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
+        return;
+    }
+    for (int y = 0; y < h; y++) {
+        BYTE* row = (BYTE*)bd.Scan0 + (size_t)y * bd.Stride;
+        for (int x = 0; x < w; x++) {
+            BYTE* p = row + (size_t)x * 4;
+            BYTE a = p[3];
+            if (a == 0) {
+                p[0] = p[1] = p[2] = 0;
+                continue;
+            }
+            if (a < 8) {
+                const int mx =
+                    (std::max)((int)p[0], (std::max)((int)p[1], (int)p[2]));
+                // Premultiplied near-white junk is still bright relative to alpha.
+                const bool brightJunk = mx >= (int)a * 200 / 255 && mx >= 6;
+                const bool nearBlack = mx <= 2;
+                if (brightJunk || nearBlack) {
+                    p[0] = p[1] = p[2] = p[3] = 0;
+                    continue;
+                }
+            }
+            if (p[0] > a) {
+                p[0] = a;
+            }
+            if (p[1] > a) {
+                p[1] = a;
+            }
+            if (p[2] > a) {
+                p[2] = a;
+            }
+        }
+    }
+    bmp->UnlockBits(&bd);
+}
+
+// Apply the icon's 1-bit AND mask as alpha. For color icons the mask matches
+// the color size (or a double-height legacy layout); for monochrome icons the
+// AND plane is the top half. Destination may differ in size from the mask —
+// coordinates are mapped so scaled DrawIconEx buffers still work.
+void ApplyIconAndMaskToBgra(BYTE* bgra,
+                            int width,
+                            int height,
+                            HBITMAP hbmMask,
+                            bool monoIcon) {
+    if (!bgra || !hbmMask || width <= 0 || height <= 0) {
+        return;
+    }
+
+    BITMAP bmMask{};
+    if (!GetObject(hbmMask, sizeof(bmMask), &bmMask) || bmMask.bmWidth <= 0 ||
+        bmMask.bmHeight <= 0) {
+        return;
+    }
+
+    const int maskW = bmMask.bmWidth;
+    const int maskH = bmMask.bmHeight;
+    int andRows;
+    if (monoIcon) {
+        andRows = maskH / 2;
+    } else if (maskH >= height * 2 && height > 0) {
+        andRows = height;
+    } else {
+        andRows = maskH;
+    }
+    if (andRows <= 0) {
+        return;
+    }
+
+    struct {
+        BITMAPINFOHEADER bmiHeader;
+        RGBQUAD bmiColors[2];
+    } bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = maskW;
+    bi.bmiHeader.biHeight = -maskH;  // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 1;
+    bi.bmiHeader.biCompression = BI_RGB;
+    bi.bmiColors[0] = {0, 0, 0, 0};
+    bi.bmiColors[1] = {255, 255, 255, 0};
+
+    const int maskStride = ((maskW + 31) / 32) * 4;
+    std::vector<BYTE> maskBits((size_t)maskStride * maskH, 0);
+
+    HDC hdc = GetDC(nullptr);
+    if (!hdc) {
+        return;
+    }
+    int got = GetDIBits(hdc, hbmMask, 0, maskH, maskBits.data(),
+                        reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS);
+    ReleaseDC(nullptr, hdc);
+    if (got <= 0) {
+        return;
+    }
+
+    for (int y = 0; y < height; y++) {
+        const int my = (y * andRows) / height;
+        BYTE* row = bgra + (size_t)y * width * 4;
+        for (int x = 0; x < width; x++) {
+            const int mx = (x * maskW) / width;
+            if (IconMaskBitTransparent(maskBits.data(), maskStride, mx, my)) {
+                row[(size_t)x * 4 + 0] = 0;
+                row[(size_t)x * 4 + 1] = 0;
+                row[(size_t)x * 4 + 2] = 0;
+                row[(size_t)x * 4 + 3] = 0;
+            } else if (row[(size_t)x * 4 + 3] == 0) {
+                // Opaque under the mask but alpha was never filled — make solid.
+                row[(size_t)x * 4 + 3] = 255;
+            }
+        }
+    }
+}
+
+// `bgra` must already be premultiplied (SanitizeAndPremultiplyBgra). Output is
+// PixelFormat32bppPARGB to match RebuildLevelBase / UpdateLayeredWindow.
+std::shared_ptr<Gdiplus::Bitmap> BitmapFromBgraScaled(const BYTE* bgra,
+                                                      int srcW,
+                                                      int srcH,
+                                                      int size) {
+    if (!bgra || srcW <= 0 || srcH <= 0 || size <= 0) {
+        return nullptr;
+    }
+
+    std::shared_ptr<Gdiplus::Bitmap> result;
+    try {
+        Gdiplus::Bitmap source(srcW, srcH, srcW * 4, PixelFormat32bppPARGB,
+                               const_cast<BYTE*>(bgra));
+        if (source.GetLastStatus() != Gdiplus::Ok) {
+            return nullptr;
+        }
+        result =
+            std::make_shared<Gdiplus::Bitmap>(size, size, PixelFormat32bppPARGB);
+        if (!result || result->GetLastStatus() != Gdiplus::Ok) {
+            return nullptr;
+        }
+        Gdiplus::Graphics g(result.get());
+        if (g.GetLastStatus() != Gdiplus::Ok) {
+            return nullptr;
+        }
+        g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+        g.Clear(Gdiplus::Color(0, 0, 0, 0));
+        g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        if (g.DrawImage(&source, 0, 0, size, size) != Gdiplus::Ok) {
+            return nullptr;
+        }
+        SanitizeParGbBitmap(result.get());
+    } catch (...) {
+        return nullptr;
+    }
+    return result;
+}
+
+// Convert HICON to a sized 32bpp PARGB bitmap for every icon type:
+// 1) Prefer color-plane pixels that already carry useful alpha (modern ARGB).
+// 2) Otherwise apply the 1-bit AND mask (black=opaque, white=transparent) so
+//    classic XOR+mask icons never keep white/black bogus backgrounds.
+// 3) Sanitize transparent RGB + premultiply, then scale as PARGB.
+// 4) Last resort: DrawIconEx onto a zero-cleared 32bpp DIB, then mask if needed.
 std::shared_ptr<Gdiplus::Bitmap> HIconToBitmap(HICON hIcon, int size) {
     if (!hIcon || size <= 0) {
         return nullptr;
     }
 
+    ICONINFO ii{};
+    if (GetIconInfo(hIcon, &ii)) {
+        const bool monoIcon = (ii.hbmColor == nullptr);
+        std::vector<BYTE> bgra;
+        int srcW = 0;
+        int srcH = 0;
+        bool havePixels = false;
+
+        if (ii.hbmColor) {
+            havePixels = CopyHbitmapToBgra32(ii.hbmColor, &bgra, &srcW, &srcH);
+        } else if (ii.hbmMask) {
+            // Monochrome: reconstruct color from the XOR (bottom) half via
+            // DrawIconEx onto a cleared DIB at the mask's logical size.
+            BITMAP bmMask{};
+            if (GetObject(ii.hbmMask, sizeof(bmMask), &bmMask) &&
+                bmMask.bmWidth > 0 && bmMask.bmHeight >= 2) {
+                srcW = bmMask.bmWidth;
+                srcH = bmMask.bmHeight / 2;
+                BITMAPINFO bi{};
+                bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bi.bmiHeader.biWidth = srcW;
+                bi.bmiHeader.biHeight = -srcH;
+                bi.bmiHeader.biPlanes = 1;
+                bi.bmiHeader.biBitCount = 32;
+                bi.bmiHeader.biCompression = BI_RGB;
+
+                HDC hScreen = GetDC(nullptr);
+                if (hScreen) {
+                    HDC hMem = CreateCompatibleDC(hScreen);
+                    ReleaseDC(nullptr, hScreen);
+                    if (hMem) {
+                        void* bits = nullptr;
+                        HBITMAP hDib = CreateDIBSection(hMem, &bi, DIB_RGB_COLORS,
+                                                        &bits, nullptr, 0);
+                        if (hDib && bits) {
+                            HGDIOBJ old = SelectObject(hMem, hDib);
+                            memset(bits, 0, (size_t)srcW * srcH * 4);
+                            DrawIconEx(hMem, 0, 0, hIcon, srcW, srcH, 0, nullptr,
+                                       DI_NORMAL);
+                            SelectObject(hMem, old);
+                            GdiFlush();
+                            bgra.assign((BYTE*)bits,
+                                        (BYTE*)bits + (size_t)srcW * srcH * 4);
+                            havePixels = true;
+                            DeleteObject(hDib);
+                        }
+                        DeleteDC(hMem);
+                    }
+                }
+            }
+        }
+
+        if (havePixels && srcW > 0 && srcH > 0) {
+            if (!IconPixelsHaveUsefulAlpha(bgra.data(), srcW, srcH, srcW * 4) &&
+                ii.hbmMask) {
+                ApplyIconAndMaskToBgra(bgra.data(), srcW, srcH, ii.hbmMask,
+                                       monoIcon);
+            }
+            SanitizeAndPremultiplyBgra(bgra.data(), srcW, srcH, srcW * 4);
+            auto scaled =
+                BitmapFromBgraScaled(bgra.data(), srcW, srcH, size);
+            if (ii.hbmColor) {
+                DeleteObject(ii.hbmColor);
+            }
+            if (ii.hbmMask) {
+                DeleteObject(ii.hbmMask);
+            }
+            if (scaled) {
+                return scaled;
+            }
+        } else {
+            if (ii.hbmColor) {
+                DeleteObject(ii.hbmColor);
+            }
+            if (ii.hbmMask) {
+                DeleteObject(ii.hbmMask);
+            }
+        }
+    }
+
+    // Last resort: DrawIconEx into a zero-cleared 32bpp DIB, then re-apply the
+    // AND mask when the draw left a useless alpha channel (XOR garbage RGB
+    // such as opaque white in transparent cells).
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bi.bmiHeader.biWidth = size;
@@ -862,37 +1243,43 @@ std::shared_ptr<Gdiplus::Bitmap> HIconToBitmap(HICON hIcon, int size) {
     GdiFlush();
 
     BYTE* px = (BYTE*)bits;
-    bool anyAlpha = false;
-    for (size_t i = 3; i < (size_t)size * size * 4; i += 4) {
-        if (px[i] != 0) {
-            anyAlpha = true;
-            break;
-        }
-    }
-    // Legacy mask-based icons come back with a zeroed alpha channel; treat any
-    // non-black pixel as opaque so they are not invisible.
-    if (!anyAlpha) {
-        for (size_t i = 0; i < (size_t)size * size * 4; i += 4) {
-            if (px[i] || px[i + 1] || px[i + 2]) {
-                px[i + 3] = 255;
+    if (!IconPixelsHaveUsefulAlpha(px, size, size, size * 4)) {
+        ICONINFO maskInfo{};
+        if (GetIconInfo(hIcon, &maskInfo)) {
+            ApplyIconAndMaskToBgra(px, size, size, maskInfo.hbmMask,
+                                   maskInfo.hbmColor == nullptr);
+            if (maskInfo.hbmColor) {
+                DeleteObject(maskInfo.hbmColor);
+            }
+            if (maskInfo.hbmMask) {
+                DeleteObject(maskInfo.hbmMask);
+            }
+        } else {
+            // No mask available: opaque where any color was drawn.
+            for (size_t i = 0; i < (size_t)size * size * 4; i += 4) {
+                if (px[i] || px[i + 1] || px[i + 2]) {
+                    px[i + 3] = 255;
+                }
             }
         }
     }
+    SanitizeAndPremultiplyBgra(px, size, size, size * 4);
 
     std::shared_ptr<Gdiplus::Bitmap> result;
     try {
         result =
-            std::make_shared<Gdiplus::Bitmap>(size, size, PixelFormat32bppARGB);
+            std::make_shared<Gdiplus::Bitmap>(size, size, PixelFormat32bppPARGB);
         if (result->GetLastStatus() == Gdiplus::Ok) {
             Gdiplus::BitmapData bd{};
             Gdiplus::Rect lockRect(0, 0, size, size);
             if (result->LockBits(&lockRect, Gdiplus::ImageLockModeWrite,
-                                 PixelFormat32bppARGB, &bd) == Gdiplus::Ok) {
+                                 PixelFormat32bppPARGB, &bd) == Gdiplus::Ok) {
                 for (int y = 0; y < size; y++) {
                     memcpy((BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
                            px + (size_t)y * size * 4, (size_t)size * 4);
                 }
                 result->UnlockBits(&bd);
+                SanitizeParGbBitmap(result.get());
             } else {
                 result.reset();
             }
@@ -930,7 +1317,32 @@ int ShilForSize(int pixelSize) {
     return SHIL_JUMBO;
 }
 
-HICON GetShellIconForPath(const std::wstring& path, int pixelSize) {
+bool PathIsLnkFile(const std::wstring& path) {
+    return path.size() >= 4 &&
+           _wcsicmp(path.c_str() + (path.size() - 4), L".lnk") == 0;
+}
+
+// SHDefExtractIconW does not composite the shortcut overlay arrow.
+HICON ExtractIconDef(const std::wstring& path, int index, int pixelSize) {
+    HICON hLarge = nullptr;
+    HICON hSmall = nullptr;
+    if (SUCCEEDED(SHDefExtractIconW(path.c_str(), index, 0, &hLarge, &hSmall,
+                                    (UINT)pixelSize)) &&
+        hLarge) {
+        if (hSmall) {
+            DestroyIcon(hSmall);
+        }
+        return hLarge;
+    }
+    if (hSmall) {
+        return hSmall;
+    }
+    return nullptr;
+}
+
+// System image list index without drawing overlays (no SHGFI_LINKOVERLAY /
+// SHGFI_ICON, which bake the shortcut arrow into .lnk icons).
+HICON GetShellIconFromImageList(const std::wstring& path, int pixelSize) {
     SHFILEINFOW sfi{};
     if (!SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi),
                         SHGFI_SYSICONINDEX)) {
@@ -945,17 +1357,101 @@ HICON GetShellIconForPath(const std::wstring& path, int pixelSize) {
         imageList->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &hIcon);
         imageList->Release();
     }
+    return hIcon;
+}
 
-    if (!hIcon) {
-        SHFILEINFOW sfi2{};
-        UINT flags =
-            SHGFI_ICON | (pixelSize <= 16 ? SHGFI_SMALLICON : SHGFI_LARGEICON);
-        if (SHGetFileInfoW(path.c_str(), 0, &sfi2, sizeof(sfi2), flags)) {
-            hIcon = sfi2.hIcon;
+// Resolve a .lnk's custom icon location or target path and extract without the
+// shell link overlay.
+HICON GetIconFromShortcutFile(const std::wstring& lnkPath, int pixelSize) {
+    IShellLinkW* link = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_IShellLinkW, (void**)&link)) ||
+        !link) {
+        return nullptr;
+    }
+
+    IPersistFile* persist = nullptr;
+    HRESULT hr = link->QueryInterface(IID_IPersistFile, (void**)&persist);
+    if (FAILED(hr) || !persist) {
+        link->Release();
+        return nullptr;
+    }
+
+    hr = persist->Load(lnkPath.c_str(), STGM_READ);
+    persist->Release();
+    if (FAILED(hr)) {
+        link->Release();
+        return nullptr;
+    }
+
+    WCHAR iconLoc[MAX_PATH]{};
+    int iconIndex = 0;
+    hr = link->GetIconLocation(iconLoc, ARRAYSIZE(iconLoc), &iconIndex);
+    if (SUCCEEDED(hr) && iconLoc[0]) {
+        WCHAR expanded[MAX_PATH]{};
+        PCWSTR file = iconLoc;
+        DWORD expandedLen =
+            ExpandEnvironmentStringsW(iconLoc, expanded, ARRAYSIZE(expanded));
+        if (expandedLen > 0 && expandedLen <= ARRAYSIZE(expanded)) {
+            file = expanded;
+        }
+        HICON hIcon = ExtractIconDef(file, iconIndex, pixelSize);
+        if (hIcon) {
+            link->Release();
+            return hIcon;
         }
     }
 
-    return hIcon;
+    WCHAR target[MAX_PATH]{};
+    hr = link->GetPath(target, ARRAYSIZE(target), nullptr, SLGP_RAWPATH);
+    if (FAILED(hr) || !target[0]) {
+        hr = link->GetPath(target, ARRAYSIZE(target), nullptr, 0);
+    }
+    link->Release();
+    if (FAILED(hr) || !target[0]) {
+        return nullptr;
+    }
+
+    WCHAR expandedTarget[MAX_PATH]{};
+    PCWSTR useTarget = target;
+    DWORD targetLen = ExpandEnvironmentStringsW(target, expandedTarget,
+                                                ARRAYSIZE(expandedTarget));
+    if (targetLen > 0 && targetLen <= ARRAYSIZE(expandedTarget)) {
+        useTarget = expandedTarget;
+    }
+
+    if (HICON hIcon = ExtractIconDef(useTarget, 0, pixelSize)) {
+        return hIcon;
+    }
+    return GetShellIconFromImageList(useTarget, pixelSize);
+}
+
+HICON GetShellIconForPath(const std::wstring& path, int pixelSize) {
+    // Prefer paths that never composite SHGFI_LINKOVERLAY / shortcut arrows.
+    if (PathIsLnkFile(path)) {
+        if (HICON hIcon = GetIconFromShortcutFile(path, pixelSize)) {
+            return hIcon;
+        }
+        // Extracting from the .lnk itself still avoids the overlay arrow.
+        if (HICON hIcon = ExtractIconDef(path, 0, pixelSize)) {
+            return hIcon;
+        }
+    } else if (HICON hIcon = ExtractIconDef(path, 0, pixelSize)) {
+        return hIcon;
+    }
+
+    if (HICON hIcon = GetShellIconFromImageList(path, pixelSize)) {
+        return hIcon;
+    }
+
+    // Last resort — SHGFI_ICON may include the shortcut overlay for .lnk files.
+    SHFILEINFOW sfi{};
+    UINT flags =
+        SHGFI_ICON | (pixelSize <= 16 ? SHGFI_SMALLICON : SHGFI_LARGEICON);
+    if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), flags)) {
+        return sfi.hIcon;
+    }
+    return nullptr;
 }
 
 // Accepts "C:\path\app.exe,3" as well as a plain image or icon file path.
@@ -974,21 +1470,10 @@ HICON ExtractIconFromResourceSpec(const std::wstring& spec, int pixelSize) {
         }
     }
 
-    HICON hLarge = nullptr;
-    HICON hSmall = nullptr;
-    if (SUCCEEDED(SHDefExtractIconW(file.c_str(), index, 0, &hLarge, &hSmall,
-                                    (UINT)pixelSize)) &&
-        hLarge) {
-        if (hSmall) {
-            DestroyIcon(hSmall);
-        }
-        return hLarge;
+    if (HICON hIcon = ExtractIconDef(file, index, pixelSize)) {
+        return hIcon;
     }
-    if (hSmall) {
-        return hSmall;
-    }
-
-    return GetShellIconForPath(file, pixelSize);
+    return GetShellIconFromImageList(file, pixelSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1038,6 +1523,21 @@ bool g_scanThreadStop = false;
 // optional + no_destroy: a bare std::thread aborts Explorer on process exit if
 // it is still joinable when globals are destroyed.
 [[clang::no_destroy]] std::optional<std::thread> g_scanThread;
+
+// Shell icon handlers on an STA thread may create windows and post messages.
+// Pump while idle/between extractions so a wait without a message loop cannot
+// hang forever; stop still wakes via g_scanCv + g_scanThreadStop.
+void PumpScanThreadMessages() {
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_QUIT) {
+            // Do not tear down the scan thread on an unexpected WM_QUIT.
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
 
 std::wstring CacheKey(const std::wstring& path) {
     std::wstring key = path;
@@ -1246,18 +1746,36 @@ void ScanFolderInto(const std::wstring& path,
             item.icon = HIconToBitmap(hIcon, iconPixelSize);
             DestroyIcon(hIcon);
         }
+        // Keep the STA responsive for in-process shell icon handlers.
+        PumpScanThreadMessages();
     }
 }
 
 void ScanThreadMain() {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    // Shell icon extractors (SHGetFileInfo / IExtractIcon) expect STA. MTA
+    // causes many extractions to fail with the generic document icon.
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
 
     for (;;) {
         ScanRequest request;
         {
             std::unique_lock<std::mutex> lock(g_scanMutex);
-            g_scanCv.wait(
-                lock, [] { return g_scanThreadStop || !g_scanQueue.empty(); });
+            for (;;) {
+                if (g_scanThreadStop || !g_scanQueue.empty()) {
+                    break;
+                }
+                // Timed wait so a pumpless STA cannot stall forever when a
+                // shell handler creates windows / expects posted messages.
+                if (g_scanCv.wait_for(
+                        lock, std::chrono::milliseconds(50), [] {
+                            return g_scanThreadStop || !g_scanQueue.empty();
+                        })) {
+                    break;
+                }
+                lock.unlock();
+                PumpScanThreadMessages();
+                lock.lock();
+            }
             if (g_scanThreadStop) {
                 break;
             }
@@ -1881,7 +2399,10 @@ void PaintLevel(PopupLevel* level) {
         format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
         format.SetFormatFlags(Gdiplus::StringFormatFlagsLineLimit);
 
-        // Repaint only the active cell(s): erase + highlight, then DrawCell.
+        // Highlight under icon/label: clear only inside the rounded path, then
+        // fill highlight and DrawCell. A full-cell SourceCopy FillRectangle
+        // (added with cachedBase in v1.5) left a sharp translucent fringe in the
+        // ScaleForPopup(2) inset margin that did not match the base panel alpha.
         auto repaintCell = [&](int cellIndex, bool pressed) {
             if (cellIndex < 0 || cellIndex >= (int)level->cellRects.size() ||
                 cellIndex >= (int)level->items.size()) {
@@ -1891,7 +2412,12 @@ void PaintLevel(PopupLevel* level) {
             int cellW = cell.right - cell.left;
             int cellH = cell.bottom - cell.top;
 
-            // Cover the base cell with the panel colour, then highlight + content.
+            Gdiplus::Rect highlight(
+                cell.left + ScaleForPopup(2), cell.top + ScaleForPopup(2),
+                cellW - ScaleForPopup(4), cellH - ScaleForPopup(4));
+            Gdiplus::GraphicsPath highlightPath;
+            AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
+
             bool darkPanel = IsDarkTheme();
             BYTE panelAlpha = (BYTE)std::clamp<int>(
                 g_settings.panelOpacity * 255 / 100, 10, 255);
@@ -1900,14 +2426,9 @@ void PaintLevel(PopupLevel* level) {
                           : Gdiplus::Color(panelAlpha, 249, 249, 249);
             Gdiplus::SolidBrush eraseBrush(panelColor);
             g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
-            g.FillRectangle(&eraseBrush, cell.left, cell.top, cellW, cellH);
+            g.FillPath(&eraseBrush, &highlightPath);
             g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
 
-            Gdiplus::Rect highlight(
-                cell.left + ScaleForPopup(2), cell.top + ScaleForPopup(2),
-                cellW - ScaleForPopup(4), cellH - ScaleForPopup(4));
-            Gdiplus::GraphicsPath highlightPath;
-            AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
             Gdiplus::SolidBrush highlightBrush(pressed ? pressColor
                                                        : hoverColor);
             g.FillPath(&highlightBrush, &highlightPath);
@@ -2807,8 +3328,9 @@ ImageSource HIconToImageSource(HICON hIcon, int size) {
 
     Gdiplus::BitmapData bd{};
     Gdiplus::Rect lockRect(0, 0, size, size);
+    // HIconToBitmap stores PARGB; WriteableBitmap also wants premultiplied BGRA.
     if (bitmap->LockBits(&lockRect, Gdiplus::ImageLockModeRead,
-                         PixelFormat32bppARGB, &bd) != Gdiplus::Ok) {
+                         PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
         return nullptr;
     }
 
@@ -2825,17 +3347,9 @@ ImageSource HIconToImageSource(HICON hIcon, int size) {
             BYTE* dest = nullptr;
             if (SUCCEEDED(byteAccess->Buffer(&dest)) && dest) {
                 for (int y = 0; y < size; y++) {
-                    const BYTE* src =
-                        (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride;
-                    BYTE* row = dest + (size_t)y * size * 4;
-                    for (int x = 0; x < size; x++) {
-                        BYTE a = src[x * 4 + 3];
-                        // WriteableBitmap expects premultiplied BGRA.
-                        row[x * 4 + 0] = (BYTE)(src[x * 4 + 0] * a / 255);
-                        row[x * 4 + 1] = (BYTE)(src[x * 4 + 1] * a / 255);
-                        row[x * 4 + 2] = (BYTE)(src[x * 4 + 2] * a / 255);
-                        row[x * 4 + 3] = a;
-                    }
+                    memcpy(dest + (size_t)y * size * 4,
+                           (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
+                           (size_t)size * 4);
                 }
             }
             byteAccess->Release();
