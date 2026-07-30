@@ -32,9 +32,9 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 |:---:|:---:|
 | Control Panel | Registry Editor |
 
-| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif) |
-|:---:|:---:|
-| Navigation pane pill | About Windows |
+| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![Property sheet tabs](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Abas.jpg) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif) |
+|:---:|:---:|:---:|
+| Navigation pane pill | Property sheet tabs | About Windows |
 
 ### Features
 
@@ -10685,7 +10685,8 @@ static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
 {
     UNREFERENCED_PARAMETER(dwRefData);
 
-    if (uMsg == g_navHoverFadeResetMessage.load(std::memory_order_acquire)) {
+    if (const UINT resetMsg = g_navHoverFadeResetMessage.load(std::memory_order_acquire);
+        resetMsg && uMsg == resetMsg) {
         NavHoverFadeDestroyState(
             hWnd,
             !g_msgWndUnloading.load(std::memory_order_acquire));
@@ -10776,9 +10777,18 @@ static LRESULT CALLBACK TvTrackSelectCursorSubclassProc(HWND hWnd, UINT uMsg,
 static void TreeCursorRemoveFromWindow(HWND hwnd)
 {
     if (GetPropW(hwnd, kTreeCursorSubclassProp)) {
-        if (GetPropW(hwnd, kPropNavHoverFadeState))
-            (void)SendMessageW(
-                hwnd, g_navHoverFadeResetMessage.load(std::memory_order_acquire), 0, 0);
+        if (GetPropW(hwnd, kPropNavHoverFadeState)) {
+            // If registration failed, resetMsg is 0 -- sending WM_NULL
+            // wouldn't reach TreeCursorSubclassProc's (correctly) guarded
+            // handler at all, leaking the hover-fade state and its SetTimer.
+            // Do the work directly instead of relying on the message.
+            if (const UINT resetMsg =
+                    g_navHoverFadeResetMessage.load(std::memory_order_acquire))
+                (void)SendMessageW(hwnd, resetMsg, 0, 0);
+            else
+                NavHoverFadeDestroyState(
+                    hwnd, !g_msgWndUnloading.load(std::memory_order_acquire));
+        }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc);
         RemovePropW(hwnd, kTreeCursorSubclassProp);
     }
@@ -13145,7 +13155,7 @@ static constexpr UINT kListSelectFadeHitTestMsg = 0x1000 + 18; // LVM_HITTEST
 // serialized on its own thread, these containers are process-global -- two
 // list/tree views on different threads can still insert into/rehash the same
 // unordered_map concurrently. g_lvSelectFadeMutex guards every access to the
-// three globals below. Never hold it across a cross-thread
+// globals below. Never hold it across a cross-thread
 // SetWindowSubclassFromAnyThread/RemoveWindowSubclassFromAnyThread call --
 // same deadlock shape documented on g_checkAnimsMutex/CheckAnims_Cleanup.
 static std::recursive_mutex g_lvSelectFadeMutex;
@@ -13154,8 +13164,17 @@ static std::unordered_map<ULONG_PTR, ListSelectFadeState> g_lvSelectFadeAnims;
 // operation -- LVN_DELETEITEM's wipe, ResyncWindow's prune -- doesn't have
 // to scan every entry in the process, just this window's own.
 static std::unordered_map<HWND, std::unordered_set<ULONG_PTR>> g_lvSelectFadeKeysByWindow;
-static HWND g_lvSelectFadeTimerHwnd = nullptr;
-static DOUBLE g_lvSelectFadeLastTime = 0.0;
+// One independent timer/subclass host per root window that has ever needed
+// one -- NOT a single global slot retargeted between windows. Retargeting
+// meant releasing the *previous* host's subclass from whichever thread was
+// installing the new one: a blocking cross-thread
+// RemoveWindowSubclassFromAnyThread call made synchronously from inside
+// SendMessageW_hook's LVN_ITEMCHANGED handling, which could freeze window
+// B's click on window A's thread for as long as A's thread was busy. Each
+// host now manages its own timer independently and self-removes on its own
+// WM_NCDESTROY; only Wh_ModUninit tears every host down explicitly, with
+// the copy-then-release shape used elsewhere in the file.
+static std::unordered_set<HWND> g_lvSelectFadeTimerHosts;
 // Count of entries still actively fading (progress < 1). DrawRoundedItemBg
 // gates its whole per-paint lookup behind this being nonzero -- the ListView
 // LVM_HITTEST call and the TreeView map lookup alike -- once every fade has
@@ -13280,9 +13299,6 @@ static LRESULT CALLBACK ListSelectFadeSubclassProc(
                 }
                 ++it;
             }
-
-            if (!anyFading)
-                g_lvSelectFadeLastTime = 0.0;
         }
 
         for (const auto& p : pending)
@@ -13296,12 +13312,26 @@ static LRESULT CALLBACK ListSelectFadeSubclassProc(
     if (msg == WM_NCDESTROY) {
         {
             std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
-            g_lvSelectFadeAnims.clear();
-            g_lvSelectFadeKeysByWindow.clear();
-            g_lvSelectFadeActiveCount = 0;
-            g_lvSelectFadeLastTime = 0.0;
-            if (g_lvSelectFadeTimerHwnd == hwnd)
-                g_lvSelectFadeTimerHwnd = nullptr;
+            // A destroyed root's descendant controls are already destroyed
+            // by this point (Windows tears down children before their
+            // parent's own WM_NCDESTROY completes), so a generic
+            // now-dead-paintHwnd sweep -- the same one the timer tick above
+            // already does -- removes exactly the entries that belonged to
+            // this window's hierarchy, without touching entries for other,
+            // still-alive windows that happen to share this process-global
+            // map. (Previously this unconditionally cleared every entry
+            // process-wide, cancelling in-flight fades in unrelated windows
+            // just because this window happened to be destroyed.)
+            for (auto it = g_lvSelectFadeAnims.begin(); it != g_lvSelectFadeAnims.end(); ) {
+                if (!it->second.paintHwnd || !IsWindow(it->second.paintHwnd)) {
+                    ListSelectFadeMarkComplete(it->second);
+                    g_lvSelectFadeKeysByWindow.erase(it->second.paintHwnd);
+                    it = g_lvSelectFadeAnims.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            g_lvSelectFadeTimerHosts.erase(hwnd);
         }
         KillTimer(hwnd, kListSelectFadeTimerId);
         // No manual RemoveWindowSubclass here: this proc is installed via
@@ -13327,50 +13357,31 @@ static bool ListSelectFadeEnsureTimer(HWND timerHwnd)
     if (!timerHwnd || !IsWindow(timerHwnd))
         return false;
 
-    // The cross-thread subclass install/remove calls below must happen
-    // outside the lock: ListSelectFadeSubclassProc takes g_lvSelectFadeMutex
-    // at the top of WM_TIMER/WM_NCDESTROY, so holding it across a blocking
-    // SendMessage into that same window's thread (via
-    // Set/RemoveWindowSubclassFromAnyThread) risks the same deadlock shape
-    // documented on g_checkAnimsMutex/CheckAnims_Cleanup.
-    HWND oldTimerHwnd = nullptr;
-    bool retargeting = false;
+    // timerHwnd is GetAncestor(hwndFrom, GA_ROOT), always on hwndFrom's own
+    // thread, so the subclass install below always takes
+    // SetWindowSubclassFromAnyThread's same-thread fast path -- no blocking
+    // cross-thread SendMessage. Each host is independent (see
+    // g_lvSelectFadeTimerHosts): there's no *other* window's subclass to
+    // release here, unlike the old single-global-slot design.
+    bool needSubclass;
     {
         std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
-        retargeting = (g_lvSelectFadeTimerHwnd != timerHwnd);
-        if (retargeting) {
-            if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd))
-                oldTimerHwnd = g_lvSelectFadeTimerHwnd;
-            g_lvSelectFadeLastTime = 0.0;
-            g_lvSelectFadeTimerHwnd = nullptr;
-        }
+        needSubclass = !g_lvSelectFadeTimerHosts.count(timerHwnd);
     }
 
-    if (oldTimerHwnd) {
-        KillTimer(oldTimerHwnd, kListSelectFadeTimerId);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            oldTimerHwnd, ListSelectFadeSubclassProc);
-    }
-
-    if (retargeting) {
+    if (needSubclass) {
         if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
                 timerHwnd, ListSelectFadeSubclassProc, 0))
             return false;
         std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
-        g_lvSelectFadeTimerHwnd = timerHwnd;
+        g_lvSelectFadeTimerHosts.insert(timerHwnd);
     }
 
-    bool needStartTimer = false;
-    {
-        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
-        if (g_lvSelectFadeLastTime == 0.0) {
-            g_lvSelectFadeLastTime = TimerGetSeconds();
-            needStartTimer = true;
-        }
-    }
-    if (needStartTimer)
-        SetTimer(timerHwnd, kListSelectFadeTimerId, kListSelectFadeTimerIntervalMs, nullptr);
-
+    // SetTimer on an already-running timer with the same ID just re-arms
+    // it -- harmless, and this is only reached once per new fade (a real
+    // selection change), not once per paint, so the redundant call some of
+    // the time isn't worth tracking a separate "is armed" flag for.
+    SetTimer(timerHwnd, kListSelectFadeTimerId, kListSelectFadeTimerIntervalMs, nullptr);
     return true;
 }
 
@@ -13422,21 +13433,21 @@ static void ListSelectFadeStartItem(HWND hwndFrom, ULONG_PTR itemId, bool isTree
 
 static void ListSelectFadeCleanup()
 {
-    HWND timerHwnd = nullptr;
+    std::vector<HWND> hosts;
     {
         std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
         g_lvSelectFadeActiveCount = 0;
-        if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd))
-            timerHwnd = g_lvSelectFadeTimerHwnd;
+        hosts.assign(g_lvSelectFadeTimerHosts.begin(), g_lvSelectFadeTimerHosts.end());
+        g_lvSelectFadeTimerHosts.clear();
         g_lvSelectFadeAnims.clear();
         g_lvSelectFadeKeysByWindow.clear();
-        g_lvSelectFadeLastTime = 0.0;
-        g_lvSelectFadeTimerHwnd = nullptr;
     }
-    if (timerHwnd) {
-        KillTimer(timerHwnd, kListSelectFadeTimerId);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            timerHwnd, ListSelectFadeSubclassProc);
+    for (HWND h : hosts) {
+        if (IsWindow(h)) {
+            KillTimer(h, kListSelectFadeTimerId);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                h, ListSelectFadeSubclassProc);
+        }
     }
 }
 
@@ -13863,249 +13874,15 @@ static bool PaintListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCREC
     return true;
 }
 
-struct ListViewGroupChevronAnim {
-    float current = 0.f;
-    float startAngle = 0.f;
-    float target = 0.f;
-    DWORD startTick = 0;
-    int lastState = -1;
-    RECT rect = {};
-    HWND paintHwnd = nullptr;
-};
+// The group-header expand/collapse chevron used to have its own
+// timer-driven rotation animation (ListViewGroupChevronAnim et al.,
+// mirroring the nav-pane TreeView glyph's), but comctl32 almost never
+// actually painted an intermediate state for this control long enough
+// for it to be seen -- removed rather than kept around (and made to
+// fight the same cross-thread/unbounded-growth bugs the nav-pane
+// version had) for a transition nobody was really watching.
+// PaintListViewGroupChevron below renders the resting state directly.
 
-static constexpr UINT kListViewGroupChevronTimerId = 0x517C0B;
-static std::unordered_map<ULONG_PTR, ListViewGroupChevronAnim> g_lvGroupChevronAnims;
-static DOUBLE g_lvGroupChevronLastTime = 0.0;
-static HWND g_lvGroupChevronTimerHwnd = nullptr;
-
-static LRESULT CALLBACK ListViewGroupChevronSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
-{
-    if (msg == WM_TIMER && wp == kListViewGroupChevronTimerId) {
-        DWORD now = GetTickCount();
-
-        bool anyMoving = false;
-        for (auto it = g_lvGroupChevronAnims.begin(); it != g_lvGroupChevronAnims.end(); ) {
-            auto& anim = it->second;
-            if (!anim.paintHwnd || !IsWindow(anim.paintHwnd)) {
-                it = g_lvGroupChevronAnims.erase(it);
-                continue;
-            }
-
-            const float before = anim.current;
-            if (anim.current != anim.target) {
-                anim.current = GlyphChevronAngleAt(
-                    anim.startAngle, anim.target, anim.startTick, now);
-                if (anim.current == anim.target)
-                    anim.startTick = 0;
-            }
-
-            if (before != anim.current && anim.rect.right > anim.rect.left)
-                InvalidateRect(anim.paintHwnd, &anim.rect, FALSE);
-            if (anim.current != anim.target)
-                anyMoving = true;
-            ++it;
-        }
-
-        if (!anyMoving) {
-            KillTimer(hwnd, kListViewGroupChevronTimerId);
-            g_lvGroupChevronLastTime = 0.0;
-        }
-        return 0;
-    }
-
-    if (msg == WM_NCDESTROY) {
-        KillTimer(hwnd, kListViewGroupChevronTimerId);
-        g_lvGroupChevronAnims.clear();
-        g_lvGroupChevronLastTime = 0.0;
-        if (g_lvGroupChevronTimerHwnd == hwnd)
-            g_lvGroupChevronTimerHwnd = nullptr;
-        // No manual RemoveWindowSubclass here: this proc is installed via
-        // WindhawkUtils::SetWindowSubclassFromAnyThread, whose
-        // SubclassProcWrapper already removes itself on WM_NCDESTROY before
-        // forwarding the message to us.
-    }
-
-    return DefSubclassProc(hwnd, msg, wp, lp);
-}
-
-static HWND ListViewGroupChevronPaintHwnd(HDC hdc)
-{
-    HWND hwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-    return (hwnd && IsWindow(hwnd)) ? hwnd : nullptr;
-}
-
-static HWND ListViewGroupChevronTimerHwnd(HWND paintHwnd)
-{
-    if (!paintHwnd || !IsWindow(paintHwnd))
-        return nullptr;
-
-    HWND root = GetAncestor(paintHwnd, GA_ROOT);
-    return (root && IsWindow(root)) ? root : paintHwnd;
-}
-
-static bool ListViewGroupChevronEnsureTimer(HWND timerHwnd)
-{
-    if (!timerHwnd || !IsWindow(timerHwnd))
-        return false;
-
-    if (g_lvGroupChevronTimerHwnd != timerHwnd) {
-        if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
-            KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                g_lvGroupChevronTimerHwnd, ListViewGroupChevronSubclassProc);
-        }
-        g_lvGroupChevronLastTime = 0.0;
-        g_lvGroupChevronTimerHwnd = nullptr;
-
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-                timerHwnd, ListViewGroupChevronSubclassProc, 0))
-            return false;
-        g_lvGroupChevronTimerHwnd = timerHwnd;
-    }
-
-    if (g_lvGroupChevronLastTime == 0.0) {
-        g_lvGroupChevronLastTime = TimerGetSeconds();
-        SetTimer(timerHwnd, kListViewGroupChevronTimerId, 16, nullptr);
-    }
-    return true;
-}
-
-static void ListViewGroupChevronCleanup()
-{
-    if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
-        KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            g_lvGroupChevronTimerHwnd, ListViewGroupChevronSubclassProc);
-    }
-    g_lvGroupChevronAnims.clear();
-    g_lvGroupChevronLastTime = 0.0;
-    g_lvGroupChevronTimerHwnd = nullptr;
-}
-
-static ULONG_PTR ListViewGroupChevronKey(HWND hwnd, LPCRECT rc)
-{
-    int x = rc ? rc->left : 0;
-    int y = rc ? rc->top : 0;
-    ULONG_PTR h = (ULONG_PTR)hwnd;
-    return h ^ (((ULONG_PTR)(UINT)(x & 0xFFFF)) << 16) ^
-           (ULONG_PTR)(UINT)(y & 0xFFFF);
-}
-
-// WM_TIMER-driven redraw invalidation is unreliable inside DirectUI hosts,
-// so the interpolation timer almost never actually animates there -- only
-// wastes a repeating timer. Starting it is skipped for these hosts entirely.
-static bool IsInsideDirectUiHwnd(HWND hwnd)
-{
-    for (HWND cur = hwnd; cur; cur = GetParent(cur)) {
-        if (IsClassName(cur, L"DirectUIHWND"))
-            return true;
-    }
-    return false;
-}
-
-static bool PaintAnimatedListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
-{
-    if (!pRect || (iPartId != LVP_EXPANDBUTTON && iPartId != LVP_COLLAPSEBUTTON))
-        return false;
-    if (!g_settings.AnimatedArrows || !SysAnimationsEnabled())
-        return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
-
-    const int w = pRect->right - pRect->left;
-    const int h = pRect->bottom - pRect->top;
-    if (w <= 0 || h <= 0)
-        return true;
-
-    HWND paintHwnd = ListViewGroupChevronPaintHwnd(hdc);
-    const float target = (iPartId == LVP_COLLAPSEBUTTON) ? 90.f : 0.f;
-    const ULONG_PTR key = ListViewGroupChevronKey(paintHwnd, pRect);
-    auto& anim = g_lvGroupChevronAnims[key];
-    anim.rect = *pRect;
-    anim.paintHwnd = paintHwnd;
-    if (anim.lastState == -1) {
-        anim.current = target;
-        anim.startAngle = target;
-        anim.target = target;
-        anim.startTick = 0;
-        anim.lastState = iPartId;
-    } else if (anim.lastState != iPartId) {
-        anim.target = target;
-        anim.lastState = iPartId;
-        if (IsInsideDirectUiHwnd(paintHwnd)) {
-            anim.current = target;
-            anim.startAngle = target;
-            anim.startTick = 0;
-        } else {
-            DWORD now = GetTickCount();
-            anim.current = GlyphChevronAngleAt(
-                anim.startAngle, anim.target, anim.startTick, now);
-            anim.startAngle = anim.current;
-            anim.startTick = now;
-            HWND timerHwnd = ListViewGroupChevronTimerHwnd(paintHwnd);
-            if (!ListViewGroupChevronEnsureTimer(timerHwnd) && paintHwnd != timerHwnd)
-                ListViewGroupChevronEnsureTimer(paintHwnd);
-        }
-    }
-
-    if (!g_d2dFactory)
-        return true;
-
-    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
-    FPUGuard fpu;
-    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
-        return true;
-
-    const float fw = (float)w;
-    const float fh = (float)h;
-    const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
-    const bool dark = IsWindowDarkMode(hdc);
-    const bool hot = (iStateId == 2 || iStateId == 3);
-    const bool pressed = (iStateId == 3);
-    const float hoverAlpha = pressed ? 0.10f : hot ? 0.075f : 0.f;
-
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    pRT->CreateSolidColorBrush(
-        dark ? D2D1::ColorF(1.f, 1.f, 1.f, hoverAlpha)
-             : D2D1::ColorF(0.f, 0.f, 0.f, hoverAlpha),
-        &brush);
-    if (!brush)
-        return true;
-
-    pRT->BeginDraw();
-    if (hoverAlpha > 0.f) {
-        pRT->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.f, 0.f, fw, fh), 4.f * scale, 4.f * scale),
-            brush.Get());
-    }
-
-    brush->SetColor(dark
-        ? D2D1::ColorF(1.f, 1.f, 1.f, hot ? 0.90f : 0.68f)
-        : D2D1::ColorF(0.f, 0.f, 0.f, hot ? 0.78f : 0.58f));
-    const float cx = fw * 0.50f;
-    const float cy = fh * 0.52f;
-    const float len = std::min(fw, fh) * 0.205f;
-    const float stroke = std::max(1.f, 1.45f * scale);
-
-    pRT->PushAxisAlignedClip(D2D1::RectF(0.f, 0.f, fw, fh),
-        D2D1_ANTIALIAS_MODE_ALIASED);
-    pRT->SetTransform(D2D1::Matrix3x2F::Rotation(
-        anim.current, D2D1::Point2F(cx, cy)));
-    pRT->DrawLine(D2D1::Point2F(cx - len * 0.35f, cy - len),
-                  D2D1::Point2F(cx + len * 0.45f, cy),
-                  brush.Get(), stroke);
-    pRT->DrawLine(D2D1::Point2F(cx - len * 0.35f, cy + len),
-                  D2D1::Point2F(cx + len * 0.45f, cy),
-                  brush.Get(), stroke);
-    pRT->SetTransform(D2D1::Matrix3x2F::Identity());
-    pRT->PopAxisAlignedClip();
-
-    HRESULT hr = pRT->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
-        pRT.Reset();
-        CachedTlsRTRecreate();
-    }
-    return hr != D2DERR_RECREATE_TARGET;
-}
 
 static bool PaintGroupHeaderOverlayPill(HDC hdc, INT iStateId, LPCRECT pRect)
 {
@@ -18473,27 +18250,36 @@ static const wchar_t kSearchIconGlyph[] = L"\uE721"; // Segoe Fluent/MDL2 "Searc
 // needs it earlier in the file than that section.
 static constexpr LPCWSTR kPropLightPaneSubclassProp = L"WH_PROP_LIGHTPANE_SUB";
 
-// The color that should show through the TABP_PANE rounded-corner cutouts.
-// A DC render target bound via BindDC discards alpha on its final blit, so
+// True when the color that should show through the TABP_PANE rounded-corner
+// cutouts is actually known -- the root is a real property-sheet dialog that
+// our own edge-extension subclass (PropDlgSubclassProc/
+// PropLightPaneSubclassProc) has already painted with kPropDkPane/
+// kPropLightPane. Without that confirmation there's no way to know what
+// really surrounds the pane (a plain #32770, an AeroWizard page, a custom-
+// colored dialog), so callers should skip the rounded-corner treatment
+// entirely rather than clearing the cutouts to a guessed color.
+static bool TabPaneCornerColorConfirmed(HWND tabHwnd, bool dark)
+{
+    if (!tabHwnd || !g_settings.RoundedTabPane)
+        return false;
+    HWND root = GetAncestor(tabHwnd, GA_ROOT);
+    const wchar_t* extensionMarker = dark ? L"_PropDkApplied" : kPropLightPaneSubclassProp;
+    wchar_t rootCls[32] = {};
+    return root && GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) &&
+        _wcsicmp(rootCls, L"#32770") == 0 && GetPropW(root, extensionMarker);
+}
+
+// The color that should show through the TABP_PANE rounded-corner cutouts,
+// once TabPaneCornerColorConfirmed() has already established it's known. A
+// DC render target bound via BindDC discards alpha on its final blit, so
 // Clear()-ing to transparent just blits the Clear color's own RGB, not the
 // real destination pixels -- and GetPixel is unsafe too, since the strip
 // above the pane may not be repainted yet at this point. Same as
-// SampleBackground's own dark-mode branch, the fix is fixed colors by
-// context instead of sampling: all 4 corners use one color, matching
-// whatever the property-sheet root dialog's own edge extension surrounds
-// this pane with (kPropDkPane/kPropLightPane), or kPropDkBg/native
-// COLOR_BTNFACE where no such extension is drawn.
-static COLORREF TabPaneCornerColor(HWND tabHwnd, bool dark)
+// SampleBackground's own dark-mode branch, the fix is a fixed color by
+// context instead of sampling.
+static COLORREF TabPaneCornerColor(bool dark)
 {
-    if (tabHwnd && g_settings.RoundedTabPane) {
-        HWND root = GetAncestor(tabHwnd, GA_ROOT);
-        const wchar_t* extensionMarker = dark ? L"_PropDkApplied" : kPropLightPaneSubclassProp;
-        wchar_t rootCls[32] = {};
-        if (root && GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) &&
-            _wcsicmp(rootCls, L"#32770") == 0 && GetPropW(root, extensionMarker))
-            return dark ? kPropDkPane : kPropLightPane;
-    }
-    return dark ? kPropDkBg : GetSysColor_orig(COLOR_BTNFACE);
+    return dark ? kPropDkPane : kPropLightPane;
 }
 
 static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
@@ -19007,9 +18793,17 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
 
             COLORREF pane = dark ? kPropDkPane : kPropLightPane;
             HWND tabHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-            COLORREF corner = TabPaneCornerColor(tabHwnd, dark);
             bool drewRounded = false;
-            if (g_d2dFactory) {
+            // Rounding requires clearing the corner cutouts to whatever
+            // color actually surrounds the pane -- only attempt it once
+            // that's confirmed (a real property-sheet root wrapping this
+            // pane with its own edge extension). Otherwise fall straight
+            // through to the flat, un-rounded fill below instead of
+            // guessing COLOR_BTNFACE and painting four grey notches on a
+            // dialog with an unrelated background (custom-colored dialog,
+            // AeroWizard page, etc.).
+            if (g_d2dFactory && TabPaneCornerColorConfirmed(tabHwnd, dark)) {
+                COLORREF corner = TabPaneCornerColor(dark);
                 ID2D1DCRenderTarget* rawRT = nullptr;
                 if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, &rcExp, g_d2dFactory, &rawRT)) && rawRT) {
                     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
@@ -19036,7 +18830,8 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 }
             }
             if (!drewRounded) {
-                // D2D unavailable/failed -- flat fill, no rounding.
+                // No confirmed corner color, or D2D unavailable/failed --
+                // flat fill, no rounding.
                 if (HBRUSH hBr = GetCachedSolidBrush(pane))
                     FillRect(hdc, &rcExp, hBr);
             }
@@ -20092,7 +19887,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         bool isLV = IsListViewThemeClass(cls);
         if (isLV && (iPartId == LVP_EXPANDBUTTON || iPartId == LVP_COLLAPSEBUTTON))
         {
-            return PaintAnimatedListViewGroupChevron(hdc, iPartId, iStateId, pRect);
+            return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
         }
         if (isLV && iPartId == 6 && g_d2dFactory)
         {
@@ -25044,8 +24839,12 @@ static std::mutex rg_gdipMutex;
 static HBRUSH rg_menuBkBrush   = nullptr;
 static HMODULE rg_hUxtheme     = nullptr;
 
-static constexpr UINT kRgRefreshColorsMessage = WM_APP + 0x5A2;
-static constexpr UINT kRgResetDividerMessage = WM_APP + 0x5A3;
+// Registered at runtime via RegisterWindowMessageW in Wh_ModInit, not fixed
+// WM_APP+N values -- both are sent to regedit's own main window (a window
+// this mod doesn't own), same collision reasoning as
+// Win32UIModernizer.NavHoverFadeReset.
+static std::atomic<UINT> g_rgRefreshColorsMessage{0};
+static std::atomic<UINT> g_rgResetDividerMessage{0};
 
 using RgSetPreferredAppMode_T  = int(WINAPI*)(int);
 using RgFlushMenuThemes_T      = void(WINAPI*)();
@@ -26038,13 +25837,15 @@ static LRESULT CALLBACK RgSearchSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_P
 static LRESULT CALLBACK RgMainSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR /*dwRefData*/)
 {
-    if (msg == kRgRefreshColorsMessage) {
+    if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire);
+        refreshMsg && msg == refreshMsg) {
         RgRefreshColorResources();
         RedrawWindow(hwnd, nullptr, nullptr,
             RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
         return 0;
     }
-    if (msg == kRgResetDividerMessage) {
+    if (const UINT resetDividerMsg = g_rgResetDividerMessage.load(std::memory_order_acquire);
+        resetDividerMsg && msg == resetDividerMsg) {
         RgDividerResetOnMainThread(hwnd);
         return 0;
     }
@@ -26189,7 +25990,13 @@ static LRESULT CALLBACK RgMainSubclassProc(
     case WM_SETTINGCHANGE:
         g_accentCacheDirty.store(true, std::memory_order_release);
         if (g_uahMenuBarTheme) { CloseThemeData(g_uahMenuBarTheme); g_uahMenuBarTheme = nullptr; }
-        PostMessageW(hwnd, kRgRefreshColorsMessage, 0, 0);
+        if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire))
+            PostMessageW(hwnd, refreshMsg, 0, 0);
+        else {
+            RgRefreshColorResources();
+            RedrawWindow(hwnd, nullptr, nullptr,
+                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
         // Regedit has no dedicated broadcast-listener window like Explorer's
         // ThemeMsgWndProc, so re-check the animations-enabled setting here.
         if (msg == WM_SETTINGCHANGE) g_animEnabled = -1;
@@ -27484,8 +27291,11 @@ static void RgUninit(bool fullUnload)
     const HWND search = rg_hwndSearch.load(std::memory_order_acquire);
 
     if (main && IsWindow(main)) {
+        const UINT resetDividerMsg =
+            g_rgResetDividerMessage.load(std::memory_order_acquire);
         DWORD_PTR resetIgnored = 0;
-        if (!SendMessageTimeoutW(main, kRgResetDividerMessage, 0, 0,
+        if (!resetDividerMsg ||
+            !SendMessageTimeoutW(main, resetDividerMsg, 0, 0,
                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &resetIgnored)) {
             RgDividerResetTrackingThreadSafe();
         }
@@ -28039,12 +27849,34 @@ static void PropApplyDarkMode(HWND hwnd)
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
+// FindWindowExW(nullptr, ...) enumerates every top-level window on the
+// desktop across ALL processes -- filter by PID before using a match, same
+// as MenuDetectPopupFromUAH's #32768 lookup above. Without this, a
+// class-brush helper called with no sample (from Wh_ModUninit/
+// Wh_ModSettingsChanged, where there genuinely is none) can grab a foreign
+// process's window of the same class, cache ITS class brush as "the
+// original to restore later", write this mod's own brush handle into a
+// class it doesn't own, and force a RedrawWindow on an unrelated app --
+// while never actually themeing anything in this process.
+static HWND FindWindowInCurrentProcess(LPCWSTR className)
+{
+    const DWORD myPid = GetCurrentProcessId();
+    HWND hwnd = nullptr;
+    while ((hwnd = FindWindowExW(nullptr, hwnd, className, nullptr)) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == myPid)
+            return hwnd;
+    }
+    return nullptr;
+}
+
 static void SetPropertyDialogClassBrush(bool dark, HWND sample)
 {
     HWND hwnd = sample;
     bool destroySample = false;
     if (!hwnd || !IsWindow(hwnd)) {
-        hwnd = FindWindowExW(nullptr, nullptr, L"#32770", nullptr);
+        hwnd = FindWindowInCurrentProcess(L"#32770");
         if (!hwnd) {
             hwnd = CreateWindowExW(0, L"#32770", nullptr, WS_POPUP,
                 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr);
@@ -28083,7 +27915,7 @@ static void SetFontViewClassBrush(bool dark, HWND sample)
 {
     HWND hwnd = (sample && IsWindow(sample))
         ? sample
-        : FindWindowExW(nullptr, nullptr, L"FontViewWClass", nullptr);
+        : FindWindowInCurrentProcess(L"FontViewWClass");
     if (!hwnd)
         return;
 
@@ -29241,8 +29073,14 @@ static void ApplyTreeRuntimeSettings(HWND hwnd)
         (!g_settings.RoundedSelection ||
          !g_settings.NavPaneHoverFade) &&
         GetPropW(hwnd, kPropNavHoverFadeState)) {
-        (void)SendMessageW(
-            hwnd, g_navHoverFadeResetMessage.load(std::memory_order_acquire), 0, 0);
+        // See TreeCursorRemoveFromWindow for why a 0 message needs a direct
+        // call instead of SendMessageW(WM_NULL).
+        if (const UINT resetMsg =
+                g_navHoverFadeResetMessage.load(std::memory_order_acquire))
+            (void)SendMessageW(hwnd, resetMsg, 0, 0);
+        else
+            NavHoverFadeDestroyState(
+                hwnd, !g_msgWndUnloading.load(std::memory_order_acquire));
     }
     if (navTree && g_settings.GlyphIcons) {
         TreeRuntimeSaveAndSetStyleBit(
@@ -29533,18 +29371,56 @@ static void HdrDarkPaintDraw(HWND hwnd, HDC hdc)
         if (!Header_GetItemRect(hwnd, i, &rcItem)) continue;
         wchar_t buf[256] = {};
         HDITEMW hdi = {};
-        hdi.mask       = HDI_TEXT;
+        hdi.mask       = HDI_TEXT | HDI_FORMAT;
         hdi.pszText    = buf;
         hdi.cchTextMax = 256;
         Header_GetItem(hwnd, i, &hdi);
         RECT rcText = { rcItem.left + leftMargin, rcItem.top,
                         rcItem.right - rightMargin, rcItem.bottom };
+
+        // Real Explorer headers do use HDF_RIGHT/HDF_CENTER and sort arrows
+        // (e.g. the "Previous Versions" list) -- match native placement:
+        // the arrow always sits at the column's own right edge, and text
+        // yields that space regardless of its own alignment.
+        const bool sortUp   = (hdi.fmt & HDF_SORTUP)   != 0;
+        const bool sortDown = (hdi.fmt & HDF_SORTDOWN) != 0;
+        if (sortUp || sortDown) {
+            const int arrowW = MulDiv(8, (int)dpi, 96);
+            const int arrowH = MulDiv(4, (int)dpi, 96);
+            const int arrowGap = MulDiv(4, (int)dpi, 96);
+            rcText.right -= (arrowW + arrowGap);
+            const int cx = rcItem.right - rightMargin - arrowW / 2;
+            const int cy = (rcItem.top + rcItem.bottom) / 2;
+            const POINT tri[3] = {
+                sortUp ? POINT{cx - arrowW / 2, cy + arrowH / 2}
+                       : POINT{cx - arrowW / 2, cy - arrowH / 2},
+                sortUp ? POINT{cx + arrowW / 2, cy + arrowH / 2}
+                       : POINT{cx + arrowW / 2, cy - arrowH / 2},
+                sortUp ? POINT{cx, cy - arrowH / 2}
+                       : POINT{cx, cy + arrowH / 2},
+            };
+            if (HBRUSH arrowBrush = CreateSolidBrush(kPropDkText)) {
+                HGDIOBJ oldArrowBrush = SelectObject(hdc, arrowBrush);
+                HGDIOBJ oldArrowPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+                Polygon(hdc, tri, 3);
+                SelectObject(hdc, oldArrowPen);
+                SelectObject(hdc, oldArrowBrush);
+                DeleteObject(arrowBrush);
+            }
+        }
+
+        UINT dtAlign = DT_LEFT;
+        switch (hdi.fmt & HDF_JUSTIFYMASK) {
+        case HDF_RIGHT:  dtAlign = DT_RIGHT;  break;
+        case HDF_CENTER: dtAlign = DT_CENTER; break;
+        }
+
         // Guard re-entry into DrawTextW_hook's glow/dark-mode pipeline --
         // this text is already themed above, same guard RgHdrSubclassProc
         // uses for its own header text.
         g_glowEntry = true;
         DrawTextW(hdc, buf, -1, &rcText,
-            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            dtAlign | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         g_glowEntry = false;
         if (hPen) {
             MoveToEx(hdc, rcItem.right - 2, rcClient.top, nullptr);
@@ -30581,14 +30457,13 @@ static Settings LoadSettings()
     next.EnableDarkMode      = Wh_GetIntSetting(L"GeneralSection.EnableDarkMode");
     // DarkMode is automatic (follows system)
     {
-        LPCWSTR hex = Wh_GetStringSetting(L"GeneralSection.CustomAccentColor");
+        auto hex = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"GeneralSection.CustomAccentColor"));
         next.CustomAccentColor = 0;
         if (hex[0] == L'#' && wcslen(hex) == 7) {
             unsigned r = 0, g = 0, b = 0;
             if (swscanf(hex + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.CustomAccentColor = RGB(r, g, b);
         }
-        Wh_FreeStringSetting(hex);
     }
     next.RoundedSelection = Wh_GetIntSetting(L"ExplorerSection.RoundedSelection");
     next.NavPaneHoverFade = Wh_GetIntSetting(L"ExplorerSection.NavPaneHoverFade");
@@ -30622,14 +30497,12 @@ static Settings LoadSettings()
     next.ListViewPill         = Wh_GetIntSetting(L"ExplorerSection.ListViewPill");
     next.FluentPinIcon        = Wh_GetIntSetting(L"ExplorerSection.FluentPinIcon");
     {
-        LPCWSTR pinSty = Wh_GetStringSetting(L"ExplorerSection.PinIconStyle");
+        auto pinSty = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.PinIconStyle"));
         next.PinIconStyle = (wcscmp(pinSty, L"filled") == 0) ? 1 : 0;
-        Wh_FreeStringSetting(pinSty);
     }
     {
-        LPCWSTR pinClr = Wh_GetStringSetting(L"ExplorerSection.PinIconColor");
+        auto pinClr = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.PinIconColor"));
         next.PinIconColor = (wcscmp(pinClr, L"accent") == 0) ? 1 : 0;
-        Wh_FreeStringSetting(pinClr);
     }
     next.PinMarginRight = std::clamp(Wh_GetIntSetting(L"ExplorerSection.PinMarginRight"), 0, 32);
     {
@@ -30649,14 +30522,13 @@ static Settings LoadSettings()
     }
     next.ModernizeShellIcons = Wh_GetIntSetting(L"ExplorerSection.ModernizeShellIcons");
     {
-        const wchar_t* s = Wh_GetStringSetting(L"ExplorerSection.GlyphColor");
+        auto s = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.GlyphColor"));
         next.GlyphColor = CLR_INVALID;
         if (s[0] == L'#' && wcslen(s) == 7) {
             unsigned r, g, b;
             if (swscanf_s(s + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.GlyphColor = RGB(r, g, b);
         }
-        Wh_FreeStringSetting(s);
     }
     next.DiskChartAccentColor = Wh_GetIntSetting(L"ExplorerSection.DiskChartAccentColor");
     next.AutoPlayReplacement = Wh_GetIntSetting(L"ExplorerSection.AutoPlayReplacement");
@@ -34473,7 +34345,10 @@ static COLORREF WinverBgColor(bool dark)
 // or the whole-dialog backdrop hole (opt-in, see WinverBackdropSetup).
 static constexpr float kWinverViewBoxW = 1282.4272460938f;
 static constexpr float kWinverViewBoxH = 204.4983520508f;
-static constexpr UINT kWinverStartLogoAnimMsg = WM_APP + 0x5A1;
+// Registered at runtime in Wh_ModInit (RegisterWindowMessageW) rather than a
+// fixed WM_APP+N value, to avoid colliding with another injected mod/app
+// using the same offset in this process -- see g_rgRefreshColorsMessage.
+static std::atomic<UINT> g_winverStartLogoAnimMsg{0};
 static constexpr UINT_PTR kWinverLogoAnimTimerId = 0x5A2;
 static constexpr DWORD kWinverLogoAnimDurationMs = 520;
 static constexpr float kWinverLogoAnimMinScale = 0.94f;
@@ -35299,29 +35174,35 @@ static void WinverEnsureSettingsButton(HWND hDlg)
         SendMessageW(g_winverSettingsBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
 }
 
+static LRESULT WinverStartLogoAnimNow(HWND hWnd)
+{
+    if (!SysAnimationsEnabled()) {
+        g_winverLogoAnimPending.store(false, std::memory_order_release);
+        g_winverLogoAnimating.store(false, std::memory_order_release);
+        KillTimer(hWnd, kWinverLogoAnimTimerId);
+        WinverPaintBannerAnimFrame(hWnd);
+        return 0;
+    }
+
+    const bool wasAnimating =
+        g_winverLogoAnimating.load(std::memory_order_acquire);
+    if (!wasAnimating) {
+        g_winverLogoAnimPending.store(false, std::memory_order_release);
+        g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
+        g_winverLogoAnimating.store(true, std::memory_order_release);
+    }
+    SetTimer(hWnd, kWinverLogoAnimTimerId, 16, nullptr);
+    if (!wasAnimating)
+        WinverPaintBannerAnimFrame(hWnd);
+    return 0;
+}
+
 static LRESULT CALLBACK WinverDialogSubclassProc(HWND hWnd, UINT uMsg,
     WPARAM wParam, LPARAM lParam, DWORD_PTR /*ref*/)
 {
-    if (uMsg == kWinverStartLogoAnimMsg) {
-        if (!SysAnimationsEnabled()) {
-            g_winverLogoAnimPending.store(false, std::memory_order_release);
-            g_winverLogoAnimating.store(false, std::memory_order_release);
-            KillTimer(hWnd, kWinverLogoAnimTimerId);
-            WinverPaintBannerAnimFrame(hWnd);
-            return 0;
-        }
-
-        const bool wasAnimating =
-            g_winverLogoAnimating.load(std::memory_order_acquire);
-        if (!wasAnimating) {
-            g_winverLogoAnimPending.store(false, std::memory_order_release);
-            g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
-            g_winverLogoAnimating.store(true, std::memory_order_release);
-        }
-        SetTimer(hWnd, kWinverLogoAnimTimerId, 16, nullptr);
-        if (!wasAnimating)
-            WinverPaintBannerAnimFrame(hWnd);
-        return 0;
+    if (const UINT startMsg = g_winverStartLogoAnimMsg.load(std::memory_order_acquire);
+        startMsg && uMsg == startMsg) {
+        return WinverStartLogoAnimNow(hWnd);
     }
 
     if (uMsg == WM_TIMER && wParam == kWinverLogoAnimTimerId) {
@@ -35450,7 +35331,10 @@ static void CALLBACK WinverWinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
         g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
         g_winverLogoAnimating.store(true, std::memory_order_release);
         RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
-        PostMessageW(hWnd, kWinverStartLogoAnimMsg, 0, 0);
+        if (const UINT startMsg = g_winverStartLogoAnimMsg.load(std::memory_order_acquire))
+            PostMessageW(hWnd, startMsg, 0, 0);
+        else
+            WinverStartLogoAnimNow(hWnd);
     }
 }
 
@@ -39766,6 +39650,28 @@ BOOL Wh_ModInit()
     if (!g_navHoverFadeResetMessage.load(std::memory_order_relaxed))
         Wh_Log(L"Failed to register nav hover fade reset message");
 
+    // Same treatment as the two above: these are SendMessage/PostMessage'd
+    // to windows this mod doesn't own (regedit's own main window, winver's
+    // own dialog), so a hardcoded WM_APP+N could collide with the host's or
+    // another mod's own private message on that window.
+    g_rgRefreshColorsMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.RgRefreshColors"),
+        std::memory_order_release);
+    if (!g_rgRefreshColorsMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register regedit refresh-colors message");
+
+    g_rgResetDividerMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.RgResetDivider"),
+        std::memory_order_release);
+    if (!g_rgResetDividerMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register regedit reset-divider message");
+
+    g_winverStartLogoAnimMsg.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.WinverStartLogoAnim"),
+        std::memory_order_release);
+    if (!g_winverStartLogoAnimMsg.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register winver logo-animation-start message");
+
     // Function hooks
     // These are load-bearing: every hook callback unconditionally calls
     // through its _orig trampoline, so a silently failed SetFunctionHook
@@ -40136,7 +40042,6 @@ void Wh_ModUninit()
 
     // Remove nav-pane pill subclass (restores original WndProc + kills glyph timer)
     PillTreeSubclassRemove();
-    ListViewGroupChevronCleanup();
     ListSelectFadeCleanup();
 
     // Restore system colors
@@ -40379,14 +40284,6 @@ void Wh_ModSettingsChanged()
     if (oldSettings.ExplorerSection && !g_settings.ExplorerSection) {
         EnumWindows(TreeCursorRemoveEnum, 0);
     }
-    // Singleton timer/subclass (only ever one live owner window, tracked
-    // via g_lvGroupChevronTimerHwnd) -- either setting going off means the
-    // animated-chevron paint path becomes unreachable, so tear it down the
-    // same way Wh_ModUninit already does.
-    if ((oldSettings.RoundedGroupHeaders && !g_settings.RoundedGroupHeaders) ||
-        (oldSettings.AnimatedArrows && !g_settings.AnimatedArrows)) {
-        ListViewGroupChevronCleanup();
-    }
     // Same singleton-timer teardown for the ListView selection-border fade --
     // RoundedSelection going off makes DrawRoundedItemBg's border path (the
     // only caller of ListSelectFade*) unreachable.
@@ -40470,8 +40367,15 @@ void Wh_ModSettingsChanged()
             Wh_Log(L"RegeditSection enabled with one or more hooks unavailable");
         EnumWindows(RgEnumWindowsAfterInitProc, 0);
         const HWND rgMain = rg_hwndMain.load(std::memory_order_acquire);
-        if (rgMain)
-            PostMessageW(rgMain, kRgRefreshColorsMessage, 0, 0);
+        if (rgMain) {
+            // Color resources are swapped in-place with no locking, so a refresh
+            // must happen on rgMain's own UI thread (see RgInitResources) --
+            // post, never call RgRefreshColorResources() directly from here.
+            if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire))
+                PostMessageW(rgMain, refreshMsg, 0, 0);
+            else
+                Wh_Log(L"Skipping regedit color refresh: refresh-colors message not registered");
+        }
     } else if (IsCurrentProcessRegedit()) {
         RgUninit(/*fullUnload=*/false);
     }
