@@ -52,8 +52,9 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **Drag-drop normalizer**: Replace the drag overlay with a clean anti-aliased rounded rectangle
 
 **Explorer**
-- **Rounded selection**: Rounded item backgrounds in Explorer nav pane and content area
+- **Rounded selection**: Rounded item backgrounds in Explorer nav pane and content area, with a smooth fade-in on selection
 - **Neutral selection color**: Optional neutral gray instead of accent color for TreeView/ListView/Header selection backgrounds
+- **Navigation pane item hover fade**: Smoothly fades and scales in item hover backgrounds in Explorer and file picker navigation panes
 - **Nav pane pill (DComp)**: WinUI-style animated pill indicator on the navigation pane
 - **File list pill indicator**: Pill on selected items in file lists (details/list view)
 - **Animated glyph arrows**: Smooth rotation animation for expand/collapse arrows
@@ -105,6 +106,7 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **Dark menu bar**: UAH dark menu painting with NC bottom line fix
 - **Modern search bar**: Pill-shaped search with focus accent line
 - **Dark ListView / Header / StatusBar / Toolbar**
+- **Glyph icons in the tree view**: Replaces the This Computer and folder/key icons with Fluent-style glyphs, accent-colored when selected
 
 - Automatic light/dark mode detection
 
@@ -1817,6 +1819,14 @@ struct D2DThreadCache
     ID2D1GradientStopCollection* buttonBorderStops = nullptr;
     ID2D1LinearGradientBrush* buttonBorderBrush = nullptr;
     bool buttonBorderDark = false;
+    // Indeterminate-progress-bar edge mask (PaintIndeterminateProgressBar).
+    // Tied to renderTarget's identity the same way brush/brushTarget above
+    // are -- an ID2D1Layer isn't valid across a render target it wasn't
+    // created from, and this cache is per-thread, so two threads painting
+    // marquee progress bars at once never share the same layer or fight
+    // over Reset()/Attach() the way a single process-global ComPtr would.
+    ID2D1Layer* progressMarqueeMaskLayer = nullptr;
+    ID2D1RenderTarget* progressMarqueeMaskLayerRT = nullptr; // identity check only
 
     void Reset()
     {
@@ -1832,6 +1842,8 @@ struct D2DThreadCache
         if (buttonBorderBrush)  { buttonBorderBrush->Release();  buttonBorderBrush = nullptr; }
         if (buttonBorderStops)  { buttonBorderStops->Release();  buttonBorderStops = nullptr; }
         buttonBorderDark = false;
+        if (progressMarqueeMaskLayer) { progressMarqueeMaskLayer->Release(); progressMarqueeMaskLayer = nullptr; }
+        progressMarqueeMaskLayerRT = nullptr;
     }
 
     ~D2DThreadCache() { Reset(); }
@@ -3498,8 +3510,6 @@ static int NavMetricsScaleForDpi(int valueAt125, UINT dpi)
     return (std::max)(1, MulDiv(valueAt125, (int)dpi,
         (int)kNavMetricsReferenceDpi));
 }
-
-static bool IsWindowDpiUnaware(HWND hwnd); // defined later, near GlyphSampleEraseColor
 
 static int NavMetricsScale(HWND hwnd, int valueAt125)
 {
@@ -10400,7 +10410,13 @@ static void DrawModernInsertMarkGdi(HWND tv, HDC hdc,
 static constexpr LPCWSTR kTreeCursorSubclassProp = L"WH_MW_TREE_CURSOR_SUB";
 static constexpr LPCWSTR kPropNavHoverFadeState =
     L"Win32UIModernizer.NavHoverFadeState";
-static constexpr UINT kNavHoverFadeResetMessage = WM_APP + 0x5A5;
+// Registered at runtime via RegisterWindowMessageW in Wh_ModInit, not a
+// fixed WM_APP+N value -- this is SendMessageW'd to Explorer's/a file
+// picker's own SysTreeView32 (a window this mod doesn't own), and WM_APP+N
+// is the range reserved for the *application*, so a hardcoded offset here
+// could collide with Explorer's or another mod's own private message on
+// that window. Same treatment as Win32UIModernizer.DefViewBorderPaint.
+static std::atomic<UINT> g_navHoverFadeResetMessage{0};
 static constexpr UINT kNavHoverFadeTimerIntervalMs = 16;
 static constexpr DOUBLE kNavHoverFadeDurationSeconds = 0.14;
 static constexpr float kNavHoverFadeInitialScale = 0.97f;
@@ -10669,7 +10685,7 @@ static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
 {
     UNREFERENCED_PARAMETER(dwRefData);
 
-    if (uMsg == kNavHoverFadeResetMessage) {
+    if (uMsg == g_navHoverFadeResetMessage.load(std::memory_order_acquire)) {
         NavHoverFadeDestroyState(
             hWnd,
             !g_msgWndUnloading.load(std::memory_order_acquire));
@@ -10762,7 +10778,7 @@ static void TreeCursorRemoveFromWindow(HWND hwnd)
     if (GetPropW(hwnd, kTreeCursorSubclassProp)) {
         if (GetPropW(hwnd, kPropNavHoverFadeState))
             (void)SendMessageW(
-                hwnd, kNavHoverFadeResetMessage, 0, 0);
+                hwnd, g_navHoverFadeResetMessage.load(std::memory_order_acquire), 0, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc);
         RemovePropW(hwnd, kTreeCursorSubclassProp);
     }
@@ -13032,16 +13048,46 @@ static void DrawSelectionBorder(ID2D1RenderTarget* pRT, FLOAT w, FLOAT h, FLOAT 
         borderBr.Get(), stroke);
 }
 
+// GetCursorPos/ScreenToClient cached per (hwnd, tick) -- this is called once
+// per visible row via DrawRoundedItemBg, so a ~30-item nav pane repainting
+// while the left button is held (drag, press-and-hold) would otherwise redo
+// the same cursor query ~30 times per frame. GetTickCount()'s ~10-16ms
+// resolution means every item painted within one repaint sees the same tick
+// and reuses a single cached query; a tick advancing or a different
+// window's items starting to paint invalidates it.
+//
+// GetKeyState(VK_LBUTTON) below is deliberately NOT part of this cache and
+// always read fresh, unlike the position: it's effectively free (no real
+// syscall, just a read of the thread's already-attached input state), and
+// caching it caused a real regression -- an unrelated repaint (e.g. a hover
+// fade tick) landing in the same ~15ms tick window as the actual
+// WM_LBUTTONDOWN-triggered repaint could populate the cache with a stale
+// "not pressed" reading moments before the press, which then got reused for
+// the real press's own paint instead of re-checking the button, making the
+// pressed state silently fail to activate.
+struct TreeItemPressedCache {
+    DWORD tick = 0;
+    HWND hwnd = nullptr;
+    POINT clientPt = {};
+    bool havePt = false;
+};
+static thread_local TreeItemPressedCache s_treeItemPressedCache;
+
 static bool IsTreeItemPressed(HWND hwnd, LPCRECT itemRect)
 {
-    if (!hwnd || !itemRect || !(GetKeyState(VK_LBUTTON) & 0x8000)) {
+    if (!hwnd || !itemRect || !(GetKeyState(VK_LBUTTON) & 0x8000))
         return false;
-    }
 
-    POINT cursor = {};
-    return GetCursorPos(&cursor) &&
-        ScreenToClient(hwnd, &cursor) &&
-        PtInRect(itemRect, cursor);
+    const DWORD now = GetTickCount();
+    TreeItemPressedCache& c = s_treeItemPressedCache;
+    if (c.tick != now || c.hwnd != hwnd) {
+        c.tick = now;
+        c.hwnd = hwnd;
+        POINT cursor = {};
+        c.havePt = GetCursorPos(&cursor) && ScreenToClient(hwnd, &cursor);
+        c.clientPt = cursor;
+    }
+    return c.havePt && PtInRect(itemRect, c.clientPt);
 }
 
 static void ScaleRectAroundCenter(RECT* rect, float scale)
@@ -13091,15 +13137,18 @@ struct ListSelectFadeState {
 };
 
 static constexpr UINT kListSelectFadeTimerId = 0x5E1EC7;
-static constexpr UINT_PTR kListSelectFadeSubId = 0x5E1EC6;
 static constexpr UINT kListSelectFadeTimerIntervalMs = 16;
 static constexpr DOUBLE kListSelectFadeDurationSeconds = 0.14;
 static constexpr UINT kListSelectFadeHitTestMsg = 0x1000 + 18; // LVM_HITTEST
-// Not lock-protected: every access happens either from paint (the item's own
-// window thread) or from SendMessageW_hook/the timer tick, both of which run
-// synchronously on whichever thread owns the window that sent the message --
-// same single-thread-per-window assumption g_lvGroupChevronAnims already
-// relies on elsewhere in this file.
+// Explorer runs one UI thread per browser window (and dialogs commonly get
+// their own thread too), so although each *window's* own messages are always
+// serialized on its own thread, these containers are process-global -- two
+// list/tree views on different threads can still insert into/rehash the same
+// unordered_map concurrently. g_lvSelectFadeMutex guards every access to the
+// three globals below. Never hold it across a cross-thread
+// SetWindowSubclassFromAnyThread/RemoveWindowSubclassFromAnyThread call --
+// same deadlock shape documented on g_checkAnimsMutex/CheckAnims_Cleanup.
+static std::recursive_mutex g_lvSelectFadeMutex;
 static std::unordered_map<ULONG_PTR, ListSelectFadeState> g_lvSelectFadeAnims;
 // Reverse index (which keys belong to which window) so a per-window
 // operation -- LVN_DELETEITEM's wipe, ResyncWindow's prune -- doesn't have
@@ -13115,6 +13164,7 @@ static DOUBLE g_lvSelectFadeLastTime = 0.0;
 // zero SendMessage calls per paint, not one per repaint forever.
 static int g_lvSelectFadeActiveCount = 0;
 
+// Callers below already hold g_lvSelectFadeMutex.
 static void ListSelectFadeMarkComplete(ListSelectFadeState& state)
 {
     if (!state.activeCounted)
@@ -13124,6 +13174,7 @@ static void ListSelectFadeMarkComplete(ListSelectFadeState& state)
         --g_lvSelectFadeActiveCount;
 }
 
+// Callers below already hold g_lvSelectFadeMutex.
 static void ListSelectFadeTrackKey(HWND hwnd, ULONG_PTR key)
 {
     g_lvSelectFadeKeysByWindow[hwnd].insert(key);
@@ -13178,64 +13229,85 @@ static float ListSelectFadeProgress(const ListSelectFadeState& state, DOUBLE now
 }
 
 static LRESULT CALLBACK ListSelectFadeSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR)
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     if (msg == WM_TIMER && wp == kListSelectFadeTimerId) {
         DOUBLE now = TimerGetSeconds();
 
+        // Rects to invalidate are collected under the lock and fired off
+        // after releasing it -- InvalidateRect itself doesn't need the
+        // lock, and keeping the critical section short matters here since
+        // this runs on every timer tick while any selection is fading.
+        struct PendingInvalidate { HWND hwnd; RECT rect; };
+        std::vector<PendingInvalidate> pending;
         bool anyFading = false;
-        for (auto it = g_lvSelectFadeAnims.begin(); it != g_lvSelectFadeAnims.end(); ) {
-            auto& state = it->second;
-            if (!state.paintHwnd || !IsWindow(state.paintHwnd)) {
-                ListSelectFadeMarkComplete(state);
-                g_lvSelectFadeKeysByWindow.erase(state.paintHwnd);
-                it = g_lvSelectFadeAnims.erase(it);
-                continue;
-            }
-
-            const float progress = ListSelectFadeProgress(state, now);
-            if (progress >= 1.f) {
-                ListSelectFadeMarkComplete(state);
-            } else {
-                anyFading = true;
-                // state.rect is kept fresh by DrawRoundedItemBg on every
-                // real paint during this active window (the InvalidateRect
-                // below is what drives those paints), so it doesn't need a
-                // live re-fetch here. It IS inflated by a safety margin
-                // before invalidating, though: the border draw expands its
-                // destination rect outward past pRect for the cross-axis
-                // bleed effect (extraX for TreeView, extraY for ListView),
-                // but InvalidateRect also sets the clip region for the next
-                // paint -- invalidating the raw, un-inflated rect would
-                // permanently clip that bleed off every repaint this timer
-                // drives, cutting the border's edges. GetSelectionBorderOuterPaddingX
-                // is the larger of the two axis paddings, so using it on all
-                // four sides is a safe, generous margin regardless of which
-                // control type/axis actually needs it.
-                if (state.rect.right > state.rect.left) {
-                    RECT inv = state.rect;
-                    const int margin = GetSelectionBorderOuterPaddingX(state.paintHwnd);
-                    InflateRect(&inv, margin, margin);
-                    InvalidateRect(state.paintHwnd, &inv, FALSE);
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            for (auto it = g_lvSelectFadeAnims.begin(); it != g_lvSelectFadeAnims.end(); ) {
+                auto& state = it->second;
+                if (!state.paintHwnd || !IsWindow(state.paintHwnd)) {
+                    ListSelectFadeMarkComplete(state);
+                    g_lvSelectFadeKeysByWindow.erase(state.paintHwnd);
+                    it = g_lvSelectFadeAnims.erase(it);
+                    continue;
                 }
+
+                const float progress = ListSelectFadeProgress(state, now);
+                if (progress >= 1.f) {
+                    ListSelectFadeMarkComplete(state);
+                } else {
+                    anyFading = true;
+                    // state.rect is kept fresh by DrawRoundedItemBg on every
+                    // real paint during this active window (the InvalidateRect
+                    // below is what drives those paints), so it doesn't need a
+                    // live re-fetch here. It IS inflated by a safety margin
+                    // before invalidating, though: the border draw expands its
+                    // destination rect outward past pRect for the cross-axis
+                    // bleed effect (extraX for TreeView, extraY for ListView),
+                    // but InvalidateRect also sets the clip region for the next
+                    // paint -- invalidating the raw, un-inflated rect would
+                    // permanently clip that bleed off every repaint this timer
+                    // drives, cutting the border's edges. GetSelectionBorderOuterPaddingX
+                    // is the larger of the two axis paddings, so using it on all
+                    // four sides is a safe, generous margin regardless of which
+                    // control type/axis actually needs it.
+                    if (state.rect.right > state.rect.left) {
+                        RECT inv = state.rect;
+                        const int margin = GetSelectionBorderOuterPaddingX(state.paintHwnd);
+                        InflateRect(&inv, margin, margin);
+                        pending.push_back({state.paintHwnd, inv});
+                    }
+                }
+                ++it;
             }
-            ++it;
+
+            if (!anyFading)
+                g_lvSelectFadeLastTime = 0.0;
         }
 
-        if (!anyFading) {
+        for (const auto& p : pending)
+            InvalidateRect(p.hwnd, &p.rect, FALSE);
+
+        if (!anyFading)
             KillTimer(hwnd, kListSelectFadeTimerId);
-            g_lvSelectFadeLastTime = 0.0;
-        }
         return 0;
     }
 
     if (msg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            g_lvSelectFadeAnims.clear();
+            g_lvSelectFadeKeysByWindow.clear();
+            g_lvSelectFadeActiveCount = 0;
+            g_lvSelectFadeLastTime = 0.0;
+            if (g_lvSelectFadeTimerHwnd == hwnd)
+                g_lvSelectFadeTimerHwnd = nullptr;
+        }
         KillTimer(hwnd, kListSelectFadeTimerId);
-        g_lvSelectFadeAnims.clear();
-        g_lvSelectFadeLastTime = 0.0;
-        if (g_lvSelectFadeTimerHwnd == hwnd)
-            g_lvSelectFadeTimerHwnd = nullptr;
-        RemoveWindowSubclass(hwnd, ListSelectFadeSubclassProc, id);
+        // No manual RemoveWindowSubclass here: this proc is installed via
+        // WindhawkUtils::SetWindowSubclassFromAnyThread, whose
+        // SubclassProcWrapper already removes itself on WM_NCDESTROY before
+        // forwarding the message to us.
     }
 
     return DefSubclassProc(hwnd, msg, wp, lp);
@@ -13255,25 +13327,50 @@ static bool ListSelectFadeEnsureTimer(HWND timerHwnd)
     if (!timerHwnd || !IsWindow(timerHwnd))
         return false;
 
-    if (g_lvSelectFadeTimerHwnd != timerHwnd) {
-        if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd)) {
-            KillTimer(g_lvSelectFadeTimerHwnd, kListSelectFadeTimerId);
-            RemoveWindowSubclass(g_lvSelectFadeTimerHwnd,
-                ListSelectFadeSubclassProc, kListSelectFadeSubId);
+    // The cross-thread subclass install/remove calls below must happen
+    // outside the lock: ListSelectFadeSubclassProc takes g_lvSelectFadeMutex
+    // at the top of WM_TIMER/WM_NCDESTROY, so holding it across a blocking
+    // SendMessage into that same window's thread (via
+    // Set/RemoveWindowSubclassFromAnyThread) risks the same deadlock shape
+    // documented on g_checkAnimsMutex/CheckAnims_Cleanup.
+    HWND oldTimerHwnd = nullptr;
+    bool retargeting = false;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        retargeting = (g_lvSelectFadeTimerHwnd != timerHwnd);
+        if (retargeting) {
+            if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd))
+                oldTimerHwnd = g_lvSelectFadeTimerHwnd;
+            g_lvSelectFadeLastTime = 0.0;
+            g_lvSelectFadeTimerHwnd = nullptr;
         }
-        g_lvSelectFadeLastTime = 0.0;
-        g_lvSelectFadeTimerHwnd = nullptr;
+    }
 
-        if (!SetWindowSubclass(timerHwnd, ListSelectFadeSubclassProc,
-                kListSelectFadeSubId, 0))
+    if (oldTimerHwnd) {
+        KillTimer(oldTimerHwnd, kListSelectFadeTimerId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            oldTimerHwnd, ListSelectFadeSubclassProc);
+    }
+
+    if (retargeting) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                timerHwnd, ListSelectFadeSubclassProc, 0))
             return false;
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
         g_lvSelectFadeTimerHwnd = timerHwnd;
     }
 
-    if (g_lvSelectFadeLastTime == 0.0) {
-        g_lvSelectFadeLastTime = TimerGetSeconds();
-        SetTimer(timerHwnd, kListSelectFadeTimerId, kListSelectFadeTimerIntervalMs, nullptr);
+    bool needStartTimer = false;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        if (g_lvSelectFadeLastTime == 0.0) {
+            g_lvSelectFadeLastTime = TimerGetSeconds();
+            needStartTimer = true;
+        }
     }
+    if (needStartTimer)
+        SetTimer(timerHwnd, kListSelectFadeTimerId, kListSelectFadeTimerIntervalMs, nullptr);
+
     return true;
 }
 
@@ -13283,45 +13380,64 @@ static bool ListSelectFadeEnsureTimer(HWND timerHwnd)
 // ever reads an existing entry's progress; it never creates one, since that
 // would mean an LVM_HITTEST lookup on every single paint of a selected item
 // (not just while it's actively fading) -- see g_lvSelectFadeActiveCount.
-static void ListSelectFadeStartItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView)
+// Inserts the fade entry and arms the timer for an item the caller has
+// already confirmed eligible (SysAnimationsEnabled + ShouldDrawSelectionBorder).
+// Used directly by ListSelectFadeResyncWindow, which validates both once for
+// the whole batch instead of paying ShouldDrawSelectionBorder's ancestor walk
+// again per selected item.
+static void ListSelectFadeStartItemUnchecked(HWND hwndFrom, ULONG_PTR itemId)
 {
-    if (!hwndFrom || !SysAnimationsEnabled() ||
-        !ShouldDrawSelectionBorder(hwndFrom, isTreeView))
-        return;
-
     const ULONG_PTR key = ListSelectFadeKey(hwndFrom, itemId);
-    if (g_lvSelectFadeAnims.find(key) != g_lvSelectFadeAnims.end())
-        return;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        if (g_lvSelectFadeAnims.find(key) != g_lvSelectFadeAnims.end())
+            return;
 
-    ListSelectFadeState st;
-    st.startTime = TimerGetSeconds();
-    st.paintHwnd = hwndFrom;
-    st.activeCounted = true;
-    g_lvSelectFadeAnims.emplace(key, st);
-    ListSelectFadeTrackKey(hwndFrom, key);
-    ++g_lvSelectFadeActiveCount;
+        ListSelectFadeState st;
+        st.startTime = TimerGetSeconds();
+        st.paintHwnd = hwndFrom;
+        st.activeCounted = true;
+        g_lvSelectFadeAnims.emplace(key, st);
+        ListSelectFadeTrackKey(hwndFrom, key);
+        ++g_lvSelectFadeActiveCount;
+    }
     if (!ListSelectFadeEnsureTimer(ListSelectFadeTimerHwnd(hwndFrom))) {
         // Timer failed to install (e.g. SetWindowSubclass exhausted) --
         // nothing will ever advance or complete this entry, so undo the
         // insert instead of leaking an active-but-frozen fade forever.
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
         ListSelectFadeUntrackKey(hwndFrom, key);
         g_lvSelectFadeAnims.erase(key);
         --g_lvSelectFadeActiveCount;
     }
 }
 
+static void ListSelectFadeStartItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView)
+{
+    if (!hwndFrom || !SysAnimationsEnabled() ||
+        !ShouldDrawSelectionBorder(hwndFrom, isTreeView))
+        return;
+    ListSelectFadeStartItemUnchecked(hwndFrom, itemId);
+}
+
 static void ListSelectFadeCleanup()
 {
-    g_lvSelectFadeActiveCount = 0;
-    if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd)) {
-        KillTimer(g_lvSelectFadeTimerHwnd, kListSelectFadeTimerId);
-        RemoveWindowSubclass(g_lvSelectFadeTimerHwnd,
-            ListSelectFadeSubclassProc, kListSelectFadeSubId);
+    HWND timerHwnd = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        g_lvSelectFadeActiveCount = 0;
+        if (g_lvSelectFadeTimerHwnd && IsWindow(g_lvSelectFadeTimerHwnd))
+            timerHwnd = g_lvSelectFadeTimerHwnd;
+        g_lvSelectFadeAnims.clear();
+        g_lvSelectFadeKeysByWindow.clear();
+        g_lvSelectFadeLastTime = 0.0;
+        g_lvSelectFadeTimerHwnd = nullptr;
     }
-    g_lvSelectFadeAnims.clear();
-    g_lvSelectFadeKeysByWindow.clear();
-    g_lvSelectFadeLastTime = 0.0;
-    g_lvSelectFadeTimerHwnd = nullptr;
+    if (timerHwnd) {
+        KillTimer(timerHwnd, kListSelectFadeTimerId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            timerHwnd, ListSelectFadeSubclassProc);
+    }
 }
 
 static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeView)
@@ -13385,8 +13501,7 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
     // this block is purely a reader, gated behind g_lvSelectFadeActiveCount so
     // a settled selection costs nothing extra per repaint.
     float selectFadeProgress = 1.f;
-    if (drawBorder && itemHwnd && SysAnimationsEnabled() &&
-        g_lvSelectFadeActiveCount > 0) {
+    if (drawBorder && itemHwnd && SysAnimationsEnabled()) {
         if (isTreeView) {
             // TreeView is single-select and keyed by the stable HTREEITEM
             // rather than a hit-testable index (TVM_HITTEST proved
@@ -13395,22 +13510,36 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
             // during an active fade can only be for the one selected item,
             // so the sole tracked entry (if any) is read directly, no
             // hit-test needed.
-            auto winIt = g_lvSelectFadeKeysByWindow.find(itemHwnd);
-            if (winIt != g_lvSelectFadeKeysByWindow.end() && !winIt->second.empty()) {
-                auto fadeIt = g_lvSelectFadeAnims.find(*winIt->second.begin());
-                if (fadeIt != g_lvSelectFadeAnims.end()) {
-                    fadeIt->second.rect = *pRect;
-                    selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            if (g_lvSelectFadeActiveCount > 0) {
+                auto winIt = g_lvSelectFadeKeysByWindow.find(itemHwnd);
+                if (winIt != g_lvSelectFadeKeysByWindow.end() && !winIt->second.empty()) {
+                    auto fadeIt = g_lvSelectFadeAnims.find(*winIt->second.begin());
+                    if (fadeIt != g_lvSelectFadeAnims.end()) {
+                        fadeIt->second.rect = *pRect;
+                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+                    }
                 }
             }
         } else {
-            const int fadeItem = ListSelectFadeHitTestItem(itemHwnd, pRect);
-            if (fadeItem >= 0) {
-                auto fadeIt = g_lvSelectFadeAnims.find(
-                    ListSelectFadeKey(itemHwnd, (ULONG_PTR)(UINT)fadeItem));
-                if (fadeIt != g_lvSelectFadeAnims.end()) {
-                    fadeIt->second.rect = *pRect;
-                    selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+            // Only worth an LVM_HITTEST round-trip while some window has an
+            // active fade -- check the (lock-protected) counter first, same
+            // early-exit this block always relied on.
+            bool anyActive;
+            {
+                std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+                anyActive = g_lvSelectFadeActiveCount > 0;
+            }
+            if (anyActive) {
+                const int fadeItem = ListSelectFadeHitTestItem(itemHwnd, pRect);
+                if (fadeItem >= 0) {
+                    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+                    auto fadeIt = g_lvSelectFadeAnims.find(
+                        ListSelectFadeKey(itemHwnd, (ULONG_PTR)(UINT)fadeItem));
+                    if (fadeIt != g_lvSelectFadeAnims.end()) {
+                        fadeIt->second.rect = *pRect;
+                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+                    }
                 }
             }
         }
@@ -13745,13 +13874,12 @@ struct ListViewGroupChevronAnim {
 };
 
 static constexpr UINT kListViewGroupChevronTimerId = 0x517C0B;
-static constexpr UINT_PTR kListViewGroupChevronSubId = 0x517C0A;
 static std::unordered_map<ULONG_PTR, ListViewGroupChevronAnim> g_lvGroupChevronAnims;
 static DOUBLE g_lvGroupChevronLastTime = 0.0;
 static HWND g_lvGroupChevronTimerHwnd = nullptr;
 
 static LRESULT CALLBACK ListViewGroupChevronSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR)
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     if (msg == WM_TIMER && wp == kListViewGroupChevronTimerId) {
         DWORD now = GetTickCount();
@@ -13792,7 +13920,10 @@ static LRESULT CALLBACK ListViewGroupChevronSubclassProc(
         g_lvGroupChevronLastTime = 0.0;
         if (g_lvGroupChevronTimerHwnd == hwnd)
             g_lvGroupChevronTimerHwnd = nullptr;
-        RemoveWindowSubclass(hwnd, ListViewGroupChevronSubclassProc, id);
+        // No manual RemoveWindowSubclass here: this proc is installed via
+        // WindhawkUtils::SetWindowSubclassFromAnyThread, whose
+        // SubclassProcWrapper already removes itself on WM_NCDESTROY before
+        // forwarding the message to us.
     }
 
     return DefSubclassProc(hwnd, msg, wp, lp);
@@ -13821,14 +13952,14 @@ static bool ListViewGroupChevronEnsureTimer(HWND timerHwnd)
     if (g_lvGroupChevronTimerHwnd != timerHwnd) {
         if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
             KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-            RemoveWindowSubclass(g_lvGroupChevronTimerHwnd,
-                ListViewGroupChevronSubclassProc, kListViewGroupChevronSubId);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                g_lvGroupChevronTimerHwnd, ListViewGroupChevronSubclassProc);
         }
         g_lvGroupChevronLastTime = 0.0;
         g_lvGroupChevronTimerHwnd = nullptr;
 
-        if (!SetWindowSubclass(timerHwnd, ListViewGroupChevronSubclassProc,
-                kListViewGroupChevronSubId, 0))
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                timerHwnd, ListViewGroupChevronSubclassProc, 0))
             return false;
         g_lvGroupChevronTimerHwnd = timerHwnd;
     }
@@ -13844,8 +13975,8 @@ static void ListViewGroupChevronCleanup()
 {
     if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
         KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-        RemoveWindowSubclass(g_lvGroupChevronTimerHwnd,
-            ListViewGroupChevronSubclassProc, kListViewGroupChevronSubId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            g_lvGroupChevronTimerHwnd, ListViewGroupChevronSubclassProc);
     }
     g_lvGroupChevronAnims.clear();
     g_lvGroupChevronLastTime = 0.0;
@@ -14523,12 +14654,14 @@ static BOOL CALLBACK SplitButtonChevronRemoveEnum(HWND hwnd, LPARAM)
 
 // ID2D1DCRenderTarget doesn't implement ID2D1DeviceContext, so PushLayer's
 // layer parameter can't be nullptr here (that's only valid on a real
-// device context) -- needs an explicit ID2D1Layer, same as every other
-// PushLayer call site in this file (see g_oneDriveWipeLayerRT for why the
-// staleness check against the render target's own identity is needed too).
-static Microsoft::WRL::ComPtr<ID2D1Layer> g_progressMarqueeMaskLayer;
-static ID2D1RenderTarget* g_progressMarqueeMaskLayerRT = nullptr; // identity check only
-
+// device context) -- needs an explicit ID2D1Layer. Cached per-thread in
+// D2DThreadCache (progressMarqueeMaskLayer/RT fields) rather than as a
+// process-global: two threads painting marquee progress bars at once (two
+// Explorer copy dialogs, each on its own thread) each get their own cache
+// via FLS, so there's no shared ComPtr for them to race on. Keyed against
+// the render target's own identity since a layer isn't valid across a
+// render target it wasn't created from -- same pattern as brush/brushTarget
+// above.
 static bool PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory) return false;
@@ -14602,32 +14735,34 @@ static bool PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LP
     if (haveMask)
         g_d2dFactory->CreateRoundedRectangleGeometry(
             D2D1::RoundedRect(maskRect, cr, cr), &maskGeom);
-    if (maskGeom &&
-        (!g_progressMarqueeMaskLayer || g_progressMarqueeMaskLayerRT != pRT.Get())) {
-        g_progressMarqueeMaskLayer.Reset();
+    D2DThreadCache* cache = D2DGetThreadCache();
+    if (maskGeom && cache &&
+        (!cache->progressMarqueeMaskLayer || cache->progressMarqueeMaskLayerRT != pRT.Get())) {
+        if (cache->progressMarqueeMaskLayer) {
+            cache->progressMarqueeMaskLayer->Release();
+            cache->progressMarqueeMaskLayer = nullptr;
+        }
         ID2D1Layer* rawLayer = nullptr;
         pRT->CreateLayer(nullptr, &rawLayer);
         if (rawLayer) {
-            g_progressMarqueeMaskLayer.Attach(rawLayer);
-            g_progressMarqueeMaskLayerRT = pRT.Get();
+            cache->progressMarqueeMaskLayer = rawLayer;
+            cache->progressMarqueeMaskLayerRT = pRT.Get();
         }
     }
-    const bool pushedLayer = maskGeom && g_progressMarqueeMaskLayer;
+    const bool pushedLayer = maskGeom && cache && cache->progressMarqueeMaskLayer;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRT->CreateSolidColorBrush(GetAccentIndicatorD2D(), &brush);
     pRT->BeginDraw();
     if (pushedLayer)
         pRT->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), maskGeom.Get()),
-            g_progressMarqueeMaskLayer.Get());
+            cache->progressMarqueeMaskLayer);
     pRT->FillRoundedRectangle(D2D1::RoundedRect(pillRect, cr, cr), brush.Get());
     if (pushedLayer)
         pRT->PopLayer();
     if (pRT->EndDraw() == (HRESULT)D2DERR_RECREATE_TARGET) {
         pRT.Reset();
-        CachedTlsRTRecreate();
-        g_progressMarqueeMaskLayer.Reset(); // belongs to the old device; recreated lazily next call
-        g_progressMarqueeMaskLayerRT = nullptr;
+        CachedTlsRTRecreate(); // also releases progressMarqueeMaskLayer via cache->Reset()
     }
     return true;
 }
@@ -14769,11 +14904,16 @@ constexpr UINT   TVM_GETNEXTITEM_  = 0x110A;
 constexpr WPARAM TVGN_PARENT_      = 0x0003;
 constexpr WPARAM TVGN_DROPHILITE_  = 0x0008;
 constexpr WPARAM TVGN_CARET_       = 0x0009;
-constexpr UINT   LVM_GETNEXTITEM_  = 0x1000 + 12;
-constexpr UINT   LVM_GETITEMRECT_  = 0x1000 + 14;
-constexpr WPARAM LVNI_FOCUSED_     = 0x0001;
-constexpr WPARAM LVNI_SELECTED_    = 0x0002;
-constexpr INT    LVIR_BOUNDS_      = 0;
+constexpr UINT   LVM_GETNEXTITEM_       = 0x1000 + 12;
+constexpr UINT   LVM_GETITEMRECT_       = 0x1000 + 14;
+constexpr UINT   LVM_GETSELECTEDCOUNT_  = 0x1000 + 50;
+constexpr WPARAM LVNI_FOCUSED_          = 0x0001;
+constexpr WPARAM LVNI_SELECTED_         = 0x0002;
+constexpr INT    LVIR_BOUNDS_           = 0;
+// A bulk selection (Ctrl+A and the like) has no meaningful per-item fade to
+// show, so ListSelectFadeResyncWindow skips starting fades entirely above
+// this count instead of paying one ancestor-walk-gated map insert per row.
+constexpr int    kListSelectFadeMaxBulkSelection = 32;
 
 // True when *pRect matches the keyboard-focused item (Tab/arrow-key nav, not
 // a mouse click) and focus cues are visible. Used to recolor an already-drawn
@@ -14815,6 +14955,7 @@ static void ListSelectFadeInvalidateItem(HWND hwndFrom, ULONG_PTR itemId, bool i
         return;
 
     const ULONG_PTR key = ListSelectFadeKey(hwndFrom, itemId);
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
     auto it = g_lvSelectFadeAnims.find(key);
     if (it == g_lvSelectFadeAnims.end())
         return;
@@ -14835,8 +14976,31 @@ static void ListSelectFadeInvalidateItem(HWND hwndFrom, ULONG_PTR itemId, bool i
 // for items that stayed selected untouched.
 static void ListSelectFadeResyncWindow(HWND hwndFrom)
 {
-    if (!hwndFrom || !ShouldDrawSelectionBorder(hwndFrom, false))
+    if (!hwndFrom || !SysAnimationsEnabled() || !ShouldDrawSelectionBorder(hwndFrom, false))
         return;
+
+    // A bulk selection (Ctrl+A and the like) also arrives as iItem==-1, and
+    // has no meaningful per-item fade to show -- counting first avoids
+    // thousands of LVM_GETNEXTITEM round-trips and map inserts for a
+    // selection this large. Any previously tracked entries for this window
+    // are dropped outright rather than left parked in g_lvSelectFadeAnims
+    // until the next selection change.
+    const int selCount = (int)SendMessageW_orig(hwndFrom, LVM_GETSELECTEDCOUNT_, 0, 0);
+    if (selCount > kListSelectFadeMaxBulkSelection) {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
+        if (winIt == g_lvSelectFadeKeysByWindow.end())
+            return;
+        for (ULONG_PTR key : winIt->second) {
+            auto animIt = g_lvSelectFadeAnims.find(key);
+            if (animIt != g_lvSelectFadeAnims.end()) {
+                ListSelectFadeMarkComplete(animIt->second);
+                g_lvSelectFadeAnims.erase(animIt);
+            }
+        }
+        g_lvSelectFadeKeysByWindow.erase(winIt);
+        return;
+    }
 
     std::unordered_set<ULONG_PTR> stillSelected;
     int idx = -1;
@@ -14847,10 +15011,19 @@ static void ListSelectFadeResyncWindow(HWND hwndFrom)
             break;
         const ULONG_PTR key = ListSelectFadeKey(hwndFrom, (ULONG_PTR)(UINT)idx);
         stillSelected.insert(key);
-        if (g_lvSelectFadeAnims.find(key) == g_lvSelectFadeAnims.end())
-            ListSelectFadeStartItem(hwndFrom, (ULONG_PTR)(UINT)idx, false);
+        bool alreadyTracked;
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            alreadyTracked = g_lvSelectFadeAnims.find(key) != g_lvSelectFadeAnims.end();
+        }
+        // Unchecked: ShouldDrawSelectionBorder was already validated once
+        // above for the whole batch, so a per-item ancestor walk here would
+        // just repeat the same answer at the cost of one extra call per row.
+        if (!alreadyTracked)
+            ListSelectFadeStartItemUnchecked(hwndFrom, (ULONG_PTR)(UINT)idx);
     }
 
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
     auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
     if (winIt == g_lvSelectFadeKeysByWindow.end())
         return;
@@ -14881,6 +15054,7 @@ static void ListSelectFadeResyncWindow(HWND hwndFrom)
 // of finding a parked entry -- same visual result, one extra hit-test.
 static void ListSelectFadeInvalidateWindowItems(HWND hwndFrom)
 {
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
     auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
     if (winIt == g_lvSelectFadeKeysByWindow.end())
         return;
@@ -18083,12 +18257,20 @@ HCURSOR WINAPI NavDividerSetCursor_hook(HCURSOR hCursor)
     return NavDividerSetCursor_orig(hCursor);
 }
 
-// Guards the install-and-post below: ensures it fires exactly once even if
+// Guards SetFunctionHook below: ensures it's queued exactly once even if
 // multiple UI threads hit NavDividerTrackAndGetHwnd concurrently right as
 // the first divider(s) appear. (g_navDividerUnloading, used right below
 // too, is declared earlier in the file -- see its own comment there for
 // why.)
 static std::atomic<bool> g_navDividerHookInstallTriggered{false};
+// Separate from the flag above: g_msgWnd is only created in Wh_ModAfterInit,
+// so a divider paint in the gap between hooks going live and that window
+// existing (or any CreateMsgWindow failure) would otherwise queue the hook
+// and never actually apply it -- Wh_ApplyHookOperations can't run from this
+// paint callback, only from ThemeMsgWndProc once the post lands. Tracked
+// independently so a later divider paint keeps retrying the post (cheap:
+// one atomic load) until it succeeds once, instead of giving up forever.
+static std::atomic<bool> g_navDividerApplyPosted{false};
 
 // Resolves the HWND owning this divider paint and refreshes kPropNavDividerX
 // -- keeps the position accurate during an active drag, when the OS may
@@ -18113,10 +18295,13 @@ static HWND NavDividerTrackAndGetHwnd(HDC hdc, LPCRECT pRect)
     // via a posted message, reusing the thread g_msgWnd already runs on.
     // Installing lazily (not in Wh_ModInit) keeps SetCursor unhooked in the
     // many processes that never show a real nav-pane divider.
-    if (!g_navDividerHookInstallTriggered.exchange(true, std::memory_order_acq_rel)) {
+    if (!g_navDividerHookInstallTriggered.exchange(true, std::memory_order_acq_rel))
         WindhawkUtils::SetFunctionHook(SetCursor, NavDividerSetCursor_hook, &NavDividerSetCursor_orig);
+
+    if (!g_navDividerApplyPosted.load(std::memory_order_acquire)) {
         HWND msgWnd = g_msgWnd.load(std::memory_order_acquire);
-        if (msgWnd) PostMessageW(msgWnd, kNavDividerApplyHooksMessage, 0, 0);
+        if (msgWnd && PostMessageW(msgWnd, kNavDividerApplyHooksMessage, 0, 0))
+            g_navDividerApplyPosted.store(true, std::memory_order_release);
     }
 
     int centerX = (pRect->left + pRect->right) / 2;
@@ -24883,7 +25068,8 @@ using RgSHDefExtractIconW_t =
 static RgSHDefExtractIconW_t rg_SHDefExtractIconW_orig = nullptr;
 static bool RgGlyphIconShouldReplace(PCWSTR pszIconFile, int iIndex, UINT* outId);
 static HICON RgGlyphIconGetForLoad(UINT id, int size, bool dark, COLORREF accent, bool useAccent);
-static HICON RgThisPcAccentIconGet(int size, bool dark, COLORREF accent);
+static bool RgThisPcAccentIconDraw(HDC hdc, int x, int y, int cx, int cy,
+    bool dark, COLORREF accent);
 
 // PatBlt/ReleaseCapture hooks -- prototype WinUI-style divider drag visual.
 // regedit's own OnLButtonDown draws its ghost-line via PatBlt(..., PATINVERT)
@@ -26391,18 +26577,17 @@ static LRESULT CALLBACK RgMainSubclassProc(
                 // our own accent-colored bake directly for this one root
                 // row instead. GetRoot alone identifies it -- it's the only
                 // item at this indentation level. No DestroyIcon: the
-                // handle is owned by RgThisPcAccentIconGet's own cache.
+                // handle is owned by RgThisPcAccentIconGet's own cache, and
+                // RgThisPcAccentIconDraw holds that cache's mutex across the
+                // draw so RgThisPcAccentIconClear (message-window thread)
+                // can't destroy it out from under this DrawIconEx call.
                 bool drewAccentRoot = false;
                 if (sel && g_settings.RegeditSection && g_settings.RgGlyphIcons &&
                     hItem == TreeView_GetRoot(tv)) {
                     int glyphCx = iconW, glyphCy = iconH;
                     ImageList_GetIconSize(himl, &glyphCx, &glyphCy);
-                    if (HICON accentIcon = RgThisPcAccentIconGet(
-                            glyphCx, dark, GetAccentIndicator())) {
-                        DrawIconEx(hdc, iconX, iconY, accentIcon, glyphCx, glyphCy,
-                                   0, nullptr, DI_NORMAL);
-                        drewAccentRoot = true;
-                    }
+                    drewAccentRoot = RgThisPcAccentIconDraw(hdc, iconX, iconY,
+                        glyphCx, glyphCy, dark, GetAccentIndicator());
                 }
                 if (!drewAccentRoot && idx >= 0)
                     ImageList_Draw(himl, idx, hdc, iconX, iconY, ILD_TRANSPARENT);
@@ -27154,24 +27339,13 @@ static bool TryApplyToWindow_Regedit(HWND hwnd)
     return false;
 }
 
-// Defense in depth: caps total substitution attempts across the process
-// lifetime. Once exceeded, every call falls straight through to the real
-// API, so any future failure in the substitution path degrades to "icons
-// don't get replaced" instead of "regedit never opens." 24 is a generous
-// margin over the ~3 legitimate ids (109/3/4) this ever matches.
-static std::atomic<int> g_rgGlyphIconAttempts{ 0 };
-static constexpr int kRgGlyphIconMaxAttempts = 24;
-
 static HRESULT WINAPI RgSHDefExtractIconW_Hook(PCWSTR pszIconFile, int iIndex,
                                                UINT uFlags, HICON* phiconLarge,
                                                HICON* phiconSmall,
                                                UINT nIconSize)
 {
     UINT id = 0;
-    if (g_rgGlyphIconAttempts.load(std::memory_order_relaxed) < kRgGlyphIconMaxAttempts &&
-        RgGlyphIconShouldReplace(pszIconFile, iIndex, &id)) {
-        g_rgGlyphIconAttempts.fetch_add(1, std::memory_order_relaxed);
-
+    if (RgGlyphIconShouldReplace(pszIconFile, iIndex, &id)) {
         // nIconSize packs the large-icon size in the low word, small-icon
         // size in the high word -- each output is baked at its own
         // requested size, not a single shared one.
@@ -29068,7 +29242,7 @@ static void ApplyTreeRuntimeSettings(HWND hwnd)
          !g_settings.NavPaneHoverFade) &&
         GetPropW(hwnd, kPropNavHoverFadeState)) {
         (void)SendMessageW(
-            hwnd, kNavHoverFadeResetMessage, 0, 0);
+            hwnd, g_navHoverFadeResetMessage.load(std::memory_order_acquire), 0, 0);
     }
     if (navTree && g_settings.GlyphIcons) {
         TreeRuntimeSaveAndSetStyleBit(
@@ -29365,8 +29539,13 @@ static void HdrDarkPaintDraw(HWND hwnd, HDC hdc)
         Header_GetItem(hwnd, i, &hdi);
         RECT rcText = { rcItem.left + leftMargin, rcItem.top,
                         rcItem.right - rightMargin, rcItem.bottom };
+        // Guard re-entry into DrawTextW_hook's glow/dark-mode pipeline --
+        // this text is already themed above, same guard RgHdrSubclassProc
+        // uses for its own header text.
+        g_glowEntry = true;
         DrawTextW(hdc, buf, -1, &rcText,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        g_glowEntry = false;
         if (hPen) {
             MoveToEx(hdc, rcItem.right - 2, rcClient.top, nullptr);
             LineTo(hdc, rcItem.right - 2, rcClient.bottom);
@@ -29381,10 +29560,15 @@ static void HdrDarkPaintDraw(HWND hwnd, HDC hdc)
 // Generic dark-mode SysHeader32 full-paint fix, same technique as regedit's
 // own RgHdrSubclassProc: AllowDarkModeForWindow's internal dark renderer
 // doesn't draw column divider lines, and NM_CUSTOMDRAW is unreliable for
-// this control, so WM_PAINT is fully replaced instead. Installed on every
-// non-Explorer, non-cabinet-rooted header once dark mode is active; regedit
-// keeps its own dedicated subclass to avoid stacking two full-paint owners
-// on the same header.
+// this control, so WM_PAINT is fully replaced instead. Installed on
+// Explorer-family, non-cabinet-rooted headers once dark mode is active
+// (property dialogs, Folder Options, etc. -- the same DarkMode_ItemsView
+// scope SetItemsViewOrDefaultTheme always used); regedit keeps its own
+// dedicated subclass to avoid stacking two full-paint owners on the same
+// header. Deliberately NOT installed in third-party processes: HdrDarkPaintDraw
+// only draws HDI_TEXT left-aligned and would silently discard alignment,
+// sort arrows, images/owner-draw and the host's own NM_CUSTOMDRAW that
+// uxtheme's native dark renderer already handles correctly there.
 static LRESULT CALLBACK HdrDarkPaintSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR /*dwRefData*/)
 {
@@ -29400,6 +29584,8 @@ static LRESULT CALLBACK HdrDarkPaintSubclassProc(
 
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
+        if (!hdc)
+            return 0;
         HdrDarkPaintDraw(hwnd, hdc);
         EndPaint(hwnd, &ps);
         return 0;
@@ -30047,8 +30233,18 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
         else if (_wcsicmp(cls, L"SysHeader32") == 0) {
             if (g_cbdAllowDark) g_cbdAllowDark(hwnd, true);
             // Replaces SetItemsViewOrDefaultTheme outright -- full WM_PAINT
-            // ownership makes whatever theme is set moot.
-            if (!cabinetRooted && !IsCurrentProcessRegedit())
+            // ownership makes whatever theme is set moot. Scoped the same way
+            // SetItemsViewOrDefaultTheme itself always was (Explorer-family,
+            // non-cabinet -- property dialogs, Folder Options, etc.): the
+            // divider-line bug this fixes only exists in the DarkMode_ItemsView
+            // renderer that theme applies, which SetItemsViewOrDefaultTheme
+            // only ever requested inside Explorer. Dropping that check here
+            // would take over WM_PAINT for every third-party app's own
+            // SysHeader32 too, discarding alignment, sort arrows, images,
+            // owner-draw and NM_CUSTOMDRAW that HdrDarkPaintDraw doesn't
+            // know how to reproduce -- uxtheme's own dark header renderer
+            // already handles all of that correctly outside Explorer.
+            if (IsCurrentProcessExplorer() && !cabinetRooted && !IsCurrentProcessRegedit())
                 HdrDarkPaintInstall(hwnd);
         }
         else if (_wcsicmp(cls, L"msctls_trackbar32") == 0 ||
@@ -30261,6 +30457,12 @@ static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, PropLightPaneSubclassProc);
         RemovePropW(hwnd, kPropLightPaneSubclassProp);
     }
+    // GlyphSampleEraseColor sets this on whatever g_tlsPaintHwnd/WindowFromDC
+    // resolves to at erase time, which is broader than the two subclasses
+    // (TreeCursorSubclassProc, PlacesBarAnimSubclassProc) that remove it on
+    // their own teardown -- sweep it here too so it can't outlive the mod on
+    // some other window.
+    RemovePropW(hwnd, kPropGlyphEraseWarm);
     return TRUE;
 }
 
@@ -35610,9 +35812,9 @@ static bool g_rgThisPcAccentDark = false;
 static COLORREF g_rgThisPcAccentColor = 0;
 static std::mutex g_rgThisPcAccentMutex;
 
-static HICON RgThisPcAccentIconGet(int size, bool dark, COLORREF accent)
+// Caller must hold g_rgThisPcAccentMutex -- see RgThisPcAccentIconDraw below.
+static HICON RgThisPcAccentIconGet_Locked(int size, bool dark, COLORREF accent)
 {
-    std::lock_guard<std::mutex> lock(g_rgThisPcAccentMutex);
     if (g_rgThisPcAccentIcon && g_rgThisPcAccentSize == size &&
         g_rgThisPcAccentDark == dark && g_rgThisPcAccentColor == accent) {
         return g_rgThisPcAccentIcon;
@@ -35627,6 +35829,23 @@ static HICON RgThisPcAccentIconGet(int size, bool dark, COLORREF accent)
     g_rgThisPcAccentDark = dark;
     g_rgThisPcAccentColor = accent;
     return icon;
+}
+
+// Holds g_rgThisPcAccentMutex across the whole get-then-draw sequence, not
+// just the cache lookup: RgThisPcAccentIconClear runs from
+// RgGlyphIconClearCache/UpdateThemeColors on the message-window thread, and
+// without this the handle it hands back could be DestroyIcon'd on that
+// thread in the gap between returning here and the regedit UI thread's own
+// DrawIconEx call below.
+static bool RgThisPcAccentIconDraw(HDC hdc, int x, int y, int cx, int cy,
+    bool dark, COLORREF accent)
+{
+    std::lock_guard<std::mutex> lock(g_rgThisPcAccentMutex);
+    HICON icon = RgThisPcAccentIconGet_Locked(cx, dark, accent);
+    if (!icon)
+        return false;
+    DrawIconEx(hdc, x, y, icon, cx, cy, 0, nullptr, DI_NORMAL);
+    return true;
 }
 
 static void RgThisPcAccentIconClear()
@@ -39540,6 +39759,12 @@ BOOL Wh_ModInit()
         std::memory_order_release);
     if (!g_defViewBorderPaintMessage.load(std::memory_order_relaxed))
         Wh_Log(L"Failed to register DefView border paint message");
+
+    g_navHoverFadeResetMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.NavHoverFadeReset"),
+        std::memory_order_release);
+    if (!g_navHoverFadeResetMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register nav hover fade reset message");
 
     // Function hooks
     // These are load-bearing: every hook callback unconditionally calls
