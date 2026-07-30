@@ -6,7 +6,7 @@
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @include         *
-// @compilerOptions -ldwmapi -lgdi32 -ld3d11 -ldxgi -ldcomp -ld3dcompiler
+// @compilerOptions -ldwmapi -lgdi32 -ld3d11 -ldxgi -ldcomp -ld3dcompiler -lole32 -loleaut32 -luuid -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -174,6 +174,10 @@ resolved, Windows 11 support) was assisted by Claude.
 #include <atomic>
 #include <unordered_map>
 #include <mutex>
+#include <string>
+#include <ole2.h>
+#include <uiautomation.h>
+#include <shellapi.h>
 
 typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 DefWindowProcW_t DefWindowProcW_Original;
@@ -1107,144 +1111,268 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     return true;
 }
 
-// Build a cache of all taskbar icon positions on the same monitor as hWnd.
-// Matching is by HWND, then owner chain, then root ancestor, then by process
-// ID (for grouped buttons whose dwData references the app frame, not the
-// specific child window). Returns FALSE only when no toolbar can be found,
-// meaning this window genuinely has no taskbar button.
-struct TaskbarIconEntry {
-    HWND hWnd;
-    int  x;
-    int  y;
-    int  width;
-};
+// --- Persistent taskbar icon cache (by HWND and by process+monitor) ---
+static std::unordered_map<HWND, int> g_TaskbarDockXs;
+static std::unordered_map<std::wstring, int> g_ProcessDockXs;
+static std::mutex g_TbCacheMutex;
 
+static HWND FindTaskbarForMonitor(HMONITOR hMon) {
+    HWND hMainTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    HMONITOR mainMon = MonitorFromWindow(hMainTray, MONITOR_DEFAULTTOPRIMARY);
+    if (hMon == mainMon || !hMon) return hMainTray;
+    HWND hSecTray = NULL;
+    while ((hSecTray = FindWindowExW(NULL, hSecTray, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
+        if (MonitorFromWindow(hSecTray, MONITOR_DEFAULTTONULL) == hMon)
+            return hSecTray;
+    }
+    return hMainTray;
+}
+
+// Resolve the taskbar icon centre (X) and the actual taskbar top edge (Y) for
+// hWnd.  Uses UI Automation on both Win10 and Win11, falling back to the
+// ToolbarWindow32 / TB_GETBUTTON path when UIA is unavailable.  Returns FALSE
+// only when no taskbar or button can be found.
 static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    TaskbarIconEntry cache[64];
-    int cacheCount = 0;
 
-    // Walk all taskbars visible on the window's monitor.
-    for (int pass = 0; pass < 2; pass++) {
-        HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
-        if (!hTaskbar) continue;
-
-        RECT tbRect;
-        GetWindowRect(hTaskbar, &tbRect);
-        HMONITOR hTbMon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL);
-        if (hTbMon != hMon) continue;
-
-        // Try every known toolbar location (Windows 10 primary, secondary,
-        // WorkerW fallback for top/side taskbars, and direct child).
-        HWND hToolbar = NULL;
-        HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
-        if (hRebar) {
-            HWND hMSTask = FindWindowEx(hRebar, NULL, L"MSTaskSwWClass", NULL);
-            if (hMSTask)
-                hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+    // Quick cache hit by HWND.
+    {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        auto it = g_TaskbarDockXs.find(hWnd);
+        if (it != g_TaskbarDockXs.end()) {
+            *outX = it->second;
+            return TRUE;
         }
-        if (!hToolbar) {
-            // Some configurations nest under WorkerW.
-            HWND hWorkerW = FindWindowEx(hTaskbar, NULL, L"WorkerW", NULL);
-            if (hWorkerW) {
-                HWND hReBarW = FindWindowEx(hWorkerW, NULL, L"ReBarWindow32", NULL);
-                if (hReBarW) {
-                    HWND hMSTask = FindWindowEx(hReBarW, NULL, L"MSTaskSwWClass", NULL);
-                    if (hMSTask)
-                        hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+    }
+
+    // Build a per-process+monitor key for grouped-button cache.
+    std::wstring procName;
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR path[MAX_PATH];
+                DWORD len = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
+                    WCHAR* name = wcsrchr(path, L'\\');
+                    if (name) procName = name + 1;
                 }
+                CloseHandle(hProc);
             }
         }
-        if (!hToolbar)
-            hToolbar = FindWindowEx(hTaskbar, NULL, L"ToolbarWindow32", NULL);
+    }
+    std::wstring processKey = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+    {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        auto it = g_ProcessDockXs.find(processKey);
+        if (it != g_ProcessDockXs.end()) {
+            *outX = it->second;
+            g_TaskbarDockXs[hWnd] = it->second;
+            return TRUE;
+        }
+    }
 
-        if (hToolbar) {
-            int count = (int)SendMessage(hToolbar, TB_BUTTONCOUNT, 0, 0);
-            for (int i = 0; i < count && cacheCount < 64; i++) {
-                TBBUTTON btn;
-                ZeroMemory(&btn, sizeof(btn));
-                if (SendMessage(hToolbar, TB_GETBUTTON, i, (LPARAM)&btn)) {
-                    RECT r;
-                    if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
-                        MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
-                        TaskbarIconEntry* e = &cache[cacheCount++];
-                        e->hWnd  = (HWND)btn.dwData;
-                        e->x     = (r.left + r.right) / 2;
-                        e->y     = (r.top + r.bottom) / 2;
-                        e->width = r.right - r.left;
+    int targetX = 0;
+    int targetY = 0;
+    int targetW = 0;
+    bool found = false;
+
+    // --- Primary method: UI Automation (Win10 + Win11) ---
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool coInit = (hr == S_OK || hr == S_FALSE);
+    IUIAutomation* pAutomation = NULL;
+    HRESULT hrUia = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER,
+                                     __uuidof(IUIAutomation), (void**)&pAutomation);
+    if (FAILED(hrUia))
+        hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER,
+                                 __uuidof(IUIAutomation), (void**)&pAutomation);
+    if (SUCCEEDED(hrUia) && pAutomation) {
+        HWND hTray = FindTaskbarForMonitor(hMon);
+        if (hTray) {
+            IUIAutomationElement* pTrayElement = NULL;
+            if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
+                WCHAR titleW[512] = {0};
+                GetWindowTextW(hWnd, titleW, 512);
+                std::wstring titleLower = titleW;
+                for (auto& c : titleLower) c = (WCHAR)towlower(c);
+                std::wstring procLower = procName;
+                for (auto& c : procLower) c = (WCHAR)towlower(c);
+                size_t dot = procLower.find(L'.');
+                if (dot != std::wstring::npos) procLower = procLower.substr(0, dot);
+
+                IUIAutomationCondition* pButtonCond = NULL;
+                IUIAutomationCondition* pListItemCond = NULL;
+                IUIAutomationCondition* pOrCond = NULL;
+                VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
+                pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
+                VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
+                pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
+                if (pButtonCond && pListItemCond)
+                    pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
+
+                IUIAutomationElementArray* pArray = NULL;
+                if (pOrCond && SUCCEEDED(pTrayElement->FindAll(TreeScope_Descendants, pOrCond, &pArray)) && pArray) {
+                    int length = 0;
+                    pArray->get_Length(&length);
+                    MONITORINFO mi = {};
+                    mi.cbSize = sizeof(mi);
+                    GetMonitorInfoW(hMon, &mi);
+                    int monRight = mi.rcMonitor.right;
+                    int bestScore = 0;
+                    for (int i = 0; i < length; i++) {
+                        IUIAutomationElement* pItem = NULL;
+                        if (SUCCEEDED(pArray->GetElement(i, &pItem)) && pItem) {
+                            BSTR name;
+                            if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
+                                std::wstring uiaName = name;
+                                for (auto& c : uiaName) c = (WCHAR)towlower(c);
+                                if (!uiaName.empty()) {
+                                    int score = 0;
+                                    if (titleLower == uiaName) score += 1000;
+                                    else {
+                                        if (!titleLower.empty() && titleLower.find(uiaName) != std::wstring::npos)
+                                            score += 500;
+                                        if (!uiaName.empty() && uiaName.find(titleLower) != std::wstring::npos)
+                                            score += 500;
+                                    }
+                                    if (!procLower.empty() && uiaName.find(procLower) != std::wstring::npos)
+                                        score += 400;
+                                    if (uiaName.find(L"start") != std::wstring::npos)    score -= 500;
+                                    if (uiaName.find(L"search") != std::wstring::npos)   score -= 500;
+                                    if (uiaName.find(L"task view") != std::wstring::npos) score -= 500;
+                                    if (score > bestScore) {
+                                        RECT bRect;
+                                        if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect)) &&
+                                            bRect.right > bRect.left && bRect.left < monRight - 50) {
+                                            bestScore = score;
+                                            targetX = bRect.left + (bRect.right - bRect.left) / 2;
+                                            targetY = bRect.top;
+                                            targetW = bRect.right - bRect.left;
+                                            found   = true;
+                                        }
+                                    }
+                                }
+                                SysFreeString(name);
+                            }
+                            pItem->Release();
+                        }
+                    }
+                    pArray->Release();
+                }
+                if (pButtonCond)    pButtonCond->Release();
+                if (pListItemCond)  pListItemCond->Release();
+                if (pOrCond)        pOrCond->Release();
+                pTrayElement->Release();
+            }
+        }
+        pAutomation->Release();
+    }
+    if (coInit) CoUninitialize();
+
+    // --- Fallback: ToolbarWindow32 / TB_GETBUTTON (Win10) ---
+    if (!found) {
+        for (int pass = 0; pass < 2 && !found; pass++) {
+            HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
+            if (!hTaskbar) continue;
+            RECT tbRect;
+            GetWindowRect(hTaskbar, &tbRect);
+            if (MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL) != hMon) continue;
+
+            HWND hToolbar = NULL;
+            HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
+            if (hRebar) {
+                HWND hMSTask = FindWindowEx(hRebar, NULL, L"MSTaskSwWClass", NULL);
+                if (hMSTask)
+                    hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+            }
+            if (!hToolbar) {
+                HWND hWorkerW = FindWindowEx(hTaskbar, NULL, L"WorkerW", NULL);
+                if (hWorkerW) {
+                    HWND hReBarW = FindWindowEx(hWorkerW, NULL, L"ReBarWindow32", NULL);
+                    if (hReBarW) {
+                        HWND hMSTask = FindWindowEx(hReBarW, NULL, L"MSTaskSwWClass", NULL);
+                        if (hMSTask)
+                            hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+                    }
+                }
+            }
+            if (!hToolbar)
+                hToolbar = FindWindowEx(hTaskbar, NULL, L"ToolbarWindow32", NULL);
+
+            if (hToolbar) {
+                struct { HWND hWnd; int x; int y; int w; } tbCache[64];
+                int tbCount = 0;
+                int btnCount = (int)SendMessage(hToolbar, TB_BUTTONCOUNT, 0, 0);
+                for (int i = 0; i < btnCount && tbCount < 64; i++) {
+                    TBBUTTON btn;
+                    ZeroMemory(&btn, sizeof(btn));
+                    if (SendMessage(hToolbar, TB_GETBUTTON, i, (LPARAM)&btn)) {
+                        RECT r;
+                        if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
+                            MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
+                            tbCache[tbCount].hWnd = (HWND)btn.dwData;
+                            tbCache[tbCount].x = (r.left + r.right) / 2;
+                            tbCache[tbCount].y = r.top; // top edge of the button
+                            tbCache[tbCount].w = r.right - r.left;
+                            tbCount++;
+                        }
+                    }
+                }
+                auto tryMatch = [&](HWND h) -> bool {
+                    for (int i = 0; i < tbCount; i++)
+                        if (tbCache[i].hWnd == h) {
+                            targetX = tbCache[i].x;
+                            targetY = tbCache[i].y;
+                            targetW = tbCache[i].w;
+                            return true;
+                        }
+                    return false;
+                };
+                if (tryMatch(hWnd)) found = true;
+                else for (HWND hCur = GetWindow(hWnd, GW_OWNER); hCur && !found; hCur = GetWindow(hCur, GW_OWNER))
+                    found = tryMatch(hCur);
+                if (!found) { HWND hRoot = GetAncestor(hWnd, GA_ROOT); if (hRoot != hWnd) found = tryMatch(hRoot); }
+                if (!found) {
+                    DWORD targetPid;
+                    GetWindowThreadProcessId(hWnd, &targetPid);
+                    if (targetPid) {
+                        int bestIdx = -1, bestDist = INT_MAX;
+                        RECT wr; GetWindowRect(hWnd, &wr);
+                        int cx = (wr.left + wr.right) / 2;
+                        for (int i = 0; i < tbCount; i++) {
+                            DWORD pid;
+                            GetWindowThreadProcessId(tbCache[i].hWnd, &pid);
+                            if (pid == targetPid) {
+                                int d = abs(tbCache[i].x - cx);
+                                if (d < bestDist) { bestDist = d; bestIdx = i; }
+                            }
+                        }
+                        if (bestIdx >= 0) {
+                            targetX = tbCache[bestIdx].x;
+                            targetY = tbCache[bestIdx].y;
+                            targetW = tbCache[bestIdx].w;
+                            found   = true;
+                        }
                     }
                 }
             }
         }
-        break;
     }
 
-    if (cacheCount == 0) return FALSE;
+    if (!found) return FALSE;
 
-    // --- Matching strategy (most specific to least specific) ---
-
-    // 1. Exact HWND.
-    for (int i = 0; i < cacheCount; i++) {
-        if (cache[i].hWnd == hWnd) {
-            *outX = cache[i].x; *outY = cache[i].y;
-            if (outWidth) *outWidth = cache[i].width;
-            return TRUE;
-        }
+    // Cache the result.
+    {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        g_TaskbarDockXs[hWnd] = targetX;
+        if (!processKey.empty()) g_ProcessDockXs[processKey] = targetX;
     }
-
-    // 2. Owner chain (child/utility windows sharing the parent's button).
-    for (HWND hCur = GetWindow(hWnd, GW_OWNER); hCur; hCur = GetWindow(hCur, GW_OWNER)) {
-        for (int i = 0; i < cacheCount; i++) {
-            if (cache[i].hWnd == hCur) {
-                *outX = cache[i].x; *outY = cache[i].y;
-                if (outWidth) *outWidth = cache[i].width;
-                return TRUE;
-            }
-        }
-    }
-
-    // 3. Root ancestor (covers dialogs and owned popups whose top-level frame
-    //    owns the taskbar button).
-    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-    if (hRoot != hWnd) {
-        for (int i = 0; i < cacheCount; i++) {
-            if (cache[i].hWnd == hRoot) {
-                *outX = cache[i].x; *outY = cache[i].y;
-                if (outWidth) *outWidth = cache[i].width;
-                return TRUE;
-            }
-        }
-    }
-
-    // 4. Process-ID match (grouped taskbar buttons may store the app's main
-    //    frame or a hidden window; take the nearest icon on the same monitor).
-    DWORD targetPid;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (targetPid) {
-        int bestIdx = -1;
-        RECT wndRect;
-        GetWindowRect(hWnd, &wndRect);
-        int wndCX = (wndRect.left + wndRect.right) / 2;
-        int bestDist = INT_MAX;
-        for (int i = 0; i < cacheCount; i++) {
-            DWORD btnPid;
-            GetWindowThreadProcessId(cache[i].hWnd, &btnPid);
-            if (btnPid == targetPid) {
-                int dist = abs(cache[i].x - wndCX);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestIdx  = i;
-                }
-            }
-        }
-        if (bestIdx >= 0) {
-            *outX = cache[bestIdx].x; *outY = cache[bestIdx].y;
-            if (outWidth) *outWidth = cache[bestIdx].width;
-            return TRUE;
-        }
-    }
-
-    return FALSE;
+    *outX = targetX;
+    *outY = targetY;
+    if (outWidth) *outWidth = targetW;
+    return TRUE;
 }
 
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
@@ -1257,21 +1385,22 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     int screenWidth  = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    POINT cursorPt;
-    GetCursorPos(&cursorPt);
-    HMONITOR hMon = MonitorFromPoint(cursorPt, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hMon = MonitorFromWindow(data->hRealWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi;
     ZeroMemory(&mi, sizeof(mi));
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the animation target to the taskbar icon centre (already has a
-    // monitor-centre default from StartGenieAnim if no icon is found).
+    // Lock the animation target to the taskbar icon centre (X) and the top
+    // edge of the icon (Y).  When the icon cannot be found, the caller's
+    // monitor-centre default (from StartGenieAnim) is kept for X, and
+    // rcWork.bottom is used for Y.
     int iconX, iconY;
     data->iconButtonWidth = 0;
     if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
         data->targetDockX = iconX;
+        taskbarY = (float)iconY;
     }
 
     bool useGpu = EnsureGpuDevice();
@@ -1536,6 +1665,11 @@ void Wh_ModUninit() {
             DeleteObject(pair.second);
         }
         g_SnapshotCache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        g_TaskbarDockXs.clear();
+        g_ProcessDockXs.clear();
     }
     ReleaseGenieGpuResources();
     ReleaseGpuDevice();
