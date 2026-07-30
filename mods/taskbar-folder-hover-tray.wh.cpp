@@ -93,7 +93,7 @@ Prefer **Taskbar Folder Menus** if you want tray-side buttons and native Shell
 menus. Prefer **this mod** if you want a hover-opened icon grid seated in the
 app icon strip.
 
-## Conflicts
+## Known Conflicts
 
 **Taskbar Fluent Media Player** uses the same gap-carving technique when its
 position is one of `taskbar_left_start`, `taskbar_right_start`,
