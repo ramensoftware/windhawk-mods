@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.0
+// @version         1.1.1
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -75,7 +75,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
   $description: Play the reverse genie animation when a window is restored from the taskbar.
 - duration_ms: 360
   $name: Minimize/Restore duration (ms)
-  $description: How long the genie animation lasts. Clamped to 50-2000.
+  $description: Controls the speed of the fluid minimize and restore effects. Values are strictly clamped between 200 and 700.
 - close_animation: true
   $name: Animate window close
   $description: Play the shatter/disintegration animation when closing an application.
@@ -202,15 +202,19 @@ static constexpr std::wstring_view kSafeCloseClasses[] = {
     L"TaskManagerWindow",
     L"WinUIDesktopWin32WindowClass"
 };
-std::unordered_map<HWND, SnapCache> g_SnapshotCache;
-std::unordered_map<HWND, int> g_IconPositions;
-std::unordered_map<std::wstring, int> g_ProcessIconPositions;
+std::unordered_map<HWND, SnapCache> g_WndSnapshots;
+std::unordered_map<HWND, int> g_TaskbarDockXs;
+std::unordered_map<std::wstring, int> g_ProcessDockXs;
 std::unordered_map<HWND, std::wstring> g_ProcessNameCache;
 std::unordered_set<HWND> g_LaunchSeen;
 std::unordered_set<HWND> g_AnimActive;
-std::mutex g_CacheMutex;
+std::mutex g_StateMutex;
+
 HWINEVENTHOOK g_hForegroundHook = NULL;
 DWORD g_hookThreadId = 0;
+HANDLE g_hAltTabThread = NULL;
+HANDLE g_hWinEventThread = NULL;
+
 struct alignas(8) SharedAnimState {
     volatile LONG64 lastAltTabTime;
     volatile LONG64 altTabSourceWindow;
@@ -319,17 +323,42 @@ static HBITMAP CreateDib32(HDC dc, int width, int height, void** bits) {
     return CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, bits, nullptr, 0);
 }
 static bool IsAnimating(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    std::lock_guard<std::mutex> lock(g_StateMutex);
     return g_AnimActive.count(hWnd) != 0;
 }
 static void CleanupWindowData(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_CacheMutex);
-    auto it = g_SnapshotCache.find(hWnd);
-    if (it != g_SnapshotCache.end()) { DeleteObject(it->second.hBmp); g_SnapshotCache.erase(it); }
-    g_IconPositions.erase(hWnd);
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    auto it = g_WndSnapshots.find(hWnd);
+    if (it != g_WndSnapshots.end()) { DeleteObject(it->second.hBmp); g_WndSnapshots.erase(it); }
+    g_TaskbarDockXs.erase(hWnd);
     g_ProcessNameCache.erase(hWnd);
     g_LaunchSeen.erase(hWnd);
 }
+
+static void SweepStaleData() {
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    for (auto it = g_WndSnapshots.begin(); it != g_WndSnapshots.end();) {
+        if (!IsWindow(it->first)) { DeleteObject(it->second.hBmp); it = g_WndSnapshots.erase(it); }
+        else ++it;
+    }
+    for (auto it = g_TaskbarDockXs.begin(); it != g_TaskbarDockXs.end();) {
+        if (!IsWindow(it->first)) it = g_TaskbarDockXs.erase(it);
+        else ++it;
+    }
+    for (auto it = g_ProcessNameCache.begin(); it != g_ProcessNameCache.end();) {
+        if (!IsWindow(it->first)) it = g_ProcessNameCache.erase(it);
+        else ++it;
+    }
+    for (auto it = g_LaunchSeen.begin(); it != g_LaunchSeen.end();) {
+        if (!IsWindow(*it)) it = g_LaunchSeen.erase(it);
+        else ++it;
+    }
+    for (auto it = g_AnimActive.begin(); it != g_AnimActive.end();) {
+        if (!IsWindow(*it)) it = g_AnimActive.erase(it);
+        else ++it;
+    }
+}
+
 static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
     if (!isClosing) return false;
     if (GetForegroundWindow() == hWnd) return true;
@@ -353,7 +382,7 @@ void InitSharedMemory() {
     }
 }
 void LoadAnimSettings() {
-    g_durationMs.store(Clamp(Wh_GetIntSetting(L"duration_ms"), 50, 2000), std::memory_order_relaxed);
+    g_durationMs.store(Clamp(Wh_GetIntSetting(L"duration_ms"), 200, 700), std::memory_order_relaxed);
     g_closeDurationMs.store(Clamp(Wh_GetIntSetting(L"close_duration_ms"), 50, 5000), std::memory_order_relaxed);
     g_shatterBlockSize.store(Clamp(Wh_GetIntSetting(L"shatter_block_size"), 1, 100), std::memory_order_relaxed);
     if (PCWSTR style = Wh_GetStringSetting(L"close_effect_style")) {
@@ -368,7 +397,7 @@ void LoadAnimSettings() {
     g_switchAnimation.store(Wh_GetIntSetting(L"switch_animation") != 0, std::memory_order_relaxed);
     g_switchDurationMs.store(Clamp(Wh_GetIntSetting(L"switch_duration_ms"), 50, 1000), std::memory_order_relaxed);
 }
-static void SetDwmTransitions(HWND hWnd, BOOL enable) {
+static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
     BOOL disable = !enable;
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
 }
@@ -384,11 +413,11 @@ static void UndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
         }
     }
-    SetDwmTransitions(hWnd, TRUE);
+    UpdateDwmTransitions(hWnd, TRUE);
 }
 std::wstring GetProcessNameCached(HWND hWnd) {
     {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         auto it = g_ProcessNameCache.find(hWnd);
         if (it != g_ProcessNameCache.end()) return it->second;
     }
@@ -413,7 +442,7 @@ std::wstring GetProcessNameCached(HWND hWnd) {
         }
     }
     {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         g_ProcessNameCache[hWnd] = procNameLower;
     }
     return procNameLower;
@@ -464,12 +493,12 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
         processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
     }
     {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
-        if (g_IconPositions.count(hWndApp)) {
-            return g_IconPositions[hWndApp];
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        if (g_TaskbarDockXs.count(hWndApp)) {
+            return g_TaskbarDockXs[hWndApp];
         }
-        if (!processKey.empty() && g_ProcessIconPositions.count(processKey)) {
-            return g_ProcessIconPositions[processKey];
+        if (!processKey.empty() && g_ProcessDockXs.count(processKey)) {
+            return g_ProcessDockXs[processKey];
         }
     }
     int targetX = fallbackX;
@@ -553,10 +582,10 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
         if (coInit) CoUninitialize();
     }
     {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         if (uiaFound) {
-            g_IconPositions[hWndApp] = targetX;
-            if (!processKey.empty()) g_ProcessIconPositions[processKey] = targetX;
+            g_TaskbarDockXs[hWndApp] = targetX;
+            if (!processKey.empty()) g_ProcessDockXs[processKey] = targetX;
         }
     }
     return targetX;
@@ -592,14 +621,31 @@ DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
 DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     SwitchAnimData* data = (SwitchAnimData*)lpParam;
     HWND hWnd = data->hWnd;
+    int durationMs = data->durationMs;
+    
+    delete data; 
+
+    struct CleanupGuard {
+        HWND h;
+        bool uncloaked = false; 
+        ~CleanupGuard() {
+            if (!uncloaked && IsWindow(h)) {
+                SetWindowCloak(h, FALSE);
+            }
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            g_AnimActive.erase(h);
+            g_workerCount.fetch_sub(1, std::memory_order_release);
+        }
+    } guard{ hWnd };
+
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     Sleep(30);
+    
     RECT winRect;
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || !IsAppMainWindow(hWnd, true) || !GetWindowRect(hWnd, &winRect)) {
-        delete data;
-        g_workerCount.fetch_sub(1, std::memory_order_release);
-        return 0;
+        return 0; 
     }
+    
     RECT extRect = winRect;
     DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extRect, sizeof(extRect));
     int ghostX = winRect.left;
@@ -607,10 +653,9 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     int ghostW = winRect.right - winRect.left;
     int ghostH = winRect.bottom - winRect.top;
     if (ghostW <= 0 || ghostH <= 0) {
-        delete data;
-        g_workerCount.fetch_sub(1, std::memory_order_release);
-        return 0;
+        return 0; 
     }
+    
     HWND hGhost = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
         L"STATIC", NULL, WS_POPUP,
@@ -619,22 +664,20 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     HTHUMBNAIL hThumb = NULL;
     HRESULT hr = DwmRegisterThumbnail(hGhost, hWnd, &hThumb);
     if (FAILED(hr)) {
-        if (IsWindow(hWnd)) SetWindowCloak(hWnd, FALSE);
         DestroyWindow(hGhost);
-        delete data;
-        g_workerCount.fetch_sub(1, std::memory_order_release);
-        return 0;
+        return 0; 
     }
     ShowWindow(hGhost, SW_SHOWNOACTIVATE);
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
-    double totalMs = (double)data->durationMs;
+    double totalMs = (double)durationMs;
     float startScale = AnimConstants::SwitchStartScale;
     int W = extRect.right - extRect.left;
     int H = extRect.bottom - extRect.top;
     int offsetX = extRect.left - winRect.left;
     int offsetY = extRect.top - winRect.top;
+    
     for (;;) {
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -665,18 +708,16 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         if (lastFrame || g_unloading.load(std::memory_order_relaxed)) break;
         DwmFlush();
     }
+    
     if (IsWindow(hWnd)) {
         SetWindowCloak(hWnd, FALSE);
+        guard.uncloaked = true;
     }
+    
     if (hThumb) DwmUnregisterThumbnail(hThumb);
     DestroyWindow(hGhost);
-    {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
-        g_AnimActive.erase(hWnd);
-    }
-    delete data;
-    g_workerCount.fetch_sub(1, std::memory_order_release);
-    return 0;
+    
+    return 0; 
 }
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
     if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
@@ -688,7 +729,7 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND
     if (!ConsumeAltTabIntent(hWnd, dwmsEventTime)) return;
 
     {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         if (!g_AnimActive.insert(hWnd).second) return;
     }
 
@@ -702,7 +743,7 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND
         SetWindowCloak(hWnd, FALSE);
         g_workerCount.fetch_sub(1, std::memory_order_release);
         delete data;
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         g_AnimActive.erase(hWnd);
     }
 }
@@ -896,27 +937,50 @@ public:
         blockSizeSetting = std::max(1, g_shatterBlockSize.load(std::memory_order_relaxed));
         closeEffect = g_closeEffectStyle.load(std::memory_order_relaxed);
     }
+    
     bool Initialize() {
         hGhost = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
             L"STATIC", NULL, WS_POPUP,
             boundLeft, boundTop, boundW, boundH,
             NULL, NULL, NULL, NULL);
+        if (!hGhost) return false;
+
         hScreenDC = GetDC(NULL);
+        if (!hScreenDC) return false;
+
         hSrcDC = CreateCompatibleDC(hScreenDC);
+        if (!hSrcDC) return false;
+        
         hOldSrc = (HBITMAP)SelectObject(hSrcDC, data->hBitmap);
+        if (!hOldSrc || hOldSrc == HGDI_ERROR) return false;
+
         hSrcDib = CreateDib32(hScreenDC, W, H, (void**)&srcBits);
+        if (!hSrcDib || !srcBits) return false;
+
         hSrcDibDC = CreateCompatibleDC(hScreenDC);
+        if (!hSrcDibDC) return false;
+        
         hOldSrcDib = (HBITMAP)SelectObject(hSrcDibDC, hSrcDib);
+        if (!hOldSrcDib || hOldSrcDib == HGDI_ERROR) return false;
+
         BitBlt(hSrcDibDC, 0, 0, W, H, hSrcDC, 0, 0, SRCCOPY);
         GdiFlush();
         srcStride = W * 4;
+
         hCanvas = CreateDib32(hScreenDC, boundW, boundH, (void**)&pBits);
+        if (!hCanvas || !pBits) return false;
+
         hCanvasDC = CreateCompatibleDC(hScreenDC);
+        if (!hCanvasDC) return false;
+        
         hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
+        if (!hOldCanvas || hOldCanvas == HGDI_ERROR) return false;
+
         canvasStride = boundW * 4;
         canvasBytes = (size_t)boundW * 4 * boundH;
         if (!data->isClosing) yb.resize(H + 1);
+        
         return true;
     }
     void PrecalcPhysics() {
@@ -1002,6 +1066,11 @@ public:
         QueryPerformanceCounter(&qpcStart);
         BOOL firstFrame = TRUE;
         for (;;) {
+            MSG msg;
+            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
             QueryPerformanceCounter(&qpcNow);
             double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
             BOOL lastFrame = (elapsedMs >= totalMs);
@@ -1031,12 +1100,13 @@ public:
                 SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
                 if (!(data->originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
             }
-            SetDwmTransitions(data->hRealWnd, TRUE);
+            UpdateDwmTransitions(data->hRealWnd, TRUE);
             DwmFlush();
         }
         if (hScreenDC) ReleaseDC(NULL, hScreenDC);
         if (hGhost) DestroyWindow(hGhost);
         if (data->hFirstFrameShown) { SetEvent(data->hFirstFrameShown); CloseHandle(data->hFirstFrameShown); }
+        
         if (data->isClosing) {
             if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
                 SetPropW(data->hRealWnd, L"AnimCloseBypass", (HANDLE)1);
@@ -1045,7 +1115,12 @@ public:
                 else if (data->closeMsg == WM_SYSCOMMAND) PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
                 else PostMessageW(data->hRealWnd, data->closeMsg, 0, 0);
             }
-            if (data->hWaitFinish) SetEvent(data->hWaitFinish);
+            
+            if (data->hWaitFinish) { 
+                SetEvent(data->hWaitFinish); 
+                CloseHandle(data->hWaitFinish);
+            }
+            
             if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
                 for (int i = 0; i < 50; ++i) {
                     if (!IsWindow(data->hRealWnd) || g_unloading.load(std::memory_order_relaxed) || !IsWindowVisible(data->hRealWnd)) break;
@@ -1055,26 +1130,29 @@ public:
                     RemovePropW(data->hRealWnd, L"AnimCloseBypass");
                     RemovePropW(data->hRealWnd, L"AnimClosed");
                     SetWindowCloak(data->hRealWnd, FALSE);
-                    SetDwmTransitions(data->hRealWnd, TRUE);
+                    UpdateDwmTransitions(data->hRealWnd, TRUE);
                 }
             }
         } else if (!data->isClosing && !data->isRising) {
-            SetDwmTransitions(data->hRealWnd, TRUE);
+            UpdateDwmTransitions(data->hRealWnd, TRUE);
         }
-        if (hCanvasDC) SelectObject(hCanvasDC, hOldCanvas);
-        if (hSrcDibDC) SelectObject(hSrcDibDC, hOldSrcDib);
-        if (hSrcDC) SelectObject(hSrcDC, hOldSrc);
+        
+        if (hCanvasDC && hOldCanvas && hOldCanvas != HGDI_ERROR) SelectObject(hCanvasDC, hOldCanvas);
+        if (hSrcDibDC && hOldSrcDib && hOldSrcDib != HGDI_ERROR) SelectObject(hSrcDibDC, hOldSrcDib);
+        if (hSrcDC && hOldSrc && hOldSrc != HGDI_ERROR) SelectObject(hSrcDC, hOldSrc);
         if (hCanvas) DeleteObject(hCanvas);
         if (hSrcDib) DeleteObject(hSrcDib);
         if (data->hBitmap) DeleteObject(data->hBitmap);
         if (hCanvasDC) DeleteDC(hCanvasDC);
         if (hSrcDibDC) DeleteDC(hSrcDibDC);
         if (hSrcDC) DeleteDC(hSrcDC);
-        { std::lock_guard<std::mutex> lock(g_CacheMutex); g_AnimActive.erase(data->hRealWnd); }
+        
+        { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(data->hRealWnd); }
         delete data;
         g_workerCount.fetch_sub(1, std::memory_order_release);
     }
 };
+
 DWORD WINAPI MainAnimThread(LPVOID lpParam) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     AnimationEngine engine((WindowAnimData*)lpParam);
@@ -1085,11 +1163,18 @@ DWORD WINAPI MainAnimThread(LPVOID lpParam) {
     engine.Teardown();
     return 0;
 }
+
 bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden = FALSE, BOOL isClosing = FALSE, UINT closeMsg = 0, HANDLE hWaitFinish = NULL) {
+    
+    static std::atomic<int> s_animCount{0};
+    if (s_animCount.fetch_add(1, std::memory_order_relaxed) % 10 == 0) {
+        SweepStaleData();
+    }
+
     RECT winRect;
     if (!GetWindowRect(hWnd, &winRect)) {
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else SetDwmTransitions(hWnd, TRUE);
+        else UpdateDwmTransitions(hWnd, TRUE);
         return false;
     }
     RECT rect = winRect, extRect;
@@ -1104,12 +1189,12 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     int rawH = winRect.bottom - winRect.top;
     if (w <= 0 || h <= 0 || rawW <= 0 || rawH <= 0) {
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else SetDwmTransitions(hWnd, TRUE);
+        else UpdateDwmTransitions(hWnd, TRUE);
         return false;
     }
     bool blocked = g_unloading.load(std::memory_order_relaxed);
     if (!blocked) {
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
         blocked = !g_AnimActive.insert(hWnd).second;
         if (!blocked) g_LaunchSeen.insert(hWnd);
     }
@@ -1117,8 +1202,8 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
         else {
             bool owned;
-            { std::lock_guard<std::mutex> lock(g_CacheMutex); owned = g_AnimActive.count(hWnd) != 0; }
-            if (!owned) SetDwmTransitions(hWnd, TRUE);
+            { std::lock_guard<std::mutex> lock(g_StateMutex); owned = g_AnimActive.count(hWnd) != 0; }
+            if (!owned) UpdateDwmTransitions(hWnd, TRUE);
         }
         return false;
     }
@@ -1138,8 +1223,8 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     else SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
     if (!PtInRect(&workArea, pt)) {
         learnedTargetX = pt.x;
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
-        g_IconPositions[hWnd] = learnedTargetX;
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        g_TaskbarDockXs[hWnd] = learnedTargetX;
     } else {
         learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
     }
@@ -1155,9 +1240,9 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &data->pBits, nullptr, 0);
     if (!data->hBitmap || !data->pBits) {
         ReleaseDC(NULL, hScreenDC);
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden); else SetDwmTransitions(hWnd, TRUE);
+        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden); else UpdateDwmTransitions(hWnd, TRUE);
         if (data->hBitmap) DeleteObject(data->hBitmap); delete data;
-        std::lock_guard<std::mutex> lock(g_CacheMutex); g_AnimActive.erase(hWnd);
+        std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd);
         return false;
     }
     auto CopySnapshot = [&](void* sourceBits) {
@@ -1194,26 +1279,28 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     if (rising) {
         BOOL fromCache = FALSE;
         {
-            std::lock_guard<std::mutex> lock(g_CacheMutex);
-            auto it = g_SnapshotCache.find(hWnd);
-            if (it != g_SnapshotCache.end()) {
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            auto it = g_WndSnapshots.find(hWnd);
+            if (it != g_WndSnapshots.end()) {
                 SnapCache& c = it->second;
                 if (c.w == w && c.h == h) { memcpy(data->pBits, c.pBits, (size_t)w * h * 4); fromCache = TRUE; }
-                DeleteObject(c.hBmp); g_SnapshotCache.erase(it);
+                DeleteObject(c.hBmp); g_WndSnapshots.erase(it);
             }
         }
         if (!fromCache) CaptureNow();
     } else {
         CaptureNow();
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
-        auto it = g_SnapshotCache.find(hWnd);
-        if (it != g_SnapshotCache.end()) { DeleteObject(it->second.hBmp); g_SnapshotCache.erase(it); }
-        void* pCacheBits = nullptr;
-        HBITMAP hCacheBmp = CreateDib32(hScreenDC, w, h, &pCacheBits);
-        if (hCacheBmp && pCacheBits) {
-            memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
-            g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits, w, h };
-        } else if (hCacheBmp) DeleteObject(hCacheBmp);
+        if (!isClosing) {
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            auto it = g_WndSnapshots.find(hWnd);
+            if (it != g_WndSnapshots.end()) { DeleteObject(it->second.hBmp); g_WndSnapshots.erase(it); }
+            void* pCacheBits = nullptr;
+            HBITMAP hCacheBmp = CreateDib32(hScreenDC, w, h, &pCacheBits);
+            if (hCacheBmp && pCacheBits) {
+                memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
+                g_WndSnapshots[hWnd] = { hCacheBmp, pCacheBits, w, h };
+            } else if (hCacheBmp) DeleteObject(hCacheBmp);
+        }
     }
     ReleaseDC(NULL, hScreenDC);
     HANDLE hFirstShown = NULL;
@@ -1233,10 +1320,10 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         return true;
     }
     g_workerCount.fetch_sub(1, std::memory_order_release);
-    if (rising) UndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak); else SetDwmTransitions(hWnd, TRUE);
+    if (rising) UndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak); else UpdateDwmTransitions(hWnd, TRUE);
     if (hFirstShown) CloseHandle(hFirstShown); if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
     DeleteObject(data->hBitmap); delete data;
-    { std::lock_guard<std::mutex> lock(g_CacheMutex); g_AnimActive.erase(hWnd); }
+    { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd); }
     return false;
 }
 DWORD WINAPI LaunchAnimThread(LPVOID lpParam);
@@ -1247,17 +1334,30 @@ static bool IsLaunchCommand(int cmd) {
     return cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMAXIMIZED;
 }
 static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
-    SetDwmTransitions(hWnd, FALSE);
+    UpdateDwmTransitions(hWnd, FALSE);
     HANDLE wait = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    const bool started = StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, TRUE, closeMsg, wait);
-    if (started) WaitForSingleObject(wait, AnimConstants::WaitTimeoutMs);
+    HANDLE workerWait = NULL;
+    
+    if (wait && !DuplicateHandle(GetCurrentProcess(), wait, GetCurrentProcess(), &workerWait, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+        CloseHandle(wait);
+        wait = nullptr;
+    }
+    
+    const bool started = StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, TRUE, closeMsg, workerWait);
+    
+    if (started) {
+        if (wait) WaitForSingleObject(wait, AnimConstants::WaitTimeoutMs);
+    } else {
+        if (workerWait) CloseHandle(workerWait);
+    }
+    
     if (wait) CloseHandle(wait);
     return started;
 }
 static void TryMinimizeAnim(HWND hWnd) {
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
     if (!ShouldAnimateWindow(hWnd)) return;
-    SetDwmTransitions(hWnd, FALSE);
+    UpdateDwmTransitions(hWnd, FALSE);
     StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
 }
 static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
@@ -1266,8 +1366,8 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
     if (!IsLaunchCommand(nCmdShow)) return false;
     if (IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
     if (!IsLaunchWindow(hWnd)) return false;
-    { std::lock_guard<std::mutex> lock(g_CacheMutex); if (!g_LaunchSeen.insert(hWnd).second) return false; }
-    SetDwmTransitions(hWnd, FALSE);
+    { std::lock_guard<std::mutex> lock(g_StateMutex); if (!g_LaunchSeen.insert(hWnd).second) return false; }
+    UpdateDwmTransitions(hWnd, FALSE);
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     *origExOut = exStyle;
     SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
@@ -1282,25 +1382,27 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle) {
         g_workerCount.fetch_sub(1, std::memory_order_release); delete ld;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         if (!(originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
-        SetDwmTransitions(hWnd, TRUE);
+        UpdateDwmTransitions(hWnd, TRUE);
     }
 }
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindow_Original(hWnd, cmd);
-        if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
-            RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return 0;
+        if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+            BOOL wasVisible = IsWindowVisible(hWnd);
+            if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return wasVisible;
+        }
     }
     if (IsMinimizeCommand(cmd)) {
         if (ShouldAnimateWindow(hWnd)) {
-            SetDwmTransitions(hWnd, FALSE);
+            UpdateDwmTransitions(hWnd, FALSE);
             StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
         }
         return ShowWindow_Original(hWnd, cmd);
     }
     if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) && IsIconic(hWnd)) {
         if (g_openAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-            SetDwmTransitions(hWnd, FALSE);
+            UpdateDwmTransitions(hWnd, FALSE);
             SetWindowCloak(hWnd, TRUE);
             BOOL result = ShowWindow_Original(hWnd, cmd);
             StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
@@ -1335,8 +1437,15 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") &&
-        g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
-        RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+        
+        BOOL applied = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags & ~SWP_HIDEWINDOW);
+        if (!applied) return FALSE;
+        
+        if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        
+        return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
+    }
     if (flags & SWP_SHOWWINDOW) {
         LONG_PTR originalStyle;
         if (PrepareLaunchAnim(hWnd, SW_SHOW, &originalStyle)) {
@@ -1348,12 +1457,27 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
     return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
 }
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
-    if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !IsAnimating(hWnd) &&
-        !GetPropW(hWnd, L"AnimCloseBypass") && !GetPropW(hWnd, L"AnimClosed")) {
+    bool animated = false;
+
+    if (g_closeAnimation.load(std::memory_order_relaxed) &&
+        IsAppMainWindow(hWnd) &&
+        !IsAnimating(hWnd) &&
+        !GetPropW(hWnd, L"AnimCloseBypass") &&
+        !GetPropW(hWnd, L"AnimClosed")) {
         SetPropW(hWnd, L"AnimCloseBypass", (HANDLE)1);
-        RunCloseAnimation(hWnd, WM_DESTROY);
+        animated = RunCloseAnimation(hWnd, WM_DESTROY);
     }
-    return DestroyWindow_Original(hWnd);
+
+    BOOL result = DestroyWindow_Original(hWnd);
+
+    if (!result && animated && IsWindow(hWnd)) {
+        RemovePropW(hWnd, L"AnimCloseBypass");
+        RemovePropW(hWnd, L"AnimClosed");
+        SetWindowCloak(hWnd, FALSE);
+        UpdateDwmTransitions(hWnd, TRUE);
+    }
+
+    return result;
 }
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_DESTROY) {
@@ -1373,13 +1497,13 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         const UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
             if (ShouldAnimateWindow(hWnd)) {
-                SetDwmTransitions(hWnd, FALSE);
+                UpdateDwmTransitions(hWnd, FALSE);
                 StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
             }
             return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
         }
         if (cmd == SC_RESTORE && IsIconic(hWnd) && g_openAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-            SetDwmTransitions(hWnd, FALSE);
+            UpdateDwmTransitions(hWnd, FALSE);
             SetWindowCloak(hWnd, TRUE);
             LRESULT result = DefWindowProcW_Original(hWnd, msg, wParam, lParam);
             StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
@@ -1392,8 +1516,18 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
     if (placement) {
         if (IsMinimizeCommand(placement->showCmd)) TryMinimizeAnim(hWnd);
         else if (placement->showCmd == SW_HIDE && !GetPropW(hWnd, L"AnimCloseBypass") &&
-                 g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
-                 RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+                 g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+            
+            WINDOWPLACEMENT modified = *placement;
+            modified.showCmd = SW_SHOWNA;
+            BOOL applied = SetWindowPlacement_Original(hWnd, &modified);
+            
+            if (!applied) return FALSE;
+            
+            if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+            
+            return ShowWindow_Original(hWnd, SW_HIDE);
+        }
     }
     return SetWindowPlacement_Original(hWnd, placement);
 }
@@ -1413,7 +1547,7 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
         if (IsWindow(hWnd)) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
             if (!(originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
-            SetDwmTransitions(hWnd, TRUE);
+            UpdateDwmTransitions(hWnd, TRUE);
         }
         g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
     }
@@ -1432,24 +1566,36 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)CloseWindow, (void*)CloseWindow_Hook, (void**)&CloseWindow_Original);
     Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
     Wh_SetFunctionHook((void*)DestroyWindow, (void*)DestroyWindow_Hook, (void**)&DestroyWindow_Original);
+    
     if (explorerProcess) {
-        HANDLE hTracker = CreateThread(NULL, 0, AltTabTrackerThread, NULL, 0, NULL);
-        if (hTracker) CloseHandle(hTracker);
+        g_hAltTabThread = CreateThread(NULL, 0, AltTabTrackerThread, NULL, 0, NULL);
     }
-    HANDLE hThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
-    if (hThread) CloseHandle(hThread);
+    g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
+    
     return TRUE;
 }
 void Wh_ModSettingsChanged() { LoadAnimSettings(); }
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
+    
+    if (g_hForegroundHook) {
+        UnhookWinEvent(g_hForegroundHook);
+        g_hForegroundHook = NULL;
+    }
+    
     if (g_hookThreadId) PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
     for (int i = 0; i < 300 && g_workerCount.load(std::memory_order_acquire) > 0; ++i) Sleep(10);
+    
+    if (g_hAltTabThread) WaitForSingleObject(g_hAltTabThread, 2000);
+    if (g_hWinEventThread) WaitForSingleObject(g_hWinEventThread, 2000);
 }
 void Wh_ModUninit() {
-    std::lock_guard<std::mutex> lock(g_CacheMutex);
-    for (auto& pair : g_SnapshotCache) DeleteObject(pair.second.hBmp);
-    g_SnapshotCache.clear(); g_IconPositions.clear(); g_ProcessIconPositions.clear(); g_ProcessNameCache.clear(); g_LaunchSeen.clear();
+    if (g_hAltTabThread) { CloseHandle(g_hAltTabThread); g_hAltTabThread = NULL; }
+    if (g_hWinEventThread) { CloseHandle(g_hWinEventThread); g_hWinEventThread = NULL; }
+
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
+    g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear(); g_ProcessNameCache.clear(); g_LaunchSeen.clear();
     if (g_hMapFile) {
         UnmapViewOfFile(g_pSharedState);
         CloseHandle(g_hMapFile);
