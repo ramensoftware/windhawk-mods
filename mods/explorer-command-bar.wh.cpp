@@ -2847,7 +2847,19 @@ void WINAPI CommandBarControl_Wave1_GotFocusHandler_Hook(void* pThis,
 
 std::atomic<bool> g_symbolsHooked;
 
-bool HookFileExplorerExtensionsSymbols(HMODULE module) {
+enum class SymbolHookResult {
+    Success,
+    // Symbol resolution itself failed, e.g. the PDB couldn't be downloaded.
+    // Transient, so trying again later can succeed.
+    ResolutionFailed,
+    // The symbols resolved, but this build has none of the functions the mod
+    // needs. Permanent for this Explorer, so it must not be retried: each
+    // HookSymbols call for a module invalidates its symbol cache and forces a
+    // re-resolution.
+    NoSymbolFound,
+};
+
+SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module) {
     // All hooks are optional, since the set of functions differs between
     // Windows builds, but at least one of the discovery hooks must be found.
     WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
@@ -2901,17 +2913,17 @@ bool HookFileExplorerExtensionsSymbols(HMODULE module) {
     if (!HookSymbols(module, fileExplorerExtensionsDllHooks,
                      ARRAYSIZE(fileExplorerExtensionsDllHooks))) {
         Wh_Log(L"HookSymbols failed");
-        return false;
+        return SymbolHookResult::ResolutionFailed;
     }
 
     if (!CommandBarManager_CommandBar_Original &&
         !CommandBarControl_OnApplyTemplate_Original &&
         !CommandBarControl_Wave1_OnApplyTemplate_Original) {
         Wh_Log(L"No command bar symbol was found");
-        return false;
+        return SymbolHookResult::NoSymbolFound;
     }
 
-    return true;
+    return SymbolHookResult::Success;
 }
 
 HMODULE GetFileExplorerExtensionsModuleHandle() {
@@ -2935,11 +2947,21 @@ bool HookFileExplorerExtensionsIfLoaded(bool applyHooks) {
 
     Wh_Log(L"Hooking FileExplorerExtensions.dll");
 
-    if (!HookFileExplorerExtensionsSymbols(module)) {
-        // Let a later attempt (e.g. the next LoadLibraryExW) try again instead
-        // of leaving the mod permanently disabled for this process.
-        g_symbolsHooked = false;
-        return false;
+    switch (HookFileExplorerExtensionsSymbols(module)) {
+        case SymbolHookResult::Success:
+            break;
+
+        case SymbolHookResult::ResolutionFailed:
+            // Transient, so let a later attempt try again instead of leaving
+            // the mod disabled for this process.
+            g_symbolsHooked = false;
+            return false;
+
+        case SymbolHookResult::NoSymbolFound:
+            // Keep the flag set: this build doesn't have what the mod needs,
+            // and re-resolving the symbols on every module load would only
+            // make Explorer slow for the rest of the session.
+            return false;
     }
 
     if (applyHooks) {
@@ -2955,7 +2977,24 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && !g_unloading) {
+    if (!module || g_unloading || !lpLibFileName) {
+        return module;
+    }
+
+    // Explorer loads modules constantly (shell extensions, thumbnail and
+    // preview handlers), and this runs inline on whatever thread did the load,
+    // so only look at the one module the mod cares about.
+    PCWSTR fileName = lpLibFileName;
+    for (PCWSTR p = lpLibFileName; *p; p++) {
+        if (*p == L'\\' || *p == L'/') {
+            fileName = p + 1;
+        }
+    }
+
+    // LoadLibraryEx appends the default extension itself, so the caller may
+    // have left it out.
+    if (_wcsicmp(fileName, L"FileExplorerExtensions.dll") == 0 ||
+        _wcsicmp(fileName, L"FileExplorerExtensions") == 0) {
         HookFileExplorerExtensionsIfLoaded(/*applyHooks=*/true);
     }
 
