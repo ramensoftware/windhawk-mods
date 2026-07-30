@@ -17,6 +17,8 @@
 /*
 # Windows 11 Calendar Weather
 
+![Screenshot](https://github.com/user-attachments/assets/1c453d01-eb84-4f71-a292-c6e6971641ed)
+
 When you open the Windows 11 date and time flyout, this mod replaces the
 notification list area with a compact weather forecast card while leaving the
 calendar and focus-session controls unchanged.
@@ -34,6 +36,7 @@ calendar and focus-session controls unchanged.
 - Open-Meteo data (no API key)
 - Configurable location, units, refresh interval, and card height
 - Optional calendar daylight bar (sunrise–sunset) above the month grid
+- Optional remaining daylight time (beside, below, or instead of the total)
 - Works with `ShellExperienceHost.exe` and newer `ShellHost.exe` (24H2+)
 - Compatible alongside **Windows 11 Notification Center Styler** (avoids copying
   that mod's theme engine; uses a uniquely named injected root)
@@ -96,6 +99,14 @@ location is unavailable.
 - showCalendarDaylight: false
   $name: Show calendar daylight hours
   $description: Insert a sunrise–sunset daylight bar between the clock/date and the month calendar
+- daylightHoursLeft: off
+  $name: Daylight hours left
+  $description: Show remaining daylight next to the total sunlight duration (requires calendar daylight hours)
+  $options:
+  - off: Off
+  - rightOf: To the right of total
+  - below: Below total
+  - insteadOf: Instead of total
 */
 // ==/WindhawkModSettings==
 
@@ -376,10 +387,13 @@ void LoadSettings();
 void ApplyOrRestoreAllMounted();
 void RequestWeatherRefresh(bool forceNetwork);
 void EnsureRefreshTimer();
+void EnsureDaylightTickTimer();
 void StopRefreshTimer();
 void UpdateAllWeatherUIs();
 void ApplyOrRestoreAllDaylight();
 void UpdateAllDaylightUIs();
+void RefreshDaylightOnFlyoutShown();
+void RegisterVisibilityRefresh(wux::UIElement const& element, int64_t& cookie);
 bool MountDaylightIntoCalendarSection(InstanceHandle handle,
                                       wuxc::Grid const& section);
 
@@ -415,6 +429,8 @@ struct ModSettings {
     int cardHeight = 390;
     bool showLocation = true;
     bool showCalendarDaylight = false;
+    // off | rightOf | below | insteadOf
+    std::wstring daylightHoursLeft = L"off";
 };
 
 ModSettings g_settings;
@@ -475,18 +491,30 @@ void LoadSettings() {
     s.showLocation = Wh_GetIntSetting(L"showLocation") != 0;
     s.showCalendarDaylight = Wh_GetIntSetting(L"showCalendarDaylight") != 0;
 
+    string_setting_unique_ptr daylightLeft(
+        Wh_GetStringSetting(L"daylightHoursLeft"));
+    if (daylightLeft &&
+        (_wcsicmp(daylightLeft.get(), L"rightOf") == 0 ||
+         _wcsicmp(daylightLeft.get(), L"below") == 0 ||
+         _wcsicmp(daylightLeft.get(), L"insteadOf") == 0)) {
+        s.daylightHoursLeft = daylightLeft.get();
+    } else {
+        s.daylightHoursLeft = L"off";
+    }
+
     {
         std::lock_guard lock(g_settingsMutex);
         g_settings = std::move(s);
     }
 
     Wh_Log(L"Settings loaded: mode=%s location=%s coordsValid=%d unit=%s "
-           L"refresh=%d hourly=%d daily=%d height=%d daylight=%d",
+           L"refresh=%d hourly=%d daily=%d height=%d daylight=%d left=%s",
            g_settings.autoLocation ? L"auto" : L"manual",
            g_settings.locationName.c_str(), g_settings.coordinatesValid ? 1 : 0,
            g_settings.temperatureUnit.c_str(), g_settings.refreshMinutes,
            g_settings.hourlyCount, g_settings.dailyCount, g_settings.cardHeight,
-           g_settings.showCalendarDaylight ? 1 : 0);
+           g_settings.showCalendarDaylight ? 1 : 0,
+           g_settings.daylightHoursLeft.c_str());
 }
 
 ModSettings GetSettingsCopy() {
@@ -570,9 +598,15 @@ std::atomic<bool> g_fetchInProgress{false};
 std::atomic<bool> g_forceRefreshPending{false};
 std::atomic<uint64_t> g_fetchGeneration{0};
 std::atomic<ULONGLONG> g_fetchStartedTick{0};
+// Wall-clock start — GetTickCount64 freezes across sleep/standby, so a hung
+// fetch can look "fresh" forever until we also check system_clock.
+std::atomic<int64_t> g_fetchStartedWallMs{0};
 std::atomic<ULONGLONG> g_lastResumeRefreshTick{0};
+std::atomic<ULONGLONG> g_lastDaylightFlyoutRefreshTick{0};
 
 PTP_TIMER g_refreshTimer = nullptr;
+PTP_TIMER g_daylightTickTimer = nullptr;
+DWORD g_refreshTimerPeriodMs = 0;
 std::mutex g_timerMutex;
 HANDLE g_suspendResumeNotify = nullptr;
 HANDLE g_displayPowerNotify = nullptr;
@@ -621,8 +655,12 @@ struct MountedWeatherInstance {
     wux::FrameworkElement::SizeChanged_revoker gridSizeChangedRevoker{};
     wux::FrameworkElement::ActualThemeChanged_revoker gridThemeChangedRevoker{};
     wux::FrameworkElement::ActualThemeChanged_revoker weatherThemeChangedRevoker{};
+    wux::FrameworkElement::EffectiveViewportChanged_revoker
+        weatherViewportRevoker{};
     int64_t backgroundChangedCookie = -1;
     int64_t shadowChangedCookie = -1;
+    int64_t weatherVisibilityCookie = -1;
+    int64_t gridVisibilityCookie = -1;
 
     MountedWeatherInstance() = default;
     MountedWeatherInstance(const MountedWeatherInstance&) = delete;
@@ -635,7 +673,9 @@ struct DaylightUiControls {
     wuxc::Grid nowMarkerHost{nullptr};
     wuxc::Grid trackHost{nullptr};
     wuxc::TextBlock sunriseText{nullptr};
+    wuxc::StackPanel durationStack{nullptr};
     wuxc::TextBlock durationText{nullptr};
+    wuxc::TextBlock remainingText{nullptr};
     wuxc::TextBlock sunsetText{nullptr};
 };
 
@@ -648,6 +688,9 @@ struct MountedDaylightInstance {
     ws::DispatcherQueue dispatcherQueue{nullptr};
     wuc::CoreDispatcher coreDispatcher{nullptr};
     DaylightUiControls ui;
+    // UI-thread tick while the flyout stays open (hours-left / now marker).
+    ws::DispatcherQueueTimer daylightTickTimer{nullptr};
+    int64_t visibilityCookie = -1;
     uint64_t generation = 0;
     int insertedGridRow = -1;
     bool insertedRowDefinition = false;
@@ -1241,6 +1284,9 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
                         }
                     } catch (...) {
                     }
+                    // Opening the flyout often only resizes existing elements
+                    // (no remount) — refresh weather hourly + daylight here.
+                    RefreshDaylightOnFlyoutShown();
                 }
             };
 
@@ -1248,6 +1294,28 @@ void ApplyCalendarMatchedChrome(MountedWeatherInstance& instance,
             winrt::auto_revoke, onLayoutDrift);
         instance.gridSizeChangedRevoker = notificationGrid.SizeChanged(
             winrt::auto_revoke, onLayoutDrift);
+
+        RegisterVisibilityRefresh(weatherRoot,
+                                  instance.weatherVisibilityCookie);
+        RegisterVisibilityRefresh(notificationGrid,
+                                  instance.gridVisibilityCookie);
+
+        // Popup open often keeps Visibility=Visible and only brings the
+        // element into view — viewport change is the reliable "opened" signal.
+        if (!instance.weatherViewportRevoker) {
+            instance.weatherViewportRevoker = weatherRoot.EffectiveViewportChanged(
+                winrt::auto_revoke,
+                [](wux::FrameworkElement const&,
+                   wux::EffectiveViewportChangedEventArgs const& args) {
+                    try {
+                        auto vp = args.EffectiveViewport();
+                        if (vp.Width > 1.0 && vp.Height > 1.0) {
+                            RefreshDaylightOnFlyoutShown();
+                        }
+                    } catch (...) {
+                    }
+                });
+        }
 
         // System theme toggles re-theme NotificationCenterGrid (opaque acrylic
         // + shadow) under our weather Border. Re-strip and rematch brushes.
@@ -2397,12 +2465,17 @@ void WeatherWorker(uint64_t generation) {
         return;
     }
     g_fetchStartedTick.store(GetTickCount64());
+    g_fetchStartedWallMs.store(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
 
     {
         struct ClearFlag {
             ~ClearFlag() {
                 g_fetchInProgress = false;
                 g_fetchStartedTick.store(0);
+                g_fetchStartedWallMs.store(0);
             }
         } clearFlag;
 
@@ -2462,13 +2535,27 @@ void ClearStuckFetchLock() {
     }
     const ULONGLONG started = g_fetchStartedTick.load();
     const ULONGLONG now = GetTickCount64();
-    // A fetch hung across sleep can leave this latch set forever.
-    if (started == 0 || now - started > 90000ULL) {
-        Wh_Log(L"Clearing stuck weather fetch lock (age ms=%llu)",
-               started ? static_cast<unsigned long long>(now - started)
-                       : 0ULL);
+    const int64_t startedWall = g_fetchStartedWallMs.load();
+    const int64_t nowWall =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count();
+
+    // Tick count freezes across sleep; wall clock does not. Treat either
+    // signal (or a missing start stamp) as a stuck latch.
+    const bool stuckByTick =
+        started == 0 || now - started > 90000ULL;
+    const bool stuckByWall =
+        startedWall == 0 || (nowWall - startedWall) > 90000;
+    if (stuckByTick || stuckByWall) {
+        Wh_Log(L"Clearing stuck weather fetch lock (tick age ms=%llu, wall "
+               L"age ms=%lld)",
+               started ? static_cast<unsigned long long>(now - started) : 0ULL,
+               startedWall ? static_cast<long long>(nowWall - startedWall)
+                           : 0LL);
         g_fetchInProgress.store(false);
         g_fetchStartedTick.store(0);
+        g_fetchStartedWallMs.store(0);
     }
 }
 
@@ -2567,10 +2654,14 @@ void EnsureRefreshTimer() {
 
     std::lock_guard lock(g_timerMutex);
     if (g_refreshTimer) {
-        // Reschedule in place — never WaitForThreadpoolTimerCallbacks on a UI
-        // thread (mount/settings paths), which can hang the shell.
+        // Do not reset the countdown on every remount/init helper call —
+        // that used to push the next hourly fetch out indefinitely.
+        if (g_refreshTimerPeriodMs == periodMs) {
+            return;
+        }
         SetThreadpoolTimer(g_refreshTimer, &due, periodMs, 30 * 1000);
-        Wh_Log(L"Refresh timer rescheduled every %d minutes",
+        g_refreshTimerPeriodMs = periodMs;
+        Wh_Log(L"Refresh timer period updated to %d minutes",
                settings.refreshMinutes);
         return;
     }
@@ -2590,8 +2681,77 @@ void EnsureRefreshTimer() {
     }
 
     SetThreadpoolTimer(g_refreshTimer, &due, periodMs, 30 * 1000);
+    g_refreshTimerPeriodMs = periodMs;
     Wh_Log(L"Refresh timer scheduled every %d minutes (first fire in %d min)",
            settings.refreshMinutes, settings.refreshMinutes);
+}
+
+void EnsureDaylightTickTimer() {
+    if (g_shuttingDown.load()) {
+        return;
+    }
+
+    // Now-marker + "hours left" while the flyout stays open.
+    constexpr DWORD kPeriodMs = 5U * 60U * 1000U;
+    FILETIME due = MakeRelativeDueTime(kPeriodMs);
+
+    std::lock_guard lock(g_timerMutex);
+    if (g_daylightTickTimer) {
+        // Do NOT reschedule — remount/flyout-open used to push due time out
+        // forever so the tick never fired.
+        return;
+    }
+
+    g_daylightTickTimer = CreateThreadpoolTimer(
+        [](PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+            if (g_shuttingDown.load()) {
+                return;
+            }
+            Wh_Log(L"Daylight tick timer fired");
+            try {
+                UpdateAllDaylightUIs();
+            } catch (...) {
+            }
+        },
+        nullptr, nullptr);
+    if (!g_daylightTickTimer) {
+        Wh_Log(L"CreateThreadpoolTimer (daylight tick) failed");
+        return;
+    }
+
+    SetThreadpoolTimer(g_daylightTickTimer, &due, kPeriodMs, 30 * 1000);
+    Wh_Log(L"Daylight tick timer scheduled every 5 minutes");
+}
+
+void StartDaylightDispatcherTick(MountedDaylightInstance& instance) {
+    if (g_shuttingDown.load() || instance.daylightTickTimer) {
+        return;
+    }
+    if (!instance.dispatcherQueue) {
+        return;
+    }
+    try {
+        auto timer = instance.dispatcherQueue.CreateTimer();
+        timer.Interval(std::chrono::minutes(5));
+        timer.IsRepeating(true);
+        timer.Tick([](ws::DispatcherQueueTimer const&,
+                      wf::IInspectable const&) {
+            if (g_shuttingDown.load()) {
+                return;
+            }
+            Wh_Log(L"Daylight DispatcherQueue tick");
+            try {
+                UpdateAllDaylightUIs();
+            } catch (...) {
+            }
+        });
+        timer.Start();
+        instance.daylightTickTimer = timer;
+        Wh_Log(L"Daylight DispatcherQueue timer started (5 min)");
+    } catch (...) {
+        Wh_Log(L"StartDaylightDispatcherTick failed %08X",
+               winrt::to_hresult());
+    }
 }
 
 void StopRefreshTimer() {
@@ -2600,7 +2760,15 @@ void StopRefreshTimer() {
         WaitForThreadpoolTimerCallbacks(g_refreshTimer, TRUE);
         CloseThreadpoolTimer(g_refreshTimer);
         g_refreshTimer = nullptr;
+        g_refreshTimerPeriodMs = 0;
         Wh_Log(L"Refresh timer stopped");
+    }
+    if (g_daylightTickTimer) {
+        SetThreadpoolTimer(g_daylightTickTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_daylightTickTimer, TRUE);
+        CloseThreadpoolTimer(g_daylightTickTimer);
+        g_daylightTickTimer = nullptr;
+        Wh_Log(L"Daylight tick timer stopped");
     }
 }
 
@@ -2658,6 +2826,7 @@ void OnSystemResumeRefresh() {
     ++g_fetchGeneration;
     g_fetchInProgress.store(false);
     g_fetchStartedTick.store(0);
+    g_fetchStartedWallMs.store(0);
     g_forceRefreshPending.store(false);
 
     EnsureRefreshTimer();
@@ -2913,6 +3082,36 @@ std::wstring FormatDaylightDuration(int sunriseMinute, int sunsetMinute) {
     return buffer;
 }
 
+std::wstring FormatDurationMinutes(int minutes) {
+    if (minutes < 0) {
+        minutes = 0;
+    }
+    wchar_t buffer[32];
+    swprintf_s(buffer, L"%dh %dm", minutes / 60, minutes % 60);
+    return buffer;
+}
+
+// Remaining daylight today: full span before sunrise, countdown until sunset
+// during the day, zero after sunset.
+int DaylightMinutesRemaining(int nowMinute,
+                             int sunriseMinute,
+                             int sunsetMinute) {
+    nowMinute = ((nowMinute % 1440) + 1440) % 1440;
+    sunriseMinute = ((sunriseMinute % 1440) + 1440) % 1440;
+    sunsetMinute = ((sunsetMinute % 1440) + 1440) % 1440;
+    if (sunsetMinute < sunriseMinute) {
+        // Rare wrap — treat as no remaining.
+        return 0;
+    }
+    if (nowMinute < sunriseMinute) {
+        return sunsetMinute - sunriseMinute;
+    }
+    if (nowMinute >= sunsetMinute) {
+        return 0;
+    }
+    return sunsetMinute - nowMinute;
+}
+
 wuxc::Viewbox MakeSunHalfIcon(bool sunrise,
                               double size,
                               wuxm::Brush const& brush) {
@@ -3069,6 +3268,13 @@ wux::FrameworkElement BuildDaylightRoot(DaylightUiControls& ui) {
     sunriseStack.Children().Append(sunriseText);
     wuxc::Grid::SetColumn(sunriseStack, 0);
 
+    wuxc::StackPanel durationStack;
+    durationStack.Orientation(wuxc::Orientation::Vertical);
+    durationStack.Spacing(1);
+    durationStack.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    durationStack.VerticalAlignment(wux::VerticalAlignment::Center);
+    ui.durationStack = durationStack;
+
     wuxc::TextBlock durationText;
     durationText.FontSize(12);
     durationText.FontWeight(wut::FontWeights::SemiBold());
@@ -3077,7 +3283,19 @@ wux::FrameworkElement BuildDaylightRoot(DaylightUiControls& ui) {
     durationText.VerticalAlignment(wux::VerticalAlignment::Center);
     durationText.Text(L"--");
     ui.durationText = durationText;
-    wuxc::Grid::SetColumn(durationText, 1);
+
+    wuxc::TextBlock remainingText;
+    remainingText.FontSize(11);
+    remainingText.FontFamily(wuxm::FontFamily(L"Segoe UI"));
+    remainingText.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    remainingText.VerticalAlignment(wux::VerticalAlignment::Center);
+    remainingText.Text(L"--");
+    remainingText.Visibility(wux::Visibility::Collapsed);
+    ui.remainingText = remainingText;
+
+    durationStack.Children().Append(durationText);
+    durationStack.Children().Append(remainingText);
+    wuxc::Grid::SetColumn(durationStack, 1);
 
     wuxc::StackPanel sunsetStack;
     sunsetStack.Orientation(wuxc::Orientation::Horizontal);
@@ -3096,7 +3314,7 @@ wux::FrameworkElement BuildDaylightRoot(DaylightUiControls& ui) {
     wuxc::Grid::SetColumn(sunsetStack, 2);
 
     infoRow.Children().Append(sunriseStack);
-    infoRow.Children().Append(durationText);
+    infoRow.Children().Append(durationStack);
     infoRow.Children().Append(sunsetStack);
 
     root.Children().Append(barStack);
@@ -3179,20 +3397,173 @@ void ApplyDaylightToInstance(MountedDaylightInstance& instance,
             instance.ui.sunsetText.Text(
                 ok ? FormatClockHm(forecast.todaySunsetMinute) : L"--:--");
         }
+
+        const auto settings = GetSettingsCopy();
+        const std::wstring& leftMode = settings.daylightHoursLeft;
+        const bool showRemaining = leftMode == L"rightOf" ||
+                                   leftMode == L"below" ||
+                                   leftMode == L"insteadOf";
+        const bool showTotal = leftMode != L"insteadOf";
+
+        if (instance.ui.durationStack) {
+            if (leftMode == L"rightOf") {
+                instance.ui.durationStack.Orientation(
+                    wuxc::Orientation::Horizontal);
+                instance.ui.durationStack.Spacing(8);
+            } else {
+                instance.ui.durationStack.Orientation(
+                    wuxc::Orientation::Vertical);
+                instance.ui.durationStack.Spacing(1);
+            }
+        }
+
         if (instance.ui.durationText) {
             instance.ui.durationText.Foreground(primary);
+            instance.ui.durationText.FontWeight(wut::FontWeights::SemiBold());
+            instance.ui.durationText.FontSize(12);
             instance.ui.durationText.Text(
                 ok ? FormatDaylightDuration(forecast.todaySunriseMinute,
                                             forecast.todaySunsetMinute)
                    : L"--");
+            instance.ui.durationText.Visibility(
+                showTotal ? wux::Visibility::Visible
+                          : wux::Visibility::Collapsed);
+        }
+
+        if (instance.ui.remainingText) {
+            const int remainingMins =
+                ok ? DaylightMinutesRemaining(nowMinute,
+                                              forecast.todaySunriseMinute,
+                                              forecast.todaySunsetMinute)
+                   : 0;
+            // Match total weight when replacing it; quieter when paired.
+            if (leftMode == L"insteadOf") {
+                instance.ui.remainingText.Foreground(primary);
+                instance.ui.remainingText.FontWeight(
+                    wut::FontWeights::SemiBold());
+                instance.ui.remainingText.FontSize(12);
+            } else {
+                instance.ui.remainingText.Foreground(secondary);
+                instance.ui.remainingText.FontWeight(
+                    wut::FontWeights::Normal());
+                instance.ui.remainingText.FontSize(11);
+            }
+            instance.ui.remainingText.Text(
+                ok ? FormatDurationMinutes(remainingMins) : L"--");
+            instance.ui.remainingText.Visibility(
+                showRemaining ? wux::Visibility::Visible
+                              : wux::Visibility::Collapsed);
+            Wh_Log(L"Daylight remaining=%s mode=%s nowMinute=%d",
+                   ok ? FormatDurationMinutes(remainingMins).c_str() : L"--",
+                   leftMode.c_str(), nowMinute);
         }
     } catch (...) {
         Wh_Log(L"ApplyDaylightToInstance error %08X", winrt::to_hresult());
     }
 }
 
+void RefreshDaylightOnFlyoutShown() {
+    if (g_shuttingDown.load()) {
+        return;
+    }
+    const ULONGLONG nowTick = GetTickCount64();
+    const ULONGLONG last = g_lastDaylightFlyoutRefreshTick.load();
+    if (last != 0 && nowTick - last < 1500ULL) {
+        return;
+    }
+    g_lastDaylightFlyoutRefreshTick.store(nowTick);
+
+    Wh_Log(L"Flyout shown — refreshing weather + daylight");
+
+    // Hourly columns are sliced at fetch time. If the local hour (or refresh
+    // interval) moved on while the flyout stayed mounted, pull a new forecast.
+    // Daylight below still updates immediately from cache while that runs.
+    try {
+        RequestWeatherRefresh(false);
+    } catch (...) {
+    }
+
+    ForecastData forecast;
+    {
+        std::lock_guard lock(g_forecastMutex);
+        forecast = g_forecast;
+    }
+
+    // Prefer applying on this thread when we already are on the XAML UI thread
+    // (Visibility / SizeChanged callbacks).
+    try {
+        const DWORD tid = GetCurrentThreadId();
+        bool applied = false;
+        {
+            std::lock_guard lock(g_mountMutex);
+            for (auto& mounted : g_daylightMounted) {
+                if (mounted.uiThreadId == tid || mounted.uiThreadId == 0) {
+                    ApplyDaylightToInstance(mounted, forecast);
+                    applied = true;
+                }
+            }
+        }
+        if (!applied) {
+            UpdateAllDaylightUIs();
+        }
+    } catch (...) {
+        try {
+            UpdateAllDaylightUIs();
+        } catch (...) {
+        }
+    }
+}
+
+void RegisterVisibilityRefresh(wux::UIElement const& element,
+                               int64_t& cookie) {
+    if (!element || cookie >= 0) {
+        return;
+    }
+    try {
+        cookie = element.RegisterPropertyChangedCallback(
+            wux::UIElement::VisibilityProperty(),
+            wux::DependencyPropertyChangedCallback(
+                [](wux::DependencyObject const& sender,
+                   wux::DependencyProperty const&) {
+                    if (g_shuttingDown.load()) {
+                        return;
+                    }
+                    try {
+                        auto ui = sender.try_as<wux::UIElement>();
+                        if (!ui ||
+                            ui.Visibility() != wux::Visibility::Visible) {
+                            return;
+                        }
+                        RefreshDaylightOnFlyoutShown();
+                    } catch (...) {
+                    }
+                }));
+    } catch (...) {
+        cookie = -1;
+    }
+}
+
 void UnmountDaylightInstance(MountedDaylightInstance& instance) {
     try {
+        if (instance.daylightTickTimer) {
+            try {
+                instance.daylightTickTimer.Stop();
+            } catch (...) {
+            }
+            instance.daylightTickTimer = nullptr;
+        }
+        if (instance.visibilityCookie >= 0) {
+            try {
+                if (auto root = instance.daylightRoot.get()) {
+                    root.UnregisterPropertyChangedCallback(
+                        wux::UIElement::VisibilityProperty(),
+                        instance.visibilityCookie);
+                }
+            } catch (...) {
+            }
+            instance.visibilityCookie = -1;
+        }
+
         auto section = instance.calendarSection.get();
         auto root = instance.daylightRoot.get();
         auto clocksHost = instance.clocksHost.get();
@@ -3633,14 +4004,19 @@ bool MountDaylightIntoCalendarSectionAttempt(InstanceHandle handle,
     for (auto const& child : section.Children()) {
         if (auto fe = child.try_as<wux::FrameworkElement>()) {
             if (IsDaylightRootName(fe.Name())) {
-                Wh_Log(L"WindhawkDaylightRoot already present");
+                Wh_Log(L"WindhawkDaylightRoot already present — refreshing");
                 EnsureCalendarStructuralVisible(section);
-                std::lock_guard lock(g_mountMutex);
-                for (auto& mounted : g_daylightMounted) {
-                    if (mounted.sectionHandle == handle) {
-                        return true;
+                try {
+                    RefreshDaylightOnFlyoutShown();
+                } catch (...) {
+                }
+                {
+                    std::lock_guard lock(g_mountMutex);
+                    for (auto& mounted : g_daylightMounted) {
+                        StartDaylightDispatcherTick(mounted);
                     }
                 }
+                EnsureDaylightTickTimer();
                 return true;
             }
         }
@@ -3760,6 +4136,11 @@ bool MountDaylightIntoCalendarSectionAttempt(InstanceHandle handle,
     {
         std::lock_guard lock(g_mountMutex);
         g_daylightMounted.push_back(std::move(instance));
+        auto& mounted = g_daylightMounted.back();
+        StartDaylightDispatcherTick(mounted);
+        if (auto root = mounted.daylightRoot.get()) {
+            RegisterVisibilityRefresh(root, mounted.visibilityCookie);
+        }
     }
 
     ForecastData forecast;
@@ -3773,6 +4154,7 @@ bool MountDaylightIntoCalendarSectionAttempt(InstanceHandle handle,
             ApplyDaylightToInstance(g_daylightMounted.back(), forecast);
         }
     }
+    EnsureDaylightTickTimer();
     return true;
 }
 
@@ -3849,7 +4231,7 @@ void UpdateAllDaylightUIs() {
 
     struct DispatchTarget {
         InstanceHandle handle = 0;
-        uint64_t generation = 0;
+        DWORD uiThreadId = 0;
         ws::DispatcherQueue dispatcherQueue{nullptr};
         wuc::CoreDispatcher coreDispatcher{nullptr};
     };
@@ -3859,24 +4241,32 @@ void UpdateAllDaylightUIs() {
         snapshot.reserve(g_daylightMounted.size());
         for (auto const& mounted : g_daylightMounted) {
             snapshot.push_back(DispatchTarget{mounted.sectionHandle,
-                                              mounted.generation,
+                                              mounted.uiThreadId,
                                               mounted.dispatcherQueue,
                                               mounted.coreDispatcher});
         }
     }
 
+    if (snapshot.empty()) {
+        return;
+    }
+
+    Wh_Log(L"UpdateAllDaylightUIs: %zu instance(s)", snapshot.size());
+
     auto applyOnUi = [forecast](InstanceHandle handle,
-                                uint64_t generation) mutable {
+                                DWORD uiThreadId) mutable {
         if (g_shuttingDown.load()) {
             return;
         }
         try {
+            const DWORD tid = GetCurrentThreadId();
             std::lock_guard lock(g_mountMutex);
             for (auto& mounted : g_daylightMounted) {
-                if (mounted.sectionHandle == handle &&
-                    mounted.generation == generation) {
+                // Prefer thread affinity; also accept handle match.
+                if (mounted.uiThreadId == tid ||
+                    (uiThreadId && mounted.uiThreadId == uiThreadId) ||
+                    mounted.sectionHandle == handle) {
                     ApplyDaylightToInstance(mounted, forecast);
-                    break;
                 }
             }
         } catch (...) {
@@ -3886,22 +4276,31 @@ void UpdateAllDaylightUIs() {
 
     for (auto& target : snapshot) {
         try {
-            if (target.dispatcherQueue) {
-                target.dispatcherQueue.TryEnqueue(ws::DispatcherQueueHandler(
-                    [applyOnUi, handle = target.handle,
-                     generation = target.generation]() mutable {
-                        applyOnUi(handle, generation);
-                    }));
-            } else if (target.coreDispatcher) {
+            // Prefer CoreDispatcher for ShellExperienceHost XAML.
+            if (target.coreDispatcher) {
                 target.coreDispatcher.RunAsync(
                     wuc::CoreDispatcherPriority::Normal,
                     wuc::DispatchedHandler(
                         [applyOnUi, handle = target.handle,
-                         generation = target.generation]() mutable {
-                            applyOnUi(handle, generation);
+                         tid = target.uiThreadId]() mutable {
+                            applyOnUi(handle, tid);
                         }));
+            } else if (target.dispatcherQueue) {
+                const bool queued =
+                    target.dispatcherQueue.TryEnqueue(
+                        ws::DispatcherQueueHandler(
+                            [applyOnUi, handle = target.handle,
+                             tid = target.uiThreadId]() mutable {
+                                applyOnUi(handle, tid);
+                            }));
+                if (!queued) {
+                    Wh_Log(L"Daylight UI TryEnqueue failed for handle %llu",
+                           static_cast<unsigned long long>(target.handle));
+                }
             } else {
-                applyOnUi(target.handle, target.generation);
+                Wh_Log(L"Daylight UI: no dispatcher for handle %llu "
+                       L"(skipping off-thread apply)",
+                       static_cast<unsigned long long>(target.handle));
             }
         } catch (...) {
             Wh_Log(L"Dispatch daylight UI failed %08X", winrt::to_hresult());
@@ -4770,6 +5169,7 @@ void UnmountInstance(MountedWeatherInstance& instance) {
             instance.gridSizeChangedRevoker = {};
             instance.gridThemeChangedRevoker = {};
             instance.weatherThemeChangedRevoker = {};
+            instance.weatherViewportRevoker = {};
             try {
                 if (instance.backgroundChangedCookie >= 0) {
                     grid.UnregisterPropertyChangedCallback(
@@ -4782,6 +5182,18 @@ void UnmountInstance(MountedWeatherInstance& instance) {
                         wux::UIElement::ShadowProperty(),
                         instance.shadowChangedCookie);
                     instance.shadowChangedCookie = -1;
+                }
+                if (instance.gridVisibilityCookie >= 0) {
+                    grid.UnregisterPropertyChangedCallback(
+                        wux::UIElement::VisibilityProperty(),
+                        instance.gridVisibilityCookie);
+                    instance.gridVisibilityCookie = -1;
+                }
+                if (instance.weatherVisibilityCookie >= 0 && root) {
+                    root.UnregisterPropertyChangedCallback(
+                        wux::UIElement::VisibilityProperty(),
+                        instance.weatherVisibilityCookie);
+                    instance.weatherVisibilityCookie = -1;
                 }
             } catch (...) {
             }
@@ -4911,11 +5323,10 @@ bool MountWeatherIntoGrid(InstanceHandle handle, wuxc::Grid const& grid) {
                         break;
                     }
                 }
-                // Flyout reopened after sleep: wall-clock age may require a
-                // fetch; daylight "now" marker always needs a fresh paint.
-                RequestWeatherRefresh(false);
+                // Flyout reopened without remounting: hourly slice + daylight
+                // "now" both need a check (RefreshDaylight also requests weather).
                 try {
-                    UpdateAllDaylightUIs();
+                    RefreshDaylightOnFlyoutShown();
                 } catch (...) {
                 }
                 return true;
@@ -5700,6 +6111,7 @@ void Wh_ModAfterInit() {
     // Requesting refresh here raced with mount and could cancel the in-flight
     // result (generation bump), leaving the card stuck on "Loading...".
     EnsureRefreshTimer();
+    EnsureDaylightTickTimer();
     RegisterSuspendResumeRefresh();
 }
 
@@ -5803,7 +6215,15 @@ void Wh_ModUninit() {
             WaitForThreadpoolTimerCallbacks(g_refreshTimer, TRUE);
             CloseThreadpoolTimer(g_refreshTimer);
             g_refreshTimer = nullptr;
+            g_refreshTimerPeriodMs = 0;
             Wh_Log(L"Refresh timer stopped");
+        }
+        if (g_daylightTickTimer) {
+            SetThreadpoolTimer(g_daylightTickTimer, nullptr, 0, 0);
+            WaitForThreadpoolTimerCallbacks(g_daylightTickTimer, TRUE);
+            CloseThreadpoolTimer(g_daylightTickTimer);
+            g_daylightTickTimer = nullptr;
+            Wh_Log(L"Daylight tick timer stopped");
         }
     }
 
