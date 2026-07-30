@@ -1096,13 +1096,22 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     return true;
 }
 
-// Find the centre and full clickable width of the taskbar icon for hWnd.
-// outWidth receives the icon button width only when a specific icon is found;
-// when only the taskbar-centre fallback is used, *outWidth is set to 0 so the
-// caller falls back to the built-in minimum scale.
-// Returns FALSE when a position could not be determined.
+// Build a cache of all taskbar icon positions on the same monitor as hWnd.
+// Matching is first by exact HWND, then by owner-chain (for child/utility
+// windows that share the parent's taskbar button). Returns FALSE when no
+// taskbar or toolbar can be found.
+struct TaskbarIconEntry {
+    HWND hWnd;
+    int  x;
+    int  y;
+    int  width;
+    int  height;
+};
+
 static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    TaskbarIconEntry cache[64];
+    int cacheCount = 0;
 
     for (int pass = 0; pass < 2; pass++) {
         HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
@@ -1112,11 +1121,6 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
         GetWindowRect(hTaskbar, &tbRect);
         HMONITOR hTbMon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL);
         if (hTbMon != hMon) continue;
-
-        // Fallback: the centre of the taskbar itself (width unknown).
-        *outX = (tbRect.left + tbRect.right) / 2;
-        *outY = (tbRect.top + tbRect.bottom) / 2;
-        if (outWidth) *outWidth = 0;
 
         HWND hToolbar = NULL;
         HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
@@ -1130,26 +1134,40 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
 
         if (hToolbar) {
             int count = (int)SendMessage(hToolbar, TB_BUTTONCOUNT, 0, 0);
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < count && cacheCount < 64; i++) {
                 TBBUTTON btn;
                 ZeroMemory(&btn, sizeof(btn));
                 if (SendMessage(hToolbar, TB_GETBUTTON, i, (LPARAM)&btn)) {
-                    if ((HWND)btn.dwData == hWnd) {
-                        RECT r;
-                        if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
-                            MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
-                            *outX = (r.left + r.right) / 2;
-                            *outY = (r.top + r.bottom) / 2;
-                            if (outWidth) *outWidth = r.right - r.left;
-                            return TRUE;
-                        }
+                    RECT r;
+                    if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
+                        MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
+                        TaskbarIconEntry* e = &cache[cacheCount++];
+                        e->hWnd   = (HWND)btn.dwData;
+                        e->x      = (r.left + r.right) / 2;
+                        e->y      = (r.top + r.bottom) / 2;
+                        e->width  = r.right - r.left;
+                        e->height = r.bottom - r.top;
                     }
                 }
             }
         }
-
-        return TRUE; // Taskbar-centre fallback with outWidth = 0.
+        break; // Only process the first matching taskbar.
     }
+
+    if (cacheCount == 0) return FALSE;
+
+    // Try exact HWND match, then owner chain.
+    for (HWND hCur = hWnd; hCur; hCur = GetWindow(hCur, GW_OWNER)) {
+        for (int i = 0; i < cacheCount; i++) {
+            if (cache[i].hWnd == hCur) {
+                *outX = cache[i].x;
+                *outY = cache[i].y;
+                if (outWidth) *outWidth = cache[i].width;
+                return TRUE;
+            }
+        }
+    }
+
     return FALSE;
 }
 
@@ -1172,8 +1190,8 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the animation target to the taskbar icon centre. Fall back to the
-    // cursor click position when the icon can't be found.
+    // Lock the animation target to the taskbar icon centre, falling back to
+    // cursor X only when the icon genuinely cannot be resolved.
     int iconX, iconY;
     data->iconButtonWidth = 0;
     if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
