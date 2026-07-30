@@ -20,7 +20,7 @@ Add your own buttons and dropdown menus to the **Windows 11 File Explorer
 command bar** (the toolbar with New / Sort / View), and hide the built-in
 buttons, separators and spacing you don't want.
 
-![Explorer Command Bar demo](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/main.gif?raw=true)
+![Explorer Command Bar demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/main.gif)
 
 Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
 Explorer.
@@ -41,7 +41,7 @@ Explorer.
   menu, the contextual commands (Set as background, Rotate left, Rotate right,
   Extract all) and the Details pane toggle.
 - **Custom item spacing** - set the exact spacing between the command bar
-  buttons, in pixels.
+  buttons.
 - **Open menus on hover** - optionally open dropdowns on hover, with a
   configurable delay.
 - **Rock solid** - buttons are re-applied automatically across tab switches,
@@ -50,14 +50,13 @@ Explorer.
 
 ## Screenshots
 
-
 Hiding built‑in buttons and separators:
 
-![Hide buttons](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/hide-buttons.gif?raw=true)
+![Hide buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-buttons.gif)
 
 You may hide even all options, and use only your custom ones:
 
-![Hide All buttons](https://github.com/DanRotaru/windhawk-mods/blob/master/exporer-command-bar/screenshots/hide-all-buttons.jpg?raw=true)
+![Hide All buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-all-buttons.jpg)
 
 ## Command parameters
 
@@ -90,20 +89,40 @@ The **Icon glyph or icon path** field accepts several forms:
 
 ## Default configuration
 
-Out of the box the mod adds:
+Out of the box the mod adds only apps which are part of a stock Windows 11
+install:
 
 * **Open in Terminal** - `wt.exe -d "%path%"`
 * **Open in Notepad** - `notepad.exe "%sel%"`
 * **Additional** ▾ (dropdown)
-  * Open in VS Code - `code.exe "%path%"`
   * Open Paint - `mspaint.exe`
   * Open Calculator - `calc.exe`
-  * **Commands** ▸ - `vite`, `npm init`, `npm install`, `npm run dev`,
-    `npm run build`, `npm run start`
-  * **AI** ▸ - `Claude`, `Codex`
+  * **System** ▸ - Task Manager (`taskmgr.exe`), Control Panel (`control.exe`)
 
 All of the built-in buttons stay visible by default. Everything is configurable
 in the mod settings.
+
+## Example configurations
+
+A few items worth adding if you have the corresponding tools installed. Set
+*Command* and *Parameters* as shown; leave *Icon glyph or icon path* empty to
+use the executable's own icon.
+
+* **Open in VS Code** - command `code.exe`, parameters `"%path%"`.
+* **Open in your editor of choice** - e.g. command
+  `%LOCALAPPDATA%\Programs\<editor>\<editor>.exe`, parameters `"%path%"`.
+* **A dropdown of project commands** (type *Dropdown menu*), each entry with
+  command `cmd.exe` and parameters `/k npm install`, `/k npm run dev`,
+  `/k npm run build`, and so on. `cmd.exe /k` keeps the console open so you can
+  see the output.
+* **A dropdown of CLI tools** - command `cmd.exe` with parameters `/k claude`,
+  `/k codex`, `/k gh pr list`, ...
+* **Open a terminal as administrator** - command
+  `powershell.exe`, parameters
+  `-Command "Start-Process wt.exe -ArgumentList '-d \"%path%\"' -Verb RunAs"`.
+
+Enable *Hide icon* for the menu entries of such commands: an `.exe` like
+`cmd.exe` contributes little as an icon next to a text label.
 
 ## How it works
 
@@ -242,12 +261,6 @@ a new tab or navigating to another folder makes them appear.
     - separatorAfter: false
     - subItems:
       - - type: button
-        - name: Open in VS Code
-        - command: code.exe
-        - parameters: '"%path%"'
-        - iconGlyph: ""
-        - separatorAfter: false
-      - - type: button
         - name: Open Paint
         - command: mspaint.exe
         - parameters: ""
@@ -260,66 +273,23 @@ a new tab or navigating to another folder makes them appear.
         - iconGlyph: 'shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'
         - separatorAfter: true
       - - type: menu
-        - name: Commands
+        - name: System
         - command: ""
         - parameters: ""
-        - iconGlyph: EC7A
+        - iconGlyph: E713
         - separatorAfter: false
         - subItems:
-          - - name: vite
-            - command: cmd.exe
-            - parameters: /k vite
+          - - name: Task Manager
+            - command: taskmgr.exe
+            - parameters: ""
             - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: true
-          - - name: npm init
-            - command: cmd.exe
-            - parameters: /k npm init
-            - iconGlyph: ""
-            - hideIcon: true
+            - hideIcon: false
             - separatorAfter: false
-          - - name: npm install
-            - command: cmd.exe
-            - parameters: /k npm install
+          - - name: Control Panel
+            - command: control.exe
+            - parameters: ""
             - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run dev
-            - command: cmd.exe
-            - parameters: /k npm run dev
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run build
-            - command: cmd.exe
-            - parameters: /k npm run build
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: npm run start
-            - command: cmd.exe
-            - parameters: /k npm run start
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-      - - type: menu
-        - name: AI
-        - command: ""
-        - parameters: ""
-        - iconGlyph: E794
-        - separatorAfter: false
-        - subItems:
-          - - name: Claude
-            - command: cmd.exe
-            - parameters: /k claude
-            - iconGlyph: ""
-            - hideIcon: true
-            - separatorAfter: false
-          - - name: Codex
-            - command: cmd.exe
-            - parameters: /k codex
-            - iconGlyph: ""
-            - hideIcon: true
+            - hideIcon: false
             - separatorAfter: false
   $name: Toolbar items
   $description: >-
@@ -382,15 +352,16 @@ a new tab or navigating to another folder makes them appear.
     How long the cursor has to stay over the button before the menu opens.
     Only used when "Open menus on hover" is enabled.
 - itemSpacing: -1
-  $name: Item spacing (pixels)
+  $name: Item spacing (pixels at 100% scaling)
   $description: >-
-    Horizontal spacing between the command bar buttons, in pixels. -1 leaves
-    the default spacing unchanged; 0 places the buttons right next to each
-    other; 5 means 5 pixels between buttons, and so on.
+    Horizontal spacing between the command bar buttons. -1 leaves the default
+    spacing unchanged; 0 places the buttons right next to each other; 5 means 5
+    pixels between buttons, and so on. The value is in effective pixels, so at
+    150% display scaling it results in 1.5 times as many physical pixels. Note
+    that any value other than -1 also removes the built-in buttons' minimum
+    width, which shrinks their click area down to the icon.
 */
 // ==/WindhawkModSettings==
-
-#include <initguid.h>
 
 #include <windows.h>
 
@@ -403,12 +374,17 @@ a new tab or navigating to another folder makes them appear.
 #include <shobjidl.h>
 
 #include <atomic>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cwctype>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 std::atomic<bool> g_unloading;
@@ -529,15 +505,75 @@ struct CommandBarEntry {
 std::mutex g_entriesMutex;
 std::vector<CommandBarEntry> g_entries;
 
-// Original visibility state of Explorer's own elements, captured the first
-// time we touch each one, so we can restore it exactly instead of forcing a
-// guessed default (which would reveal elements Explorer keeps collapsed).
-std::mutex g_originalStateMutex;
-std::unordered_map<void*, mux::Visibility> g_originalVisibility;
-std::unordered_map<void*, muxc::CommandBarOverflowButtonVisibility>
-    g_originalOverflow;
-std::unordered_map<void*, mux::Thickness> g_originalMargin;
-std::unordered_map<void*, double> g_originalMinWidth;
+// The Explorer elements we touch, each with the original state captured the
+// first time we touched it, so it can be restored exactly instead of forcing a
+// guessed default (which would reveal elements Explorer keeps collapsed), and
+// with the visibility watcher registered on it (see below).
+//
+// The element is held as a weak reference and entries are matched by resolving
+// it, never by its address: XAML objects die with their window or tab, and the
+// heap happily hands the same address to an unrelated element of the next one.
+struct ManagedElement {
+    DWORD threadId;
+    winrt::weak_ref<mux::UIElement> element;
+
+    bool hasOriginalVisibility = false;
+    mux::Visibility originalVisibility = mux::Visibility::Visible;
+
+    bool hasOriginalSpacing = false;
+    mux::Thickness originalMargin{};
+    double originalMinWidth = 0;
+
+    // Command bars only.
+    bool hasOriginalOverflow = false;
+    muxc::CommandBarOverflowButtonVisibility originalOverflow =
+        muxc::CommandBarOverflowButtonVisibility::Auto;
+
+    bool watched = false;
+    int64_t visibilityToken = 0;
+};
+
+std::mutex g_managedElementsMutex;
+std::vector<ManagedElement> g_managedElements;
+
+// The lookups below must run on the element's own UI thread, and the caller
+// must hold g_managedElementsMutex. A weak reference to a live non-agile XAML
+// element can only be resolved from its own thread, which is also why entries
+// of other threads are skipped rather than treated as dead.
+
+ManagedElement* FindManagedElement(mux::UIElement const& element) {
+    DWORD threadId = GetCurrentThreadId();
+
+    for (auto& entry : g_managedElements) {
+        if (entry.threadId == threadId && entry.element.get() == element) {
+            return &entry;
+        }
+    }
+
+    return nullptr;
+}
+
+ManagedElement& GetManagedElement(mux::UIElement const& element) {
+    DWORD threadId = GetCurrentThreadId();
+
+    // Drop the entries of this thread whose element is gone, so the list
+    // doesn't grow for the whole Explorer session.
+    for (auto it = g_managedElements.begin();
+         it != g_managedElements.end();) {
+        if (it->threadId == threadId && !it->element.get()) {
+            it = g_managedElements.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (auto* entry = FindManagedElement(element)) {
+        return *entry;
+    }
+
+    g_managedElements.push_back({threadId, winrt::make_weak(element)});
+    return g_managedElements.back();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Getting the current folder path and launching commands.
@@ -713,6 +749,42 @@ std::wstring BuildParameters(std::wstring parameters,
     return parameters;
 }
 
+// The threads which are busy resolving the Explorer context and launching a
+// command. Their code lives in this DLL, so the mod can't be unloaded while
+// one of them is still running - see
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+std::mutex g_launchThreadsMutex;
+std::vector<HANDLE> g_launchThreads;
+
+void TrackLaunchThread(HANDLE thread) {
+    std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+
+    // Reap the ones which already finished.
+    for (auto it = g_launchThreads.begin(); it != g_launchThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_launchThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    g_launchThreads.push_back(thread);
+}
+
+void WaitForLaunchThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+        threads.swap(g_launchThreads);
+    }
+
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
 void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
     ExplorerContext context = GetExplorerContext(hExplorerWnd);
     Wh_Log(L"Launching %s for window %08X, path: %s, selection: %s",
@@ -733,7 +805,7 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
 
 void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
                      ActionItem const& item) {
-    if (item.command.empty()) {
+    if (item.command.empty() || g_unloading) {
         return;
     }
 
@@ -769,8 +841,10 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
 
     auto launchParams = std::make_unique<LaunchParams>(hWnd, item);
 
-    // Do the shell COM work off the UI thread to avoid blocking or
-    // deadlocking it.
+    // Do the shell COM work off the UI thread, so a slow or unresponsive
+    // shell can't block the click handler. Note that IShellBrowser and
+    // friends are owned by the Explorer UI thread, so the calls marshal back
+    // to it; only the waiting happens elsewhere.
     HANDLE thread = CreateThread(
         nullptr, 0,
         [](LPVOID lpParam) -> DWORD {
@@ -789,7 +863,9 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         launchParams.get(), 0, nullptr);
     if (thread) {
         launchParams.release();  // Owned by the thread now.
-        CloseHandle(thread);
+        // The handle is closed once the thread finished, either here on a
+        // later launch or in Wh_ModUninit, which waits for it.
+        TrackLaunchThread(thread);
     }
 }
 
@@ -938,75 +1014,144 @@ HICON ExtractCommandIcon(std::wstring const& command) {
     return nullptr;
 }
 
-muxm::ImageSource CreateImageSourceFromIcon(HICON hIcon) {
-    muxm::ImageSource result = nullptr;
+// A decoded icon: premultiplied BGRA pixels, top-down. Plain pixel data with
+// no thread affinity, which is what lets it be cached globally and turned into
+// a WriteableBitmap per XamlRoot.
+struct DecodedIcon {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> pixels;
 
-    ICONINFO iconInfo{};
-    if (!GetIconInfo(hIcon, &iconInfo)) {
-        return result;
+    bool empty() const { return pixels.empty(); }
+};
+
+// Reads a bitmap as 32-bit top-down pixels, whatever its own format is.
+bool ReadBitmapPixels(HBITMAP hBitmap, DecodedIcon* decoded) {
+    BITMAP bm{};
+    if (!GetObject(hBitmap, sizeof(bm), &bm) || bm.bmWidth <= 0 ||
+        bm.bmHeight <= 0) {
+        return false;
     }
 
+    int width = bm.bmWidth;
+    int height = bm.bmHeight;
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;  // Top-down.
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    std::vector<uint8_t> pixels((size_t)width * height * 4);
+
+    HDC hdc = CreateCompatibleDC(nullptr);
+    if (!hdc) {
+        return false;
+    }
+
+    bool succeeded = GetDIBits(hdc, hBitmap, 0, height, pixels.data(), &bmi,
+                               DIB_RGB_COLORS) != 0;
+    DeleteDC(hdc);
+
+    if (!succeeded) {
+        return false;
+    }
+
+    decoded->width = width;
+    decoded->height = height;
+    decoded->pixels = std::move(pixels);
+    return true;
+}
+
+// True if every pixel is fully transparent, which is how a bitmap without an
+// alpha channel comes back.
+bool HasNoAlphaChannel(std::vector<uint8_t> const& pixels) {
+    for (size_t p = 3; p < pixels.size(); p += 4) {
+        if (pixels[p]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void MakeOpaque(std::vector<uint8_t>& pixels) {
+    for (size_t p = 3; p < pixels.size(); p += 4) {
+        pixels[p] = 255;
+    }
+}
+
+// 1-bpp icons have no color bitmap at all: their mask holds an AND mask
+// stacked on top of an XOR (monochrome color) mask.
+bool DecodeMonochromeIcon(HBITMAP hbmMask, DecodedIcon* decoded) {
+    DecodedIcon mask;
+    if (!ReadBitmapPixels(hbmMask, &mask) || mask.height % 2 != 0) {
+        return false;
+    }
+
+    int width = mask.width;
+    int height = mask.height / 2;
+
+    DecodedIcon result;
+    result.width = width;
+    result.height = height;
+    result.pixels.assign((size_t)width * height * 4, 0);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            size_t andIndex = ((size_t)y * width + x) * 4;
+            size_t xorIndex = ((size_t)(y + height) * width + x) * 4;
+
+            // A set AND mask bit means "leave the background alone", i.e.
+            // transparent - the pixel stays zeroed.
+            if (mask.pixels[andIndex]) {
+                continue;
+            }
+
+            uint8_t value = mask.pixels[xorIndex] ? 255 : 0;
+            result.pixels[andIndex + 0] = value;
+            result.pixels[andIndex + 1] = value;
+            result.pixels[andIndex + 2] = value;
+            result.pixels[andIndex + 3] = 255;
+        }
+    }
+
+    *decoded = std::move(result);
+    return true;
+}
+
+bool DecodeIcon(HICON hIcon, DecodedIcon* decoded) {
+    ICONINFO iconInfo{};
+    if (!GetIconInfo(hIcon, &iconInfo)) {
+        return false;
+    }
+
+    bool succeeded = false;
+
     if (iconInfo.hbmColor) {
-        BITMAP bm{};
-        if (GetObject(iconInfo.hbmColor, sizeof(bm), &bm) && bm.bmWidth > 0 &&
-            bm.bmHeight > 0) {
-            int width = bm.bmWidth;
-            int height = bm.bmHeight;
-
-            BITMAPINFO bmi{};
-            bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-            bmi.bmiHeader.biWidth = width;
-            bmi.bmiHeader.biHeight = -height;  // Top-down.
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 32;
-            bmi.bmiHeader.biCompression = BI_RGB;
-
-            std::vector<uint8_t> pixels((size_t)width * height * 4);
-
-            HDC hdc = CreateCompatibleDC(nullptr);
-            if (hdc) {
-                if (GetDIBits(hdc, iconInfo.hbmColor, 0, height, pixels.data(),
-                              &bmi, DIB_RGB_COLORS)) {
-                    // Icons without an alpha channel come back fully
-                    // transparent, make them opaque.
-                    bool hasAlpha = false;
-                    for (size_t p = 3; p < pixels.size(); p += 4) {
-                        if (pixels[p]) {
-                            hasAlpha = true;
-                            break;
-                        }
-                    }
-
-                    if (!hasAlpha) {
-                        for (size_t p = 3; p < pixels.size(); p += 4) {
-                            pixels[p] = 255;
-                        }
-                    }
-
-                    // The XAML bitmap expects premultiplied alpha.
-                    for (size_t p = 0; p < pixels.size(); p += 4) {
-                        uint8_t alpha = pixels[p + 3];
-                        if (alpha != 255) {
-                            pixels[p] = pixels[p] * alpha / 255;
-                            pixels[p + 1] = pixels[p + 1] * alpha / 255;
-                            pixels[p + 2] = pixels[p + 2] * alpha / 255;
-                        }
-                    }
-
-                    try {
-                        muxm::Imaging::WriteableBitmap bitmap(width, height);
-                        memcpy(bitmap.PixelBuffer().data(), pixels.data(),
-                               pixels.size());
-                        bitmap.Invalidate();
-                        result = bitmap;
-                    } catch (...) {
-                        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        if (ReadBitmapPixels(iconInfo.hbmColor, decoded)) {
+            if (HasNoAlphaChannel(decoded->pixels)) {
+                MakeOpaque(decoded->pixels);
+            } else {
+                // The XAML bitmap expects premultiplied alpha.
+                for (size_t p = 0; p < decoded->pixels.size(); p += 4) {
+                    uint8_t alpha = decoded->pixels[p + 3];
+                    if (alpha != 255) {
+                        decoded->pixels[p] = decoded->pixels[p] * alpha / 255;
+                        decoded->pixels[p + 1] =
+                            decoded->pixels[p + 1] * alpha / 255;
+                        decoded->pixels[p + 2] =
+                            decoded->pixels[p + 2] * alpha / 255;
                     }
                 }
-
-                DeleteDC(hdc);
             }
+
+            succeeded = true;
         }
+    } else if (iconInfo.hbmMask) {
+        succeeded = DecodeMonochromeIcon(iconInfo.hbmMask, decoded);
     }
 
     if (iconInfo.hbmColor) {
@@ -1016,7 +1161,22 @@ muxm::ImageSource CreateImageSourceFromIcon(HICON hIcon) {
         DeleteObject(iconInfo.hbmMask);
     }
 
-    return result;
+    return succeeded;
+}
+
+muxm::ImageSource CreateImageSource(DecodedIcon const& decoded) try {
+    if (decoded.empty()) {
+        return nullptr;
+    }
+
+    muxm::Imaging::WriteableBitmap bitmap(decoded.width, decoded.height);
+    memcpy(bitmap.PixelBuffer().data(), decoded.pixels.data(),
+           decoded.pixels.size());
+    bitmap.Invalidate();
+    return bitmap;
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    return nullptr;
 }
 
 std::wstring ParseGlyphSetting(PCWSTR glyphSetting) {
@@ -1106,66 +1266,7 @@ bool IsShellPath(std::wstring const& s) {
     return s.size() >= 6 && _wcsnicmp(s.c_str(), L"shell:", 6) == 0;
 }
 
-muxm::ImageSource CreateImageSourceFromHBitmap(HBITMAP hBitmap) {
-    muxm::ImageSource result = nullptr;
-
-    BITMAP bm{};
-    if (!GetObject(hBitmap, sizeof(bm), &bm) || bm.bmWidth <= 0 ||
-        bm.bmHeight <= 0) {
-        return result;
-    }
-
-    int width = bm.bmWidth;
-    int height = bm.bmHeight;
-
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height;  // Top-down.
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    std::vector<uint8_t> pixels((size_t)width * height * 4);
-
-    HDC hdc = CreateCompatibleDC(nullptr);
-    if (!hdc) {
-        return result;
-    }
-
-    if (GetDIBits(hdc, hBitmap, 0, height, pixels.data(), &bmi,
-                  DIB_RGB_COLORS)) {
-        // The shell returns premultiplied alpha already; just handle the
-        // fully-opaque (no alpha channel) case.
-        bool hasAlpha = false;
-        for (size_t p = 3; p < pixels.size(); p += 4) {
-            if (pixels[p]) {
-                hasAlpha = true;
-                break;
-            }
-        }
-
-        if (!hasAlpha) {
-            for (size_t p = 3; p < pixels.size(); p += 4) {
-                pixels[p] = 255;
-            }
-        }
-
-        try {
-            muxm::Imaging::WriteableBitmap bitmap(width, height);
-            memcpy(bitmap.PixelBuffer().data(), pixels.data(), pixels.size());
-            bitmap.Invalidate();
-            result = bitmap;
-        } catch (...) {
-            Wh_Log(L"Error %08X", winrt::to_hresult().value);
-        }
-    }
-
-    DeleteDC(hdc);
-    return result;
-}
-
-muxm::ImageSource LoadImageSourceFromShellPath(std::wstring const& path) {
+bool DecodeShellPathIcon(std::wstring const& path, DecodedIcon* decoded) {
     std::wstring expanded = ExpandEnvVars(path);
 
     PIDLIST_ABSOLUTE pidl = nullptr;
@@ -1173,14 +1274,14 @@ muxm::ImageSource LoadImageSourceFromShellPath(std::wstring const& path) {
                                   nullptr)) ||
         !pidl) {
         Wh_Log(L"Couldn't parse shell path %s", path.c_str());
-        return nullptr;
+        return false;
     }
 
     winrt::com_ptr<IShellItemImageFactory> factory;
     HRESULT hr = SHCreateItemFromIDList(pidl, IID_PPV_ARGS(factory.put()));
     CoTaskMemFree(pidl);
     if (FAILED(hr) || !factory) {
-        return nullptr;
+        return false;
     }
 
     SIZE size = {32, 32};
@@ -1188,12 +1289,73 @@ muxm::ImageSource LoadImageSourceFromShellPath(std::wstring const& path) {
     hr = factory->GetImage(size, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
                            &hBitmap);
     if (FAILED(hr) || !hBitmap) {
-        return nullptr;
+        return false;
     }
 
-    auto source = CreateImageSourceFromHBitmap(hBitmap);
+    bool succeeded = ReadBitmapPixels(hBitmap, decoded);
     DeleteObject(hBitmap);
-    return source;
+
+    // The shell returns premultiplied alpha already; just handle the
+    // fully-opaque (no alpha channel) case.
+    if (succeeded && HasNoAlphaChannel(decoded->pixels)) {
+        MakeOpaque(decoded->pixels);
+    }
+
+    return succeeded;
+}
+
+std::shared_ptr<DecodedIcon> ResolveIcon(std::wstring const& iconSetting,
+                                         std::wstring const& command) {
+    auto decoded = std::make_shared<DecodedIcon>();
+
+    bool isPath = !iconSetting.empty() && LooksLikeIconPath(iconSetting);
+    if (isPath && IsShellPath(iconSetting)) {
+        DecodeShellPathIcon(iconSetting, decoded.get());
+        return decoded;
+    }
+
+    HICON hIcon = nullptr;
+    if (isPath) {
+        hIcon = LoadIconFromPath(iconSetting);
+    } else if (iconSetting.empty() && !command.empty()) {
+        hIcon = ExtractCommandIcon(command);
+    }
+
+    if (hIcon) {
+        DecodeIcon(hIcon, decoded.get());
+        DestroyIcon(hIcon);
+    }
+
+    return decoded;
+}
+
+// Resolving an icon is expensive - the search path, the App Paths registry
+// keys, a reparse point, and for a shell path the package metadata of a Store
+// app - and it happens on the Explorer UI thread while a window or a tab is
+// being built. The decoded pixels don't depend on the thread or the window, so
+// they're resolved once and reused; the cache is dropped when the settings
+// change. An entry with no pixels is a remembered failure.
+std::mutex g_iconCacheMutex;
+std::unordered_map<std::wstring, std::shared_ptr<DecodedIcon>> g_iconCache;
+
+std::shared_ptr<DecodedIcon> GetIcon(std::wstring const& iconSetting,
+                                     std::wstring const& command) {
+    // '\n' can't appear in either part, so it's an unambiguous separator.
+    std::wstring key = iconSetting + L'\n' + command;
+
+    {
+        std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+        auto it = g_iconCache.find(key);
+        if (it != g_iconCache.end()) {
+            return it->second;
+        }
+    }
+
+    auto decoded = ResolveIcon(iconSetting, command);
+
+    std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+    return g_iconCache.insert_or_assign(std::move(key), std::move(decoded))
+        .first->second;
 }
 
 // Returns nullptr if no icon could be resolved from the settings.
@@ -1201,27 +1363,12 @@ muxc::IconElement TryCreateIconElement(std::wstring const& iconSetting,
                                        std::wstring const& command) {
     bool isPath = !iconSetting.empty() && LooksLikeIconPath(iconSetting);
 
-    muxm::ImageSource source = nullptr;
-    if (isPath && IsShellPath(iconSetting)) {
-        source = LoadImageSourceFromShellPath(iconSetting);
-    } else {
-        HICON hIcon = nullptr;
-        if (isPath) {
-            hIcon = LoadIconFromPath(iconSetting);
-        } else if (iconSetting.empty() && !command.empty()) {
-            hIcon = ExtractCommandIcon(command);
+    if (isPath || iconSetting.empty()) {
+        if (auto source = CreateImageSource(*GetIcon(iconSetting, command))) {
+            muxc::ImageIcon imageIcon;
+            imageIcon.Source(source);
+            return imageIcon;
         }
-
-        if (hIcon) {
-            source = CreateImageSourceFromIcon(hIcon);
-            DestroyIcon(hIcon);
-        }
-    }
-
-    if (source) {
-        muxc::ImageIcon imageIcon;
-        imageIcon.Source(source);
-        return imageIcon;
     }
 
     std::wstring glyph;
@@ -1253,11 +1400,14 @@ muxc::IconElement CreateIconElement(std::wstring const& iconSetting,
 }
 
 // Icon for a command bar button, honoring the item's "Hide icon" option.
+// Since the label is collapsed, a button without any icon would render as an
+// empty box, so an icon which couldn't be resolved (a mistyped command, a
+// missing executable) falls back to a visible placeholder glyph.
 muxc::IconElement MakeCommandButtonIcon(ActionItem const& item) {
     if (item.hideIcon) {
         return nullptr;
     }
-    return CreateIconElement(item.icon, item.command, L"");
+    return CreateIconElement(item.icon, item.command, L"");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1401,10 +1551,10 @@ bool ShouldHide(ManagedTarget const& target);
 // touched it.
 mux::Visibility EffectiveVisibility(mux::UIElement const& element) {
     {
-        std::lock_guard<std::mutex> lock(g_originalStateMutex);
-        auto it = g_originalVisibility.find(winrt::get_abi(element));
-        if (it != g_originalVisibility.end()) {
-            return it->second;
+        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+        auto* entry = FindManagedElement(element);
+        if (entry && entry->hasOriginalVisibility) {
+            return entry->originalVisibility;
         }
     }
 
@@ -1479,33 +1629,26 @@ void SetVisibilityInternal(mux::UIElement const& element,
     g_settingVisibilityDepth--;
 }
 
-// Explorer shows and hides its contextual commands (Set as background, Rotate
-// left/right, Extract all, ...) as the selection changes, which overwrites our
-// collapse. Watching the property lets us re-apply immediately, and keeps the
-// remembered original in sync so disabling the mod restores what Explorer
-// wanted rather than what it happened to be when we first saw the element.
-struct VisibilityWatch {
-    DWORD threadId;
-    void* key;
-    winrt::weak_ref<mux::UIElement> element;
-    int64_t token;
-};
-
-std::mutex g_watchesMutex;
-std::vector<VisibilityWatch> g_watches;
-
 void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
                                   bool forceShow = false);
 
-// Hiding a group separator depends on the whole group, so a single element
-// changing isn't enough to decide: re-run the pass for the command bar once the
-// current batch of changes has settled. Coalesced per command bar, since
-// Explorer updates a whole run of commands on every selection change.
-std::mutex g_pendingRecomputeMutex;
-std::unordered_set<void*> g_pendingRecompute;
+void UpdateCommandBar(muxc::CommandBar const& commandBar);
 
-void QueueVisibilityRecompute(
-    winrt::weak_ref<muxc::CommandBar> const& weakCommandBar) {
+// Both a visibility recompute (hiding a group separator depends on the whole
+// group, so a single element changing isn't enough to decide) and a full
+// update after Explorer touched the command list are deferred and coalesced
+// per command bar: Explorer updates a whole run of commands on every selection
+// change, and appending our own buttons raises one change notification each.
+//
+// The pending entries are keyed by address, which is safe here because the
+// queued work always removes its own entry: an entry can't outlive the command
+// bar it belongs to and be matched against a later one at the same address.
+std::mutex g_pendingUpdatesMutex;
+std::unordered_map<void*, bool> g_pendingUpdates;  // Value: full update.
+
+void QueueCommandBarUpdate(
+    winrt::weak_ref<muxc::CommandBar> const& weakCommandBar,
+    bool fullUpdate) {
     auto commandBar = weakCommandBar.get();
     if (!commandBar) {
         return;
@@ -1513,27 +1656,38 @@ void QueueVisibilityRecompute(
 
     void* key = winrt::get_abi(commandBar);
     {
-        std::lock_guard<std::mutex> lock(g_pendingRecomputeMutex);
-        if (!g_pendingRecompute.insert(key).second) {
-            return;  // Already queued.
+        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
+        auto [it, inserted] = g_pendingUpdates.insert({key, fullUpdate});
+        if (!inserted) {
+            // Already queued; the queued work reads the flag when it runs, so
+            // a full update can still be requested on top of a recompute.
+            it->second = it->second || fullUpdate;
+            return;
         }
     }
 
-    auto forgetPending = [key]() {
-        std::lock_guard<std::mutex> lock(g_pendingRecomputeMutex);
-        g_pendingRecompute.erase(key);
+    auto takePending = [key]() {
+        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
+        bool full = false;
+        auto it = g_pendingUpdates.find(key);
+        if (it != g_pendingUpdates.end()) {
+            full = it->second;
+            g_pendingUpdates.erase(it);
+        }
+
+        return full;
     };
 
     auto dispatcherQueue =
         winrt::Microsoft::UI::Dispatching::DispatcherQueue::
             GetForCurrentThread();
     if (!dispatcherQueue) {
-        forgetPending();
+        takePending();
         return;
     }
 
-    if (!dispatcherQueue.TryEnqueue([weakCommandBar, forgetPending]() {
-            forgetPending();
+    if (!dispatcherQueue.TryEnqueue([weakCommandBar, takePending]() {
+            bool full = takePending();
 
             if (g_unloading) {
                 return;
@@ -1541,44 +1695,39 @@ void QueueVisibilityRecompute(
 
             if (auto commandBar = weakCommandBar.get()) {
                 try {
-                    ApplyDefaultButtonVisibility(commandBar);
+                    if (full) {
+                        UpdateCommandBar(commandBar);
+                    } else {
+                        ApplyDefaultButtonVisibility(commandBar);
+                    }
                 } catch (...) {
                     Wh_Log(L"Error %08X", winrt::to_hresult().value);
                 }
             }
         })) {
-        forgetPending();
+        takePending();
     }
 }
 
+void QueueVisibilityRecompute(
+    winrt::weak_ref<muxc::CommandBar> const& weakCommandBar) {
+    QueueCommandBarUpdate(weakCommandBar, /*fullUpdate=*/false);
+}
+
+// Explorer shows and hides its contextual commands (Set as background, Rotate
+// left/right, Extract all, ...) as the selection changes, which overwrites our
+// collapse. Watching the property lets us re-apply immediately, and keeps the
+// remembered original in sync so disabling the mod restores what Explorer
+// wanted rather than what it happened to be when we first saw the element.
+// The caller has established, under the lock, that the element isn't watched
+// yet.
 void WatchVisibility(mux::UIElement const& element,
-                     void* key,
                      ManagedTarget const& target,
                      winrt::weak_ref<muxc::CommandBar> const& owner) {
-    {
-        std::lock_guard<std::mutex> lock(g_watchesMutex);
-
-        DWORD threadId = GetCurrentThreadId();
-        for (auto it = g_watches.begin(); it != g_watches.end();) {
-            if (it->key == key) {
-                return;  // Already watched.
-            }
-
-            // Drop entries of elements that are gone. Only our own thread's,
-            // since a weak reference to a live non-agile element can't be
-            // resolved from another thread.
-            if (it->threadId == threadId && !it->element.get()) {
-                it = g_watches.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
     int64_t token = element.RegisterPropertyChangedCallback(
         mux::UIElement::VisibilityProperty(),
-        [key, target, owner](mux::DependencyObject const& sender,
-                             mux::DependencyProperty const&) {
+        [target, owner](mux::DependencyObject const& sender,
+                        mux::DependencyProperty const&) {
             if (g_unloading || g_settingVisibilityDepth > 0) {
                 return;
             }
@@ -1591,8 +1740,10 @@ void WatchVisibility(mux::UIElement const& element,
             // Explorer changed it, so this is the new baseline to restore.
             mux::Visibility visibility = element.Visibility();
             {
-                std::lock_guard<std::mutex> lock(g_originalStateMutex);
-                g_originalVisibility[key] = visibility;
+                std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+                auto& entry = GetManagedElement(element);
+                entry.originalVisibility = visibility;
+                entry.hasOriginalVisibility = true;
             }
 
             if (visibility != mux::Visibility::Collapsed &&
@@ -1605,34 +1756,54 @@ void WatchVisibility(mux::UIElement const& element,
             QueueVisibilityRecompute(owner);
         });
 
-    std::lock_guard<std::mutex> lock(g_watchesMutex);
-    g_watches.push_back({GetCurrentThreadId(), key,
-                         winrt::make_weak(element), token});
+    std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+    auto& entry = GetManagedElement(element);
+    entry.watched = true;
+    entry.visibilityToken = token;
 }
 
+// Unregisters the watchers of this thread's elements, keeping their remembered
+// original state for the restore which follows.
 void UnwatchVisibilityForCurrentThread() {
     DWORD threadId = GetCurrentThreadId();
-    std::vector<VisibilityWatch> taken;
+
+    std::vector<std::pair<mux::UIElement, int64_t>> taken;
     {
-        std::lock_guard<std::mutex> lock(g_watchesMutex);
-        for (auto it = g_watches.begin(); it != g_watches.end();) {
-            if (it->threadId == threadId) {
-                taken.push_back(std::move(*it));
-                it = g_watches.erase(it);
-            } else {
-                ++it;
+        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+        for (auto& entry : g_managedElements) {
+            if (entry.threadId != threadId || !entry.watched) {
+                continue;
             }
+
+            if (auto element = entry.element.get()) {
+                taken.push_back({element, entry.visibilityToken});
+            }
+
+            entry.watched = false;
+            entry.visibilityToken = 0;
         }
     }
 
-    for (auto const& watch : taken) {
-        if (auto element = watch.element.get()) {
-            try {
-                element.UnregisterPropertyChangedCallback(
-                    mux::UIElement::VisibilityProperty(), watch.token);
-            } catch (...) {
-                Wh_Log(L"Error %08X", winrt::to_hresult().value);
-            }
+    for (auto const& [element, token] : taken) {
+        try {
+            element.UnregisterPropertyChangedCallback(
+                mux::UIElement::VisibilityProperty(), token);
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        }
+    }
+}
+
+void ForgetManagedElementsForCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+
+    std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+    for (auto it = g_managedElements.begin();
+         it != g_managedElements.end();) {
+        if (it->threadId == threadId) {
+            it = g_managedElements.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -1645,20 +1816,22 @@ void SetManagedVisibility(mux::UIElement const& element,
                           ManagedTarget const& target,
                           bool forceShow,
                           winrt::weak_ref<muxc::CommandBar> const& owner) {
-    void* key = winrt::get_abi(element);
-
     mux::Visibility original;
+    bool watch;
     {
-        std::lock_guard<std::mutex> lock(g_originalStateMutex);
-        auto it = g_originalVisibility.find(key);
-        if (it == g_originalVisibility.end()) {
-            it = g_originalVisibility.emplace(key, element.Visibility()).first;
+        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+        auto& entry = GetManagedElement(element);
+        if (!entry.hasOriginalVisibility) {
+            entry.originalVisibility = element.Visibility();
+            entry.hasOriginalVisibility = true;
         }
-        original = it->second;
+
+        original = entry.originalVisibility;
+        watch = !forceShow && !entry.watched;
     }
 
-    if (!forceShow) {
-        WatchVisibility(element, key, target, owner);
+    if (watch) {
+        WatchVisibility(element, target, owner);
     }
 
     SetVisibilityInternal(element, !forceShow && ShouldHide(target)
@@ -1674,25 +1847,19 @@ void SetManagedVisibility(mux::UIElement const& element,
 void ApplyItemSpacing(muxc::AppBarButton const& button,
                       int spacing,
                       bool reset) {
-    void* key = winrt::get_abi(button);
-
     mux::Thickness originalMargin;
     double originalMinWidth;
     {
-        std::lock_guard<std::mutex> lock(g_originalStateMutex);
-
-        auto marginIt = g_originalMargin.find(key);
-        if (marginIt == g_originalMargin.end()) {
-            marginIt = g_originalMargin.emplace(key, button.Margin()).first;
+        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+        auto& entry = GetManagedElement(button);
+        if (!entry.hasOriginalSpacing) {
+            entry.originalMargin = button.Margin();
+            entry.originalMinWidth = button.MinWidth();
+            entry.hasOriginalSpacing = true;
         }
-        originalMargin = marginIt->second;
 
-        auto minWidthIt = g_originalMinWidth.find(key);
-        if (minWidthIt == g_originalMinWidth.end()) {
-            minWidthIt =
-                g_originalMinWidth.emplace(key, button.MinWidth()).first;
-        }
-        originalMinWidth = minWidthIt->second;
+        originalMargin = entry.originalMargin;
+        originalMinWidth = entry.originalMinWidth;
     }
 
     if (reset || spacing < 0) {
@@ -1777,6 +1944,16 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
                     entry.isDetailsToggle = true;
                 } else {
                     entry.defaultIndex = IdentifyDefaultButton(button);
+                    if (entry.defaultIndex < 0) {
+                        // Expected for the contextual commands Explorer keeps
+                        // in the list, but it's also what a built-in button
+                        // whose icon file was renamed in a new Windows build
+                        // looks like, so log enough to tell the two apart.
+                        Wh_Log(L"Unrecognized command %u: icon %s, "
+                               L"automation id %s",
+                               i, GetButtonIconUri(button).c_str(),
+                               GetAutomationId(button).c_str());
+                    }
                 }
             }
         }
@@ -1787,12 +1964,33 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
     // Explorer keeps ~20 contextual, zero-width commands (Extract, Eject, ...)
     // in the list between the View group and the overflow region. The vertical
     // line the user sees "after View" is really the separator right before our
-    // first custom button, so locate that.
+    // first custom button, so locate that one.
     uint32_t firstCustomIndex = count;
     for (uint32_t i = 0; i < count; i++) {
         if (entries[i].isOurs) {
             firstCustomIndex = i;
             break;
+        }
+    }
+
+    uint32_t viewSeparatorIndex = count;
+    if (firstCustomIndex > 0 && firstCustomIndex < count &&
+        entries[firstCustomIndex - 1].isSeparator) {
+        viewSeparatorIndex = firstCustomIndex - 1;
+    } else {
+        // Without custom buttons (the mod can be used just to hide the
+        // built-in ones) it's the first separator after the View button.
+        for (uint32_t i = 0; i < count && viewSeparatorIndex == count; i++) {
+            if (entries[i].defaultIndex != kViewButtonIndex) {
+                continue;
+            }
+
+            for (uint32_t j = i + 1; j < count; j++) {
+                if (entries[j].isSeparator) {
+                    viewSeparatorIndex = j;
+                    break;
+                }
+            }
         }
     }
 
@@ -1842,8 +2040,7 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
                 target = kNewButtonIndex;
             } else if (prevIndex == kDeleteButtonIndex) {
                 target = kDeleteButtonIndex;
-            } else if (firstCustomIndex < count && i + 1 == firstCustomIndex) {
-                // The separator right before our custom buttons.
+            } else if (i == viewSeparatorIndex) {
                 target = kViewButtonIndex;
             }
 
@@ -1885,17 +2082,16 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
     // part). OverflowButtonVisibility alone doesn't hide the separator in
     // Explorer's template, so collapse it explicitly too.
     if (isPrimary) {
-        void* key = winrt::get_abi(commandBar);
         muxc::CommandBarOverflowButtonVisibility originalOverflow;
         {
-            std::lock_guard<std::mutex> lock(g_originalStateMutex);
-            auto it = g_originalOverflow.find(key);
-            if (it == g_originalOverflow.end()) {
-                it = g_originalOverflow
-                         .emplace(key, commandBar.OverflowButtonVisibility())
-                         .first;
+            std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+            auto& entry = GetManagedElement(commandBar);
+            if (!entry.hasOriginalOverflow) {
+                entry.originalOverflow = commandBar.OverflowButtonVisibility();
+                entry.hasOriginalOverflow = true;
             }
-            originalOverflow = it->second;
+
+            originalOverflow = entry.originalOverflow;
         }
 
         commandBar.OverflowButtonVisibility(
@@ -1995,6 +2191,63 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
     }
 }
 
+// The hover timers of our menu buttons. A started timer is rooted by the
+// dispatcher queue and its Tick handler lives in this DLL, so the timers have
+// to be stopped before the mod is unloaded.
+struct HoverTimerEntry {
+    DWORD threadId;
+    winrt::weak_ref<mux::DispatcherTimer> timer;
+};
+
+std::mutex g_hoverTimersMutex;
+std::vector<HoverTimerEntry> g_hoverTimers;
+
+void TrackHoverTimer(mux::DispatcherTimer const& timer) {
+    DWORD threadId = GetCurrentThreadId();
+
+    std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
+
+    // Drop this thread's timers which are gone with their button.
+    for (auto it = g_hoverTimers.begin(); it != g_hoverTimers.end();) {
+        if (it->threadId == threadId && !it->timer.get()) {
+            it = g_hoverTimers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    g_hoverTimers.push_back({threadId, winrt::make_weak(timer)});
+}
+
+void StopHoverTimersForCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+
+    std::vector<mux::DispatcherTimer> taken;
+    {
+        std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
+        for (auto it = g_hoverTimers.begin(); it != g_hoverTimers.end();) {
+            if (it->threadId != threadId) {
+                ++it;
+                continue;
+            }
+
+            if (auto timer = it->timer.get()) {
+                taken.push_back(std::move(timer));
+            }
+
+            it = g_hoverTimers.erase(it);
+        }
+    }
+
+    for (auto const& timer : taken) {
+        try {
+            timer.Stop();
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        }
+    }
+}
+
 muxc::AppBarButton CreateMenuButton(ActionItem const& item,
                                     int index,
                                     bool openOnHover,
@@ -2008,7 +2261,38 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
     muxc::MenuFlyout menu;
     menu.Placement(
         muxc::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
-    AppendMenuEntries(item.subItems, menu.Items(), weakButton);
+
+    // Every menu entry resolves an icon, which is the expensive part of
+    // building the menu, so the entries are created the first time the menu is
+    // needed instead of while the window or the tab is being built.
+    auto ensureMenuEntries = [subItems = item.subItems, weakButton](
+                                 muxc::MenuFlyout const& menu) {
+        if (!menu || menu.Items().Size() > 0) {
+            return;
+        }
+
+        try {
+            AppendMenuEntries(subItems, menu.Items(), weakButton);
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        }
+    };
+
+    menu.Opening([ensureMenuEntries](wf::IInspectable const& sender,
+                                     wf::IInspectable const&) {
+        ensureMenuEntries(sender.try_as<muxc::MenuFlyout>());
+    });
+
+    // Also while the pointer is on its way to the button, which is both a
+    // little earlier than the click and a safety net for the case above.
+    button.PointerEntered(
+        [ensureMenuEntries, weakButton](
+            wf::IInspectable const&,
+            mux::Input::PointerRoutedEventArgs const&) {
+            if (auto button = weakButton.get()) {
+                ensureMenuEntries(button.Flyout().try_as<muxc::MenuFlyout>());
+            }
+        });
 
     button.Flyout(menu);
 
@@ -2033,6 +2317,7 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
         } else {
             mux::DispatcherTimer timer;
             timer.Interval(std::chrono::milliseconds(hoverDelayMs));
+            TrackHoverTimer(timer);
 
             // Capture the timer weakly in its own Tick handler to avoid a
             // reference cycle.
@@ -2177,17 +2462,10 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
                 return;
             }
 
-            // Defer the update; mutating the vector from within its own
-            // change notification isn't allowed.
-            auto dispatcherQueue = winrt::Microsoft::UI::Dispatching::
-                DispatcherQueue::GetForCurrentThread();
-            if (dispatcherQueue) {
-                dispatcherQueue.TryEnqueue([weakCommandBar]() {
-                    if (auto commandBar = weakCommandBar.get()) {
-                        UpdateCommandBar(commandBar);
-                    }
-                });
-            }
+            // Defer the update; mutating the vector from within its own change
+            // notification isn't allowed. Coalesced, since adding our own
+            // buttons raises one notification per button.
+            QueueCommandBarUpdate(weakCommandBar, /*fullUpdate=*/true);
         });
 
     {
@@ -2218,6 +2496,7 @@ std::vector<CommandBarEntry> TakeEntriesForCurrentThread() {
 void RemoveButtonsForCurrentThread() {
     // Before restoring anything, so the watcher can't fight the restore.
     UnwatchVisibilityForCurrentThread();
+    StopHoverTimersForCurrentThread();
 
     for (auto& entry : TakeEntriesForCurrentThread()) {
         auto commandBar = entry.commandBar.get();
@@ -2235,9 +2514,17 @@ void RemoveButtonsForCurrentThread() {
             Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
     }
+
+    // Everything has been restored, so the remembered original state of this
+    // thread's elements isn't needed anymore.
+    ForgetManagedElementsForCurrentThread();
 }
 
 void RefreshButtonsForCurrentThread() {
+    // The buttons are recreated below, so the hover timers of the old ones are
+    // stopped and forgotten first.
+    StopHoverTimersForCurrentThread();
+
     std::vector<winrt::weak_ref<muxc::CommandBar>> commandBars;
     {
         DWORD threadId = GetCurrentThreadId();
@@ -2289,6 +2576,22 @@ bool IsTargetCommandBarName(std::wstring_view name) {
            name == L"FileExplorerSecondaryCommandBar";
 }
 
+// Both command bars are found, so there's nothing left to look for.
+bool FoundAllCommandBars(std::vector<muxc::CommandBar> const& commandBars) {
+    bool primary = false;
+    bool secondary = false;
+
+    for (auto const& commandBar : commandBars) {
+        if (commandBar.Name() == L"FileExplorerCommandBar") {
+            primary = true;
+        } else if (commandBar.Name() == L"FileExplorerSecondaryCommandBar") {
+            secondary = true;
+        }
+    }
+
+    return primary && secondary;
+}
+
 void CollectCommandBars(mux::DependencyObject const& root,
                         int depth,
                         std::vector<muxc::CommandBar>* commandBars) {
@@ -2298,6 +2601,12 @@ void CollectCommandBars(mux::DependencyObject const& root,
 
     int count = muxm::VisualTreeHelper::GetChildrenCount(root);
     for (int i = 0; i < count; i++) {
+        // The scan runs on every focus event, so stop walking the tree as soon
+        // as there's nothing left to find.
+        if (FoundAllCommandBars(*commandBars)) {
+            return;
+        }
+
         auto child = muxm::VisualTreeHelper::GetChild(root, i);
         if (auto commandBar = child.try_as<muxc::CommandBar>();
             commandBar && IsTargetCommandBarName(commandBar.Name())) {
@@ -2617,6 +2926,9 @@ bool HookFileExplorerExtensionsIfLoaded(bool applyHooks) {
     Wh_Log(L"Hooking FileExplorerExtensions.dll");
 
     if (!HookFileExplorerExtensionsSymbols(module)) {
+        // Let a later attempt (e.g. the next LoadLibraryExW) try again instead
+        // of leaving the mod permanently disabled for this process.
+        g_symbolsHooked = false;
         return false;
     }
 
@@ -2724,29 +3036,27 @@ std::vector<HWND> GetFileExplorerWnds() {
 constexpr int kMaxMenuDepth = 2;
 
 ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
-    PCWSTR type = Wh_GetStringSetting(L"%s.type", prefix);
-    PCWSTR name = Wh_GetStringSetting(L"%s.name", prefix);
-    PCWSTR command = Wh_GetStringSetting(L"%s.command", prefix);
-    PCWSTR parameters = Wh_GetStringSetting(L"%s.parameters", prefix);
-    PCWSTR iconGlyph = Wh_GetStringSetting(L"%s.iconGlyph", prefix);
+    auto name = WindhawkUtils::StringSetting::make(L"%s.name", prefix);
+    auto command = WindhawkUtils::StringSetting::make(L"%s.command", prefix);
+    auto parameters =
+        WindhawkUtils::StringSetting::make(L"%s.parameters", prefix);
+    auto iconGlyph =
+        WindhawkUtils::StringSetting::make(L"%s.iconGlyph", prefix);
 
     ActionItem item;
-    item.name = name;
-    item.command = command;
-    item.parameters = parameters;
-    item.icon = iconGlyph;
+    item.name = name.get();
+    item.command = command.get();
+    item.parameters = parameters.get();
+    item.icon = iconGlyph.get();
     item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
-    item.isMenu = wcscmp(type, L"menu") == 0;
     item.separatorAfter =
         Wh_GetIntSetting(L"%s.separatorAfter", prefix) != 0;
 
-    Wh_FreeStringSetting(type);
-    Wh_FreeStringSetting(name);
-    Wh_FreeStringSetting(command);
-    Wh_FreeStringSetting(parameters);
-    Wh_FreeStringSetting(iconGlyph);
-
+    // The deepest level can't hold a submenu, so it declares no type at all.
     if (depth < kMaxMenuDepth) {
+        auto type = WindhawkUtils::StringSetting::make(L"%s.type", prefix);
+        item.isMenu = wcscmp(type.get(), L"menu") == 0;
+
         for (int i = 0; i < 100; i++) {
             WCHAR subPrefix[256];
             swprintf(subPrefix, ARRAYSIZE(subPrefix), L"%s.subItems[%d]",
@@ -2769,6 +3079,12 @@ ActionItem LoadActionItem(PCWSTR prefix, int depth, bool* isEmpty) {
 }
 
 void LoadSettings() {
+    {
+        // The items, and with them the icons they ask for, may have changed.
+        std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+        g_iconCache.clear();
+    }
+
     std::lock_guard<std::mutex> lock(g_settings.mutex);
 
     g_settings.openMenuOnHover = Wh_GetIntSetting(L"openMenuOnHover") != 0;
@@ -2813,14 +3129,8 @@ void LoadSettings() {
         g_settings.items.push_back(std::move(item));
     }
 
-    if (g_settings.items.empty()) {
-        ActionItem item;
-        item.name = L"Open in Terminal";
-        item.command = L"wt.exe";
-        item.parameters = L"-d \"%path%\"";
-        item.icon = L"";
-        g_settings.items.push_back(std::move(item));
-    }
+    // No fallback item if the list is empty: using the mod only to hide
+    // built-in buttons is a supported configuration.
 }
 
 BOOL Wh_ModInit() {
@@ -2871,30 +3181,50 @@ void Wh_ModUninit() {
 
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing buttons for window %08X", (DWORD)(ULONG_PTR)hWnd);
-        RunFromWindowThread(
-            hWnd, [](PVOID) { RemoveButtonsForCurrentThread(); }, nullptr);
+        if (!RunFromWindowThread(
+                hWnd, [](PVOID) { RemoveButtonsForCurrentThread(); },
+                nullptr)) {
+            Wh_Log(L"Couldn't reach the thread of window %08X",
+                   (DWORD)(ULONG_PTR)hWnd);
+        }
+    }
+
+    // Anything left here belongs to a thread which couldn't be reached above.
+    // Its watchers and timers can only be released from that thread, so all
+    // that's left to do is to drop the records.
+    {
+        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
+        if (!g_managedElements.empty()) {
+            Wh_Log(L"%zu elements couldn't be restored",
+                   g_managedElements.size());
+        }
+
+        g_managedElements.clear();
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_watchesMutex);
-        g_watches.clear();
+        std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
+        g_hoverTimers.clear();
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_pendingRecomputeMutex);
-        g_pendingRecompute.clear();
+        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
+        g_pendingUpdates.clear();
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_originalStateMutex);
-        g_originalVisibility.clear();
-        g_originalOverflow.clear();
-        g_originalMargin.clear();
-        g_originalMinWidth.clear();
+        std::lock_guard<std::mutex> lock(g_iconCacheMutex);
+        g_iconCache.clear();
     }
 
-    std::lock_guard<std::mutex> lock(g_entriesMutex);
-    g_entries.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_entriesMutex);
+        g_entries.clear();
+    }
+
+    // Last, since the launch threads run our code: the DLL can't be unmapped
+    // while one of them is still working.
+    WaitForLaunchThreads();
 }
 
 void Wh_ModSettingsChanged() {
