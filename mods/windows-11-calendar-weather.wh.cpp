@@ -545,6 +545,11 @@ struct HourlyEntry {
     double temperature = 0;
     int weatherCode = -1;
     bool isDay = true;
+    // Civil time at the forecast location (from Open-Meteo local ISO).
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = -1;
 };
 
 struct DailyEntry {
@@ -569,6 +574,10 @@ struct ForecastData {
     int todaySunriseMinute = 0;
     int todaySunsetMinute = 0;
     int utcOffsetSeconds = 0;
+    // Full Open-Meteo hourly series — display strip is re-sliced from this
+    // whenever the flyout paints so the first column tracks the current hour
+    // even if a network refresh has not completed yet.
+    std::vector<HourlyEntry> hourlyAll;
     std::vector<HourlyEntry> hourly;
     std::vector<DailyEntry> daily;
     std::wstring temperatureUnit;
@@ -1842,12 +1851,6 @@ bool ParseIsoLocalDateTime(std::wstring_view text,
     return true;
 }
 
-FILETIME SystemTimeToFileTimeLocalAsUtc(const SYSTEMTIME& st) {
-    FILETIME ft{};
-    SystemTimeToFileTime(&st, &ft);
-    return ft;
-}
-
 ULARGE_INTEGER FileTimeToUlarge(const FILETIME& ft) {
     ULARGE_INTEGER u;
     u.LowPart = ft.dwLowDateTime;
@@ -1868,15 +1871,85 @@ FILETIME GetForecastLocationNow(int utcOffsetSeconds) {
     return localAsFt;
 }
 
-FILETIME FloorFileTimeToHour(FILETIME ft) {
+SYSTEMTIME GetForecastLocationSystemTime(int utcOffsetSeconds) {
+    FILETIME nowLocal = GetForecastLocationNow(utcOffsetSeconds);
     SYSTEMTIME st{};
-    FileTimeToSystemTime(&ft, &st);
-    st.wMinute = 0;
-    st.wSecond = 0;
-    st.wMilliseconds = 0;
-    FILETIME out{};
-    SystemTimeToFileTime(&st, &out);
-    return out;
+    FileTimeToSystemTime(&nowLocal, &st);
+    return st;
+}
+
+// Compare civil Y-M-D-H (location-local). Returns <0, 0, >0.
+int CompareCivilHour(int y, int m, int d, int h,
+                     const SYSTEMTIME& now) {
+    if (y != now.wYear) {
+        return y < now.wYear ? -1 : 1;
+    }
+    if (m != now.wMonth) {
+        return m < now.wMonth ? -1 : 1;
+    }
+    if (d != now.wDay) {
+        return d < now.wDay ? -1 : 1;
+    }
+    if (h != now.wHour) {
+        return h < now.wHour ? -1 : 1;
+    }
+    return 0;
+}
+
+size_t FindHourlyStartIndex(std::vector<HourlyEntry> const& all,
+                            SYSTEMTIME const& nowLocal) {
+    if (all.empty()) {
+        return 0;
+    }
+    for (size_t i = 0; i < all.size(); i++) {
+        if (all[i].hour < 0) {
+            continue;
+        }
+        if (CompareCivilHour(all[i].year, all[i].month, all[i].day,
+                             all[i].hour, nowLocal) >= 0) {
+            return i;
+        }
+    }
+    return all.size() - 1;
+}
+
+void ResliceHourlyForecast(ForecastData& data, int hourlyCount) {
+    if (!data.valid) {
+        data.hourly.clear();
+        return;
+    }
+    // Copy before clearing data.hourly — when hourlyAll is empty we fall back
+    // to the previous slice and must not invalidate that reference.
+    std::vector<HourlyEntry> source =
+        !data.hourlyAll.empty() ? data.hourlyAll : data.hourly;
+    if (source.empty()) {
+        data.hourly.clear();
+        return;
+    }
+
+    SYSTEMTIME nowLocal = GetForecastLocationSystemTime(data.utcOffsetSeconds);
+    const size_t start = FindHourlyStartIndex(source, nowLocal);
+    const int prevFirstHour =
+        data.hourly.empty() ? -1 : data.hourly.front().hour;
+    data.hourly.clear();
+    data.hourly.reserve(static_cast<size_t>((std::max)(hourlyCount, 0)));
+    for (int n = 0; n < hourlyCount; n++) {
+        const size_t idx = start + static_cast<size_t>(n);
+        if (idx >= source.size()) {
+            break;
+        }
+        data.hourly.push_back(source[idx]);
+    }
+    const int newFirstHour =
+        data.hourly.empty() ? -1 : data.hourly.front().hour;
+    if (newFirstHour != prevFirstHour) {
+        Wh_Log(L"Hourly reslice: location now %04d-%02d-%02d %02d:xx → "
+               L"start %s (%zu cols)",
+               nowLocal.wYear, nowLocal.wMonth, nowLocal.wDay, nowLocal.wHour,
+               data.hourly.empty() ? L"?"
+                                   : data.hourly.front().hourLabel.c_str(),
+               data.hourly.size());
+    }
 }
 
 PCWSTR WeekdayAbbrev(WORD dayOfWeek) {
@@ -2126,11 +2199,7 @@ std::optional<ForecastData> ParseForecastJson(std::wstring const& body,
             return std::nullopt;
         }
 
-        FILETIME nowLocal = GetForecastLocationNow(data.utcOffsetSeconds);
-        FILETIME nowHour = FloorFileTimeToHour(nowLocal);
-        ULARGE_INTEGER nowU = FileTimeToUlarge(nowHour);
-
-        size_t startIndex = hourlySize;
+        data.hourlyAll.reserve(hourlySize);
         for (size_t i = 0; i < hourlySize; i++) {
             SYSTEMTIME st{};
             bool hasTime = false;
@@ -2138,33 +2207,23 @@ std::optional<ForecastData> ParseForecastJson(std::wstring const& body,
                 !hasTime) {
                 continue;
             }
-            FILETIME ft = SystemTimeToFileTimeLocalAsUtc(st);
-            if (FileTimeToUlarge(ft).QuadPart >= nowU.QuadPart) {
-                startIndex = i;
-                break;
-            }
+            HourlyEntry entry;
+            entry.year = st.wYear;
+            entry.month = st.wMonth;
+            entry.day = st.wDay;
+            entry.hour = st.wHour;
+            entry.hourLabel = FormatHourLabel(st.wHour);
+            entry.temperature = hourlyTemps[i];
+            entry.weatherCode = hourlyCodes[i];
+            entry.isDay =
+                (i < hourlyIsDay.size()) ? (hourlyIsDay[i] > 0) : true;
+            data.hourlyAll.push_back(std::move(entry));
         }
-        if (startIndex >= hourlySize) {
-            startIndex = hourlySize > 0 ? hourlySize - 1 : 0;
+        if (data.hourlyAll.empty()) {
+            return std::nullopt;
         }
 
-        data.hourly.reserve(static_cast<size_t>(hourlyCount));
-        for (int n = 0; n < hourlyCount; n++) {
-            size_t idx = startIndex + static_cast<size_t>(n);
-            if (idx >= hourlySize) {
-                break;
-            }
-            SYSTEMTIME st{};
-            bool hasTime = false;
-            ParseIsoLocalDateTime(hourlyTimes[idx], st, hasTime);
-            HourlyEntry entry;
-            entry.hourLabel = FormatHourLabel(st.wHour);
-            entry.temperature = hourlyTemps[idx];
-            entry.weatherCode = hourlyCodes[idx];
-            entry.isDay =
-                (idx < hourlyIsDay.size()) ? (hourlyIsDay[idx] > 0) : true;
-            data.hourly.push_back(std::move(entry));
-        }
+        ResliceHourlyForecast(data, hourlyCount);
 
         auto daily = root.GetNamedObject(L"daily");
         std::vector<std::wstring> dailyTimes;
@@ -2618,6 +2677,11 @@ void RequestWeatherRefresh(bool forceNetwork) {
         return;
     }
 
+    // Paint immediately from the cached full hourly series (re-sliced to
+    // "now") so the strip does not stay stuck on an old hour while the
+    // network fetch runs — or if that fetch fails/hangs.
+    UpdateAllWeatherUIs();
+
     uint64_t generation = ++g_fetchGeneration;
     if (!QueueUserWorkItem(
             [](PVOID param) -> DWORD {
@@ -2709,6 +2773,12 @@ void EnsureDaylightTickTimer() {
             }
             Wh_Log(L"Daylight tick timer fired");
             try {
+                // Same cadence as daylight: advance hourly columns from cache
+                // and fetch if the wall-clock cache is stale.
+                RequestWeatherRefresh(false);
+            } catch (...) {
+            }
+            try {
                 UpdateAllDaylightUIs();
             } catch (...) {
             }
@@ -2740,6 +2810,10 @@ void StartDaylightDispatcherTick(MountedDaylightInstance& instance) {
                 return;
             }
             Wh_Log(L"Daylight DispatcherQueue tick");
+            try {
+                RequestWeatherRefresh(false);
+            } catch (...) {
+            }
             try {
                 UpdateAllDaylightUIs();
             } catch (...) {
@@ -4398,12 +4472,19 @@ void ClearPanelChildren(wuxc::Panel const& panel) {
 }
 
 void ApplyForecastToInstance(MountedWeatherInstance& instance,
-                             ForecastData const& forecast,
+                             ForecastData const& forecastIn,
                              ModSettings const& settings) {
     try {
         auto weatherRoot = instance.weatherRoot.get();
         if (!weatherRoot) {
             return;
+        }
+
+        // Re-slice hourly from the full cached series using "now" so the strip
+        // advances with the clock even when a network refresh is delayed.
+        ForecastData forecast = forecastIn;
+        if (forecast.valid) {
+            ResliceHourlyForecast(forecast, settings.hourlyCount);
         }
 
         auto primary = BrushOrFallback(
