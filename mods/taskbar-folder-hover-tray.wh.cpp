@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.4
+// @version         1.5
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -1359,7 +1359,7 @@ constexpr PCWSTR kPopupClassName = L"WH_TaskbarFolderHoverTray_Grid";
 constexpr PCWSTR kMenuOwnerClassName = L"WH_TaskbarFolderHoverTray_MenuOwner";
 constexpr UINT_PTR kTickTimerId = 1;
 constexpr UINT_PTR kOpenTimerId = 2;
-constexpr UINT kTickTimerMs = 30;
+constexpr UINT kTickTimerMs = 50;
 // Hard cap on cascade depth so a symlink loop cannot exhaust window handles.
 constexpr int kMaxLevels = 16;
 
@@ -1380,6 +1380,12 @@ struct PopupLevel {
     int hoverCell = -1;
     int pressedCell = -1;
     bool loading = false;
+    // Static content (panel, icons, labels) without hover/press chrome. Hover
+    // changes blit this and overlay the highlight instead of repainting all cells.
+    std::unique_ptr<Gdiplus::Bitmap> cachedBase;
+    int cachedBaseW = 0;
+    int cachedBaseH = 0;
+    bool baseDirty = true;
 };
 
 HWND g_menuOwnerWnd = nullptr;
@@ -1404,6 +1410,7 @@ ULONGLONG g_pendingSubSinceTick = 0;
 ULONGLONG g_closeDeeperSinceTick = 0;
 
 IContextMenu2* g_activeContextMenu2 = nullptr;
+IContextMenu3* g_activeContextMenu3 = nullptr;
 
 // Both take their arguments by value: reopening a level destroys the PopupLevel
 // the caller may have read them from.
@@ -1411,6 +1418,9 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title);
 void OpenSubLevel(int parentDepth, int cell);
 void CloseLevelsFrom(int depth);
 void CloseChain();
+void StartRetryThread();
+bool EnsurePopupClasses();
+HWND EnsureMenuOwnerWindow();
 
 int ScaleForPopup(int value) {
     return MulDiv(value, g_popupDpi, 96);
@@ -1504,8 +1514,8 @@ int RootTitleBandHeight(const PopupLevel* level) {
 }
 
 // Fills level->cellRects and returns the required window size in physical
-// pixels. When maxHeight > 0, widens the grid (more columns) so the height
-// fits instead of growing a tall popup that would fall off-screen.
+// pixels. When maxHeight > 0, auto columns are derived from how many rows fit
+// in that height so large folders go wide instead of tall-and-narrow.
 SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
     int itemCount = (int)level->items.size();
     int padding = ScaleForPopup(8);
@@ -1516,18 +1526,29 @@ SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
     int count = std::max<int>(itemCount, 1);
     int cols;
     if (g_settings.columns > 0) {
-        cols = g_settings.columns;
+        cols = std::min<int>(g_settings.columns, count);
+    } else if (maxHeight > 0 && cellH > 0) {
+        int usable = std::max(0, maxHeight - padding * 2 - titleBand);
+        int maxRows = std::max<int>(1, usable / cellH);
+        cols = (count + maxRows - 1) / maxRows;
+        cols = std::clamp<int>(cols, 1, count);
+        // Prefer a squarer grid when it still fits the available height.
+        int squareCols = (int)std::ceil(std::sqrt((double)count));
+        squareCols = std::clamp<int>(squareCols, cols, count);
+        int squareRows = (count + squareCols - 1) / squareCols;
+        if (squareRows <= maxRows) {
+            cols = squareCols;
+        }
     } else {
         cols = (int)std::ceil(std::sqrt((double)count));
         cols = std::clamp<int>(cols, 1, 6);
+        cols = std::min<int>(cols, count);
     }
-    cols = std::min<int>(cols, count);
     int rows = (count + cols - 1) / cols;
 
     if (maxHeight > 0 && cellH > 0) {
         int usable = maxHeight - padding * 2 - titleBand;
         int maxRows = std::max<int>(1, usable / cellH);
-        // Prefer widening over dropping items when the default layout is too tall.
         while (rows > maxRows && cols < count) {
             cols++;
             rows = (count + cols - 1) / cols;
@@ -1568,6 +1589,170 @@ bool CanExpand(int depth) {
     return depth < g_settings.maxFolderDepth && depth + 1 < kMaxLevels;
 }
 
+void InvalidateLevelBase(PopupLevel* level) {
+    if (!level) {
+        return;
+    }
+    level->baseDirty = true;
+    level->cachedBase.reset();
+    level->cachedBaseW = 0;
+    level->cachedBaseH = 0;
+}
+
+// Paints the static panel (no hover/press chrome) into level->cachedBase.
+bool RebuildLevelBase(PopupLevel* level, int width, int height) {
+    auto bitmap = std::make_unique<Gdiplus::Bitmap>(width, height,
+                                                    PixelFormat32bppPARGB);
+    if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+        return false;
+    }
+
+    Gdiplus::Graphics g(bitmap.get());
+    g.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+    g.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    bool dark = IsDarkTheme();
+    BYTE panelAlpha =
+        (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100, 10, 255);
+    Gdiplus::Color panelColor = dark
+                                    ? Gdiplus::Color(panelAlpha, 43, 43, 43)
+                                    : Gdiplus::Color(panelAlpha, 249, 249, 249);
+    Gdiplus::Color borderColor =
+        dark ? Gdiplus::Color(40, 255, 255, 255) : Gdiplus::Color(28, 0, 0, 0);
+    Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
+                                    : Gdiplus::Color(255, 26, 26, 26);
+    Gdiplus::Color badgeFillColor = GetAccentGdipColor(255);
+    bool lightAccent = ((int)badgeFillColor.GetR() + badgeFillColor.GetG() +
+                        badgeFillColor.GetB()) > 500;
+    Gdiplus::Color badgeMarkColor = lightAccent
+                                        ? Gdiplus::Color(255, 20, 20, 20)
+                                        : Gdiplus::Color(255, 255, 255, 255);
+    Gdiplus::Color badgeRingColor =
+        dark ? Gdiplus::Color(160, 0, 0, 0) : Gdiplus::Color(70, 255, 255, 255);
+
+    int radius = ScaleForPopup(g_settings.cornerRadius);
+    Gdiplus::Rect panelRect(0, 0, width - 1, height - 1);
+    Gdiplus::GraphicsPath panelPath;
+    AddRoundedRect(&panelPath, panelRect, radius);
+
+    Gdiplus::SolidBrush panelBrush(panelColor);
+    g.FillPath(&panelBrush, &panelPath);
+    Gdiplus::Pen borderPen(borderColor, 1.0f);
+    g.DrawPath(&borderPen, &panelPath);
+
+    PCWSTR fontName = PopupFontName();
+    Gdiplus::FontFamily family(fontName);
+    Gdiplus::Font font(&family, (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
+                       Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush textBrush(textColor);
+
+    Gdiplus::StringFormat format;
+    format.SetAlignment(Gdiplus::StringAlignmentCenter);
+    format.SetLineAlignment(Gdiplus::StringAlignmentNear);
+    format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+    format.SetFormatFlags(Gdiplus::StringFormatFlagsLineLimit);
+
+    int titleBand = RootTitleBandHeight(level);
+    if (titleBand > 0) {
+        Gdiplus::Font titleFont(
+            &family, (Gdiplus::REAL)ScaleForPopup(g_settings.titleFontSize),
+            Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+        Gdiplus::StringFormat titleFormat;
+        if (g_settings.titleAlign == L"left") {
+            titleFormat.SetAlignment(Gdiplus::StringAlignmentNear);
+        } else if (g_settings.titleAlign == L"right") {
+            titleFormat.SetAlignment(Gdiplus::StringAlignmentFar);
+        } else {
+            titleFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
+        }
+        titleFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        titleFormat.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+        titleFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+        int pad = ScaleForPopup(12);
+        Gdiplus::RectF titleRect(
+            (Gdiplus::REAL)pad, (Gdiplus::REAL)ScaleForPopup(4),
+            (Gdiplus::REAL)(width - pad * 2),
+            (Gdiplus::REAL)(titleBand - ScaleForPopup(4)));
+        g.DrawString(level->title.c_str(), -1, &titleFont, titleRect,
+                     &titleFormat, &textBrush);
+    }
+
+    if (level->items.empty()) {
+        Gdiplus::StringFormat centered;
+        centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+        centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        PCWSTR message = level->loading ? L"Loading..." : L"Empty folder";
+        Gdiplus::RectF area(0.0f, (Gdiplus::REAL)titleBand, (Gdiplus::REAL)width,
+                            (Gdiplus::REAL)(height - titleBand));
+        g.DrawString(message, -1, &font, area, &centered, &textBrush);
+    }
+
+    int iconSize = ScaleForPopup(g_settings.iconSize);
+    int iconTop = ScaleForPopup(10);
+    int labelGap = ScaleForPopup(6);
+    bool expandable = CanExpand(level->depth);
+
+    for (size_t i = 0; i < level->items.size() && i < level->cellRects.size();
+         i++) {
+        const RECT& cell = level->cellRects[i];
+        int cellW = cell.right - cell.left;
+        int cellH = cell.bottom - cell.top;
+        const GridItem& item = level->items[i];
+        Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
+                               cell.top + iconTop, iconSize, iconSize);
+        if (item.icon) {
+            g.DrawImage(item.icon.get(), iconRect);
+        }
+
+        if (item.isFolder && expandable) {
+            int badge = std::max<int>(14, (iconSize * 54 + 50) / 100);
+            int badgeLeft = iconRect.GetRight() - badge + badge / 4;
+            int badgeTop = iconRect.GetBottom() - badge + badge / 4;
+            Gdiplus::Rect badgeRect(badgeLeft, badgeTop, badge, badge);
+
+            Gdiplus::GraphicsPath badgePath;
+            AddRoundedRect(&badgePath, badgeRect, badge / 2);
+            Gdiplus::SolidBrush badgeBrush(badgeFillColor);
+            g.FillPath(&badgeBrush, &badgePath);
+            Gdiplus::Pen badgeRing(badgeRingColor, 1.0f);
+            g.DrawPath(&badgeRing, &badgePath);
+
+            Gdiplus::REAL glyphW = badge * 0.58f;
+            Gdiplus::REAL glyphH = glyphW * 0.80f;
+            Gdiplus::RectF glyphBox(
+                badgeLeft + (badge - glyphW) / 2.0f,
+                badgeTop + (badge - glyphH) / 2.0f + badge * 0.02f, glyphW,
+                glyphH);
+            Gdiplus::GraphicsPath glyphPath;
+            AddFolderGlyphPath(&glyphPath, glyphBox);
+            Gdiplus::SolidBrush markBrush(badgeMarkColor);
+            g.FillPath(&markBrush, &glyphPath);
+        }
+
+        Gdiplus::RectF labelRect(
+            (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
+            (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
+            (Gdiplus::REAL)(cellW - ScaleForPopup(8)),
+            (Gdiplus::REAL)(cellH - iconTop - iconSize - labelGap -
+                            ScaleForPopup(4)));
+        if (labelRect.Height > 0) {
+            g.DrawString(item.displayName.c_str(), -1, &font, labelRect, &format,
+                         &textBrush);
+        }
+    }
+
+    level->cachedBase = std::move(bitmap);
+    level->cachedBaseW = width;
+    level->cachedBaseH = height;
+    level->baseDirty = false;
+    return true;
+}
+
 void PaintLevel(PopupLevel* level) {
     if (!level || !level->hwnd) {
         return;
@@ -1577,6 +1762,13 @@ void PaintLevel(PopupLevel* level) {
     int height = level->rect.bottom - level->rect.top;
     if (width <= 0 || height <= 0) {
         return;
+    }
+
+    if (level->baseDirty || !level->cachedBase || level->cachedBaseW != width ||
+        level->cachedBaseH != height) {
+        if (!RebuildLevelBase(level, width, height)) {
+            return;
+        }
     }
 
     HDC hScreenDC = GetDC(nullptr);
@@ -1610,54 +1802,35 @@ void PaintLevel(PopupLevel* level) {
     }
     HGDIOBJ hOldBmp = SelectObject(hMemDC, hBmp);
 
-    bool dark = IsDarkTheme();
-    BYTE panelAlpha =
-        (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100, 10, 255);
-    Gdiplus::Color panelColor = dark
-                                    ? Gdiplus::Color(panelAlpha, 43, 43, 43)
-                                    : Gdiplus::Color(panelAlpha, 249, 249, 249);
-    Gdiplus::Color borderColor =
-        dark ? Gdiplus::Color(40, 255, 255, 255) : Gdiplus::Color(28, 0, 0, 0);
-    Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
-                                    : Gdiplus::Color(255, 26, 26, 26);
-    Gdiplus::Color hoverColor =
-        dark ? Gdiplus::Color(28, 255, 255, 255) : Gdiplus::Color(18, 0, 0, 0);
-    Gdiplus::Color pressColor =
-        dark ? Gdiplus::Color(46, 255, 255, 255) : Gdiplus::Color(32, 0, 0, 0);
-    // The cascade badge is filled with the system accent so it reads as a
-    // deliberate affordance and stays legible over any icon art. Its marks flip
-    // to dark if the accent itself is light.
-    Gdiplus::Color badgeFillColor = GetAccentGdipColor(255);
-    bool lightAccent = ((int)badgeFillColor.GetR() + badgeFillColor.GetG() +
-                        badgeFillColor.GetB()) > 500;
-    Gdiplus::Color badgeMarkColor = lightAccent
-                                        ? Gdiplus::Color(255, 20, 20, 20)
-                                        : Gdiplus::Color(255, 255, 255, 255);
-    Gdiplus::Color badgeRingColor =
-        dark ? Gdiplus::Color(160, 0, 0, 0) : Gdiplus::Color(70, 255, 255, 255);
-
     {
-        // A PARGB surface over the DIB bits is exactly the premultiplied format
-        // UpdateLayeredWindow wants, and lets GDI+ blend correctly into it.
         Gdiplus::Bitmap surface(width, height, width * 4, PixelFormat32bppPARGB,
                                 (BYTE*)bits);
         Gdiplus::Graphics g(&surface);
-        g.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+        g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
+        g.Clear(Gdiplus::Color(0, 0, 0, 0));
+        g.DrawImage(level->cachedBase.get(), 0, 0, width, height);
+
+        g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
-        g.Clear(Gdiplus::Color(0, 0, 0, 0));
 
-        int radius = ScaleForPopup(g_settings.cornerRadius);
-        Gdiplus::Rect panelRect(0, 0, width - 1, height - 1);
-        Gdiplus::GraphicsPath panelPath;
-        AddRoundedRect(&panelPath, panelRect, radius);
-
-        Gdiplus::SolidBrush panelBrush(panelColor);
-        g.FillPath(&panelBrush, &panelPath);
-        Gdiplus::Pen borderPen(borderColor, 1.0f);
-        g.DrawPath(&borderPen, &panelPath);
+        bool dark = IsDarkTheme();
+        Gdiplus::Color hoverColor =
+            dark ? Gdiplus::Color(28, 255, 255, 255) : Gdiplus::Color(18, 0, 0, 0);
+        Gdiplus::Color pressColor =
+            dark ? Gdiplus::Color(46, 255, 255, 255) : Gdiplus::Color(32, 0, 0, 0);
+        Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
+                                        : Gdiplus::Color(255, 26, 26, 26);
+        Gdiplus::Color badgeFillColor = GetAccentGdipColor(255);
+        bool lightAccent = ((int)badgeFillColor.GetR() + badgeFillColor.GetG() +
+                            badgeFillColor.GetB()) > 500;
+        Gdiplus::Color badgeMarkColor = lightAccent
+                                            ? Gdiplus::Color(255, 20, 20, 20)
+                                            : Gdiplus::Color(255, 255, 255, 255);
+        Gdiplus::Color badgeRingColor = dark ? Gdiplus::Color(160, 0, 0, 0)
+                                             : Gdiplus::Color(70, 255, 255, 255);
 
         PCWSTR fontName = PopupFontName();
         Gdiplus::FontFamily family(fontName);
@@ -1665,99 +1838,66 @@ void PaintLevel(PopupLevel* level) {
                            (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
         Gdiplus::SolidBrush textBrush(textColor);
-
         Gdiplus::StringFormat format;
         format.SetAlignment(Gdiplus::StringAlignmentCenter);
         format.SetLineAlignment(Gdiplus::StringAlignmentNear);
         format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
         format.SetFormatFlags(Gdiplus::StringFormatFlagsLineLimit);
 
-        int titleBand = RootTitleBandHeight(level);
-        if (titleBand > 0) {
-            Gdiplus::Font titleFont(
-                &family, (Gdiplus::REAL)ScaleForPopup(g_settings.titleFontSize),
-                Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
-            Gdiplus::StringFormat titleFormat;
-            if (g_settings.titleAlign == L"left") {
-                titleFormat.SetAlignment(Gdiplus::StringAlignmentNear);
-            } else if (g_settings.titleAlign == L"right") {
-                titleFormat.SetAlignment(Gdiplus::StringAlignmentFar);
-            } else {
-                titleFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
-            }
-            titleFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-            titleFormat.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
-            titleFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
-
-            int pad = ScaleForPopup(12);
-            Gdiplus::RectF titleRect(
-                (Gdiplus::REAL)pad, (Gdiplus::REAL)ScaleForPopup(4),
-                (Gdiplus::REAL)(width - pad * 2),
-                (Gdiplus::REAL)(titleBand - ScaleForPopup(4)));
-            g.DrawString(level->title.c_str(), -1, &titleFont, titleRect,
-                         &titleFormat, &textBrush);
-        }
-
-        if (level->items.empty()) {
-            Gdiplus::StringFormat centered;
-            centered.SetAlignment(Gdiplus::StringAlignmentCenter);
-            centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-            PCWSTR message = level->loading ? L"Loading..." : L"Empty folder";
-            Gdiplus::RectF area(0.0f, (Gdiplus::REAL)titleBand,
-                                (Gdiplus::REAL)width,
-                                (Gdiplus::REAL)(height - titleBand));
-            g.DrawString(message, -1, &font, area, &centered, &textBrush);
-        }
-
         int iconSize = ScaleForPopup(g_settings.iconSize);
         int iconTop = ScaleForPopup(10);
         int labelGap = ScaleForPopup(6);
         bool expandable = CanExpand(level->depth);
 
-        for (size_t i = 0;
-             i < level->items.size() && i < level->cellRects.size(); i++) {
-            const RECT& cell = level->cellRects[i];
+        // Repaint only the active cell(s): highlight under the icon, matching the
+        // original z-order without rebuilding the whole grid.
+        auto repaintCell = [&](int cellIndex, bool pressed) {
+            if (cellIndex < 0 || cellIndex >= (int)level->cellRects.size() ||
+                cellIndex >= (int)level->items.size()) {
+                return;
+            }
+            const RECT& cell = level->cellRects[cellIndex];
             int cellW = cell.right - cell.left;
             int cellH = cell.bottom - cell.top;
 
-            if ((int)i == level->pressedCell || (int)i == level->hoverCell) {
-                Gdiplus::Rect highlight(
-                    cell.left + ScaleForPopup(2), cell.top + ScaleForPopup(2),
-                    cellW - ScaleForPopup(4), cellH - ScaleForPopup(4));
-                Gdiplus::GraphicsPath highlightPath;
-                AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
-                Gdiplus::SolidBrush highlightBrush(
-                    (int)i == level->pressedCell ? pressColor : hoverColor);
-                g.FillPath(&highlightBrush, &highlightPath);
-            }
+            // Cover the base cell with the panel colour, then highlight + content.
+            bool darkPanel = IsDarkTheme();
+            BYTE panelAlpha = (BYTE)std::clamp<int>(
+                g_settings.panelOpacity * 255 / 100, 10, 255);
+            Gdiplus::Color panelColor =
+                darkPanel ? Gdiplus::Color(panelAlpha, 43, 43, 43)
+                          : Gdiplus::Color(panelAlpha, 249, 249, 249);
+            Gdiplus::SolidBrush eraseBrush(panelColor);
+            g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+            g.FillRectangle(&eraseBrush, cell.left, cell.top, cellW, cellH);
+            g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
 
-            const GridItem& item = level->items[i];
+            Gdiplus::Rect highlight(
+                cell.left + ScaleForPopup(2), cell.top + ScaleForPopup(2),
+                cellW - ScaleForPopup(4), cellH - ScaleForPopup(4));
+            Gdiplus::GraphicsPath highlightPath;
+            AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
+            Gdiplus::SolidBrush highlightBrush(pressed ? pressColor
+                                                       : hoverColor);
+            g.FillPath(&highlightBrush, &highlightPath);
+
+            const GridItem& item = level->items[cellIndex];
             Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
                                    cell.top + iconTop, iconSize, iconSize);
             if (item.icon) {
                 g.DrawImage(item.icon.get(), iconRect);
             }
-
-            // Folders that cascade get an accent chip on the icon's lower-right
-            // corner carrying a folder glyph, so the cell says what it is
-            // instead of just pointing somewhere.
             if (item.isFolder && expandable) {
-                // Sized off the icon so the badge keeps its proportions at any
-                // icon size or DPI.
                 int badge = std::max<int>(14, (iconSize * 54 + 50) / 100);
-                // Only a quarter of the badge hangs off the icon, so it never
-                // reaches down into the label.
                 int badgeLeft = iconRect.GetRight() - badge + badge / 4;
                 int badgeTop = iconRect.GetBottom() - badge + badge / 4;
                 Gdiplus::Rect badgeRect(badgeLeft, badgeTop, badge, badge);
-
                 Gdiplus::GraphicsPath badgePath;
                 AddRoundedRect(&badgePath, badgeRect, badge / 2);
                 Gdiplus::SolidBrush badgeBrush(badgeFillColor);
                 g.FillPath(&badgeBrush, &badgePath);
                 Gdiplus::Pen badgeRing(badgeRingColor, 1.0f);
                 g.DrawPath(&badgeRing, &badgePath);
-
                 Gdiplus::REAL glyphW = badge * 0.58f;
                 Gdiplus::REAL glyphH = glyphW * 0.80f;
                 Gdiplus::RectF glyphBox(
@@ -1769,7 +1909,6 @@ void PaintLevel(PopupLevel* level) {
                 Gdiplus::SolidBrush markBrush(badgeMarkColor);
                 g.FillPath(&markBrush, &glyphPath);
             }
-
             Gdiplus::RectF labelRect(
                 (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
                 (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
@@ -1780,6 +1919,13 @@ void PaintLevel(PopupLevel* level) {
                 g.DrawString(item.displayName.c_str(), -1, &font, labelRect,
                              &format, &textBrush);
             }
+        };
+
+        if (level->hoverCell >= 0 && level->hoverCell != level->pressedCell) {
+            repaintCell(level->hoverCell, false);
+        }
+        if (level->pressedCell >= 0) {
+            repaintCell(level->pressedCell, true);
         }
     }
 
@@ -1790,8 +1936,8 @@ void PaintLevel(PopupLevel* level) {
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
-    UpdateLayeredWindow(level->hwnd, hScreenDC, &ptDst, &size, hMemDC, &ptSrc,
-                        0, &blend, ULW_ALPHA);
+    UpdateLayeredWindow(level->hwnd, hScreenDC, &ptDst, &size, hMemDC, &ptSrc, 0,
+                        &blend, ULW_ALPHA);
 
     SelectObject(hMemDC, hOldBmp);
     DeleteObject(hBmp);
@@ -1974,16 +2120,31 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
         if (menu) {
             if (SUCCEEDED(contextMenu->QueryContextMenu(
                     menu, 0, 1, 0x7FFF, CMF_NORMAL | CMF_EXPLORE))) {
-                contextMenu->QueryInterface(IID_IContextMenu2,
-                                            (void**)&g_activeContextMenu2);
+                g_activeContextMenu3 = nullptr;
+                g_activeContextMenu2 = nullptr;
+                if (FAILED(contextMenu->QueryInterface(
+                        IID_IContextMenu3, (void**)&g_activeContextMenu3))) {
+                    contextMenu->QueryInterface(IID_IContextMenu2,
+                                                (void**)&g_activeContextMenu2);
+                }
 
+                // A never-shown 0x0 owner cannot become foreground; park a 1x1
+                // window at the click so TrackPopupMenuEx dismisses correctly.
+                SetWindowPos(g_menuOwnerWnd, HWND_TOPMOST, screenPt.x, screenPt.y,
+                             1, 1, SWP_SHOWWINDOW);
                 SetForegroundWindow(g_menuOwnerWnd);
                 UINT cmd = TrackPopupMenuEx(menu,
                                             TPM_RETURNCMD | TPM_RIGHTBUTTON |
                                                 TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                             screenPt.x, screenPt.y,
                                             g_menuOwnerWnd, nullptr);
+                PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
+                ShowWindow(g_menuOwnerWnd, SW_HIDE);
 
+                if (g_activeContextMenu3) {
+                    g_activeContextMenu3->Release();
+                    g_activeContextMenu3 = nullptr;
+                }
                 if (g_activeContextMenu2) {
                     g_activeContextMenu2->Release();
                     g_activeContextMenu2 = nullptr;
@@ -2033,12 +2194,24 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
                                   UINT uMsg,
                                   WPARAM wParam,
                                   LPARAM lParam) {
-    // Shell context menus need these forwarded so they can draw their own
-    // items.
-    if (g_activeContextMenu2 &&
-        (uMsg == WM_INITMENUPOPUP || uMsg == WM_DRAWITEM ||
-         uMsg == WM_MEASUREITEM)) {
-        if (SUCCEEDED(
+    // New monitors create Shell_SecondaryTrayWnd without StartTaskbar; kick a
+    // retry so secondary taskbars still get folder buttons.
+    if ((uMsg == WM_DISPLAYCHANGE || uMsg == WM_DEVICECHANGE) &&
+        !g_unloading) {
+        StartRetryThread();
+    }
+
+    if (uMsg == WM_INITMENUPOPUP || uMsg == WM_DRAWITEM ||
+        uMsg == WM_MEASUREITEM || uMsg == WM_MENUCHAR) {
+        if (g_activeContextMenu3) {
+            LRESULT result = 0;
+            if (SUCCEEDED(g_activeContextMenu3->HandleMenuMsg2(
+                    uMsg, wParam, lParam, &result))) {
+                return result;
+            }
+        }
+        if (g_activeContextMenu2 &&
+            SUCCEEDED(
                 g_activeContextMenu2->HandleMenuMsg(uMsg, wParam, lParam))) {
             return uMsg == WM_INITMENUPOPUP ? 0 : TRUE;
         }
@@ -2246,6 +2419,9 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
         case WM_THEMECHANGED:
             RefreshThemeCache();
             CloseChain();
+            if (!g_unloading) {
+                StartRetryThread();
+            }
             return 0;
 
         case WM_DESTROY:
@@ -2255,6 +2431,65 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
     }
 
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+bool EnsurePopupClasses() {
+    enum class ClassState { Untried, Ok, Failed };
+    static ClassState classState = ClassState::Untried;
+    if (classState != ClassState::Untried) {
+        return classState == ClassState::Ok;
+    }
+
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    WNDCLASSEXW popupClass{};
+    popupClass.cbSize = sizeof(popupClass);
+    popupClass.lpfnWndProc = PopupWndProc;
+    popupClass.hInstance = instance;
+    popupClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    popupClass.lpszClassName = kPopupClassName;
+    ATOM popupAtom = RegisterClassExW(&popupClass);
+
+    WNDCLASSEXW ownerClass{};
+    ownerClass.cbSize = sizeof(ownerClass);
+    ownerClass.lpfnWndProc = MenuOwnerWndProc;
+    ownerClass.hInstance = instance;
+    ownerClass.lpszClassName = kMenuOwnerClassName;
+    ATOM ownerAtom = RegisterClassExW(&ownerClass);
+
+    if (!popupAtom || !ownerAtom) {
+        Wh_Log(L"RegisterClassExW failed (error %u); hover grids disabled",
+               GetLastError());
+        if (popupAtom) {
+            UnregisterClassW(kPopupClassName, instance);
+        }
+        if (ownerAtom) {
+            UnregisterClassW(kMenuOwnerClassName, instance);
+        }
+        classState = ClassState::Failed;
+        return false;
+    }
+
+    classState = ClassState::Ok;
+    return true;
+}
+
+HWND EnsureMenuOwnerWindow() {
+    if (g_menuOwnerWnd) {
+        return g_menuOwnerWnd;
+    }
+    if (!EnsurePopupClasses()) {
+        return nullptr;
+    }
+
+    // Top-level so it receives WM_DISPLAYCHANGE when a monitor is plugged in.
+    // Kept hidden until a shell context menu needs an activatable owner.
+    g_menuOwnerWnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW, kMenuOwnerClassName, L"", WS_POPUP, 0, 0, 0, 0,
+        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!g_menuOwnerWnd) {
+        Wh_Log(L"Failed to create menu owner window (error %u)", GetLastError());
+    }
+    return g_menuOwnerWnd;
 }
 
 // Returns the reusable window for the given cascade depth, creating it on first
@@ -2267,56 +2502,15 @@ HWND EnsureLevelWindow(int depth) {
         return g_levelWindows[depth];
     }
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
-
-    enum class ClassState { Untried, Ok, Failed };
-    static ClassState classState = ClassState::Untried;
-    if (classState == ClassState::Untried) {
-        WNDCLASSEXW popupClass{};
-        popupClass.cbSize = sizeof(popupClass);
-        popupClass.lpfnWndProc = PopupWndProc;
-        popupClass.hInstance = instance;
-        popupClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        popupClass.lpszClassName = kPopupClassName;
-        ATOM popupAtom = RegisterClassExW(&popupClass);
-
-        WNDCLASSEXW ownerClass{};
-        ownerClass.cbSize = sizeof(ownerClass);
-        ownerClass.lpfnWndProc = MenuOwnerWndProc;
-        ownerClass.hInstance = instance;
-        ownerClass.lpszClassName = kMenuOwnerClassName;
-        ATOM ownerAtom = RegisterClassExW(&ownerClass);
-
-        if (!popupAtom || !ownerAtom) {
-            Wh_Log(L"RegisterClassExW failed (error %u); hover grids disabled",
-                   GetLastError());
-            if (popupAtom) {
-                UnregisterClassW(kPopupClassName, instance);
-            }
-            if (ownerAtom) {
-                UnregisterClassW(kMenuOwnerClassName, instance);
-            }
-            classState = ClassState::Failed;
-        } else {
-            classState = ClassState::Ok;
-        }
-    }
-    if (classState != ClassState::Ok) {
+    if (!EnsurePopupClasses()) {
         return nullptr;
     }
-
-    if (!g_menuOwnerWnd) {
-        // A separate, activatable owner window: shell context menus misbehave
-        // when owned by a WS_EX_NOACTIVATE window.
-        g_menuOwnerWnd = CreateWindowExW(WS_EX_TOOLWINDOW, kMenuOwnerClassName,
-                                         L"", WS_POPUP, 0, 0, 0, 0, nullptr,
-                                         nullptr, instance, nullptr);
-    }
+    EnsureMenuOwnerWindow();
 
     HWND hWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
         kPopupClassName, L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr,
-        instance, nullptr);
+        GetModuleHandleW(nullptr), nullptr);
     if (!hWnd) {
         Wh_Log(L"Failed to create the hover grid window (error %u)",
                GetLastError());
@@ -2333,6 +2527,8 @@ HWND EnsureLevelWindow(int depth) {
 }
 
 void UpdatePopupDpi() {
+    // Sub-levels intentionally keep the root's DPI so a cascade that spills
+    // onto another monitor does not suddenly change cell sizes mid-gesture.
     HWND reference = g_taskbarWnd;
     if (!reference && !g_levelWindows.empty()) {
         reference = g_levelWindows[0];
@@ -2362,6 +2558,7 @@ PopupLevel* InstallLevel(std::unique_ptr<PopupLevel> level) {
 void PresentLevel(PopupLevel* level, const SIZE& size) {
     level->rect.right = level->rect.left + size.cx;
     level->rect.bottom = level->rect.top + size.cy;
+    InvalidateLevelBase(level);
 
     SetWindowPos(level->hwnd, HWND_TOPMOST, level->rect.left, level->rect.top,
                  size.cx, size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -2713,14 +2910,18 @@ UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
 
         if (isImageFile) {
             try {
-                std::wstring uri = L"file:///" + icon;
-                std::replace(uri.begin(), uri.end(), L'\\', L'/');
-                winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage bitmap;
-                bitmap.DecodePixelWidth(iconExtent * 2);
-                bitmap.UriSource(
-                    winrt::Windows::Foundation::Uri(winrt::hstring(uri)));
-                image.Source(bitmap);
-                loaded = true;
+                WCHAR url[2048];
+                DWORD urlLen = ARRAYSIZE(url);
+                if (SUCCEEDED(UrlCreateFromPathW(icon.c_str(), url, &urlLen,
+                                                 0))) {
+                    winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage
+                        bitmap;
+                    bitmap.DecodePixelWidth(iconExtent * 2);
+                    bitmap.UriSource(
+                        winrt::Windows::Foundation::Uri(winrt::hstring(url)));
+                    image.Source(bitmap);
+                    loaded = true;
+                }
             } catch (...) {
                 loaded = false;
             }
@@ -3652,6 +3853,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"AfterInit");
+    EnsureMenuOwnerWindow();
     StartRetryThread();
 }
 
