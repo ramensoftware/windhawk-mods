@@ -2,7 +2,7 @@
 // @id              gather-windows-to-monitor
 // @name            Gather Windows To Monitor
 // @description     Move eligible open windows to a chosen monitor with global hotkeys
-// @version         0.1.0
+// @version         0.1.1
 // @author          Fred
 // @github          https://github.com/fjdiazt
 // @include         windhawk.exe
@@ -14,6 +14,8 @@
 # Gather Windows To Monitor
 
 Global hotkeys gather visible application windows to a selected monitor work area.
+
+`Ctrl+Alt+Shift+W` moves only the foreground window to the primary monitor.
 
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
@@ -36,6 +38,8 @@ not attempted because it is not reliable for all apps.
   $name: Enable mod
 - HotkeyPrimary: "Ctrl+Alt+Shift+P"
   $name: Gather to primary monitor
+- HotkeyForegroundPrimary: "Ctrl+Alt+Shift+W"
+  $name: Move foreground window to primary monitor
 - HotkeyMonitor1: "Ctrl+Alt+Shift+1"
   $name: Gather to monitor 1
 - HotkeyMonitor2: "Ctrl+Alt+Shift+2"
@@ -87,6 +91,7 @@ not attempted because it is not reliable for all apps.
 
 enum class TargetMode {
     Primary,
+    ForegroundPrimary,
     Monitor1,
     Monitor2,
     Monitor3,
@@ -127,7 +132,7 @@ struct Settings {
     AnchorMode anchor;
     bool includeOwnedWindows;
     bool debugLogging;
-    std::wstring hotkeys[6];
+    std::wstring hotkeys[7];
 };
 
 struct MonitorInfo {
@@ -168,6 +173,8 @@ AnchorMode ParseAnchorMode(const std::wstring& text);
 void LoadSettings() {
     g_settings.enabled = Wh_GetIntSetting(L"Enabled") != 0;
     g_settings.hotkeys[(int)TargetMode::Primary] = GetStringSetting(L"HotkeyPrimary");
+    g_settings.hotkeys[(int)TargetMode::ForegroundPrimary] =
+        GetStringSetting(L"HotkeyForegroundPrimary");
     g_settings.hotkeys[(int)TargetMode::Monitor1] = GetStringSetting(L"HotkeyMonitor1");
     g_settings.hotkeys[(int)TargetMode::Monitor2] = GetStringSetting(L"HotkeyMonitor2");
     g_settings.hotkeys[(int)TargetMode::Monitor3] = GetStringSetting(L"HotkeyMonitor3");
@@ -266,11 +273,13 @@ void RegisterConfiguredHotkeys() {
     }
 
     const TargetMode modes[] = {
-        TargetMode::Primary, TargetMode::Monitor1, TargetMode::Monitor2,
-        TargetMode::Monitor3, TargetMode::Mouse, TargetMode::Foreground,
+        TargetMode::Primary, TargetMode::ForegroundPrimary, TargetMode::Monitor1,
+        TargetMode::Monitor2, TargetMode::Monitor3, TargetMode::Mouse,
+        TargetMode::Foreground,
     };
     const wchar_t* names[] = {
-        L"primary", L"monitor 1", L"monitor 2", L"monitor 3", L"mouse", L"foreground",
+        L"primary", L"foreground to primary", L"monitor 1", L"monitor 2",
+        L"monitor 3", L"mouse", L"foreground",
     };
 
     for (size_t i = 0; i < ARRAYSIZE(modes); i++) {
@@ -334,7 +343,9 @@ const MonitorInfo* MonitorByHandle(const std::vector<MonitorInfo>& monitors, HMO
 
 const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<MonitorInfo>& monitors) {
     if (monitors.empty()) return nullptr;
-    if (mode == TargetMode::Primary) return PrimaryMonitor(monitors);
+    if (mode == TargetMode::Primary || mode == TargetMode::ForegroundPrimary) {
+        return PrimaryMonitor(monitors);
+    }
     if (mode == TargetMode::Monitor1 || mode == TargetMode::Monitor2 || mode == TargetMode::Monitor3) {
         size_t index = (size_t)mode - (size_t)TargetMode::Monitor1;
         if (index < monitors.size()) return &monitors[index];
@@ -550,7 +561,11 @@ void GatherWindows(TargetMode mode) {
     Wh_Log(L"Target work area: (%ld,%ld,%ld,%ld)", target->work.left, target->work.top,
            target->work.right, target->work.bottom);
     GatherState state{ &target->work, 0, 0, 0 };
-    EnumWindows(GatherEnumProc, (LPARAM)&state);
+    if (mode == TargetMode::ForegroundPrimary) {
+        GatherEnumProc(GetForegroundWindow(), (LPARAM)&state);
+    } else {
+        EnumWindows(GatherEnumProc, (LPARAM)&state);
+    }
     Wh_Log(L"Gather done: found=%d moved=%d skipped=%d", state.found, state.moved, state.skipped);
 }
 
