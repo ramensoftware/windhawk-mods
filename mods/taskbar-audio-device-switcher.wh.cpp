@@ -2,11 +2,10 @@
 // @id              taskbar-audio-device-switcher
 // @name            Taskbar audio device switcher
 // @description     Shows a tray icon for every connected audio device and switches the default device with a click
-// @version         1.2.0
+// @version         1.3.0
 // @author          Maksim Chingin
 // @github          https://github.com/umnik1
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
@@ -257,7 +256,18 @@ HANDLE g_windowReadyEvent;
 // MMDevice notification threads.
 std::atomic<HWND> g_hWnd;
 UINT g_taskbarCreatedMessage;
-int g_iconSize = 16;
+int g_iconSize;
+// Whether g_iconSize could be derived from the taskbar's monitor, or whether
+// it is the less accurate fallback and should be retried.
+bool g_iconSizeFromTaskbar;
+
+// Shell_NotifyIconW blocks in a cross-process SendMessage, and a thread which
+// is blocked there keeps dispatching inbound sent messages. Nothing may touch
+// g_trayIcons from such a handler while the loops in RefreshDevices hold an
+// iterator into it, so the work is deferred through these flags instead.
+bool g_refreshing;
+bool g_refreshPending;
+bool g_trayIconsLost;
 
 std::vector<AudioDevice> g_devices;  // all devices, hidden ones included
 std::unordered_map<std::wstring, TrayIcon> g_trayIcons;  // device id -> icon
@@ -278,6 +288,13 @@ PrivateExtractIconsW_t g_pPrivateExtractIcons;
 // Settings
 // ---------------------------------------------------------------------------
 
+std::wstring ToLower(std::wstring str) {
+    if (!str.empty()) {
+        CharLowerBuffW(&str[0], static_cast<DWORD>(str.size()));
+    }
+    return str;
+}
+
 void LoadSettings() {
     g_settings.showPlayback = Wh_GetIntSetting(L"showPlayback") != 0;
     g_settings.showRecording = Wh_GetIntSetting(L"showRecording") != 0;
@@ -291,24 +308,19 @@ void LoadSettings() {
         if (!*value) {
             break;
         }
-        g_settings.excluded.emplace_back(value.get());
+        // Stored lowercased, IsExcluded runs on every device on every refresh.
+        g_settings.excluded.push_back(ToLower(value.get()));
     }
 }
 
-std::wstring ToLower(std::wstring str) {
-    if (!str.empty()) {
-        CharLowerBuffW(&str[0], static_cast<DWORD>(str.size()));
-    }
-    return str;
-}
-
+// The patterns in g_settings.excluded are already lowercased.
 bool IsExcluded(const std::wstring& name) {
     if (g_settings.excluded.empty()) {
         return false;
     }
     std::wstring lowerName = ToLower(name);
     for (const auto& pattern : g_settings.excluded) {
-        if (lowerName.find(ToLower(pattern)) != std::wstring::npos) {
+        if (lowerName.find(pattern) != std::wstring::npos) {
             return true;
         }
     }
@@ -398,7 +410,13 @@ void SetDeviceHidden(const std::wstring& deviceId, bool hidden) {
 // ---------------------------------------------------------------------------
 
 // The size the shell expects, for the DPI of the monitor the taskbar is on.
-int GetTrayIconSize() {
+//
+// fromTaskbar reports whether the taskbar was actually found. The tool mod
+// process can be started before the shell is up, and the fallback value
+// reflects this thread's DPI context rather than the taskbar's monitor, so it
+// has to be retried later.
+int GetTrayIconSize(bool* fromTaskbar) {
+    *fromTaskbar = false;
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
     using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
 
@@ -421,6 +439,7 @@ int GetTrayIconSize() {
             if (dpi != 0) {
                 int size = pGetSystemMetricsForDpi(SM_CXSMICON, dpi);
                 if (size > 0) {
+                    *fromTaskbar = true;
                     return size;
                 }
             }
@@ -429,6 +448,18 @@ int GetTrayIconSize() {
 
     int size = GetSystemMetrics(SM_CXSMICON);
     return size > 0 ? size : 16;
+}
+
+// Returns whether the size changed.
+bool UpdateIconSize() {
+    bool fromTaskbar = false;
+    int size = GetTrayIconSize(&fromTaskbar);
+    g_iconSizeFromTaskbar = fromTaskbar;
+    if (size == g_iconSize) {
+        return false;
+    }
+    g_iconSize = size;
+    return true;
 }
 
 HICON ExtractIconFromSpec(std::wstring spec, int size) {
@@ -470,6 +501,9 @@ HICON ExtractIconFromSpec(std::wstring spec, int size) {
     }
 
     if (!icon) {
+        // A negative index is a resource id, which ExtractIconExW resolves as
+        // documented, so this also covers the mmres.dll,-3010 form the device
+        // icon paths use.
         HICON large = nullptr;
         HICON small = nullptr;
         if (ExtractIconExW(spec.c_str(), index, &large, &small, 1) != UINT_MAX) {
@@ -861,6 +895,27 @@ std::wstring MakeTooltip(const AudioDevice& device) {
 }
 
 void RefreshDevices() {
+    // The loops below hold iterators into g_trayIcons across blocking
+    // Shell_NotifyIconW calls, during which this thread keeps dispatching
+    // inbound sent messages. Re-entering would invalidate them.
+    if (g_refreshing) {
+        g_refreshPending = true;
+        return;
+    }
+    g_refreshing = true;
+
+    if (g_trayIconsLost) {
+        // The tray was re-created, so the shell already dropped our icons and
+        // there is nothing to delete.
+        g_trayIcons.clear();
+        g_trayIconsLost = false;
+    }
+
+    if (!g_iconSizeFromTaskbar) {
+        // The taskbar wasn't up when the size was last derived.
+        UpdateIconSize();
+    }
+
     std::vector<AudioDevice> devices;
     EnumerateDevices(devices);
 
@@ -935,6 +990,15 @@ void RefreshDevices() {
     g_devices = std::move(devices);
 
     PurgeStaleIcons();
+
+    g_refreshing = false;
+
+    if (g_refreshPending) {
+        g_refreshPending = false;
+        if (HWND hWnd = g_hWnd.load()) {
+            SetTimer(hWnd, kRefreshTimerId, 250, nullptr);
+        }
+    }
 }
 
 const AudioDevice* FindDeviceByTrayId(UINT trayId) {
@@ -1120,12 +1184,28 @@ HMENU BuildShownDevicesMenu(const std::vector<AudioDevice>& devices,
     return menu;
 }
 
+// An absolute path under System32. A bare file name would be resolved through
+// the process search path, which starts at the current directory, inherited
+// from windhawk.exe.
+std::wstring SystemPath(PCWSTR fileName) {
+    WCHAR directory[MAX_PATH];
+    UINT length = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
+    if (length == 0 || length >= ARRAYSIZE(directory)) {
+        return fileName;
+    }
+    std::wstring path(directory, length);
+    path += L'\\';
+    path += fileName;
+    return path;
+}
+
 void OpenVolumeMixer() {
     // ms-settings:apps-volume only exists on Windows 10 1803 and newer.
     HINSTANCE result = ShellExecuteW(nullptr, L"open", L"ms-settings:apps-volume",
                                     nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(result) <= 32) {
-        ShellExecuteW(nullptr, L"open", L"SndVol.exe", nullptr, nullptr, SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, nullptr, SystemPath(L"SndVol.exe").c_str(), nullptr,
+                      nullptr, SW_SHOWNORMAL);
     }
 }
 
@@ -1209,17 +1289,25 @@ void ShowContextMenu(HWND hWnd,
             OpenVolumeMixer();
             break;
         case IDM_LEGACY_APPLET:
-            ShellExecuteW(nullptr, L"open", L"mmsys.cpl", nullptr, nullptr,
-                          SW_SHOWNORMAL);
+            // .cpl files register a "cplopen" verb and no "open" verb, so the
+            // default verb has to be used.
+            ShellExecuteW(nullptr, nullptr, SystemPath(L"mmsys.cpl").c_str(), nullptr,
+                          nullptr, SW_SHOWNORMAL);
             break;
     }
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == g_taskbarCreatedMessage && g_taskbarCreatedMessage) {
-        // The tray was re-created, our icons are gone with it.
-        RemoveAllTrayIcons(false);
-        RefreshDevices();
+        // The tray was re-created, our icons are gone with it. This is a sent
+        // message, so it can arrive while this thread is blocked inside
+        // Shell_NotifyIconW with an iterator into g_trayIcons alive: only set
+        // the flags here and do the work from the timer.
+        g_trayIconsLost = true;
+        // Also the point at which the taskbar is known to exist, so the icon
+        // size can finally be derived from its monitor.
+        UpdateIconSize();
+        SetTimer(hWnd, kRefreshTimerId, 250, nullptr);
         return 0;
     }
 
@@ -1240,7 +1328,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                     }
                     break;
                 case WM_MBUTTONUP:
-                    SetDefaultDevice(device->id, true);
+                    if (!device->isDefaultComm) {
+                        SetDefaultDevice(device->id, true);
+                    }
                     break;
                 case WM_CONTEXTMENU:
                 case WM_RBUTTONUP: {
@@ -1281,17 +1371,16 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             }
             break;
 
+        // WM_DPICHANGED only reaches per-monitor-DPI-aware windows, so in
+        // practice the other two do the work here.
         case WM_SETTINGCHANGE:
         case WM_DISPLAYCHANGE:
-        case WM_DPICHANGED: {
+        case WM_DPICHANGED:
             // These arrive often, only act when the icon size really changed.
-            int size = GetTrayIconSize();
-            if (size != g_iconSize) {
-                g_iconSize = size;
+            if (UpdateIconSize()) {
                 SetTimer(hWnd, kRefreshTimerId, 500, nullptr);
             }
             break;
-        }
 
         case WM_DESTROY:
             KillTimer(hWnd, kRefreshTimerId);
@@ -1314,7 +1403,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     }
 
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
-    g_iconSize = GetTrayIconSize();
+    UpdateIconSize();
 
     LoadHiddenIds();
 
@@ -1381,8 +1470,10 @@ DWORD WINAPI ThreadProc(LPVOID) {
         g_enumerator = nullptr;
     }
 
-    g_hWnd.store(nullptr);
+    // Destroy first: WM_DESTROY removes the tray icons and needs g_hWnd to
+    // still be set to build the NOTIFYICONDATA.
     DestroyWindow(hWnd);
+    g_hWnd.store(nullptr);
     UnregisterClassW(kWindowClassName, wc.hInstance);
     ClearIconCache();
 
