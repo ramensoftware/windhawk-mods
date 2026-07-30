@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.11
+// @version         1.12
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -140,7 +140,9 @@ do not conflict.
 - maxItems: 60
   $name: Maximum items
   $description: >-
-    Limit how many entries the grid shows. 0 means unlimited.
+    Limit how many entries the grid shows. 0 means unlimited, but that is only
+    sensible for small folders — the grid is also clipped to what fits on the
+    monitor, so extras are not shown.
 
 - includeSubfolders: true
   $name: Show subfolders
@@ -2050,8 +2052,12 @@ int RootTitleBandHeight(const PopupLevel* level) {
 
 // Fills level->cellRects and returns the required window size in physical
 // pixels. When maxHeight > 0, auto columns are derived from how many rows fit
-// in that height so large folders go wide instead of tall-and-narrow.
-SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
+// in that height so large folders go wide instead of tall-and-narrow. When
+// maxWidth > 0, columns are capped so the grid stays on the monitor; items
+// beyond cols*rows are trimmed from level->items.
+SIZE ComputeLevelLayout(PopupLevel* level,
+                        int maxHeight = 0,
+                        int maxWidth = 0) {
     int itemCount = (int)level->items.size();
     int padding = ScaleForPopup(8);
     int cellW = ScaleForPopup(g_settings.cellWidth);
@@ -2079,6 +2085,12 @@ SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
         cols = std::clamp<int>(cols, 1, 6);
         cols = std::min<int>(cols, count);
     }
+
+    if (maxWidth > 0 && cellW > 0) {
+        int maxCols = std::max(1, (maxWidth - padding * 2) / cellW);
+        cols = std::min(cols, maxCols);
+    }
+
     int rows = (count + cols - 1) / cols;
 
     if (maxHeight > 0 && cellH > 0) {
@@ -2088,6 +2100,26 @@ SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
             cols++;
             rows = (count + cols - 1) / cols;
         }
+        // Height growth can widen past the monitor — re-apply the width cap.
+        if (maxWidth > 0 && cellW > 0) {
+            int maxCols = std::max(1, (maxWidth - padding * 2) / cellW);
+            if (cols > maxCols) {
+                cols = maxCols;
+                rows = (count + cols - 1) / cols;
+            }
+        }
+        if (rows > maxRows) {
+            rows = maxRows;
+        }
+    }
+
+    // Drop items that would fall outside the visible cols*rows grid.
+    int capacity = cols * std::max(rows, 1);
+    if (itemCount > capacity) {
+        level->items.resize(capacity);
+        itemCount = capacity;
+        count = std::max<int>(itemCount, 1);
+        rows = itemCount > 0 ? (itemCount + cols - 1) / cols : 1;
     }
 
     level->cellRects.clear();
@@ -2113,6 +2145,9 @@ SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
     }
     if (maxHeight > 0) {
         size.cy = std::min<int>(size.cy, maxHeight);
+    }
+    if (maxWidth > 0) {
+        size.cx = std::min<int>(size.cx, maxWidth);
     }
     return size;
 }
@@ -3153,14 +3188,13 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
         maxHeight = std::max(ScaleForPopup(96),
                              (int)(screen.bottom - screen.top) - ScaleForPopup(16));
     }
+    int maxWidth =
+        std::max(0, (int)(screen.right - screen.left) - ScaleForPopup(8));
 
-    SIZE size = ComputeLevelLayout(level.get(), maxHeight);
+    SIZE size = ComputeLevelLayout(level.get(), maxHeight, maxWidth);
 
     int centerX = (anchorRect.left + anchorRect.right) / 2;
     int left = centerX - size.cx / 2;
-    left = std::clamp<int>(
-        left, screen.left + ScaleForPopup(4),
-        std::max<int>(screen.left, screen.right - size.cx - ScaleForPopup(4)));
 
     // Prefer above the taskbar; never flip below a bottom taskbar where the
     // grid would land past the monitor edge.
@@ -3176,7 +3210,10 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     level->rect.top = std::clamp<int>(
         level->rect.top, screen.top,
         std::max<int>(screen.top, screen.bottom - size.cy));
-    level->rect.left = left;
+    int loLeft = screen.left + ScaleForPopup(4);
+    int hiLeft = screen.right - size.cx - ScaleForPopup(4);
+    level->rect.left =
+        hiLeft <= loLeft ? screen.left : std::clamp(left, loLeft, hiLeft);
 
     auto* installed = InstallLevel(std::move(level));
     PresentLevel(installed, size);
@@ -3229,11 +3266,13 @@ void OpenSubLevel(int parentDepth, int cell) {
     const RECT& screen = monitorInfo.rcMonitor;
     const RECT& screenWork = monitorInfo.rcWork;
 
-    // Cap height to the work area (excludes the taskbar), matching root grids.
-    SIZE size = ComputeLevelLayout(
-        level.get(),
-        std::max(0, (int)(screenWork.bottom - screenWork.top) -
-                        ScaleForPopup(16)));
+    // Cap height to the work area (excludes the taskbar) and width to the
+    // parent monitor so cascade grids stay on-screen.
+    int maxHeight = std::max(
+        0, (int)(screenWork.bottom - screenWork.top) - ScaleForPopup(16));
+    int maxWidth =
+        std::max(0, (int)(screen.right - screen.left) - ScaleForPopup(8));
+    SIZE size = ComputeLevelLayout(level.get(), maxHeight, maxWidth);
 
     int seam = ScaleForPopup(2);
     int left = parent->rect.right + seam;
@@ -3250,7 +3289,10 @@ void OpenSubLevel(int parentDepth, int cell) {
         top, screenWork.top,
         std::max<int>(screenWork.top, screenWork.bottom - size.cy));
 
-    level->rect.left = left;
+    int loLeft = screen.left;
+    int hiLeft = screen.right - size.cx;
+    level->rect.left =
+        hiLeft <= loLeft ? screen.left : std::clamp(left, loLeft, hiLeft);
     level->rect.top = top;
 
     auto* installed = InstallLevel(std::move(level));
@@ -4422,10 +4464,20 @@ void Wh_ModSettingsChanged() {
     // reloading.
     StopScanThread();
 
-    ApplyOnWindowThread([](void*) {
-        CloseChain();
-        RemoveAllHostGrids();
-    });
+    if (!ApplyOnWindowThread([](void*) {
+            CloseChain();
+            RemoveAllHostGrids();
+            // Popup HWNDs keep the acrylic accent applied at create time;
+            // destroy them so the next hover recreates with the current setting.
+            for (HWND hWnd : g_levelWindows) {
+                if (hWnd) {
+                    DestroyWindow(hWnd);
+                }
+            }
+            g_levelWindows.clear();
+        })) {
+        Wh_Log(L"SettingsChanged: failed to tear down UI on taskbar thread");
+    }
 
     LoadSettings();
     ResetFolderData();
@@ -4441,44 +4493,53 @@ void Wh_ModUninit() {
     StopRetryThread();
     StopScanThread();
 
-    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (taskbarWnd) {
-        if (!ApplyOnWindowThread([](void*) {
-                CloseChain();
-                RemoveAllHostGrids();
+    // DestroyWindow / XAML teardown must run on the creating UI thread. Prefer
+    // a mod-owned window (level popup or menu owner) when the taskbar HWND is
+    // already gone — never DestroyWindow from this Windhawk callback thread.
+    auto teardownOnUiThread = [](void*) {
+        CloseChain();
+        RemoveAllHostGrids();
 
-                for (HWND hWnd : g_levelWindows) {
-                    if (hWnd) {
-                        DestroyWindow(hWnd);
-                    }
-                }
-                g_levelWindows.clear();
-
-                if (g_menuOwnerWnd) {
-                    DestroyWindow(g_menuOwnerWnd);
-                    g_menuOwnerWnd = nullptr;
-                }
-
-                // Full release of the no_destroy hosts vector on the UI thread.
-                g_taskbarHosts.reset();
-            })) {
-            Wh_Log(L"Uninit: failed to run destroy on taskbar thread; windows "
-                   L"may leak and UnregisterClass may fail");
-        }
-    } else {
-        // No taskbar UI thread to release XAML on - retain the no_destroy
-        // hosts rather than tearing them down from the Windhawk callback.
-        Wh_Log(L"No taskbar window at uninit; retaining host state");
         for (HWND hWnd : g_levelWindows) {
             if (hWnd) {
                 DestroyWindow(hWnd);
             }
         }
         g_levelWindows.clear();
+
         if (g_menuOwnerWnd) {
             DestroyWindow(g_menuOwnerWnd);
             g_menuOwnerWnd = nullptr;
         }
+
+        g_taskbarHosts.reset();
+    };
+
+    HWND threadWnd = nullptr;
+    for (HWND h : g_levelWindows) {
+        if (h) {
+            threadWnd = h;
+            break;
+        }
+    }
+    if (!threadWnd) {
+        threadWnd = g_menuOwnerWnd;
+    }
+    if (!threadWnd) {
+        threadWnd = FindCurrentProcessTaskbarWnd();
+    }
+
+    if (threadWnd) {
+        if (!RunFromWindowThread(threadWnd, teardownOnUiThread, nullptr)) {
+            Wh_Log(L"Uninit: RunFromWindowThread failed (error %u); windows "
+                   L"may leak and UnregisterClass may fail",
+                   GetLastError());
+        }
+    } else {
+        // No mod-owned or taskbar window — nothing left that can dangle into
+        // unmapped code; retain no_destroy host state rather than tearing it
+        // down from the wrong thread.
+        Wh_Log(L"No mod-owned or taskbar window at uninit; retaining host state");
     }
 
     g_levels.reset();
