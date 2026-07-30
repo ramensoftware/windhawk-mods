@@ -27,16 +27,21 @@
 /*
 # Taskbar Separators
 
-Add clean, customizable separators between application buttons on the
+Add clean, customizable visual separators between application buttons on the
 Windows 11 taskbar.
 
 Unlike placeholder applications or pinned shortcuts, these separators are
-visual, non-clickable elements and do not launch programs or occupy normal
+visual, non-clickable elements. They do not launch programs or occupy normal
 application slots.
+
+## Preview
+
+![Taskbar Separators preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-preview.jpg)
 
 ## Features
 
 - Add multiple separators at configurable taskbar positions
+- Optional separator before the first application button
 - Live position and appearance updates
 - Five configurable visual styles:
   - Fade
@@ -44,8 +49,9 @@ application slots.
   - Double
   - Rounded
   - Glow
-- Adjustable thickness, height, opacity, color, and effect settings
+- Adjustable thickness, length, opacity, color, and effect settings
 - Automatic horizontal and vertical taskbar orientation
+- Optional animation compatibility mode
 - Clean removal when the mod is disabled
 - No changes to taskbar button margins, padding, or application behavior
 
@@ -58,11 +64,29 @@ application slots.
 
 ## Position behavior
 
-Positions refer to the current visual order of taskbar application buttons.
+Numbered positions place separators after application buttons:
 
+- Position `1` places a separator after the first application button
+- Position `2` places a separator after the second application button
+- Position `3` places a separator after the third application button
+
+Enable **Separator before first app** to place a separator before the first
+application button.
+
+Start, Search, Widgets, Task View, and other system buttons are not counted as
+application buttons.
+
+Positions follow the current visual order of taskbar application buttons.
 Opening, closing, pinning, unpinning, or rearranging applications can change
-which icons are beside a configured separator position. The separator remains
-attached to its numeric position in the taskbar order.
+which icons appear beside a configured separator.
+
+## Settings
+
+![Taskbar Separators settings](https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-settings.jpg)
+
+## Alternate setups
+
+![Taskbar Separators alternate setups](https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-alt.jpg)
 
 ## Animation compatibility
 
@@ -77,9 +101,8 @@ separator positioning.
 
 ## Compatibility
 
-- Windows 11
-- Standard horizontal taskbars
-- Vertical taskbars provided by compatible customization mods (not tested)
+- Windows 11 horizontal taskbars
+- Vertical taskbars via Vertical Taskbar for Windows 11
 - Compatible with Windows 11 Taskbar Styler in normal configurations
 
 ## License and attribution
