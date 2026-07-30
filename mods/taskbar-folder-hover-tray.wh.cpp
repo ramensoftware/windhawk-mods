@@ -3,7 +3,7 @@
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
 // @version         1.11
-// @author          Grant Benson
+// @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
