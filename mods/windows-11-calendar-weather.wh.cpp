@@ -8,7 +8,7 @@
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lpowrprof
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -547,6 +547,12 @@ struct ForecastData {
     // Wall clock — steady_clock does not advance across sleep, so wake would
     // treat multi-hour-old data as still fresh.
     std::chrono::system_clock::time_point fetchedAtWall{};
+    // Local civil time at fetch — hour/day change means hourly strip is stale
+    // even if still inside the refresh interval.
+    int fetchedLocalYear = 0;
+    int fetchedLocalMonth = 0;
+    int fetchedLocalDay = 0;
+    int fetchedLocalHour = -1;
 };
 
 struct ResolvedLocation {
@@ -563,10 +569,13 @@ std::wstring g_resolvedKey;
 std::atomic<bool> g_fetchInProgress{false};
 std::atomic<bool> g_forceRefreshPending{false};
 std::atomic<uint64_t> g_fetchGeneration{0};
+std::atomic<ULONGLONG> g_fetchStartedTick{0};
+std::atomic<ULONGLONG> g_lastResumeRefreshTick{0};
 
 PTP_TIMER g_refreshTimer = nullptr;
 std::mutex g_timerMutex;
 HANDLE g_suspendResumeNotify = nullptr;
+HANDLE g_displayPowerNotify = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Mounted UI state
@@ -2169,6 +2178,12 @@ std::optional<ForecastData> ParseForecastJson(std::wstring const& body,
         }
         data.valid = true;
         data.fetchedAtWall = std::chrono::system_clock::now();
+        SYSTEMTIME localNow{};
+        GetLocalTime(&localNow);
+        data.fetchedLocalYear = localNow.wYear;
+        data.fetchedLocalMonth = localNow.wMonth;
+        data.fetchedLocalDay = localNow.wDay;
+        data.fetchedLocalHour = localNow.wHour;
         return data;
     } catch (...) {
         Wh_Log(L"ParseForecastJson error %08X", winrt::to_hresult());
@@ -2381,10 +2396,14 @@ void WeatherWorker(uint64_t generation) {
         Wh_Log(L"Fetch already in progress");
         return;
     }
+    g_fetchStartedTick.store(GetTickCount64());
 
     {
         struct ClearFlag {
-            ~ClearFlag() { g_fetchInProgress = false; }
+            ~ClearFlag() {
+                g_fetchInProgress = false;
+                g_fetchStartedTick.store(0);
+            }
         } clearFlag;
 
         try {
@@ -2410,10 +2429,55 @@ void WeatherWorker(uint64_t generation) {
     }
 }
 
+bool IsForecastCacheStale(ForecastData const& forecast, int refreshMinutes) {
+    if (!forecast.valid) {
+        return true;
+    }
+
+    const auto age =
+        std::chrono::system_clock::now() - forecast.fetchedAtWall;
+    if (age < std::chrono::minutes(0)) {
+        return true;
+    }
+    if (age >= std::chrono::minutes(refreshMinutes)) {
+        return true;
+    }
+
+    // Hourly strip is baked at fetch time — a local hour/day change means the
+    // card is wrong even inside the refresh window (sleep across midnight).
+    if (forecast.fetchedLocalHour < 0) {
+        return true;
+    }
+    SYSTEMTIME localNow{};
+    GetLocalTime(&localNow);
+    return localNow.wYear != forecast.fetchedLocalYear ||
+           localNow.wMonth != forecast.fetchedLocalMonth ||
+           localNow.wDay != forecast.fetchedLocalDay ||
+           localNow.wHour != forecast.fetchedLocalHour;
+}
+
+void ClearStuckFetchLock() {
+    if (!g_fetchInProgress.load()) {
+        return;
+    }
+    const ULONGLONG started = g_fetchStartedTick.load();
+    const ULONGLONG now = GetTickCount64();
+    // A fetch hung across sleep can leave this latch set forever.
+    if (started == 0 || now - started > 90000ULL) {
+        Wh_Log(L"Clearing stuck weather fetch lock (age ms=%llu)",
+               started ? static_cast<unsigned long long>(now - started)
+                       : 0ULL);
+        g_fetchInProgress.store(false);
+        g_fetchStartedTick.store(0);
+    }
+}
+
 void RequestWeatherRefresh(bool forceNetwork) {
     if (g_shuttingDown.load()) {
         return;
     }
+
+    ClearStuckFetchLock();
 
     // Coalesce: never bump the fetch generation while a worker is running —
     // that used to invalidate the in-flight result and leave the UI empty.
@@ -2423,6 +2487,13 @@ void RequestWeatherRefresh(bool forceNetwork) {
         }
         Wh_Log(L"Weather refresh skipped — fetch already in progress%s",
                forceNetwork ? L" (queued)" : L"");
+        // Still repaint daylight / cached card so the flyout is not frozen.
+        if (!forceNetwork) {
+            try {
+                UpdateAllWeatherUIs();
+            } catch (...) {
+            }
+        }
         return;
     }
 
@@ -2433,31 +2504,25 @@ void RequestWeatherRefresh(bool forceNetwork) {
         if (!g_forecast.valid) {
             needsFetch = true;
             Wh_Log(L"Weather refresh: no cached forecast");
-        } else {
-            // Use system_clock so sleep/hibernate/logon gaps count as age.
+        } else if (IsForecastCacheStale(g_forecast, settings.refreshMinutes)) {
+            needsFetch = true;
             auto age =
                 std::chrono::system_clock::now() - g_forecast.fetchedAtWall;
-            auto limit = std::chrono::minutes(settings.refreshMinutes);
             auto ageMin =
                 std::chrono::duration_cast<std::chrono::minutes>(age).count();
-            if (age < std::chrono::minutes(0)) {
-                // Clock went backwards — refetch.
-                needsFetch = true;
-                Wh_Log(L"Weather refresh: wall clock moved backwards");
-            } else if (age >= limit) {
-                needsFetch = true;
-                Wh_Log(L"Weather refresh: cache age %lld min >= interval %d",
-                       static_cast<long long>(ageMin), settings.refreshMinutes);
-            } else if (forceNetwork) {
-                Wh_Log(L"Weather refresh: forced; cache age %lld min",
-                       static_cast<long long>(ageMin));
-            } else {
-                Wh_Log(L"Weather refresh: using cache (age %lld min, interval %d)",
-                       static_cast<long long>(ageMin), settings.refreshMinutes);
-            }
-            if (g_forecast.temperatureUnit != settings.temperatureUnit) {
-                needsFetch = true;
-            }
+            Wh_Log(L"Weather refresh: cache stale (age %lld min, fetched "
+                   L"local %04d-%02d-%02d %02d:xx)",
+                   static_cast<long long>(ageMin), g_forecast.fetchedLocalYear,
+                   g_forecast.fetchedLocalMonth, g_forecast.fetchedLocalDay,
+                   g_forecast.fetchedLocalHour);
+        } else if (forceNetwork) {
+            Wh_Log(L"Weather refresh: forced");
+        } else {
+            Wh_Log(L"Weather refresh: using cache");
+        }
+        if (g_forecast.valid &&
+            g_forecast.temperatureUnit != settings.temperatureUnit) {
+            needsFetch = true;
         }
     }
 
@@ -2548,6 +2613,25 @@ void StopRefreshTimerLocked() {
 #define DEVICE_NOTIFY_CALLBACK 2
 #endif
 
+// Display power state GUID (Connected Standby / modern sleep often skips APM).
+static const GUID kGuidConsoleDisplayState = {
+    0x6fe69556,
+    0x704a,
+    0x47a0,
+    {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+
+#ifndef PBT_POWERSETTINGCHANGE
+#define PBT_POWERSETTINGCHANGE 0x8013
+#endif
+
+#ifndef POWERBROADCAST_SETTING_DEFINED_LOCAL
+struct PowerBroadcastSettingLocal {
+    GUID PowerSetting;
+    DWORD DataLength;
+    UCHAR Data[1];
+};
+#endif
+
 // Local copy of DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS — avoids depending on
 // which Windows SDK headers Windhawk's toolchain exposes.
 struct SuspendResumeNotifyParams {
@@ -2559,8 +2643,23 @@ void OnSystemResumeRefresh() {
     if (g_shuttingDown.load()) {
         return;
     }
-    Wh_Log(L"System resume — forcing weather + daylight refresh");
-    // Reschedule the periodic timer; relative due times stall across sleep.
+    const ULONGLONG nowTick = GetTickCount64();
+    const ULONGLONG last = g_lastResumeRefreshTick.load();
+    if (last != 0 && nowTick - last < 5000ULL) {
+        return;
+    }
+    g_lastResumeRefreshTick.store(nowTick);
+
+    Wh_Log(L"System resume/display-on — forcing weather + daylight refresh");
+
+    // Cancel any fetch that hung while the NIC stack was asleep, then force a
+    // new one. Daylight uses wall-clock "now" so it can look correct while the
+    // weather card still shows the pre-sleep hourly slice.
+    ++g_fetchGeneration;
+    g_fetchInProgress.store(false);
+    g_fetchStartedTick.store(0);
+    g_forceRefreshPending.store(false);
+
     EnsureRefreshTimer();
     try {
         UpdateAllDaylightUIs();
@@ -2586,51 +2685,105 @@ ULONG CALLBACK SuspendResumeNotifyCallback(PVOID /*context*/,
     return ERROR_SUCCESS;
 }
 
+ULONG CALLBACK DisplayPowerNotifyCallback(PVOID /*context*/,
+                                          ULONG type,
+                                          PVOID setting) {
+    if (type != PBT_POWERSETTINGCHANGE || !setting) {
+        return ERROR_SUCCESS;
+    }
+    auto* power = reinterpret_cast<PowerBroadcastSettingLocal*>(setting);
+    if (!IsEqualGUID(power->PowerSetting, kGuidConsoleDisplayState) ||
+        power->DataLength < sizeof(DWORD)) {
+        return ERROR_SUCCESS;
+    }
+    const DWORD state = *reinterpret_cast<DWORD*>(power->Data);
+    // 0 = off, 1 = on, 2 = dimmed. Refresh when the display turns on after
+    // modern standby (which often skips classic APM resume notifications).
+    if (state == 1) {
+        OnSystemResumeRefresh();
+    }
+    return ERROR_SUCCESS;
+}
+
 void RegisterSuspendResumeRefresh() {
-    if (g_suspendResumeNotify) {
-        return;
-    }
-
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        return;
-    }
-
-    using RegisterFn = HANDLE(WINAPI*)(HANDLE, DWORD);
-    auto registerFn = reinterpret_cast<RegisterFn>(
-        GetProcAddress(user32, "RegisterSuspendResumeNotification"));
-    if (!registerFn) {
-        Wh_Log(L"RegisterSuspendResumeNotification unavailable");
-        return;
-    }
-
-    SuspendResumeNotifyParams params{};
-    params.Callback = SuspendResumeNotifyCallback;
-    params.Context = nullptr;
-    g_suspendResumeNotify = registerFn(&params, DEVICE_NOTIFY_CALLBACK);
     if (!g_suspendResumeNotify) {
-        Wh_Log(L"RegisterSuspendResumeNotification failed (%lu)",
-               GetLastError());
-        return;
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32) {
+            using RegisterFn = HANDLE(WINAPI*)(HANDLE, DWORD);
+            auto registerFn = reinterpret_cast<RegisterFn>(
+                GetProcAddress(user32, "RegisterSuspendResumeNotification"));
+            if (registerFn) {
+                SuspendResumeNotifyParams params{};
+                params.Callback = SuspendResumeNotifyCallback;
+                params.Context = nullptr;
+                g_suspendResumeNotify =
+                    registerFn(&params, DEVICE_NOTIFY_CALLBACK);
+                if (g_suspendResumeNotify) {
+                    Wh_Log(L"Registered suspend/resume weather refresh");
+                } else {
+                    Wh_Log(L"RegisterSuspendResumeNotification failed (%lu)",
+                           GetLastError());
+                }
+            } else {
+                Wh_Log(L"RegisterSuspendResumeNotification unavailable");
+            }
+        }
     }
-    Wh_Log(L"Registered suspend/resume weather refresh");
+
+    if (!g_displayPowerNotify) {
+        HMODULE powrprof = LoadLibraryExW(L"powrprof.dll", nullptr,
+                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (powrprof) {
+            using RegisterPowerFn = DWORD(WINAPI*)(LPCGUID, DWORD, HANDLE,
+                                                   HANDLE*);
+            auto registerPower = reinterpret_cast<RegisterPowerFn>(
+                GetProcAddress(powrprof, "PowerSettingRegisterNotification"));
+            if (registerPower) {
+                SuspendResumeNotifyParams params{};
+                params.Callback = DisplayPowerNotifyCallback;
+                params.Context = nullptr;
+                HANDLE handle = nullptr;
+                const DWORD err = registerPower(&kGuidConsoleDisplayState,
+                                                DEVICE_NOTIFY_CALLBACK,
+                                                &params, &handle);
+                if (err == ERROR_SUCCESS && handle) {
+                    g_displayPowerNotify = handle;
+                    Wh_Log(L"Registered display-on weather refresh");
+                } else {
+                    Wh_Log(L"PowerSettingRegisterNotification failed (%lu)",
+                           err);
+                }
+            }
+        }
+    }
 }
 
 void UnregisterSuspendResumeRefresh() {
-    if (!g_suspendResumeNotify) {
-        return;
+    if (g_suspendResumeNotify) {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32) {
+            using UnregisterFn = BOOL(WINAPI*)(HANDLE);
+            auto unregisterFn = reinterpret_cast<UnregisterFn>(
+                GetProcAddress(user32, "UnregisterSuspendResumeNotification"));
+            if (unregisterFn) {
+                unregisterFn(g_suspendResumeNotify);
+            }
+        }
+        g_suspendResumeNotify = nullptr;
     }
 
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (user32) {
-        using UnregisterFn = BOOL(WINAPI*)(HANDLE);
-        auto unregisterFn = reinterpret_cast<UnregisterFn>(
-            GetProcAddress(user32, "UnregisterSuspendResumeNotification"));
-        if (unregisterFn) {
-            unregisterFn(g_suspendResumeNotify);
+    if (g_displayPowerNotify) {
+        HMODULE powrprof = GetModuleHandleW(L"powrprof.dll");
+        if (powrprof) {
+            using UnregisterPowerFn = DWORD(WINAPI*)(HANDLE);
+            auto unregisterPower = reinterpret_cast<UnregisterPowerFn>(
+                GetProcAddress(powrprof, "PowerSettingUnregisterNotification"));
+            if (unregisterPower) {
+                unregisterPower(g_displayPowerNotify);
+            }
         }
+        g_displayPowerNotify = nullptr;
     }
-    g_suspendResumeNotify = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
