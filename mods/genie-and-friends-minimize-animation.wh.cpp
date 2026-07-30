@@ -1097,15 +1097,15 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
 }
 
 // Build a cache of all taskbar icon positions on the same monitor as hWnd.
-// Matching is first by exact HWND, then by owner-chain (for child/utility
-// windows that share the parent's taskbar button). Returns FALSE when no
-// taskbar or toolbar can be found.
+// Matching is by HWND, then owner chain, then root ancestor, then by process
+// ID (for grouped buttons whose dwData references the app frame, not the
+// specific child window). Returns FALSE only when no toolbar can be found,
+// meaning this window genuinely has no taskbar button.
 struct TaskbarIconEntry {
     HWND hWnd;
     int  x;
     int  y;
     int  width;
-    int  height;
 };
 
 static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
@@ -1113,6 +1113,7 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     TaskbarIconEntry cache[64];
     int cacheCount = 0;
 
+    // Walk all taskbars visible on the window's monitor.
     for (int pass = 0; pass < 2; pass++) {
         HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
         if (!hTaskbar) continue;
@@ -1122,12 +1123,26 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
         HMONITOR hTbMon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL);
         if (hTbMon != hMon) continue;
 
+        // Try every known toolbar location (Windows 10 primary, secondary,
+        // WorkerW fallback for top/side taskbars, and direct child).
         HWND hToolbar = NULL;
         HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
         if (hRebar) {
             HWND hMSTask = FindWindowEx(hRebar, NULL, L"MSTaskSwWClass", NULL);
             if (hMSTask)
                 hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+        }
+        if (!hToolbar) {
+            // Some configurations nest under WorkerW.
+            HWND hWorkerW = FindWindowEx(hTaskbar, NULL, L"WorkerW", NULL);
+            if (hWorkerW) {
+                HWND hReBarW = FindWindowEx(hWorkerW, NULL, L"ReBarWindow32", NULL);
+                if (hReBarW) {
+                    HWND hMSTask = FindWindowEx(hReBarW, NULL, L"MSTaskSwWClass", NULL);
+                    if (hMSTask)
+                        hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
+                }
+            }
         }
         if (!hToolbar)
             hToolbar = FindWindowEx(hTaskbar, NULL, L"ToolbarWindow32", NULL);
@@ -1142,33 +1157,84 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
                     if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
                         MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
                         TaskbarIconEntry* e = &cache[cacheCount++];
-                        e->hWnd   = (HWND)btn.dwData;
-                        e->x      = (r.left + r.right) / 2;
-                        e->y      = (r.top + r.bottom) / 2;
-                        e->width  = r.right - r.left;
-                        e->height = r.bottom - r.top;
+                        e->hWnd  = (HWND)btn.dwData;
+                        e->x     = (r.left + r.right) / 2;
+                        e->y     = (r.top + r.bottom) / 2;
+                        e->width = r.right - r.left;
                     }
                 }
             }
         }
-        break; // Only process the first matching taskbar.
+        break;
     }
 
     if (cacheCount == 0) return FALSE;
 
-    // Try exact HWND match, then owner chain.
-    for (HWND hCur = hWnd; hCur; hCur = GetWindow(hCur, GW_OWNER)) {
+    // --- Matching strategy (most specific to least specific) ---
+
+    // 1. Exact HWND.
+    for (int i = 0; i < cacheCount; i++) {
+        if (cache[i].hWnd == hWnd) {
+            *outX = cache[i].x; *outY = cache[i].y;
+            if (outWidth) *outWidth = cache[i].width;
+            return TRUE;
+        }
+    }
+
+    // 2. Owner chain (child/utility windows sharing the parent's button).
+    for (HWND hCur = GetWindow(hWnd, GW_OWNER); hCur; hCur = GetWindow(hCur, GW_OWNER)) {
         for (int i = 0; i < cacheCount; i++) {
             if (cache[i].hWnd == hCur) {
-                *outX = cache[i].x;
-                *outY = cache[i].y;
+                *outX = cache[i].x; *outY = cache[i].y;
                 if (outWidth) *outWidth = cache[i].width;
                 return TRUE;
             }
         }
     }
 
+    // 3. Root ancestor (covers dialogs and owned popups whose top-level frame
+    //    owns the taskbar button).
+    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+    if (hRoot != hWnd) {
+        for (int i = 0; i < cacheCount; i++) {
+            if (cache[i].hWnd == hRoot) {
+                *outX = cache[i].x; *outY = cache[i].y;
+                if (outWidth) *outWidth = cache[i].width;
+                return TRUE;
+            }
+        }
+    }
+
+    // 4. Process-ID match (grouped taskbar buttons may store the app's main
+    //    frame or a hidden window; take the nearest icon on the same monitor).
+    DWORD targetPid;
+    GetWindowThreadProcessId(hWnd, &targetPid);
+    if (targetPid) {
+        int bestIdx = -1;
+        RECT wndRect;
+        GetWindowRect(hWnd, &wndRect);
+        int wndCX = (wndRect.left + wndRect.right) / 2;
+        int bestDist = INT_MAX;
+        for (int i = 0; i < cacheCount; i++) {
+            DWORD btnPid;
+            GetWindowThreadProcessId(cache[i].hWnd, &btnPid);
+            if (btnPid == targetPid) {
+                int dist = abs(cache[i].x - wndCX);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx  = i;
+                }
+            }
+        }
+        if (bestIdx >= 0) {
+            *outX = cache[bestIdx].x; *outY = cache[bestIdx].y;
+            if (outWidth) *outWidth = cache[bestIdx].width;
+            return TRUE;
+        }
+    }
+
     return FALSE;
+}
 }
 
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
@@ -1190,14 +1256,12 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the animation target to the taskbar icon centre, falling back to
-    // cursor X only when the icon genuinely cannot be resolved.
+    // Lock the animation target to the taskbar icon centre (already has a
+    // monitor-centre default from StartGenieAnim if no icon is found).
     int iconX, iconY;
     data->iconButtonWidth = 0;
     if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
         data->targetDockX = iconX;
-    } else {
-        data->targetDockX = cursorPt.x;
     }
 
     bool useGpu = EnsureGpuDevice();
