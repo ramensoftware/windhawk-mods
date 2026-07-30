@@ -7,7 +7,7 @@
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
