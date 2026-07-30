@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              cjk-spacer
 // @name            CJK Spacer
-// @description     Add spaces between CJK characters and letters or digits in Explorer menus, tooltips, and popups
-// @version         0.1.5
+// @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
+// @version         0.1.6
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -46,17 +46,18 @@ keyboard shortcut text are also preserved.
 ## Supported UI
 
 - Classic Win32 popup menus are rewritten through public `HMENU` APIs. This
-  includes File Explorer, desktop, taskbar, tray, and jump-list menus hosted by
-  `explorer.exe`.
+  happens only while `TrackPopupMenu` is active, including items added or
+  changed while the menu is open. It covers File Explorer, desktop, taskbar,
+  tray, and jump-list context menus hosted by `explorer.exe`.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
   both text measurement and drawing without touching unrelated GDI text. Basic
   or classic-theme tooltips drawn directly with `DrawTextW` aren't covered.
-- Windows 11 XAML popup text uses an experimental, display-only
-  DirectWrite hook. This includes context menus, tooltips, and other Explorer
-  flyouts. While a tracked popup is visible, other XAML text laid out on the
-  same UI thread can also be transformed; unrelated Explorer threads remain
-  unaffected. Taskbar thumbnail previews are explicitly excluded.
+- Windows 11 XAML context menus and pointer tooltips use an experimental,
+  display-only DirectWrite hook. Taskbar thumbnail previews and XAML popups
+  related to them are explicitly excluded. While an eligible popup is visible,
+  other XAML text laid out on the same UI thread can also be transformed;
+  unrelated Explorer threads remain unaffected.
 
 The modern path is intentionally conservative and can miss text if a Windows
 build uses a different popup window class. Disable `modernUiText` if it causes
@@ -69,9 +70,9 @@ flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
 The mod doesn't edit system files, registry values, or file names. A file name
 shown in a classic menu can nevertheless be displayed with inserted spaces.
 The modern DirectWrite path changes display text only. The classic path updates
-strings stored in `HMENU` objects, so menu text read through accessibility APIs
-also contains the inserted spaces while the mod is enabled. Strings rewritten
-just before display are recorded and restored when the mod is disabled.
+strings stored in active `HMENU` objects, so menu text read through
+accessibility APIs also contains the inserted spaces while the popup is open.
+Rewritten strings are recorded and restored when the popup closes.
 */
 // ==/WindhawkModReadme==
 
@@ -84,8 +85,8 @@ just before display are recorded and restored when the mod is disabled.
   $name: Classic Win32 tooltips
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: true
-  $name: Windows 11 popup text (experimental)
-  $description: Process DirectWrite text in Explorer XAML menus, tooltips, and flyouts.
+  $name: Windows 11 context menus and tooltips (experimental)
+  $description: Process DirectWrite text in Explorer XAML context menus and pointer tooltips.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -383,6 +384,7 @@ TrackPopupMenu_t g_originalTrackPopupMenu;
 TrackPopupMenuEx_t g_originalTrackPopupMenuEx;
 
 struct RewrittenMenuItem {
+    HMENU rootMenu;
     HMENU menu;
     UINT index;
     std::wstring original;
@@ -391,9 +393,43 @@ struct RewrittenMenuItem {
 
 std::mutex g_rewrittenMenuItemsMutex;
 std::vector<RewrittenMenuItem> g_rewrittenMenuItems;
+thread_local unsigned int g_classicPopupMenuDepth = 0;
+thread_local HMENU g_classicPopupRootMenu = nullptr;
+thread_local bool g_restoringClassicMenuText = false;
+
+void RememberRewrittenMenuItem(HMENU menu,
+                               UINT index,
+                               std::wstring original,
+                               std::wstring spaced);
 
 bool IsStringMenuFlags(UINT flags) {
     return !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR));
+}
+
+int FindMenuItemIndex(HMENU menu, UINT item, bool byPosition) {
+    const int itemCount = GetMenuItemCount(menu);
+    if (itemCount < 0) {
+        return -1;
+    }
+
+    if (byPosition) {
+        return item < static_cast<UINT>(itemCount)
+                   ? static_cast<int>(item)
+                   : -1;
+    }
+
+    for (int index = 0; index < itemCount; ++index) {
+        MENUITEMINFOW itemInfo = {};
+        itemInfo.cbSize = sizeof(itemInfo);
+        itemInfo.fMask = MIIM_ID;
+        if (GetMenuItemInfoW(
+                menu, index, TRUE, &itemInfo) &&
+            itemInfo.wID == item) {
+            return index;
+        }
+    }
+
+    return -1;
 }
 
 BOOL WINAPI InsertMenuWHook(HMENU menu,
@@ -401,13 +437,27 @@ BOOL WINAPI InsertMenuWHook(HMENU menu,
                             UINT flags,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
-    if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
         IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/InsertMenuW)");
-            return g_originalInsertMenuW(menu, position, flags, itemId,
-                                         spaced.c_str());
+            const BOOL result = g_originalInsertMenuW(
+                menu, position, flags, itemId, spaced.c_str());
+            if (result) {
+                const int index = FindMenuItemIndex(
+                    menu,
+                    (flags & MF_BYPOSITION)
+                        ? position
+                        : static_cast<UINT>(itemId),
+                    (flags & MF_BYPOSITION) != 0);
+                if (index >= 0) {
+                    RememberRewrittenMenuItem(
+                        menu, static_cast<UINT>(index), newItem, spaced);
+                }
+            }
+            return result;
         }
     }
 
@@ -418,12 +468,22 @@ BOOL WINAPI AppendMenuWHook(HMENU menu,
                             UINT flags,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
-    if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
         IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/AppendMenuW)");
-            return g_originalAppendMenuW(menu, flags, itemId, spaced.c_str());
+            const BOOL result = g_originalAppendMenuW(
+                menu, flags, itemId, spaced.c_str());
+            if (result) {
+                const int index = GetMenuItemCount(menu) - 1;
+                if (index >= 0) {
+                    RememberRewrittenMenuItem(
+                        menu, static_cast<UINT>(index), newItem, spaced);
+                }
+            }
+            return result;
         }
     }
 
@@ -435,13 +495,21 @@ BOOL WINAPI ModifyMenuWHook(HMENU menu,
                             UINT flags,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
-    if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
         IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/ModifyMenuW)");
-            return g_originalModifyMenuW(menu, position, flags, itemId,
-                                         spaced.c_str());
+            const int index = FindMenuItemIndex(
+                menu, position, (flags & MF_BYPOSITION) != 0);
+            const BOOL result = g_originalModifyMenuW(
+                menu, position, flags, itemId, spaced.c_str());
+            if (result && index >= 0) {
+                RememberRewrittenMenuItem(
+                    menu, static_cast<UINT>(index), newItem, spaced);
+            }
+            return result;
         }
     }
 
@@ -508,7 +576,8 @@ void RememberRewrittenMenuItem(HMENU menu,
     }
 
     for (auto& item : g_rewrittenMenuItems) {
-        if (item.menu == menu && item.index == index) {
+        if (item.rootMenu == g_classicPopupRootMenu &&
+            item.menu == menu && item.index == index) {
             if (item.spaced != spaced) {
                 item.original = std::move(original);
                 item.spaced = std::move(spaced);
@@ -518,17 +587,32 @@ void RememberRewrittenMenuItem(HMENU menu,
     }
 
     g_rewrittenMenuItems.push_back(
-        {menu, index, std::move(original), std::move(spaced)});
+        {g_classicPopupRootMenu, menu, index, std::move(original),
+         std::move(spaced)});
 }
 
-void RestoreRewrittenMenuItems() {
+void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
     std::vector<RewrittenMenuItem> items;
     {
         std::lock_guard<std::mutex> guard(
             g_rewrittenMenuItemsMutex);
-        items.swap(g_rewrittenMenuItems);
+        if (!rootMenu) {
+            items.swap(g_rewrittenMenuItems);
+        } else {
+            for (auto iterator = g_rewrittenMenuItems.begin();
+                 iterator != g_rewrittenMenuItems.end();) {
+                if (iterator->rootMenu == rootMenu) {
+                    items.push_back(std::move(*iterator));
+                    iterator = g_rewrittenMenuItems.erase(iterator);
+                } else {
+                    ++iterator;
+                }
+            }
+        }
     }
 
+    const bool wasRestoring = g_restoringClassicMenuText;
+    g_restoringClassicMenuText = true;
     for (auto iterator = items.rbegin(); iterator != items.rend();
          ++iterator) {
         if (!IsMenu(iterator->menu)) {
@@ -551,13 +635,15 @@ void RestoreRewrittenMenuItems() {
         SetMenuItemInfoW(
             iterator->menu, iterator->index, TRUE, &replacement);
     }
+    g_restoringClassicMenuText = wasRestoring;
 }
 
 BOOL WINAPI InsertMenuItemWHook(HMENU menu,
                                 UINT item,
                                 BOOL byPosition,
                                 LPCMENUITEMINFOW itemInfo) {
-    if (g_classicMenus.load(std::memory_order_relaxed) &&
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) &&
         MenuItemInfoContainsString(itemInfo) &&
         ContainsCjkCodePoint(itemInfo->dwTypeData)) {
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
@@ -566,7 +652,22 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
             MENUITEMINFOW copy =
                 CopyMenuItemInfoForRewrite(itemInfo);
             copy.dwTypeData = const_cast<wchar_t*>(spaced.c_str());
-            return g_originalInsertMenuItemW(menu, item, byPosition, &copy);
+            const BOOL result = g_originalInsertMenuItemW(
+                menu, item, byPosition, &copy);
+            if (result) {
+                const int index = FindMenuItemIndex(
+                    menu,
+                    byPosition || !(itemInfo->fMask & MIIM_ID)
+                        ? item
+                        : itemInfo->wID,
+                    byPosition != FALSE);
+                if (index >= 0) {
+                    RememberRewrittenMenuItem(
+                        menu, static_cast<UINT>(index),
+                        itemInfo->dwTypeData, spaced);
+                }
+            }
+            return result;
         }
     }
 
@@ -577,16 +678,26 @@ BOOL WINAPI SetMenuItemInfoWHook(HMENU menu,
                                  UINT item,
                                  BOOL byPosition,
                                  LPCMENUITEMINFOW itemInfo) {
-    if (g_classicMenus.load(std::memory_order_relaxed) &&
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) &&
         MenuItemInfoContainsString(itemInfo) &&
         ContainsCjkCodePoint(itemInfo->dwTypeData)) {
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
         if (spaced != itemInfo->dwTypeData) {
             Wh_Log(L"Applied CJK spacing (classic/SetMenuItemInfoW)");
+            const int index = FindMenuItemIndex(
+                menu, item, byPosition != FALSE);
             MENUITEMINFOW copy =
                 CopyMenuItemInfoForRewrite(itemInfo);
             copy.dwTypeData = const_cast<wchar_t*>(spaced.c_str());
-            return g_originalSetMenuItemInfoW(menu, item, byPosition, &copy);
+            const BOOL result = g_originalSetMenuItemInfoW(
+                menu, item, byPosition, &copy);
+            if (result && index >= 0) {
+                RememberRewrittenMenuItem(
+                    menu, static_cast<UINT>(index),
+                    itemInfo->dwTypeData, spaced);
+            }
+            return result;
         }
     }
 
@@ -644,7 +755,16 @@ BOOL WINAPI TrackPopupMenuHook(HMENU menu,
                                HWND owner,
                                const RECT* rect) {
     if (g_classicMenus.load(std::memory_order_relaxed)) {
+        const HMENU previousRootMenu = g_classicPopupRootMenu;
+        g_classicPopupRootMenu = menu;
+        ++g_classicPopupMenuDepth;
         RewriteMenuTree(menu);
+        const BOOL result = g_originalTrackPopupMenu(
+            menu, flags, x, y, reserved, owner, rect);
+        RestoreRewrittenMenuItems(menu);
+        --g_classicPopupMenuDepth;
+        g_classicPopupRootMenu = previousRootMenu;
+        return result;
     }
 
     return g_originalTrackPopupMenu(menu, flags, x, y, reserved, owner, rect);
@@ -657,7 +777,16 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
                                  HWND owner,
                                  LPTPMPARAMS parameters) {
     if (g_classicMenus.load(std::memory_order_relaxed)) {
+        const HMENU previousRootMenu = g_classicPopupRootMenu;
+        g_classicPopupRootMenu = menu;
+        ++g_classicPopupMenuDepth;
         RewriteMenuTree(menu);
+        const BOOL result = g_originalTrackPopupMenuEx(
+            menu, flags, x, y, owner, parameters);
+        RestoreRewrittenMenuItems(menu);
+        --g_classicPopupMenuDepth;
+        g_classicPopupRootMenu = previousRootMenu;
+        return result;
     }
 
     return g_originalTrackPopupMenuEx(menu, flags, x, y, owner, parameters);
@@ -1006,6 +1135,41 @@ ModernWindowKind ClassifyModernWindow(HWND window) {
                       : ModernWindowKind::Other;
 }
 
+bool HasWindowClass(HWND window, LPCWSTR expectedClassName) {
+    if (!window) {
+        return false;
+    }
+
+    wchar_t className[128];
+    const int length = GetClassNameW(window, className, ARRAYSIZE(className));
+    return length > 0 && _wcsicmp(className, expectedClassName) == 0;
+}
+
+bool IsTaskbarThumbnailSurface(HWND window) {
+    if (!window) {
+        return false;
+    }
+
+    const HWND root = GetAncestor(window, GA_ROOT);
+    const HWND rootOwner = GetAncestor(window, GA_ROOTOWNER);
+    const HWND candidates[] = {window, root, rootOwner};
+
+    for (HWND candidate : candidates) {
+        if (HasWindowClass(candidate, L"TaskListThumbnailWnd") ||
+            HasWindowClass(candidate, L"XamlExplorerHostIslandWindow")) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsCursorInsideTaskbarThumbnailSurface() {
+    POINT cursor;
+    return GetCursorPos(&cursor) &&
+           IsTaskbarThumbnailSurface(WindowFromPoint(cursor));
+}
+
 bool TrackModernWindow(HWND window, ModernWindowKind kind) {
     if (!window || kind == ModernWindowKind::Other) {
         return false;
@@ -1089,6 +1253,10 @@ bool IsModernPopupActiveForCurrentThread() {
         return false;
     }
 
+    if (IsCursorInsideTaskbarThumbnailSurface()) {
+        return false;
+    }
+
     const DWORD currentThreadId = GetCurrentThreadId();
     bool popupActive = false;
     bool taskbarThumbnailActive = false;
@@ -1106,13 +1274,14 @@ bool IsModernPopupActiveForCurrentThread() {
             continue;
         }
 
-        if (iterator->second.threadId == currentThreadId &&
-            IsWindowVisible(iterator->first)) {
+        if (IsWindowVisible(iterator->first)) {
             if (iterator->second.kind ==
-                ModernWindowKind::TaskbarThumbnail) {
+                    ModernWindowKind::TaskbarThumbnail ||
+                (iterator->second.kind == ModernWindowKind::Popup &&
+                 IsTaskbarThumbnailSurface(iterator->first))) {
                 taskbarThumbnailActive = true;
-            } else if (iterator->second.kind ==
-                       ModernWindowKind::Popup) {
+            } else if (iterator->second.threadId == currentThreadId &&
+                       iterator->second.kind == ModernWindowKind::Popup) {
                 popupActive = true;
             }
         }
