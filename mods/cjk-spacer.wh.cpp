@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.6
+// @version         0.1.7
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -51,8 +51,10 @@ keyboard shortcut text are also preserved.
   tray, and jump-list context menus hosted by `explorer.exe`.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
-  both text measurement and drawing without touching unrelated GDI text. Basic
-  or classic-theme tooltips drawn directly with `DrawTextW` aren't covered.
+  both text measurement and drawing without touching unrelated GDI text.
+  Existing tooltip controls are discovered when the mod is enabled in a
+  running Explorer. Basic or classic-theme tooltips drawn directly with
+  `DrawTextW` aren't covered.
 - Windows 11 XAML context menus and pointer tooltips use an experimental,
   display-only DirectWrite hook. Taskbar thumbnail previews and XAML popups
   related to them are explicitly excluded. While an eligible popup is visible,
@@ -101,15 +103,19 @@ Rewritten strings are recorded and restored when the popup closes.
 #include <cstring>
 #include <cwchar>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <windows.h>
+
+#include <commctrl.h>
 #include <dwrite.h>
 #include <uxtheme.h>
-#include <windows.h>
+#include <vsstyle.h>
 
 namespace {
 
@@ -413,6 +419,10 @@ int FindMenuItemIndex(HMENU menu, UINT item, bool byPosition) {
     }
 
     if (byPosition) {
+        if (item == static_cast<UINT>(-1)) {
+            return itemCount > 0 ? itemCount - 1 : -1;
+        }
+
         return item < static_cast<UINT>(itemCount)
                    ? static_cast<int>(item)
                    : -1;
@@ -563,6 +573,21 @@ bool ReadMenuItemText(HMENU menu,
     return true;
 }
 
+int FindMenuItemIndexByText(HMENU menu,
+                            const std::wstring& expectedText) {
+    const int itemCount = GetMenuItemCount(menu);
+    for (int index = 0; index < itemCount; ++index) {
+        std::wstring current;
+        if (ReadMenuItemText(
+                menu, static_cast<UINT>(index), &current) &&
+            current == expectedText) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
 void RememberRewrittenMenuItem(HMENU menu,
                                UINT index,
                                std::wstring original,
@@ -573,17 +598,6 @@ void RememberRewrittenMenuItem(HMENU menu,
         std::erase_if(g_rewrittenMenuItems, [](const auto& item) {
             return !IsMenu(item.menu);
         });
-    }
-
-    for (auto& item : g_rewrittenMenuItems) {
-        if (item.rootMenu == g_classicPopupRootMenu &&
-            item.menu == menu && item.index == index) {
-            if (item.spaced != spaced) {
-                item.original = std::move(original);
-                item.spaced = std::move(spaced);
-            }
-            return;
-        }
     }
 
     g_rewrittenMenuItems.push_back(
@@ -619,11 +633,16 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
             continue;
         }
 
+        int index = static_cast<int>(iterator->index);
         std::wstring current;
-        if (!ReadMenuItemText(iterator->menu, iterator->index,
-                              &current) ||
+        if (!ReadMenuItemText(
+                iterator->menu, iterator->index, &current) ||
             current != iterator->spaced) {
-            continue;
+            index = FindMenuItemIndexByText(
+                iterator->menu, iterator->spaced);
+            if (index < 0) {
+                continue;
+            }
         }
 
         MENUITEMINFOW replacement = {};
@@ -633,7 +652,8 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
             const_cast<wchar_t*>(iterator->original.c_str());
 
         SetMenuItemInfoW(
-            iterator->menu, iterator->index, TRUE, &replacement);
+            iterator->menu, static_cast<UINT>(index), TRUE,
+            &replacement);
     }
     g_restoringClassicMenuText = wasRestoring;
 }
@@ -704,7 +724,13 @@ BOOL WINAPI SetMenuItemInfoWHook(HMENU menu,
     return g_originalSetMenuItemInfoW(menu, item, byPosition, itemInfo);
 }
 
-void RewriteMenuTree(HMENU menu) {
+constexpr unsigned int kMaxMenuDepth = 16;
+
+void RewriteMenuTree(HMENU menu, unsigned int depth = 0) {
+    if (!menu || depth >= kMaxMenuDepth) {
+        return;
+    }
+
     const int itemCount = GetMenuItemCount(menu);
     for (int index = 0; index < itemCount; ++index) {
         MENUITEMINFOW itemInfo = {};
@@ -742,7 +768,7 @@ void RewriteMenuTree(HMENU menu) {
         }
 
         if (itemInfo.hSubMenu) {
-            RewriteMenuTree(itemInfo.hSubMenu);
+            RewriteMenuTree(itemInfo.hSubMenu, depth + 1);
         }
     }
 }
@@ -800,6 +826,7 @@ using OpenThemeData_t = decltype(&OpenThemeData);
 using OpenThemeDataEx_t = decltype(&OpenThemeDataEx);
 using OpenThemeDataForDpi_t = decltype(&OpenThemeDataForDpi);
 using CloseThemeData_t = decltype(&CloseThemeData);
+using GetWindowTheme_t = decltype(&GetWindowTheme);
 using GetThemeTextExtent_t = decltype(&GetThemeTextExtent);
 using DrawThemeText_t = decltype(&DrawThemeText);
 using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
@@ -808,11 +835,12 @@ OpenThemeData_t g_originalOpenThemeData;
 OpenThemeDataEx_t g_originalOpenThemeDataEx;
 OpenThemeDataForDpi_t g_originalOpenThemeDataForDpi;
 CloseThemeData_t g_originalCloseThemeData;
+GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 
-std::mutex g_classicTooltipThemesMutex;
+std::shared_mutex g_classicTooltipThemesMutex;
 std::unordered_set<HTHEME> g_classicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
@@ -847,7 +875,8 @@ bool IsTrackedClassicTooltipTheme(HTHEME theme) {
         return false;
     }
 
-    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    std::shared_lock<std::shared_mutex> guard(
+        g_classicTooltipThemesMutex);
     return g_classicTooltipThemes.contains(theme);
 }
 
@@ -858,7 +887,8 @@ void TrackClassicTooltipTheme(HTHEME theme) {
 
     bool inserted;
     {
-        std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+        std::lock_guard<std::shared_mutex> guard(
+            g_classicTooltipThemesMutex);
         inserted = g_classicTooltipThemes.insert(theme).second;
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
@@ -875,7 +905,8 @@ void UntrackClassicTooltipTheme(HTHEME theme) {
         return;
     }
 
-    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    std::lock_guard<std::shared_mutex> guard(
+        g_classicTooltipThemesMutex);
     g_classicTooltipThemes.erase(theme);
     g_classicTooltipThemeCount.store(
         static_cast<unsigned int>(g_classicTooltipThemes.size()),
@@ -883,9 +914,44 @@ void UntrackClassicTooltipTheme(HTHEME theme) {
 }
 
 void ClearTrackedClassicTooltipThemes() {
-    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    std::lock_guard<std::shared_mutex> guard(
+        g_classicTooltipThemesMutex);
     g_classicTooltipThemes.clear();
     g_classicTooltipThemeCount.store(0, std::memory_order_relaxed);
+}
+
+bool IsClassicTooltipWindow(HWND window) {
+    wchar_t className[64];
+    return GetClassNameW(
+               window, className, ARRAYSIZE(className)) > 0 &&
+           _wcsicmp(className, TOOLTIPS_CLASSW) == 0;
+}
+
+BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
+    DWORD processId;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId() &&
+        IsClassicTooltipWindow(window)) {
+        TrackClassicTooltipTheme(g_getWindowTheme(window));
+    }
+
+    return TRUE;
+}
+
+BOOL CALLBACK EnumExistingClassicTooltipTopLevelWindow(
+    HWND window,
+    LPARAM) {
+    EnumExistingClassicTooltipWindow(window, 0);
+    EnumChildWindows(
+        window, EnumExistingClassicTooltipWindow, 0);
+    return TRUE;
+}
+
+void DiscoverExistingClassicTooltipThemes() {
+    if (g_getWindowTheme) {
+        EnumWindows(
+            EnumExistingClassicTooltipTopLevelWindow, 0);
+    }
 }
 
 HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
@@ -926,6 +992,13 @@ HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
     return g_originalCloseThemeData(theme);
 }
 
+bool IsClassicTooltipTextPart(int partId) {
+    return partId == TTP_STANDARD ||
+           partId == TTP_STANDARDTITLE ||
+           partId == TTP_BALLOON ||
+           partId == TTP_BALLOONTITLE;
+}
+
 bool BuildSpacedClassicTooltipText(LPCWSTR text,
                                    int textLength,
                                    DWORD textFlags,
@@ -962,6 +1035,7 @@ HRESULT WINAPI GetThemeTextExtentHook(HTHEME theme,
                                       LPRECT extentRectangle) {
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
+        !IsClassicTooltipTextPart(partId) ||
         !IsTrackedClassicTooltipTheme(theme)) {
         return g_originalGetThemeTextExtent(
             theme, dc, partId, stateId, text, textLength, textFlags,
@@ -998,6 +1072,7 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
                                  LPCRECT rectangle) {
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
+        !IsClassicTooltipTextPart(partId) ||
         !IsTrackedClassicTooltipTheme(theme)) {
         return g_originalDrawThemeText(
             theme, dc, partId, stateId, text, textLength, textFlags,
@@ -1033,6 +1108,7 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
                                    const DTTOPTS* options) {
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
+        !IsClassicTooltipTextPart(partId) ||
         !IsTrackedClassicTooltipTheme(theme)) {
         return g_originalDrawThemeTextEx(
             theme, dc, partId, stateId, text, textLength, textFlags,
@@ -1253,43 +1329,58 @@ bool IsModernPopupActiveForCurrentThread() {
         return false;
     }
 
-    if (IsCursorInsideTaskbarThumbnailSurface()) {
-        return false;
-    }
-
     const DWORD currentThreadId = GetCurrentThreadId();
     bool popupActive = false;
     bool taskbarThumbnailActive = false;
+    bool removedWindow = false;
 
-    std::lock_guard<std::mutex> guard(
-        g_trackedModernWindowsMutex);
-    for (auto iterator = g_trackedModernWindows.begin();
-         iterator != g_trackedModernWindows.end();) {
-        if (!IsWindow(iterator->first)) {
-            iterator = g_trackedModernWindows.erase(iterator);
+    {
+        std::lock_guard<std::mutex> guard(
+            g_trackedModernWindowsMutex);
+        for (auto iterator = g_trackedModernWindows.begin();
+             iterator != g_trackedModernWindows.end();) {
+            if (!IsWindow(iterator->first) ||
+                ClassifyModernWindow(iterator->first) !=
+                    iterator->second.kind) {
+                iterator =
+                    g_trackedModernWindows.erase(iterator);
+                removedWindow = true;
+                continue;
+            }
+
+            if (IsWindowVisible(iterator->first)) {
+                if (iterator->second.kind ==
+                        ModernWindowKind::TaskbarThumbnail ||
+                    (iterator->second.kind ==
+                         ModernWindowKind::Popup &&
+                     IsTaskbarThumbnailSurface(
+                         iterator->first))) {
+                    taskbarThumbnailActive = true;
+                } else if (
+                    iterator->second.threadId ==
+                        currentThreadId &&
+                    iterator->second.kind ==
+                        ModernWindowKind::Popup) {
+                    popupActive = true;
+                }
+            }
+
+            ++iterator;
+        }
+
+        if (removedWindow) {
             g_trackedModernWindowCount.store(
                 static_cast<unsigned int>(
                     g_trackedModernWindows.size()),
                 std::memory_order_relaxed);
-            continue;
         }
-
-        if (IsWindowVisible(iterator->first)) {
-            if (iterator->second.kind ==
-                    ModernWindowKind::TaskbarThumbnail ||
-                (iterator->second.kind == ModernWindowKind::Popup &&
-                 IsTaskbarThumbnailSurface(iterator->first))) {
-                taskbarThumbnailActive = true;
-            } else if (iterator->second.threadId == currentThreadId &&
-                       iterator->second.kind == ModernWindowKind::Popup) {
-                popupActive = true;
-            }
-        }
-
-        ++iterator;
     }
 
-    return popupActive && !taskbarThumbnailActive;
+    if (!popupActive || taskbarThumbnailActive) {
+        return false;
+    }
+
+    return !IsCursorInsideTaskbarThumbnailSurface();
 }
 
 HWND WINAPI CreateWindowExWHook(
@@ -1555,6 +1646,12 @@ bool HookClassicTooltipThemeDrawing() {
 
     bool hooked = false;
 
+    g_getWindowTheme = reinterpret_cast<GetWindowTheme_t>(
+        GetProcAddress(themeModule, "GetWindowTheme"));
+    if (!g_getWindowTheme) {
+        Wh_Log(L"Couldn't find GetWindowTheme");
+    }
+
     const auto openThemeData =
         reinterpret_cast<OpenThemeData_t>(
             GetProcAddress(themeModule, "OpenThemeData"));
@@ -1707,8 +1804,8 @@ BOOL Wh_ModInit() {
             CreateWindowExW, CreateWindowExWHook,
             &g_originalCreateWindowExW, L"CreateWindowExW");
 
-        HMODULE user32Module = LoadLibraryExW(
-            L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        HMODULE user32Module =
+            GetModuleHandleW(L"user32.dll");
         if (user32Module) {
             const auto createWindowInBand =
                 reinterpret_cast<CreateWindowInBand_t>(
@@ -1734,7 +1831,7 @@ BOOL Wh_ModInit() {
                 Wh_Log(L"Couldn't find CreateWindowInBandEx");
             }
         } else {
-            Wh_Log(L"Couldn't load user32.dll");
+            Wh_Log(L"Couldn't find user32.dll");
         }
 
         installedAnyHook |= HookDirectWrite();
@@ -1749,6 +1846,10 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (g_classicTooltips.load(std::memory_order_relaxed)) {
+        DiscoverExistingClassicTooltipThemes();
+    }
+
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         DiscoverExistingModernWindows();
     }
