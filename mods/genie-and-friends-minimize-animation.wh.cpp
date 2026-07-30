@@ -1172,12 +1172,14 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the animation target to the actual taskbar-icon centre rather than
-    // wherever the cursor happened to be.
+    // Lock the animation target to the taskbar icon centre. Fall back to the
+    // cursor click position when the icon can't be found.
     int iconX, iconY;
     data->iconButtonWidth = 0;
     if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
         data->targetDockX = iconX;
+    } else {
+        data->targetDockX = cursorPt.x;
     }
 
     bool useGpu = EnsureGpuDevice();
