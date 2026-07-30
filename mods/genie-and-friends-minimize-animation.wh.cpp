@@ -1153,18 +1153,6 @@ static HWND FindTaskbarForMonitor(HMONITOR hMon) {
 static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
 
-    // Quick cache hit by HWND.
-    {
-        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        auto it = g_TaskbarIconCache.find(hWnd);
-        if (it != g_TaskbarIconCache.end()) {
-            *outX = it->second.x;
-            *outY = it->second.y;
-            if (outWidth) *outWidth = it->second.width;
-            return TRUE;
-        }
-    }
-
     // Build a per-process+monitor key for grouped-button cache.
     std::wstring procName;
     {
@@ -1184,17 +1172,6 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
         }
     }
     std::wstring processKey = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
-    {
-        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        auto it = g_ProcessIconCache.find(processKey);
-        if (it != g_ProcessIconCache.end()) {
-            *outX = it->second.x;
-            *outY = it->second.y;
-            if (outWidth) *outWidth = it->second.width;
-            g_TaskbarIconCache[hWnd] = it->second;
-            return TRUE;
-        }
-    }
 
     int targetX = 0;
     int targetY = 0;
@@ -1212,83 +1189,151 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
                                  __uuidof(IUIAutomation), (void**)&pAutomation);
     if (SUCCEEDED(hrUia) && pAutomation) {
         HWND hTray = FindTaskbarForMonitor(hMon);
+        WCHAR titleW[512] = {0};
+        GetWindowTextW(hWnd, titleW, 512);
+        std::wstring titleLower = titleW;
+        for (auto& c : titleLower) c = (WCHAR)towlower(c);
+        std::wstring procLower = procName;
+        for (auto& c : procLower) c = (WCHAR)towlower(c);
+        size_t dot = procLower.find(L'.');
+        if (dot != std::wstring::npos) procLower = procLower.substr(0, dot);
+
+        IUIAutomationCondition* pButtonCond = NULL;
+        IUIAutomationCondition* pListItemCond = NULL;
+        IUIAutomationCondition* pOrCond = NULL;
+        VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
+        pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
+        VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
+        pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
+        if (pButtonCond && pListItemCond)
+            pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
+
+        auto tryMatch = [&](IUIAutomationElement* pParent) -> bool {
+            if (!pOrCond) return false;
+            IUIAutomationElementArray* pArray = NULL;
+            if (FAILED(pParent->FindAll(TreeScope_Descendants, pOrCond, &pArray)) || !pArray)
+                return false;
+            int length = 0;
+            pArray->get_Length(&length);
+            int bestScore = 0;
+            int bestX = 0, bestY = 0, bestW = 0;
+            for (int i = 0; i < length; i++) {
+                IUIAutomationElement* pItem = NULL;
+                if (FAILED(pArray->GetElement(i, &pItem)) || !pItem) continue;
+                BSTR name;
+                if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
+                    std::wstring uiaName = name;
+                    for (auto& c : uiaName) c = (WCHAR)towlower(c);
+                    if (!uiaName.empty()) {
+                        int score = 0;
+                        if (titleLower == uiaName) score += 1000;
+                        else {
+                            if (!titleLower.empty() && titleLower.find(uiaName) != std::wstring::npos)
+                                score += 500;
+                            if (!uiaName.empty() && uiaName.find(titleLower) != std::wstring::npos)
+                                score += 500;
+                        }
+                        if (!procLower.empty() && uiaName.find(procLower) != std::wstring::npos)
+                            score += 400;
+                        if (uiaName.find(L"start") != std::wstring::npos)    score -= 500;
+                        if (uiaName.find(L"search") != std::wstring::npos)   score -= 500;
+                        if (uiaName.find(L"task view") != std::wstring::npos) score -= 500;
+                        if (score > bestScore) {
+                            RECT bRect;
+                            if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect)) &&
+                                bRect.right > bRect.left) {
+                                bestScore = score;
+                                bestX = bRect.left + (bRect.right - bRect.left) / 2;
+                                bestY = bRect.top;
+                                bestW = bRect.right - bRect.left;
+                            }
+                        }
+                    }
+                    SysFreeString(name);
+                }
+                pItem->Release();
+            }
+            pArray->Release();
+            if (bestScore > 0) {
+                targetX = bestX; targetY = bestY; targetW = bestW;
+                found = true;
+                return true;
+            }
+            return false;
+        };
+
         if (hTray) {
             IUIAutomationElement* pTrayElement = NULL;
             if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
-                WCHAR titleW[512] = {0};
-                GetWindowTextW(hWnd, titleW, 512);
-                std::wstring titleLower = titleW;
-                for (auto& c : titleLower) c = (WCHAR)towlower(c);
-                std::wstring procLower = procName;
-                for (auto& c : procLower) c = (WCHAR)towlower(c);
-                size_t dot = procLower.find(L'.');
-                if (dot != std::wstring::npos) procLower = procLower.substr(0, dot);
-
-                IUIAutomationCondition* pButtonCond = NULL;
-                IUIAutomationCondition* pListItemCond = NULL;
-                IUIAutomationCondition* pOrCond = NULL;
-                VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
-                pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
-                VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
-                pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
-                if (pButtonCond && pListItemCond)
-                    pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
-
-                IUIAutomationElementArray* pArray = NULL;
-                if (pOrCond && SUCCEEDED(pTrayElement->FindAll(TreeScope_Descendants, pOrCond, &pArray)) && pArray) {
-                    int length = 0;
-                    pArray->get_Length(&length);
-                    MONITORINFO mi = {};
-                    mi.cbSize = sizeof(mi);
-                    GetMonitorInfoW(hMon, &mi);
-                    int monRight = mi.rcMonitor.right;
-                    int bestScore = 0;
-                    for (int i = 0; i < length; i++) {
-                        IUIAutomationElement* pItem = NULL;
-                        if (SUCCEEDED(pArray->GetElement(i, &pItem)) && pItem) {
-                            BSTR name;
-                            if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
-                                std::wstring uiaName = name;
-                                for (auto& c : uiaName) c = (WCHAR)towlower(c);
-                                if (!uiaName.empty()) {
-                                    int score = 0;
-                                    if (titleLower == uiaName) score += 1000;
-                                    else {
-                                        if (!titleLower.empty() && titleLower.find(uiaName) != std::wstring::npos)
-                                            score += 500;
-                                        if (!uiaName.empty() && uiaName.find(titleLower) != std::wstring::npos)
-                                            score += 500;
-                                    }
-                                    if (!procLower.empty() && uiaName.find(procLower) != std::wstring::npos)
-                                        score += 400;
-                                    if (uiaName.find(L"start") != std::wstring::npos)    score -= 500;
-                                    if (uiaName.find(L"search") != std::wstring::npos)   score -= 500;
-                                    if (uiaName.find(L"task view") != std::wstring::npos) score -= 500;
-                                    if (score > bestScore) {
-                                        RECT bRect;
-                                        if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect)) &&
-                                            bRect.right > bRect.left && bRect.left < monRight - 50) {
-                                            bestScore = score;
-                                            targetX = bRect.left + (bRect.right - bRect.left) / 2;
-                                            targetY = bRect.top;
-                                            targetW = bRect.right - bRect.left;
-                                            found   = true;
-                                        }
-                                    }
-                                }
-                                SysFreeString(name);
-                            }
-                            pItem->Release();
-                        }
-                    }
-                    pArray->Release();
-                }
-                if (pButtonCond)    pButtonCond->Release();
-                if (pListItemCond)  pListItemCond->Release();
-                if (pOrCond)        pOrCond->Release();
+                tryMatch(pTrayElement);
                 pTrayElement->Release();
             }
         }
+
+        // If the Shell_TrayWnd scan missed the button, cast a wider net over
+        // the desktop root, restricted to the taskbar bounding rectangle.
+        if (!found) {
+            RECT trayRect;
+            HWND hTrayWnd = FindTaskbarForMonitor(hMon);
+            if (hTrayWnd && GetWindowRect(hTrayWnd, &trayRect)) {
+                IUIAutomationElement* pRoot = NULL;
+                if (SUCCEEDED(pAutomation->GetRootElement(&pRoot)) && pRoot) {
+                    IUIAutomationElementArray* pAll = NULL;
+                    if (SUCCEEDED(pRoot->FindAll(TreeScope_Descendants, pOrCond, &pAll)) && pAll) {
+                        int len = 0;
+                        pAll->get_Length(&len);
+                        int bestScore = 0;
+                        int bestX = 0, bestY = 0, bestW = 0;
+                        for (int i = 0; i < len; i++) {
+                            IUIAutomationElement* pItem = NULL;
+                            if (FAILED(pAll->GetElement(i, &pItem)) || !pItem) continue;
+                            RECT bRect;
+                            if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect)) &&
+                                bRect.right > bRect.left &&
+                                bRect.top >= trayRect.top - 10 &&
+                                bRect.bottom <= trayRect.bottom + 10) {
+                                BSTR name;
+                                if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
+                                    std::wstring uiaName = name;
+                                    for (auto& c : uiaName) c = (WCHAR)towlower(c);
+                                    if (!uiaName.empty()) {
+                                        int score = 0;
+                                        if (titleLower == uiaName) score += 1000;
+                                        else {
+                                            if (!titleLower.empty() && titleLower.find(uiaName) != std::wstring::npos)
+                                                score += 500;
+                                            if (!uiaName.empty() && uiaName.find(titleLower) != std::wstring::npos)
+                                                score += 500;
+                                        }
+                                        if (!procLower.empty() && uiaName.find(procLower) != std::wstring::npos)
+                                            score += 400;
+                                        if (uiaName.find(L"start") != std::wstring::npos)    score -= 500;
+                                        if (uiaName.find(L"search") != std::wstring::npos)   score -= 500;
+                                        if (uiaName.find(L"task view") != std::wstring::npos) score -= 500;
+                                        if (score > bestScore) {
+                                            bestScore = score;
+                                            bestX = bRect.left + (bRect.right - bRect.left) / 2;
+                                            bestY = bRect.top;
+                                            bestW = bRect.right - bRect.left;
+                                            found = true;
+                                        }
+                                    }
+                                    SysFreeString(name);
+                                }
+                            }
+                            pItem->Release();
+                        }
+                        if (found) { targetX = bestX; targetY = bestY; targetW = bestW; }
+                        pAll->Release();
+                    }
+                    pRoot->Release();
+                }
+            }
+        }
+
+        if (pButtonCond)    pButtonCond->Release();
+        if (pListItemCond)  pListItemCond->Release();
+        if (pOrCond)        pOrCond->Release();
         pAutomation->Release();
     }
     if (coInit) CoUninitialize();
@@ -1380,6 +1425,18 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
                     }
                 }
             }
+        }
+    }
+
+    // --- Fallback: process-level cache if UIA + toolbar both failed ---
+    if (!found) {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        auto it = g_ProcessIconCache.find(processKey);
+        if (it != g_ProcessIconCache.end()) {
+            targetX = it->second.x;
+            targetY = it->second.y;
+            targetW = it->second.width;
+            found = true;
         }
     }
 
