@@ -14793,7 +14793,7 @@
           53
         ],
         "ratingUsers": 62,
-        "updated": 1784662230000,
+        "updated": 1785445785000,
         "users": 620
       },
       "metadata": {
@@ -14802,7 +14802,8 @@
         "description": "Modernizes legacy Win32 UI elements",
         "exclude": [
           "dwm.exe",
-          "mmc.exe"
+          "mmc.exe",
+          "msiexec.exe"
         ],
         "github": "https://github.com/crazyboyybs",
         "include": [
@@ -14810,7 +14811,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Win32 UI Modernizer",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "win7-action-center-recreation": {

@@ -14816,7 +14816,7 @@
           53
         ],
         "ratingUsers": 62,
-        "updated": 1784662230000,
+        "updated": 1785445785000,
         "users": 620
       },
       "metadata": {
@@ -14825,7 +14825,8 @@
         "description": "Moderniza elementos antigos da interface Win32",
         "exclude": [
           "dwm.exe",
-          "mmc.exe"
+          "mmc.exe",
+          "msiexec.exe"
         ],
         "github": "https://github.com/crazyboyybs",
         "include": [
@@ -14833,7 +14834,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Modernizador de Interface Win32",
-        "version": "1.0.1"
+        "version": "1.0.2"
       },
       "metadataEnglish": {
         "description": "Modernizes legacy Win32 UI elements",

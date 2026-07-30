@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-26T18:48:12.000Z</updated>
+    <updated>2026-07-30T21:09:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.2]]></title>
+        <id>https://windhawk.net/mods/win32-ui-modernizer#ba5ce914896f8bec55bb51db2e9d0822e6a4afa7</id>
+        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
+        <updated>2026-07-30T21:09:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed some WinUI apps failing to open like Photos and OneDrive</li>
+<li>Fixed headers missing it's dividers on dark mode</li>
+<li>Fixed the placeholder text on the rebar search bar not appearing on dark mode</li>
+<li>Fixed more DPI unaware controls</li>
+<li>Fixed the File Explorer navigation pane glyphs not rendering correctly when the translucent compatibility option is on</li>
+<li>Fixed the Recycle Bin glyph not displaying the full and empty variants accordingly</li>
+<li>Excluded the .msi installers from the mod as requested</li>
+<li>NEW: Added an option for hover/hot fade animation on the navigation pane</li>
+<li>NEW: Added a hover/hot state to the Registry Editor tree view</li>
+<li>NEW: All tree views now get a hover/hot state</li>
+<li>NEW: The selected state for tree views and list views now display a fade animation</li>
+<li>NEW: Added an option to switch the Registry Editor tree view icons with glyphs</li>
+<li>NEW: Revamped the Property Sheets windows design to match the new WinUI look that's currently being tested by Microsoft</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.8.0]]></title>
         <id>https://windhawk.net/mods/translucent-windows#109589023dde428deaee2fe80e4ce446283a7935</id>
@@ -618,36 +643,6 @@ this is safe to do for as many or as few programs as you'd like.</p>]]></content
         <author>
             <name>ernisn</name>
             <uri>https://github.com/ernisn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Buttons 2.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-buttons#8df93b9c741196c6fa1eae0e4bf295cc080cb5c2</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-buttons"/>
-        <updated>2026-07-20T20:32:01.000Z</updated>
-        <content type="html"><![CDATA[<p>New Features:</p>
-<ul>
-<li>Added nested submenus support - create submenus within submenus up to 3 levels deep for both left-click and right-click menus</li>
-<li>Added right-click menu support - buttons can now have separate menus for right-click actions (up to 3 levels)</li>
-<li>Submenu icons now support image files (.png, .ico, .jpg, .bmp, .webp) and app paths (.exe, .dll) for icon extraction</li>
-<li>Icon paths now support both quoted and unquoted formats (e.g. "C:\Path\icon.png" or C:\Path\icon.png)</li>
-<li>Added multiple commands support - execute multiple commands in sequence by adding multiple Action entries in Windhawk UI</li>
-<li>Preset buttons now ignore user-defined submenus and right-click menus to maintain consistent preset behavior</li>
-<li><strong>Added <a href="https://salyts.github.io/Windows-11-Start-Menu-Buttons/">Visual Configurator</a></strong> — a web-based tool to configure buttons visually with drag &amp; drop, icon browser, submenu builder, export/import and more</li>
-</ul>
-<p>Bug Fixes:</p>
-<ul>
-<li>Fixed "Container left margin" and "Container right margin" not working for Account button</li>
-<li>Fixed quote handling in icon paths - now properly strips outer quotes before processing</li>
-</ul>
-<p>Notes:</p>
-<ul>
-<li>When upgrading from v2.1, Action fields may appear empty in UI but will continue to work. To edit them or add multiple commands, re-enter the actions manually in Windhawk settings. See mod description for details.</li>
-<li><strong>Upgrading from v2.1?</strong> Use the <strong><a href="https://salyts.github.io/Windows-11-Start-Menu-Buttons/">Configurator's Migrate tool</a></strong> to convert your v2.1 config to v2.2 format automatically — paste your old config, click Migrate, and copy the result back to Windhawk.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
