@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.14
+// @version         1.15
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -70,6 +70,28 @@ Two consequences worth knowing:
 
 - The buttons cannot be drag-reordered like real taskbar items.
 - They do not collapse into the overflow button when the taskbar gets full.
+
+## Related mod: Taskbar Folder Menus
+
+[Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp)
+(`taskbar-folder-menus` by sb4ssman) is another Windows 11 explorer.exe mod for
+browsing folders from the taskbar. Both support configurable folder/shortcut
+buttons, `shell:` targets and environment-variable expansion, subfolders that
+expand on hover (cascade), shell context menus on items, and browsing folder
+contents without minimizing windows.
+
+They differ in placement and UI:
+
+| | Taskbar Folder Hover Tray (this) | Taskbar Folder Menus |
+|---|---|---|
+| Placement | Carved gap inside the **app icon strip** (flush with pinned/running apps) | Next to the **system tray** / notification area |
+| Open | **Hover** opens immediately | **Click** opens |
+| UI | Custom-drawn **icon grid** popup | **Native Shell** cascading menus |
+| Buttons | Sized from live taskbar app buttons; emoji/custom icons optional | Compact tray buttons with emoji labels and extensive tray grid layout options |
+
+Prefer **Taskbar Folder Menus** if you want tray-side buttons and native Shell
+menus. Prefer **this mod** if you want a hover-opened icon grid seated in the
+app icon strip.
 
 ## Conflicts
 
