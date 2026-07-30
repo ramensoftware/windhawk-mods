@@ -201,6 +201,7 @@ struct GhostAnimData {
     int width;
     int height;
     int targetDockX;
+    int iconButtonWidth;
     BOOL isRising;
     int mode;
     int durationMs;
@@ -458,6 +459,12 @@ static void SolveFrame(const GhostAnimData* d, float t,
     const float cy = T + h * 0.5f;
     const int   dockX = d->targetDockX;
 
+    float minScaleX = 0.0f;
+    if (d->iconButtonWidth > 0 && w > 0) {
+        minScaleX = (float)d->iconButtonWidth / (float)w;
+        if (minScaleX >= 1.0f) minScaleX = 0.99f;
+    }
+
     float scaleX = 1.0f, scaleY = 1.0f;
     float fx = cx, fy = cy;
     float alpha = 1.0f;
@@ -470,7 +477,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
         float moveX = 1.0f - (invT * invT * invT * invT * invT * invT);
         float moveY = (0.70f * (t * t)) + (0.10f * t);
         scaleX = 1.0f - (0.95f * (1.8f * t));
-        if (scaleX < 0.05f) scaleX = 0.05f;
+        if (scaleX < max(0.05f, minScaleX)) scaleX = max(0.05f, minScaleX);
         scaleY = 1.0f - (0.70f * (t * t));
 
         float startCenterX = cx;
@@ -488,7 +495,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_VACUUM: {
         float e = easeInCubic(t);
         float s = 1.0f - 0.97f * e;
-        if (s < 0.03f) s = 0.03f;
+        if (s < max(0.03f, minScaleX)) s = max(0.03f, minScaleX);
         scaleX = scaleY = s;
         fx = cx + (dockX - cx) * e;
         fy = cy + (taskbarY - cy) * e;
@@ -534,6 +541,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_WARP: {
         float ramp = t / 0.6f; if (ramp > 1.0f) ramp = 1.0f;
         scaleX = 1.0f - 0.96f * ramp;
+        if (scaleX < max(0.04f, minScaleX)) scaleX = max(0.04f, minScaleX);
         scaleY = 1.0f;
         anchorTopLeft = true;
         fx = cx;
@@ -572,7 +580,9 @@ static void SolveFrame(const GhostAnimData* d, float t,
 
     case MODE_SWIRL: {
         float e = easeInCubic(t);
-        scaleX = scaleY = 1.0f - 0.95f * e;
+        float s = 1.0f - 0.95f * e;
+        if (s < max(0.05f, minScaleX)) s = max(0.05f, minScaleX);
+        scaleX = scaleY = s;
         float baseCX = cx + (dockX - cx) * e;
         float baseCY = cy + (taskbarY - cy) * e;
         float amp = (w * 0.40f) * (1.0f - t);
@@ -983,7 +993,7 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     }
 
     const float LEAD     = 1.4f;
-    const float neckW    = (w * 0.05f > 10.0f) ? w * 0.05f : 10.0f;
+    const float neckW    = (data->iconButtonWidth > 0) ? max((float)data->iconButtonWidth, 10.0f) : max(w * 0.05f, 10.0f);
     const float sourceCX = data->targetRect.left + w * 0.5f;
     const float dockX    = (float)data->targetDockX;
     const float dockY    = taskbarY;
@@ -1086,13 +1096,13 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     return true;
 }
 
-// Find the center of the taskbar icon for hWnd in screen coordinates.
-// Returns FALSE if the position could not be determined (caller should fall
-// back to cursor-based heuristics).
-static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY) {
+// Find the centre and full clickable width of the taskbar icon for hWnd.
+// outWidth receives the button width (including padding) so the animation can
+// scale down to exactly the icon block's size.
+// Returns FALSE when a position could not be determined.
+static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
 
-    // Try primary (Shell_TrayWnd) and secondary (Shell_SecondaryTrayWnd) taskbars.
     for (int pass = 0; pass < 2; pass++) {
         HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
         if (!hTaskbar) continue;
@@ -1102,11 +1112,10 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY) {
         HMONITOR hTbMon = MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL);
         if (hTbMon != hMon) continue;
 
-        // Fallback: the centre of the taskbar itself.
         *outX = (tbRect.left + tbRect.right) / 2;
         *outY = (tbRect.top + tbRect.bottom) / 2;
+        if (outWidth) *outWidth = tbRect.right - tbRect.left;
 
-        // Windows 10 path: ToolbarWindow32 inside ReBarWindow32 → MSTaskSwWClass.
         HWND hToolbar = NULL;
         HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
         if (hRebar) {
@@ -1123,13 +1132,13 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY) {
                 TBBUTTON btn;
                 ZeroMemory(&btn, sizeof(btn));
                 if (SendMessage(hToolbar, TB_GETBUTTON, i, (LPARAM)&btn)) {
-                    // The taskbar toolbar stores the HWND in dwData.
                     if ((HWND)btn.dwData == hWnd) {
                         RECT r;
                         if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
                             MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
                             *outX = (r.left + r.right) / 2;
                             *outY = (r.top + r.bottom) / 2;
+                            if (outWidth) *outWidth = r.right - r.left;
                             return TRUE;
                         }
                     }
@@ -1137,7 +1146,7 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY) {
             }
         }
 
-        return TRUE; // Used taskbar-centre fallback.
+        return TRUE;
     }
     return FALSE;
 }
@@ -1161,12 +1170,11 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the horizontal target to the centre of the taskbar icon rather than
-    // wherever the cursor happened to be.  The vertical target stays at the top
-    // edge of the taskbar (rcWork.bottom) so the animation ribbon spreads
-    // upward from the icon row, not from inside the taskbar.
+    // Lock the animation target to the actual taskbar-icon centre rather than
+    // wherever the cursor happened to be.
     int iconX, iconY;
-    if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY)) {
+    data->iconButtonWidth = 0;
+    if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
         data->targetDockX = iconX;
     }
 
