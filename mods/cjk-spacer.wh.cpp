@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.7
+// @version         0.1.8
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -59,11 +59,13 @@ keyboard shortcut text are also preserved.
   display-only DirectWrite hook. Taskbar thumbnail previews and XAML popups
   related to them are explicitly excluded. While an eligible popup is visible,
   other XAML text laid out on the same UI thread can also be transformed;
-  unrelated Explorer threads remain unaffected.
+  unrelated Explorer threads remain unaffected. This path is disabled by
+  default; enable `modernUiText` to opt in.
 
 The modern path is intentionally conservative and can miss text if a Windows
-build uses a different popup window class. Disable `modernUiText` if it causes
-a problem.
+build uses a different popup window class. It remains opt-in because
+DirectWrite doesn't identify the target XAML element; disable `modernUiText`
+again if it causes a problem.
 
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
 flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
@@ -86,7 +88,7 @@ Rewritten strings are recorded and restored when the popup closes.
 - classicTooltips: true
   $name: Classic Win32 tooltips
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
-- modernUiText: true
+- modernUiText: false
   $name: Windows 11 context menus and tooltips (experimental)
   $description: Process DirectWrite text in Explorer XAML context menus and pointer tooltips.
 - characterMode: unicode
@@ -112,7 +114,7 @@ Rewritten strings are recorded and restored when the popup closes.
 
 #include <windows.h>
 
-#include <commctrl.h>
+#include <commctrl.h>  // TOOLTIPS_CLASSW
 #include <dwrite.h>
 #include <uxtheme.h>
 #include <vsstyle.h>
@@ -128,7 +130,7 @@ enum class CharacterKind {
 
 std::atomic_bool g_classicMenus{true};
 std::atomic_bool g_classicTooltips{true};
-std::atomic_bool g_modernUiText{true};
+std::atomic_bool g_modernUiText{false};
 std::atomic_bool g_unicodeLettersAndDigits{true};
 
 bool IsHighSurrogate(wchar_t value) {
@@ -232,6 +234,10 @@ bool IsAsciiLetterOrDigit(uint32_t codePoint) {
 }
 
 bool IsUnicodeLetterOrDigit(uint32_t codePoint) {
+    if (codePoint < 0x80) {
+        return IsAsciiLetterOrDigit(codePoint);
+    }
+
     // Fullwidth Latin letters and digits already have ideographic advance
     // widths, so inserting an extra ASCII space is typographically redundant.
     if (IsInRange(codePoint, 0xFF10, 0xFF19) ||
@@ -407,6 +413,9 @@ void RememberRewrittenMenuItem(HMENU menu,
                                UINT index,
                                std::wstring original,
                                std::wstring spaced);
+int FindMenuItemIndexByText(
+    HMENU menu,
+    const std::wstring& expectedText);
 
 bool IsStringMenuFlags(UINT flags) {
     return !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR));
@@ -456,12 +465,18 @@ BOOL WINAPI InsertMenuWHook(HMENU menu,
             const BOOL result = g_originalInsertMenuW(
                 menu, position, flags, itemId, spaced.c_str());
             if (result) {
-                const int index = FindMenuItemIndex(
-                    menu,
-                    (flags & MF_BYPOSITION)
-                        ? position
-                        : static_cast<UINT>(itemId),
-                    (flags & MF_BYPOSITION) != 0);
+                int index;
+                if (flags & MF_BYPOSITION) {
+                    index = FindMenuItemIndex(
+                        menu, position, true);
+                } else if (flags & MF_POPUP) {
+                    index = FindMenuItemIndexByText(
+                        menu, spaced);
+                } else {
+                    index = FindMenuItemIndex(
+                        menu, static_cast<UINT>(itemId),
+                        false);
+                }
                 if (index >= 0) {
                     RememberRewrittenMenuItem(
                         menu, static_cast<UINT>(index), newItem, spaced);
@@ -758,8 +773,13 @@ void RewriteMenuTree(HMENU menu, unsigned int depth = 0) {
                     replacement.fMask = MIIM_STRING;
                     replacement.dwTypeData =
                         const_cast<wchar_t*>(spaced.c_str());
-                    if (SetMenuItemInfoW(
-                            menu, index, TRUE, &replacement)) {
+                    const BOOL rewritten =
+                        g_originalSetMenuItemInfoW
+                            ? g_originalSetMenuItemInfoW(
+                                  menu, index, TRUE, &replacement)
+                            : SetMenuItemInfoW(
+                                  menu, index, TRUE, &replacement);
+                    if (rewritten) {
                         RememberRewrittenMenuItem(
                             menu, index, std::move(original), spaced);
                     }
@@ -941,6 +961,12 @@ BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
 BOOL CALLBACK EnumExistingClassicTooltipTopLevelWindow(
     HWND window,
     LPARAM) {
+    DWORD processId;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId != GetCurrentProcessId()) {
+        return TRUE;
+    }
+
     EnumExistingClassicTooltipWindow(window, 0);
     EnumChildWindows(
         window, EnumExistingClassicTooltipWindow, 0);
@@ -1187,6 +1213,23 @@ std::mutex g_trackedModernWindowsMutex;
 std::unordered_map<HWND, TrackedModernWindow>
     g_trackedModernWindows;
 std::atomic_uint g_trackedModernWindowCount{0};
+std::atomic_uint g_trackedModernPopupCount{0};
+
+void UpdateTrackedModernWindowCountsLocked() {
+    unsigned int popupCount = 0;
+    for (const auto& entry : g_trackedModernWindows) {
+        if (entry.second.kind == ModernWindowKind::Popup) {
+            ++popupCount;
+        }
+    }
+
+    g_trackedModernWindowCount.store(
+        static_cast<unsigned int>(
+            g_trackedModernWindows.size()),
+        std::memory_order_relaxed);
+    g_trackedModernPopupCount.store(
+        popupCount, std::memory_order_relaxed);
+}
 
 ModernWindowKind ClassifyModernWindowClassName(LPCWSTR className) {
     if (!className) {
@@ -1269,10 +1312,7 @@ bool TrackModernWindow(HWND window, ModernWindowKind kind) {
             iterator->second = {threadId, kind};
         }
         inserted = wasInserted;
-        g_trackedModernWindowCount.store(
-            static_cast<unsigned int>(
-                g_trackedModernWindows.size()),
-            std::memory_order_relaxed);
+        UpdateTrackedModernWindowCountsLocked();
     }
 
     if (inserted) {
@@ -1321,10 +1361,11 @@ void ClearTrackedModernWindows() {
         g_trackedModernWindowsMutex);
     g_trackedModernWindows.clear();
     g_trackedModernWindowCount.store(0, std::memory_order_relaxed);
+    g_trackedModernPopupCount.store(0, std::memory_order_relaxed);
 }
 
 bool IsModernPopupActiveForCurrentThread() {
-    if (g_trackedModernWindowCount.load(
+    if (g_trackedModernPopupCount.load(
             std::memory_order_relaxed) == 0) {
         return false;
     }
@@ -1369,10 +1410,7 @@ bool IsModernPopupActiveForCurrentThread() {
         }
 
         if (removedWindow) {
-            g_trackedModernWindowCount.store(
-                static_cast<unsigned int>(
-                    g_trackedModernWindows.size()),
-                std::memory_order_relaxed);
+            UpdateTrackedModernWindowCountsLocked();
         }
     }
 
