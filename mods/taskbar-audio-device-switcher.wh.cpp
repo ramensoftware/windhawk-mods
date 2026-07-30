@@ -2,10 +2,10 @@
 // @id              taskbar-audio-device-switcher
 // @name            Taskbar audio device switcher
 // @description     Shows a tray icon for every connected audio device and switches the default device with a click
-// @version         1.1.0
+// @version         1.2.0
 // @author          Maksim Chingin
 // @github          https://github.com/umnik1
-// @include         explorer.exe
+// @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lgdi32 -luser32
 // ==/WindhawkMod==
@@ -22,6 +22,20 @@ options.
 
 Each device uses its own icon, the one Windows shows in the sound settings, so
 headphones, speakers, HDMI output and a microphone are easy to tell apart.
+
+## How this differs from the other audio switching mods
+
+The catalog already has several mods for switching audio devices, but the
+interaction model here is different: instead of one icon that you click through
+or scroll on, every device gets its own icon, with its own graphic, and you
+click the device you want directly. Nothing is cycled, and no list of devices
+has to be configured in advance.
+
+* **Audioswap** / **Microswap** — a single tray icon which cycles through a
+  preconfigured list of up to 6 devices.
+* **Mic Tray Control** — one microphone icon, focused on mute and volume.
+* **Audio scroll switcher** — switches devices by scrolling over the taskbar,
+  without adding any icon.
 
 ## Choosing which devices are shown
 
@@ -40,14 +54,20 @@ New tray icons are hidden inside the overflow ("^") flyout by default. To make
 the audio device icons always visible, either drag them out of the flyout onto
 the taskbar, or go to
 *Settings → Personalization → Taskbar → Other system tray icons* and turn the
-relevant `explorer.exe` entries on.
+`windhawk.exe` entries on.
 
 ## Notes
 
+* The mod runs in a dedicated `windhawk.exe` process and doesn't hook anything,
+  see [Mods as
+  tools](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process).
 * Devices are refreshed automatically when a device is plugged in/out, enabled,
   disabled, or when the default device changes from somewhere else.
 * Switching the default device uses the undocumented `IPolicyConfig` interface,
   the same one used by nircmd, SoundSwitch and similar tools.
+* Middle click sets the device as the communications device only. With the
+  default settings a left click already does that too, so middle click is only
+  useful if the *Switch the communications device too* option is turned off.
 */
 // ==/WindhawkModReadme==
 
@@ -78,11 +98,15 @@ relevant `explorer.exe` entries on.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 #include <shellapi.h>
 #include <propsys.h>
 #include <mmdeviceapi.h>
+#include <stdio.h>
 
+#include <atomic>
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -199,15 +223,15 @@ struct AudioDevice {
     bool isDefaultComm = false;
     // Hidden through the tray menu, can be toggled back from there.
     bool hidden = false;
-    // Hidden through the "Hidden devices" setting, can only be brought back by
-    // changing the setting.
+    // Hidden through the "Always hidden devices" setting, can only be brought
+    // back by changing the setting.
     bool hiddenBySetting = false;
     UINT trayId = 0;
 };
 
 struct TrayIcon {
     UINT trayId = 0;
-    HICON icon = nullptr;
+    HICON icon = nullptr;  // owned by the icon cache, not by this struct
     std::wstring tip;
 };
 
@@ -223,12 +247,23 @@ Settings g_settings;
 
 HANDLE g_thread;
 HANDLE g_windowReadyEvent;
-HWND g_hWnd;
+// Written by the mod thread, read from the Windhawk callbacks and from the
+// MMDevice notification threads.
+std::atomic<HWND> g_hWnd;
 UINT g_taskbarCreatedMessage;
+int g_iconSize = 16;
 
 std::vector<AudioDevice> g_devices;  // all devices, hidden ones included
 std::unordered_map<std::wstring, TrayIcon> g_trayIcons;  // device id -> icon
 std::vector<std::wstring> g_hiddenIds;
+
+// Extracting an icon from a DLL is expensive and the device list is rebuilt on
+// every notification, so the built icons are kept around. The cache owns the
+// handles.
+std::unordered_map<std::wstring, HICON> g_iconCache;
+
+// Kept alive for the notification callback and reused for the enumeration.
+IMMDeviceEnumerator* g_enumerator;
 
 using PrivateExtractIconsW_t = UINT(WINAPI*)(LPCWSTR, int, int, int, HICON*, UINT*, UINT, UINT);
 PrivateExtractIconsW_t g_pPrivateExtractIcons;
@@ -244,16 +279,13 @@ void LoadSettings() {
     g_settings.setCommunications = Wh_GetIntSetting(L"setCommunications") != 0;
 
     g_settings.excluded.clear();
-    for (int i = 0; i < 64; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"excludedDevices[%d]", i);
-        bool empty = !value || !*value;
-        if (!empty) {
-            g_settings.excluded.emplace_back(value);
-        }
-        Wh_FreeStringSetting(value);
-        if (empty) {
+    for (int i = 0;; i++) {
+        WindhawkUtils::StringSetting value =
+            WindhawkUtils::StringSetting::make(L"excludedDevices[%d]", i);
+        if (!*value) {
             break;
         }
+        g_settings.excluded.emplace_back(value.get());
     }
 }
 
@@ -359,20 +391,65 @@ void SetDeviceHidden(const std::wstring& deviceId, bool hidden) {
 // Icons
 // ---------------------------------------------------------------------------
 
+// The size the shell expects, for the DPI of the monitor the taskbar is on.
+int GetTrayIconSize() {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
+
+    static bool initialized = false;
+    static GetDpiForWindow_t pGetDpiForWindow;
+    static GetSystemMetricsForDpi_t pGetSystemMetricsForDpi;
+    if (!initialized) {
+        initialized = true;
+        if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+            pGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
+                GetProcAddress(user32, "GetDpiForWindow"));
+            pGetSystemMetricsForDpi = reinterpret_cast<GetSystemMetricsForDpi_t>(
+                GetProcAddress(user32, "GetSystemMetricsForDpi"));
+        }
+    }
+
+    if (pGetDpiForWindow && pGetSystemMetricsForDpi) {
+        if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+            UINT dpi = pGetDpiForWindow(tray);
+            if (dpi != 0) {
+                int size = pGetSystemMetricsForDpi(SM_CXSMICON, dpi);
+                if (size > 0) {
+                    return size;
+                }
+            }
+        }
+    }
+
+    int size = GetSystemMetrics(SM_CXSMICON);
+    return size > 0 ? size : 16;
+}
+
 HICON ExtractIconFromSpec(std::wstring spec, int size) {
     if (spec.empty()) {
         return nullptr;
     }
 
+    // Only a trailing ",<number>" is an icon index. Paths may legitimately
+    // contain a comma of their own.
     int index = 0;
     size_t comma = spec.find_last_of(L',');
-    if (comma != std::wstring::npos) {
-        index = static_cast<int>(wcstol(spec.c_str() + comma + 1, nullptr, 10));
-        spec.resize(comma);
+    if (comma != std::wstring::npos && comma + 1 < spec.size()) {
+        size_t digits = comma + 1;
+        if (spec[digits] == L'-' || spec[digits] == L'+') {
+            digits++;
+        }
+        if (digits < spec.size() &&
+            spec.find_first_not_of(L"0123456789", digits) == std::wstring::npos) {
+            index = static_cast<int>(wcstol(spec.c_str() + comma + 1, nullptr, 10));
+            spec.resize(comma);
+        }
     }
 
     WCHAR expanded[MAX_PATH * 2];
-    if (ExpandEnvironmentStringsW(spec.c_str(), expanded, ARRAYSIZE(expanded))) {
+    DWORD expandedLength =
+        ExpandEnvironmentStringsW(spec.c_str(), expanded, ARRAYSIZE(expanded));
+    if (expandedLength > 0 && expandedLength <= ARRAYSIZE(expanded)) {
         spec = expanded;
     }
 
@@ -423,6 +500,11 @@ HICON ExtractFallbackIcon(EDataFlow flow, int size) {
 }
 
 // Returns a faded, mostly grayscale copy of the icon, or nullptr on failure.
+//
+// Only the alpha channel is scaled. An icon's colour bitmap holds straight,
+// non-premultiplied alpha, which is also how the icon drawing path composites
+// it, so scaling the colour channels as well would darken the icon instead of
+// fading it.
 HICON MakeDimmedIcon(HICON source) {
     ICONINFO info = {};
     if (!GetIconInfo(source, &info)) {
@@ -521,12 +603,7 @@ HICON MakeDimmedIcon(HICON source) {
     return result;
 }
 
-HICON BuildDeviceIcon(const AudioDevice& device) {
-    int size = GetSystemMetrics(SM_CXSMICON);
-    if (size <= 0) {
-        size = 16;
-    }
-
+HICON BuildDeviceIcon(const AudioDevice& device, int size, bool dim) {
     HICON icon = ExtractIconFromSpec(device.iconPath, size);
     if (!icon) {
         icon = ExtractFallbackIcon(device.flow, size);
@@ -535,7 +612,7 @@ HICON BuildDeviceIcon(const AudioDevice& device) {
         return nullptr;
     }
 
-    if (g_settings.dimInactive && !device.isDefault) {
+    if (dim) {
         if (HICON dimmed = MakeDimmedIcon(icon)) {
             DestroyIcon(icon);
             icon = dimmed;
@@ -543,6 +620,49 @@ HICON BuildDeviceIcon(const AudioDevice& device) {
     }
 
     return icon;
+}
+
+// The returned icon belongs to the cache, the caller must not destroy it.
+HICON GetDeviceIcon(const AudioDevice& device) {
+    bool dim = g_settings.dimInactive && !device.isDefault;
+
+    std::wstring key = std::to_wstring(g_iconSize);
+    key += dim ? L"|d|" : L"|n|";
+    key += device.flow == eCapture ? L"c|" : L"r|";
+    key += device.iconPath;
+
+    auto it = g_iconCache.find(key);
+    if (it != g_iconCache.end()) {
+        return it->second;
+    }
+
+    HICON icon = BuildDeviceIcon(device, g_iconSize, dim);
+    if (icon) {
+        g_iconCache[key] = icon;
+    }
+    return icon;
+}
+
+// Drops the cached icons built for a size which is no longer in use. Called
+// after the tray icons have been updated, so that the shell never holds a
+// destroyed handle.
+void PurgeStaleIcons() {
+    std::wstring prefix = std::to_wstring(g_iconSize) + L"|";
+    for (auto it = g_iconCache.begin(); it != g_iconCache.end();) {
+        if (it->first.compare(0, prefix.size(), prefix) != 0) {
+            DestroyIcon(it->second);
+            it = g_iconCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void ClearIconCache() {
+    for (auto& entry : g_iconCache) {
+        DestroyIcon(entry.second);
+    }
+    g_iconCache.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -592,13 +712,17 @@ UINT TrayIdForDevice(const std::wstring& deviceId) {
 }
 
 void EnumerateDevices(std::vector<AudioDevice>& devices) {
-    IMMDeviceEnumerator* enumerator = nullptr;
-    if (FAILED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                                kIID_IMMDeviceEnumerator,
-                                reinterpret_cast<void**>(&enumerator))) ||
-        !enumerator) {
-        Wh_Log(L"Failed to create the device enumerator");
-        return;
+    IMMDeviceEnumerator* enumerator = g_enumerator;
+    IMMDeviceEnumerator* ownedEnumerator = nullptr;
+    if (!enumerator) {
+        if (FAILED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
+                                    kIID_IMMDeviceEnumerator,
+                                    reinterpret_cast<void**>(&ownedEnumerator))) ||
+            !ownedEnumerator) {
+            Wh_Log(L"Failed to create the device enumerator");
+            return;
+        }
+        enumerator = ownedEnumerator;
     }
 
     const struct {
@@ -688,7 +812,9 @@ void EnumerateDevices(std::vector<AudioDevice>& devices) {
         collection->Release();
     }
 
-    enumerator->Release();
+    if (ownedEnumerator) {
+        ownedEnumerator->Release();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -698,18 +824,15 @@ void EnumerateDevices(std::vector<AudioDevice>& devices) {
 void RemoveTrayIcon(UINT trayId) {
     NOTIFYICONDATAW nid = {};
     nid.cbSize = sizeof(nid);
-    nid.hWnd = g_hWnd;
+    nid.hWnd = g_hWnd.load();
     nid.uID = trayId;
     Shell_NotifyIconW(NIM_DELETE, &nid);
 }
 
 void RemoveAllTrayIcons(bool notifyShell) {
-    for (auto& entry : g_trayIcons) {
-        if (notifyShell) {
+    if (notifyShell) {
+        for (auto& entry : g_trayIcons) {
             RemoveTrayIcon(entry.second.trayId);
-        }
-        if (entry.second.icon) {
-            DestroyIcon(entry.second.icon);
         }
     }
     g_trayIcons.clear();
@@ -749,9 +872,6 @@ void RefreshDevices() {
             continue;
         }
         RemoveTrayIcon(it->second.trayId);
-        if (it->second.icon) {
-            DestroyIcon(it->second.icon);
-        }
         it = g_trayIcons.erase(it);
     }
 
@@ -760,12 +880,18 @@ void RefreshDevices() {
             continue;
         }
 
-        HICON icon = BuildDeviceIcon(device);
+        HICON icon = GetDeviceIcon(device);
         std::wstring tip = MakeTooltip(device);
+
+        auto it = g_trayIcons.find(device.id);
+        if (it != g_trayIcons.end() && it->second.icon == icon &&
+            it->second.tip == tip) {
+            continue;  // nothing changed for this device
+        }
 
         NOTIFYICONDATAW nid = {};
         nid.cbSize = sizeof(nid);
-        nid.hWnd = g_hWnd;
+        nid.hWnd = g_hWnd.load();
         nid.uID = device.trayId;
         nid.uFlags = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
         nid.uCallbackMessage = WM_APP_TRAY;
@@ -775,23 +901,15 @@ void RefreshDevices() {
             nid.hIcon = icon;
         }
 
-        auto it = g_trayIcons.find(device.id);
         if (it == g_trayIcons.end()) {
             if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
-                // A leftover icon from a previous session of the mod.
-                RemoveTrayIcon(device.trayId);
-                if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
-                    Wh_Log(L"Failed to add a tray icon for %s", device.name.c_str());
-                    if (icon) {
-                        DestroyIcon(icon);
-                    }
-                    continue;
-                }
+                Wh_Log(L"Failed to add a tray icon for %s", device.name.c_str());
+                continue;
             }
 
             NOTIFYICONDATAW version = {};
             version.cbSize = sizeof(version);
-            version.hWnd = g_hWnd;
+            version.hWnd = g_hWnd.load();
             version.uID = device.trayId;
             version.uVersion = NOTIFYICON_VERSION_4;
             Shell_NotifyIconW(NIM_SETVERSION, &version);
@@ -803,15 +921,14 @@ void RefreshDevices() {
             g_trayIcons[device.id] = std::move(state);
         } else {
             Shell_NotifyIconW(NIM_MODIFY, &nid);
-            if (it->second.icon) {
-                DestroyIcon(it->second.icon);
-            }
             it->second.icon = icon;
             it->second.tip = std::move(tip);
         }
     }
 
     g_devices = std::move(devices);
+
+    PurgeStaleIcons();
 }
 
 const AudioDevice* FindDeviceByTrayId(UINT trayId) {
@@ -827,22 +944,32 @@ const AudioDevice* FindDeviceByTrayId(UINT trayId) {
 // Switching the default device
 // ---------------------------------------------------------------------------
 
-void SetDefaultDevice(const std::wstring& deviceId, bool communicationsOnly) {
+// deviceId is taken by value on purpose: the caller's string usually lives in
+// g_devices, and the outgoing COM calls below can be re-entered by this thread,
+// which may rebuild that list.
+void SetDefaultDevice(std::wstring deviceId, bool communicationsOnly) {
     IPolicyConfig* config = nullptr;
     HRESULT hr = CoCreateInstance(kCLSID_PolicyConfigClient, nullptr, CLSCTX_ALL,
                                   kIID_IPolicyConfig, reinterpret_cast<void**>(&config));
     if (SUCCEEDED(hr) && config) {
-        if (communicationsOnly) {
-            config->SetDefaultEndpoint(deviceId.c_str(), eCommunications);
-        } else {
-            config->SetDefaultEndpoint(deviceId.c_str(), eConsole);
-            config->SetDefaultEndpoint(deviceId.c_str(), eMultimedia);
-            if (g_settings.setCommunications) {
-                config->SetDefaultEndpoint(deviceId.c_str(), eCommunications);
+        HRESULT setResult =
+            config->SetDefaultEndpoint(deviceId.c_str(),
+                                       communicationsOnly ? eCommunications : eConsole);
+        if (SUCCEEDED(setResult)) {
+            if (!communicationsOnly) {
+                config->SetDefaultEndpoint(deviceId.c_str(), eMultimedia);
+                if (g_settings.setCommunications) {
+                    config->SetDefaultEndpoint(deviceId.c_str(), eCommunications);
+                }
             }
+            config->Release();
+            return;
         }
+
+        // Fall through to the Vista interface.
+        Wh_Log(L"SetDefaultEndpoint failed, hr=0x%08X",
+               static_cast<unsigned>(setResult));
         config->Release();
-        return;
     }
 
     IPolicyConfigVista* vista = nullptr;
@@ -862,7 +989,7 @@ void SetDefaultDevice(const std::wstring& deviceId, bool communicationsOnly) {
         return;
     }
 
-    Wh_Log(L"Failed to create the policy config client, hr=0x%08X",
+    Wh_Log(L"Failed to switch the default device, hr=0x%08X",
            static_cast<unsigned>(hr));
 }
 
@@ -925,8 +1052,8 @@ class NotificationClient final : public IMMNotificationClient {
 
    private:
     void NotifyChanged() {
-        if (g_hWnd) {
-            PostMessageW(g_hWnd, WM_APP_REFRESH, 0, 0);
+        if (HWND hWnd = g_hWnd.load()) {
+            PostMessageW(hWnd, WM_APP_REFRESH, 0, 0);
         }
     }
 
@@ -960,8 +1087,8 @@ HMENU BuildShownDevicesMenu(const std::vector<AudioDevice>& devices,
             }
         } else {
             anyHidden = true;
-            // Devices filtered out by the "Hidden devices" setting can't be
-            // brought back from here.
+            // Devices filtered out by the "Always hidden devices" setting can't
+            // be brought back from here.
             if (device.hiddenBySetting) {
                 flags |= MF_GRAYED;
             }
@@ -985,6 +1112,15 @@ HMENU BuildShownDevicesMenu(const std::vector<AudioDevice>& devices,
     }
 
     return menu;
+}
+
+void OpenVolumeMixer() {
+    // ms-settings:apps-volume only exists on Windows 10 1803 and newer.
+    HINSTANCE result = ShellExecuteW(nullptr, L"open", L"ms-settings:apps-volume",
+                                    nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(result) <= 32) {
+        ShellExecuteW(nullptr, L"open", L"SndVol.exe", nullptr, nullptr, SW_SHOWNORMAL);
+    }
 }
 
 void ShowContextMenu(HWND hWnd,
@@ -1064,12 +1200,11 @@ void ShowContextMenu(HWND hWnd,
                           SW_SHOWNORMAL);
             break;
         case IDM_VOLUME_MIXER:
-            ShellExecuteW(nullptr, L"open", L"ms-settings:apps-volume", nullptr, nullptr,
-                          SW_SHOWNORMAL);
+            OpenVolumeMixer();
             break;
         case IDM_LEGACY_APPLET:
-            ShellExecuteW(nullptr, L"open", L"rundll32.exe",
-                          L"shell32.dll,Control_RunDLL mmsys.cpl", nullptr, SW_SHOWNORMAL);
+            ShellExecuteW(nullptr, L"open", L"mmsys.cpl", nullptr, nullptr,
+                          SW_SHOWNORMAL);
             break;
     }
 }
@@ -1129,7 +1264,6 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
         case WM_APP_RELOAD_SETTINGS:
             LoadSettings();
-            RemoveAllTrayIcons(true);
             RefreshDevices();
             return 0;
 
@@ -1143,9 +1277,15 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
         case WM_SETTINGCHANGE:
         case WM_DISPLAYCHANGE:
-        case WM_DPICHANGED:
-            SetTimer(hWnd, kRefreshTimerId, 500, nullptr);
+        case WM_DPICHANGED: {
+            // These arrive often, only act when the icon size really changed.
+            int size = GetTrayIconSize();
+            if (size != g_iconSize) {
+                g_iconSize = size;
+                SetTimer(hWnd, kRefreshTimerId, 500, nullptr);
+            }
             break;
+        }
 
         case WM_DESTROY:
             KillTimer(hWnd, kRefreshTimerId);
@@ -1168,6 +1308,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     }
 
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
+    g_iconSize = GetTrayIconSize();
 
     LoadHiddenIds();
 
@@ -1176,14 +1317,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = kWindowClassName;
-    ATOM atom = RegisterClassExW(&wc);
-    if (!atom && GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-        // Left over from a previous instance of the mod, its window procedure
-        // points into an unloaded module.
-        UnregisterClassW(kWindowClassName, wc.hInstance);
-        atom = RegisterClassExW(&wc);
-    }
-    if (!atom) {
+    if (!RegisterClassExW(&wc)) {
         Wh_Log(L"RegisterClassExW failed, error %u", GetLastError());
         SetEvent(g_windowReadyEvent);
         if (SUCCEEDED(comInit)) {
@@ -1204,17 +1338,16 @@ DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
-    g_hWnd = hWnd;
+    g_hWnd.store(hWnd);
     SetEvent(g_windowReadyEvent);
 
-    IMMDeviceEnumerator* enumerator = nullptr;
     NotificationClient* client = nullptr;
     if (SUCCEEDED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
                                    kIID_IMMDeviceEnumerator,
-                                   reinterpret_cast<void**>(&enumerator))) &&
-        enumerator) {
+                                   reinterpret_cast<void**>(&g_enumerator))) &&
+        g_enumerator) {
         client = new NotificationClient();
-        if (FAILED(enumerator->RegisterEndpointNotificationCallback(client))) {
+        if (FAILED(g_enumerator->RegisterEndpointNotificationCallback(client))) {
             client->Release();
             client = nullptr;
             Wh_Log(L"Failed to register the endpoint notification callback");
@@ -1233,17 +1366,19 @@ DWORD WINAPI ThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (enumerator) {
+    if (g_enumerator) {
         if (client) {
-            enumerator->UnregisterEndpointNotificationCallback(client);
+            g_enumerator->UnregisterEndpointNotificationCallback(client);
             client->Release();
         }
-        enumerator->Release();
+        g_enumerator->Release();
+        g_enumerator = nullptr;
     }
 
-    g_hWnd = nullptr;
+    g_hWnd.store(nullptr);
     DestroyWindow(hWnd);
     UnregisterClassW(kWindowClassName, wc.hInstance);
+    ClearIconCache();
 
     if (SUCCEEDED(comInit)) {
         CoUninitialize();
@@ -1254,10 +1389,10 @@ DWORD WINAPI ThreadProc(LPVOID) {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Windhawk entry points
+// Tool mod callbacks
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
@@ -1277,30 +1412,32 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L">");
 
-    if (g_hWnd) {
-        PostMessageW(g_hWnd, WM_APP_RELOAD_SETTINGS, 0, 0);
+    // The window may still be coming up, the settings must not be dropped.
+    if (g_windowReadyEvent) {
+        WaitForSingleObject(g_windowReadyEvent, 5000);
+    }
+
+    if (HWND hWnd = g_hWnd.load()) {
+        PostMessageW(hWnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L">");
 
     if (g_windowReadyEvent) {
         WaitForSingleObject(g_windowReadyEvent, 5000);
     }
 
-    HWND hWnd = g_hWnd;
-    if (hWnd) {
+    if (HWND hWnd = g_hWnd.load()) {
         PostMessageW(hWnd, WM_CLOSE, 0, 0);
     }
 
     if (g_thread) {
-        if (WaitForSingleObject(g_thread, 5000) == WAIT_TIMEOUT) {
-            Wh_Log(L"The mod thread did not exit in time");
-        }
+        WaitForSingleObject(g_thread, 5000);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
@@ -1309,4 +1446,183 @@ void Wh_ModUninit() {
         CloseHandle(g_windowReadyEvent);
         g_windowReadyEvent = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
