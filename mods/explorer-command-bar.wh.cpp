@@ -89,40 +89,22 @@ The **Icon glyph or icon path** field accepts several forms:
 
 ## Default configuration
 
-Out of the box the mod adds only apps which are part of a stock Windows 11
-install:
+Out of the box the mod adds:
 
 * **Open in Terminal** - `wt.exe -d "%path%"`
 * **Open in Notepad** - `notepad.exe "%sel%"`
 * **Additional** ▾ (dropdown)
+  * Open in VS Code - `code.exe "%path%"`
   * Open Paint - `mspaint.exe`
   * Open Calculator - `calc.exe`
-  * **System** ▸ - Task Manager (`taskmgr.exe`), Control Panel (`control.exe`)
+  * **Commands** ▸ - `vite`, `npm init`, `npm install`, `npm run dev`,
+    `npm run build`, `npm run start`
+  * **AI** ▸ - `Claude`, `Codex`
 
+Items whose command isn't installed simply do nothing when clicked (the failure
+is written to the mod log), so remove the ones you don't need and add your own.
 All of the built-in buttons stay visible by default. Everything is configurable
 in the mod settings.
-
-## Example configurations
-
-A few items worth adding if you have the corresponding tools installed. Set
-*Command* and *Parameters* as shown; leave *Icon glyph or icon path* empty to
-use the executable's own icon.
-
-* **Open in VS Code** - command `code.exe`, parameters `"%path%"`.
-* **Open in your editor of choice** - e.g. command
-  `%LOCALAPPDATA%\Programs\<editor>\<editor>.exe`, parameters `"%path%"`.
-* **A dropdown of project commands** (type *Dropdown menu*), each entry with
-  command `cmd.exe` and parameters `/k npm install`, `/k npm run dev`,
-  `/k npm run build`, and so on. `cmd.exe /k` keeps the console open so you can
-  see the output.
-* **A dropdown of CLI tools** - command `cmd.exe` with parameters `/k claude`,
-  `/k codex`, `/k gh pr list`, ...
-* **Open a terminal as administrator** - command
-  `powershell.exe`, parameters
-  `-Command "Start-Process wt.exe -ArgumentList '-d \"%path%\"' -Verb RunAs"`.
-
-Enable *Hide icon* for the menu entries of such commands: an `.exe` like
-`cmd.exe` contributes little as an icon next to a text label.
 
 ## How it works
 
@@ -261,6 +243,12 @@ a new tab or navigating to another folder makes them appear.
     - separatorAfter: false
     - subItems:
       - - type: button
+        - name: Open in VS Code
+        - command: code.exe
+        - parameters: '"%path%"'
+        - iconGlyph: ""
+        - separatorAfter: false
+      - - type: button
         - name: Open Paint
         - command: mspaint.exe
         - parameters: ""
@@ -273,23 +261,66 @@ a new tab or navigating to another folder makes them appear.
         - iconGlyph: 'shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'
         - separatorAfter: true
       - - type: menu
-        - name: System
+        - name: Commands
         - command: ""
         - parameters: ""
-        - iconGlyph: E713
+        - iconGlyph: EC7A
         - separatorAfter: false
         - subItems:
-          - - name: Task Manager
-            - command: taskmgr.exe
-            - parameters: ""
+          - - name: vite
+            - command: cmd.exe
+            - parameters: /k vite
             - iconGlyph: ""
-            - hideIcon: false
+            - hideIcon: true
+            - separatorAfter: true
+          - - name: npm init
+            - command: cmd.exe
+            - parameters: /k npm init
+            - iconGlyph: ""
+            - hideIcon: true
             - separatorAfter: false
-          - - name: Control Panel
-            - command: control.exe
-            - parameters: ""
+          - - name: npm install
+            - command: cmd.exe
+            - parameters: /k npm install
             - iconGlyph: ""
-            - hideIcon: false
+            - hideIcon: true
+            - separatorAfter: false
+          - - name: npm run dev
+            - command: cmd.exe
+            - parameters: /k npm run dev
+            - iconGlyph: ""
+            - hideIcon: true
+            - separatorAfter: false
+          - - name: npm run build
+            - command: cmd.exe
+            - parameters: /k npm run build
+            - iconGlyph: ""
+            - hideIcon: true
+            - separatorAfter: false
+          - - name: npm run start
+            - command: cmd.exe
+            - parameters: /k npm run start
+            - iconGlyph: ""
+            - hideIcon: true
+            - separatorAfter: false
+      - - type: menu
+        - name: AI
+        - command: ""
+        - parameters: ""
+        - iconGlyph: E794
+        - separatorAfter: false
+        - subItems:
+          - - name: Claude
+            - command: cmd.exe
+            - parameters: /k claude
+            - iconGlyph: ""
+            - hideIcon: true
+            - separatorAfter: false
+          - - name: Codex
+            - command: cmd.exe
+            - parameters: /k codex
+            - iconGlyph: ""
+            - hideIcon: true
             - separatorAfter: false
   $name: Toolbar items
   $description: >-
@@ -375,6 +406,7 @@ a new tab or navigating to another folder makes them appear.
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -495,15 +527,27 @@ namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 
 constexpr PCWSTR kButtonNamePrefix = L"WindhawkActionButton";
 
+// Everything below is per-UI-thread state, and every XAML object in it belongs
+// to the thread that created it: a weak reference to a live non-agile XAML
+// element can only be resolved from its own thread, and its event handlers can
+// only be unregistered there. The state is therefore thread_local rather than
+// a global keyed by thread id - the cross-thread access becomes impossible by
+// construction, the storage goes away with the window's thread, and the
+// lookups don't scan other windows' entries. Both Wh_ModUninit and
+// Wh_ModSettingsChanged already reach every thread through
+// RunFromWindowThread.
+
 struct CommandBarEntry {
-    DWORD threadId;
     winrt::weak_ref<muxc::CommandBar> commandBar;
     winrt::event_token loadedToken{};
     winrt::event_token vectorChangedToken{};
 };
 
-std::mutex g_entriesMutex;
-std::vector<CommandBarEntry> g_entries;
+thread_local std::vector<CommandBarEntry> g_entries;
+
+// Set once a scan of this thread's XAML island found its command bars, so the
+// focus hook can skip the tree walk while they're still around.
+thread_local bool g_threadScanned;
 
 // The Explorer elements we touch, each with the original state captured the
 // first time we touched it, so it can be restored exactly instead of forcing a
@@ -514,7 +558,6 @@ std::vector<CommandBarEntry> g_entries;
 // it, never by its address: XAML objects die with their window or tab, and the
 // heap happily hands the same address to an unrelated element of the next one.
 struct ManagedElement {
-    DWORD threadId;
     winrt::weak_ref<mux::UIElement> element;
 
     bool hasOriginalVisibility = false;
@@ -533,19 +576,11 @@ struct ManagedElement {
     int64_t visibilityToken = 0;
 };
 
-std::mutex g_managedElementsMutex;
-std::vector<ManagedElement> g_managedElements;
-
-// The lookups below must run on the element's own UI thread, and the caller
-// must hold g_managedElementsMutex. A weak reference to a live non-agile XAML
-// element can only be resolved from its own thread, which is also why entries
-// of other threads are skipped rather than treated as dead.
+thread_local std::vector<ManagedElement> g_managedElements;
 
 ManagedElement* FindManagedElement(mux::UIElement const& element) {
-    DWORD threadId = GetCurrentThreadId();
-
     for (auto& entry : g_managedElements) {
-        if (entry.threadId == threadId && entry.element.get() == element) {
+        if (entry.element.get() == element) {
             return &entry;
         }
     }
@@ -554,13 +589,11 @@ ManagedElement* FindManagedElement(mux::UIElement const& element) {
 }
 
 ManagedElement& GetManagedElement(mux::UIElement const& element) {
-    DWORD threadId = GetCurrentThreadId();
-
-    // Drop the entries of this thread whose element is gone, so the list
-    // doesn't grow for the whole Explorer session.
+    // Drop the entries whose element is gone, so the list doesn't grow for the
+    // lifetime of the window.
     for (auto it = g_managedElements.begin();
          it != g_managedElements.end();) {
-        if (it->threadId == threadId && !it->element.get()) {
+        if (!it->element.get()) {
             it = g_managedElements.erase(it);
         } else {
             ++it;
@@ -571,8 +604,70 @@ ManagedElement& GetManagedElement(mux::UIElement const& element) {
         return *entry;
     }
 
-    g_managedElements.push_back({threadId, winrt::make_weak(element)});
+    g_managedElements.push_back({winrt::make_weak(element)});
     return g_managedElements.back();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Resolving a configured command. Used both for launching it and for taking
+// its icon.
+
+std::wstring ExpandEnvVars(std::wstring const& str) {
+    WCHAR buffer[MAX_PATH];
+    DWORD length =
+        ExpandEnvironmentStringsW(str.c_str(), buffer, ARRAYSIZE(buffer));
+    if (length == 0 || length > ARRAYSIZE(buffer)) {
+        return str;
+    }
+
+    return buffer;
+}
+
+// Resolves a bare executable name to a full path the way ShellExecute does:
+// through the search path, then through the App Paths registry keys.
+std::wstring ResolveCommandPath(std::wstring const& command) {
+    std::wstring expanded = ExpandEnvVars(command);
+
+    if (expanded.find(L'\\') != std::wstring::npos) {
+        return expanded;
+    }
+
+    WCHAR resolved[MAX_PATH];
+    if (SearchPathW(nullptr, expanded.c_str(), L".exe", ARRAYSIZE(resolved),
+                    resolved, nullptr)) {
+        return resolved;
+    }
+
+    std::wstring keyPath =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" +
+        expanded;
+    std::wstring lower = expanded;
+    for (auto& c : lower) {
+        c = towlower(c);
+    }
+    if (!lower.ends_with(L".exe")) {
+        keyPath += L".exe";
+    }
+
+    for (HKEY rootKey : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
+        WCHAR buffer[MAX_PATH];
+        DWORD size = sizeof(buffer);
+        if (RegGetValueW(rootKey, keyPath.c_str(), nullptr, RRF_RT_REG_SZ,
+                         nullptr, buffer, &size) == ERROR_SUCCESS &&
+            buffer[0]) {
+            std::wstring appPath = ExpandEnvVars(buffer);
+
+            // The value is sometimes quoted.
+            if (appPath.size() >= 2 && appPath.front() == L'"' &&
+                appPath.back() == L'"') {
+                appPath = appPath.substr(1, appPath.size() - 2);
+            }
+
+            return appPath;
+        }
+    }
+
+    return expanded;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -793,13 +888,34 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
 
     std::wstring parameters = BuildParameters(item.parameters, context);
 
-    HINSTANCE hInst = ShellExecuteW(
-        nullptr, nullptr, item.command.c_str(),
-        parameters.empty() ? nullptr : parameters.c_str(),
-        context.folderPath.empty() ? nullptr : context.folderPath.c_str(),
-        SW_SHOWNORMAL);
-    if ((INT_PTR)hInst <= 32) {
-        Wh_Log(L"ShellExecuteW failed: %d", (int)(INT_PTR)hInst);
+    // A bare command name has to be resolved before it's launched: the working
+    // directory is the browsed folder, and the shell resolves a relative file
+    // against it, so a same-named executable sitting in the folder the user
+    // happens to be looking at would win over the real one.
+    std::wstring command = ResolveCommandPath(item.command);
+    bool isPath = command.find(L'\\') != std::wstring::npos;
+    if (!isPath) {
+        Wh_Log(L"Couldn't resolve %s to a path, launching without a working "
+               L"directory",
+               item.command.c_str());
+    }
+
+    SHELLEXECUTEINFOW execInfo = {sizeof(execInfo)};
+    // No UI: a command which doesn't exist would otherwise put up a modal
+    // error box on this thread, which the mod would then have to wait for
+    // while unloading. The failure is logged below instead. NOASYNC because
+    // this thread exits right after.
+    execInfo.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+    execInfo.lpFile = command.c_str();
+    execInfo.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
+    execInfo.lpDirectory = (isPath && !context.folderPath.empty())
+                               ? context.folderPath.c_str()
+                               : nullptr;
+    execInfo.nShow = SW_SHOWNORMAL;
+
+    if (!ShellExecuteExW(&execInfo)) {
+        Wh_Log(L"ShellExecuteExW failed for %s: %u", command.c_str(),
+               GetLastError());
     }
 }
 
@@ -872,64 +988,6 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
 ////////////////////////////////////////////////////////////////////////////////
 // Icons.
 
-std::wstring ExpandEnvVars(std::wstring const& str) {
-    WCHAR buffer[MAX_PATH];
-    DWORD length =
-        ExpandEnvironmentStringsW(str.c_str(), buffer, ARRAYSIZE(buffer));
-    if (length == 0 || length > ARRAYSIZE(buffer)) {
-        return str;
-    }
-
-    return buffer;
-}
-
-// Resolves a bare executable name to a full path the way ShellExecute does:
-// through the search path, then through the App Paths registry keys.
-std::wstring ResolveCommandPath(std::wstring const& command) {
-    std::wstring expanded = ExpandEnvVars(command);
-
-    if (expanded.find(L'\\') != std::wstring::npos) {
-        return expanded;
-    }
-
-    WCHAR resolved[MAX_PATH];
-    if (SearchPathW(nullptr, expanded.c_str(), L".exe", ARRAYSIZE(resolved),
-                    resolved, nullptr)) {
-        return resolved;
-    }
-
-    std::wstring keyPath =
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" +
-        expanded;
-    std::wstring lower = expanded;
-    for (auto& c : lower) {
-        c = towlower(c);
-    }
-    if (!lower.ends_with(L".exe")) {
-        keyPath += L".exe";
-    }
-
-    for (HKEY rootKey : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
-        WCHAR buffer[MAX_PATH];
-        DWORD size = sizeof(buffer);
-        if (RegGetValueW(rootKey, keyPath.c_str(), nullptr, RRF_RT_REG_SZ,
-                         nullptr, buffer, &size) == ERROR_SUCCESS &&
-            buffer[0]) {
-            std::wstring appPath = ExpandEnvVars(buffer);
-
-            // The value is sometimes quoted.
-            if (appPath.size() >= 2 && appPath.front() == L'"' &&
-                appPath.back() == L'"') {
-                appPath = appPath.substr(1, appPath.size() - 2);
-            }
-
-            return appPath;
-        }
-    }
-
-    return expanded;
-}
-
 #ifndef IO_REPARSE_TAG_APPEXECLINK
 #define IO_REPARSE_TAG_APPEXECLINK (0x8000001BL)
 #endif
@@ -962,7 +1020,7 @@ std::wstring ResolveAppExecutionAlias(std::wstring const& path) {
         WCHAR stringList[1];
     };
 
-    alignas(8) BYTE buffer[16 * 1024];
+    alignas(8) BYTE buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
     DWORD bytesReturned = 0;
     BOOL succeeded =
         DeviceIoControl(hFile, FSCTL_GET_REPARSE_POINT, nullptr, 0, buffer,
@@ -1066,7 +1124,10 @@ bool ReadBitmapPixels(HBITMAP hBitmap, DecodedIcon* decoded) {
 }
 
 // True if every pixel is fully transparent, which is how a bitmap without an
-// alpha channel comes back.
+// alpha channel comes back. Note that this can't be told apart from an icon
+// which is genuinely fully transparent; such an icon ends up opaque (and thus
+// visible) rather than invisible, which is the better of the two failure modes
+// for a toolbar button.
 bool HasNoAlphaChannel(std::vector<uint8_t> const& pixels) {
     for (size_t p = 3; p < pixels.size(); p += 4) {
         if (pixels[p]) {
@@ -1187,6 +1248,16 @@ std::wstring ParseGlyphSetting(PCWSTR glyphSetting) {
     if (!glyphSetting[1]) {
         // A literal glyph character.
         return std::wstring(1, glyphSetting[0]);
+    }
+
+    // Every character has to be a hex digit, so that a typo ends up as no icon
+    // instead of an unrelated glyph (`abc` would otherwise parse as 0xABC, and
+    // `E756x` as 0xE756).
+    for (PCWSTR p = glyphSetting; *p; p++) {
+        if (!iswxdigit(*p)) {
+            Wh_Log(L"%s is not a glyph code point", glyphSetting);
+            return std::wstring();
+        }
     }
 
     unsigned long parsed = wcstoul(glyphSetting, nullptr, 16);
@@ -1550,12 +1621,9 @@ bool ShouldHide(ManagedTarget const& target);
 // Explorer last set, which we track, or its current value if we've never
 // touched it.
 mux::Visibility EffectiveVisibility(mux::UIElement const& element) {
-    {
-        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
-        auto* entry = FindManagedElement(element);
-        if (entry && entry->hasOriginalVisibility) {
-            return entry->originalVisibility;
-        }
+    auto* entry = FindManagedElement(element);
+    if (entry && entry->hasOriginalVisibility) {
+        return entry->originalVisibility;
     }
 
     return element.Visibility();
@@ -1643,8 +1711,8 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar);
 // The pending entries are keyed by address, which is safe here because the
 // queued work always removes its own entry: an entry can't outlive the command
 // bar it belongs to and be matched against a later one at the same address.
-std::mutex g_pendingUpdatesMutex;
-std::unordered_map<void*, bool> g_pendingUpdates;  // Value: full update.
+thread_local std::unordered_map<void*, bool>
+    g_pendingUpdates;  // Value: full update.
 
 void QueueCommandBarUpdate(
     winrt::weak_ref<muxc::CommandBar> const& weakCommandBar,
@@ -1655,19 +1723,17 @@ void QueueCommandBarUpdate(
     }
 
     void* key = winrt::get_abi(commandBar);
-    {
-        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
-        auto [it, inserted] = g_pendingUpdates.insert({key, fullUpdate});
-        if (!inserted) {
-            // Already queued; the queued work reads the flag when it runs, so
-            // a full update can still be requested on top of a recompute.
-            it->second = it->second || fullUpdate;
-            return;
-        }
+    auto [it, inserted] = g_pendingUpdates.insert({key, fullUpdate});
+    if (!inserted) {
+        // Already queued; the queued work reads the flag when it runs, so a
+        // full update can still be requested on top of a recompute.
+        it->second = it->second || fullUpdate;
+        return;
     }
 
+    // Runs on this same thread, either from the dispatcher queue or right
+    // below if queueing failed.
     auto takePending = [key]() {
-        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
         bool full = false;
         auto it = g_pendingUpdates.find(key);
         if (it != g_pendingUpdates.end()) {
@@ -1740,13 +1806,16 @@ void WatchVisibility(mux::UIElement const& element,
             // Explorer changed it, so this is the new baseline to restore.
             mux::Visibility visibility = element.Visibility();
             {
-                std::lock_guard<std::mutex> lock(g_managedElementsMutex);
                 auto& entry = GetManagedElement(element);
                 entry.originalVisibility = visibility;
                 entry.hasOriginalVisibility = true;
             }
 
-            if (visibility != mux::Visibility::Collapsed &&
+            // A group separator isn't decided here: the group snapshot this
+            // watcher was registered with can be stale, and the recompute
+            // below re-collects it anyway.
+            if (target.kind != ManagedKind::GroupSeparator &&
+                visibility != mux::Visibility::Collapsed &&
                 ShouldHide(target)) {
                 SetVisibilityInternal(element, mux::Visibility::Collapsed);
             }
@@ -1756,7 +1825,6 @@ void WatchVisibility(mux::UIElement const& element,
             QueueVisibilityRecompute(owner);
         });
 
-    std::lock_guard<std::mutex> lock(g_managedElementsMutex);
     auto& entry = GetManagedElement(element);
     entry.watched = true;
     entry.visibilityToken = token;
@@ -1765,26 +1833,21 @@ void WatchVisibility(mux::UIElement const& element,
 // Unregisters the watchers of this thread's elements, keeping their remembered
 // original state for the restore which follows.
 void UnwatchVisibilityForCurrentThread() {
-    DWORD threadId = GetCurrentThreadId();
-
-    std::vector<std::pair<mux::UIElement, int64_t>> taken;
-    {
-        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
-        for (auto& entry : g_managedElements) {
-            if (entry.threadId != threadId || !entry.watched) {
-                continue;
-            }
-
-            if (auto element = entry.element.get()) {
-                taken.push_back({element, entry.visibilityToken});
-            }
-
-            entry.watched = false;
-            entry.visibilityToken = 0;
+    for (auto& entry : g_managedElements) {
+        if (!entry.watched) {
+            continue;
         }
-    }
 
-    for (auto const& [element, token] : taken) {
+        auto element = entry.element.get();
+        int64_t token = entry.visibilityToken;
+
+        entry.watched = false;
+        entry.visibilityToken = 0;
+
+        if (!element) {
+            continue;
+        }
+
         try {
             element.UnregisterPropertyChangedCallback(
                 mux::UIElement::VisibilityProperty(), token);
@@ -1795,17 +1858,7 @@ void UnwatchVisibilityForCurrentThread() {
 }
 
 void ForgetManagedElementsForCurrentThread() {
-    DWORD threadId = GetCurrentThreadId();
-
-    std::lock_guard<std::mutex> lock(g_managedElementsMutex);
-    for (auto it = g_managedElements.begin();
-         it != g_managedElements.end();) {
-        if (it->threadId == threadId) {
-            it = g_managedElements.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    g_managedElements.clear();
 }
 
 // Sets an element's visibility to Collapsed when hiding, or restores its
@@ -1819,7 +1872,6 @@ void SetManagedVisibility(mux::UIElement const& element,
     mux::Visibility original;
     bool watch;
     {
-        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
         auto& entry = GetManagedElement(element);
         if (!entry.hasOriginalVisibility) {
             entry.originalVisibility = element.Visibility();
@@ -1850,7 +1902,6 @@ void ApplyItemSpacing(muxc::AppBarButton const& button,
     mux::Thickness originalMargin;
     double originalMinWidth;
     {
-        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
         auto& entry = GetManagedElement(button);
         if (!entry.hasOriginalSpacing) {
             entry.originalMargin = button.Margin();
@@ -1978,18 +2029,14 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
         entries[firstCustomIndex - 1].isSeparator) {
         viewSeparatorIndex = firstCustomIndex - 1;
     } else {
-        // Without custom buttons (the mod can be used just to hide the
-        // built-in ones) it's the first separator after the View button.
-        for (uint32_t i = 0; i < count && viewSeparatorIndex == count; i++) {
-            if (entries[i].defaultIndex != kViewButtonIndex) {
-                continue;
-            }
-
-            for (uint32_t j = i + 1; j < count; j++) {
-                if (entries[j].isSeparator) {
-                    viewSeparatorIndex = j;
-                    break;
-                }
+        // The mod can also be used just to hide the built-in buttons, without
+        // any custom ones. Then it's the last of Explorer's own separators -
+        // the same element our buttons would have followed, so the option keeps
+        // targeting the same line either way.
+        for (uint32_t i = count; i > 0; i--) {
+            if (entries[i - 1].isSeparator) {
+                viewSeparatorIndex = i - 1;
+                break;
             }
         }
     }
@@ -2084,7 +2131,6 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
     if (isPrimary) {
         muxc::CommandBarOverflowButtonVisibility originalOverflow;
         {
-            std::lock_guard<std::mutex> lock(g_managedElementsMutex);
             auto& entry = GetManagedElement(commandBar);
             if (!entry.hasOriginalOverflow) {
                 entry.originalOverflow = commandBar.OverflowButtonVisibility();
@@ -2128,7 +2174,8 @@ muxc::AppBarButton CreateBareButton(int index,
 }
 
 muxc::AppBarButton CreateActionButton(ActionItem const& item, int index) {
-    muxc::AppBarButton button = CreateBareButton(index, item.name, MakeCommandButtonIcon(item));
+    muxc::AppBarButton button =
+        CreateBareButton(index, item.name, MakeCommandButtonIcon(item));
 
     button.Click([item](wf::IInspectable const& sender,
                         mux::RoutedEventArgs const&) {
@@ -2194,56 +2241,32 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
 // The hover timers of our menu buttons. A started timer is rooted by the
 // dispatcher queue and its Tick handler lives in this DLL, so the timers have
 // to be stopped before the mod is unloaded.
-struct HoverTimerEntry {
-    DWORD threadId;
-    winrt::weak_ref<mux::DispatcherTimer> timer;
-};
-
-std::mutex g_hoverTimersMutex;
-std::vector<HoverTimerEntry> g_hoverTimers;
+thread_local std::vector<winrt::weak_ref<mux::DispatcherTimer>> g_hoverTimers;
 
 void TrackHoverTimer(mux::DispatcherTimer const& timer) {
-    DWORD threadId = GetCurrentThreadId();
-
-    std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
-
-    // Drop this thread's timers which are gone with their button.
+    // Drop the timers which are gone with their button.
     for (auto it = g_hoverTimers.begin(); it != g_hoverTimers.end();) {
-        if (it->threadId == threadId && !it->timer.get()) {
+        if (!it->get()) {
             it = g_hoverTimers.erase(it);
         } else {
             ++it;
         }
     }
 
-    g_hoverTimers.push_back({threadId, winrt::make_weak(timer)});
+    g_hoverTimers.push_back(winrt::make_weak(timer));
 }
 
 void StopHoverTimersForCurrentThread() {
-    DWORD threadId = GetCurrentThreadId();
+    std::vector<winrt::weak_ref<mux::DispatcherTimer>> taken;
+    taken.swap(g_hoverTimers);
 
-    std::vector<mux::DispatcherTimer> taken;
-    {
-        std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
-        for (auto it = g_hoverTimers.begin(); it != g_hoverTimers.end();) {
-            if (it->threadId != threadId) {
-                ++it;
-                continue;
+    for (auto const& weakTimer : taken) {
+        if (auto timer = weakTimer.get()) {
+            try {
+                timer.Stop();
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult().value);
             }
-
-            if (auto timer = it->timer.get()) {
-                taken.push_back(std::move(timer));
-            }
-
-            it = g_hoverTimers.erase(it);
-        }
-    }
-
-    for (auto const& timer : taken) {
-        try {
-            timer.Stop();
-        } catch (...) {
-            Wh_Log(L"Error %08X", winrt::to_hresult().value);
         }
     }
 }
@@ -2252,7 +2275,8 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
                                     int index,
                                     bool openOnHover,
                                     int hoverDelayMs) {
-    muxc::AppBarButton button = CreateBareButton(index, item.name, MakeCommandButtonIcon(item));
+    muxc::AppBarButton button =
+        CreateBareButton(index, item.name, MakeCommandButtonIcon(item));
 
     // The menu flyout is shown in its own popup window, so resolve the
     // Explorer window from the anchor button, not from the clicked menu item.
@@ -2420,28 +2444,25 @@ void RemoveOurButtons(muxc::CommandBar const& commandBar) {
 }
 
 void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-
-        // Prune entries whose command bar is gone.
-        for (auto it = g_entries.begin(); it != g_entries.end();) {
-            if (!it->commandBar.get()) {
-                it = g_entries.erase(it);
-            } else {
-                ++it;
-            }
+    // Prune entries whose command bar is gone. Only this thread's, since
+    // g_entries is thread_local - a command bar can only ever be tracked by
+    // the thread which owns it.
+    for (auto it = g_entries.begin(); it != g_entries.end();) {
+        if (!it->commandBar.get()) {
+            it = g_entries.erase(it);
+        } else {
+            ++it;
         }
+    }
 
-        for (auto const& entry : g_entries) {
-            if (entry.commandBar.get() == commandBar) {
-                // Already tracked (e.g. re-added to the tree).
-                return;
-            }
+    for (auto const& entry : g_entries) {
+        if (entry.commandBar.get() == commandBar) {
+            // Already tracked (e.g. re-added to the tree).
+            return;
         }
     }
 
     CommandBarEntry entry;
-    entry.threadId = GetCurrentThreadId();
     entry.commandBar = winrt::make_weak(commandBar);
 
     // Re-add the buttons whenever the command bar reloads.
@@ -2468,29 +2489,9 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
             QueueCommandBarUpdate(weakCommandBar, /*fullUpdate=*/true);
         });
 
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        g_entries.push_back(std::move(entry));
-    }
+    g_entries.push_back(std::move(entry));
 
     UpdateCommandBar(commandBar);
-}
-
-std::vector<CommandBarEntry> TakeEntriesForCurrentThread() {
-    DWORD threadId = GetCurrentThreadId();
-    std::vector<CommandBarEntry> taken;
-
-    std::lock_guard<std::mutex> lock(g_entriesMutex);
-    for (auto it = g_entries.begin(); it != g_entries.end();) {
-        if (it->threadId == threadId) {
-            taken.push_back(std::move(*it));
-            it = g_entries.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    return taken;
 }
 
 void RemoveButtonsForCurrentThread() {
@@ -2498,7 +2499,10 @@ void RemoveButtonsForCurrentThread() {
     UnwatchVisibilityForCurrentThread();
     StopHoverTimersForCurrentThread();
 
-    for (auto& entry : TakeEntriesForCurrentThread()) {
+    std::vector<CommandBarEntry> taken;
+    taken.swap(g_entries);
+
+    for (auto& entry : taken) {
         auto commandBar = entry.commandBar.get();
         if (!commandBar) {
             continue;
@@ -2516,8 +2520,11 @@ void RemoveButtonsForCurrentThread() {
     }
 
     // Everything has been restored, so the remembered original state of this
-    // thread's elements isn't needed anymore.
+    // thread's elements isn't needed anymore. Any update still queued on the
+    // dispatcher gives up on its own, since g_unloading is set.
     ForgetManagedElementsForCurrentThread();
+    g_pendingUpdates.clear();
+    g_threadScanned = false;
 }
 
 void RefreshButtonsForCurrentThread() {
@@ -2525,15 +2532,10 @@ void RefreshButtonsForCurrentThread() {
     // stopped and forgotten first.
     StopHoverTimersForCurrentThread();
 
+    // A copy, since UpdateCommandBar below can add entries.
     std::vector<winrt::weak_ref<muxc::CommandBar>> commandBars;
-    {
-        DWORD threadId = GetCurrentThreadId();
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        for (auto const& entry : g_entries) {
-            if (entry.threadId == threadId) {
-                commandBars.push_back(entry.commandBar);
-            }
-        }
+    for (auto const& entry : g_entries) {
+        commandBars.push_back(entry.commandBar);
     }
 
     for (auto const& weakCommandBar : commandBars) {
@@ -2641,6 +2643,14 @@ void ScanXamlRootForCommandBars(mux::UIElement const& element) try {
     for (auto const& commandBar : commandBars) {
         OnCommandBarAdded(commandBar);
     }
+
+    if (!commandBars.empty()) {
+        // The island is built and its command bars are tracked; the focus hook
+        // doesn't have to keep looking. Not conditioned on both bars being
+        // found, since a layout without a secondary bar would otherwise be
+        // rescanned on every focus change.
+        g_threadScanned = true;
+    }
 } catch (...) {
     Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
@@ -2669,14 +2679,7 @@ void ScheduleXamlRootScan(mux::UIElement const& element) try {
 }
 
 muxc::CommandBar GetKnownCommandBarForCurrentThread() {
-    DWORD threadId = GetCurrentThreadId();
-
-    std::lock_guard<std::mutex> lock(g_entriesMutex);
     for (auto const& entry : g_entries) {
-        if (entry.threadId != threadId) {
-            continue;
-        }
-
         if (auto commandBar = entry.commandBar.get()) {
             return commandBar;
         }
@@ -2806,6 +2809,13 @@ CommandBarControl_GotFocusHandler_t
 
 void HandleCommandBarControlGotFocus(void* sender) {
     if (g_unloading || !sender) {
+        return;
+    }
+
+    // This runs on every focus change, and the scan walks the whole visual
+    // tree, so skip it once this thread's command bars are known. A rebuilt
+    // command bar comes back through OnApplyTemplate / Loaded instead.
+    if (g_threadScanned && GetKnownCommandBarForCurrentThread()) {
         return;
     }
 
@@ -3174,6 +3184,15 @@ void Wh_ModAfterInit() {
     }
 }
 
+// Our function hooks are gone by the time Wh_ModUninit runs, but the XAML
+// delegates aren't - they stay live until they're unregistered below. Setting
+// the flag one callback earlier shortens the window in which they still act.
+void Wh_ModBeforeUninit() {
+    Wh_Log(L">");
+
+    g_unloading = true;
+}
+
 void Wh_ModUninit() {
     Wh_Log(L">");
 
@@ -3189,37 +3208,12 @@ void Wh_ModUninit() {
         }
     }
 
-    // Anything left here belongs to a thread which couldn't be reached above.
-    // Its watchers and timers can only be released from that thread, so all
-    // that's left to do is to drop the records.
-    {
-        std::lock_guard<std::mutex> lock(g_managedElementsMutex);
-        if (!g_managedElements.empty()) {
-            Wh_Log(L"%zu elements couldn't be restored",
-                   g_managedElements.size());
-        }
-
-        g_managedElements.clear();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_hoverTimersMutex);
-        g_hoverTimers.clear();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_pendingUpdatesMutex);
-        g_pendingUpdates.clear();
-    }
-
+    // The per-thread state (g_entries, g_managedElements, g_hoverTimers,
+    // g_pendingUpdates) was released above, on each thread which owns it - it's
+    // thread_local, so there's nothing here to clean up for other threads.
     {
         std::lock_guard<std::mutex> lock(g_iconCacheMutex);
         g_iconCache.clear();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_entriesMutex);
-        g_entries.clear();
     }
 
     // Last, since the launch threads run our code: the DLL can't be unmapped
