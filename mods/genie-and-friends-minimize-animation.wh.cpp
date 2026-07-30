@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              genie-and-friends-minimize-animation
 // @name            Genie + Friends minimize animation pack
-// @description     GPU-accelerated macOS/Compiz-style minimize & restore effects: Genie (true mesh bend), Vacuum, Glide, Pop, Slide, Free Fall, Warp, Squash, Roll-Up & Swirl.
-// @version         2.2.3
+// @description     GPU-accelerated minimise/restore effects that lock each animation to the correct taskbar icon. Genie (true mesh bend), Vacuum, Glide, Pop, Slide, Free Fall, Warp, Squash, Roll-Up & Swirl. Windows 10 + 11.
+// @version         2.3.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @include         *
@@ -56,6 +56,16 @@ silently falls back to a GDI renderer, so nothing breaks.
 
 ## Changelog
 
+- **v2.3.0**: minimise/restore animation now locks to the exact taskbar icon
+  position (horizontal centre + button width) rather than the cursor click
+  point, so every effect converges on the correct icon. Full taskbar button
+  enumeration with owner-chain, root-ancestor, and process-ID matching ensures
+  grouped and child windows find their icon. Removed cursor-based fallback.
+  Fixes a grey flash on minimise/restore (double-animation guard, DwmFlush
+  before ShowWindow, restore cloak/uncloak sequencing, ghost-window background
+  brush). Genie mesh neck width and per-effect min scale now match the icon
+  button's pixel width. Windows 11 22H2+ are supported, with fallback scanning
+  paths for every known taskbar layout (ReBar, WorkerW, MSTaskSwWClass).
 - **v2.2.3**: ghost windows no longer render DWM drop shadows, preventing
   shadow stacking or phantom shadows when the real window has shadows disabled.
 - **v2.2.2**: the pack stands on its own as `genie-and-friends-minimize-animation`.
@@ -76,7 +86,8 @@ The effect selection and the original Genie math originate from **lolstijl**'s
 multi-effect pack, which itself built on the original Genie Animation Mod.
 This pack is maintained by **akilluminati47**, who wrote the GPU
 (DirectComposition) renderer, the mesh-warped Genie bend, and the anti-flash
-timing fix. Development was assisted by Claude and Gemini.
+timing fix. Development of v2.3.0 (icon-targeted animation, grey-flash
+resolved, Windows 11 support) was assisted by Claude.
 */
 // ==/WindhawkModReadme==
 
