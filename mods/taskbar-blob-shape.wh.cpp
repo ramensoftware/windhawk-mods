@@ -2,7 +2,7 @@
 // @id              taskbar-blob-shape
 // @name            Taskbar Blob Shape
 // @description     Injects a customizable blob shape behind active taskbar items.
-// @version         0.2.0
+// @version         1.0.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -15,6 +15,11 @@
 # Taskbar Blob Shape
 
 Adds a blob shape behind active taskbar buttons.
+
+![Taskbar Blob Shape](https://i.imgur.com/REPLACE-ME.png)
+
+Based on **Taskbar Elastic WinUI Pill** and the unreleased **Taskbar Elastic
+Border** by **Lockframe**.
 
 Every taskbar button gets its own blob shape, shown or hidden as the
 button's running indicator state changes. The shapes are hosted in the
@@ -46,7 +51,7 @@ outward with concave (outside) corner radii, ending in a flat top edge:
     $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32').
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
-    $description: Offset the blob shape (e.g. '0, 4, 0, 0' pushes it down 4px). Leave empty to disable.
+    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Leave empty to disable.
   - BottomRadius: '4.0'
     $name: Bottom corner radius
     $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
@@ -65,7 +70,6 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 */
 // ==/WindhawkModSettings==
 
-#include <thread>
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.Collections.h>
@@ -205,8 +209,9 @@ void ParseThickness(PCWSTR str, winrt::Windows::UI::Xaml::Thickness& outThicknes
     if (vals.size() == 1) {
         outL = outT = outR = outB = vals[0];
     } else if (vals.size() == 2) {
-        outT = outB = vals[0];
-        outL = outR = vals[1];
+        // XAML convention: "horizontal,vertical"
+        outL = outR = vals[0];
+        outT = outB = vals[1];
     } else if (vals.size() >= 4) {
         outL = vals[0]; outT = vals[1]; outR = vals[2]; outB = vals[3];
     } else if (vals.size() > 0) {
@@ -409,90 +414,20 @@ using namespace winrt::Windows::UI::Xaml::Media;
 using namespace winrt::Windows::UI::Xaml::Hosting;
 using namespace winrt::Windows::UI::Composition;
 
-bool IsSafeComPointer(void* p) {
-    if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
-
-    void* vtable = *(void**)p;
-    if (!vtable) return false;
-    if (!VirtualQuery(vtable, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
-
-    void* qi = *(void**)vtable;
-    if (!qi) return false;
-    if (!VirtualQuery(qi, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT || !(mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return false;
-
-    return true;
-}
-
-volatile thread_local bool g_inSafeComCall = false;
-volatile thread_local bool g_safeComCrashed = false;
-thread_local CONTEXT g_safeComContext;
-
-LONG CALLBACK SafeComCallVEH(PEXCEPTION_POINTERS ExceptionInfo) {
-    if (g_inSafeComCall && ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
-        g_inSafeComCall = false;
-        g_safeComCrashed = true;
-        RtlRestoreContext(&g_safeComContext, nullptr);
-    }
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-bool SafeProbeHelper(void* pPtr, const GUID& iid, void** finalOutPtr) {
-    ::IUnknown* pUnk = (::IUnknown*)pPtr;
-    PVOID veh = AddVectoredExceptionHandler(1, SafeComCallVEH);
-    if (!veh) return false;
-
-    bool success = false;
-    g_safeComCrashed = false;
-
-    RtlCaptureContext(&g_safeComContext);
-
-    if (g_safeComCrashed) {
-        RemoveVectoredExceptionHandler(veh);
-        return false;
-    }
-
-    g_inSafeComCall = true;
-    void* tempPtr = nullptr;
-    if (SUCCEEDED(pUnk->QueryInterface(iid, &tempPtr)) && tempPtr) {
-        // Test if the returned pointer is actually a valid COM object
-        // by calling AddRef and Release under VEH protection.
-        ((::IUnknown*)tempPtr)->AddRef();
-        ((::IUnknown*)tempPtr)->Release();
-
-        *finalOutPtr = tempPtr;
-        success = true;
-    }
-    g_inSafeComCall = false;
-
-    RemoveVectoredExceptionHandler(veh);
-    return success;
-}
-
-bool ProbeForFrameworkElement(void* pThis, int offset, winrt::Windows::UI::Xaml::FrameworkElement& outElem) {
-    void* pPtr = (void**)pThis + offset;
-    if (!IsSafeComPointer(pPtr)) return false;
-
-    void* outPtr = nullptr;
-    if (SafeProbeHelper(pPtr, winrt::guid_of<winrt::Windows::UI::Xaml::FrameworkElement>(), &outPtr)) {
-        winrt::copy_from_abi(outElem, outPtr);
-        ((::IUnknown*)outPtr)->Release();
-        return true;
-    }
-    return false;
-}
-
+// Resolves the XAML element from the native TaskListButton pointer the same
+// way the mods this derives from do (taskbar-elastic-pill, taskbar-labels):
+// the IUnknown of the WinRT object sits at a fixed offset in the
+// implementation type.
 FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     if (!pThis) return nullptr;
-    winrt::Windows::UI::Xaml::FrameworkElement result{nullptr};
-    for (int i = 1; i <= 6; i++) {
-        if (ProbeForFrameworkElement(pThis, i, result)) return result;
+    try {
+        void* iUnknownPtr = (void**)pThis + 3;
+        winrt::Windows::Foundation::IUnknown iUnknown;
+        winrt::copy_from_abi(iUnknown, iUnknownPtr);
+        return iUnknown.try_as<FrameworkElement>();
+    } catch (...) {
+        return nullptr;
     }
-    return nullptr;
 }
 
 FrameworkElement FindChildByName(FrameworkElement const& parent, std::wstring_view name, int depth = 0) {
@@ -541,21 +476,19 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
 
-        // Prune entries whose button died. Their blob elements live in the
-        // RootGrid, so they must be removed explicitly.
-        if (g_blobEntries->size() > 100) {
-            for (auto it = g_blobEntries->begin(); it != g_blobEntries->end(); ) {
-                if ((*it)->button.get() == nullptr) {
-                    if (auto blob = (*it)->blobShape.get()) orphans.push_back(blob);
-                    it = g_blobEntries->erase(it);
-                } else {
-                    ++it;
-                }
+        // Prune entries whose button died without an Unloaded (rare). Their
+        // blob elements live in the RootGrid, so they must be removed
+        // explicitly. This runs on every lookup — the list is small since
+        // Unloaded drops entries eagerly.
+        for (auto it = g_blobEntries->begin(); it != g_blobEntries->end(); ) {
+            auto btn = (*it)->button.get();
+            if (!btn) {
+                if (auto blob = (*it)->blobShape.get()) orphans.push_back(blob);
+                it = g_blobEntries->erase(it);
+                continue;
             }
-        }
-
-        for (auto& e : *g_blobEntries) {
-            if (e->button.get() == button) { result = e; break; }
+            if (btn == button) result = *it;
+            ++it;
         }
         if (!result) {
             result = std::make_shared<BlobEntry>();
@@ -664,29 +597,28 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     auto bg = FindChildByName(iconPanel, L"BackgroundElement");
     FrameworkElement anchor = bg ? bg : iconPanel;
 
-    // Suppress the native background at the composition level. A plain
-    // Opacity(0) is a LOCAL value, and the RunningIndicatorStates transition
-    // storyboards hold ANIMATED values on BackgroundElement — which outrank
-    // local values in XAML's precedence — letting the native pill reappear
-    // on top of the blob (seen on cross-monitor activations, where the
-    // existing button transitions with storyboards; freshly created buttons
-    // apply their initial state without transitions, hence the asymmetry).
-    // The hand-off visual's IsVisible flag is outside the XAML property
-    // system, so no storyboard can override it.
-    if (bg) {
-        try {
-            ElementCompositionPreview::GetElementVisual(bg).IsVisible(!isActive);
-        } catch (...) {}
-    }
+    // Suppression of the native background is decided at the END, from the
+    // same condition that shows the blob, so no failure path can leave an
+    // active button with neither indicator. The hand-off visual's IsVisible
+    // flag is used instead of a local Opacity because the
+    // RunningIndicatorStates transition storyboards hold ANIMATED values on
+    // BackgroundElement, which outrank local values in XAML's precedence.
+    auto setNativeHidden = [&](bool hidden) {
+        if (bg) {
+            try {
+                ElementCompositionPreview::GetElementVisual(bg).IsVisible(!hidden);
+            } catch (...) {}
+        }
+    };
 
     auto entry = FindOrCreateEntry(button);
 
     // Button removal (window moved to another monitor, app closed, container
     // recycled) is a LIFECYCLE event, not a state change — UpdateVisualStates
-    // never fires a final "inactive" for it. Without this, the blob stays
-    // visible, glued to a detached offset chain that no longer updates:
-    // a frozen ghost. On Unloaded: hide the blob and invalidate the grid
-    // cache and expression binding so the next use re-resolves everything.
+    // never fires a final "inactive" for it. On Unloaded, tear the blob down
+    // completely: stop its expression (which holds references to the whole
+    // visual chain), unparent it, restore the native indicator, and drop the
+    // entry. The create path rebuilds everything if the container is reused.
     if (!entry->unloadAttached) {
         entry->unloadAttached = true;
         std::weak_ptr<BlobEntry> weakEntry = entry;
@@ -694,16 +626,50 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             if (g_unloading) return;
             auto e = weakEntry.lock();
             if (!e) return;
-            e->bound = false;
-            e->grid = nullptr;
-            if (auto blob = e->blobShape.get()) blob.Opacity(0.0);
+            if (auto blob = e->blobShape.get()) {
+                try {
+                    ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
+                } catch (...) {}
+                try {
+                    if (auto parent = VisualTreeHelper::GetParent(blob)) {
+                        if (auto panel = parent.try_as<winrt::Windows::UI::Xaml::Controls::Panel>()) {
+                            uint32_t index;
+                            if (panel.Children().IndexOf(blob, index)) {
+                                panel.Children().RemoveAt(index);
+                            }
+                        }
+                    }
+                } catch (...) {}
+            }
+            if (auto btn = e->button.get()) {
+                try {
+                    auto iconPanel = FindChildByName(btn, L"IconPanel");
+                    auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
+                    if (bg) ElementCompositionPreview::GetElementVisual(bg).IsVisible(true);
+                } catch (...) {}
+                if (auto anchor = e->anchor.get()) {
+                    try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
+                }
+                try { btn.Unloaded(e->unloadToken); } catch (...) {}
+            }
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            g_blobEntries->erase(
+                std::remove_if(g_blobEntries->begin(), g_blobEntries->end(),
+                    [&](auto& x) { return x == e; }),
+                g_blobEntries->end());
         });
     }
 
     auto grid = entry->grid.get();
     if (!grid) {
         grid = GetTaskbarRootGrid(button);
-        if (!grid) return; // not rooted yet; retried on the next event
+        if (!grid) {
+            // Not rooted under a TaskbarFrame — e.g. buttons in the overflow
+            // flyout live in a separate XAML island. Leave the native
+            // indicator fully in charge there.
+            setNativeHidden(false);
+            return;
+        }
         entry->grid = winrt::make_weak(grid);
     }
 
@@ -822,8 +788,8 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         if (localSettings.CustomWidth >= 0.0)  adjX += (float)((bW - W) / 2.0);
         if (localSettings.CustomHeight >= 0.0) adjY += (float)((bH - H) / 2.0);
         if (localSettings.HasCustomMargin) {
-            adjX += (float)localSettings.CustomMargin.Left;
-            adjY += (float)localSettings.CustomMargin.Top;
+            adjX += (float)(localSettings.CustomMargin.Left - localSettings.CustomMargin.Right);
+            adjY += (float)(localSettings.CustomMargin.Top - localSettings.CustomMargin.Bottom);
         }
         if (anchor != button) {
             try {
@@ -857,9 +823,12 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         }
     }
 
-    // Hidden until the expression is glued, so the shape can never render at
-    // a stale or unbound position.
-    blobShape.Opacity((isActive && entry->bound) ? 1.0 : 0.0);
+    // One condition drives both the blob and the native indicator: the
+    // native background only disappears when the blob is actually shown in
+    // its place, and the blob never renders at a stale or unbound position.
+    bool show = isActive && entry->bound;
+    blobShape.Opacity(show ? 1.0 : 0.0);
+    setNativeHidden(show);
 }
 
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
@@ -921,21 +890,11 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module) {
-        if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
-            g_taskbarViewModule = module;
-            Wh_Log(L"Taskbar View DLL loaded: %s", lpLibFileName);
-            std::thread([]() {
-                Sleep(2000);
-                HMODULE safeModule = nullptr;
-                if (!GetModuleHandleExW(0, L"Taskbar.View.dll", &safeModule)) return;
-                HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\WindhawkElasticModsHookMutex");
-                if (hMutex) WaitForSingleObject(hMutex, INFINITE);
-                if (HookTaskbarViewDllSymbols(safeModule)) Wh_ApplyHookOperations();
-                if (hMutex) { ReleaseMutex(hMutex); CloseHandle(hMutex); }
-                FreeLibrary(safeModule);
-            }).detach();
-        }
+    if (module && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
+        g_taskbarViewModule = module;
+        Wh_Log(L"Taskbar View DLL loaded: %s", lpLibFileName);
+        if (HookTaskbarViewDllSymbols(module)) Wh_ApplyHookOperations();
     }
     return module;
 }
