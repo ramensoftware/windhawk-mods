@@ -338,6 +338,8 @@ static HANDLE g_hConnectThread = NULL;
 // this and the connect thread run code in the mod's own image, so leaving
 // either alive when Windhawk unloads the DLL crashes the process on return.
 static HANDLE g_hReapThread = NULL;
+// Modal native Wi-Fi profile UI runs here, never on the hotkey thread.
+static HANDLE g_hProfileDialogThread = NULL;
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -4644,7 +4646,7 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
     }
 }
 
-void RefreshNetworkData(BOOL forceDetection = FALSE) {
+void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOverride = nullptr) {
     if (g_Ctx.hWlanClient) {
         RefreshWifiData(g_Ctx.hWlanClient);
     } else {
@@ -4652,14 +4654,14 @@ void RefreshNetworkData(BOOL forceDetection = FALSE) {
         g_NetworkCount = 0;
         LeaveCriticalSection(&g_Ctx.csLock);
     }
-    UpdateEthernetStatus();
+    UpdateEthernetStatus(pNLMOverride);
     
     // Detect network location category (Home / Public / Work).
     // Skip the COM query entirely when the feature is disabled, and also
     // while the flyout isn't visible: the result is only consumed at paint
     // time, so running the registry enumeration (and, on a name-match miss,
     // up to four NLM/COM calls plus a GetAdaptersAddresses pass) on every
-    // auto-refresh tick while hidden would be wasted work. WM_SHOW_FLYOUT
+    // auto-refresh tick while hidden would be wasted work. ToggleFlyoutWindow()
     // already calls RefreshNetworkData() when the flyout opens, so gating on
     // visibility here is safe. forceDetection bypasses this gate for the
     // one-off priming calls at mod startup and after a settings change, so
@@ -4670,7 +4672,7 @@ void RefreshNetworkData(BOOL forceDetection = FALSE) {
     BOOL flyoutVisible = forceDetection ||
                          (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
     if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
-        g_CurrentNetworkCategory = DetectNetworkLocationCategory();
+        g_CurrentNetworkCategory = DetectNetworkLocationCategory(pNLMOverride);
     } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
         // Don't wipe the reliable fallback just because the connection is
         // momentarily settling (e.g. during a reconnect). While the flyout is
@@ -5355,7 +5357,7 @@ static BOOL AskForPasswordAndConnect(int index) {
     if (needsPassword) {
         WCHAR password[65] = {0};
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
-            LogSsidSafe(L"User cancelled password for", item->ssid);
+            LogSsidSafe(L"User cancelled password for", ctx->ssid);
             g_PendingConnectIndex = -1;
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
@@ -5370,7 +5372,7 @@ static BOOL AskForPasswordAndConnect(int index) {
             }
         }
         if (isEmpty) {
-            LogSsidSafe(L"Empty password provided for", item->ssid);
+            LogSsidSafe(L"Empty password provided for", ctx->ssid);
             MessageBoxW(g_hWndFlyout, LOC(STR_PWD_EMPTY), LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
             g_PendingConnectIndex = -1;
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
@@ -5381,12 +5383,31 @@ static BOOL AskForPasswordAndConnect(int index) {
         ctx->password[0] = L'\0';
     }
     
-    item->connState = CONN_STATE_CONNECTING;
-    item->operationStartTime = GetTickCount();
-    g_PendingConnectIndex = index;
+    // The password dialog is modal; refresh may have rebuilt the list while
+    // it was open. Re-resolve the original row before publishing state.
+    EnterCriticalSection(&g_Ctx.csLock);
+    int resolvedIndex = -1;
+    for (int i = 0; i < g_NetworkCount; ++i) {
+        if (IsEqualGUID(g_NetworkList[i].interfaceGuid, ctx->interfaceGuid) &&
+            wcscmp(g_NetworkList[i].ssid, ctx->ssid) == 0) {
+            resolvedIndex = i;
+            break;
+        }
+    }
+    if (resolvedIndex >= 0) {
+        g_NetworkList[resolvedIndex].connState = CONN_STATE_CONNECTING;
+        g_NetworkList[resolvedIndex].operationStartTime = GetTickCount();
+        g_PendingConnectIndex = resolvedIndex;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (resolvedIndex < 0) {
+        SecureZeroMemory(ctx->password, sizeof(ctx->password));
+        free(ctx);
+        return FALSE;
+    }
     
     Wh_Log(L"AskForPasswordAndConnect: set g_PendingConnectIndex=%d, SSID=%s, hasProfile=%d", 
-           index, item->ssid, item->hasProfile);
+           resolvedIndex, ctx->ssid, ctx->hasProfile);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -6046,20 +6067,53 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     }
 }
 
+struct WlanProfileDialogContext {
+    WCHAR profileName[33];
+    GUID interfaceGuid;
+};
+
+static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID parameter) {
+    std::unique_ptr<WlanProfileDialogContext> context(
+        static_cast<WlanProfileDialogContext*>(parameter));
+    if (!context) return ERROR_INVALID_PARAMETER;
+    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
+        DWORD, LPCWSTR, GUID*, HWND, DWORD, PVOID, DWORD*);
+    HMODULE hWlanUi = LoadLibraryExW(L"wlanui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hWlanUi) return GetLastError();
+    WlanUIEditProfile_t editProfile = reinterpret_cast<WlanUIEditProfile_t>(
+        GetProcAddress(hWlanUi, "WlanUIEditProfile"));
+    DWORD result = ERROR_PROC_NOT_FOUND;
+    if (editProfile) {
+        DWORD reasonCode = 0;
+        // No owner makes the native dialog center on the screen.
+        result = editProfile(1, context->profileName, &context->interfaceGuid,
+                             nullptr, 0, nullptr, &reasonCode);
+    }
+    FreeLibrary(hWlanUi);
+    return result;
+}
+
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
-    if (itemIndex < 0 || itemIndex >= g_NetworkCount) return;
+    WifiNetworkItem item = {};
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (itemIndex < 0 || itemIndex >= g_NetworkCount) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        return;
+    }
+    item = g_NetworkList[itemIndex];
+    LeaveCriticalSection(&g_Ctx.csLock);
     g_ContextMenuTargetIndex = itemIndex;
-    WifiNetworkItem* item = &g_NetworkList[itemIndex];
     HMENU hMenu = CreatePopupMenu();
-    if (item->connState == CONN_STATE_CONNECTED) {
+    if (!hMenu) return;
+    if (item.connState == CONN_STATE_CONNECTED) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, LOC(STR_CTX_DISCONNECT));
         AppendMenuW(hMenu, MF_STRING, IDM_STATUS,     LOC(STR_CTX_STATUS));
-    } else if (item->connState == CONN_STATE_CONNECTING) {
+    } else if (item.connState == CONN_STATE_CONNECTING) {
         AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CONNECT, LOC(STR_CONNECTING));
     } else {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, LOC(STR_CTX_CONNECT));
     }
-    if (item->hasProfile) {
+    if (item.hasProfile) {
         AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
     }
     if (g_Settings.theme == 1) {
@@ -6094,31 +6148,32 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
                 }
                 LeaveCriticalSection(&g_Ctx.csLock);
 
-                // Properties belongs to the WLAN profile, not to the adapter.
-                // WlanUIEditProfile is the supported native UI for exactly this
-                // operation and displays the “Wireless Network Properties”
-                // dialog (Connection/Security tabs) for the selected SSID.
-                // Resolve it dynamically so the mod has no wlanui.lib link-time
-                // dependency and can retain the safe fallbacks on old builds.
+                // Properties belongs to the WLAN profile, not the adapter.
+                // It is modal, therefore run it outside the hotkey thread so
+                // that shutdown can join a tracked worker safely.
                 if (cmd == IDM_PROPERTIES && haveItem && item.hasProfile &&
                     !IsEqualGUID(item.interfaceGuid, GUID_NULL)) {
-                    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
-                        DWORD, LPCWSTR, GUID*, HWND, DWORD, PVOID, DWORD*);
-                    HMODULE hWlanUi = LoadLibraryW(L"wlanui.dll");
-                    if (hWlanUi) {
-                        WlanUIEditProfile_t editProfile = reinterpret_cast<WlanUIEditProfile_t>(
-                            GetProcAddress(hWlanUi, "WlanUIEditProfile"));
-                        if (editProfile) {
-                            DWORD reasonCode = 0;
-                            // 1 is WLAN_UI_API_VERSION and 0 selects the
-                            // Connection page, matching the classic dialog.
-                            // Do not parent it to the flyout at the right edge:
-                            // a null owner lets the native dialog center itself
-                            // on the screen.
-                            launched = (editProfile(1, item.ssid, &item.interfaceGuid,
-                                                    nullptr, 0, nullptr, &reasonCode) == ERROR_SUCCESS);
+                    if (g_hProfileDialogThread &&
+                        WaitForSingleObject(g_hProfileDialogThread, 0) == WAIT_OBJECT_0) {
+                        CloseHandle(g_hProfileDialogThread);
+                        g_hProfileDialogThread = NULL;
+                    }
+                    if (!g_hProfileDialogThread) {
+                        std::unique_ptr<WlanProfileDialogContext> context(
+                            new WlanProfileDialogContext{});
+                        StringCchCopyW(context->profileName, ARRAYSIZE(context->profileName), item.ssid);
+                        context->interfaceGuid = item.interfaceGuid;
+                        // Transfer ownership only after preparing the worker
+                        // context. If CreateThread fails, delete it locally.
+                        WlanProfileDialogContext* rawContext = context.release();
+                        HANDLE thread = CreateThread(NULL, 0, WlanProfileDialogThreadProc,
+                                                     rawContext, 0, NULL);
+                        if (thread) {
+                            g_hProfileDialogThread = thread;
+                            launched = TRUE; // The native profile UI owns rawContext.
+                        } else {
+                            delete rawContext;
                         }
-                        FreeLibrary(hWlanUi);
                     }
                 }
 
@@ -6145,7 +6200,7 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
                             // or default verb here: on affected builds those are
                             // implemented by explorer.exe with an invalid raw
                             // argument, which produces the error dialog above.
-                            sei.lpVerb = L"status";
+                            sei.lpVerb = (cmd == IDM_STATUS) ? L"status" : L"properties";
                             launched = ShellExecuteExW(&sei);
 
                             // Last-resort adapter fallback. It is deliberately
@@ -7201,7 +7256,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 // this the timer would otherwise keep running a full
                 // RefreshWifiData()/UpdateEthernetStatus() every tick with
                 // nothing on screen to consume it until explorer restarts.
-                // Re-armed in WM_SHOW_FLYOUT.
+                // Re-armed by ToggleFlyoutWindow() when the flyout is shown.
                 if (g_RefreshTimer) { KillTimer(hwnd, g_RefreshTimer); g_RefreshTimer = 0; }
             }
         }
@@ -7450,8 +7505,8 @@ void ToggleFlyoutWindow() {
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
             ShowWindow(g_hWndFlyout, SW_SHOW);
-            // ToggleFlyoutWindow is the normal show path; WM_SHOW_FLYOUT is
-            // not posted here. Restore the timer stopped on deactivation.
+            // ToggleFlyoutWindow is the normal show path. Restore the timer
+            // stopped on deactivation.
             if (!g_RefreshTimer && g_Settings.refreshInterval > 0)
                 g_RefreshTimer = SetTimer(g_hWndFlyout, 1000, g_Settings.refreshInterval, NULL);
             SetForegroundWindow(g_hWndFlyout);
@@ -7586,7 +7641,14 @@ void SafeCleanup() {
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-        if (g_hConnectThread) {
+        if (g_hProfileDialogThread) {
+        // Never unload mod code while WlanUIEditProfile's modal UI is still
+        // executing it. This may wait for the user to close the dialog.
+        WaitForSingleObject(g_hProfileDialogThread, INFINITE);
+        CloseHandle(g_hProfileDialogThread);
+        g_hProfileDialogThread = NULL;
+    }
+    if (g_hConnectThread) {
         Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
         DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
         Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
@@ -7988,9 +8050,10 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    // Keep DirectUI's known-valid endellipsis token. Centering is handled by
-    // the icon/container geometry; this avoids an unsupported XML value.
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    // Keep DirectUI's known-valid endellipsis token. Give every map label
+    // 90rp rather than the old 69rp so localized Internet/network names and
+    // long computer names have substantially more room before truncating.
+    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(pcName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8011,7 +8074,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(networkName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8042,7 +8105,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(internetName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8973,7 +9036,13 @@ static void PrimeNetworkCategoryForNetCenterHost() {
         }
     }
 
-    RefreshNetworkData(/*forceDetection=*/TRUE);
+    // Keep the NLM interface private to this STA. Publishing it in g_pNLM
+    // would make Wh_ModUninit release an unmarshalled COM object from another
+    // thread in control.exe.
+    ComPtr<INetworkListManager> nlm;
+    CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                     IID_INetworkListManager, (void**)nlm.put());
+    RefreshNetworkData(/*forceDetection=*/TRUE, nlm.get());
     Wh_Log(L"[NetMap] One-time priming in non-explorer host finished "
            L"(category=%d, online=%d)",
            g_CurrentNetworkCategory, (int)IsInternetConnected());
@@ -9117,15 +9186,15 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     if (!SetXML || g_inHook)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
 
-    // A different parser on this page thread means the previously tracked
-    // page has been replaced (including in-place navigation to any other
-    // Control Panel page). Drop it before the UIFILE filter below: otherwise
-    // a later event could call SetXML on a freed DUIXmlParser.
-    if (g_ncTarget && g_ncTarget != t)
+    // Parser addresses can be immediately reused during in-place navigation,
+    // so pointer identity alone cannot identify the live NetCenter page. Any
+    // non-NetCenter parse on this page thread retires the tracked target.
+    bool isNetCenterPage = IsNetCenter(m) && tp && !_wcsicmp(tp, L"UIFILE") &&
+                           IS_INTRESOURCE(n) && (UINT)(UINT_PTR)n == 110;
+    if (g_ncTarget && (g_ncTarget != t || !isNetCenterPage))
         UnadviseConnectivityEvents();
 
-    if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
-        (UINT)(UINT_PTR)n != 110)
+    if (!isNetCenterPage)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
 
     // Resolve and cache netcenter.dll's address range here, on the one path
@@ -9270,7 +9339,8 @@ static bool Init() {
     // when the feature is off, so installing the hooks unconditionally has
     // no behavioral effect while it's disabled, and lets it turn on and off
     // correctly at runtime without a mod reload. The DrawTextW hook is the
-    // one exception: it's gated on privacyMode in HookAll() above since,
+    // one exception is deferred until SetXMLFromResource_Hook observes
+    // netcenter.dll, so an unused privacy feature never hooks DrawTextW.
     // unlike the others, it sits on a very hot user32 path.
     if (!HookAll()) {
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
@@ -9430,16 +9500,6 @@ void Wh_ModUninit() {
         if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
             UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandle(NULL));
             Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
-        }
-        // Mirror the explorer-host branch below: release the NLM instance
-        // PrimeNetworkCategoryForNetCenterHost()/UpdateEthernetStatus() may
-        // have created and published here, and balance InitGdiPlusRendering's
-        // GdiplusStartup token / gdiplus.dll reference. Neither was
-        // previously released in this process, so every reload/unload of
-        // control.exe leaked both.
-        if (g_pNLM) {
-            g_pNLM->Release();
-            g_pNLM = NULL;
         }
         ShutdownGdiPlusRendering();
         FreeSystemIcons();
