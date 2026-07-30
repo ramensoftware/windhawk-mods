@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer menus, tooltips, and popups
-// @version         0.1.3
+// @version         0.1.4
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -51,7 +51,7 @@ keyboard shortcut text are also preserved.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
   both text measurement and drawing without touching unrelated GDI text.
-- Windows 11 XAML/WinUI popup text uses an experimental, display-only
+- Windows 11 XAML popup text uses an experimental, display-only
   DirectWrite hook. This includes context menus, tooltips, and other Explorer
   flyouts. Tracking is scoped to the popup's UI thread so it doesn't enable
   rewriting on unrelated Explorer or taskbar threads. Taskbar thumbnail
@@ -61,11 +61,12 @@ The modern path is intentionally conservative and can miss text if a Windows
 build uses a different popup window class. Disable `modernUiText` if it causes
 a problem.
 
-The mod doesn't edit system files, registry values, or file names. The modern
-DirectWrite path changes display text only. The classic path updates strings
-stored in `HMENU` objects, so menu text read through accessibility APIs also
-contains the inserted spaces while the mod is enabled. Strings rewritten just
-before display are recorded and restored when the mod is disabled.
+The mod doesn't edit system files, registry values, or file names. A file name
+shown in a classic menu can nevertheless be displayed with inserted spaces.
+The modern DirectWrite path changes display text only. The classic path updates
+strings stored in `HMENU` objects, so menu text read through accessibility APIs
+also contains the inserted spaces while the mod is enabled. Strings rewritten
+just before display are recorded and restored when the mod is disabled.
 */
 // ==/WindhawkModReadme==
 
@@ -79,7 +80,7 @@ before display are recorded and restored when the mod is disabled.
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: true
   $name: Windows 11 popup text (experimental)
-  $description: Process DirectWrite text in Explorer XAML/WinUI menus, tooltips, and flyouts.
+  $description: Process DirectWrite text in Explorer XAML menus, tooltips, and flyouts.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -89,7 +90,6 @@ before display are recorded and restored when the mod is disabled.
 */
 // ==/WindhawkModSettings==
 
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -98,6 +98,7 @@ before display are recorded and restored when the mod is disabled.
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <dwrite.h>
@@ -155,9 +156,12 @@ bool IsCjkCodePoint(uint32_t codePoint) {
     // Jamo, CJK strokes, and Katakana phonetic extensions. CJK punctuation is
     // deliberately excluded except for the ideographic iteration mark and
     // ideographic zero.
+    const bool isKana =
+        IsInRange(codePoint, 0x3040, 0x30FF) &&
+        codePoint != 0x30A0 && codePoint != 0x30FB;
     if (IsInRange(codePoint, 0x2E80, 0x2FDF) ||
         codePoint == 0x3005 || codePoint == 0x3007 ||
-        IsInRange(codePoint, 0x3040, 0x30FF) ||
+        isKana ||
         IsInRange(codePoint, 0x3100, 0x318F) ||
         IsInRange(codePoint, 0x31A0, 0x31BF) ||
         IsInRange(codePoint, 0x31C0, 0x31EF) ||
@@ -393,7 +397,7 @@ BOOL WINAPI InsertMenuWHook(HMENU menu,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
     if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
+        IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/InsertMenuW)");
@@ -410,7 +414,7 @@ BOOL WINAPI AppendMenuWHook(HMENU menu,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
     if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
+        IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/AppendMenuW)");
@@ -427,7 +431,7 @@ BOOL WINAPI ModifyMenuWHook(HMENU menu,
                             UINT_PTR itemId,
                             LPCWSTR newItem) {
     if (g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
+        IsStringMenuFlags(flags) && ContainsCjkCodePoint(newItem)) {
         const std::wstring spaced = AddCjkSpacing(newItem);
         if (spaced != newItem) {
             Wh_Log(L"Applied CJK spacing (classic/ModifyMenuW)");
@@ -539,13 +543,8 @@ void RestoreRewrittenMenuItems() {
         replacement.dwTypeData =
             const_cast<wchar_t*>(iterator->original.c_str());
 
-        if (g_originalSetMenuItemInfoW) {
-            g_originalSetMenuItemInfoW(
-                iterator->menu, iterator->index, TRUE, &replacement);
-        } else {
-            SetMenuItemInfoW(
-                iterator->menu, iterator->index, TRUE, &replacement);
-        }
+        SetMenuItemInfoW(
+            iterator->menu, iterator->index, TRUE, &replacement);
     }
 }
 
@@ -554,7 +553,8 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
                                 BOOL byPosition,
                                 LPCMENUITEMINFOW itemInfo) {
     if (g_classicMenus.load(std::memory_order_relaxed) &&
-        MenuItemInfoContainsString(itemInfo)) {
+        MenuItemInfoContainsString(itemInfo) &&
+        ContainsCjkCodePoint(itemInfo->dwTypeData)) {
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
         if (spaced != itemInfo->dwTypeData) {
             Wh_Log(L"Applied CJK spacing (classic/InsertMenuItemW)");
@@ -573,7 +573,8 @@ BOOL WINAPI SetMenuItemInfoWHook(HMENU menu,
                                  BOOL byPosition,
                                  LPCMENUITEMINFOW itemInfo) {
     if (g_classicMenus.load(std::memory_order_relaxed) &&
-        MenuItemInfoContainsString(itemInfo)) {
+        MenuItemInfoContainsString(itemInfo) &&
+        ContainsCjkCodePoint(itemInfo->dwTypeData)) {
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
         if (spaced != itemInfo->dwTypeData) {
             Wh_Log(L"Applied CJK spacing (classic/SetMenuItemInfoW)");
@@ -604,7 +605,8 @@ void RewriteMenuTree(HMENU menu) {
 
         if (isTextItem && itemInfo.cch > 0) {
             std::wstring original;
-            if (ReadMenuItemText(menu, index, &original)) {
+            if (ReadMenuItemText(menu, index, &original) &&
+                ContainsCjkCodePoint(original)) {
                 const std::wstring spaced = AddCjkSpacing(original);
                 if (spaced != original) {
                     Wh_Log(L"Applied CJK spacing (classic/pre-display)");
@@ -676,9 +678,9 @@ GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 
-constexpr size_t kClassicTooltipThemeCapacity = 16;
-std::atomic<HTHEME>
-    g_classicTooltipThemes[kClassicTooltipThemeCapacity] = {};
+std::mutex g_classicTooltipThemesMutex;
+std::unordered_set<HTHEME> g_classicTooltipThemes;
+std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
 
 bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
@@ -705,34 +707,33 @@ bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
 }
 
 bool IsTrackedClassicTooltipTheme(HTHEME theme) {
-    if (!theme) {
+    if (!theme ||
+        g_classicTooltipThemeCount.load(
+            std::memory_order_relaxed) == 0) {
         return false;
     }
 
-    for (auto& trackedTheme : g_classicTooltipThemes) {
-        if (trackedTheme.load(std::memory_order_relaxed) == theme) {
-            return true;
-        }
-    }
-
-    return false;
+    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    return g_classicTooltipThemes.contains(theme);
 }
 
 void TrackClassicTooltipTheme(HTHEME theme) {
-    if (!theme || IsTrackedClassicTooltipTheme(theme)) {
+    if (!theme) {
         return;
     }
 
-    for (auto& trackedTheme : g_classicTooltipThemes) {
-        HTHEME empty = nullptr;
-        if (trackedTheme.compare_exchange_strong(
-                empty, theme, std::memory_order_relaxed)) {
-            Wh_Log(L"Tracking classic Win32 tooltip theme");
-            return;
-        }
+    bool inserted;
+    {
+        std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+        inserted = g_classicTooltipThemes.insert(theme).second;
+        g_classicTooltipThemeCount.store(
+            static_cast<unsigned int>(g_classicTooltipThemes.size()),
+            std::memory_order_relaxed);
     }
 
-    Wh_Log(L"Classic tooltip theme tracking capacity reached");
+    if (inserted) {
+        Wh_Log(L"Tracking classic Win32 tooltip theme");
+    }
 }
 
 void UntrackClassicTooltipTheme(HTHEME theme) {
@@ -740,11 +741,17 @@ void UntrackClassicTooltipTheme(HTHEME theme) {
         return;
     }
 
-    for (auto& trackedTheme : g_classicTooltipThemes) {
-        HTHEME expected = theme;
-        trackedTheme.compare_exchange_strong(
-            expected, nullptr, std::memory_order_relaxed);
-    }
+    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    g_classicTooltipThemes.erase(theme);
+    g_classicTooltipThemeCount.store(
+        static_cast<unsigned int>(g_classicTooltipThemes.size()),
+        std::memory_order_relaxed);
+}
+
+void ClearTrackedClassicTooltipThemes() {
+    std::lock_guard<std::mutex> guard(g_classicTooltipThemesMutex);
+    g_classicTooltipThemes.clear();
+    g_classicTooltipThemeCount.store(0, std::memory_order_relaxed);
 }
 
 HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
@@ -917,7 +924,7 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
 }
 
 // -------------------------------------------------------------------------
-// Windows 11 XAML/WinUI popup detection
+// Windows 11 XAML popup detection
 // -------------------------------------------------------------------------
 
 using ShowWindow_t = decltype(&ShowWindow);
@@ -949,9 +956,7 @@ ModernWindowKind ClassifyModernWindowClassName(LPCWSTR className) {
         return ModernWindowKind::Other;
     }
 
-    if (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
-        _wcsicmp(className,
-                 L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0) {
+    if (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0) {
         return ModernWindowKind::Popup;
     }
 
@@ -974,9 +979,10 @@ bool TrackModernWindow(HWND window, ModernWindowKind kind) {
         return false;
     }
 
+    DWORD processId;
     const DWORD threadId =
-        GetWindowThreadProcessId(window, nullptr);
-    if (!threadId) {
+        GetWindowThreadProcessId(window, &processId);
+    if (!threadId || processId != GetCurrentProcessId()) {
         return false;
     }
 
@@ -1031,6 +1037,11 @@ void ClearTrackedModernWindows() {
 }
 
 bool IsModernPopupActiveForCurrentThread() {
+    if (g_trackedModernWindowCount.load(
+            std::memory_order_relaxed) == 0) {
+        return false;
+    }
+
     const DWORD currentThreadId = GetCurrentThreadId();
     bool popupActive = false;
     bool taskbarThumbnailActive = false;
@@ -1150,7 +1161,7 @@ BOOL WINAPI DestroyWindowHook(HWND window) {
 }
 
 // -------------------------------------------------------------------------
-// DirectWrite text layout used by Windows 11 XAML/WinUI popups
+// DirectWrite text layout used by Windows 11 XAML popups
 // -------------------------------------------------------------------------
 
 using IDWriteFactory_CreateTextLayout_t =
@@ -1279,24 +1290,20 @@ HRESULT STDMETHODCALLTYPE CreateGdiCompatibleTextLayoutHook(
         transform, useGdiNatural, textLayout);
 }
 
-bool HookDWriteFactory(HMODULE module,
-                       const char* factoryExport,
-                       void* createTextLayoutHook,
-                       IDWriteFactory_CreateTextLayout_t* originalTextLayout,
-                       void* createGdiLayoutHook,
-                       IDWriteFactory_CreateGdiCompatibleTextLayout_t*
-                           originalGdiLayout,
-                       const wchar_t* implementationName) {
-    if (!module) {
+bool HookDirectWrite() {
+    HMODULE dwrite =
+        LoadLibraryExW(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dwrite) {
+        Wh_Log(L"Couldn't load dwrite.dll");
         return false;
     }
 
     using DWriteCreateFactory_t =
         HRESULT(WINAPI*)(DWRITE_FACTORY_TYPE, REFIID, IUnknown**);
     const auto createFactory = reinterpret_cast<DWriteCreateFactory_t>(
-        GetProcAddress(module, factoryExport));
+        GetProcAddress(dwrite, "DWriteCreateFactory"));
     if (!createFactory) {
-        Wh_Log(L"Couldn't find %s factory export", implementationName);
+        Wh_Log(L"Couldn't find DWriteCreateFactory");
         return false;
     }
 
@@ -1305,46 +1312,27 @@ bool HookDWriteFactory(HMODULE module,
         createFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                       reinterpret_cast<IUnknown**>(&factory));
     if (FAILED(result) || !factory) {
-        Wh_Log(L"%s factory creation failed: 0x%08X", implementationName,
-               result);
+        Wh_Log(L"DirectWrite factory creation failed: 0x%08X", result);
         return false;
     }
 
     void** vtable = *reinterpret_cast<void***>(factory);
     const bool textLayoutHooked = Wh_SetFunctionHook(
-        vtable[18], createTextLayoutHook,
-        reinterpret_cast<void**>(originalTextLayout));
+        vtable[18], reinterpret_cast<void*>(CreateTextLayoutHook),
+        reinterpret_cast<void**>(&g_originalCreateTextLayout));
     const bool gdiLayoutHooked = Wh_SetFunctionHook(
-        vtable[19], createGdiLayoutHook,
-        reinterpret_cast<void**>(originalGdiLayout));
+        vtable[19],
+        reinterpret_cast<void*>(CreateGdiCompatibleTextLayoutHook),
+        reinterpret_cast<void**>(
+            &g_originalCreateGdiCompatibleTextLayout));
 
     factory->Release();
 
     if (!textLayoutHooked || !gdiLayoutHooked) {
-        Wh_Log(L"Couldn't install one or more %s hooks",
-               implementationName);
+        Wh_Log(L"Couldn't install one or more DirectWrite hooks");
     }
 
     return textLayoutHooked || gdiLayoutHooked;
-}
-
-bool HookDirectWrite() {
-    bool hooked = false;
-
-    HMODULE dwrite =
-        LoadLibraryExW(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (dwrite) {
-        hooked |= HookDWriteFactory(
-            dwrite, "DWriteCreateFactory",
-            reinterpret_cast<void*>(CreateTextLayoutHook),
-            &g_originalCreateTextLayout,
-            reinterpret_cast<void*>(CreateGdiCompatibleTextLayoutHook),
-            &g_originalCreateGdiCompatibleTextLayout, L"DirectWrite");
-    } else {
-        Wh_Log(L"Couldn't load dwrite.dll");
-    }
-
-    return hooked;
 }
 
 template <typename Function>
@@ -1526,6 +1514,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
+    ClearTrackedClassicTooltipThemes();
     ClearTrackedModernWindows();
     Wh_Log(L"CJK Spacer uninitialized");
 }
