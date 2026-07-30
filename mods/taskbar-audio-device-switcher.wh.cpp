@@ -2,7 +2,7 @@
 // @id              taskbar-audio-device-switcher
 // @name            Taskbar audio device switcher
 // @description     Shows a tray icon for every connected audio device and switches the default device with a click
-// @version         1.4.0
+// @version         1.5.0
 // @author          Maksim Chingin
 // @github          https://github.com/umnik1
 // @include         windhawk.exe
@@ -51,7 +51,9 @@ choice is remembered across restarts. There is also **Hide this icon** for the
 device that was clicked, and **Show all devices** to undo everything.
 
 The icon of the last remaining device can't be hidden, otherwise there would be
-no menu left to bring the other ones back.
+no menu left to bring the other ones back. For the same reason, if every device
+that is currently connected happens to be hidden — say the only visible one was
+unplugged — the hidden ones are shown anyway until that changes.
 
 ## Windows 11 note
 
@@ -939,6 +941,25 @@ void RefreshDevices() {
 
     std::vector<AudioDevice> devices;
     EnumerateDevices(devices);
+
+    // The menu lives on the tray icons, so at least one device has to keep one,
+    // otherwise there is no way left to unhide anything. The menu already
+    // refuses to hide the last visible device, but that device can also just
+    // disappear afterwards, by being unplugged or switched off. Devices hidden
+    // through the setting stay hidden: that one is recoverable from the
+    // Windhawk settings, the manual list is not.
+    bool anyVisible = false;
+    for (const auto& device : devices) {
+        if (!device.hidden) {
+            anyVisible = true;
+            break;
+        }
+    }
+    if (!anyVisible) {
+        for (auto& device : devices) {
+            device.hidden = device.hiddenBySetting;
+        }
+    }
 
     // Remove the icons of devices which are gone or which were hidden.
     for (auto it = g_trayIcons.begin(); it != g_trayIcons.end();) {
