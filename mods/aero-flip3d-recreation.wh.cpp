@@ -41,7 +41,7 @@ The mod has been tested on Windows 10 1809.
 
 - Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.
 
-The mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly -- no manual tuning needed.
+The mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.
 
 ## Performance
 
