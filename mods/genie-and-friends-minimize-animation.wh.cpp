@@ -493,7 +493,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
         float moveX = 1.0f - (invT * invT * invT * invT * invT * invT);
         float moveY = (0.70f * (t * t)) + (0.10f * t);
         scaleX = 1.0f - (0.95f * (1.8f * t));
-        { float ms = 0.02f > minScaleX ? 0.02f : minScaleX; if (scaleX < ms) scaleX = ms; }
+        { float ms = 0.05f > minScaleX ? 0.05f : minScaleX; if (scaleX < ms) scaleX = ms; }
         scaleY = 1.0f - (0.70f * (t * t));
 
         float startCenterX = cx;
@@ -511,7 +511,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_VACUUM: {
         float e = easeInCubic(t);
         float s = 1.0f - 0.97f * e;
-        { float ms = 0.02f > minScaleX ? 0.02f : minScaleX; if (s < ms) s = ms; }
+        { float ms = 0.03f > minScaleX ? 0.03f : minScaleX; if (s < ms) s = ms; }
         scaleX = scaleY = s;
         fx = cx + (dockX - cx) * e;
         fy = cy + (taskbarY - cy) * e;
@@ -557,7 +557,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_WARP: {
         float ramp = t / 0.6f; if (ramp > 1.0f) ramp = 1.0f;
         scaleX = 1.0f - 0.96f * ramp;
-        { float ms = 0.02f > minScaleX ? 0.02f : minScaleX; if (scaleX < ms) scaleX = ms; }
+        { float ms = 0.04f > minScaleX ? 0.04f : minScaleX; if (scaleX < ms) scaleX = ms; }
         scaleY = 1.0f;
         anchorTopLeft = true;
         fx = cx;
@@ -597,7 +597,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_SWIRL: {
         float e = easeInCubic(t);
         float s = 1.0f - 0.95f * e;
-        { float ms = 0.02f > minScaleX ? 0.02f : minScaleX; if (s < ms) s = ms; }
+        { float ms = 0.05f > minScaleX ? 0.05f : minScaleX; if (s < ms) s = ms; }
         scaleX = scaleY = s;
         float baseCX = cx + (dockX - cx) * e;
         float baseCY = cy + (taskbarY - cy) * e;
@@ -1009,7 +1009,7 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     }
 
     const float LEAD     = 1.4f;
-    const float neckW    = (data->iconButtonWidth > 0) ? ((float)data->iconButtonWidth > 4.0f ? (float)data->iconButtonWidth : 4.0f) : (w * 0.02f > 4.0f ? w * 0.02f : 4.0f);
+    const float neckW    = (data->iconButtonWidth > 0) ? ((float)data->iconButtonWidth > 10.0f ? (float)data->iconButtonWidth : 10.0f) : (w * 0.05f > 10.0f ? w * 0.05f : 10.0f);
     const float sourceCX = data->targetRect.left + w * 0.5f;
     const float dockX    = (float)data->targetDockX;
     const float dockY    = taskbarY;
@@ -1664,8 +1664,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
             if (!IsInSysCmdOnThisThread(hWnd) && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
                 SetDwmTransitions(hWnd, FALSE);
                 StartGenieAnim(hWnd, FALSE);
-                BOOL cloaked = TRUE;
-                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
             }
             return ShowWindow_Original(hWnd, nCmdShow);
         }
@@ -1707,10 +1705,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetSysCmdGuard(hWnd, true);
             SetDwmTransitions(hWnd, FALSE);
             StartGenieAnim(hWnd, FALSE);
-            {
-                BOOL cloaked = TRUE;
-                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
-            }
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
             SetSysCmdGuard(hWnd, false);
             return res;
