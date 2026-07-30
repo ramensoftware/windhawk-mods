@@ -14,7 +14,10 @@
 /*
 This mod patches the Explorer shell provided by the Win10 taskbar mod at runtime.
 
-**!Important! You MUST install, follow the instructions and run atleast 2 times the [Win10 taskbar mod.](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)**
+But it is not confirmed if notifications arrive to the Notification Center.
+Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)
+
+**!Important! You MUST install, follow the instructions and run at least 2 times the [Win10 taskbar mod.](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)**
 **If you don't follow these instructions carefully, the mod will not apply correctly.**
 
 # Technical details
@@ -122,4 +125,6 @@ void Wh_ModUninit(void) {
 
     DWORD temp = 0;
     VirtualProtect((void *) target, patch_size, old_protect, &temp);
+
+    FlushInstructionCache(GetCurrentProcess(), (void *) target, patch_size);
 }
