@@ -6879,6 +6879,38 @@
         "version": "0.1"
       }
     },
+    "instant-taskbar-thumbnail-previews": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785447979000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785447979000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Alchemy",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Controls taskbar thumbnail preview show and close behavior.",
+        "github": "https://github.com/alchemyyy",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Instant Taskbar Thumbnail Previews",
+        "version": "1.0.0"
+      }
+    },
     "internet-status-indicator": {
       "details": {
         "defaultSorting": 13728,

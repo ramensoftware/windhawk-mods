@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-23T19:31:49.000Z</updated>
+    <updated>2026-07-30T21:46:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.0.0]]></title>
+        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#06f19979b14e80d76a5ca4508def5ec55767a251</id>
+        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
+        <updated>2026-07-30T21:46:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="instanttaskbarthumbnailpreviews">Instant Taskbar Thumbnail Previews</h1>
+<p>Adds the ability to configure or remove the delays before Windows 11 shows and closes taskbar thumbnail previews,
+as well as the ability to configure mouse actions that close them.</p>
+<p>Both delay settings replace the corresponding Windows value, so they can make the transitions either shorter or longer than the stock delays.</p>
+<p>The optional outside-click behavior arms the taskbar's native light-dismiss action while a thumbnail flyout is open.</p>
+<p>The optional Start-button hover behavior closes an open thumbnail flyout directly from the Start button's XAML pointer-enter handler.</p>
+<p>This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.</p>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tray Utility Customizer 1.1]]></title>
         <id>https://windhawk.net/mods/tray-utility-customizer#c0d2cdf90c41060ac6f8f932491d0fba012ed2cb</id>
@@ -1129,47 +1146,6 @@ redirect mainly fires for the right-click → Open path.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Power Options Button 1.0.13]]></title>
-        <id>https://windhawk.net/mods/power-options-button#e755e88374b2d3f0446affb356c0e7c8c214af8b</id>
-        <link href="https://windhawk.net/mods/power-options-button"/>
-        <updated>2026-07-10T13:43:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="poweroptionsbutton">Power Options Button</h1>
-<p>Adds a tray icon for switching between Windows power plans.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/26A3Ilv.gif" alt="Power Options Button preview" /></p>
-<p><em>Shows the tray icon, tooltip, right-click menu, and mouse-wheel switching between power plans.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Tray icon shows the currently active Windows power plan.</li>
-<li>Tooltip shows the active plan.</li>
-<li>Mouse wheel over the tray icon cycles between:</li>
-<li>Power Saver</li>
-<li>Balanced</li>
-<li>High Performance</li>
-<li>Ultimate Performance</li>
-<li>Right-click opens a context menu.</li>
-<li>Icon color changes depending on the active plan:</li>
-<li>Green = Power Saver</li>
-<li>Yellow = Balanced</li>
-<li>Red = High Performance</li>
-<li>Violet = Ultimate Performance</li>
-<li>If Ultimate Performance is not available, it is shown as disabled and can be created from the tray menu with administrator approval.</li>
-<li>Automatically restores the tray icon after Explorer/taskbar restart.</li>
-</ul>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Scroll up over the tray icon: next power plan.</li>
-<li>Scroll down over the tray icon: previous power plan.</li>
-<li>Right-click the tray icon: choose a power plan manually.</li>
-<li>Left-click the tray icon: refresh current status.</li>
-<li>Use "Create Ultimate Performance…" from the tray menu to create the Ultimate Performance plan if it is not available yet.</li>
-</ul>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>
