@@ -319,6 +319,18 @@ Este mod funciona apenas no Windows 11 com o menu Iniciar padrão.
       "styles": [
         "Canvas.ZIndex=1"
       ]
+    },
+    {
+      "target": "TextBlock#AppDisplayName",
+      "styles": [
+        "Visibility=Collapsed"
+      ]
+    },
+    {
+      "target": "TextBlock#Text",
+      "styles": [
+        "Visibility=Collapsed"
+      ]
     }
   ],
   "themeResourceVariables": [
