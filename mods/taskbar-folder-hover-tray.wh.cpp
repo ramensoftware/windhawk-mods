@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.12
+// @version         1.13
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -2909,17 +2909,13 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
     // Theme/display messages do not need a live level; handle them even when
     // the HWND is a reused shell with no PopupLevel attached yet. Top-level
     // popups receive WM_SETTINGCHANGE broadcasts even while hidden, so only
-    // dismiss an open chain and only retry injection on monitor changes —
-    // otherwise every SPI broadcast would CloseChain / reinject and cancel
-    // pending opens.
+    // dismiss an open chain — otherwise every SPI broadcast would CloseChain
+    // and cancel pending opens. Monitor reinject is owned by MenuOwnerWndProc.
     if (uMsg == WM_DISPLAYCHANGE || uMsg == WM_SETTINGCHANGE ||
         uMsg == WM_THEMECHANGED) {
         RefreshThemeCache();
         if (!Levels().empty()) {
             CloseChain();
-        }
-        if (uMsg == WM_DISPLAYCHANGE && !g_unloading) {
-            StartRetryThread();
         }
         return 0;
     }
@@ -3344,8 +3340,12 @@ std::vector<std::unique_ptr<TaskbarHost>>& TaskbarHosts() {
 std::atomic<bool> g_injectionLive{false};
 
 // Joinable retry thread + stop event. A HANDLE has no destructor that aborts at
-// process exit, and MsgWaitForMultipleObjects lets us join from the UI thread
-// without deadlocking on inbound SendMessage calls.
+// process exit. StartRetryThread is non-blocking (no join) so window procs can
+// call it safely; StopRetryThread joins with MsgWaitForMultipleObjects so
+// settings/uninit can wait without deadlocking on inbound SendMessage.
+// g_retryAgain asks a live worker to run another inject pass after its current
+// one instead of joining and restarting from a UI thread.
+std::atomic<bool> g_retryAgain{false};
 HANDLE g_retryThread = nullptr;
 HANDLE g_retryStopEvent = nullptr;
 SRWLOCK g_retryLock = SRWLOCK_INIT;
@@ -3363,47 +3363,52 @@ constexpr GUID kIBufferByteAccessGuid = {
     {0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda}};
 
 ImageSource HIconToImageSource(HICON hIcon, int size) {
-    auto bitmap = HIconToBitmap(hIcon, size);
-    if (!bitmap) {
-        return nullptr;
-    }
-
-    Gdiplus::BitmapData bd{};
-    Gdiplus::Rect lockRect(0, 0, size, size);
-    // HIconToBitmap stores PARGB; WriteableBitmap also wants premultiplied BGRA.
-    if (bitmap->LockBits(&lockRect, Gdiplus::ImageLockModeRead,
-                         PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
-        return nullptr;
-    }
-
-    winrt::Windows::UI::Xaml::Media::Imaging::WriteableBitmap writeable(size,
-                                                                        size);
     try {
-        auto buffer = writeable.PixelBuffer();
-        IBufferByteAccess* byteAccess = nullptr;
-        auto* bufferUnknown = (IUnknown*)winrt::get_abi(buffer);
-        if (bufferUnknown &&
-            SUCCEEDED(bufferUnknown->QueryInterface(kIBufferByteAccessGuid,
-                                                    (void**)&byteAccess)) &&
-            byteAccess) {
-            BYTE* dest = nullptr;
-            if (SUCCEEDED(byteAccess->Buffer(&dest)) && dest) {
-                for (int y = 0; y < size; y++) {
-                    memcpy(dest + (size_t)y * size * 4,
-                           (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
-                           (size_t)size * 4);
+        auto bitmap = HIconToBitmap(hIcon, size);
+        if (!bitmap) {
+            return nullptr;
+        }
+
+        Gdiplus::BitmapData bd{};
+        Gdiplus::Rect lockRect(0, 0, size, size);
+        // HIconToBitmap stores PARGB; WriteableBitmap also wants premultiplied
+        // BGRA.
+        if (bitmap->LockBits(&lockRect, Gdiplus::ImageLockModeRead,
+                             PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
+            return nullptr;
+        }
+
+        try {
+            // Activation can throw; keep it inside the LockBits guard.
+            winrt::Windows::UI::Xaml::Media::Imaging::WriteableBitmap writeable(
+                size, size);
+            auto buffer = writeable.PixelBuffer();
+            IBufferByteAccess* byteAccess = nullptr;
+            auto* bufferUnknown = (IUnknown*)winrt::get_abi(buffer);
+            if (bufferUnknown &&
+                SUCCEEDED(bufferUnknown->QueryInterface(kIBufferByteAccessGuid,
+                                                        (void**)&byteAccess)) &&
+                byteAccess) {
+                BYTE* dest = nullptr;
+                if (SUCCEEDED(byteAccess->Buffer(&dest)) && dest) {
+                    for (int y = 0; y < size; y++) {
+                        memcpy(dest + (size_t)y * size * 4,
+                               (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
+                               (size_t)size * 4);
+                    }
                 }
+                byteAccess->Release();
             }
-            byteAccess->Release();
+            bitmap->UnlockBits(&bd);
+            writeable.Invalidate();
+            return writeable;
+        } catch (...) {
+            bitmap->UnlockBits(&bd);
+            return nullptr;
         }
     } catch (...) {
-        bitmap->UnlockBits(&bd);
         return nullptr;
     }
-
-    bitmap->UnlockBits(&bd);
-    writeable.Invalidate();
-    return writeable;
 }
 
 void SetButtonBrush(Button const& button, PCWSTR key, Brush const& brush) {
@@ -4201,61 +4206,71 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
 }
 
 bool InjectHostGridsOnTaskbarThread() {
-    // Register classes and create the menu owner on this (taskbar) thread so
-    // DestroyWindow / UnregisterClass later stay same-thread-safe.
-    EnsureMenuOwnerWindow();
+    // Reached via RunFromWindowThread / WH_CALLWNDPROC — not a XAML delegate —
+    // so WinRT failures must not unwind through user32's callback frame.
+    try {
+        // Register classes and create the menu owner on this (taskbar) thread so
+        // DestroyWindow / UnregisterClass later stay same-thread-safe.
+        EnsureMenuOwnerWindow();
 
-    if (g_settings.folders.empty()) {
-        Wh_Log(L"No folders configured, nothing to inject");
-        RemoveAllHostGrids();
-        return true;
-    }
-
-    RemoveAllHostGrids();
-
-    struct EnumState {
-        int found = 0;
-        int injected = 0;
-    } state;
-
-    // Primary and secondary tray windows share the explorer taskbar UI thread
-    // on Windows 11, matching other Windhawk taskbar mods.
-    EnumThreadWindows(
-        GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto* state = reinterpret_cast<EnumState*>(lParam);
-            WCHAR className[32];
-            if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-                return TRUE;
-            }
-            if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
-                _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
-                return TRUE;
-            }
-            state->found++;
-            if (InjectHostGridForTaskbar(hWnd)) {
-                state->injected++;
-            } else {
-                Wh_Log(L"Inject failed for %s %p", className, hWnd);
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&state));
-
-    if (g_taskbarHosts && !g_taskbarHosts->empty()) {
-        g_taskbarWnd = (*g_taskbarHosts)[0]->hwnd;
-        UpdatePopupDpi();
-        int iconPixelSize = ScaleForPopup(g_settings.iconSize);
-        for (size_t i = 0; i < g_settings.folders.size(); i++) {
-            RequestScan(FolderPathForButton((int)i), iconPixelSize);
+        if (g_settings.folders.empty()) {
+            Wh_Log(L"No folders configured, nothing to inject");
+            RemoveAllHostGrids();
+            return true;
         }
-    }
 
-    g_injectionLive = state.found > 0 && state.injected == state.found;
-    Wh_Log(L"Taskbar inject: %d/%d windows, %d hosts", state.injected,
-           state.found,
-           g_taskbarHosts ? (int)g_taskbarHosts->size() : 0);
-    return g_injectionLive;
+        RemoveAllHostGrids();
+
+        struct EnumState {
+            int found = 0;
+            int injected = 0;
+        } state;
+
+        // Primary and secondary tray windows share the explorer taskbar UI thread
+        // on Windows 11, matching other Windhawk taskbar mods.
+        EnumThreadWindows(
+            GetCurrentThreadId(),
+            [](HWND hWnd, LPARAM lParam) -> BOOL {
+                auto* state = reinterpret_cast<EnumState*>(lParam);
+                WCHAR className[32];
+                if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+                    return TRUE;
+                }
+                if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+                    _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+                    return TRUE;
+                }
+                state->found++;
+                if (InjectHostGridForTaskbar(hWnd)) {
+                    state->injected++;
+                } else {
+                    Wh_Log(L"Inject failed for %s %p", className, hWnd);
+                }
+                return TRUE;
+            },
+            reinterpret_cast<LPARAM>(&state));
+
+        if (g_taskbarHosts && !g_taskbarHosts->empty()) {
+            g_taskbarWnd = (*g_taskbarHosts)[0]->hwnd;
+            UpdatePopupDpi();
+            int iconPixelSize = ScaleForPopup(g_settings.iconSize);
+            for (size_t i = 0; i < g_settings.folders.size(); i++) {
+                RequestScan(FolderPathForButton((int)i), iconPixelSize);
+            }
+        }
+
+        g_injectionLive = state.found > 0 && state.injected == state.found;
+        Wh_Log(L"Taskbar inject: %d/%d windows, %d hosts", state.injected,
+               state.found,
+               g_taskbarHosts ? (int)g_taskbarHosts->size() : 0);
+        return g_injectionLive;
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Injection failed: %s", e.message().c_str());
+        return false;
+    } catch (...) {
+        Wh_Log(L"Injection failed");
+        return false;
+    }
 }
 
 bool ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
@@ -4286,22 +4301,44 @@ DWORD WINAPI RetryThreadProc(void* param) {
     static const DWORD delays[] = {0,    500,  1000,  2000,
                                    4000, 8000, 15000, 30000};
 
-    for (size_t i = 0; i < ARRAYSIZE(delays) && !g_unloading; i++) {
-        if (delays[i] &&
-            WaitForSingleObject(stopEvent, delays[i]) != WAIT_TIMEOUT) {
-            return 0;
+    for (;;) {
+        g_retryAgain.store(false, std::memory_order_relaxed);
+
+        for (size_t i = 0; i < ARRAYSIZE(delays) && !g_unloading; i++) {
+            if (delays[i] &&
+                WaitForSingleObject(stopEvent, delays[i]) != WAIT_TIMEOUT) {
+                return 0;
+            }
+            if (g_unloading) {
+                return 0;
+            }
+
+            ApplyOnWindowThread([](void*) { InjectHostGridsOnTaskbarThread(); });
+
+            if (g_injectionLive || g_unloading) {
+                break;
+            }
         }
-        if (g_unloading) {
+
+        if (g_unloading ||
+            WaitForSingleObject(stopEvent, 0) != WAIT_TIMEOUT) {
             return 0;
         }
 
-        ApplyOnWindowThread([](void*) { InjectHostGridsOnTaskbarThread(); });
-
-        if (g_injectionLive || g_unloading) {
-            return 0;
+        // Another StartRetryThread arrived while we were working (e.g. a new
+        // monitor). Exchange under the lock so a concurrent Start cannot miss
+        // the flag between our check and return.
+        AcquireSRWLockExclusive(&g_retryLock);
+        bool again = g_retryAgain.exchange(false, std::memory_order_relaxed);
+        if (again && !g_unloading &&
+            WaitForSingleObject(stopEvent, 0) == WAIT_TIMEOUT) {
+            g_injectionLive = false;
+            ReleaseSRWLockExclusive(&g_retryLock);
+            continue;
         }
+        ReleaseSRWLockExclusive(&g_retryLock);
+        return 0;
     }
-    return 0;
 }
 
 void StopRetryThread() {
@@ -4310,6 +4347,7 @@ void StopRetryThread() {
     HANDLE retryStopEvent = g_retryStopEvent;
     g_retryThread = nullptr;
     g_retryStopEvent = nullptr;
+    g_retryAgain.store(false, std::memory_order_relaxed);
     if (retryStopEvent) {
         SetEvent(retryStopEvent);
     }
@@ -4317,7 +4355,8 @@ void StopRetryThread() {
 
     if (retryThread) {
         // Pump sent messages while waiting so a worker blocked in SendMessage
-        // to this UI thread cannot deadlock the join.
+        // to this UI thread cannot deadlock the join. Only settings/uninit
+        // should call this; window procs use StartRetryThread (non-blocking).
         DWORD result;
         do {
             result = MsgWaitForMultipleObjects(1, &retryThread, FALSE, INFINITE,
@@ -4334,15 +4373,32 @@ void StopRetryThread() {
     }
 }
 
+// Non-blocking: safe from window procedures. If a worker is already alive,
+// request another inject pass instead of joining. StopRetryThread still joins
+// for Wh_ModSettingsChanged / Wh_ModUninit.
 void StartRetryThread() {
-    StopRetryThread();
-
     AcquireSRWLockExclusive(&g_retryLock);
-    if (g_unloading || g_retryThread || g_retryStopEvent) {
+    if (g_unloading) {
         ReleaseSRWLockExclusive(&g_retryLock);
         return;
     }
 
+    if (g_retryThread) {
+        if (WaitForSingleObject(g_retryThread, 0) == WAIT_TIMEOUT) {
+            g_retryAgain.store(true, std::memory_order_relaxed);
+            ReleaseSRWLockExclusive(&g_retryLock);
+            return;
+        }
+        // Previous worker finished; reap without blocking.
+        CloseHandle(g_retryThread);
+        g_retryThread = nullptr;
+        if (g_retryStopEvent) {
+            CloseHandle(g_retryStopEvent);
+            g_retryStopEvent = nullptr;
+        }
+    }
+
+    g_retryAgain.store(false, std::memory_order_relaxed);
     g_injectionLive = false;
     g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_retryStopEvent) {
