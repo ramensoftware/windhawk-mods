@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lmsimg32 -lwinmm
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,7 +18,7 @@ This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern
 
 It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.
 
-This is the first version of the mod and it is a best-effort implementation, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
+This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
 
 The mod has been tested on Windows 10 1809.
 
@@ -41,7 +41,7 @@ The mod has been tested on Windows 10 1809.
 
 - Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.
 
-The mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly — no manual tuning needed.
+The mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly -- no manual tuning needed.
 
 ## Performance
 
@@ -88,7 +88,7 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 //     only classify/post input, while enumeration, DWM and animation run on
 //     the UI thread.
 //  4. Minimal logging: Wh_Log is used only for init/uninit, unrecoverable
-//     failures and caught exceptions — never for per-frame or per-key events.
+//     failures and caught exceptions -- never for per-frame or per-key events.
 //  5. Tool-process teardown joins the UI and input threads before code is
 //     unloaded, so no hook or window procedure can outlive the module.
 //  6. Isolated components with fallbacks: if the desktop snapshot, the
@@ -713,7 +713,7 @@ static void DetectPerformanceProfile() {
     if (p.veryLowEnd) {
         // Strictest budget: fewer DWM strips + lower frame rate to keep the
         // switcher responsive even on a 4 GB / HDD machine. The desktop
-        // snapshot is always kept — without it the overlay would show a blank
+        // snapshot is always kept -- without it the overlay would show a blank
         // Aero gradient instead of the real wallpaper, which risks getting
         // stuck visually.
         p.frameIntervalMs = 25;       // 40 fps.
@@ -737,7 +737,7 @@ static void DetectPerformanceProfile() {
 
 static void LoadSettings() {
     g_settings.perspective = Wh_GetIntSetting(L"usePerspective") != 0;
-    // Performance profile is always auto-detected — no manual override.
+    // Performance profile is always auto-detected -- no manual override.
 
     Wh_Log(L"LoadSettings: perspective=%d",
                 g_settings.perspective ? 1 : 0);
@@ -782,7 +782,6 @@ static int g_winTabClaimAttempt = 0;
 // unstable on some Windows 10/11 Explorer builds. The GDI snapshot below is
 // the safe backplate; this flag only re-enables the risky DWM path for tests.
 static constexpr bool kEnableDesktopDwmBackdrop = false;
-static constexpr bool kEnableLowLevelInputHooks = true;
 
 static constexpr UINT WM_FLIP3D_ACTIVATE = WM_APP + 0x520;
 static constexpr UINT WM_FLIP3D_NAVIGATE = WM_APP + 0x521;
@@ -812,8 +811,6 @@ inline int StripCountForDepth(int depth) {
 
 inline int ClampInt(int value, int minValue, int maxValue);  // Defined below.
 
-// Maximum time Wh_ModInit may wait for the background hook thread. Explorer
-// must never be blocked longer than this (point 5: no blocking init).
 
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -1146,20 +1143,12 @@ static void CaptureDesktopSnapshot() {
         desktopHwnd = GetDesktopWindow();
     }
     if (!desktopHwnd || !IsWindow(desktopHwnd)) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: no desktop window");
+        Wh_Log(L"CaptureDesktopSnapshot: no desktop window");
         return;
     }
 
-    if (!g_perf.allowSnapshot) {
-        // Very low-end profile: two full-screen 32-bit bitmaps (snapshot +
-        // composite) are ~16 MB at 1080p and must be blitted on every
-        // repaint. On a 2 GB machine that is both a memory and a bandwidth
-        // problem, so the backdrop degrades to the plain Aero gradient.
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: skipped (low-end profile)");
-        return;
-    }
     if (!GdiBudgetAllowsBitmaps() || !MemoryPressureAllowsSnapshot()) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: resource pressure");
+        Wh_Log(L"CaptureDesktopSnapshot: resource pressure");
         return;
     }
 
@@ -1172,7 +1161,7 @@ static void CaptureDesktopSnapshot() {
     const int width = RectWidth(desktopRect);
     const int height = RectHeight(desktopRect);
     if (width <= 0 || height <= 0) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: invalid size");
+        Wh_Log(L"CaptureDesktopSnapshot: invalid size");
         return;
     }
 
@@ -1195,13 +1184,13 @@ static void CaptureDesktopSnapshot() {
     if (!reuseExisting) {
         ScopedDc screenDc = ScopedDc::fromScreen(nullptr);
         if (!screenDc) {
-            Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: GetDC failed (code %u)", static_cast<unsigned>(GetLastError()));
+            Wh_Log(L"CaptureDesktopSnapshot: GetDC failed (code %u)", static_cast<unsigned>(GetLastError()));
             return;
         }
 
         ScopedBitmap bitmap(CreateCompatibleBitmap(screenDc.get(), width, height));
         if (!bitmap) {
-            Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: CreateCompatibleBitmap");
+            Wh_Log(L"CaptureDesktopSnapshot: CreateCompatibleBitmap");
             return;
         }
         g_desktopSnapshotBitmap = std::move(bitmap);
@@ -1212,19 +1201,19 @@ static void CaptureDesktopSnapshot() {
     // Draw the current content into the new or reused bitmap.
     ScopedDc screenDc = ScopedDc::fromScreen(nullptr);
     if (!screenDc) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: GetDC(2) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"CaptureDesktopSnapshot: GetDC(2) failed (code %u)", static_cast<unsigned>(GetLastError()));
         return;
     }
 
     ScopedDc memDc = ScopedDc::compatible(screenDc.get());
     if (!memDc) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: CreateCompatibleDC");
+        Wh_Log(L"CaptureDesktopSnapshot: CreateCompatibleDC");
         return;
     }
 
     ScopedSelectObject<HBITMAP> select(memDc.get(), g_desktopSnapshotBitmap.get());
     if (!select.succeeded()) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: SelectObject");
+        Wh_Log(L"CaptureDesktopSnapshot: SelectObject");
         return;
     }
 
@@ -1300,7 +1289,7 @@ static void CaptureDesktopSnapshot() {
     }
 
     if (!ok) {
-        Wh_Log(L"[AeroFlip3D] CaptureDesktopSnapshot: capture");
+        Wh_Log(L"CaptureDesktopSnapshot: capture");
     }
 }
 
@@ -1315,7 +1304,7 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
         return false;
     }
 
-    // DPI-tolerant cache check (±1 pixel).
+    // DPI-tolerant cache check (+/-1 pixel).
     if (g_backdropCompositeBitmap) {
         if (abs(g_backdropCompositeSize.cx - w) <= 1 &&
             abs(g_backdropCompositeSize.cy - h) <= 1) {
@@ -1450,7 +1439,7 @@ static void PaintStaticWallpaperBackdrop(HWND hwnd, HDC hdc) {
 
     // Layer 2: current wallpaper via plain GDI. Only bitmap-compatible
     // wallpapers work here; JPEG/PNG would need GDI+/WIC, which is
-    // intentionally avoided inside explorer.exe.
+    // intentionally avoided in the tool-mod process.
     wchar_t wallpaperPath[MAX_PATH] = L"";
     if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, ARRAYSIZE(wallpaperPath),
                               wallpaperPath, 0) &&
@@ -1492,7 +1481,7 @@ static void PaintStaticWallpaperBackdrop(HWND hwnd, HDC hdc) {
     }
 
     // Layer 3: crash-safe Aero gradient, plain GDI only. No GDI+/WIC/
-    // PrintWindow/DwmRegisterThumbnail here — this must always work.
+    // PrintWindow/DwmRegisterThumbnail here -- this must always work.
     const int h = std::max(1, RectHeight(rc));
     const int bands = 96;
     for (int i = 0; i < bands; ++i) {
@@ -1538,7 +1527,7 @@ try {
             return FALSE;  // Stop.
         }
     } catch (...) {
-        Wh_Log(L"[AeroFlip3D] FindDesktopHostProc");
+        Wh_Log(L"FindDesktopHostProc");
         return FALSE;  // Stop enumeration safely.
     }
     
@@ -1817,8 +1806,9 @@ static void FallbackToSingleThumbnail(FlipWindowEntry& entry) {
     if (SUCCEEDED(hr) && entry.thumbnail) {
         DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
         ApplySingleThumbnailProperties(entry);
+    } else {
+        Wh_Log(L"Perspective strips unavailable: card fell back to flat thumbnail");
     }
-    Wh_Log(L"[AeroFlip3D] Perspective strips unavailable: card fell back to flat thumbnail");
 }
 
 // Applies one card's live content to DWM. Perspective mode: the card rect +
@@ -1888,7 +1878,7 @@ static void ApplyCardThumbnails(FlipWindowEntry& entry) {
         }
 
         // Strip geometry. s = horizontal position of the strip centre:
-        // s=0 is the near (left) edge, s=1 the far (right) edge — matching
+        // s=0 is the near (left) edge, s=1 the far (right) edge -- matching
         // the Win7 front-left deck orientation.
         const double s = (j + 0.5) / static_cast<double>(M);
         const int stripH = std::max(1, static_cast<int>(std::lround(h * (1.0 - tilt * s))));
@@ -2049,7 +2039,7 @@ static const std::vector<int>& GetBackToFrontOrderCached() {
 // re-registers every card in back-to-front order on each selection change,
 // so the selected card's strips are always the last registered ones.
 // (Former incremental path was removed: it caused the front window to appear
-// behind other cards — DWM z-order follows registration order, and the outgoing
+// behind other cards -- DWM z-order follows registration order, and the outgoing
 // card registered before the new front card would end up on top.)
 
 static void ApplyAllThumbnailProperties() {
@@ -2073,12 +2063,12 @@ static void RebuildThumbnailZOrder() {
 
     // (Z-order fix) Always do a full rebuild: the incremental path caused
     // the front window to appear behind other cards because DWM z-order
-    // follows registration order — the outgoing card, re-registered before
+    // follows registration order -- the outgoing card, re-registered before
     // the new front card, would end up on top of the rest of the deck that
     // was not re-registered at all.
     const int count = static_cast<int>(g_windows.size());
 
-    // DWM thumbnails don't expose an explicit z-order API. Updating properties
+    // DWM thumbnails do not expose an explicit z-order API. Updating properties
     // isn't always enough on Win10/11: re-register only when the selection
     // changes, in back-to-front order, so the selected card's strips are the
     // last registered ones. Within a card, strips are registered left ->
@@ -2149,7 +2139,7 @@ static void RebuildThumbnailZOrder() {
             }
         } catch (...) {
             // A single misbehaving window must never take the rebuild down.
-            Wh_Log(L"[AeroFlip3D] RebuildThumbnailZOrder");
+            Wh_Log(L"RebuildThumbnailZOrder");
             entry.slices.clear();
             entry.thumbnail.reset();
             entry.stripCount = 0;
@@ -2177,9 +2167,9 @@ static void EnableHighResAnimationTimer() {
     }
     if (timeBeginPeriod(1) == TIMERR_NOERROR) {
         g_highResTimerActive = true;
-        Wh_Log(L"[AeroFlip3D] EnableHighResAnimationTimer: timeBeginPeriod(1) OK");
+        Wh_Log(L"EnableHighResAnimationTimer: timeBeginPeriod(1) OK");
     } else {
-        Wh_Log(L"[AeroFlip3D] EnableHighResAnimationTimer: timeBeginPeriod(1) failed");
+        Wh_Log(L"EnableHighResAnimationTimer: timeBeginPeriod(1) failed");
     }
 }
 
@@ -2189,7 +2179,7 @@ static void DisableHighResAnimationTimer() {
     }
     timeEndPeriod(1);
     g_highResTimerActive = false;
-    Wh_Log(L"[AeroFlip3D] DisableHighResAnimationTimer: timeEndPeriod(1)");
+    Wh_Log(L"DisableHighResAnimationTimer: timeEndPeriod(1)");
 }
 
 static void UpdateRefreshTimerNow(bool enable) {
@@ -2202,7 +2192,7 @@ static void UpdateRefreshTimerNow(bool enable) {
             g_animationTimerId = SetTimer(g_hOverlayWnd, kAnimationTimerId,
                                           g_perf.frameIntervalMs, nullptr);
             if (!g_animationTimerId) {
-                Wh_Log(L"[AeroFlip3D] SetTimer(animation) failed (code %u)", static_cast<unsigned>(GetLastError()));
+                Wh_Log(L"SetTimer(animation) failed (code %u)", static_cast<unsigned>(GetLastError()));
             }
         }
     } else if (g_animationTimerId) {
@@ -2290,7 +2280,7 @@ static void CleanupThumbnails() {
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
-// Simulated 3D layout — copied from message (4).txt / original public-DWM
+// Simulated 3D layout -- copied from message (4).txt / original public-DWM
 // implementation. It intentionally produces only target RECTs and vertical
 // strip trapezoids; it does not require DirectComposition or PrintWindow.
 // -----------------------------------------------------------------------------
@@ -2442,16 +2432,6 @@ static void ComputeSimulatedStackLayout(std::vector<FlipWindowEntry>& windows,
     }
 }
 
-static void ComputeStackLayout(std::vector<FlipWindowEntry>& windows,
-                               int selectedIndex,
-                               bool desktopSelected,
-                               int clientW,
-                               int clientH,
-                               UINT dpi) {
-    ComputeSimulatedStackLayout(windows, selectedIndex, desktopSelected,
-                                clientW, clientH, dpi);
-}
-
 static void RecomputeTargetsForCurrentSelection() {
     if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || g_windows.empty()) {
         return;
@@ -2459,7 +2439,7 @@ static void RecomputeTargetsForCurrentSelection() {
 
     RECT clientRect = {};
     if (!GetClientRect(g_hOverlayWnd, &clientRect)) {
-        Wh_Log(L"[AeroFlip3D] RecomputeTargetsForCurrentSelection: GetClientRect failed");
+        Wh_Log(L"RecomputeTargetsForCurrentSelection: GetClientRect failed");
         return;
     }
 
@@ -2469,7 +2449,7 @@ static void RecomputeTargetsForCurrentSelection() {
                 g_selectedIndex, g_desktopSelected ? 1 : 0,
                 RectWidth(clientRect), RectHeight(clientRect), dpi, static_cast<unsigned>(g_windows.size()));
 
-    ComputeStackLayout(g_windows,
+    ComputeSimulatedStackLayout(g_windows,
                        g_selectedIndex,
                        g_desktopSelected,
                        RectWidth(clientRect),
@@ -2540,7 +2520,7 @@ static HWND CreateOverlayWindow() {
         if (RegisterClassExW(&wc)) {
             g_overlayClassRegistered = true;
         } else {
-            Wh_Log(L"[AeroFlip3D] RegisterClassExW(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
+            Wh_Log(L"RegisterClassExW(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
             return nullptr;
         }
     }
@@ -2559,7 +2539,7 @@ static HWND CreateOverlayWindow() {
                                 hInstance,
                                 nullptr);
     if (!hwnd) {
-        Wh_Log(L"[AeroFlip3D] CreateWindowExW(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"CreateWindowExW(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
         return nullptr;
     }
 
@@ -2639,7 +2619,7 @@ static void SafeDestroyOverlayWindow(HWND overlay) {
         return;
     }
     if (!DestroyWindow(overlay)) {
-        Wh_Log(L"[AeroFlip3D] DestroyWindow(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"DestroyWindow(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
         ShowWindow(overlay, SW_HIDE);
     }
 }
@@ -2735,14 +2715,14 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
     }
 
     if (g_exitInProgress || (g_hOverlayWnd && IsWindow(g_hOverlayWnd))) {
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D: skipped (exit in progress or overlay already exists)");
+        Wh_Log(L"ActivateFlip3D: skipped (exit in progress or overlay already exists)");
         return true;
     }
 
     BOOL compositionEnabled = FALSE;
     if (FAILED(DwmIsCompositionEnabled(&compositionEnabled)) || !compositionEnabled) {
         g_hookSessionActive.store(false, std::memory_order_relaxed);
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D: DWM composition disabled");
+        Wh_Log(L"ActivateFlip3D: DWM composition disabled");
         return false;
     }
 
@@ -2751,7 +2731,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
     Wh_Log(L"ActivateFlip3D: %u eligible top-level window(s) found", static_cast<unsigned>(eligible.size()));
     if (eligible.size() < 2) {
         g_hookSessionActive.store(false, std::memory_order_relaxed);
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D: not enough eligible windows (need >= 2)");
+        Wh_Log(L"ActivateFlip3D: not enough eligible windows (need >= 2)");
         return false;
     }
 
@@ -2760,7 +2740,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
     g_hOverlayWnd = CreateOverlayWindow();
     if (!g_hOverlayWnd) {
         g_hookSessionActive.store(false, std::memory_order_relaxed);
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D: CreateOverlayWindow returned null");
+        Wh_Log(L"ActivateFlip3D: CreateOverlayWindow returned null");
         return false;
     }
 
@@ -2812,7 +2792,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
                 static_cast<unsigned>(g_windows.size()), skippedNoRect, skippedThumbnailFailed);
 
     if (g_windows.empty()) {
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D: no thumbnails registered");
+        Wh_Log(L"ActivateFlip3D: no thumbnails registered");
         DeactivateFlip3D(false);
         return false;
     }
@@ -2864,11 +2844,11 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
 
     if (!g_persistentMode.load(std::memory_order_acquire) &&
         !SetTimer(g_hOverlayWnd, kFailsafeTimerId, kFailsafeAutoCloseMs, nullptr)) {
-        Wh_Log(L"[AeroFlip3D] SetTimer(failsafe) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"SetTimer(failsafe) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
     if (!g_persistentMode.load(std::memory_order_acquire) &&
         !SetTimer(g_hOverlayWnd, kAutoCycleTimerId, kAutoCycleIntervalMs, nullptr)) {
-        Wh_Log(L"[AeroFlip3D] SetTimer(auto-cycle) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"SetTimer(auto-cycle) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
 
     SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -2885,7 +2865,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
 }
 
 // Guarded activation: ActivateFlip3DImpl enumerates arbitrary top-level
-// windows and captures/registers their rendering source — exactly the kind of
+// windows and captures/registers their rendering source -- exactly the kind of
 // cross-process interaction that can fail in unexpected ways. Any exception
 // is caught here, logged once, cleaned up, and the switcher simply does not
 // open; explorer.exe keeps running.
@@ -2893,7 +2873,7 @@ static bool ActivateFlip3D(TriggerModifier triggerModifier, int initialDelta) {
 try {
         return ActivateFlip3DImpl(triggerModifier, initialDelta);
     } catch (...) {
-        Wh_Log(L"[AeroFlip3D] ActivateFlip3D");
+        Wh_Log(L"ActivateFlip3D");
         try {
             if (g_hOverlayWnd && IsWindow(g_hOverlayWnd) &&
                 GetCurrentThreadId() == g_overlayThreadId) {
@@ -2944,6 +2924,8 @@ try {
                 InvalidateRect(hwnd, nullptr, TRUE);
                 return 0;
 
+            // WM_MOUSEWHEEL is handled by LowLevelMouseProc; this fallback
+            // exists in case the LL hook is not installed.
             case WM_MOUSEWHEEL: {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 NavigateSelection(delta > 0 ? -1 : 1);
@@ -3042,7 +3024,7 @@ try {
         }
     } catch (...) {
         // Boundary guard: log once, neutralize the message, never crash.
-        Wh_Log(L"[AeroFlip3D] OverlayWndProc");
+        Wh_Log(L"OverlayWndProc");
         if (msg == WM_PAINT) {
             ValidateRect(hwnd, nullptr);  // Prevent a WM_PAINT storm.
             return 0;
@@ -3083,8 +3065,6 @@ try {
                     case kHotkeyWinTab:
                         // Win+Tab: transient mode. Release Win = confirm.
                         if (g_isActive) {
-                            if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-                                                    }
                             NavigateSelection(1);
                         } else {
                             g_persistentMode.store(false, std::memory_order_relaxed);
@@ -3125,7 +3105,7 @@ try {
                 return 0;
         }
     } catch (...) {
-        Wh_Log(L"[AeroFlip3D] ControllerWndProc");
+        Wh_Log(L"ControllerWndProc");
         if (msg == WM_DESTROY) {
             if (hwnd == g_hControllerWnd) {
                 g_hControllerWnd = nullptr;
@@ -3153,7 +3133,7 @@ static HWND CreateControllerWindow() {
 
     if (!g_controllerClassRegistered) {
         if (!RegisterClassExW(&wc)) {
-            Wh_Log(L"[AeroFlip3D] RegisterClassExW(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
+            Wh_Log(L"RegisterClassExW(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
             return nullptr;
         }
         g_controllerClassRegistered = true;
@@ -3162,7 +3142,7 @@ static HWND CreateControllerWindow() {
     HWND hwnd = CreateWindowExW(0, className, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, hInstance, nullptr);
     if (!hwnd) {
-        Wh_Log(L"[AeroFlip3D] CreateWindowExW(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"CreateWindowExW(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
     return hwnd;
 }
@@ -3223,73 +3203,46 @@ try {
             return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
         }
 
-        if (active && keyDown && (IsCtrlKey(vk) || IsShiftKey(vk))) {
-            // Let Ctrl/Shift key-down through so system shortcuts keep working.
+        if (active && keyDown && (IsCtrlKey(vk) || IsShiftKey(vk) || IsAltKey(vk) || vk == VK_F12)) {
+            // Let Ctrl/Shift/Alt/F12 key-down through so system shortcuts and
+            // the Ctrl+Alt+F12 combo keep working.
             return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
         }
 
-        // Safe/manual shortcuts. Ctrl+Alt+F12 is the recommended one.
-        // Each combo below is skipped here entirely when RegisterHotKey
-        // currently owns it: letting both paths fire for one physical press
-        // caused a double activate and skipped the desktop entry.
-        const bool stickyOwnedElsewhere = g_stickyHotkeyOwned.load(std::memory_order_relaxed);
-        // (Fix #2) Ctrl+Alt+F12: handle in the hook even when active, regardless
-        // of hotkey ownership, so it can always close the switcher.
-        const bool manualShortcut =
-            (vk == VK_F12 && ctrlDown && altDown && !winDown) ||
-            false;
+        // Ctrl+Alt+F12: handled entirely in the hook whether or not
+        // RegisterHotKey succeeded. The hook tracks Ctrl/Alt state from its
+        // own events so the combo works reliably even while the switcher is
+        // open (where the catch-all swallow below would otherwise hide modifiers).
+        const bool manualShortcut = (vk == VK_F12 && ctrlDown && altDown && !winDown);
         if (manualShortcut && keyDown) {
-            TriggerModifier manualModifier = winDown ? TriggerModifier::Win
-                                                     : (altDown ? TriggerModifier::Alt
-                                                                : TriggerModifier::None);
             if (active) {
                 g_hookSessionActive.store(false, std::memory_order_relaxed);
-                g_suppressReleaseModifier.store(static_cast<int>(manualModifier), std::memory_order_relaxed);
-                g_suppressNextModifierRelease.store(TriggerModifierStillPhysicallyDown(manualModifier), std::memory_order_relaxed);
                 ResetWheelState();
                 PostToController(WM_FLIP3D_CLOSE, 0, 0);
-            } else if (!stickyOwnedElsewhere) {
-                // The hook only classifies and posts. It never enumerates
-                // windows and never marks the system keyboard as captured;
-                // the UI thread sets g_hookSessionActive only after opening.
+            } else {
                 PostToController(WM_FLIP3D_ACTIVATE,
                                  static_cast<WPARAM>(TriggerModifier::None), 0);
             }
             return 1;
         }
 
-        // Win+Tab while active: swallowed inside the active block below
-
-        if (!kEnableLowLevelInputHooks) {
-            // Safe mode: hook only backs the manual hotkey if RegisterHotKey
-            // was stolen. Never intercept Win+Tab/Alt+Tab/arrows here.
-            return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
-        }
-
-        // Only Win+Tab activates Flip3D via the LL hook (fallback path if
-        // RegisterHotKey failed/was lost for this exact combo). Alt+Tab is
-        // NEVER intercepted. !ctrlDown excludes Win+Tab, which is its
-        // own combo (handled above / by its own WM_HOTKEY) - without this,
-        // Win+Tab could fall through here and get double-activated in
-        // the wrong (transient) mode whenever Win+Tab happens to be owned
-        // while Win+Tab is not, or vice versa.
+        // Win+Tab activates Flip3D via the LL hook when RegisterHotKey
+        // failed (normal case: the shell owns it). Alt+Tab is NEVER intercepted.
+        // While the switcher is open Tab is swallowed unconditionally -- the
+        // auto-cycle timer (kAutoCycleTimerId at 250 ms) is the sole navigation
+        // mechanism so the deck speed is predictable regardless of which hotkey
+        // path triggered the activation.
         const bool winTabOwnedElsewhere = g_winTabHotkeyOwned.load(std::memory_order_relaxed);
         if (vk == VK_TAB && keyDown && winDown && !altDown && !ctrlDown && !winTabOwnedElsewhere) {
             if (!active) {
                 const TriggerModifier trigger = TriggerModifier::Win;
                 const int initialDelta = shiftDown ? -1 : 1;
-                // No synchronous eligibility call here: EnumWindows/DWM work is
-                // performed asynchronously by the UI thread after this hook
-                // has returned. A failed post cannot lock the keyboard because
-                // g_hookSessionActive is still false.
                 PostToController(WM_FLIP3D_ACTIVATE,
                                  static_cast<WPARAM>(trigger),
                                  static_cast<LPARAM>(initialDelta));
                 return 1;
             }
-
-            PostToController(WM_FLIP3D_NAVIGATE,
-                             static_cast<WPARAM>(static_cast<INT_PTR>(shiftDown ? -1 : 1)), 0);
+            // Already open: swallow so only auto-cycle advances.
             return 1;
         }
 
@@ -3373,7 +3326,7 @@ try {
     } catch (...) {
         // Boundary guard: on ANY failure, forward the event to Windows so the
         // input chain is never broken.
-        Wh_Log(L"[AeroFlip3D] LowLevelKeyboardProc");
+        Wh_Log(L"LowLevelKeyboardProc");
     }
     
 
@@ -3430,7 +3383,7 @@ if (!g_hookSessionActive.load(std::memory_order_relaxed)) {
             return 1;
         }
     } catch (...) {
-        Wh_Log(L"[AeroFlip3D] LowLevelMouseProc");
+        Wh_Log(L"LowLevelMouseProc");
     }
     
 
@@ -3494,7 +3447,7 @@ static void UnregisterAllHotkeys() {
 static bool TryRegisterHotkey(int id, UINT modifiers, UINT vk, PCWSTR label) {
     if (!RegisterHotKey(g_hControllerWnd, id, modifiers, vk)) {
         // Non-fatal: the LL hook still backs Win+Tab / manual shortcuts.
-        Wh_Log(L"[AeroFlip3D] %s failed (code %u)", label, static_cast<unsigned>(GetLastError()));
+        Wh_Log(L"%s failed (code %u)", label, static_cast<unsigned>(GetLastError()));
         return false;
     }
     Wh_Log(L"TryRegisterHotkey: %s registered (id=%d)", label, id);
@@ -3540,17 +3493,20 @@ static DWORD HookThreadProcImpl(LPVOID) {
     PeekMessageW(&dummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     g_hookThreadId = GetCurrentThreadId();
-    Wh_Log(L"[AeroFlip3D] HookThread: started, tid=%lu", g_hookThreadId);
+    Wh_Log(L"HookThread: started, tid=%lu", g_hookThreadId);
 
     // Single cleanup point for normal exit AND exception unwind.
     auto cleanup = MakeScopeGuard([] {
-        Wh_Log(L"[AeroFlip3D] HookThread: cleanup running");
+        Wh_Log(L"HookThread: cleanup running");
         g_pendingActivateHwnd = nullptr;
         if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
             FinishExitAfterAnimation();
         }
-        // (Fix #5) g_inputThreadId is pre-captured; always post quit.
-        if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+        if (g_inputThreadId) {
+            while (!PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0) &&
+                   WaitForSingleObject(g_inputThread.get(), 10) == WAIT_TIMEOUT) {
+            }
+        }
         if (g_inputThread) {
             WaitForSingleObject(g_inputThread.get(), INFINITE);
             g_inputThread.reset();
@@ -3558,7 +3514,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
         UnregisterAllHotkeys();
         if (g_hControllerWnd && IsWindow(g_hControllerWnd)) {
             if (!DestroyWindow(g_hControllerWnd)) {
-                Wh_Log(L"[AeroFlip3D] DestroyWindow(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
+                Wh_Log(L"DestroyWindow(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
             }
         }
         g_hControllerWnd = nullptr;
@@ -3579,7 +3535,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
         // the fallback and blocks Task View without any permanent polling.
         BeginWinTabClaim();
     } else {
-        Wh_Log(L"[AeroFlip3D] HookThread: controller window");
+        Wh_Log(L"HookThread: controller window");
     }
 
     // LL hooks are installed on a separate input thread. Starting it only
@@ -3601,7 +3557,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
     Wh_Log(L"HookThread: install %s, entering message loop", ok ? L"OK" : L"FAILED");
 
     if (!ok) {
-        Wh_Log(L"[AeroFlip3D] HookThread: install");
+        Wh_Log(L"HookThread: install");
         return 1;  // ScopeGuard cleans everything up.
     }
 
@@ -3611,21 +3567,23 @@ static DWORD HookThreadProcImpl(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    Wh_Log(L"[AeroFlip3D] HookThread: message loop exited (WM_QUIT)");
+    Wh_Log(L"HookThread: message loop exited (WM_QUIT)");
     return 0;  // ScopeGuard cleans everything up.
 }
 
 // Guarded thread entry: an unhandled exception here must fail this thread
-// alone, never take explorer.exe down. The ready event is ALWAYS signaled so
-// Wh_ModInit can never hang waiting for us.
+// alone, never take the tool-mod process down.
 static DWORD WINAPI HookThreadProc(LPVOID param) {
 try {
         return HookThreadProcImpl(param);
     } catch (...) {
-        Wh_Log(L"[AeroFlip3D] HookThreadProc");
+        Wh_Log(L"HookThreadProc");
         try {
-            // (Fix #5) g_inputThreadId is pre-captured; always post quit.
-            if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+            if (g_inputThreadId) {
+                while (!PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0) &&
+                       WaitForSingleObject(g_inputThread.get(), 10) == WAIT_TIMEOUT) {
+                }
+            }
             if (g_inputThread) {
                 WaitForSingleObject(g_inputThread.get(), INFINITE);
                 g_inputThread.reset();
@@ -3633,7 +3591,7 @@ try {
             UnregisterAllHotkeys();
             if (g_hControllerWnd && IsWindow(g_hControllerWnd)) {
                 if (!DestroyWindow(g_hControllerWnd)) {
-                    Wh_Log(L"[AeroFlip3D] DestroyWindow(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
+                    Wh_Log(L"DestroyWindow(controller) failed (code %u)", static_cast<unsigned>(GetLastError()));
                 }
             }
             g_hControllerWnd = nullptr;
@@ -3643,9 +3601,6 @@ try {
         } catch (...) {
         }
         g_hookInstallOk.store(false, std::memory_order_release);
-        if (g_hookReadyEvent) {
-            SetEvent(g_hookReadyEvent.get());
-        }
         return 1;
     }
     
@@ -3680,14 +3635,23 @@ static void WhTool_ModUninitImpl() {
     // it, and unhook unconditionally as a final defensive action.
     // (Fix #5) g_hookThreadId is captured from CreateThread so it is always
     // valid once the thread is created.
+    // Post WM_QUIT with retry: PostThreadMessageW fails until the target
+    // thread has created its message queue. Retry in 10 ms steps bounded by
+    // the thread actually exiting.
     if (g_hookThreadId) {
-        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        while (!PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0) &&
+               WaitForSingleObject(g_hookThread.get(), 10) == WAIT_TIMEOUT) {
+        }
     }
     if (g_hookThread) {
         WaitForSingleObject(g_hookThread.get(), INFINITE);
         g_hookThread.reset();
     }
-    if (g_inputThreadId) PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+    if (g_inputThreadId) {
+        while (!PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0) &&
+               WaitForSingleObject(g_inputThread.get(), 10) == WAIT_TIMEOUT) {
+        }
+    }
     if (g_inputThread) {
         WaitForSingleObject(g_inputThread.get(), INFINITE);
         g_inputThread.reset();
