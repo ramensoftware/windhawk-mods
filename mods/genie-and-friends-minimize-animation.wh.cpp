@@ -1644,7 +1644,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 
     if (g_enabled.load(std::memory_order_relaxed) && Msg == WM_SYSCOMMAND) {
         UINT cmd = wParam & 0xFFF0;
-        if (cmd == SC_MINIMIZE) {
+        if (cmd == SC_MINIMIZE && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
             SetSysCmdGuard(hWnd, true);
             SetDwmTransitions(hWnd, FALSE);
             StartGenieAnim(hWnd, FALSE);
