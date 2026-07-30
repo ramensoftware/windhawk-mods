@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer menus and tooltips
-// @version         0.1.1
+// @version         0.1.2
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -49,6 +49,9 @@ keyboard shortcut text are also preserved.
 - Classic Win32 popup menus are rewritten through public `HMENU` APIs. This
   includes File Explorer, desktop, taskbar, tray, and jump-list menus hosted by
   `explorer.exe`.
+- Classic Win32 tooltips, including legacy notification-area icon tooltips, are
+  rewritten only through theme handles opened for the `TOOLTIP` class, covering
+  both text measurement and drawing without touching unrelated GDI text.
 - Windows 11 context menus and XAML/WinUI tooltips use an experimental,
   display-only DirectWrite hook. UI Automation is used when a popup is shown to
   distinguish menus and tooltips from other Explorer flyouts.
@@ -70,6 +73,9 @@ strings after the mod is disabled until Explorer restarts.
 - classicMenus: true
   $name: Classic context menus
   $description: Process classic Win32 popup-menu text.
+- classicTooltips: true
+  $name: Classic Win32 tooltips
+  $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: true
   $name: Windows 11 menus and tooltips (experimental)
   $description: Process DirectWrite text in Explorer XAML/WinUI context menus and tooltips.
@@ -92,6 +98,7 @@ strings after the mod is disabled until Explorer restarts.
 #include <dwrite.h>
 #include <initguid.h>
 #include <uiautomation.h>
+#include <uxtheme.h>
 #include <windows.h>
 
 namespace {
@@ -104,6 +111,7 @@ enum class CharacterKind {
 };
 
 std::atomic_bool g_classicMenus{true};
+std::atomic_bool g_classicTooltips{true};
 std::atomic_bool g_modernUiText{true};
 std::atomic_bool g_unicodeLettersAndDigits{true};
 std::atomic_uint g_activeModernPopupCount{0};
@@ -539,6 +547,221 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
     }
 
     return g_originalTrackPopupMenuEx(menu, flags, x, y, owner, parameters);
+}
+
+// -------------------------------------------------------------------------
+// Classic Win32 tooltips
+// -------------------------------------------------------------------------
+
+using OpenThemeData_t = decltype(&OpenThemeData);
+using OpenThemeDataEx_t = decltype(&OpenThemeDataEx);
+using OpenThemeDataForDpi_t = decltype(&OpenThemeDataForDpi);
+using CloseThemeData_t = decltype(&CloseThemeData);
+using DrawThemeText_t = decltype(&DrawThemeText);
+using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
+
+OpenThemeData_t g_originalOpenThemeData;
+OpenThemeDataEx_t g_originalOpenThemeDataEx;
+OpenThemeDataForDpi_t g_originalOpenThemeDataForDpi;
+CloseThemeData_t g_originalCloseThemeData;
+DrawThemeText_t g_originalDrawThemeText;
+DrawThemeTextEx_t g_originalDrawThemeTextEx;
+
+constexpr size_t kClassicTooltipThemeCapacity = 16;
+std::atomic<HTHEME>
+    g_classicTooltipThemes[kClassicTooltipThemeCapacity] = {};
+thread_local bool g_rewritingClassicTooltipText = false;
+
+bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
+    if (!classList) {
+        return false;
+    }
+
+    constexpr wchar_t needle[] = L"tooltip";
+    constexpr size_t needleLength = ARRAYSIZE(needle) - 1;
+    for (const wchar_t* cursor = classList; *cursor; ++cursor) {
+        if (_wcsnicmp(cursor, needle, needleLength) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsTrackedClassicTooltipTheme(HTHEME theme) {
+    if (!theme) {
+        return false;
+    }
+
+    for (auto& trackedTheme : g_classicTooltipThemes) {
+        if (trackedTheme.load(std::memory_order_relaxed) == theme) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void TrackClassicTooltipTheme(HTHEME theme) {
+    if (!theme || IsTrackedClassicTooltipTheme(theme)) {
+        return;
+    }
+
+    for (auto& trackedTheme : g_classicTooltipThemes) {
+        HTHEME empty = nullptr;
+        if (trackedTheme.compare_exchange_strong(
+                empty, theme, std::memory_order_relaxed)) {
+            Wh_Log(L"Tracking classic Win32 tooltip theme");
+            return;
+        }
+    }
+
+    Wh_Log(L"Classic tooltip theme tracking capacity reached");
+}
+
+void UntrackClassicTooltipTheme(HTHEME theme) {
+    if (!theme) {
+        return;
+    }
+
+    for (auto& trackedTheme : g_classicTooltipThemes) {
+        HTHEME expected = theme;
+        trackedTheme.compare_exchange_strong(
+            expected, nullptr, std::memory_order_relaxed);
+    }
+}
+
+HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
+    HTHEME theme = g_originalOpenThemeData(window, classList);
+    if (IsClassicTooltipThemeClassList(classList)) {
+        TrackClassicTooltipTheme(theme);
+    }
+
+    return theme;
+}
+
+HTHEME WINAPI OpenThemeDataExHook(HWND window,
+                                  LPCWSTR classList,
+                                  DWORD flags) {
+    HTHEME theme =
+        g_originalOpenThemeDataEx(window, classList, flags);
+    if (IsClassicTooltipThemeClassList(classList)) {
+        TrackClassicTooltipTheme(theme);
+    }
+
+    return theme;
+}
+
+HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
+                                      LPCWSTR classList,
+                                      UINT dpi) {
+    HTHEME theme =
+        g_originalOpenThemeDataForDpi(window, classList, dpi);
+    if (IsClassicTooltipThemeClassList(classList)) {
+        TrackClassicTooltipTheme(theme);
+    }
+
+    return theme;
+}
+
+HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
+    UntrackClassicTooltipTheme(theme);
+    return g_originalCloseThemeData(theme);
+}
+
+bool BuildSpacedClassicTooltipText(LPCWSTR text,
+                                   int textLength,
+                                   DWORD textFlags,
+                                   std::wstring* spaced) {
+    if (!text || textLength < -1) {
+        return false;
+    }
+
+    const size_t length =
+        textLength < 0 ? wcslen(text)
+                       : static_cast<size_t>(textLength);
+    if (length == 0) {
+        return false;
+    }
+
+    const std::wstring_view original(text, length);
+    if (!ContainsCjkCodePoint(original)) {
+        return false;
+    }
+
+    const bool preserveMnemonics = !(textFlags & DT_NOPREFIX);
+    *spaced = AddCjkSpacing(original, preserveMnemonics);
+    return spaced->size() != original.size();
+}
+
+HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
+                                 HDC dc,
+                                 int partId,
+                                 int stateId,
+                                 LPCWSTR text,
+                                 int textLength,
+                                 DWORD textFlags,
+                                 DWORD textFlags2,
+                                 LPCRECT rectangle) {
+    if (!g_classicTooltips.load(std::memory_order_relaxed) ||
+        g_rewritingClassicTooltipText ||
+        !IsTrackedClassicTooltipTheme(theme)) {
+        return g_originalDrawThemeText(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            textFlags2, rectangle);
+    }
+
+    std::wstring spaced;
+    if (!BuildSpacedClassicTooltipText(
+            text, textLength, textFlags, &spaced)) {
+        return g_originalDrawThemeText(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            textFlags2, rectangle);
+    }
+
+    Wh_Log(L"Applied CJK spacing (classic tooltip/DrawThemeText)");
+    g_rewritingClassicTooltipText = true;
+    const HRESULT result = g_originalDrawThemeText(
+        theme, dc, partId, stateId, spaced.c_str(),
+        static_cast<int>(spaced.size()), textFlags, textFlags2,
+        rectangle);
+    g_rewritingClassicTooltipText = false;
+    return result;
+}
+
+HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
+                                   HDC dc,
+                                   int partId,
+                                   int stateId,
+                                   LPCWSTR text,
+                                   int textLength,
+                                   DWORD textFlags,
+                                   LPRECT rectangle,
+                                   const DTTOPTS* options) {
+    if (!g_classicTooltips.load(std::memory_order_relaxed) ||
+        g_rewritingClassicTooltipText ||
+        !IsTrackedClassicTooltipTheme(theme)) {
+        return g_originalDrawThemeTextEx(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            rectangle, options);
+    }
+
+    std::wstring spaced;
+    if (!BuildSpacedClassicTooltipText(
+            text, textLength, textFlags, &spaced)) {
+        return g_originalDrawThemeTextEx(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            rectangle, options);
+    }
+
+    Wh_Log(L"Applied CJK spacing (classic tooltip/DrawThemeTextEx)");
+    g_rewritingClassicTooltipText = true;
+    const HRESULT result = g_originalDrawThemeTextEx(
+        theme, dc, partId, stateId, spaced.c_str(),
+        static_cast<int>(spaced.size()), textFlags, rectangle,
+        options);
+    g_rewritingClassicTooltipText = false;
+    return result;
 }
 
 // -------------------------------------------------------------------------
@@ -981,9 +1204,92 @@ bool InstallHook(Function target,
     return true;
 }
 
+bool HookClassicTooltipThemeDrawing() {
+    HMODULE themeModule = LoadLibraryExW(
+        L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!themeModule) {
+        Wh_Log(L"Couldn't load uxtheme.dll");
+        return false;
+    }
+
+    bool hooked = false;
+
+    const auto openThemeData =
+        reinterpret_cast<OpenThemeData_t>(
+            GetProcAddress(themeModule, "OpenThemeData"));
+    if (openThemeData) {
+        hooked |= InstallHook(
+            openThemeData, OpenThemeDataHook,
+            &g_originalOpenThemeData, L"OpenThemeData");
+    } else {
+        Wh_Log(L"Couldn't find OpenThemeData");
+    }
+
+    const auto openThemeDataEx =
+        reinterpret_cast<OpenThemeDataEx_t>(
+            GetProcAddress(themeModule, "OpenThemeDataEx"));
+    if (openThemeDataEx) {
+        hooked |= InstallHook(
+            openThemeDataEx, OpenThemeDataExHook,
+            &g_originalOpenThemeDataEx, L"OpenThemeDataEx");
+    } else {
+        Wh_Log(L"Couldn't find OpenThemeDataEx");
+    }
+
+    const auto openThemeDataForDpi =
+        reinterpret_cast<OpenThemeDataForDpi_t>(
+            GetProcAddress(themeModule, "OpenThemeDataForDpi"));
+    if (openThemeDataForDpi) {
+        hooked |= InstallHook(
+            openThemeDataForDpi, OpenThemeDataForDpiHook,
+            &g_originalOpenThemeDataForDpi,
+            L"OpenThemeDataForDpi");
+    } else {
+        Wh_Log(L"Couldn't find OpenThemeDataForDpi");
+    }
+
+    const auto closeThemeData =
+        reinterpret_cast<CloseThemeData_t>(
+            GetProcAddress(themeModule, "CloseThemeData"));
+    if (closeThemeData) {
+        hooked |= InstallHook(
+            closeThemeData, CloseThemeDataHook,
+            &g_originalCloseThemeData, L"CloseThemeData");
+    } else {
+        Wh_Log(L"Couldn't find CloseThemeData");
+    }
+
+    const auto drawThemeText =
+        reinterpret_cast<DrawThemeText_t>(
+            GetProcAddress(themeModule, "DrawThemeText"));
+    if (drawThemeText) {
+        hooked |= InstallHook(
+            drawThemeText, DrawThemeTextHook,
+            &g_originalDrawThemeText, L"DrawThemeText");
+    } else {
+        Wh_Log(L"Couldn't find DrawThemeText");
+    }
+
+    const auto drawThemeTextEx =
+        reinterpret_cast<DrawThemeTextEx_t>(
+            GetProcAddress(themeModule, "DrawThemeTextEx"));
+    if (drawThemeTextEx) {
+        hooked |= InstallHook(
+            drawThemeTextEx, DrawThemeTextExHook,
+            &g_originalDrawThemeTextEx, L"DrawThemeTextEx");
+    } else {
+        Wh_Log(L"Couldn't find DrawThemeTextEx");
+    }
+
+    return hooked;
+}
+
 void LoadSettings() {
     g_classicMenus.store(Wh_GetIntSetting(L"classicMenus") != 0,
                          std::memory_order_relaxed);
+    g_classicTooltips.store(
+        Wh_GetIntSetting(L"classicTooltips") != 0,
+        std::memory_order_relaxed);
     g_modernUiText.store(Wh_GetIntSetting(L"modernUiText") != 0,
                          std::memory_order_relaxed);
 
@@ -1001,6 +1307,7 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!g_classicMenus.load(std::memory_order_relaxed) &&
+        !g_classicTooltips.load(std::memory_order_relaxed) &&
         !g_modernUiText.load(std::memory_order_relaxed)) {
         Wh_Log(L"CJK Spacer has no enabled UI targets");
         return FALSE;
@@ -1027,6 +1334,8 @@ BOOL Wh_ModInit() {
         InstallHook(TrackPopupMenuEx, TrackPopupMenuExHook,
                     &g_originalTrackPopupMenuEx, L"TrackPopupMenuEx");
 
+    installedAnyHook |= HookClassicTooltipThemeDrawing();
+
     installedAnyHook |= InstallHook(ShowWindow, ShowWindowHook,
                                     &g_originalShowWindow, L"ShowWindow");
     installedAnyHook |= InstallHook(SetWindowPos, SetWindowPosHook,
@@ -1037,8 +1346,10 @@ BOOL Wh_ModInit() {
 
     installedAnyHook |= HookDirectWrite();
 
-    Wh_Log(L"CJK Spacer initialized (classic=%d, modern=%d, unicode=%d)",
-           g_classicMenus.load(), g_modernUiText.load(),
+    Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
+           L"classicTooltips=%d, modern=%d, unicode=%d)",
+           g_classicMenus.load(), g_classicTooltips.load(),
+           g_modernUiText.load(),
            g_unicodeLettersAndDigits.load());
     return installedAnyHook ? TRUE : FALSE;
 }
@@ -1049,7 +1360,9 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Wh_Log(L"CJK Spacer settings changed (classic=%d, modern=%d, unicode=%d)",
-           g_classicMenus.load(), g_modernUiText.load(),
+    Wh_Log(L"CJK Spacer settings changed (classicMenus=%d, "
+           L"classicTooltips=%d, modern=%d, unicode=%d)",
+           g_classicMenus.load(), g_classicTooltips.load(),
+           g_modernUiText.load(),
            g_unicodeLettersAndDigits.load());
 }
