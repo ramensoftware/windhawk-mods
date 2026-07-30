@@ -23,6 +23,12 @@ options.
 Each device uses its own icon, the one Windows shows in the sound settings, so
 headphones, speakers, HDMI output and a microphone are easy to tell apart.
 
+![Tray icons](https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/tray-icons.png) \
+*Two playback devices: the default one is drawn normally, the other one dimmed*
+
+![Right click menu](https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/context-menu.png) \
+*The right click menu of a device*
+
 ## How this differs from the other audio switching mods
 
 The catalog already has several mods for switching audio devices, but the
