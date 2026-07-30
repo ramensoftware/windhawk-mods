@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.2
+// @version         1.3
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -234,10 +234,6 @@ do not conflict.
 - openFolderOnClick: true
   $name: Click opens the folder
   $description: Left clicking a taskbar button opens the folder in File Explorer.
-
-- debugLog: false
-  $name: Verbose logging
-  $description: Write extra detail to the Windhawk log.
 */
 // ==/WindhawkModSettings==
 
@@ -274,10 +270,15 @@ do not conflict.
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+#ifndef SEE_MASK_ASYNCOK
+#define SEE_MASK_ASYNCOK 0x00100000
+#endif
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
@@ -330,19 +331,11 @@ struct Settings {
     int gapAfter = 0;
     int buttonIconSize = 0;
     bool openFolderOnClick = true;
-    bool debugLog = false;
 };
 
 Settings g_settings;
 
 std::atomic<bool> g_unloading{false};
-
-#define LOGV(...)                  \
-    do {                           \
-        if (g_settings.debugLog) { \
-            Wh_Log(__VA_ARGS__);   \
-        }                          \
-    } while (0)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Small helpers
@@ -483,7 +476,6 @@ void LoadSettings() {
     g_settings.buttonIconSize =
         std::clamp<int>(Wh_GetIntSetting(L"buttonIconSize"), 0, 128);
     g_settings.openFolderOnClick = Wh_GetIntSetting(L"openFolderOnClick");
-    g_settings.debugLog = Wh_GetIntSetting(L"debugLog");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -998,7 +990,9 @@ std::mutex g_scanMutex;
 std::condition_variable g_scanCv;
 std::vector<ScanRequest> g_scanQueue;
 bool g_scanThreadStop = false;
-std::thread g_scanThread;
+// optional + no_destroy: a bare std::thread aborts Explorer on process exit if
+// it is still joinable when globals are destroyed.
+[[clang::no_destroy]] std::optional<std::thread> g_scanThread;
 
 std::wstring CacheKey(const std::wstring& path) {
     std::wstring key = path;
@@ -1247,8 +1241,8 @@ void ScanThreadMain() {
             g_folderCache[CacheKey(request.path)] = fresh;
         }
 
-        LOGV(L"Scanned %s: %d items", request.path.c_str(),
-             (int)fresh->items.size());
+        Wh_Log(L"Scanned %s: %d items", request.path.c_str(),
+               (int)fresh->items.size());
     }
 
     winrt::uninit_apartment();
@@ -1297,8 +1291,8 @@ std::shared_ptr<FolderData> GetFolderDataAndRefresh(const std::wstring& path,
 void StartScanThread() {
     std::lock_guard<std::mutex> lock(g_scanMutex);
     g_scanThreadStop = false;
-    if (!g_scanThread.joinable()) {
-        g_scanThread = std::thread(ScanThreadMain);
+    if (!g_scanThread) {
+        g_scanThread.emplace(ScanThreadMain);
     }
 }
 
@@ -1309,9 +1303,10 @@ void StopScanThread() {
         g_scanQueue.clear();
     }
     g_scanCv.notify_all();
-    if (g_scanThread.joinable()) {
-        g_scanThread.join();
+    if (g_scanThread && g_scanThread->joinable()) {
+        g_scanThread->join();
     }
+    g_scanThread.reset();
 }
 
 void ResetFolderData() {
@@ -1477,8 +1472,9 @@ int RootTitleBandHeight(const PopupLevel* level) {
 }
 
 // Fills level->cellRects and returns the required window size in physical
-// pixels.
-SIZE ComputeLevelLayout(PopupLevel* level) {
+// pixels. When maxHeight > 0, widens the grid (more columns) so the height
+// fits instead of growing a tall popup that would fall off-screen.
+SIZE ComputeLevelLayout(PopupLevel* level, int maxHeight = 0) {
     int itemCount = (int)level->items.size();
     int padding = ScaleForPopup(8);
     int cellW = ScaleForPopup(g_settings.cellWidth);
@@ -1495,6 +1491,16 @@ SIZE ComputeLevelLayout(PopupLevel* level) {
     }
     cols = std::min<int>(cols, count);
     int rows = (count + cols - 1) / cols;
+
+    if (maxHeight > 0 && cellH > 0) {
+        int usable = maxHeight - padding * 2 - titleBand;
+        int maxRows = std::max<int>(1, usable / cellH);
+        // Prefer widening over dropping items when the default layout is too tall.
+        while (rows > maxRows && cols < count) {
+            cols++;
+            rows = (count + cols - 1) / cols;
+        }
+    }
 
     level->cellRects.clear();
     level->cellRects.reserve(itemCount);
@@ -1516,6 +1522,9 @@ SIZE ComputeLevelLayout(PopupLevel* level) {
         // Leave room for the "Loading" / "Empty folder" message.
         size.cx = padding * 2 + cellW * 2;
         size.cy = std::max<int>(size.cy, padding * 2 + titleBand + cellH);
+    }
+    if (maxHeight > 0) {
+        size.cy = std::min<int>(size.cy, maxHeight);
     }
     return size;
 }
@@ -1904,14 +1913,19 @@ int LevelIndexUnderCursor() {
     return -1;
 }
 
-void ShowItemContextMenu(const std::wstring& path, POINT screenPt) {
-    if (!g_menuOwnerWnd) {
+void ShowItemContextMenu(std::wstring path, POINT screenPt) {
+    if (!g_menuOwnerWnd || path.empty()) {
         return;
     }
+
+    // Stay raised for the whole modal body, including InvokeCommand which also
+    // pumps messages - otherwise OnTick can tear down levels under the menu.
+    g_menuActive = true;
 
     PIDLIST_ABSOLUTE pidl = nullptr;
     if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) ||
         !pidl) {
+        g_menuActive = false;
         return;
     }
 
@@ -1921,6 +1935,7 @@ void ShowItemContextMenu(const std::wstring& path, POINT screenPt) {
                               &child)) ||
         !parentFolder) {
         CoTaskMemFree(pidl);
+        g_menuActive = false;
         return;
     }
 
@@ -1936,14 +1951,12 @@ void ShowItemContextMenu(const std::wstring& path, POINT screenPt) {
                 contextMenu->QueryInterface(IID_IContextMenu2,
                                             (void**)&g_activeContextMenu2);
 
-                g_menuActive = true;
                 SetForegroundWindow(g_menuOwnerWnd);
                 UINT cmd = TrackPopupMenuEx(menu,
                                             TPM_RETURNCMD | TPM_RIGHTBUTTON |
                                                 TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                                             screenPt.x, screenPt.y,
                                             g_menuOwnerWnd, nullptr);
-                g_menuActive = false;
 
                 if (g_activeContextMenu2) {
                     g_activeContextMenu2->Release();
@@ -1968,26 +1981,26 @@ void ShowItemContextMenu(const std::wstring& path, POINT screenPt) {
 
     parentFolder->Release();
     CoTaskMemFree(pidl);
+    g_menuActive = false;
 }
 
-// Launching happens on a throwaway thread: this is called from the taskbar's UI
-// thread, and ShellExecuteEx can block for a long time.
+// Launch on the UI thread via SEE_MASK_ASYNCOK so the shell does the work on
+// its own thread - no detached worker that can outlive the mod DLL.
 void LaunchPath(const std::wstring& path) {
-    std::thread([path] {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (path.empty()) {
+        return;
+    }
 
-        SHELLEXECUTEINFOW info{};
-        info.cbSize = sizeof(info);
-        info.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_FLAG_NO_UI;
-        info.lpFile = path.c_str();
-        info.nShow = SW_SHOWNORMAL;
-        if (!ShellExecuteExW(&info)) {
-            LOGV(L"ShellExecuteEx failed for %s (error %u)", path.c_str(),
-                 GetLastError());
-        }
-
-        CoUninitialize();
-    }).detach();
+    SHELLEXECUTEINFOW info{};
+    info.cbSize = sizeof(info);
+    info.fMask =
+        SEE_MASK_INVOKEIDLIST | SEE_MASK_FLAG_NO_UI | SEE_MASK_ASYNCOK;
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info)) {
+        Wh_Log(L"ShellExecuteEx failed for %s (error %u)", path.c_str(),
+               GetLastError());
+    }
 }
 
 LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
@@ -2057,13 +2070,13 @@ void PrefetchSubfolders(PopupLevel* level) {
 // retires levels the cursor has moved away from, and dismisses the chain when
 // the cursor leaves the live path. Runs on level 0's window only.
 void OnTick() {
-    RefreshLoadingLevels();
-
     if (g_menuActive) {
         g_outsideSinceTick = 0;
         g_closeDeeperSinceTick = 0;
         return;
     }
+
+    RefreshLoadingLevels();
 
     ULONGLONG now = GetTickCount64();
 
@@ -2196,7 +2209,8 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
             if (cell >= 0 && cell < (int)level->items.size()) {
                 POINT screenPt = pt;
                 ClientToScreen(hWnd, &screenPt);
-                ShowItemContextMenu(level->items[cell].fullPath, screenPt);
+                ShowItemContextMenu(std::wstring(level->items[cell].fullPath),
+                                    screenPt);
             }
             return 0;
         }
@@ -2227,24 +2241,40 @@ HWND EnsureLevelWindow(int depth) {
 
     HINSTANCE instance = GetModuleHandleW(nullptr);
 
-    static bool classesRegistered = false;
-    if (!classesRegistered) {
+    enum class ClassState { Untried, Ok, Failed };
+    static ClassState classState = ClassState::Untried;
+    if (classState == ClassState::Untried) {
         WNDCLASSEXW popupClass{};
         popupClass.cbSize = sizeof(popupClass);
         popupClass.lpfnWndProc = PopupWndProc;
         popupClass.hInstance = instance;
         popupClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
         popupClass.lpszClassName = kPopupClassName;
-        RegisterClassExW(&popupClass);
+        ATOM popupAtom = RegisterClassExW(&popupClass);
 
         WNDCLASSEXW ownerClass{};
         ownerClass.cbSize = sizeof(ownerClass);
         ownerClass.lpfnWndProc = MenuOwnerWndProc;
         ownerClass.hInstance = instance;
         ownerClass.lpszClassName = kMenuOwnerClassName;
-        RegisterClassExW(&ownerClass);
+        ATOM ownerAtom = RegisterClassExW(&ownerClass);
 
-        classesRegistered = true;
+        if (!popupAtom || !ownerAtom) {
+            Wh_Log(L"RegisterClassExW failed (error %u); hover grids disabled",
+                   GetLastError());
+            if (popupAtom) {
+                UnregisterClassW(kPopupClassName, instance);
+            }
+            if (ownerAtom) {
+                UnregisterClassW(kMenuOwnerClassName, instance);
+            }
+            classState = ClassState::Failed;
+        } else {
+            classState = ClassState::Ok;
+        }
+    }
+    if (classState != ClassState::Ok) {
+        return nullptr;
     }
 
     if (!g_menuOwnerWnd) {
@@ -2340,8 +2370,6 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     g_rootAnchorRect = anchorRect;
     g_outsideSinceTick = 0;
 
-    SIZE size = ComputeLevelLayout(level.get());
-
     HMONITOR monitor = MonitorFromRect(&anchorRect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
@@ -2349,19 +2377,40 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     const RECT& screen = monitorInfo.rcMonitor;
 
     int gap = ScaleForPopup(g_settings.gapAbove);
+    int availableAbove = anchorRect.top - gap - screen.top;
+    int availableBelow = screen.bottom - anchorRect.bottom - gap;
+    int maxHeight = std::max(availableAbove, availableBelow);
+    if (maxHeight < ScaleForPopup(96)) {
+        maxHeight = std::max(ScaleForPopup(96),
+                             (int)(screen.bottom - screen.top) - ScaleForPopup(16));
+    }
+
+    SIZE size = ComputeLevelLayout(level.get(), maxHeight);
+
     int centerX = (anchorRect.left + anchorRect.right) / 2;
     int left = centerX - size.cx / 2;
     left = std::clamp<int>(
         left, screen.left + ScaleForPopup(4),
         std::max<int>(screen.left, screen.right - size.cx - ScaleForPopup(4)));
 
-    if (anchorRect.top - gap - size.cy >= screen.top) {
+    // Prefer above the taskbar; never flip below a bottom taskbar where the
+    // grid would land past the monitor edge.
+    if (availableAbove >= size.cy) {
         level->rect.top = anchorRect.top - gap - size.cy;
         level->above = true;
-    } else {
+    } else if (availableBelow >= size.cy) {
         level->rect.top = anchorRect.bottom + gap;
         level->above = false;
+    } else if (availableAbove >= availableBelow) {
+        level->rect.top = screen.top;
+        level->above = true;
+    } else {
+        level->rect.top = std::max<int>(screen.top, screen.bottom - size.cy);
+        level->above = false;
     }
+    level->rect.top = std::clamp<int>(
+        level->rect.top, screen.top,
+        std::max<int>(screen.top, screen.bottom - size.cy));
     level->rect.left = left;
 
     auto* installed = InstallLevel(std::move(level));
@@ -2408,13 +2457,15 @@ void OpenSubLevel(int parentDepth, int cell) {
         level->loading = false;
     }
 
-    SIZE size = ComputeLevelLayout(level.get());
-
     HMONITOR monitor = MonitorFromRect(&parent->rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
     GetMonitorInfoW(monitor, &monitorInfo);
     const RECT& screen = monitorInfo.rcMonitor;
+
+    SIZE size = ComputeLevelLayout(
+        level.get(), std::max(0, (int)(screen.bottom - screen.top) -
+                                     ScaleForPopup(16)));
 
     int seam = ScaleForPopup(2);
     int left = parent->rect.right + seam;
@@ -2459,6 +2510,7 @@ struct TaskbarHost {
     Grid hostGrid{nullptr};
     Grid trackedRootGrid{nullptr};
     FrameworkElement anchor{nullptr};
+    FrameworkElement cachedRepeater{nullptr};
     std::vector<ButtonState> buttonStates;
     Thickness anchorOriginalMargin{};
     bool hasAnchorOriginalMargin = false;
@@ -2466,16 +2518,27 @@ struct TaskbarHost {
     double buttonWidth = kFallbackButtonSize;
     double buttonHeight = kFallbackButtonSize;
     ULONGLONG lastAnchorResolveTick = 0;
+    ULONGLONG lastButtonSizeTick = 0;
 };
 
-[[clang::no_destroy]] std::vector<std::unique_ptr<TaskbarHost>> g_taskbarHosts;
+[[clang::no_destroy]] std::optional<std::vector<std::unique_ptr<TaskbarHost>>>
+    g_taskbarHosts{std::in_place};
+
+std::vector<std::unique_ptr<TaskbarHost>>& TaskbarHosts() {
+    if (!g_taskbarHosts) {
+        g_taskbarHosts.emplace();
+    }
+    return *g_taskbarHosts;
+}
 
 std::atomic<bool> g_injectionLive{false};
-// Retry workers are detached and validated against this counter rather than
-// joined, because TrayUI::StartTaskbar restarts them from the taskbar UI thread
-// and a worker may be blocked sending a message to that same thread.
-std::atomic<uint32_t> g_retryGeneration{0};
-std::atomic<int> g_retryWorkers{0};
+
+// Joinable retry thread + stop event. A HANDLE has no destructor that aborts at
+// process exit, and MsgWaitForMultipleObjects lets us join from the UI thread
+// without deadlocking on inbound SendMessage calls.
+HANDLE g_retryThread = nullptr;
+HANDLE g_retryStopEvent = nullptr;
+SRWLOCK g_retryLock = SRWLOCK_INIT;
 
 // WriteableBitmap's backing store is reachable only through this interop
 // interface, which the C++/WinRT projection does not declare for us.
@@ -2884,7 +2947,10 @@ void AdoptAnchor(TaskbarHost* host, FrameworkElement const& anchor) {
 }
 
 TaskbarHost* FindTaskbarHost(HWND hwnd) {
-    for (auto& host : g_taskbarHosts) {
+    if (!g_taskbarHosts) {
+        return nullptr;
+    }
+    for (auto& host : *g_taskbarHosts) {
         if (host && host->hwnd == hwnd) {
             return host.get();
         }
@@ -2893,7 +2959,10 @@ TaskbarHost* FindTaskbarHost(HWND hwnd) {
 }
 
 TaskbarHost* FindTaskbarHostByRootGrid(Grid const& rootGrid) {
-    for (auto& host : g_taskbarHosts) {
+    if (!g_taskbarHosts) {
+        return nullptr;
+    }
+    for (auto& host : *g_taskbarHosts) {
         if (host && host->trackedRootGrid == rootGrid) {
             return host.get();
         }
@@ -2926,7 +2995,7 @@ RECT ComputeHoverAnchorRect(Button const& button) {
         }
         rect.left = cursor.x - half;
         rect.right = cursor.x + half;
-        LOGV(L"Button rect fell outside the taskbar, using the cursor instead");
+        Wh_Log(L"Button rect fell outside the taskbar, using the cursor instead");
     }
 
     rect.top = taskbarRect.top;
@@ -3132,13 +3201,18 @@ void RemoveHostGrid(TaskbarHost* host) {
 
     host->hostGrid = nullptr;
     host->trackedRootGrid = nullptr;
+    host->cachedRepeater = nullptr;
 }
 
 void RemoveAllHostGrids() {
-    for (auto& host : g_taskbarHosts) {
+    if (!g_taskbarHosts) {
+        g_injectionLive = false;
+        return;
+    }
+    for (auto& host : *g_taskbarHosts) {
         RemoveHostGrid(host.get());
     }
-    g_taskbarHosts.clear();
+    g_taskbarHosts->clear();
     g_injectionLive = false;
 }
 
@@ -3150,29 +3224,42 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
     }
 
     try {
-        auto repeater = FindTaskbarRepeater(host->trackedRootGrid);
+        FrameworkElement repeater = host->cachedRepeater;
+        bool repeaterLooksDead = false;
+        try {
+            repeaterLooksDead = !repeater || repeater.ActualWidth() <= 1.0;
+        } catch (...) {
+            repeaterLooksDead = true;
+        }
+        if (repeaterLooksDead) {
+            repeater = FindTaskbarRepeater(host->trackedRootGrid);
+            host->cachedRepeater = repeater;
+        }
         if (!repeater) {
             return;
         }
 
-        double previousWidth = host->buttonWidth;
-        double previousHeight = host->buttonHeight;
-        UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
-                                    &host->buttonHeight);
+        ULONGLONG now = GetTickCount64();
+        if (now - host->lastButtonSizeTick > 250) {
+            host->lastButtonSizeTick = now;
+            double previousWidth = host->buttonWidth;
+            double previousHeight = host->buttonHeight;
+            UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
+                                        &host->buttonHeight);
 
-        if (std::abs(previousWidth - host->buttonWidth) > 0.5 ||
-            std::abs(previousHeight - host->buttonHeight) > 0.5) {
-            for (auto& state : host->buttonStates) {
-                if (state.button) {
-                    state.button.Width(host->buttonWidth);
-                    state.button.Height(host->buttonHeight);
+            if (std::abs(previousWidth - host->buttonWidth) > 0.5 ||
+                std::abs(previousHeight - host->buttonHeight) > 0.5) {
+                for (auto& state : host->buttonStates) {
+                    if (state.button) {
+                        state.button.Width(host->buttonWidth);
+                        state.button.Height(host->buttonHeight);
+                    }
                 }
+                host->hostGrid.Height(host->buttonHeight);
+                host->hostGrid.Width(DesiredHostWidth(host));
             }
-            host->hostGrid.Height(host->buttonHeight);
-            host->hostGrid.Width(DesiredHostWidth(host));
         }
 
-        ULONGLONG now = GetTickCount64();
         bool anchorLooksDead =
             !host->anchor || host->anchor.ActualWidth() <= 1.0;
         if (anchorLooksDead || now - host->lastAnchorResolveTick > 250) {
@@ -3223,6 +3310,7 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
         // the next pass.
         host->anchor = nullptr;
         host->hasAnchorOriginalMargin = false;
+        host->cachedRepeater = nullptr;
     }
 }
 
@@ -3233,7 +3321,7 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
 
     auto xamlRoot = GetTaskbarXamlRoot(taskbarWnd);
     if (!xamlRoot) {
-        LOGV(L"No taskbar XamlRoot yet for %p", taskbarWnd);
+        Wh_Log(L"No taskbar XamlRoot yet for %p", taskbarWnd);
         return false;
     }
 
@@ -3244,29 +3332,32 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
 
     auto rootGrid = FindTaskbarRootGrid(root);
     if (!rootGrid) {
-        LOGV(L"Taskbar RootGrid not found yet for %p", taskbarWnd);
+        Wh_Log(L"Taskbar RootGrid not found yet for %p", taskbarWnd);
         return false;
     }
 
     auto repeater = FindTaskbarRepeater(rootGrid);
     if (!repeater) {
-        LOGV(L"TaskbarFrameRepeater not found yet for %p", taskbarWnd);
+        Wh_Log(L"TaskbarFrameRepeater not found yet for %p", taskbarWnd);
         return false;
     }
 
     // Replace an existing host for this HWND if we are re-injecting.
     if (auto* existing = FindTaskbarHost(taskbarWnd)) {
         RemoveHostGrid(existing);
-        g_taskbarHosts.erase(
-            std::remove_if(g_taskbarHosts.begin(), g_taskbarHosts.end(),
-                           [taskbarWnd](const std::unique_ptr<TaskbarHost>& h) {
-                               return h && h->hwnd == taskbarWnd;
-                           }),
-            g_taskbarHosts.end());
+        auto& hosts = TaskbarHosts();
+        hosts.erase(std::remove_if(hosts.begin(), hosts.end(),
+                                   [taskbarWnd](
+                                       const std::unique_ptr<TaskbarHost>& h) {
+                                       return h && h->hwnd == taskbarWnd;
+                                   }),
+                    hosts.end());
     }
 
     auto host = std::make_unique<TaskbarHost>();
     host->hwnd = taskbarWnd;
+    host->cachedRepeater = repeater;
+    host->lastButtonSizeTick = GetTickCount64();
     UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
                                 &host->buttonHeight);
 
@@ -3294,13 +3385,13 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
            (int)host->buttonStates.size(), taskbarWnd, host->buttonWidth,
            host->buttonHeight);
 
-    g_taskbarHosts.push_back(std::move(host));
+    TaskbarHosts().push_back(std::move(host));
     return true;
 }
 
 bool InjectHostGridsOnTaskbarThread() {
     if (g_settings.folders.empty()) {
-        LOGV(L"No folders configured, nothing to inject");
+        Wh_Log(L"No folders configured, nothing to inject");
         RemoveAllHostGrids();
         return true;
     }
@@ -3336,8 +3427,8 @@ bool InjectHostGridsOnTaskbarThread() {
         },
         reinterpret_cast<LPARAM>(&state));
 
-    if (!g_taskbarHosts.empty()) {
-        g_taskbarWnd = g_taskbarHosts[0]->hwnd;
+    if (g_taskbarHosts && !g_taskbarHosts->empty()) {
+        g_taskbarWnd = (*g_taskbarHosts)[0]->hwnd;
         UpdatePopupDpi();
         int iconPixelSize = ScaleForPopup(g_settings.iconSize);
         for (size_t i = 0; i < g_settings.folders.size(); i++) {
@@ -3347,7 +3438,8 @@ bool InjectHostGridsOnTaskbarThread() {
 
     g_injectionLive = state.found > 0 && state.injected == state.found;
     Wh_Log(L"Taskbar inject: %d/%d windows, %d hosts", state.injected,
-           state.found, (int)g_taskbarHosts.size());
+           state.found,
+           g_taskbarHosts ? (int)g_taskbarHosts->size() : 0);
     return g_injectionLive;
 }
 
@@ -3368,54 +3460,85 @@ void ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
 // The taskbar is rebuilt on theme changes, Explorer restarts and DPI changes,
 // so injection is retried with a backoff until it sticks.
 
-void RetryLoop(uint32_t generation) {
+DWORD WINAPI RetryThreadProc(void* param) {
+    HANDLE stopEvent = static_cast<HANDLE>(param);
     static const DWORD delays[] = {0,    500,  1000,  2000,
                                    4000, 8000, 15000, 30000};
 
-    auto superseded = [generation] {
-        return g_unloading || g_retryGeneration.load() != generation;
-    };
-
-    for (size_t i = 0; i < ARRAYSIZE(delays); i++) {
-        for (DWORD waited = 0; waited < delays[i]; waited += 50) {
-            if (superseded()) {
-                return;
-            }
-            Sleep(50);
+    for (size_t i = 0; i < ARRAYSIZE(delays) && !g_unloading; i++) {
+        if (delays[i] &&
+            WaitForSingleObject(stopEvent, delays[i]) != WAIT_TIMEOUT) {
+            return 0;
         }
-        if (superseded()) {
-            return;
+        if (g_unloading) {
+            return 0;
         }
 
         ApplyOnWindowThread([](void*) { InjectHostGridsOnTaskbarThread(); });
 
-        if (g_injectionLive) {
-            return;
+        if (g_injectionLive || g_unloading) {
+            return 0;
         }
     }
+    return 0;
 }
 
-void StartRetryWorker() {
-    if (g_unloading) {
+void StopRetryThread() {
+    AcquireSRWLockExclusive(&g_retryLock);
+    HANDLE retryThread = g_retryThread;
+    HANDLE retryStopEvent = g_retryStopEvent;
+    g_retryThread = nullptr;
+    g_retryStopEvent = nullptr;
+    if (retryStopEvent) {
+        SetEvent(retryStopEvent);
+    }
+    ReleaseSRWLockExclusive(&g_retryLock);
+
+    if (retryThread) {
+        // Pump sent messages while waiting so a worker blocked in SendMessage
+        // to this UI thread cannot deadlock the join.
+        DWORD result;
+        do {
+            result = MsgWaitForMultipleObjects(1, &retryThread, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG msg;
+                PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+        CloseHandle(retryThread);
+    }
+    if (retryStopEvent) {
+        CloseHandle(retryStopEvent);
+    }
+}
+
+void StartRetryThread() {
+    StopRetryThread();
+
+    AcquireSRWLockExclusive(&g_retryLock);
+    if (g_unloading || g_retryThread || g_retryStopEvent) {
+        ReleaseSRWLockExclusive(&g_retryLock);
         return;
     }
-    uint32_t generation = ++g_retryGeneration;
-    g_injectionLive = false;
-    g_retryWorkers++;
-    std::thread([generation] {
-        RetryLoop(generation);
-        g_retryWorkers--;
-    }).detach();
-}
 
-// Retires outstanding workers without joining. Safe to call from any thread,
-// including the taskbar UI thread.
-void RetireRetryWorkers(DWORD timeoutMs) {
-    g_retryGeneration++;
-    for (DWORD waited = 0; waited < timeoutMs && g_retryWorkers.load() > 0;
-         waited += 25) {
-        Sleep(25);
+    g_injectionLive = false;
+    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_retryStopEvent) {
+        Wh_Log(L"CreateEventW for retry stop failed (%u)", GetLastError());
+        ReleaseSRWLockExclusive(&g_retryLock);
+        return;
     }
+
+    HANDLE stopEvent = g_retryStopEvent;
+    g_retryThread =
+        CreateThread(nullptr, 0, RetryThreadProc, stopEvent, 0, nullptr);
+    if (!g_retryThread) {
+        Wh_Log(L"CreateThread for retry failed (%u)", GetLastError());
+        CloseHandle(g_retryStopEvent);
+        g_retryStopEvent = nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_retryLock);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3428,9 +3551,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     Wh_Log(L"TrayUI::StartTaskbar");
     TrayUI_StartTaskbar_Original(pThis);
     if (!g_unloading) {
-        // Runs on the taskbar UI thread, so retire without waiting.
-        RetireRetryWorkers(0);
-        StartRetryWorker();
+        StartRetryThread();
     }
 }
 
@@ -3509,13 +3630,13 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"AfterInit");
-    StartRetryWorker();
+    StartRetryThread();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
 
-    RetireRetryWorkers(2000);
+    StopRetryThread();
     // The scan thread reads g_settings, so it has to be parked before
     // reloading.
     StopScanThread();
@@ -3529,32 +3650,52 @@ void Wh_ModSettingsChanged() {
     ResetFolderData();
 
     StartScanThread();
-    StartRetryWorker();
+    StartRetryThread();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
     g_unloading = true;
-    RetireRetryWorkers(3000);
+    StopRetryThread();
     StopScanThread();
 
-    ApplyOnWindowThread([](void*) {
-        CloseChain();
-        RemoveAllHostGrids();
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (taskbarWnd) {
+        ApplyOnWindowThread([](void*) {
+            CloseChain();
+            RemoveAllHostGrids();
 
+            for (HWND hWnd : g_levelWindows) {
+                if (hWnd) {
+                    DestroyWindow(hWnd);
+                }
+            }
+            g_levelWindows.clear();
+
+            if (g_menuOwnerWnd) {
+                DestroyWindow(g_menuOwnerWnd);
+                g_menuOwnerWnd = nullptr;
+            }
+
+            // Full release of the no_destroy hosts vector on the UI thread.
+            g_taskbarHosts.reset();
+        });
+    } else {
+        // No taskbar UI thread to release XAML on - retain the no_destroy
+        // hosts rather than tearing them down from the Windhawk callback.
+        Wh_Log(L"No taskbar window at uninit; retaining host state");
         for (HWND hWnd : g_levelWindows) {
             if (hWnd) {
                 DestroyWindow(hWnd);
             }
         }
         g_levelWindows.clear();
-
         if (g_menuOwnerWnd) {
             DestroyWindow(g_menuOwnerWnd);
             g_menuOwnerWnd = nullptr;
         }
-    });
+    }
 
     g_levels.clear();
     {
