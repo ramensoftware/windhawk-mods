@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer menus, tooltips, and popups
-// @version         0.1.4
+// @version         0.1.5
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -50,16 +50,21 @@ keyboard shortcut text are also preserved.
   `explorer.exe`.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
-  both text measurement and drawing without touching unrelated GDI text.
+  both text measurement and drawing without touching unrelated GDI text. Basic
+  or classic-theme tooltips drawn directly with `DrawTextW` aren't covered.
 - Windows 11 XAML popup text uses an experimental, display-only
   DirectWrite hook. This includes context menus, tooltips, and other Explorer
-  flyouts. Tracking is scoped to the popup's UI thread so it doesn't enable
-  rewriting on unrelated Explorer or taskbar threads. Taskbar thumbnail
-  previews are explicitly excluded.
+  flyouts. While a tracked popup is visible, other XAML text laid out on the
+  same UI thread can also be transformed; unrelated Explorer threads remain
+  unaffected. Taskbar thumbnail previews are explicitly excluded.
 
 The modern path is intentionally conservative and can miss text if a Windows
 build uses a different popup window class. Disable `modernUiText` if it causes
 a problem.
+
+The mod is injected only into `explorer.exe`. Start, Search, and some shell
+flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
+`ShellExperienceHost.exe` are outside its scope.
 
 The mod doesn't edit system files, registry values, or file names. A file name
 shown in a classic menu can nevertheless be displayed with inserted spaces.
@@ -927,13 +932,40 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
 // Windows 11 XAML popup detection
 // -------------------------------------------------------------------------
 
-using ShowWindow_t = decltype(&ShowWindow);
-using SetWindowPos_t = decltype(&SetWindowPos);
-using DestroyWindow_t = decltype(&DestroyWindow);
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+using CreateWindowInBand_t = HWND(WINAPI*)(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band);
+using CreateWindowInBandEx_t = HWND(WINAPI*)(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band,
+    DWORD typeFlags);
 
-ShowWindow_t g_originalShowWindow;
-SetWindowPos_t g_originalSetWindowPos;
-DestroyWindow_t g_originalDestroyWindow;
+CreateWindowExW_t g_originalCreateWindowExW;
+CreateWindowInBand_t g_originalCreateWindowInBand;
+CreateWindowInBandEx_t g_originalCreateWindowInBandEx;
 
 enum class ModernWindowKind {
     Other,
@@ -986,20 +1018,29 @@ bool TrackModernWindow(HWND window, ModernWindowKind kind) {
         return false;
     }
 
+    bool inserted;
     {
         std::lock_guard<std::mutex> guard(
             g_trackedModernWindowsMutex);
-        g_trackedModernWindows[window] = {threadId, kind};
+        const auto [iterator, wasInserted] =
+            g_trackedModernWindows.try_emplace(
+                window, TrackedModernWindow{threadId, kind});
+        if (!wasInserted) {
+            iterator->second = {threadId, kind};
+        }
+        inserted = wasInserted;
         g_trackedModernWindowCount.store(
             static_cast<unsigned int>(
                 g_trackedModernWindows.size()),
             std::memory_order_relaxed);
     }
 
-    if (kind == ModernWindowKind::TaskbarThumbnail) {
-        Wh_Log(L"Tracking excluded taskbar thumbnail");
-    } else {
-        Wh_Log(L"Tracking modern popup");
+    if (inserted) {
+        if (kind == ModernWindowKind::TaskbarThumbnail) {
+            Wh_Log(L"Tracking excluded taskbar thumbnail");
+        } else {
+            Wh_Log(L"Tracking modern popup");
+        }
     }
     return true;
 }
@@ -1009,24 +1050,30 @@ bool TrackModernWindowIfRelevant(HWND window) {
     return TrackModernWindow(window, kind);
 }
 
-void UntrackModernWindow(HWND window) {
-    std::lock_guard<std::mutex> guard(
-        g_trackedModernWindowsMutex);
-    g_trackedModernWindows.erase(window);
-    g_trackedModernWindowCount.store(
-        static_cast<unsigned int>(g_trackedModernWindows.size()),
-        std::memory_order_relaxed);
-}
-
-bool IsModernWindowTracked(HWND window) {
-    if (g_trackedModernWindowCount.load(
-            std::memory_order_relaxed) == 0) {
-        return false;
+void TrackCreatedModernWindow(HWND window, LPCWSTR className) {
+    if (!window) {
+        return;
     }
 
-    std::lock_guard<std::mutex> guard(
-        g_trackedModernWindowsMutex);
-    return g_trackedModernWindows.contains(window);
+    const ModernWindowKind kind =
+        className && !IS_INTRESOURCE(className)
+            ? ClassifyModernWindowClassName(className)
+            : ClassifyModernWindow(window);
+    TrackModernWindow(window, kind);
+}
+
+BOOL CALLBACK EnumExistingModernWindow(HWND window, LPARAM) {
+    DWORD processId;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId()) {
+        TrackModernWindowIfRelevant(window);
+    }
+
+    return TRUE;
+}
+
+void DiscoverExistingModernWindows() {
+    EnumWindows(EnumExistingModernWindow, 0);
 }
 
 void ClearTrackedModernWindows() {
@@ -1076,88 +1123,67 @@ bool IsModernPopupActiveForCurrentThread() {
     return popupActive && !taskbarThumbnailActive;
 }
 
-BOOL WINAPI ShowWindowHook(HWND window, int command) {
-    const bool modernUiEnabled =
-        g_modernUiText.load(std::memory_order_relaxed);
-    const bool showing = command != SW_HIDE;
-    if (!modernUiEnabled &&
-        g_trackedModernWindowCount.load(
-            std::memory_order_relaxed) == 0) {
-        return g_originalShowWindow(window, command);
-    }
-
-    bool tracked = IsModernWindowTracked(window);
-
-    if (!tracked) {
-        if (!modernUiEnabled || !showing) {
-            return g_originalShowWindow(window, command);
-        }
-
-        tracked = TrackModernWindowIfRelevant(window);
-        if (!tracked) {
-            return g_originalShowWindow(window, command);
-        }
-    }
-
-    const BOOL result = g_originalShowWindow(window, command);
-
-    if (tracked &&
-        (!showing || !IsWindow(window) ||
-         !IsWindowVisible(window))) {
-        UntrackModernWindow(window);
-    }
-
-    return result;
+HWND WINAPI CreateWindowExWHook(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter) {
+    HWND window = g_originalCreateWindowExW(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter);
+    TrackCreatedModernWindow(window, className);
+    return window;
 }
 
-BOOL WINAPI SetWindowPosHook(HWND window,
-                            HWND insertAfter,
-                            int x,
-                            int y,
-                            int width,
-                            int height,
-                            UINT flags) {
-    const bool modernUiEnabled =
-        g_modernUiText.load(std::memory_order_relaxed);
-    const bool showing = (flags & SWP_SHOWWINDOW) != 0;
-    if ((!modernUiEnabled || !showing) &&
-        g_trackedModernWindowCount.load(
-            std::memory_order_relaxed) == 0) {
-        return g_originalSetWindowPos(
-            window, insertAfter, x, y, width, height, flags);
-    }
-
-    bool tracked = IsModernWindowTracked(window);
-
-    if (!tracked) {
-        if (!modernUiEnabled ||
-            (!showing && !IsWindowVisible(window))) {
-            return g_originalSetWindowPos(
-                window, insertAfter, x, y, width, height, flags);
-        }
-
-        tracked = TrackModernWindowIfRelevant(window);
-        if (!tracked) {
-            return g_originalSetWindowPos(
-                window, insertAfter, x, y, width, height, flags);
-        }
-    }
-
-    const BOOL result = g_originalSetWindowPos(
-        window, insertAfter, x, y, width, height, flags);
-
-    if (tracked &&
-        (!result || (flags & SWP_HIDEWINDOW) ||
-         !IsWindow(window) || !IsWindowVisible(window))) {
-        UntrackModernWindow(window);
-    }
-
-    return result;
+HWND WINAPI CreateWindowInBandHook(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band) {
+    HWND window = g_originalCreateWindowInBand(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter, band);
+    TrackCreatedModernWindow(window, className);
+    return window;
 }
 
-BOOL WINAPI DestroyWindowHook(HWND window) {
-    UntrackModernWindow(window);
-    return g_originalDestroyWindow(window);
+HWND WINAPI CreateWindowInBandExHook(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band,
+    DWORD typeFlags) {
+    HWND window = g_originalCreateWindowInBandEx(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter, band, typeFlags);
+    TrackCreatedModernWindow(window, className);
+    return window;
 }
 
 // -------------------------------------------------------------------------
@@ -1199,10 +1225,10 @@ HRESULT CreateTextLayoutWithSpacing(
     FLOAT maxWidth,
     FLOAT maxHeight,
     IDWriteTextLayout** textLayout) {
-    if (g_modernUiText.load(std::memory_order_relaxed) && text &&
-        IsModernPopupActiveForCurrentThread()) {
+    if (g_modernUiText.load(std::memory_order_relaxed) && text) {
         const std::wstring_view original(text, textLength);
-        if (!ContainsCjkCodePoint(original)) {
+        if (!ContainsCjkCodePoint(original) ||
+            !IsModernPopupActiveForCurrentThread()) {
             return originalFunction(factory, text, textLength, textFormat,
                                     maxWidth, maxHeight, textLayout);
         }
@@ -1233,10 +1259,10 @@ HRESULT CreateGdiCompatibleTextLayoutWithSpacing(
     const DWRITE_MATRIX* transform,
     BOOL useGdiNatural,
     IDWriteTextLayout** textLayout) {
-    if (g_modernUiText.load(std::memory_order_relaxed) && text &&
-        IsModernPopupActiveForCurrentThread()) {
+    if (g_modernUiText.load(std::memory_order_relaxed) && text) {
         const std::wstring_view original(text, textLength);
-        if (!ContainsCjkCodePoint(original)) {
+        if (!ContainsCjkCodePoint(original) ||
+            !IsModernPopupActiveForCurrentThread()) {
             return originalFunction(
                 factory, text, textLength, textFormat, layoutWidth,
                 layoutHeight, pixelsPerDip, transform, useGdiNatural,
@@ -1464,45 +1490,86 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    if (!g_classicMenus.load(std::memory_order_relaxed) &&
-        !g_classicTooltips.load(std::memory_order_relaxed) &&
-        !g_modernUiText.load(std::memory_order_relaxed)) {
+    const bool classicMenusEnabled =
+        g_classicMenus.load(std::memory_order_relaxed);
+    const bool classicTooltipsEnabled =
+        g_classicTooltips.load(std::memory_order_relaxed);
+    const bool modernUiTextEnabled =
+        g_modernUiText.load(std::memory_order_relaxed);
+
+    if (!classicMenusEnabled && !classicTooltipsEnabled &&
+        !modernUiTextEnabled) {
         Wh_Log(L"CJK Spacer has no enabled UI targets");
         return FALSE;
     }
 
     bool installedAnyHook = false;
 
-    installedAnyHook |= InstallHook(InsertMenuW, InsertMenuWHook,
-                                    &g_originalInsertMenuW, L"InsertMenuW");
-    installedAnyHook |= InstallHook(AppendMenuW, AppendMenuWHook,
-                                    &g_originalAppendMenuW, L"AppendMenuW");
-    installedAnyHook |= InstallHook(ModifyMenuW, ModifyMenuWHook,
-                                    &g_originalModifyMenuW, L"ModifyMenuW");
-    installedAnyHook |=
-        InstallHook(InsertMenuItemW, InsertMenuItemWHook,
-                    &g_originalInsertMenuItemW, L"InsertMenuItemW");
-    installedAnyHook |=
-        InstallHook(SetMenuItemInfoW, SetMenuItemInfoWHook,
-                    &g_originalSetMenuItemInfoW, L"SetMenuItemInfoW");
-    installedAnyHook |=
-        InstallHook(TrackPopupMenu, TrackPopupMenuHook,
-                    &g_originalTrackPopupMenu, L"TrackPopupMenu");
-    installedAnyHook |=
-        InstallHook(TrackPopupMenuEx, TrackPopupMenuExHook,
-                    &g_originalTrackPopupMenuEx, L"TrackPopupMenuEx");
+    if (classicMenusEnabled) {
+        installedAnyHook |= InstallHook(
+            InsertMenuW, InsertMenuWHook, &g_originalInsertMenuW,
+            L"InsertMenuW");
+        installedAnyHook |= InstallHook(
+            AppendMenuW, AppendMenuWHook, &g_originalAppendMenuW,
+            L"AppendMenuW");
+        installedAnyHook |= InstallHook(
+            ModifyMenuW, ModifyMenuWHook, &g_originalModifyMenuW,
+            L"ModifyMenuW");
+        installedAnyHook |= InstallHook(
+            InsertMenuItemW, InsertMenuItemWHook,
+            &g_originalInsertMenuItemW, L"InsertMenuItemW");
+        installedAnyHook |= InstallHook(
+            SetMenuItemInfoW, SetMenuItemInfoWHook,
+            &g_originalSetMenuItemInfoW, L"SetMenuItemInfoW");
+        installedAnyHook |= InstallHook(
+            TrackPopupMenu, TrackPopupMenuHook,
+            &g_originalTrackPopupMenu, L"TrackPopupMenu");
+        installedAnyHook |= InstallHook(
+            TrackPopupMenuEx, TrackPopupMenuExHook,
+            &g_originalTrackPopupMenuEx, L"TrackPopupMenuEx");
+    }
 
-    installedAnyHook |= HookClassicTooltipThemeDrawing();
+    if (classicTooltipsEnabled) {
+        installedAnyHook |= HookClassicTooltipThemeDrawing();
+    }
 
-    installedAnyHook |= InstallHook(ShowWindow, ShowWindowHook,
-                                    &g_originalShowWindow, L"ShowWindow");
-    installedAnyHook |= InstallHook(SetWindowPos, SetWindowPosHook,
-                    &g_originalSetWindowPos, L"SetWindowPos");
-    installedAnyHook |= InstallHook(DestroyWindow, DestroyWindowHook,
-                                    &g_originalDestroyWindow,
-                                    L"DestroyWindow");
+    if (modernUiTextEnabled) {
+        installedAnyHook |= InstallHook(
+            CreateWindowExW, CreateWindowExWHook,
+            &g_originalCreateWindowExW, L"CreateWindowExW");
 
-    installedAnyHook |= HookDirectWrite();
+        HMODULE user32Module = LoadLibraryExW(
+            L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (user32Module) {
+            const auto createWindowInBand =
+                reinterpret_cast<CreateWindowInBand_t>(
+                    GetProcAddress(user32Module, "CreateWindowInBand"));
+            if (createWindowInBand) {
+                installedAnyHook |= InstallHook(
+                    createWindowInBand, CreateWindowInBandHook,
+                    &g_originalCreateWindowInBand,
+                    L"CreateWindowInBand");
+            } else {
+                Wh_Log(L"Couldn't find CreateWindowInBand");
+            }
+
+            const auto createWindowInBandEx =
+                reinterpret_cast<CreateWindowInBandEx_t>(
+                    GetProcAddress(user32Module, "CreateWindowInBandEx"));
+            if (createWindowInBandEx) {
+                installedAnyHook |= InstallHook(
+                    createWindowInBandEx, CreateWindowInBandExHook,
+                    &g_originalCreateWindowInBandEx,
+                    L"CreateWindowInBandEx");
+            } else {
+                Wh_Log(L"Couldn't find CreateWindowInBandEx");
+            }
+        } else {
+            Wh_Log(L"Couldn't load user32.dll");
+        }
+
+        installedAnyHook |= HookDirectWrite();
+    }
 
     Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
            L"classicTooltips=%d, modern=%d, unicode=%d)",
@@ -1512,6 +1579,12 @@ BOOL Wh_ModInit() {
     return installedAnyHook ? TRUE : FALSE;
 }
 
+void Wh_ModAfterInit() {
+    if (g_modernUiText.load(std::memory_order_relaxed)) {
+        DiscoverExistingModernWindows();
+    }
+}
+
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
     ClearTrackedClassicTooltipThemes();
@@ -1519,25 +1592,7 @@ void Wh_ModUninit() {
     Wh_Log(L"CJK Spacer uninitialized");
 }
 
-void Wh_ModSettingsChanged() {
-    const bool classicMenusWasEnabled =
-        g_classicMenus.load(std::memory_order_relaxed);
-    const bool modernUiWasEnabled =
-        g_modernUiText.load(std::memory_order_relaxed);
-    LoadSettings();
-
-    if (classicMenusWasEnabled &&
-        !g_classicMenus.load(std::memory_order_relaxed)) {
-        RestoreRewrittenMenuItems();
-    }
-    if (modernUiWasEnabled &&
-        !g_modernUiText.load(std::memory_order_relaxed)) {
-        ClearTrackedModernWindows();
-    }
-
-    Wh_Log(L"CJK Spacer settings changed (classicMenus=%d, "
-           L"classicTooltips=%d, modern=%d, unicode=%d)",
-           g_classicMenus.load(), g_classicTooltips.load(),
-           g_modernUiText.load(),
-           g_unicodeLettersAndDigits.load());
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = TRUE;
+    return TRUE;
 }
