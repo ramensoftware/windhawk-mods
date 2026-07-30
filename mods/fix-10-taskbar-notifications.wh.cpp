@@ -5,7 +5,7 @@
 // @version         0.1
 // @author          ilovethisgame
 // @github          https://github.com/bozohi
-// @include         explorer.exe
+// @include         %ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore\explorer.exe
 // @architecture    amd64
 // @license         MIT
 // ==/WindhawkMod==
@@ -14,10 +14,8 @@
 /*
 This mod patches the Explorer shell provided by the Win10 taskbar mod at runtime.
 
-**IF YOUR WINDOWS VERSION IS NOT WINDOWS 11 24H2 OR ABOVE, DO NOT INSTALL THIS!**
-
 **!Important! You MUST install, follow the instructions and run atleast 2 times the [Win10 taskbar mod.](https://windhawk.net/mods/win10-taskbar-on-win11-24h2)**
-**If you don't follow these instructions carefully, explorer may behave in an unexpected (and likely unpleasant) manner.**
+**If you don't follow these instructions carefully, the mod will not apply correctly.**
 
 # Technical details
 
@@ -47,9 +45,9 @@ There is no `NULL` check in that loop, so it is likely that the iterator was nev
 
 static bool patch_applied { false };
 static uint8_t patch_bytes[] { 0xC3, 0x90, 0x90, 0x90, 0x90 }; // ret + 4 nop
-static constexpr size_t patch_size = sizeof patch_bytes;
+static constexpr size_t patch_size { sizeof patch_bytes };
 
-static uint8_t orig_bytes[patch_size] = { 0 };
+static uint8_t orig_bytes[patch_size] { 0 };
 static uint8_t *target;
 
 BOOL Wh_ModInit(void) {
@@ -94,16 +92,19 @@ BOOL Wh_ModInit(void) {
 
     patch_applied = true;
 
+    FlushInstructionCache(GetCurrentProcess(), (void *) target, patch_size);
+
     return TRUE;
 }
 
 void Wh_ModUninit(void) {
     if (!patch_applied) {
-        Wh_Log(L"Patch was not applied, skipping revert");
+        Wh_Log(L"UNINIT: Patch was not applied, skipping revert");
+        return;
     }
 
     if (orig_bytes[0] == 0x00) {
-        Wh_Log(L"Original bytes did not get copied correctly, aborting uninit");
+        Wh_Log(L"UNINIT: Original bytes did not get copied correctly, aborting revert");
         return;
     }
 
@@ -114,9 +115,9 @@ void Wh_ModUninit(void) {
     }
 
     if (!memcpy_s((void *) target, patch_size, orig_bytes, patch_size)) {
-        Wh_Log(L"Original bytes rewritten successfully");
+        Wh_Log(L"UNINIT: Original bytes rewritten successfully");
     } else {
-        Wh_Log(L"FAILED TO REVERT PATCH");
+        Wh_Log(L"UNINIT: FAILED TO REVERT PATCH");
     }
 
     DWORD temp = 0;
