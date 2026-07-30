@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-30T21:46:19.000Z</updated>
+    <updated>2026-07-30T21:54:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Corner Click Fix 2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#846fb5c2697073198ff251c14fd373f94f16f977</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
+        <updated>2026-07-30T21:54:46.000Z</updated>
+        <content type="html"><![CDATA[<p>Reworked corner-click handling to hook the taskbar’s invisible InputSite window procedure and intercept its <code>WM_POINTER</code> messages directly. Existing InputSite windows are found through taskbar scans, while <code>CreateWindowInBand</code> covers future taskbar recreation. Runtime hook operations are applied only when necessary, with retry and unload protection.</p>
+<p>Improved corner detection by validating the taskbar bounds, monitor ownership, adjacent-monitor geometry, DPI-scaled L-shaped region, pointer lifecycle, and left-aligned taskbar setting. The registry check now runs only after the cheaper geometry checks pass.</p>
+<p>UI Automation is now limited to Start-button activation on a dedicated worker thread:</p>
+<ul>
+<li>Uses <code>CUIAutomation8</code>, COM RAII, provider timeouts, and per-taskbar element caching.</li>
+<li>Coalesces clicks received during UIA lag to avoid repeatedly toggling Start open and closed.</li>
+<li>Adds the <code>openStartWhenButtonUnavailable</code> setting, enabled by default. When UIA successfully searches the taskbar but finds no Start button, the mod falls back to pressing the Windows key.</li>
+<li>Does not trigger the fallback for COM errors, UIA provider failures, activation failures, stale taskbars, or worker-queue failures.</li>
+</ul>
+<p>The fallback applies to both primary and secondary taskbars. Since Windows normally opens a keyboard-triggered Start menu on the primary monitor, the documentation recommends the <a href="https://windhawk.net/mods/start-menu-open-location">Start menu open location</a> mod for cursor-monitor placement.</p>
+<p>The UIA bounding rectangle is not queried before interception because that would require provider calls on the taskbar input thread or depend on potentially stale cached geometry.</p>
+<p>Also updated the Windhawk requirement and settings descriptions, and removed redundant linker options.</p>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.0.0]]></title>
         <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#06f19979b14e80d76a5ca4508def5ec55767a251</id>
@@ -628,20 +650,6 @@ this is safe to do for as many or as few programs as you'd like.</p>]]></content
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Focus Stealing 1.0.2]]></title>
-        <id>https://windhawk.net/mods/prevent-focus-stealing#d607126a33c8069941244306d497dc60d16d4384</id>
-        <link href="https://windhawk.net/mods/prevent-focus-stealing"/>
-        <updated>2026-07-20T21:09:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed invisible windows being made visible (resolves issue #4041).</li>
-<li>Corrected outdated documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>bawNg</name>
-            <uri>https://github.com/bawNg</uri>
         </author>
     </entry>
 </feed>
