@@ -2,7 +2,7 @@
 // @id              taskbar-media-presence
 // @name            Taskbar Media Presence
 // @description     Taskbar music controls with adaptive album art, per-app volume, safe multi-monitor placement, and Discord Rich Presence.
-// @version         1.0.15
+// @version         1.0.17
 // @author          MrBoxik
 // @github          https://github.com/MrBoxik
 // @homepage        https://github.com/MrBoxik/Taskbar-Media-Presence
@@ -10,12 +10,12 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore
+// @compilerOptions -lole32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Media Presence 1.0.15
+# Taskbar Media Presence 1.0.17
 
 A compact Windows 11 taskbar player for any application that publishes a Windows media session.
 
@@ -48,7 +48,7 @@ MusicBee users can install the project-owned [`mb_TaskbarMediaPresence.dll`](htt
 
 The Windhawk mod never downloads or launches the companion automatically; installation is a separate manual choice.
 
-Discord publishing is disabled by default. When enabled, the mod communicates only with the local Discord desktop client and uses the configured Rich Presence asset key. It performs no external HTTP requests.
+Discord publishing is disabled by default. When enabled, the mod sends the selected track, artist, playback state, and progress to the local Discord desktop client. Discord then broadcasts that activity to the user's profile according to their Discord activity-privacy settings. The mod performs no external HTTP requests itself.
 
 ## Links
 
@@ -68,7 +68,7 @@ Created and maintained by **[MrBoxik](https://github.com/MrBoxik)**. Based on **
   - PlayerSetting:
     - taskbarMode: "selected"
       $name: Taskbar monitor mode
-      $description: Show one widget on the selected monitor, or mirror it on every compatible Windows taskbar. A taskbar using a separate unsupported XAML dispatcher is skipped safely.
+      $description: Show one widget on the selected monitor, or mirror it on every Windows taskbar.
       $options:
       - "selected": "Only selected monitor"
       - "all": "All monitors"
@@ -628,7 +628,7 @@ Created and maintained by **[MrBoxik](https://github.com/MrBoxik)**. Based on **
 - DiscordPresenceSettings:
   - enabled: false
     $name: Publish Discord Rich Presence
-    $description: Disabled by default. When enabled, publishes the selected song directly to the running Discord desktop app. The project Application ID is included below and can be replaced.
+    $description: Disabled by default. When enabled, sends the selected track, artist, playback state, and progress to the running Discord desktop client, which broadcasts the activity on your Discord profile to people allowed by your Discord privacy settings. The project Application ID is included below and can be replaced.
   - applicationId: "1528896038163710112"
     $name: Discord Application ID
     $description: The Taskbar Media Presence application ID is included by default. You can replace it with another numeric Application ID. This value is public, not a secret.
@@ -645,13 +645,7 @@ Created and maintained by **[MrBoxik](https://github.com/MrBoxik)**. Based on **
 - DebugSettings:
   - ignoredProcesses: ""
     $name: Ignore media from processes (separate with ; )
-  - enableTreeDump: false
-    $name: Dump XAML element names to log on inject
-  - showDebugBorders: false
-    $name: Show debug borders
-  - showLayoutAnchors: false
-    $name: Show layout anchors and centers
-  $name: Advanced / troubleshooting
+  $name: Advanced
 */
 // ==/WindhawkModSettings==
 
@@ -700,7 +694,6 @@ SOFTWARE.
 #include <winrt/Windows.Storage.Streams.h>
 #include <robuffer.h>
 #include <shcore.h>
-
 #include <windows.h>
 #include <appmodel.h>
 #include <shellapi.h>
@@ -788,7 +781,7 @@ struct ModSettings {
     std::wstring emptyIconGlyph       = L"E189";
     int          emptyIconSize        = 16;
     std::wstring emptyIconFont        = L"segoe_fluent";
-    std::wstring emptyIconColor       = L"255 255 255";
+    std::wstring emptyIconColor       = L"140 140 140";
     int          emptyIconOpacity     = 100;
     std::wstring albumArtQuality      = L"medium";
     std::wstring albumArtFitMode      = L"adaptive";
@@ -876,11 +869,11 @@ struct ModSettings {
     int          acrylicTintOpacity   = 50;
     int          micaOpacity          = 50;
     bool         transparentTaskbar   = false;
-    std::wstring buttonColor          = L"255 255 255";
+    std::wstring buttonColor          = L"0 0 0$255 255 255";
     int          buttonColorOpacity   = 100;
-    std::wstring titleColor           = L"255 255 255";
+    std::wstring titleColor           = L"0 0 0$255 255 255";
     int          titleColorOpacity    = 100;
-    std::wstring artistColor          = L"255 255 255";
+    std::wstring artistColor          = L"0 0 0$255 255 255";
     int          artistColorOpacity   = 80;
     std::wstring ignoredProcesses     = L"";
     bool         enableTreeDump       = false;
@@ -897,8 +890,8 @@ struct ModSettings {
 // Settings are published as immutable shared snapshots. Readers copy the
 // current shared_ptr under a short mutex, keeping their snapshot alive without
 // retaining every historical settings version for the lifetime of Explorer.
-[[clang::no_destroy]] static std::mutex g_settingsSnapshotMtx;
-[[clang::no_destroy]] static std::shared_ptr<const ModSettings>
+static std::mutex g_settingsSnapshotMtx;
+static std::shared_ptr<const ModSettings>
     g_settingsSnapshot = std::make_shared<const ModSettings>();
 static std::mutex g_mediaSourceMtx;
 static std::wstring g_preferredMediaApp;
@@ -1330,9 +1323,11 @@ static void LoadSettings() {
         }
     }
 
-    // The dedicated dropdown overrides the legacy array entry. This also
-    // migrates the 1.0.5 default, where player left-click was Play/Pause.
-    g_settings.playerLeftClick = g_settings.widgetClickAction;
+    // A non-default dedicated dropdown overrides the array entry. Keeping
+    // "Nothing" selected leaves an explicitly configured array action intact.
+    if (g_settings.widgetClickAction != L"none") {
+        g_settings.playerLeftClick = g_settings.widgetClickAction;
+    }
 
     g_settings.albumArtWheelAction = L"none";
     g_settings.albumArtWheelUpAction = L"none";
@@ -1420,9 +1415,6 @@ static void LoadSettings() {
     g_settings.disableAlbumArtClick    = Wh_GetIntSetting(L"BehaviorSettings.disableAlbumArtClick") != 0;
 
     g_settings.ignoredProcesses     = Str(L"DebugSettings.ignoredProcesses", L"");
-    g_settings.enableTreeDump       = Wh_GetIntSetting(L"DebugSettings.enableTreeDump")    != 0;
-    g_settings.showDebugBorders     = Wh_GetIntSetting(L"DebugSettings.showDebugBorders")  != 0;
-    g_settings.showLayoutAnchors    = Wh_GetIntSetting(L"DebugSettings.showLayoutAnchors") != 0;
     try {
         std::lock_guard<std::mutex> lock(g_mediaButtonsMutex);
         g_mediaButtons.clear();
@@ -2413,7 +2405,7 @@ static void CloseWorkerEventHandle(HANDLE& slot) {
     if (handle) CloseHandle(handle);
 }
 
-static bool PinModuleForOutstandingCallbacks(PCWSTR reason);
+static void ReportOutstandingCallbackRisk(PCWSTR reason);
 
 // Discord's desktop Rich Presence RPC requires a registered application ID.
 // This is an original, minimal local IPC client: it publishes the current
@@ -2744,13 +2736,20 @@ static DWORD DiscordPresenceThreadMain() {
         std::wstring activityName = ResolveDiscordActivityName(
             activityNameTemplate, media);
         DiscordActivityTiming timing = GetDiscordActivityTiming(media);
+        auto quantizeTimestamp = [](int64_t value) {
+            constexpr int64_t kQuantumSeconds = 5;
+            return value - value % kQuantumSeconds;
+        };
         std::wstring stateKey = shouldPublish
             ? media.title + L"\n" + media.artist + L"\n" + media.albumTitle +
                 L"\n" + (media.isPlaying ? L"playing" : L"paused") +
                 L"\n" + largeImage + L"\n" + activityName + L"\n" +
                 (timing.valid
-                    ? std::to_wstring(timing.startEpochSeconds) + L":" +
-                        std::to_wstring(timing.endEpochSeconds)
+                    ? std::to_wstring(
+                          quantizeTimestamp(timing.startEpochSeconds)) +
+                        L":" +
+                        std::to_wstring(
+                          quantizeTimestamp(timing.endEpochSeconds))
                     : L"no-timeline")
             : L"<clear>";
 
@@ -2872,18 +2871,16 @@ static void StopDiscordPresenceThread() {
         if (cancelSynchronousIo) {
             cancelSynchronousIo(g_discordPresenceThread);
         }
-        // Synchronous catalog calls have their own short WinHTTP timeouts and
-        // CancelSynchronousIo normally wakes them immediately. Keep the stop
-        // path bounded nevertheless. On a pathological provider hang, retain
-        // both the worker and its events; closing either would create a
-        // use-after-close. During unload, pin the module so the still-running
-        // code can never be unmapped.
+        // Discord IPC is local named-pipe I/O. CancelSynchronousIo normally
+        // wakes it immediately, but keep the stop path bounded. If a pathological
+        // client hang remains, retain the worker handles for diagnostics and let
+        // Windhawk manage the module lifetime normally.
         if (!WaitForThreadExitBounded(g_discordPresenceThread, 6000)) {
             Wh_Log(
                 L"Discord presence: worker did not stop within 6 seconds; "
                 L"cleanup deferred");
             if (g_unloading) {
-                PinModuleForOutstandingCallbacks(
+                ReportOutstandingCallbackRisk(
                     L"Discord presence worker still stopping");
             }
             return;
@@ -2963,10 +2960,10 @@ static void RecordMediaEventUnsubscribeFailure(PCWSTR source) noexcept {
     bool firstFailure = !g_mediaEventUnsubscribeFailed.exchange(
         true, std::memory_order_acq_rel);
     if (firstFailure) {
-        Wh_Log(L"Media event cleanup failed for %ls; retaining the module",
+        Wh_Log(L"Media event cleanup failed for %ls",
                source ? source : L"an unknown source");
     }
-    PinModuleForOutstandingCallbacks(
+    ReportOutstandingCallbackRisk(
         source ? source : L"failed media event unsubscription");
 }
 
@@ -3960,7 +3957,16 @@ static void SendMediaSeekAsync(
             return;
         }
 
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        struct ApartmentGuard {
+            ApartmentGuard() {
+                winrt::init_apartment(
+                    winrt::apartment_type::multi_threaded);
+            }
+            ~ApartmentGuard() noexcept {
+                winrt::uninit_apartment();
+            }
+        } apartmentGuard;
+
         try {
             GlobalSystemMediaTransportControlsSession session{nullptr};
             {
@@ -4259,6 +4265,47 @@ static std::wstring ProcessApplicationUserModelId(HANDLE process) {
     return std::wstring(buffer.data());
 }
 
+static std::wstring QueryProcessImagePath(HANDLE process) {
+    if (!process) return L"";
+
+    DWORD capacity = 512;
+    while (capacity <= 32768) {
+        std::wstring path(capacity, L'\0');
+        DWORD length = capacity;
+        if (QueryFullProcessImageNameW(process, 0, path.data(), &length)) {
+            path.resize(length);
+            return path;
+        }
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) break;
+        capacity *= 2;
+    }
+
+    return L"";
+}
+
+static bool ContainsIdentifierToken(const std::wstring& value,
+                                    const std::wstring& token) {
+    if (token.size() < 5) return false;
+
+    auto isTokenCharacter = [](wchar_t character) {
+        return iswalnum(character) || character == L'.' ||
+               character == L'_' || character == L'-';
+    };
+
+    size_t position = 0;
+    while ((position = value.find(token, position)) != std::wstring::npos) {
+        bool leftBoundary =
+            position == 0 || !isTokenCharacter(value[position - 1]);
+        size_t end = position + token.size();
+        bool rightBoundary =
+            end == value.size() || !isTokenCharacter(value[end]);
+        if (leftBoundary && rightBoundary) return true;
+        position = end;
+    }
+
+    return false;
+}
+
 static bool SamePackagedAppIdentity(const std::wstring& first,
                                     const std::wstring& second) {
     if (first.empty() || second.empty()) return false;
@@ -4295,46 +4342,60 @@ static bool AudioSessionMatchesApp(IAudioSessionControl2* sessionControl2,
                                    const std::wstring& appUserModelId) {
     if (!sessionControl2 || appUserModelId.empty()) return false;
 
-    std::wstring appLower = ToLowerCopy(appUserModelId);
+    const std::wstring appLower = ToLowerCopy(appUserModelId);
     std::wstring appStem = ToLowerCopy(PathFileStem(appUserModelId));
     if (appStem == L"applicationframehost" || appStem == L"explorer") {
         appStem.clear();
     }
 
+    DWORD processId = 0;
+    if (SUCCEEDED(sessionControl2->GetProcessId(&processId)) && processId) {
+        HANDLE process = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+        if (process) {
+            const std::wstring processAumid =
+                ProcessApplicationUserModelId(process);
+            const std::wstring processPath =
+                QueryProcessImagePath(process);
+            CloseHandle(process);
+
+            if (SamePackagedAppIdentity(appUserModelId, processAumid)) {
+                return true;
+            }
+
+            if (!processPath.empty()) {
+                const std::wstring processLower =
+                    ToLowerCopy(processPath);
+                const std::wstring processStem =
+                    ToLowerCopy(PathFileStem(processPath));
+                if (processLower == appLower ||
+                    (!appStem.empty() && processStem == appStem) ||
+                    KnownMediaPlayerProcessAlias(appLower, processStem)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Session identifiers vary between desktop and packaged applications.
+    // Accept the complete app identity, or a reasonably long stem delimited as
+    // an identifier token. Avoid unrestricted substring matches such as "vlc"
+    // or "mpc", which can select an unrelated audio session.
     LPWSTR rawSessionId = nullptr;
-    if (SUCCEEDED(sessionControl2->GetSessionIdentifier(&rawSessionId)) && rawSessionId) {
-        std::wstring sessionIdLower = ToLowerCopy(rawSessionId);
+    if (SUCCEEDED(sessionControl2->GetSessionIdentifier(&rawSessionId)) &&
+        rawSessionId) {
+        const std::wstring sessionIdLower = ToLowerCopy(rawSessionId);
         CoTaskMemFree(rawSessionId);
-        if (sessionIdLower.find(appLower) != std::wstring::npos ||
-            (!appStem.empty() && sessionIdLower.find(appStem) != std::wstring::npos)) {
+        if (sessionIdLower == appLower ||
+            (appLower.size() >= 8 &&
+             sessionIdLower.find(appLower) != std::wstring::npos) ||
+            (!appStem.empty() &&
+             ContainsIdentifierToken(sessionIdLower, appStem))) {
             return true;
         }
     }
 
-    DWORD processId = 0;
-    if (FAILED(sessionControl2->GetProcessId(&processId)) || !processId) return false;
-
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (!process) return false;
-
-    wchar_t imagePath[32768]{};
-    DWORD imagePathLength = ARRAYSIZE(imagePath);
-    bool matches = false;
-    std::wstring processAumid = ProcessApplicationUserModelId(process);
-    if (SamePackagedAppIdentity(appUserModelId, processAumid)) {
-        matches = true;
-    }
-    if (QueryFullProcessImageNameW(process, 0, imagePath, &imagePathLength)) {
-        std::wstring processPath(imagePath, imagePathLength);
-        std::wstring processLower = ToLowerCopy(processPath);
-        std::wstring processStem = ToLowerCopy(PathFileStem(processPath));
-        matches = matches || processLower == appLower ||
-                  (!appStem.empty() && processStem == appStem) ||
-                  (!processStem.empty() && appLower.find(processStem) != std::wstring::npos) ||
-                  KnownMediaPlayerProcessAlias(appLower, processStem);
-    }
-    CloseHandle(process);
-    return matches;
+    return false;
 }
 
 static bool ForEachMatchingAudioSession(
@@ -4407,62 +4468,52 @@ static bool ForEachMatchingAudioSession(
     return found;
 }
 
-static bool GetAppVolumeByAUMID(const std::wstring& appUserModelId, float& volume) {
-    bool volumeRead = false;
-    ForEachMatchingAudioSession(appUserModelId, nullptr,
-        [&](IAudioSessionControl* sessionControl, IAudioSessionControl2*) {
-            if (volumeRead) return;
-            winrt::com_ptr<ISimpleAudioVolume> appVolume;
-            if (SUCCEEDED(sessionControl->QueryInterface(__uuidof(ISimpleAudioVolume),
-                                                         appVolume.put_void())) &&
-                SUCCEEDED(appVolume->GetMasterVolume(&volume))) {
-                volumeRead = true;
-            }
-        });
-    return volumeRead;
-}
-
-static bool SetAppVolumeByAUMID(const std::wstring& appUserModelId, float volume) {
-    bool changed = false;
-    volume = std::clamp(volume, 0.0f, 1.0f);
-    ForEachMatchingAudioSession(appUserModelId, nullptr,
-        [&](IAudioSessionControl* sessionControl, IAudioSessionControl2*) {
-            winrt::com_ptr<ISimpleAudioVolume> appVolume;
-            if (SUCCEEDED(sessionControl->QueryInterface(__uuidof(ISimpleAudioVolume),
-                                                         appVolume.put_void())) &&
-                SUCCEEDED(appVolume->SetMasterVolume(volume, nullptr))) {
-                changed = true;
-            }
-        });
-    return changed;
-}
-
-static bool GetAppMuteByAUMID(const std::wstring& appUserModelId, bool& muted) {
+static bool GetAppVolumeStateByAUMID(
+    const std::wstring& appUserModelId, float& volume, bool& muted) {
     bool stateRead = false;
-    ForEachMatchingAudioSession(appUserModelId, nullptr,
+    ForEachMatchingAudioSession(
+        appUserModelId, nullptr,
         [&](IAudioSessionControl* sessionControl, IAudioSessionControl2*) {
             if (stateRead) return;
+
             winrt::com_ptr<ISimpleAudioVolume> appVolume;
-            BOOL isMuted = FALSE;
-            if (SUCCEEDED(sessionControl->QueryInterface(__uuidof(ISimpleAudioVolume),
-                                                         appVolume.put_void())) &&
-                SUCCEEDED(appVolume->GetMute(&isMuted))) {
-                muted = isMuted != FALSE;
+            if (FAILED(sessionControl->QueryInterface(
+                    __uuidof(ISimpleAudioVolume), appVolume.put_void())) ||
+                !appVolume) {
+                return;
+            }
+
+            float sessionVolume = 0.0f;
+            BOOL sessionMuted = FALSE;
+            if (SUCCEEDED(appVolume->GetMasterVolume(&sessionVolume))) {
+                volume = sessionVolume;
+                muted = SUCCEEDED(appVolume->GetMute(&sessionMuted)) &&
+                        sessionMuted != FALSE;
                 stateRead = true;
             }
         });
     return stateRead;
 }
 
-static bool SetAppMuteByAUMID(const std::wstring& appUserModelId, bool muted) {
+static bool SetAppVolumeStateByAUMID(
+    const std::wstring& appUserModelId, float volume, bool unmute) {
     bool changed = false;
-    ForEachMatchingAudioSession(appUserModelId, nullptr,
+    volume = std::clamp(volume, 0.0f, 1.0f);
+    ForEachMatchingAudioSession(
+        appUserModelId, nullptr,
         [&](IAudioSessionControl* sessionControl, IAudioSessionControl2*) {
             winrt::com_ptr<ISimpleAudioVolume> appVolume;
-            if (SUCCEEDED(sessionControl->QueryInterface(__uuidof(ISimpleAudioVolume),
-                                                         appVolume.put_void())) &&
-                SUCCEEDED(appVolume->SetMute(muted ? TRUE : FALSE, nullptr))) {
+            if (FAILED(sessionControl->QueryInterface(
+                    __uuidof(ISimpleAudioVolume), appVolume.put_void())) ||
+                !appVolume) {
+                return;
+            }
+
+            if (SUCCEEDED(appVolume->SetMasterVolume(volume, nullptr))) {
                 changed = true;
+                if (unmute) {
+                    appVolume->SetMute(FALSE, nullptr);
+                }
             }
         });
     return changed;
@@ -4503,11 +4554,23 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
         DispatchMediaUpdate();
     } else if (action == L"open_app") {
         bool queued = QueueAsyncTask([]() {
-            std::wstring title, appAumid;
-            {
-                std::lock_guard<std::mutex> lk(g_mediaMtx);
-                title = g_media.title;
+            HRESULT apartmentResult =
+                CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            struct ApartmentCleanup {
+                HRESULT result;
+                ~ApartmentCleanup() {
+                    if (SUCCEEDED(result)) CoUninitialize();
+                }
+            } apartmentCleanup{apartmentResult};
+            bool comAvailable =
+                SUCCEEDED(apartmentResult) ||
+                apartmentResult == RPC_E_CHANGED_MODE;
+            if (!comAvailable) {
+                Wh_Log(L"Open-media-app action: COM initialization failed "
+                       L"(0x%08X)", apartmentResult);
             }
+
+            std::wstring appAumid;
             {
                 std::lock_guard<std::mutex> lk(g_sessionMtx);
                 if (g_currentSession) {
@@ -4518,17 +4581,13 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
             }
 
             struct WindowSearch {
-                std::wstring targetTitle;
                 std::wstring targetAumid;
+                bool comAvailable = false;
                 HWND aumidHwnd = nullptr;
                 HWND processHwnd = nullptr;
-                HWND titleHwnd = nullptr;
             };
             WindowSearch search;
-
-            search.targetTitle = title;
-            std::transform(search.targetTitle.begin(), search.targetTitle.end(), search.targetTitle.begin(), ::towlower);
-
+            search.comAvailable = comAvailable;
             search.targetAumid = appAumid;
             std::transform(search.targetAumid.begin(), search.targetAumid.end(), search.targetAumid.begin(), ::towlower);
 
@@ -4541,7 +4600,8 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
 
                 auto* s = reinterpret_cast<WindowSearch*>(lParam);
 
-                if (!s->aumidHwnd && !s->targetAumid.empty()) {
+                if (s->comAvailable && !s->aumidHwnd &&
+                    !s->targetAumid.empty()) {
                     IPropertyStore* pps = nullptr;
                     if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&pps)))) {
                         PROPVARIANT var;
@@ -4588,23 +4648,11 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                     }
                 }
 
-                if (!s->titleHwnd && !s->targetTitle.empty()) {
-                    wchar_t windowTitle[512];
-                    if (GetWindowTextW(hwnd, windowTitle, 512) > 0) {
-                        std::wstring wTitle(windowTitle);
-                        std::transform(wTitle.begin(), wTitle.end(), wTitle.begin(), ::towlower);
-                        if (wTitle.find(s->targetTitle) != std::wstring::npos) {
-                            s->titleHwnd = hwnd;
-                        }
-                    }
-                }
-
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&search));
 
-            HWND targetWindow = search.aumidHwnd
-                ? search.aumidHwnd
-                : (search.processHwnd ? search.processHwnd : search.titleHwnd);
+            HWND targetWindow =
+                search.aumidHwnd ? search.aumidHwnd : search.processHwnd;
 
             if (targetWindow) {
                 if (IsIconic(targetWindow)) {
@@ -4656,10 +4704,13 @@ static HWND g_volumePopupTitle = nullptr;
 static HWND g_volumePopupPercent = nullptr;
 static std::wstring g_volumePopupAppUserModelId;
 static HBRUSH g_volumePopupBrush = nullptr;
+static COLORREF g_volumePopupTextColor = RGB(245, 245, 245);
+static COLORREF g_volumePopupTrackColor = RGB(96, 96, 102);
+static COLORREF g_volumePopupFillColor = RGB(0, 120, 215);
+static COLORREF g_volumePopupDisabledFillColor = RGB(100, 100, 104);
 static HFONT g_volumePopupFont = nullptr;
 static UINT g_volumePopupDpi = 96;
 static HMODULE g_modModuleHandle = nullptr;
-static std::atomic<HMODULE> g_lifecycleSafetyModulePin{nullptr};
 static bool g_volumePopupClassRegistered = false;
 static constexpr wchar_t kVolumePopupClass[] =
     L"TaskbarMediaPresenceVolumePopup_v101";
@@ -4772,27 +4823,12 @@ static void ApplyVolumePopupDpiLayout(HWND window, UINT dpi) {
     if (window) InvalidateRect(window, nullptr, TRUE);
 }
 
-static bool PinModuleForOutstandingCallbacks(PCWSTR reason) {
-    if (g_lifecycleSafetyModulePin.load(std::memory_order_acquire)) return true;
-
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&PinModuleForOutstandingCallbacks),
-            &module)) {
-        Wh_Log(L"Lifecycle safety: failed to pin module for %s (%u)",
-               reason ? reason : L"unknown callback", GetLastError());
-        return false;
-    }
-
-    HMODULE expected = nullptr;
-    g_lifecycleSafetyModulePin.compare_exchange_strong(
-        expected, module, std::memory_order_release,
-        std::memory_order_acquire);
-    Wh_Log(L"Lifecycle safety: retaining module for %s",
-           reason ? reason : L"an outstanding callback");
-    return true;
+static void ReportOutstandingCallbackRisk(PCWSTR reason) {
+    // Windhawk owns the module lifetime. Permanently pinning this DLL would make
+    // disable/re-enable and updates ineffective until Explorer restarts.
+    Wh_Log(
+        L"Lifecycle safety: cleanup left %s; the module will not be pinned",
+        reason ? reason : L"an outstanding callback");
 }
 
 static std::wstring CurrentMediaAppUserModelId() {
@@ -4871,16 +4907,11 @@ static bool IsMusicBeeProcessId(DWORD processId) {
         PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!process) return false;
 
-    wchar_t path[32768]{};
-    DWORD pathLength = ARRAYSIZE(path);
-    bool matches = false;
-    if (QueryFullProcessImageNameW(process, 0, path, &pathLength)) {
-        std::wstring stem = ToLowerCopy(
-            PathFileStem(std::wstring(path, pathLength)));
-        matches = stem == L"musicbee";
-    }
+    const std::wstring path = QueryProcessImagePath(process);
     CloseHandle(process);
-    return matches;
+    if (path.empty()) return false;
+
+    return ToLowerCopy(PathFileStem(path)) == L"musicbee";
 }
 
 using GetNamedPipeServerProcessIdFn = BOOL(WINAPI*)(HANDLE, PULONG);
@@ -5042,9 +5073,11 @@ static bool GetControllableVolumeForApp(
     }
 
     float volume = 0.0f;
-    if (!GetAppVolumeByAUMID(appUserModelId, volume)) return false;
     bool appMuted = false;
-    GetAppMuteByAUMID(appUserModelId, appMuted);
+    if (!GetAppVolumeStateByAUMID(
+            appUserModelId, volume, appMuted)) {
+        return false;
+    }
     percent = std::clamp((int)std::lround(volume * 100.0f), 0, 100);
     muted = appMuted;
     if (IsCurrentMediaApp(appUserModelId)) {
@@ -5078,11 +5111,9 @@ static bool SetControllableVolumeForApp(
         return success;
     }
 
-    bool changed = SetAppVolumeByAUMID(
-        appUserModelId, requestedPercent / 100.0f);
-    if (changed && requestedPercent > 0) {
-        SetAppMuteByAUMID(appUserModelId, false);
-    }
+    bool changed = SetAppVolumeStateByAUMID(
+        appUserModelId, requestedPercent / 100.0f,
+        requestedPercent > 0);
     if (changed && IsCurrentMediaApp(appUserModelId)) {
         PublishVolumeState(requestedPercent, false);
     }
@@ -5112,6 +5143,11 @@ static bool QueueControllableVolumeSet(
         HRESULT apartmentResult =
             CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         while (!g_unloading) {
+            // Coalesce continuous slider movement and mouse-wheel changes to at
+            // most about 25 audio writes per second.
+            Sleep(40);
+            if (g_unloading) break;
+
             std::wstring appUserModelId;
             int requestedPercent = 0;
             uint64_t generation = 0;
@@ -5122,14 +5158,8 @@ static bool QueueControllableVolumeSet(
                 generation = g_pendingVolumeSetGeneration;
             }
 
-            bool changed = SetControllableVolumeForApp(
+            SetControllableVolumeForApp(
                 appUserModelId, requestedPercent);
-            if (!changed) {
-                int actualPercent = 0;
-                bool muted = false;
-                GetControllableVolumeForApp(
-                    appUserModelId, actualPercent, muted);
-            }
 
             std::lock_guard<std::mutex> lock(g_pendingVolumeSetMtx);
             if (generation == g_pendingVolumeSetGeneration) {
@@ -5425,13 +5455,13 @@ static LRESULT CALLBACK VolumePopupWindowProc(HWND window, UINT message,
         }
         case WM_CTLCOLORSTATIC: {
             HDC dc = (HDC)wParam;
-            SetTextColor(dc, RGB(245, 245, 245));
+            SetTextColor(dc, g_volumePopupTextColor);
             SetBkMode(dc, TRANSPARENT);
             return (LRESULT)g_volumePopupBrush;
         }
         case WM_CTLCOLORBTN: {
             HDC dc = (HDC)wParam;
-            SetTextColor(dc, RGB(245, 245, 245));
+            SetTextColor(dc, g_volumePopupTextColor);
             SetBkMode(dc, TRANSPARENT);
             return (LRESULT)g_volumePopupBrush;
         }
@@ -5444,9 +5474,10 @@ static LRESULT CALLBACK VolumePopupWindowProc(HWND window, UINT message,
 
             HPEN oldPen = static_cast<HPEN>(
                 SelectObject(dc, GetStockObject(NULL_PEN)));
-            HBRUSH trackBrush = CreateSolidBrush(RGB(96, 96, 102));
+            HBRUSH trackBrush = CreateSolidBrush(g_volumePopupTrackColor);
             HBRUSH fillBrush = CreateSolidBrush(
-                g_volumePopupEnabled ? RGB(0, 120, 215) : RGB(100, 100, 104));
+                g_volumePopupEnabled ? g_volumePopupFillColor
+                                     : g_volumePopupDisabledFillColor);
 
             int centerX = VolumeTrackCenterX();
             int trackTop = VolumeTrackTop();
@@ -5647,9 +5678,28 @@ static void ShowAppVolumeFlyout(FrameworkElement const& target) {
         g_volumePopupClassRegistered = true;
     }
 
-    if (!g_volumePopupBrush) {
-        g_volumePopupBrush = CreateSolidBrush(RGB(36, 36, 40));
+    const bool popupUsesLightTheme = IsSystemLightTheme();
+    const COLORREF popupBackgroundColor =
+        popupUsesLightTheme ? RGB(248, 248, 248) : RGB(36, 36, 40);
+    g_volumePopupTextColor =
+        popupUsesLightTheme ? RGB(28, 28, 28) : RGB(245, 245, 245);
+    g_volumePopupTrackColor =
+        popupUsesLightTheme ? RGB(190, 190, 196) : RGB(96, 96, 102);
+    g_volumePopupDisabledFillColor =
+        popupUsesLightTheme ? RGB(150, 150, 156) : RGB(100, 100, 104);
+
+    const DWORD accentColor = GetWindowsAccentColor();
+    g_volumePopupFillColor = RGB(
+        (accentColor >> 16) & 0xFF,
+        (accentColor >> 8) & 0xFF,
+        accentColor & 0xFF);
+
+    if (g_volumePopupBrush) {
+        DeleteObject(g_volumePopupBrush);
+        g_volumePopupBrush = nullptr;
     }
+    g_volumePopupBrush = CreateSolidBrush(popupBackgroundColor);
+    if (!g_volumePopupBrush) return;
 
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -5685,12 +5735,14 @@ static void ShowAppVolumeFlyout(FrameworkElement const& target) {
         return;
     }
 
-    const int cornerPreference = 2;
-    DwmSetWindowAttribute(popupWindow, 33, &cornerPreference,
-                          sizeof(cornerPreference));
-    const BOOL useDarkMode = TRUE;
-    DwmSetWindowAttribute(popupWindow, 20, &useDarkMode,
-                          sizeof(useDarkMode));
+    const DWM_WINDOW_CORNER_PREFERENCE cornerPreference = DWMWCP_ROUND;
+    DwmSetWindowAttribute(
+        popupWindow, DWMWA_WINDOW_CORNER_PREFERENCE,
+        &cornerPreference, sizeof(cornerPreference));
+    const BOOL useDarkMode = popupUsesLightTheme ? FALSE : TRUE;
+    DwmSetWindowAttribute(
+        popupWindow, DWMWA_USE_IMMERSIVE_DARK_MODE,
+        &useDarkMode, sizeof(useDarkMode));
     ShowWindow(popupWindow, SW_SHOWNOACTIVATE);
     SetWindowPos(popupWindow, HWND_TOPMOST, x, y, popupWidth, popupHeight,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
@@ -5936,12 +5988,12 @@ static std::vector<BYTE> FetchAppIconBytes(const std::wstring& appUserModelId, i
                                 HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, c->exactPid);
                                 if (hProc) { DWORD sz = MAX_PATH; QueryFullProcessImageNameW(hProc, 0, path, &sz); CloseHandle(hProc); }
                                 c->exactPath = path;
-                                return FALSE;
                             }
                         }
                     }
                     PropVariantClear(&var);
                     pps->Release();
+                    if (c->exactIcon) return FALSE;
                 }
             }
 
@@ -7579,8 +7631,8 @@ struct TaskbarTopologyNotificationWindow {
         Wh_Log(
             L"Taskbar topology notifications: class unregister failed (%u)",
             error);
-        PinModuleForOutstandingCallbacks(
-            L"taskbar topology notification window class");
+        ReportOutstandingCallbackRisk(
+            L"the taskbar topology notification window class registered");
     }
 
     bool Create(HANDLE updateEvent) {
@@ -7661,14 +7713,13 @@ struct TaskbarTopologyNotificationWindow {
 };
 
 
-static std::atomic<bool> g_themeChangePending{false};
-
 static DWORD TimerThreadMain() {
     bool lastThemeWasLight = IsSystemLightTheme();
     ULONGLONG nextVolumePollTick = 0;
     ULONGLONG nextMetadataRetryTick = 0;
     ULONGLONG nextInjectionRetryTick = 0;
     ULONGLONG taskbarTopologyRebuildDueTick = 0;
+    ULONGLONG themeRefreshDueTick = 0;
     ULONGLONG idleStoppedSinceTick = 0;
     uint64_t lastTaskbarTopology = GetTaskbarTopologyFingerprint();
     bool topologyOwnerWasLive = true;
@@ -7711,8 +7762,39 @@ static DWORD TimerThreadMain() {
         if (hEvent) handles[handleCount++] = hEvent;
         const DWORD updateIndex = handleCount;
         handles[handleCount++] = updateEvent;
+
+        DWORD waitTimeout = 1000;
+        {
+            std::lock_guard<std::mutex> lock(g_mediaMtx);
+            if (g_media.hasMedia && g_media.isPlaying) {
+                waitTimeout = 250;
+            }
+        }
+        HWND waitPopupWindow =
+            g_volumePopupWindow.load(std::memory_order_acquire);
+        if (waitPopupWindow && IsWindowVisible(waitPopupWindow)) {
+            waitTimeout = 250;
+        }
+
+        auto shortenWaitForDeadline =
+            [&waitTimeout](ULONGLONG deadline) {
+                if (!deadline) return;
+                ULONGLONG now = GetTickCount64();
+                if (deadline <= now) {
+                    waitTimeout = 0;
+                    return;
+                }
+                waitTimeout = std::min<DWORD>(
+                    waitTimeout,
+                    static_cast<DWORD>(std::min<ULONGLONG>(
+                        deadline - now, MAXDWORD)));
+            };
+        shortenWaitForDeadline(themeRefreshDueTick);
+        shortenWaitForDeadline(taskbarTopologyRebuildDueTick);
+
         DWORD wait = MsgWaitForMultipleObjectsEx(
-            handleCount, handles, 250, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            handleCount, handles, waitTimeout, QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
         if (wait == WAIT_OBJECT_0 + handleCount) {
             topologyNotifications.PumpMessages();
             wait = WAIT_TIMEOUT;
@@ -7720,6 +7802,8 @@ static DWORD TimerThreadMain() {
 
         if (wait == WAIT_OBJECT_0 + stopIndex || g_unloading) break;
         if (g_applyingSettings) continue;
+
+        ULONGLONG nowTick = GetTickCount64();
 
         HWND selectedTaskbar = g_taskbarWnd.load();
         if (!selectedTaskbar || !IsWindow(selectedTaskbar)) {
@@ -7755,14 +7839,14 @@ static DWORD TimerThreadMain() {
             bool currentThemeIsLight = IsSystemLightTheme();
             if (currentThemeIsLight != lastThemeWasLight) {
                 lastThemeWasLight = currentThemeIsLight;
-                g_themeChangePending = true;
-                g_needsUiUpdate = true;
+                themeRefreshDueTick = nowTick + 150;
                 SetEvent(updateEvent);
             }
         }
 
-        if (g_themeChangePending.exchange(false)) {
-            Sleep(150);
+        if (themeRefreshDueTick && nowTick >= themeRefreshDueTick) {
+            themeRefreshDueTick = 0;
+            g_needsUiUpdate = true;
             if (!TaskbarXamlCallbacksSuppressed() && uiUpdateWindow) {
                 RunFromWindowThread(uiUpdateWindow, [](void*) {
                     if (!TaskbarXamlCallbacksSuppressed() && g_playerGrid) {
@@ -7775,7 +7859,6 @@ static DWORD TimerThreadMain() {
         // Audio-session enumeration is comparatively expensive. Poll quickly
         // while the volume flyout is visible, otherwise refresh only every
         // 1.5 seconds or immediately after a media-state update.
-        ULONGLONG nowTick = GetTickCount64();
 
         ULONGLONG restartNotBefore =
             g_taskbarRestartNotBeforeTick.load(std::memory_order_acquire);
@@ -9483,22 +9566,6 @@ static void QueueQuickMonitorRebuild() {
     QueueQuickRebuild(true);
 }
 
-static void OpenWindhawk() {
-    bool queued = QueueAsyncTask([]() {
-        wchar_t expanded[MAX_PATH]{};
-        ExpandEnvironmentStringsW(L"%ProgramFiles%\\Windhawk\\windhawk.exe", expanded, MAX_PATH);
-
-        DWORD attrs = GetFileAttributesW(expanded);
-        if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-            ShellExecuteW(nullptr, L"open", expanded, nullptr, nullptr, SW_SHOWNORMAL);
-        } else {
-            Wh_Log(L"Open-Windhawk action: Windhawk executable wasn't found in Program Files");
-        }
-    });
-    if (!queued) {
-        Wh_Log(L"Open-Windhawk action couldn't be queued");
-    }
-}
 
 struct MediaSourceMenuEntry {
     std::wstring appId;
@@ -9682,13 +9749,12 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
         appendPosition(L"Before system tray", L"right", 3);
 
         std::wstring customLabel = Cfg()->positionPreset == L"custom"
-            ? L"\u2713 Custom position and offset..."
-            : L"Custom position and offset...";
+            ? L"\u2713 Custom (configure in Windhawk settings)"
+            : L"Custom (configure in Windhawk settings)";
         positionMenu.Items().Append(MakeActionContextMenuItem(
             L"\uE713", customLabel.c_str(), []() {
                 Wh_SetIntValue(L"quickPositionPreset", 4);
                 QueueQuickSettingsRebuild();
-                OpenWindhawk();
             }));
         menu.Items().Append(positionMenu);
 
@@ -9728,16 +9794,6 @@ static void ShowMediaContextMenu(FrameworkElement const& target) {
                 }));
         }
         menu.Items().Append(monitorMenu);
-
-        try {
-            Controls::MenuFlyoutSeparator separator;
-            menu.Items().Append(separator);
-        } catch (...) {}
-
-        menu.Items().Append(MakeActionContextMenuItem(
-            L"\uE713", L"Open full Windhawk settings", []() {
-                OpenWindhawk();
-            }));
 
         if (g_unloading || TaskbarXamlCallbacksSuppressed()) {
             CloseActiveContextMenuOnCurrentThread();
@@ -13889,21 +13945,13 @@ static void RefreshPlayerContentsForGrid(
     if (Cfg()->showAppIcon) {
         if (auto fe = FindChildByName(playerGrid, kAppIconImageName))
             if (auto img = fe.try_as<Controls::Image>()) {
-                bool sizeChanged = (g_cachedAppIconSize != Cfg()->appIconSize);
-                if (sizeChanged && !appIconBytes.empty()) {
-                    std::wstring aumid;
-                    {
-                        std::lock_guard<std::mutex> lk(g_mediaMtx);
-                        aumid = g_media.appUserModelId;
-                    }
-                    if (!aumid.empty()) {
-                        appIconBytes = FetchAppIconBytes(aumid, Cfg()->appIconSize);
-                        {
-                            std::lock_guard<std::mutex> lk(g_mediaMtx);
-                            g_media.appIconBytes = appIconBytes;
-                        }
-                    }
-                    g_cachedAppIconSize = Cfg()->appIconSize;
+                bool sizeChanged =
+                    g_cachedAppIconSize != Cfg()->appIconSize;
+                if (sizeChanged) {
+                    // FetchMediaPropertiesAsync performs the potentially slow
+                    // window/COM icon search on a worker and publishes the
+                    // result back through g_media.
+                    FetchMediaPropertiesAsync();
                 }
 
                 if (!appIconBytes.empty()) {
@@ -14731,7 +14779,7 @@ static void ModUninitImpl() {
         !requestsDrained ||
         HasOutstandingExecutableCallbacks();
     if (executableCallbacksOutstanding) {
-        PinModuleForOutstandingCallbacks(
+        ReportOutstandingCallbackRisk(
             L"an executable callback, worker, timer, or window procedure remains");
     }
 
@@ -14743,7 +14791,7 @@ static void ModUninitImpl() {
     if (ordinaryCleanupIncomplete && !executableCallbacksOutstanding) {
         Wh_Log(
             L"Wh_ModUninit: non-callback UI cleanup was incomplete; "
-            L"continuing without permanently pinning the module");
+            L"continuing with normal Windhawk module lifetime");
     }
 
     if (playerCleanup.confirmed) {
@@ -14770,13 +14818,13 @@ void Wh_ModUninit() noexcept {
         Wh_Log(L"Wh_ModUninit: unhandled WinRT failure 0x%08X",
                static_cast<uint32_t>(error.code()));
         if (HasOutstandingExecutableCallbacks()) {
-            PinModuleForOutstandingCallbacks(
+            ReportOutstandingCallbackRisk(
                 L"cleanup exception left an executable callback active");
         }
     } catch (...) {
         Wh_Log(L"Wh_ModUninit: unhandled cleanup exception");
         if (HasOutstandingExecutableCallbacks()) {
-            PinModuleForOutstandingCallbacks(
+            ReportOutstandingCallbackRisk(
                 L"cleanup exception left an executable callback active");
         }
     }
