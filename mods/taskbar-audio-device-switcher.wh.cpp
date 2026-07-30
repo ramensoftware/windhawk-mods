@@ -2,7 +2,7 @@
 // @id              taskbar-audio-device-switcher
 // @name            Taskbar audio device switcher
 // @description     Shows a tray icon for every connected audio device and switches the default device with a click
-// @version         1.3.0
+// @version         1.4.0
 // @author          Maksim Chingin
 // @github          https://github.com/umnik1
 // @include         windhawk.exe
@@ -256,18 +256,23 @@ HANDLE g_windowReadyEvent;
 // MMDevice notification threads.
 std::atomic<HWND> g_hWnd;
 UINT g_taskbarCreatedMessage;
+// Only ever written at startup and at the beginning of a refresh, never from a
+// message handler: PurgeStaleIcons relies on the size staying put for the whole
+// duration of a refresh, and the handlers which notice a size change can run
+// re-entrantly in the middle of one.
 int g_iconSize;
-// Whether g_iconSize could be derived from the taskbar's monitor, or whether
-// it is the less accurate fallback and should be retried.
-bool g_iconSizeFromTaskbar;
 
 // Shell_NotifyIconW blocks in a cross-process SendMessage, and a thread which
 // is blocked there keeps dispatching inbound sent messages. Nothing may touch
-// g_trayIcons from such a handler while the loops in RefreshDevices hold an
-// iterator into it, so the work is deferred through these flags instead.
+// g_trayIcons or g_iconSize from such a handler while a refresh is in flight,
+// so the work is deferred through these flags instead.
 bool g_refreshing;
 bool g_refreshPending;
 bool g_trayIconsLost;
+// Set when g_iconSize has to be re-derived at the start of the next refresh,
+// either because the taskbar wasn't up yet or because a broadcast suggests the
+// size changed.
+bool g_iconSizeStale;
 
 std::vector<AudioDevice> g_devices;  // all devices, hidden ones included
 std::unordered_map<std::wstring, TrayIcon> g_trayIcons;  // device id -> icon
@@ -450,16 +455,20 @@ int GetTrayIconSize(bool* fromTaskbar) {
     return size > 0 ? size : 16;
 }
 
-// Returns whether the size changed.
-bool UpdateIconSize() {
+// Stores the current size. Only to be called at startup and at the start of a
+// refresh, see g_iconSize.
+void UpdateIconSize() {
     bool fromTaskbar = false;
-    int size = GetTrayIconSize(&fromTaskbar);
-    g_iconSizeFromTaskbar = fromTaskbar;
-    if (size == g_iconSize) {
-        return false;
-    }
-    g_iconSize = size;
-    return true;
+    g_iconSize = GetTrayIconSize(&fromTaskbar);
+    // A fallback value has to be retried once the taskbar exists.
+    g_iconSizeStale = !fromTaskbar;
+}
+
+// Reads the size without storing it, so that this stays safe to call from a
+// message handler which may run in the middle of a refresh.
+bool IconSizeChanged() {
+    bool fromTaskbar = false;
+    return GetTrayIconSize(&fromTaskbar) != g_iconSize;
 }
 
 HICON ExtractIconFromSpec(std::wstring spec, int size) {
@@ -689,7 +698,17 @@ HICON GetDeviceIcon(const AudioDevice& device) {
 void PurgeStaleIcons() {
     std::wstring prefix = std::to_wstring(g_iconSize) + L"|";
     for (auto it = g_iconCache.begin(); it != g_iconCache.end();) {
-        if (it->first.compare(0, prefix.size(), prefix) != 0) {
+        // A handle the shell still displays must never be destroyed, whatever
+        // size it was built for. g_trayIcons tracks exactly what was handed
+        // over, so it is the authority here.
+        bool inUse = false;
+        for (const auto& entry : g_trayIcons) {
+            if (entry.second.icon == it->second) {
+                inUse = true;
+                break;
+            }
+        }
+        if (!inUse && it->first.compare(0, prefix.size(), prefix) != 0) {
             DestroyIcon(it->second);
             it = g_iconCache.erase(it);
         } else {
@@ -911,8 +930,10 @@ void RefreshDevices() {
         g_trayIconsLost = false;
     }
 
-    if (!g_iconSizeFromTaskbar) {
-        // The taskbar wasn't up when the size was last derived.
+    if (g_iconSizeStale) {
+        // Either the taskbar wasn't up when the size was last derived, or a
+        // broadcast reported a change. This is the only place the size is
+        // updated once running, so it stays fixed for the whole refresh.
         UpdateIconSize();
     }
 
@@ -982,7 +1003,13 @@ void RefreshDevices() {
             g_trayIcons[device.id] = std::move(state);
         } else {
             Shell_NotifyIconW(NIM_MODIFY, &nid);
-            it->second.icon = icon;
+            if (icon) {
+                it->second.icon = icon;
+            }
+            // Without NIF_ICON the shell keeps displaying the previous icon, so
+            // the recorded handle has to keep pointing at it — otherwise nothing
+            // holds a reference and PurgeStaleIcons would destroy a handle which
+            // is still on screen.
             it->second.tip = std::move(tip);
         }
     }
@@ -1305,8 +1332,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
         // the flags here and do the work from the timer.
         g_trayIconsLost = true;
         // Also the point at which the taskbar is known to exist, so the icon
-        // size can finally be derived from its monitor.
-        UpdateIconSize();
+        // size can finally be derived from its monitor. The refresh does it,
+        // this handler must not touch g_iconSize itself.
+        g_iconSizeStale = true;
         SetTimer(hWnd, kRefreshTimerId, 250, nullptr);
         return 0;
     }
@@ -1377,7 +1405,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
             // These arrive often, only act when the icon size really changed.
-            if (UpdateIconSize()) {
+            // The new size is picked up by the refresh, not stored here: this
+            // can run while a refresh is in flight.
+            if (IconSizeChanged()) {
+                g_iconSizeStale = true;
                 SetTimer(hWnd, kRefreshTimerId, 500, nullptr);
             }
             break;
