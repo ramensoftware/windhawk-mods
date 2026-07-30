@@ -2,12 +2,12 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.3
+// @version         1.4
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -lcomctl32 -ldwmapi -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -139,7 +139,8 @@ do not conflict.
 
 - maxItems: 60
   $name: Maximum items
-  $description: Limit how many entries the grid shows.
+  $description: >-
+    Limit how many entries the grid shows. 0 means unlimited.
 
 - includeSubfolders: true
   $name: Show subfolders
@@ -254,10 +255,9 @@ do not conflict.
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
-#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -272,6 +272,7 @@ do not conflict.
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -367,10 +368,7 @@ std::wstring ExpandEnv(const std::wstring& s) {
 }
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR raw = Wh_GetStringSetting(name);
-    std::wstring value = raw ? raw : L"";
-    Wh_FreeStringSetting(raw);
-    return value;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 // An icon setting is a file reference if it looks like a path, otherwise it is
@@ -389,26 +387,23 @@ bool IconSettingIsFile(const std::wstring& icon) {
 void LoadFolders(std::vector<FolderEntry>* out) {
     out->clear();
     for (int i = 0; i < 64; i++) {
-        PCWSTR rawPath = Wh_GetStringSetting(L"folders[%d].path", i);
-        std::wstring path = rawPath ? rawPath : L"";
-        Wh_FreeStringSetting(rawPath);
-        path = Trim(std::move(path));
+        auto rawPath =
+            WindhawkUtils::StringSetting::make(L"folders[%d].path", i);
+        std::wstring path = Trim(std::wstring(rawPath.get()));
+        // Skip blank slots so a hole in the middle does not drop later folders.
         if (path.empty()) {
-            break;
+            continue;
         }
 
-        PCWSTR rawName = Wh_GetStringSetting(L"folders[%d].name", i);
-        std::wstring name = rawName ? rawName : L"";
-        Wh_FreeStringSetting(rawName);
-
-        PCWSTR rawIcon = Wh_GetStringSetting(L"folders[%d].icon", i);
-        std::wstring icon = rawIcon ? rawIcon : L"";
-        Wh_FreeStringSetting(rawIcon);
+        auto rawName =
+            WindhawkUtils::StringSetting::make(L"folders[%d].name", i);
+        auto rawIcon =
+            WindhawkUtils::StringSetting::make(L"folders[%d].icon", i);
 
         FolderEntry entry;
-        entry.name = Trim(std::move(name));
+        entry.name = Trim(std::wstring(rawName.get()));
         entry.path = ExpandEnv(path);
-        entry.icon = Trim(std::move(icon));
+        entry.icon = Trim(std::wstring(rawIcon.get()));
         if (entry.name.empty()) {
             entry.name = entry.path;
         }
@@ -531,11 +526,12 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
-    // TaskbarHost::FrameHeight starts with `sub rsp,28` then `add
-    // rcx,<offset>`, which is how the offset of the host's FrameworkElement is
-    // recovered.
     size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
     {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
         if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
@@ -545,6 +541,11 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
                 L"Unsupported TaskbarHost::FrameHeight, using default offset");
         }
     }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
@@ -763,26 +764,62 @@ void EnumRepeaterChildren(FrameworkElement const& repeater,
 
 ULONG_PTR g_gdiplusToken = 0;
 
-bool IsDarkTheme() {
+struct ThemeCache {
+    bool dark = true;
+    BYTE accentR = 0;
+    BYTE accentG = 120;
+    BYTE accentB = 215;
+    bool variableFontAvailable = false;
+    bool resolved = false;
+};
+
+ThemeCache g_themeCache;
+
+void RefreshThemeCache() {
     try {
         winrt::Windows::UI::ViewManagement::UISettings settings;
         auto bg = settings.GetColorValue(
             winrt::Windows::UI::ViewManagement::UIColorType::Background);
-        return ((int)bg.R + bg.G + bg.B) < 384;
+        g_themeCache.dark = ((int)bg.R + bg.G + bg.B) < 384;
+
+        auto accent = settings.GetColorValue(
+            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+        g_themeCache.accentR = accent.R;
+        g_themeCache.accentG = accent.G;
+        g_themeCache.accentB = accent.B;
     } catch (...) {
-        return true;
+        g_themeCache.dark = true;
+        g_themeCache.accentR = 0;
+        g_themeCache.accentG = 120;
+        g_themeCache.accentB = 215;
     }
+
+    Gdiplus::FontFamily probe(L"Segoe UI Variable Text");
+    g_themeCache.variableFontAvailable = probe.IsAvailable() != FALSE;
+    g_themeCache.resolved = true;
+}
+
+bool IsDarkTheme() {
+    if (!g_themeCache.resolved) {
+        RefreshThemeCache();
+    }
+    return g_themeCache.dark;
 }
 
 Gdiplus::Color GetAccentGdipColor(BYTE alpha) {
-    try {
-        winrt::Windows::UI::ViewManagement::UISettings settings;
-        auto c = settings.GetColorValue(
-            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        return Gdiplus::Color(alpha, c.R, c.G, c.B);
-    } catch (...) {
-        return Gdiplus::Color(alpha, 0, 120, 215);
+    if (!g_themeCache.resolved) {
+        RefreshThemeCache();
     }
+    return Gdiplus::Color(alpha, g_themeCache.accentR, g_themeCache.accentG,
+                          g_themeCache.accentB);
+}
+
+PCWSTR PopupFontName() {
+    if (!g_themeCache.resolved) {
+        RefreshThemeCache();
+    }
+    return g_themeCache.variableFontAvailable ? L"Segoe UI Variable Text"
+                                              : L"Segoe UI";
 }
 
 // DrawIconEx into a 32bpp DIB, then copy into a GDI+ bitmap that owns its
@@ -971,7 +1008,6 @@ struct GridItem {
 struct FolderData {
     std::vector<GridItem> items;
     bool ready = false;
-    bool valid = false;
     ULONGLONG scannedAtTick = 0;
     int scannedIconSize = 0;
 };
@@ -1107,7 +1143,6 @@ void ScanFolderInto(const std::wstring& path,
                     int iconPixelSize,
                     FolderData* out) {
     out->items.clear();
-    out->valid = false;
     out->scannedIconSize = iconPixelSize;
 
     if (path.empty()) {
@@ -1122,8 +1157,6 @@ void ScanFolderInto(const std::wstring& path,
     if (hFind == INVALID_HANDLE_VALUE) {
         return;
     }
-
-    out->valid = true;
 
     do {
         if (g_unloading) {
@@ -1347,7 +1380,6 @@ struct PopupLevel {
     int hoverCell = -1;
     int pressedCell = -1;
     bool loading = false;
-    bool above = true;
 };
 
 HWND g_menuOwnerWnd = nullptr;
@@ -1627,13 +1659,7 @@ void PaintLevel(PopupLevel* level) {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &panelPath);
 
-        PCWSTR fontName = L"Segoe UI Variable Text";
-        {
-            Gdiplus::FontFamily probe(fontName);
-            if (!probe.IsAvailable()) {
-                fontName = L"Segoe UI";
-            }
-        }
+        PCWSTR fontName = PopupFontName();
         Gdiplus::FontFamily family(fontName);
         Gdiplus::Font font(&family,
                            (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
@@ -2217,6 +2243,8 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
 
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
+        case WM_THEMECHANGED:
+            RefreshThemeCache();
             CloseChain();
             return 0;
 
@@ -2397,16 +2425,12 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     // grid would land past the monitor edge.
     if (availableAbove >= size.cy) {
         level->rect.top = anchorRect.top - gap - size.cy;
-        level->above = true;
     } else if (availableBelow >= size.cy) {
         level->rect.top = anchorRect.bottom + gap;
-        level->above = false;
     } else if (availableAbove >= availableBelow) {
         level->rect.top = screen.top;
-        level->above = true;
     } else {
         level->rect.top = std::max<int>(screen.top, screen.bottom - size.cy);
-        level->above = false;
     }
     level->rect.top = std::clamp<int>(
         level->rect.top, screen.top,
@@ -2501,7 +2525,6 @@ struct ButtonState {
     winrt::event_token enterToken{};
     winrt::event_token exitToken{};
     int folderIndex = -1;
-    HWND taskbarWnd = nullptr;
 };
 
 // One injected host per taskbar window (primary + each secondary monitor).
@@ -3113,7 +3136,6 @@ Grid BuildHostGrid(TaskbarHost* host) {
         ButtonState state;
         state.button = button;
         state.folderIndex = (int)i;
-        state.taskbarWnd = host->hwnd;
 
         int folderIndex = (int)i;
         HWND taskbarWnd = host->hwnd;
