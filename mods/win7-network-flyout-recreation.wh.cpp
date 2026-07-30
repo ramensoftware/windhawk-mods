@@ -38,6 +38,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
 - **Classic tooltips**: Full network info on hover (SSID, signal, security type)
 - **Right-click context menu**: Quick access to network status and properties
+- **Native Network Menus**: “Status” opens the native Wi‑Fi connection status dialog, while “Properties” opens the native Wireless Network Properties dialog for saved Wi‑Fi profiles when available, with safe fallbacks for unsupported cases.
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
 - **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian or auto-detect
@@ -123,6 +124,9 @@ If you encounter issues, please report them to the author of the mod.
 // ==/WindhawkModSettings==
 // ## Changelog
 // - 4.0.0: Enhanced the Network Sharing center Control Panel page
+// - 4.0.0: Native network context menu actions now open the native Wi-Fi status
+//   and saved-profile Wireless Network Properties dialogs when available, with
+//   safe fallbacks for unsupported cases.
 // - 4.0.0: Removed legacy EnumWindows-based refresh (INetworkListManagerEvents now drives live updates).
 // - 4.0.0: Control Panel Network Map layout refinements and privacy masking.
 // - 3.4.0: van.dll alignment: row height 30rp + 24rp name + padding
