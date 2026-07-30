@@ -8,7 +8,8 @@
 // @include         explorer.exe
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme/*
+// ==WindhawkModReadme==
+/*
 # Windows 11 Start Menu Complete Styler
 
 Mod visual completo para personalizar o menu Iniciar do Windows 11.
@@ -33,9 +34,10 @@ Este mod oferece **personalização visual completa** do Start Menu, enquanto o 
 
 ## Nota
 Este mod funciona apenas no Windows 11 com o menu Iniciar padrão.
-*/// ==/WindhawkModReadme==
+*/
+// ==/WindhawkModReadme==
 
-// ==WindhawkModSettings/*
+// ==WindhawkModSettings==
 {
   "theme": "",
   "disableNewStartMenuLayout": "",
