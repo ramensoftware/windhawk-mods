@@ -3992,22 +3992,6 @@ static void FormatDisplaySSID(const WifiNetworkItem& item, int displayIndex,
     }
 }
 
-static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
-    if (!buf || bufLen <= 0)
-        return;
-    buf[0] = L'\0';
-
-    WifiNetworkItem item = {};
-    BOOL haveItem = FALSE;
-    EnterCriticalSection(&g_Ctx.csLock);
-    if (index >= 0 && index < g_NetworkCount) {
-        item = g_NetworkList[index];
-        haveItem = TRUE;
-    }
-    LeaveCriticalSection(&g_Ctx.csLock);
-    if (haveItem)
-        FormatDisplaySSID(item, index, buf, bufLen);
-}
 
 // -------------------------------------------------------
 // Icons and resources
