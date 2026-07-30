@@ -7505,15 +7505,34 @@ static void QueueQuickMonitorRebuild();
 
 
 struct TaskbarTopologyNotificationState {
-    WNDPROC originalWindowProc = nullptr;
     HANDLE updateEvent = nullptr;
     bool changePending = false;
 };
+
+static constexpr wchar_t kTaskbarTopologyNotificationClass[] =
+    L"TaskbarMediaPresenceTopologyNotification_v115";
 
 static LRESULT CALLBACK TaskbarTopologyNotificationWindowProc(
     HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept {
     auto* state = reinterpret_cast<TaskbarTopologyNotificationState*>(
         GetWindowLongPtrW(window, GWLP_USERDATA));
+
+    if (message == WM_NCCREATE) {
+        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        state = create
+            ? static_cast<TaskbarTopologyNotificationState*>(
+                  create->lpCreateParams)
+            : nullptr;
+        if (!state) return FALSE;
+
+        SetLastError(ERROR_SUCCESS);
+        LONG_PTR previous = SetWindowLongPtrW(
+            window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+        if (!previous && GetLastError() != ERROR_SUCCESS) {
+            return FALSE;
+        }
+    }
+
     if (state) {
         switch (message) {
         case WM_DISPLAYCHANGE:
@@ -7528,43 +7547,89 @@ static LRESULT CALLBACK TaskbarTopologyNotificationWindowProc(
         }
     }
 
-    WNDPROC original = state ? state->originalWindowProc : nullptr;
-    return original
-        ? CallWindowProcW(original, window, message, wParam, lParam)
-        : DefWindowProcW(window, message, wParam, lParam);
+    if (message == WM_NCDESTROY) {
+        SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+    }
+
+    return DefWindowProcW(window, message, wParam, lParam);
 }
 
 struct TaskbarTopologyNotificationWindow {
     HWND window = nullptr;
+    HMODULE moduleHandle = nullptr;
+    bool classRegistered = false;
     TaskbarTopologyNotificationState state;
+
+    void ReleaseClassRegistration() noexcept {
+        if (!classRegistered || !moduleHandle) return;
+
+        SetLastError(ERROR_SUCCESS);
+        if (UnregisterClassW(
+                kTaskbarTopologyNotificationClass, moduleHandle)) {
+            classRegistered = false;
+            return;
+        }
+
+        DWORD error = GetLastError();
+        if (error == ERROR_CLASS_DOES_NOT_EXIST) {
+            classRegistered = false;
+            return;
+        }
+
+        Wh_Log(
+            L"Taskbar topology notifications: class unregister failed (%u)",
+            error);
+        PinModuleForOutstandingCallbacks(
+            L"taskbar topology notification window class");
+    }
 
     bool Create(HANDLE updateEvent) {
         state.updateEvent = updateEvent;
+
+        if (!GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(
+                    &TaskbarTopologyNotificationWindowProc),
+                &moduleHandle) ||
+            !moduleHandle) {
+            Wh_Log(
+                L"Taskbar topology notifications: module handle lookup failed");
+            return false;
+        }
+
+        WNDCLASSEXW windowClass{};
+        windowClass.cbSize = sizeof(windowClass);
+        windowClass.lpfnWndProc =
+            TaskbarTopologyNotificationWindowProc;
+        windowClass.hInstance = moduleHandle;
+        windowClass.lpszClassName =
+            kTaskbarTopologyNotificationClass;
+
+        if (!RegisterClassExW(&windowClass)) {
+            Wh_Log(
+                L"Taskbar topology notifications: class registration failed "
+                L"(%u)",
+                GetLastError());
+            moduleHandle = nullptr;
+            return false;
+        }
+        classRegistered = true;
+
         window = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"",
-            WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
-            GetModuleHandleW(nullptr), nullptr);
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            kTaskbarTopologyNotificationClass, L"", WS_POPUP,
+            0, 0, 0, 0, nullptr, nullptr, moduleHandle, &state);
         if (!window) {
-            Wh_Log(L"Taskbar topology notifications: hidden window creation failed");
+            Wh_Log(
+                L"Taskbar topology notifications: hidden window creation "
+                L"failed (%u)",
+                GetLastError());
+            ReleaseClassRegistration();
+            moduleHandle = nullptr;
             return false;
         }
 
-        SetWindowLongPtrW(
-            window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&state));
-        SetLastError(ERROR_SUCCESS);
-        auto previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
-            window, GWLP_WNDPROC,
-            reinterpret_cast<LONG_PTR>(
-                &TaskbarTopologyNotificationWindowProc)));
-        if (!previous && GetLastError() != ERROR_SUCCESS) {
-            SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-            DestroyWindow(window);
-            window = nullptr;
-            Wh_Log(L"Taskbar topology notifications: subclassing failed");
-            return false;
-        }
-
-        state.originalWindowProc = previous;
         return true;
     }
 
@@ -7580,17 +7645,21 @@ struct TaskbarTopologyNotificationWindow {
     }
 
     ~TaskbarTopologyNotificationWindow() noexcept {
-        if (!window || !IsWindow(window)) return;
-        if (state.originalWindowProc) {
-            SetWindowLongPtrW(
-                window, GWLP_WNDPROC,
-                reinterpret_cast<LONG_PTR>(state.originalWindowProc));
+        if (window && IsWindow(window)) {
+            if (!DestroyWindow(window)) {
+                Wh_Log(
+                    L"Taskbar topology notifications: hidden window "
+                    L"destruction failed (%u)",
+                    GetLastError());
+            }
         }
-        SetWindowLongPtrW(window, GWLP_USERDATA, 0);
-        DestroyWindow(window);
         window = nullptr;
+
+        ReleaseClassRegistration();
+        moduleHandle = nullptr;
     }
 };
+
 
 static std::atomic<bool> g_themeChangePending{false};
 
