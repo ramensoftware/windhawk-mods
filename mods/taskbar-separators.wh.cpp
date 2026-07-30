@@ -323,15 +323,20 @@ struct AnimationDividerCache {
 };
 thread_local std::vector<AnimationDividerCache> g_animationDividers;
 thread_local winrt::weak_ref<FrameworkElement> g_animationPointerSource;
-thread_local winrt::event_token g_animationPointerMovedToken{};
+thread_local winrt::Windows::Foundation::IInspectable
+    g_animationPointerMovedHandler{nullptr};
 thread_local winrt::event_token g_animationPointerExitedToken{};
 thread_local winrt::event_token g_animationRenderingToken{};
 thread_local bool g_animationPointerHandlersAttached = false;
+thread_local bool g_animationPointerExitedHandlerAttached = false;
 thread_local bool g_animationRenderingSubscribed = false;
 thread_local bool g_animationPointerInside = false;
 thread_local bool g_animationRenderingCallbackActive = false;
 thread_local bool g_animationSubscriptionOrderRefreshed = false;
 thread_local int g_animationStableFrames = 0;
+using AnimationClock = std::chrono::steady_clock;
+thread_local AnimationClock::time_point g_animationLastActivity{};
+constexpr auto kAnimationTrackingTimeout = std::chrono::seconds(3);
 
 thread_local DispatcherTimer g_initialReconcileTimer{nullptr};
 thread_local winrt::event_token g_initialReconcileTimerToken{};
@@ -1010,7 +1015,7 @@ bool TryGetBeforeFirstDividerGeometry(
     double rectangleWidth,
     double rectangleHeight,
     DividerGeometry* geometry) {
-    if (!overlayCanvas || !firstIcon || !secondIcon || !geometry ||
+    if (!overlayCanvas || !firstIcon || !geometry ||
         !std::isfinite(rectangleWidth) || rectangleWidth <= 0 ||
         !std::isfinite(rectangleHeight) || rectangleHeight <= 0) {
         return false;
@@ -1018,27 +1023,34 @@ bool TryGetBeforeFirstDividerGeometry(
 
     winrt::Windows::Foundation::Rect firstBounds{};
     winrt::Windows::Foundation::Rect secondBounds{};
-    if (!TryGetIconBounds(overlayCanvas, firstIcon, &firstBounds) ||
-        !TryGetIconBounds(overlayCanvas, secondIcon, &secondBounds)) {
+    if (!TryGetIconBounds(overlayCanvas, firstIcon, &firstBounds)) {
         return false;
     }
 
     double firstCenter = PrimaryCenter(firstBounds, orientation);
-    double secondCenter = PrimaryCenter(secondBounds, orientation);
-    double pitch = secondCenter - firstCenter;
     double firstCrossCenter =
         orientation == TaskbarOrientation::horizontal
             ? firstBounds.Y + firstBounds.Height / 2.0
             : firstBounds.X + firstBounds.Width / 2.0;
-    double secondCrossCenter =
-        orientation == TaskbarOrientation::horizontal
-            ? secondBounds.Y + secondBounds.Height / 2.0
-            : secondBounds.X + secondBounds.Width / 2.0;
-    double crossPitch = secondCrossCenter - firstCrossCenter;
-    if (!std::isfinite(pitch) || !std::isfinite(crossPitch) ||
-        std::fabs(pitch) <= 0.1 ||
-        std::fabs(pitch) <= std::fabs(crossPitch)) {
-        return false;
+    double pitch = PrimarySize(firstBounds, orientation);
+    double crossPitch = 0;
+    if (secondIcon) {
+        if (!TryGetIconBounds(overlayCanvas, secondIcon, &secondBounds)) {
+            return false;
+        }
+
+        double secondCenter = PrimaryCenter(secondBounds, orientation);
+        pitch = secondCenter - firstCenter;
+        double secondCrossCenter =
+            orientation == TaskbarOrientation::horizontal
+                ? secondBounds.Y + secondBounds.Height / 2.0
+                : secondBounds.X + secondBounds.Width / 2.0;
+        crossPitch = secondCrossCenter - firstCrossCenter;
+        if (!std::isfinite(pitch) || !std::isfinite(crossPitch) ||
+            std::fabs(pitch) <= 0.1 ||
+            std::fabs(pitch) <= std::fabs(crossPitch)) {
+            return false;
+        }
     }
 
     double virtualPreviousCenter = firstCenter - pitch;
@@ -1061,7 +1073,7 @@ bool TryGetBeforeFirstDividerGeometry(
     }
 
     geometry->targetBounds = firstBounds;
-    geometry->nextBounds = secondBounds;
+    geometry->nextBounds = secondIcon ? secondBounds : firstBounds;
     geometry->center = center;
     geometry->left = left;
     geometry->top = top;
@@ -1128,11 +1140,19 @@ void UnsubscribeAnimationRendering(bool logStopped) {
 
 void StopAnimationTracking() {
     UnsubscribeAnimationRendering(true);
+    g_animationLastActivity = {};
 }
 
 void OnAnimationRendering(winrt::Windows::Foundation::IInspectable const&,
                           winrt::Windows::Foundation::IInspectable const&) {
     if (g_unloading) {
+        StopAnimationTracking();
+        return;
+    }
+
+    auto now = AnimationClock::now();
+    if (g_animationLastActivity == AnimationClock::time_point{} ||
+        now - g_animationLastActivity >= kAnimationTrackingTimeout) {
         StopAnimationTracking();
         return;
     }
@@ -1163,7 +1183,8 @@ void OnAnimationRendering(winrt::Windows::Foundation::IInspectable const&,
             auto previousIcon = cache.previousIcon.get();
             auto targetIcon = cache.targetIcon.get();
             auto nextIcon = cache.nextIcon.get();
-            if (!host || !targetIcon || (!nextIcon && !previousIcon)) {
+            if (!host || !targetIcon ||
+                (!cache.beforeFirst && !nextIcon && !previousIcon)) {
                 Wh_Log(L"ANIMATION TRACKING: cache invalid");
                 ClearAnimationElementCache();
                 StopAnimationTracking();
@@ -1234,6 +1255,8 @@ void StartAnimationTracking(bool refreshSubscription = false) {
         return;
     }
 
+    g_animationLastActivity = AnimationClock::now();
+
     bool wasSubscribed = g_animationRenderingSubscribed;
     if (wasSubscribed && !refreshSubscription) {
         return;
@@ -1291,26 +1314,41 @@ void OnAnimationPointerExited(
 
     g_animationPointerInside = false;
     g_animationStableFrames = 0;
+    g_animationLastActivity = AnimationClock::now();
 }
 
 void DetachAnimationPointerHandlers() {
+    StopAnimationTracking();
+
     if (g_animationPointerHandlersAttached) {
         if (auto source = g_animationPointerSource.get()) {
-            try {
-                source.PointerMoved(g_animationPointerMovedToken);
-                source.PointerExited(g_animationPointerExitedToken);
-            } catch (...) {
-                // The source can be disconnected while Explorer rebuilds the
-                // taskbar. Clearing our tokens is sufficient in that case.
+            if (g_animationPointerMovedHandler) {
+                try {
+                    source.RemoveHandler(UIElement::PointerMovedEvent(),
+                                         g_animationPointerMovedHandler);
+                } catch (...) {
+                    // The source can be disconnected while Explorer rebuilds
+                    // the taskbar. Clearing our delegate is sufficient then.
+                }
+            }
+            if (g_animationPointerExitedHandlerAttached) {
+                try {
+                    source.PointerExited(g_animationPointerExitedToken);
+                } catch (...) {
+                    // The source can be disconnected while Explorer rebuilds
+                    // the taskbar. Clearing our token is sufficient then.
+                }
             }
         }
     }
 
-    g_animationPointerMovedToken = {};
+    g_animationPointerMovedHandler = nullptr;
     g_animationPointerExitedToken = {};
     g_animationPointerSource = {};
     g_animationPointerHandlersAttached = false;
+    g_animationPointerExitedHandlerAttached = false;
     g_animationPointerInside = false;
+    g_animationLastActivity = {};
 }
 
 void AttachAnimationPointerHandlers(FrameworkElement const& source) {
@@ -1328,12 +1366,15 @@ void AttachAnimationPointerHandlers(FrameworkElement const& source) {
     }
 
     try {
-        g_animationPointerMovedToken = source.PointerMoved(
+        g_animationPointerSource = winrt::make_weak(source);
+        g_animationPointerMovedHandler = winrt::box_value(
             Input::PointerEventHandler{OnAnimationPointerMoved});
+        source.AddHandler(UIElement::PointerMovedEvent(),
+                          g_animationPointerMovedHandler, true);
+        g_animationPointerHandlersAttached = true;
         g_animationPointerExitedToken = source.PointerExited(
             Input::PointerEventHandler{OnAnimationPointerExited});
-        g_animationPointerSource = winrt::make_weak(source);
-        g_animationPointerHandlersAttached = true;
+        g_animationPointerExitedHandlerAttached = true;
     } catch (...) {
         DetachAnimationPointerHandlers();
     }
@@ -1738,6 +1779,14 @@ bool TryGetTaskbarOrientation(
         return true;
     }
 
+    size_t validIconCount = 0;
+    for (auto const& icon : icons) {
+        winrt::Windows::Foundation::Rect bounds{};
+        if (icon && TryGetIconBounds(overlayCanvas, icon, &bounds)) {
+            validIconCount++;
+        }
+    }
+
     double totalHorizontalMovement = 0;
     double totalVerticalMovement = 0;
     bool foundPair = false;
@@ -1764,6 +1813,19 @@ bool TryGetTaskbarOrientation(
         totalVerticalMovement +=
             std::fabs(currentCenterY - previousCenterY);
         foundPair = true;
+    }
+
+    if (!foundPair && validIconCount < 2) {
+        double width = overlayCanvas.ActualWidth();
+        double height = overlayCanvas.ActualHeight();
+        if (!std::isfinite(width) || !std::isfinite(height) || width < 0 ||
+            height < 0) {
+            return false;
+        }
+
+        *orientation = width >= height ? TaskbarOrientation::horizontal
+                                       : TaskbarOrientation::vertical;
+        return true;
     }
 
     if (!foundPair ||
@@ -3032,9 +3094,11 @@ ReconcileResult ReconcileDividers(bool enabled) {
                 FrameworkElement targetIcon = nullptr;
                 FrameworkElement nextIcon = nullptr;
                 if (activeSeparator.beforeFirst) {
-                    if (appIcons.size() >= 2) {
+                    if (!appIcons.empty()) {
                         targetIcon = appIcons[0];
-                        nextIcon = appIcons[1];
+                        if (appIcons.size() >= 2) {
+                            nextIcon = appIcons[1];
+                        }
                     }
                 } else {
                     size_t buttonIndex =
@@ -3058,8 +3122,7 @@ ReconcileResult ReconcileDividers(bool enabled) {
                 bool geometryValid = false;
                 if (orientationValid && targetIcon) {
                     geometryValid = activeSeparator.beforeFirst
-                                        ? nextIcon &&
-                                              TryGetBeforeFirstDividerGeometry(
+                                        ? TryGetBeforeFirstDividerGeometry(
                                                   overlayCanvas, targetIcon,
                                                   nextIcon,
                                                   taskbarOrientation,
