@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.6
+// @version         1.7
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -2351,12 +2351,18 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
     }
 
     // Theme/display messages do not need a live level; handle them even when
-    // the HWND is a reused shell with no PopupLevel attached yet.
+    // the HWND is a reused shell with no PopupLevel attached yet. Top-level
+    // popups receive WM_SETTINGCHANGE broadcasts even while hidden, so only
+    // dismiss an open chain and only retry injection on monitor changes —
+    // otherwise every SPI broadcast would CloseChain / reinject and cancel
+    // pending opens.
     if (uMsg == WM_DISPLAYCHANGE || uMsg == WM_SETTINGCHANGE ||
         uMsg == WM_THEMECHANGED) {
         RefreshThemeCache();
-        CloseChain();
-        if (!g_unloading) {
+        if (!Levels().empty()) {
+            CloseChain();
+        }
+        if (uMsg == WM_DISPLAYCHANGE && !g_unloading) {
             StartRetryThread();
         }
         return 0;
@@ -2520,6 +2526,8 @@ HWND EnsureLevelWindow(int depth) {
     if (!EnsurePopupClasses()) {
         return nullptr;
     }
+    // Best-effort: owner is only required for shell context menus. A failure
+    // must not block creating the hover grid window itself.
     EnsureMenuOwnerWindow();
 
     HWND hWnd = CreateWindowExW(
