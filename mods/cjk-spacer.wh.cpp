@@ -990,9 +990,11 @@ bool TrackModernWindow(HWND window, ModernWindowKind kind) {
             std::memory_order_relaxed);
     }
 
-    Wh_Log(kind == ModernWindowKind::TaskbarThumbnail
-               ? L"Tracking excluded taskbar thumbnail"
-               : L"Tracking modern popup");
+    if (kind == ModernWindowKind::TaskbarThumbnail) {
+        Wh_Log(L"Tracking excluded taskbar thumbnail");
+    } else {
+        Wh_Log(L"Tracking modern popup");
+    }
     return true;
 }
 
