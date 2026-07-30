@@ -1,14 +1,13 @@
 // ==WindhawkMod==
 // @id              cjk-spacer
 // @name            CJK Spacer
-// @description     Add spaces between CJK characters and letters or digits in Explorer menus and tooltips
+// @description     Add spaces between CJK characters and letters or digits in Explorer menus, tooltips, and popups
 // @version         0.1.2
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
@@ -52,19 +51,20 @@ keyboard shortcut text are also preserved.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
   both text measurement and drawing without touching unrelated GDI text.
-- Windows 11 context menus and XAML/WinUI tooltips use an experimental,
-  display-only DirectWrite hook. UI Automation is used when a popup is shown to
-  distinguish menus and tooltips from other Explorer flyouts.
+- Windows 11 XAML/WinUI popup text uses an experimental, display-only
+  DirectWrite hook. This includes context menus, tooltips, and other Explorer
+  flyouts. Tracking is scoped to the popup's UI thread so it doesn't enable
+  rewriting on unrelated Explorer or taskbar threads.
 
 The modern path is intentionally conservative and can miss text if a Windows
-build exposes a different popup accessibility tree. Disable `modernUiText` if
-it causes a problem.
+build uses a different popup window class. Disable `modernUiText` if it causes
+a problem.
 
 The mod doesn't edit system files, registry values, or file names. The modern
 DirectWrite path changes display text only. The classic path updates strings
 stored in `HMENU` objects, so menu text read through accessibility APIs also
-contains the inserted spaces. Resource-loaded classic menus can retain those
-strings after the mod is disabled until Explorer restarts.
+contains the inserted spaces while the mod is enabled. Strings rewritten just
+before display are recorded and restored when the mod is disabled.
 */
 // ==/WindhawkModReadme==
 
@@ -77,8 +77,8 @@ strings after the mod is disabled until Explorer restarts.
   $name: Classic Win32 tooltips
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: true
-  $name: Windows 11 menus and tooltips (experimental)
-  $description: Process DirectWrite text in Explorer XAML/WinUI context menus and tooltips.
+  $name: Windows 11 popup text (experimental)
+  $description: Process DirectWrite text in Explorer XAML/WinUI menus, tooltips, and flyouts.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -88,16 +88,18 @@ strings after the mod is disabled until Explorer restarts.
 */
 // ==/WindhawkModSettings==
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <cwchar>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <dwrite.h>
-#include <initguid.h>
-#include <uiautomation.h>
 #include <uxtheme.h>
 #include <windows.h>
 
@@ -114,7 +116,6 @@ std::atomic_bool g_classicMenus{true};
 std::atomic_bool g_classicTooltips{true};
 std::atomic_bool g_modernUiText{true};
 std::atomic_bool g_unicodeLettersAndDigits{true};
-std::atomic_uint g_activeModernPopupCount{0};
 
 bool IsHighSurrogate(wchar_t value) {
     return value >= 0xD800 && value <= 0xDBFF;
@@ -272,10 +273,6 @@ bool NeedsSpace(CharacterKind left, CharacterKind right) {
            (left == CharacterKind::Word && right == CharacterKind::Cjk);
 }
 
-// A token is a base code point, its combining marks/variation selectors, and
-// an optional Win32 mnemonic '&' prefix. Keeping the prefix in the token makes
-// "打开&Open" become "打开 &Open", which Windows displays as "打开 Open"
-// while preserving the O mnemonic.
 bool ContainsCjkCodePoint(std::wstring_view text) {
     size_t offset = 0;
     while (offset < text.size()) {
@@ -291,6 +288,10 @@ bool ContainsCjkCodePoint(std::wstring_view text) {
     return false;
 }
 
+// A token is a base code point, its combining marks/variation selectors, and
+// an optional Win32 mnemonic '&' prefix. Keeping the prefix in the token makes
+// "打开&Open" become "打开 &Open", which Windows displays as "打开 Open"
+// while preserving the O mnemonic.
 std::wstring AddCjkSpacing(std::wstring_view text,
                            bool preserveMnemonics = true) {
     std::wstring result;
@@ -371,6 +372,16 @@ SetMenuItemInfoW_t g_originalSetMenuItemInfoW;
 TrackPopupMenu_t g_originalTrackPopupMenu;
 TrackPopupMenuEx_t g_originalTrackPopupMenuEx;
 
+struct RewrittenMenuItem {
+    HMENU menu;
+    UINT index;
+    std::wstring original;
+    std::wstring spaced;
+};
+
+std::mutex g_rewrittenMenuItemsMutex;
+std::vector<RewrittenMenuItem> g_rewrittenMenuItems;
+
 bool IsStringMenuFlags(UINT flags) {
     return !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR));
 }
@@ -441,6 +452,102 @@ bool MenuItemInfoContainsString(const MENUITEMINFOW* itemInfo) {
            (itemInfo->fMask & MIIM_TYPE);
 }
 
+MENUITEMINFOW CopyMenuItemInfoForRewrite(
+    const MENUITEMINFOW* itemInfo) {
+    MENUITEMINFOW copy = {};
+    const size_t copySize =
+        itemInfo->cbSize < sizeof(copy) ? itemInfo->cbSize
+                                        : sizeof(copy);
+    std::memcpy(&copy, itemInfo, copySize);
+    return copy;
+}
+
+bool ReadMenuItemText(HMENU menu,
+                      UINT index,
+                      std::wstring* text) {
+    MENUITEMINFOW itemInfo = {};
+    itemInfo.cbSize = sizeof(itemInfo);
+    itemInfo.fMask = MIIM_FTYPE | MIIM_STRING;
+    if (!GetMenuItemInfoW(menu, index, TRUE, &itemInfo) ||
+        (itemInfo.fType &
+         (MFT_BITMAP | MFT_OWNERDRAW | MFT_SEPARATOR))) {
+        return false;
+    }
+
+    std::vector<wchar_t> buffer(itemInfo.cch + 1);
+    itemInfo.dwTypeData = buffer.data();
+    itemInfo.cch = static_cast<UINT>(buffer.size());
+    if (!GetMenuItemInfoW(menu, index, TRUE, &itemInfo)) {
+        return false;
+    }
+
+    text->assign(buffer.data(), itemInfo.cch);
+    return true;
+}
+
+void RememberRewrittenMenuItem(HMENU menu,
+                               UINT index,
+                               std::wstring original,
+                               std::wstring spaced) {
+    std::lock_guard<std::mutex> guard(g_rewrittenMenuItemsMutex);
+
+    if (g_rewrittenMenuItems.size() >= 256) {
+        std::erase_if(g_rewrittenMenuItems, [](const auto& item) {
+            return !IsMenu(item.menu);
+        });
+    }
+
+    for (auto& item : g_rewrittenMenuItems) {
+        if (item.menu == menu && item.index == index) {
+            if (item.spaced != spaced) {
+                item.original = std::move(original);
+                item.spaced = std::move(spaced);
+            }
+            return;
+        }
+    }
+
+    g_rewrittenMenuItems.push_back(
+        {menu, index, std::move(original), std::move(spaced)});
+}
+
+void RestoreRewrittenMenuItems() {
+    std::vector<RewrittenMenuItem> items;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_rewrittenMenuItemsMutex);
+        items.swap(g_rewrittenMenuItems);
+    }
+
+    for (auto iterator = items.rbegin(); iterator != items.rend();
+         ++iterator) {
+        if (!IsMenu(iterator->menu)) {
+            continue;
+        }
+
+        std::wstring current;
+        if (!ReadMenuItemText(iterator->menu, iterator->index,
+                              &current) ||
+            current != iterator->spaced) {
+            continue;
+        }
+
+        MENUITEMINFOW replacement = {};
+        replacement.cbSize = sizeof(replacement);
+        replacement.fMask = MIIM_STRING;
+        replacement.dwTypeData =
+            const_cast<wchar_t*>(iterator->original.c_str());
+
+        if (g_originalSetMenuItemInfoW) {
+            g_originalSetMenuItemInfoW(
+                iterator->menu, iterator->index, TRUE, &replacement);
+        } else {
+            SetMenuItemInfoW(
+                iterator->menu, iterator->index, TRUE, &replacement);
+        }
+    }
+}
+
 BOOL WINAPI InsertMenuItemWHook(HMENU menu,
                                 UINT item,
                                 BOOL byPosition,
@@ -450,9 +557,9 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
         if (spaced != itemInfo->dwTypeData) {
             Wh_Log(L"Applied CJK spacing (classic/InsertMenuItemW)");
-            MENUITEMINFOW copy = *itemInfo;
+            MENUITEMINFOW copy =
+                CopyMenuItemInfoForRewrite(itemInfo);
             copy.dwTypeData = const_cast<wchar_t*>(spaced.c_str());
-            copy.cch = static_cast<UINT>(spaced.size());
             return g_originalInsertMenuItemW(menu, item, byPosition, &copy);
         }
     }
@@ -469,9 +576,9 @@ BOOL WINAPI SetMenuItemInfoWHook(HMENU menu,
         const std::wstring spaced = AddCjkSpacing(itemInfo->dwTypeData);
         if (spaced != itemInfo->dwTypeData) {
             Wh_Log(L"Applied CJK spacing (classic/SetMenuItemInfoW)");
-            MENUITEMINFOW copy = *itemInfo;
+            MENUITEMINFOW copy =
+                CopyMenuItemInfoForRewrite(itemInfo);
             copy.dwTypeData = const_cast<wchar_t*>(spaced.c_str());
-            copy.cch = static_cast<UINT>(spaced.size());
             return g_originalSetMenuItemInfoW(menu, item, byPosition, &copy);
         }
     }
@@ -495,12 +602,8 @@ void RewriteMenuTree(HMENU menu) {
               (MFT_BITMAP | MFT_OWNERDRAW | MFT_SEPARATOR));
 
         if (isTextItem && itemInfo.cch > 0) {
-            std::vector<wchar_t> buffer(itemInfo.cch + 1);
-            itemInfo.dwTypeData = buffer.data();
-            itemInfo.cch = static_cast<UINT>(buffer.size());
-
-            if (GetMenuItemInfoW(menu, index, TRUE, &itemInfo)) {
-                const std::wstring original(buffer.data(), itemInfo.cch);
+            std::wstring original;
+            if (ReadMenuItemText(menu, index, &original)) {
                 const std::wstring spaced = AddCjkSpacing(original);
                 if (spaced != original) {
                     Wh_Log(L"Applied CJK spacing (classic/pre-display)");
@@ -510,8 +613,11 @@ void RewriteMenuTree(HMENU menu) {
                     replacement.fMask = MIIM_STRING;
                     replacement.dwTypeData =
                         const_cast<wchar_t*>(spaced.c_str());
-                    replacement.cch = static_cast<UINT>(spaced.size());
-                    SetMenuItemInfoW(menu, index, TRUE, &replacement);
+                    if (SetMenuItemInfoW(
+                            menu, index, TRUE, &replacement)) {
+                        RememberRewrittenMenuItem(
+                            menu, index, std::move(original), spaced);
+                    }
                 }
             }
         }
@@ -557,6 +663,7 @@ using OpenThemeData_t = decltype(&OpenThemeData);
 using OpenThemeDataEx_t = decltype(&OpenThemeDataEx);
 using OpenThemeDataForDpi_t = decltype(&OpenThemeDataForDpi);
 using CloseThemeData_t = decltype(&CloseThemeData);
+using GetThemeTextExtent_t = decltype(&GetThemeTextExtent);
 using DrawThemeText_t = decltype(&DrawThemeText);
 using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
 
@@ -564,6 +671,7 @@ OpenThemeData_t g_originalOpenThemeData;
 OpenThemeDataEx_t g_originalOpenThemeDataEx;
 OpenThemeDataForDpi_t g_originalOpenThemeDataForDpi;
 CloseThemeData_t g_originalCloseThemeData;
+GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 
@@ -580,8 +688,15 @@ bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
     constexpr wchar_t needle[] = L"tooltip";
     constexpr size_t needleLength = ARRAYSIZE(needle) - 1;
     for (const wchar_t* cursor = classList; *cursor; ++cursor) {
-        if (_wcsnicmp(cursor, needle, needleLength) == 0) {
-            return true;
+        const bool startsToken =
+            cursor == classList || cursor[-1] == L':' ||
+            cursor[-1] == L';';
+        if (startsToken &&
+            _wcsnicmp(cursor, needle, needleLength) == 0) {
+            const wchar_t trailing = cursor[needleLength];
+            if (trailing == L'\0' || trailing == L';') {
+                return true;
+            }
         }
     }
 
@@ -694,6 +809,42 @@ bool BuildSpacedClassicTooltipText(LPCWSTR text,
     return spaced->size() != original.size();
 }
 
+HRESULT WINAPI GetThemeTextExtentHook(HTHEME theme,
+                                      HDC dc,
+                                      int partId,
+                                      int stateId,
+                                      LPCWSTR text,
+                                      int textLength,
+                                      DWORD textFlags,
+                                      LPCRECT boundingRectangle,
+                                      LPRECT extentRectangle) {
+    if (!g_classicTooltips.load(std::memory_order_relaxed) ||
+        g_rewritingClassicTooltipText ||
+        !IsTrackedClassicTooltipTheme(theme)) {
+        return g_originalGetThemeTextExtent(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            boundingRectangle, extentRectangle);
+    }
+
+    std::wstring spaced;
+    if (!BuildSpacedClassicTooltipText(
+            text, textLength, textFlags, &spaced)) {
+        return g_originalGetThemeTextExtent(
+            theme, dc, partId, stateId, text, textLength, textFlags,
+            boundingRectangle, extentRectangle);
+    }
+
+    Wh_Log(L"Applied CJK spacing "
+           L"(classic tooltip/GetThemeTextExtent)");
+    g_rewritingClassicTooltipText = true;
+    const HRESULT result = g_originalGetThemeTextExtent(
+        theme, dc, partId, stateId, spaced.c_str(),
+        static_cast<int>(spaced.size()), textFlags,
+        boundingRectangle, extentRectangle);
+    g_rewritingClassicTooltipText = false;
+    return result;
+}
+
 HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
                                  HDC dc,
                                  int partId,
@@ -765,7 +916,7 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
 }
 
 // -------------------------------------------------------------------------
-// Windows 11 XAML/WinUI menu and tooltip detection
+// Windows 11 XAML/WinUI popup detection
 // -------------------------------------------------------------------------
 
 using ShowWindow_t = decltype(&ShowWindow);
@@ -776,26 +927,20 @@ ShowWindow_t g_originalShowWindow;
 SetWindowPos_t g_originalSetWindowPos;
 DestroyWindow_t g_originalDestroyWindow;
 
-enum class ModernPopupKind : ULONG_PTR {
-    Unclassified = 0,
-    Menu = 1,
-    ToolTip = 2,
+struct TrackedModernPopup {
+    DWORD threadId;
 };
 
-constexpr wchar_t kModernPopupKindProperty[] =
-    L"CJKSpacer_ModernPopupKind";
-
-thread_local bool g_detectingModernPopupKind = false;
+std::mutex g_trackedModernPopupsMutex;
+std::unordered_map<HWND, TrackedModernPopup>
+    g_trackedModernPopups;
+std::atomic_uint g_trackedModernPopupCount{0};
 
 bool IsModernPopupClassName(LPCWSTR className) {
-    if (!className ||
-        reinterpret_cast<ULONG_PTR>(className) <= 0xFFFF) {
-        return false;
-    }
-
-    return _wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
+    return className &&
+           (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
            _wcsicmp(className,
-                    L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0;
+                    L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0);
 }
 
 bool IsModernPopupWindow(HWND window) {
@@ -804,151 +949,113 @@ bool IsModernPopupWindow(HWND window) {
     return length > 0 && IsModernPopupClassName(className);
 }
 
-template <typename Interface>
-void ReleaseComInterface(Interface*& value) {
-    if (value) {
-        value->Release();
-        value = nullptr;
-    }
-}
-
-bool PopupContainsControlType(IUIAutomation* automation,
-                              IUIAutomationElement* root,
-                              CONTROLTYPEID controlType) {
-    VARIANT propertyValue = {};
-    propertyValue.vt = VT_I4;
-    propertyValue.lVal = controlType;
-
-    IUIAutomationCondition* condition = nullptr;
-    HRESULT result = automation->CreatePropertyCondition(
-        UIA_ControlTypePropertyId, propertyValue, &condition);
-    if (FAILED(result) || !condition) {
-        return false;
-    }
-
-    IUIAutomationElement* match = nullptr;
-    result = root->FindFirst(TreeScope_Subtree, condition, &match);
-    const bool found = SUCCEEDED(result) && match;
-    ReleaseComInterface(condition);
-    ReleaseComInterface(match);
-    return found;
-}
-
-ModernPopupKind DetectModernPopupKind(HWND window) {
-    if (g_detectingModernPopupKind) {
-        return ModernPopupKind::Unclassified;
-    }
-
-    g_detectingModernPopupKind = true;
-
-    CO_MTA_USAGE_COOKIE mtaCookie;
-    const bool mtaUsageIncreased =
-        SUCCEEDED(CoIncrementMTAUsage(&mtaCookie));
-
-    IUIAutomation* automation = nullptr;
-    IUIAutomationElement* root = nullptr;
-    ModernPopupKind kind = ModernPopupKind::Unclassified;
-
-    HRESULT result = CoCreateInstance(
-        CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&automation));
-    if (SUCCEEDED(result) && automation) {
-        result = automation->ElementFromHandle(window, &root);
-    }
-
-    if (SUCCEEDED(result) && root) {
-        if (PopupContainsControlType(automation, root,
-                                     UIA_MenuControlTypeId)) {
-            kind = ModernPopupKind::Menu;
-        } else if (PopupContainsControlType(
-                       automation, root, UIA_ToolTipControlTypeId)) {
-            kind = ModernPopupKind::ToolTip;
-        }
-    }
-
-    ReleaseComInterface(root);
-    ReleaseComInterface(automation);
-
-    if (mtaUsageIncreased) {
-        CoDecrementMTAUsage(mtaCookie);
-    }
-
-    g_detectingModernPopupKind = false;
-    return kind;
-}
-
-ModernPopupKind GetTrackedModernPopupKind(HWND window) {
-    return static_cast<ModernPopupKind>(
-        reinterpret_cast<ULONG_PTR>(
-            GetPropW(window, kModernPopupKindProperty)));
-}
-
-bool IsSupportedModernPopupKind(ModernPopupKind kind) {
-    return kind == ModernPopupKind::Menu ||
-           kind == ModernPopupKind::ToolTip;
-}
-
 bool TrackModernPopup(HWND window) {
-    if (GetTrackedModernPopupKind(window) !=
-        ModernPopupKind::Unclassified) {
-        return true;
-    }
-
-    const ModernPopupKind kind = DetectModernPopupKind(window);
-    if (!IsSupportedModernPopupKind(kind)) {
+    if (!window) {
         return false;
     }
 
-    if (!SetPropW(window, kModernPopupKindProperty,
-                  reinterpret_cast<HANDLE>(
-                      static_cast<ULONG_PTR>(kind)))) {
+    const DWORD threadId =
+        GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) {
         return false;
     }
 
-    g_activeModernPopupCount.fetch_add(1, std::memory_order_relaxed);
-    Wh_Log(L"Tracking modern %s popup",
-           kind == ModernPopupKind::Menu ? L"menu" : L"tooltip");
+    {
+        std::lock_guard<std::mutex> guard(
+            g_trackedModernPopupsMutex);
+        g_trackedModernPopups[window] = {threadId};
+        g_trackedModernPopupCount.store(
+            static_cast<unsigned int>(
+                g_trackedModernPopups.size()),
+            std::memory_order_relaxed);
+    }
+
+    Wh_Log(L"Tracking modern popup");
     return true;
 }
 
 void UntrackModernPopup(HWND window) {
-    const ModernPopupKind kind = GetTrackedModernPopupKind(window);
-    if (!IsSupportedModernPopupKind(kind)) {
-        return;
-    }
-
-    RemovePropW(window, kModernPopupKindProperty);
-    const unsigned int previous =
-        g_activeModernPopupCount.fetch_sub(1, std::memory_order_relaxed);
-    if (previous == 0) {
-        g_activeModernPopupCount.store(0, std::memory_order_relaxed);
-    }
+    std::lock_guard<std::mutex> guard(
+        g_trackedModernPopupsMutex);
+    g_trackedModernPopups.erase(window);
+    g_trackedModernPopupCount.store(
+        static_cast<unsigned int>(g_trackedModernPopups.size()),
+        std::memory_order_relaxed);
 }
 
-bool IsModernPopupActive() {
-    return g_activeModernPopupCount.load(std::memory_order_relaxed) != 0;
+bool IsModernPopupTracked(HWND window) {
+    if (g_trackedModernPopupCount.load(
+            std::memory_order_relaxed) == 0) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> guard(
+        g_trackedModernPopupsMutex);
+    return g_trackedModernPopups.contains(window);
+}
+
+void ClearTrackedModernPopups() {
+    std::lock_guard<std::mutex> guard(
+        g_trackedModernPopupsMutex);
+    g_trackedModernPopups.clear();
+    g_trackedModernPopupCount.store(0, std::memory_order_relaxed);
+}
+
+bool IsModernPopupActiveForCurrentThread() {
+    const DWORD currentThreadId = GetCurrentThreadId();
+    bool active = false;
+
+    std::lock_guard<std::mutex> guard(
+        g_trackedModernPopupsMutex);
+    for (auto iterator = g_trackedModernPopups.begin();
+         iterator != g_trackedModernPopups.end();) {
+        if (!IsWindow(iterator->first)) {
+            iterator = g_trackedModernPopups.erase(iterator);
+            g_trackedModernPopupCount.store(
+                static_cast<unsigned int>(
+                    g_trackedModernPopups.size()),
+                std::memory_order_relaxed);
+            continue;
+        }
+
+        if (iterator->second.threadId == currentThreadId &&
+            IsWindowVisible(iterator->first)) {
+            active = true;
+        }
+
+        ++iterator;
+    }
+
+    return active;
 }
 
 BOOL WINAPI ShowWindowHook(HWND window, int command) {
     const bool modernUiEnabled =
         g_modernUiText.load(std::memory_order_relaxed);
-    const bool isModernPopup = IsModernPopupWindow(window);
     const bool showing = command != SW_HIDE;
+    if (!modernUiEnabled &&
+        g_trackedModernPopupCount.load(
+            std::memory_order_relaxed) == 0) {
+        return g_originalShowWindow(window, command);
+    }
 
-    if (modernUiEnabled && isModernPopup && showing) {
-        TrackModernPopup(window);
+    bool tracked = IsModernPopupTracked(window);
+
+    if (!tracked) {
+        if (!modernUiEnabled || !showing ||
+            !IsModernPopupWindow(window)) {
+            return g_originalShowWindow(window, command);
+        }
+
+        tracked = TrackModernPopup(window);
     }
 
     const BOOL result = g_originalShowWindow(window, command);
 
-    if (isModernPopup) {
-        if (!showing || !IsWindowVisible(window)) {
-            UntrackModernPopup(window);
-        } else if (modernUiEnabled &&
-                   GetTrackedModernPopupKind(window) ==
-                   ModernPopupKind::Unclassified) {
-            TrackModernPopup(window);
-        }
+    if (tracked &&
+        (!showing || !IsWindow(window) ||
+         !IsWindowVisible(window))) {
+        UntrackModernPopup(window);
     }
 
     return result;
@@ -963,24 +1070,34 @@ BOOL WINAPI SetWindowPosHook(HWND window,
                             UINT flags) {
     const bool modernUiEnabled =
         g_modernUiText.load(std::memory_order_relaxed);
-    const bool isModernPopup = IsModernPopupWindow(window);
+    const bool showing = (flags & SWP_SHOWWINDOW) != 0;
+    if ((!modernUiEnabled || !showing) &&
+        g_trackedModernPopupCount.load(
+            std::memory_order_relaxed) == 0) {
+        return g_originalSetWindowPos(
+            window, insertAfter, x, y, width, height, flags);
+    }
 
-    if (modernUiEnabled && isModernPopup &&
-        (flags & SWP_SHOWWINDOW)) {
-        TrackModernPopup(window);
+    bool tracked = IsModernPopupTracked(window);
+
+    if (!tracked) {
+        if (!modernUiEnabled || !showing ||
+            !IsModernPopupWindow(window)) {
+            return g_originalSetWindowPos(
+                window, insertAfter, x, y, width, height, flags);
+        }
+
+        tracked = TrackModernPopup(window);
     }
 
     const BOOL result = g_originalSetWindowPos(
         window, insertAfter, x, y, width, height, flags);
 
-    if (isModernPopup && result) {
-        if (flags & SWP_HIDEWINDOW) {
-            UntrackModernPopup(window);
-        } else if (modernUiEnabled && (flags & SWP_SHOWWINDOW) &&
-                   GetTrackedModernPopupKind(window) ==
-                       ModernPopupKind::Unclassified) {
-            TrackModernPopup(window);
-        }
+    if (tracked &&
+        (!result || (flags & SWP_HIDEWINDOW) ||
+         !IsWindow(window) ||
+         (showing && !IsWindowVisible(window)))) {
+        UntrackModernPopup(window);
     }
 
     return result;
@@ -992,7 +1109,7 @@ BOOL WINAPI DestroyWindowHook(HWND window) {
 }
 
 // -------------------------------------------------------------------------
-// DirectWrite text layout used by the Windows 11 menu
+// DirectWrite text layout used by Windows 11 XAML/WinUI popups
 // -------------------------------------------------------------------------
 
 using IDWriteFactory_CreateTextLayout_t =
@@ -1031,7 +1148,7 @@ HRESULT CreateTextLayoutWithSpacing(
     FLOAT maxHeight,
     IDWriteTextLayout** textLayout) {
     if (g_modernUiText.load(std::memory_order_relaxed) && text &&
-        IsModernPopupActive()) {
+        IsModernPopupActiveForCurrentThread()) {
         const std::wstring_view original(text, textLength);
         if (!ContainsCjkCodePoint(original)) {
             return originalFunction(factory, text, textLength, textFormat,
@@ -1065,7 +1182,7 @@ HRESULT CreateGdiCompatibleTextLayoutWithSpacing(
     BOOL useGdiNatural,
     IDWriteTextLayout** textLayout) {
     if (g_modernUiText.load(std::memory_order_relaxed) && text &&
-        IsModernPopupActive()) {
+        IsModernPopupActiveForCurrentThread()) {
         const std::wstring_view original(text, textLength);
         if (!ContainsCjkCodePoint(original)) {
             return originalFunction(
@@ -1259,6 +1376,18 @@ bool HookClassicTooltipThemeDrawing() {
         Wh_Log(L"Couldn't find CloseThemeData");
     }
 
+    const auto getThemeTextExtent =
+        reinterpret_cast<GetThemeTextExtent_t>(
+            GetProcAddress(themeModule, "GetThemeTextExtent"));
+    if (getThemeTextExtent) {
+        hooked |= InstallHook(
+            getThemeTextExtent, GetThemeTextExtentHook,
+            &g_originalGetThemeTextExtent,
+            L"GetThemeTextExtent");
+    } else {
+        Wh_Log(L"Couldn't find GetThemeTextExtent");
+    }
+
     const auto drawThemeText =
         reinterpret_cast<DrawThemeText_t>(
             GetProcAddress(themeModule, "DrawThemeText"));
@@ -1355,11 +1484,27 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    RestoreRewrittenMenuItems();
+    ClearTrackedModernPopups();
     Wh_Log(L"CJK Spacer uninitialized");
 }
 
 void Wh_ModSettingsChanged() {
+    const bool classicMenusWasEnabled =
+        g_classicMenus.load(std::memory_order_relaxed);
+    const bool modernUiWasEnabled =
+        g_modernUiText.load(std::memory_order_relaxed);
     LoadSettings();
+
+    if (classicMenusWasEnabled &&
+        !g_classicMenus.load(std::memory_order_relaxed)) {
+        RestoreRewrittenMenuItems();
+    }
+    if (modernUiWasEnabled &&
+        !g_modernUiText.load(std::memory_order_relaxed)) {
+        ClearTrackedModernPopups();
+    }
+
     Wh_Log(L"CJK Spacer settings changed (classicMenus=%d, "
            L"classicTooltips=%d, modern=%d, unicode=%d)",
            g_classicMenus.load(), g_classicTooltips.load(),
