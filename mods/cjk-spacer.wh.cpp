@@ -30,6 +30,16 @@ Examples:
 - `使用 VS Code 打开` is unchanged
 - `打开(&O)` is unchanged
 
+## Screenshot
+
+Before:
+
+![Before enabling CJK Spacer](https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/Before.png)
+
+After:
+
+![After enabling CJK Spacer](https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/After.png)
+
 The transformation is idempotent. Punctuation and existing whitespace break a
 boundary and are preserved. Win32 `&` mnemonic markers and tab-separated
 keyboard shortcut text are also preserved.
