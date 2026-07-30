@@ -477,7 +477,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
         float moveX = 1.0f - (invT * invT * invT * invT * invT * invT);
         float moveY = (0.70f * (t * t)) + (0.10f * t);
         scaleX = 1.0f - (0.95f * (1.8f * t));
-        if (scaleX < max(0.05f, minScaleX)) scaleX = max(0.05f, minScaleX);
+        { float ms = 0.05f > minScaleX ? 0.05f : minScaleX; if (scaleX < ms) scaleX = ms; }
         scaleY = 1.0f - (0.70f * (t * t));
 
         float startCenterX = cx;
@@ -495,7 +495,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_VACUUM: {
         float e = easeInCubic(t);
         float s = 1.0f - 0.97f * e;
-        if (s < max(0.03f, minScaleX)) s = max(0.03f, minScaleX);
+        { float ms = 0.03f > minScaleX ? 0.03f : minScaleX; if (s < ms) s = ms; }
         scaleX = scaleY = s;
         fx = cx + (dockX - cx) * e;
         fy = cy + (taskbarY - cy) * e;
@@ -541,7 +541,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_WARP: {
         float ramp = t / 0.6f; if (ramp > 1.0f) ramp = 1.0f;
         scaleX = 1.0f - 0.96f * ramp;
-        if (scaleX < max(0.04f, minScaleX)) scaleX = max(0.04f, minScaleX);
+        { float ms = 0.04f > minScaleX ? 0.04f : minScaleX; if (scaleX < ms) scaleX = ms; }
         scaleY = 1.0f;
         anchorTopLeft = true;
         fx = cx;
@@ -581,7 +581,7 @@ static void SolveFrame(const GhostAnimData* d, float t,
     case MODE_SWIRL: {
         float e = easeInCubic(t);
         float s = 1.0f - 0.95f * e;
-        if (s < max(0.05f, minScaleX)) s = max(0.05f, minScaleX);
+        { float ms = 0.05f > minScaleX ? 0.05f : minScaleX; if (s < ms) s = ms; }
         scaleX = scaleY = s;
         float baseCX = cx + (dockX - cx) * e;
         float baseCY = cy + (taskbarY - cy) * e;
@@ -993,7 +993,7 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     }
 
     const float LEAD     = 1.4f;
-    const float neckW    = (data->iconButtonWidth > 0) ? max((float)data->iconButtonWidth, 10.0f) : max(w * 0.05f, 10.0f);
+    const float neckW    = (data->iconButtonWidth > 0) ? ((float)data->iconButtonWidth > 10.0f ? (float)data->iconButtonWidth : 10.0f) : (w * 0.05f > 10.0f ? w * 0.05f : 10.0f);
     const float sourceCX = data->targetRect.left + w * 0.5f;
     const float dockX    = (float)data->targetDockX;
     const float dockY    = taskbarY;
