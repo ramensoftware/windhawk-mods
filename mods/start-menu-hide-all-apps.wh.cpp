@@ -38,6 +38,7 @@ Este mod funciona apenas no Windows 11 com o menu Iniciar padrão.
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
+/*
 {
   "theme": "",
   "disableNewStartMenuLayout": "",
@@ -333,6 +334,7 @@ Este mod funciona apenas no Windows 11 com o menu Iniciar padrão.
   ],
   "webContentCustomJs": ""
 }
+*/
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
