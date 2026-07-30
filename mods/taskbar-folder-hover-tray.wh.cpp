@@ -2,12 +2,12 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.5
+// @version         1.6
 // @author          Grant Benson
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
+// @compilerOptions -lole32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -1020,7 +1020,16 @@ struct ScanRequest {
 // Keyed by resolved folder path so subfolders opened on hover share the same
 // cache as the folders configured on the taskbar.
 std::mutex g_cacheMutex;
-std::unordered_map<std::wstring, std::shared_ptr<FolderData>> g_folderCache;
+[[clang::no_destroy]] std::optional<
+    std::unordered_map<std::wstring, std::shared_ptr<FolderData>>>
+    g_folderCache{std::in_place};
+
+std::unordered_map<std::wstring, std::shared_ptr<FolderData>>& FolderCache() {
+    if (!g_folderCache) {
+        g_folderCache.emplace();
+    }
+    return *g_folderCache;
+}
 
 std::mutex g_scanMutex;
 std::condition_variable g_scanCv;
@@ -1159,7 +1168,7 @@ void ScanFolderInto(const std::wstring& path,
     }
 
     do {
-        if (g_unloading) {
+        if (g_unloading || g_scanThreadStop) {
             break;
         }
         if (wcscmp(fd.cFileName, L".") == 0 ||
@@ -1227,7 +1236,7 @@ void ScanFolderInto(const std::wstring& path,
     }
 
     for (auto& item : out->items) {
-        if (g_unloading) {
+        if (g_unloading || g_scanThreadStop) {
             break;
         }
         const std::wstring& iconSource =
@@ -1241,7 +1250,7 @@ void ScanFolderInto(const std::wstring& path,
 }
 
 void ScanThreadMain() {
-    winrt::init_apartment(winrt::apartment_type::single_threaded);
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
     for (;;) {
         ScanRequest request;
@@ -1271,7 +1280,7 @@ void ScanThreadMain() {
 
         {
             std::lock_guard<std::mutex> lock(g_cacheMutex);
-            g_folderCache[CacheKey(request.path)] = fresh;
+            FolderCache()[CacheKey(request.path)] = fresh;
         }
 
         Wh_Log(L"Scanned %s: %d items", request.path.c_str(),
@@ -1305,8 +1314,8 @@ std::shared_ptr<FolderData> GetFolderData(const std::wstring& path) {
         return nullptr;
     }
     std::lock_guard<std::mutex> lock(g_cacheMutex);
-    auto found = g_folderCache.find(CacheKey(path));
-    return found == g_folderCache.end() ? nullptr : found->second;
+    auto found = FolderCache().find(CacheKey(path));
+    return found == FolderCache().end() ? nullptr : found->second;
 }
 
 // Returns the cached contents, queueing a scan when the entry is missing,
@@ -1344,7 +1353,7 @@ void StopScanThread() {
 
 void ResetFolderData() {
     std::lock_guard<std::mutex> lock(g_cacheMutex);
-    g_folderCache.clear();
+    FolderCache().clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1393,7 +1402,15 @@ HWND g_taskbarWnd = nullptr;
 
 // Windows are created lazily, one per depth, and reused across cascades.
 std::vector<HWND> g_levelWindows;
-std::vector<std::unique_ptr<PopupLevel>> g_levels;
+[[clang::no_destroy]] std::optional<std::vector<std::unique_ptr<PopupLevel>>>
+    g_levels{std::in_place};
+
+std::vector<std::unique_ptr<PopupLevel>>& Levels() {
+    if (!g_levels) {
+        g_levels.emplace();
+    }
+    return *g_levels;
+}
 
 RECT g_rootAnchorRect{};
 int g_popupDpi = 96;
@@ -1599,6 +1616,75 @@ void InvalidateLevelBase(PopupLevel* level) {
     level->cachedBaseH = 0;
 }
 
+// Icon, folder badge, and label for one grid cell. Shared by the static base
+// paint and the hover/press cell overlay so the two stay visually identical.
+void DrawCell(Gdiplus::Graphics& g,
+              PopupLevel* level,
+              int index,
+              const Gdiplus::Color& textColor,
+              const Gdiplus::Color& badgeFillColor,
+              const Gdiplus::Color& badgeMarkColor,
+              const Gdiplus::Color& badgeRingColor,
+              Gdiplus::Font& font,
+              Gdiplus::StringFormat& format) {
+    if (!level || index < 0 || index >= (int)level->cellRects.size() ||
+        index >= (int)level->items.size()) {
+        return;
+    }
+
+    const RECT& cell = level->cellRects[index];
+    int cellW = cell.right - cell.left;
+    int cellH = cell.bottom - cell.top;
+    const GridItem& item = level->items[index];
+
+    int iconSize = ScaleForPopup(g_settings.iconSize);
+    int iconTop = ScaleForPopup(10);
+    int labelGap = ScaleForPopup(6);
+    bool expandable = CanExpand(level->depth);
+
+    Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
+                           cell.top + iconTop, iconSize, iconSize);
+    if (item.icon) {
+        g.DrawImage(item.icon.get(), iconRect);
+    }
+
+    if (item.isFolder && expandable) {
+        int badge = std::max<int>(14, (iconSize * 54 + 50) / 100);
+        int badgeLeft = iconRect.GetRight() - badge + badge / 4;
+        int badgeTop = iconRect.GetBottom() - badge + badge / 4;
+        Gdiplus::Rect badgeRect(badgeLeft, badgeTop, badge, badge);
+
+        Gdiplus::GraphicsPath badgePath;
+        AddRoundedRect(&badgePath, badgeRect, badge / 2);
+        Gdiplus::SolidBrush badgeBrush(badgeFillColor);
+        g.FillPath(&badgeBrush, &badgePath);
+        Gdiplus::Pen badgeRing(badgeRingColor, 1.0f);
+        g.DrawPath(&badgeRing, &badgePath);
+
+        Gdiplus::REAL glyphW = badge * 0.58f;
+        Gdiplus::REAL glyphH = glyphW * 0.80f;
+        Gdiplus::RectF glyphBox(
+            badgeLeft + (badge - glyphW) / 2.0f,
+            badgeTop + (badge - glyphH) / 2.0f + badge * 0.02f, glyphW, glyphH);
+        Gdiplus::GraphicsPath glyphPath;
+        AddFolderGlyphPath(&glyphPath, glyphBox);
+        Gdiplus::SolidBrush markBrush(badgeMarkColor);
+        g.FillPath(&markBrush, &glyphPath);
+    }
+
+    Gdiplus::SolidBrush textBrush(textColor);
+    Gdiplus::RectF labelRect(
+        (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
+        (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
+        (Gdiplus::REAL)(cellW - ScaleForPopup(8)),
+        (Gdiplus::REAL)(cellH - iconTop - iconSize - labelGap -
+                        ScaleForPopup(4)));
+    if (labelRect.Height > 0) {
+        g.DrawString(item.displayName.c_str(), -1, &font, labelRect, &format,
+                     &textBrush);
+    }
+}
+
 // Paints the static panel (no hover/press chrome) into level->cachedBase.
 bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     auto bitmap = std::make_unique<Gdiplus::Bitmap>(width, height,
@@ -1692,58 +1778,10 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
         g.DrawString(message, -1, &font, area, &centered, &textBrush);
     }
 
-    int iconSize = ScaleForPopup(g_settings.iconSize);
-    int iconTop = ScaleForPopup(10);
-    int labelGap = ScaleForPopup(6);
-    bool expandable = CanExpand(level->depth);
-
     for (size_t i = 0; i < level->items.size() && i < level->cellRects.size();
          i++) {
-        const RECT& cell = level->cellRects[i];
-        int cellW = cell.right - cell.left;
-        int cellH = cell.bottom - cell.top;
-        const GridItem& item = level->items[i];
-        Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
-                               cell.top + iconTop, iconSize, iconSize);
-        if (item.icon) {
-            g.DrawImage(item.icon.get(), iconRect);
-        }
-
-        if (item.isFolder && expandable) {
-            int badge = std::max<int>(14, (iconSize * 54 + 50) / 100);
-            int badgeLeft = iconRect.GetRight() - badge + badge / 4;
-            int badgeTop = iconRect.GetBottom() - badge + badge / 4;
-            Gdiplus::Rect badgeRect(badgeLeft, badgeTop, badge, badge);
-
-            Gdiplus::GraphicsPath badgePath;
-            AddRoundedRect(&badgePath, badgeRect, badge / 2);
-            Gdiplus::SolidBrush badgeBrush(badgeFillColor);
-            g.FillPath(&badgeBrush, &badgePath);
-            Gdiplus::Pen badgeRing(badgeRingColor, 1.0f);
-            g.DrawPath(&badgeRing, &badgePath);
-
-            Gdiplus::REAL glyphW = badge * 0.58f;
-            Gdiplus::REAL glyphH = glyphW * 0.80f;
-            Gdiplus::RectF glyphBox(
-                badgeLeft + (badge - glyphW) / 2.0f,
-                badgeTop + (badge - glyphH) / 2.0f + badge * 0.02f, glyphW,
-                glyphH);
-            Gdiplus::GraphicsPath glyphPath;
-            AddFolderGlyphPath(&glyphPath, glyphBox);
-            Gdiplus::SolidBrush markBrush(badgeMarkColor);
-            g.FillPath(&markBrush, &glyphPath);
-        }
-
-        Gdiplus::RectF labelRect(
-            (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
-            (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
-            (Gdiplus::REAL)(cellW - ScaleForPopup(8)),
-            (Gdiplus::REAL)(cellH - iconTop - iconSize - labelGap -
-                            ScaleForPopup(4)));
-        if (labelRect.Height > 0) {
-            g.DrawString(item.displayName.c_str(), -1, &font, labelRect, &format,
-                         &textBrush);
-        }
+        DrawCell(g, level, (int)i, textColor, badgeFillColor, badgeMarkColor,
+                 badgeRingColor, font, format);
     }
 
     level->cachedBase = std::move(bitmap);
@@ -1837,20 +1875,13 @@ void PaintLevel(PopupLevel* level) {
         Gdiplus::Font font(&family,
                            (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-        Gdiplus::SolidBrush textBrush(textColor);
         Gdiplus::StringFormat format;
         format.SetAlignment(Gdiplus::StringAlignmentCenter);
         format.SetLineAlignment(Gdiplus::StringAlignmentNear);
         format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
         format.SetFormatFlags(Gdiplus::StringFormatFlagsLineLimit);
 
-        int iconSize = ScaleForPopup(g_settings.iconSize);
-        int iconTop = ScaleForPopup(10);
-        int labelGap = ScaleForPopup(6);
-        bool expandable = CanExpand(level->depth);
-
-        // Repaint only the active cell(s): highlight under the icon, matching the
-        // original z-order without rebuilding the whole grid.
+        // Repaint only the active cell(s): erase + highlight, then DrawCell.
         auto repaintCell = [&](int cellIndex, bool pressed) {
             if (cellIndex < 0 || cellIndex >= (int)level->cellRects.size() ||
                 cellIndex >= (int)level->items.size()) {
@@ -1881,44 +1912,8 @@ void PaintLevel(PopupLevel* level) {
                                                        : hoverColor);
             g.FillPath(&highlightBrush, &highlightPath);
 
-            const GridItem& item = level->items[cellIndex];
-            Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
-                                   cell.top + iconTop, iconSize, iconSize);
-            if (item.icon) {
-                g.DrawImage(item.icon.get(), iconRect);
-            }
-            if (item.isFolder && expandable) {
-                int badge = std::max<int>(14, (iconSize * 54 + 50) / 100);
-                int badgeLeft = iconRect.GetRight() - badge + badge / 4;
-                int badgeTop = iconRect.GetBottom() - badge + badge / 4;
-                Gdiplus::Rect badgeRect(badgeLeft, badgeTop, badge, badge);
-                Gdiplus::GraphicsPath badgePath;
-                AddRoundedRect(&badgePath, badgeRect, badge / 2);
-                Gdiplus::SolidBrush badgeBrush(badgeFillColor);
-                g.FillPath(&badgeBrush, &badgePath);
-                Gdiplus::Pen badgeRing(badgeRingColor, 1.0f);
-                g.DrawPath(&badgeRing, &badgePath);
-                Gdiplus::REAL glyphW = badge * 0.58f;
-                Gdiplus::REAL glyphH = glyphW * 0.80f;
-                Gdiplus::RectF glyphBox(
-                    badgeLeft + (badge - glyphW) / 2.0f,
-                    badgeTop + (badge - glyphH) / 2.0f + badge * 0.02f, glyphW,
-                    glyphH);
-                Gdiplus::GraphicsPath glyphPath;
-                AddFolderGlyphPath(&glyphPath, glyphBox);
-                Gdiplus::SolidBrush markBrush(badgeMarkColor);
-                g.FillPath(&markBrush, &glyphPath);
-            }
-            Gdiplus::RectF labelRect(
-                (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
-                (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
-                (Gdiplus::REAL)(cellW - ScaleForPopup(8)),
-                (Gdiplus::REAL)(cellH - iconTop - iconSize - labelGap -
-                                ScaleForPopup(4)));
-            if (labelRect.Height > 0) {
-                g.DrawString(item.displayName.c_str(), -1, &font, labelRect,
-                             &format, &textBrush);
-            }
+            DrawCell(g, level, cellIndex, textColor, badgeFillColor,
+                     badgeMarkColor, badgeRingColor, font, format);
         };
 
         if (level->hoverCell >= 0 && level->hoverCell != level->pressedCell) {
@@ -1946,7 +1941,7 @@ void PaintLevel(PopupLevel* level) {
 }
 
 PopupLevel* LevelFromHwnd(HWND hWnd) {
-    for (auto& level : g_levels) {
+    for (auto& level : Levels()) {
         if (level->hwnd == hWnd) {
             return level.get();
         }
@@ -1969,12 +1964,12 @@ void CloseLevelsFrom(int depth) {
     if (depth < 0) {
         depth = 0;
     }
-    while ((int)g_levels.size() > depth) {
-        auto& level = g_levels.back();
+    while ((int)Levels().size() > depth) {
+        auto& level = Levels().back();
         if (level->hwnd) {
             ShowWindow(level->hwnd, SW_HIDE);
         }
-        g_levels.pop_back();
+        Levels().pop_back();
     }
     if (g_pendingSubDepth >= depth - 1) {
         g_pendingSubDepth = -1;
@@ -1984,8 +1979,8 @@ void CloseLevelsFrom(int depth) {
 }
 
 void CloseChain() {
-    if (!g_levels.empty() && g_levels[0]->hwnd) {
-        KillTimer(g_levels[0]->hwnd, kTickTimerId);
+    if (!Levels().empty() && Levels()[0]->hwnd) {
+        KillTimer(Levels()[0]->hwnd, kTickTimerId);
     }
     CloseLevelsFrom(0);
     g_outsideSinceTick = 0;
@@ -2005,12 +2000,12 @@ RECT BridgingRect(const RECT& a, const RECT& b) {
 // to another app on the taskbar closes the menu instead of keeping it stuck
 // open.
 bool CursorInRootCorridor(POINT pt) {
-    if (g_levels.empty()) {
+    if (Levels().empty()) {
         return false;
     }
 
     const RECT& anchor = g_rootAnchorRect;
-    const RECT& popup = g_levels[0]->rect;
+    const RECT& popup = Levels()[0]->rect;
 
     RECT gap{};
     gap.left = std::min<LONG>(anchor.left, popup.left);
@@ -2043,7 +2038,7 @@ bool CursorInRootCorridor(POINT pt) {
 // part of the live path.
 bool CursorIsInLivePath() {
     POINT pt;
-    if (!GetCursorPos(&pt) || g_levels.empty()) {
+    if (!GetCursorPos(&pt) || Levels().empty()) {
         return false;
     }
 
@@ -2051,7 +2046,7 @@ bool CursorIsInLivePath() {
         return true;
     }
 
-    for (const auto& level : g_levels) {
+    for (const auto& level : Levels()) {
         if (PtInRect(&level->rect, pt)) {
             return true;
         }
@@ -2061,8 +2056,8 @@ bool CursorIsInLivePath() {
         return true;
     }
 
-    for (size_t i = 1; i < g_levels.size(); i++) {
-        RECT bridge = BridgingRect(g_levels[i - 1]->rect, g_levels[i]->rect);
+    for (size_t i = 1; i < Levels().size(); i++) {
+        RECT bridge = BridgingRect(Levels()[i - 1]->rect, Levels()[i]->rect);
         if (PtInRect(&bridge, pt)) {
             return true;
         }
@@ -2077,8 +2072,8 @@ int LevelIndexUnderCursor() {
     if (!GetCursorPos(&pt)) {
         return -1;
     }
-    for (int i = (int)g_levels.size() - 1; i >= 0; i--) {
-        if (PtInRect(&g_levels[i]->rect, pt)) {
+    for (int i = (int)Levels().size() - 1; i >= 0; i--) {
+        if (PtInRect(&Levels()[i]->rect, pt)) {
             return i;
         }
     }
@@ -2086,7 +2081,12 @@ int LevelIndexUnderCursor() {
 }
 
 void ShowItemContextMenu(std::wstring path, POINT screenPt) {
-    if (!g_menuOwnerWnd || path.empty()) {
+    if (!g_menuOwnerWnd ||
+        GetWindowThreadProcessId(g_menuOwnerWnd, nullptr) !=
+            GetCurrentThreadId()) {
+        return;
+    }
+    if (path.empty()) {
         return;
     }
 
@@ -2139,7 +2139,6 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
                                             screenPt.x, screenPt.y,
                                             g_menuOwnerWnd, nullptr);
                 PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
-                ShowWindow(g_menuOwnerWnd, SW_HIDE);
 
                 if (g_activeContextMenu3) {
                     g_activeContextMenu3->Release();
@@ -2151,6 +2150,9 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
                 }
 
                 if (cmd) {
+                    // Dismiss the hover chain before the shell verb runs so
+                    // Explorer windows are not covered by stale grids.
+                    CloseChain();
                     CMINVOKECOMMANDINFOEX info{};
                     info.cbSize = sizeof(info);
                     info.fMask = CMIC_MASK_UNICODE;
@@ -2160,6 +2162,8 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
                     info.nShow = SW_SHOWNORMAL;
                     contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
                 }
+
+                ShowWindow(g_menuOwnerWnd, SW_HIDE);
             }
             DestroyMenu(menu);
         }
@@ -2196,8 +2200,7 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
                                   LPARAM lParam) {
     // New monitors create Shell_SecondaryTrayWnd without StartTaskbar; kick a
     // retry so secondary taskbars still get folder buttons.
-    if ((uMsg == WM_DISPLAYCHANGE || uMsg == WM_DEVICECHANGE) &&
-        !g_unloading) {
+    if (uMsg == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryThread();
     }
 
@@ -2222,8 +2225,8 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
 // Re-copies any level still waiting on its first scan. Levels resize as their
 // contents arrive, so this reopens rather than just repainting.
 void RefreshLoadingLevels() {
-    for (size_t i = 0; i < g_levels.size(); i++) {
-        auto* level = g_levels[i].get();
+    for (size_t i = 0; i < Levels().size(); i++) {
+        auto* level = Levels()[i].get();
         if (!level->loading) {
             continue;
         }
@@ -2294,11 +2297,11 @@ void OnTick() {
 
     // Retire anything deeper than the grid the cursor is in, unless the cursor
     // is still resting on the cell that opened the next one down.
-    if (cursorLevel >= 0 && (int)g_levels.size() > cursorLevel + 1) {
-        auto* level = g_levels[cursorLevel].get();
+    if (cursorLevel >= 0 && (int)Levels().size() > cursorLevel + 1) {
+        auto* level = Levels()[cursorLevel].get();
         bool onSpawner =
             level->hoverCell >= 0 &&
-            level->hoverCell == g_levels[cursorLevel + 1]->spawnerCell;
+            level->hoverCell == Levels()[cursorLevel + 1]->spawnerCell;
         if (onSpawner) {
             g_closeDeeperSinceTick = 0;
         } else if (g_closeDeeperSinceTick == 0) {
@@ -2347,6 +2350,18 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
         return 0;
     }
 
+    // Theme/display messages do not need a live level; handle them even when
+    // the HWND is a reused shell with no PopupLevel attached yet.
+    if (uMsg == WM_DISPLAYCHANGE || uMsg == WM_SETTINGCHANGE ||
+        uMsg == WM_THEMECHANGED) {
+        RefreshThemeCache();
+        CloseChain();
+        if (!g_unloading) {
+            StartRetryThread();
+        }
+        return 0;
+    }
+
     PopupLevel* level = LevelFromHwnd(hWnd);
     if (!level) {
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -2363,8 +2378,8 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
                 bool expandable =
                     cell >= 0 && cell < (int)level->items.size() &&
                     level->items[cell].isFolder && CanExpand(level->depth);
-                int alreadyOpen = (int)g_levels.size() > level->depth + 1
-                                      ? g_levels[level->depth + 1]->spawnerCell
+                int alreadyOpen = (int)Levels().size() > level->depth + 1
+                                      ? Levels()[level->depth + 1]->spawnerCell
                                       : -1;
                 if (expandable && cell != alreadyOpen) {
                     g_pendingSubDepth = level->depth;
@@ -2413,16 +2428,6 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
             }
             return 0;
         }
-
-        case WM_DISPLAYCHANGE:
-        case WM_SETTINGCHANGE:
-        case WM_THEMECHANGED:
-            RefreshThemeCache();
-            CloseChain();
-            if (!g_unloading) {
-                StartRetryThread();
-            }
-            return 0;
 
         case WM_DESTROY:
             KillTimer(hWnd, kTickTimerId);
@@ -2475,6 +2480,14 @@ bool EnsurePopupClasses() {
 
 HWND EnsureMenuOwnerWindow() {
     if (g_menuOwnerWnd) {
+        // DestroyWindow/CreateWindow must run on the owning thread; a wrong-
+        // thread caller cannot replace the window safely.
+        if (GetWindowThreadProcessId(g_menuOwnerWnd, nullptr) !=
+            GetCurrentThreadId()) {
+            Wh_Log(L"Menu owner window belongs to a different thread; refusing "
+                   L"to use or recreate it from this thread");
+            return nullptr;
+        }
         return g_menuOwnerWnd;
     }
     if (!EnsurePopupClasses()) {
@@ -2483,6 +2496,8 @@ HWND EnsureMenuOwnerWindow() {
 
     // Top-level so it receives WM_DISPLAYCHANGE when a monitor is plugged in.
     // Kept hidden until a shell context menu needs an activatable owner.
+    // Must be created on the taskbar UI thread (via InjectHostGrids /
+    // EnsureLevelWindow).
     g_menuOwnerWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW, kMenuOwnerClassName, L"", WS_POPUP, 0, 0, 0, 0,
         nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -2545,13 +2560,13 @@ void UpdatePopupDpi() {
 PopupLevel* InstallLevel(std::unique_ptr<PopupLevel> level) {
     int depth = level->depth;
     CloseLevelsFrom(depth + 1);
-    if ((int)g_levels.size() <= depth) {
-        g_levels.resize(depth);
-        g_levels.push_back(std::move(level));
+    if ((int)Levels().size() <= depth) {
+        Levels().resize(depth);
+        Levels().push_back(std::move(level));
     } else {
-        g_levels[depth] = std::move(level);
+        Levels()[depth] = std::move(level);
     }
-    return g_levels[depth].get();
+    return Levels()[depth].get();
 }
 
 // Places and shows a level's window, then paints it.
@@ -2644,11 +2659,11 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
 // Opens the grid for the subfolder in `cell` of the level at `parentDepth`,
 // cascading to the side of the parent like a normal submenu.
 void OpenSubLevel(int parentDepth, int cell) {
-    if (g_unloading || parentDepth < 0 || parentDepth >= (int)g_levels.size()) {
+    if (g_unloading || parentDepth < 0 || parentDepth >= (int)Levels().size()) {
         return;
     }
 
-    auto* parent = g_levels[parentDepth].get();
+    auto* parent = Levels()[parentDepth].get();
     if (cell < 0 || cell >= (int)parent->items.size() ||
         !parent->items[cell].isFolder || !CanExpand(parentDepth)) {
         return;
@@ -2683,10 +2698,13 @@ void OpenSubLevel(int parentDepth, int cell) {
     monitorInfo.cbSize = sizeof(monitorInfo);
     GetMonitorInfoW(monitor, &monitorInfo);
     const RECT& screen = monitorInfo.rcMonitor;
+    const RECT& screenWork = monitorInfo.rcWork;
 
+    // Cap height to the work area (excludes the taskbar), matching root grids.
     SIZE size = ComputeLevelLayout(
-        level.get(), std::max(0, (int)(screen.bottom - screen.top) -
-                                     ScaleForPopup(16)));
+        level.get(),
+        std::max(0, (int)(screenWork.bottom - screenWork.top) -
+                        ScaleForPopup(16)));
 
     int seam = ScaleForPopup(2);
     int left = parent->rect.right + seam;
@@ -2697,10 +2715,11 @@ void OpenSubLevel(int parentDepth, int cell) {
                    : std::max<int>(screen.left, screen.right - size.cx);
     }
 
-    // Top-aligned with the cell that opened it, kept fully on screen.
+    // Top-aligned with the cell that opened it, kept within the work area.
     int top = cellScreenRect.top - ScaleForPopup(8);
-    top = std::clamp<int>(top, screen.top,
-                          std::max<int>(screen.top, screen.bottom - size.cy));
+    top = std::clamp<int>(
+        top, screenWork.top,
+        std::max<int>(screenWork.top, screenWork.bottom - size.cy));
 
     level->rect.left = left;
     level->rect.top = top;
@@ -2941,17 +2960,23 @@ UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
     }
 
     // No icon configured, or the configured one failed: fall back to the
-    // folder's own shell icon.
+    // folder's own shell icon. Skip UNC/network paths — SHGetFileInfo can
+    // block the taskbar UI thread for a long time on unavailable shares.
     if (!loaded) {
         std::wstring resolved = ResolveFolderPath(entry.path);
         if (!resolved.empty()) {
-            HICON hIcon = GetShellIconForPath(resolved, iconExtent * 2);
-            if (hIcon) {
-                auto source = HIconToImageSource(hIcon, iconExtent * 2);
-                DestroyIcon(hIcon);
-                if (source) {
-                    image.Source(source);
-                    loaded = true;
+            if (PathIsUNCW(resolved.c_str())) {
+                Wh_Log(L"Skipping sync shell icon for UNC path %s",
+                       resolved.c_str());
+            } else {
+                HICON hIcon = GetShellIconForPath(resolved, iconExtent * 2);
+                if (hIcon) {
+                    auto source = HIconToImageSource(hIcon, iconExtent * 2);
+                    DestroyIcon(hIcon);
+                    if (source) {
+                        image.Source(source);
+                        loaded = true;
+                    }
                 }
             }
         }
@@ -3529,10 +3554,9 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
             host->hostGrid.Margin({left, 0, 0, 0});
         }
     } catch (...) {
-        // The anchor was recycled out from under us; drop it and re-resolve on
-        // the next pass.
-        host->anchor = nullptr;
-        host->hasAnchorOriginalMargin = false;
+        // The anchor was recycled out from under us; restore its original
+        // margin (if we still can) and re-resolve on the next pass.
+        RestoreAnchorMargin(host);
         host->cachedRepeater = nullptr;
     }
 }
@@ -3613,6 +3637,10 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
 }
 
 bool InjectHostGridsOnTaskbarThread() {
+    // Register classes and create the menu owner on this (taskbar) thread so
+    // DestroyWindow / UnregisterClass later stay same-thread-safe.
+    EnsureMenuOwnerWindow();
+
     if (g_settings.folders.empty()) {
         Wh_Log(L"No folders configured, nothing to inject");
         RemoveAllHostGrids();
@@ -3666,15 +3694,21 @@ bool InjectHostGridsOnTaskbarThread() {
     return g_injectionLive;
 }
 
-void ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
+bool ApplyOnWindowThread(RunFromWindowThreadProc_t proc) {
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
-        return;
+        Wh_Log(L"ApplyOnWindowThread: no taskbar window found");
+        return false;
     }
     if (!g_taskbarWnd) {
         g_taskbarWnd = taskbarWnd;
     }
-    RunFromWindowThread(taskbarWnd, proc, nullptr);
+    if (!RunFromWindowThread(taskbarWnd, proc, nullptr)) {
+        Wh_Log(L"ApplyOnWindowThread: RunFromWindowThread failed (error %u)",
+               GetLastError());
+        return false;
+    }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3853,7 +3887,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"AfterInit");
-    EnsureMenuOwnerWindow();
+    // Menu owner / popup classes are created on the taskbar UI thread during
+    // InjectHostGridsOnTaskbarThread (and EnsureLevelWindow), not here.
     StartRetryThread();
 }
 
@@ -3886,25 +3921,28 @@ void Wh_ModUninit() {
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (taskbarWnd) {
-        ApplyOnWindowThread([](void*) {
-            CloseChain();
-            RemoveAllHostGrids();
+        if (!ApplyOnWindowThread([](void*) {
+                CloseChain();
+                RemoveAllHostGrids();
 
-            for (HWND hWnd : g_levelWindows) {
-                if (hWnd) {
-                    DestroyWindow(hWnd);
+                for (HWND hWnd : g_levelWindows) {
+                    if (hWnd) {
+                        DestroyWindow(hWnd);
+                    }
                 }
-            }
-            g_levelWindows.clear();
+                g_levelWindows.clear();
 
-            if (g_menuOwnerWnd) {
-                DestroyWindow(g_menuOwnerWnd);
-                g_menuOwnerWnd = nullptr;
-            }
+                if (g_menuOwnerWnd) {
+                    DestroyWindow(g_menuOwnerWnd);
+                    g_menuOwnerWnd = nullptr;
+                }
 
-            // Full release of the no_destroy hosts vector on the UI thread.
-            g_taskbarHosts.reset();
-        });
+                // Full release of the no_destroy hosts vector on the UI thread.
+                g_taskbarHosts.reset();
+            })) {
+            Wh_Log(L"Uninit: failed to run destroy on taskbar thread; windows "
+                   L"may leak and UnregisterClass may fail");
+        }
     } else {
         // No taskbar UI thread to release XAML on - retain the no_destroy
         // hosts rather than tearing them down from the Windhawk callback.
@@ -3921,10 +3959,10 @@ void Wh_ModUninit() {
         }
     }
 
-    g_levels.clear();
+    g_levels.reset();
     {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
-        g_folderCache.clear();
+        g_folderCache.reset();
     }
 
     // The window procedures live in this DLL, so the classes must not outlive
