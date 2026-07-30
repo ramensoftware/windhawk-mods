@@ -1246,7 +1246,6 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
 
     return FALSE;
 }
-}
 
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GhostAnimData* data = (GhostAnimData*)lpParam;
