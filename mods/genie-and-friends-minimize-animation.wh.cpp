@@ -173,7 +173,6 @@ resolved, Windows 11 support) was assisted by Claude.
 #include <string.h>
 #include <atomic>
 #include <unordered_map>
-#include <unordered_set>
 #include <mutex>
 #include <string>
 #include <ole2.h>
@@ -222,7 +221,6 @@ struct GhostAnimData {
     int mode;
     int durationMs;
     LONG_PTR originalExStyle;
-    BOOL wasCloaked;
     HANDLE hReady;
 };
 
@@ -640,10 +638,6 @@ static void SolveFrame(const GhostAnimData* d, float t,
 
 static void FinalizeRealWindow(GhostAnimData* data) {
     if (data->isRising) {
-        if (data->wasCloaked) {
-            BOOL cloaked = FALSE;
-            DwmSetWindowAttribute(data->hRealWnd, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
-        }
         SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
         if (!(data->originalExStyle & WS_EX_LAYERED)) {
             SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
@@ -1009,7 +1003,7 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
     }
 
     const float LEAD     = 1.4f;
-    const float neckW    = (data->iconButtonWidth > 0) ? ((float)data->iconButtonWidth > 10.0f ? (float)data->iconButtonWidth : 10.0f) : (w * 0.05f > 10.0f ? w * 0.05f : 10.0f);
+    const float neckW    = (w * 0.05f > 10.0f) ? w * 0.05f : 10.0f;
     const float sourceCX = data->targetRect.left + w * 0.5f;
     const float dockX    = (float)data->targetDockX;
     const float dockY    = taskbarY;
@@ -1120,20 +1114,6 @@ static std::unordered_map<HWND, TbIconPos> g_TaskbarIconCache;
 static std::unordered_map<std::wstring, TbIconPos> g_ProcessIconCache;
 static std::mutex g_TbCacheMutex;
 
-// Guard: only one animation at a time per window.
-static std::unordered_set<HWND> g_animInProgress;
-static std::mutex g_animMtx;
-
-static bool AnimIsInProgress(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_animMtx);
-    return g_animInProgress.count(hWnd) != 0;
-}
-static void AnimSetInProgress(HWND hWnd, bool set) {
-    std::lock_guard<std::mutex> lock(g_animMtx);
-    if (set) g_animInProgress.insert(hWnd);
-    else     g_animInProgress.erase(hWnd);
-}
-
 static HWND FindTaskbarForMonitor(HMONITOR hMon) {
     HWND hMainTray = FindWindowW(L"Shell_TrayWnd", NULL);
     HMONITOR mainMon = MonitorFromWindow(hMainTray, MONITOR_DEFAULTTOPRIMARY);
@@ -1200,18 +1180,24 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
 
         IUIAutomationCondition* pButtonCond = NULL;
         IUIAutomationCondition* pListItemCond = NULL;
+        IUIAutomationCondition* pTabItemCond = NULL;
         IUIAutomationCondition* pOrCond = NULL;
+        IUIAutomationCondition* pOrCond2 = NULL;
         VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
         pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
         VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
         pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
+        VARIANT varTab; varTab.vt = VT_I4; varTab.lVal = UIA_TabItemControlTypeId;
+        pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varTab, &pTabItemCond);
         if (pButtonCond && pListItemCond)
             pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
+        if (pOrCond && pTabItemCond)
+            pAutomation->CreateOrCondition(pOrCond, pTabItemCond, &pOrCond2);
 
         auto tryMatch = [&](IUIAutomationElement* pParent) -> bool {
-            if (!pOrCond) return false;
+            if (!pOrCond2) return false;
             IUIAutomationElementArray* pArray = NULL;
-            if (FAILED(pParent->FindAll(TreeScope_Descendants, pOrCond, &pArray)) || !pArray)
+            if (FAILED(pParent->FindAll(TreeScope_Descendants, pOrCond2, &pArray)) || !pArray)
                 return false;
             int length = 0;
             pArray->get_Length(&length);
@@ -1279,7 +1265,7 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
                 IUIAutomationElement* pRoot = NULL;
                 if (SUCCEEDED(pAutomation->GetRootElement(&pRoot)) && pRoot) {
                     IUIAutomationElementArray* pAll = NULL;
-                    if (SUCCEEDED(pRoot->FindAll(TreeScope_Descendants, pOrCond, &pAll)) && pAll) {
+                    if (SUCCEEDED(pRoot->FindAll(TreeScope_Descendants, pOrCond2, &pAll)) && pAll) {
                         int len = 0;
                         pAll->get_Length(&len);
                         int bestScore = 0;
@@ -1333,7 +1319,9 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
 
         if (pButtonCond)    pButtonCond->Release();
         if (pListItemCond)  pListItemCond->Release();
+        if (pTabItemCond)   pTabItemCond->Release();
         if (pOrCond)        pOrCond->Release();
+        if (pOrCond2)       pOrCond2->Release();
         pAutomation->Release();
     }
     if (coInit) CoUninitialize();
@@ -1530,15 +1518,11 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     if (hGhost) DestroyWindow(hGhost);
     DeleteObject(data->hBitmap);
     if (data->hReady) CloseHandle(data->hReady);
-    AnimSetInProgress(data->hRealWnd, false);
     delete data;
     return 0;
 }
 
 void StartGenieAnim(HWND hWnd, BOOL rising) {
-    if (AnimIsInProgress(hWnd)) return;
-    AnimSetInProgress(hWnd, true);
-
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
@@ -1552,17 +1536,24 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(hMon, &mi);
 
+    // Default dock: monitor centre. Taskbar-click tracking below will override.
+    int defaultDockX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+
+    // If the cursor is on the taskbar (outside the work area), use its X as the
+    // icon position — matches older v2.2.2 behaviour that worked reliably.
+    POINT pt;
+    GetCursorPos(&pt);
+    if (!PtInRect(&mi.rcWork, pt)) {
+        defaultDockX = pt.x;
+    }
+
     GhostAnimData* data = new GhostAnimData();
     data->hRealWnd = hWnd;
     data->targetRect = rect;
     data->width = w;
     data->height = h;
     data->isRising = rising;
-    data->wasCloaked = rising;
-    // Default dock X is the monitor centre; the animation thread will
-    // overwrite this with the actual taskbar-icon centre via
-    // GetTaskbarIconCenter.
-    data->targetDockX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+    data->targetDockX = defaultDockX;
     data->mode = g_mode.load(std::memory_order_relaxed);
     data->durationMs = g_durations[data->mode].load(std::memory_order_relaxed);
     data->originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -1638,40 +1629,16 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
     if (hReady) WaitForSingleObject(hReady, 40);
 }
 
-// Per-window re-entrancy guard so that when DefWindowProcW_Hook handles
-// SC_MINIMIZE/SC_RESTORE (which internally calls ShowWindow), the nested
-// call through ShowWindow_Hook does not start a second animation.
-static std::unordered_map<HWND, DWORD> g_inSysCmd;
-static std::mutex                      g_sysCmdMtx;
-
-static bool IsInSysCmdOnThisThread(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_sysCmdMtx);
-    auto it = g_inSysCmd.find(hWnd);
-    return it != g_inSysCmd.end() && it->second == GetCurrentThreadId();
-}
-
-static void SetSysCmdGuard(HWND hWnd, bool set) {
-    std::lock_guard<std::mutex> lock(g_sysCmdMtx);
-    if (set)
-        g_inSysCmd[hWnd] = GetCurrentThreadId();
-    else
-        g_inSysCmd.erase(hWnd);
-}
-
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (g_enabled.load(std::memory_order_relaxed)) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
-            if (!IsInSysCmdOnThisThread(hWnd) && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
-                SetDwmTransitions(hWnd, FALSE);
-                StartGenieAnim(hWnd, FALSE);
-            }
+            SetDwmTransitions(hWnd, FALSE);
+            StartGenieAnim(hWnd, FALSE);
             return ShowWindow_Original(hWnd, nCmdShow);
         }
         else if (nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) {
-            if (IsIconic(hWnd) && !IsInSysCmdOnThisThread(hWnd)) {
+            if (IsIconic(hWnd)) {
                 SetDwmTransitions(hWnd, FALSE);
-                BOOL cloaked = TRUE;
-                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
@@ -1687,10 +1654,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     if (Msg == WM_DESTROY) {
         {
-            std::lock_guard<std::mutex> lock(g_sysCmdMtx);
-            g_inSysCmd.erase(hWnd);
-        }
-        {
             std::lock_guard<std::mutex> lock(g_CacheMutex);
             if (g_SnapshotCache.count(hWnd)) {
                 DeleteObject(g_SnapshotCache[hWnd]);
@@ -1701,25 +1664,18 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 
     if (g_enabled.load(std::memory_order_relaxed) && Msg == WM_SYSCOMMAND) {
         UINT cmd = wParam & 0xFFF0;
-        if (cmd == SC_MINIMIZE && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
-            SetSysCmdGuard(hWnd, true);
+        if (cmd == SC_MINIMIZE) {
             SetDwmTransitions(hWnd, FALSE);
             StartGenieAnim(hWnd, FALSE);
-            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-            SetSysCmdGuard(hWnd, false);
-            return res;
+            return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
         }
         else if (cmd == SC_RESTORE && IsIconic(hWnd)) {
-            SetSysCmdGuard(hWnd, true);
             SetDwmTransitions(hWnd, FALSE);
-            BOOL cloaked = TRUE;
-            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
             StartGenieAnim(hWnd, TRUE);
-            SetSysCmdGuard(hWnd, false);
             return res;
         }
     }
