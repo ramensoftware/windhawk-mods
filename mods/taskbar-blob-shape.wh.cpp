@@ -119,7 +119,7 @@ struct BlobEntry {
     // and the adjustment constant it was bound with. The blob stays hidden
     // until the binding succeeds.
     bool bound = false;
-    float boundAdjX = -1e9f, boundAdjY = -1e9f;
+    float boundAdjX = -1e9f, boundYBase = -1e9f;
 
     // Last applied geometry, so state changes (hover, press) don't rebuild.
     double geoW = -1.0, geoH = -1.0, geoRt = -1.0, geoRb = -1.0;
@@ -602,16 +602,20 @@ Grid GetTaskbarRootGrid(winrt::Windows::UI::Xaml::FrameworkElement const& button
 }
 
 // Glues the blob's Translation to its button's visual offset chain with a
-// composition ExpressionAnimation:
-//   Translation = sum(chain offsets up to RootGrid) + adj - self.Offset
-// Bound once per blob and never retargeted; the render thread then moves the
-// blob with the button through every taskbar animation. Returns false while
-// the chain can't be resolved (button not fully in the tree yet).
+// composition ExpressionAnimation. Only the X axis is dynamic:
+//   Translation.X = sum(chain Offset.X up to RootGrid) + adjX - self.Offset.X
+//   Translation.Y = yBase - self.Offset.Y   (constant, from the LAYOUT position)
+// X tracking keeps the blob glued through reordering and reflow slides, while
+// the layout-based Y pins the blob at its final vertical position instantly —
+// entrance animations ("Animation Effects") that slide new buttons upward
+// animate the visuals' Offset.Y, which this expression deliberately ignores.
+// Bound once per blob and never retargeted. Returns false while the chain
+// can't be resolved (button not fully in the tree yet).
 bool BindBlobExpression(
     winrt::Windows::UI::Xaml::Shapes::Path const& blobShape,
     Grid const& grid,
     winrt::Windows::UI::Xaml::FrameworkElement const& button,
-    float adjX, float adjY)
+    float adjX, float yBase)
 {
     try {
         FrameworkElement gridElem = grid;
@@ -628,17 +632,18 @@ bool BindBlobExpression(
 
         auto vis = ElementCompositionPreview::GetElementVisual(blobShape);
 
-        std::wstring expr;
+        std::wstring expr = L"Vector3(";
         for (size_t i = 0; i < chain.size(); i++) {
-            expr += L"p" + std::to_wstring(i) + L".Offset + ";
+            expr += L"p" + std::to_wstring(i) + L".Offset.X + ";
         }
-        expr += L"adj - self.Offset";
+        expr += L"adjX - self.Offset.X, yBase - self.Offset.Y, 0.0f)";
 
         auto exp = vis.Compositor().CreateExpressionAnimation(winrt::hstring(expr));
         for (size_t i = 0; i < chain.size(); i++) {
             exp.SetReferenceParameter(winrt::hstring(L"p" + std::to_wstring(i)), chain[i]);
         }
-        exp.SetVector3Parameter(L"adj", winrt::Windows::Foundation::Numerics::float3(adjX, adjY, 0.0f));
+        exp.SetScalarParameter(L"adjX", adjX);
+        exp.SetScalarParameter(L"yBase", yBase);
         exp.SetReferenceParameter(L"self", vis);
         vis.Properties().StartAnimation(L"Translation", exp);
         return true;
@@ -727,7 +732,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         entry->blobShape = winrt::make_weak(blobShape);
         entry->bound = false;
         entry->boundAdjX = -1e9f;
-        entry->boundAdjY = -1e9f;
+        entry->boundYBase = -1e9f;
         entry->geoW = -1.0;
     } else {
         // If the button was re-hosted under a different taskbar's grid
@@ -828,13 +833,26 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             } catch (...) {}
         }
 
-        if (!entry->bound ||
-            std::abs(entry->boundAdjX - adjX) > 0.5f ||
-            std::abs(entry->boundAdjY - adjY) > 0.5f) {
-            if (BindBlobExpression(blobShape, grid, button, adjX, adjY)) {
+        // The Y coordinate comes from the LAYOUT position — TransformToVisual
+        // reflects layout, not composition animations — so entrance slides
+        // never displace the blob vertically. It only changes with taskbar
+        // size/DPI changes, which re-run this via SizeChanged and rebind.
+        bool haveYBase = false;
+        float yBase = 0.0f;
+        try {
+            auto layoutPos = button.TransformToVisual(grid).TransformPoint({0, 0});
+            yBase = std::round(layoutPos.Y + adjY);
+            haveYBase = true;
+        } catch (...) {}
+
+        if (haveYBase &&
+            (!entry->bound ||
+             std::abs(entry->boundAdjX - adjX) > 0.5f ||
+             std::abs(entry->boundYBase - yBase) > 0.5f)) {
+            if (BindBlobExpression(blobShape, grid, button, adjX, yBase)) {
                 entry->bound = true;
                 entry->boundAdjX = adjX;
-                entry->boundAdjY = adjY;
+                entry->boundYBase = yBase;
             }
         }
     }
