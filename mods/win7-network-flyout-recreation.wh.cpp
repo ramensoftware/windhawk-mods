@@ -2344,6 +2344,52 @@ static BOOL  g_EthernetHasInternet = FALSE;
 static GUID  g_EthernetAdapterGuid = {0};
 static BOOL  g_HasEthernetAdapterGuid = FALSE;
 
+struct NetworkStateSnapshot {
+    int networkCount;
+    WifiNetworkItem networks[50];
+    BOOL ethernetConnected;
+    WCHAR ethernetNetworkName[64];
+    BOOL ethernetHasInternet;
+    GUID ethernetAdapterGuid;
+    BOOL hasEthernetAdapterGuid;
+    int currentNetworkCategory;
+    int lastReliableNetworkCategory;
+    DWORD lastReliableNetworkCategoryTick;
+};
+
+static void CaptureNetworkState(NetworkStateSnapshot* snapshot) {
+    if (!snapshot)
+        return;
+
+    ZeroMemory(snapshot, sizeof(*snapshot));
+    snapshot->currentNetworkCategory = -1;
+    snapshot->lastReliableNetworkCategory = -1;
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    int count = g_NetworkCount;
+    if (count < 0)
+        count = 0;
+    if (count > (int)ARRAYSIZE(snapshot->networks))
+        count = (int)ARRAYSIZE(snapshot->networks);
+
+    snapshot->networkCount = count;
+    if (count > 0)
+        CopyMemory(snapshot->networks, g_NetworkList,
+                   sizeof(WifiNetworkItem) * count);
+    snapshot->ethernetConnected = g_EthernetConnected;
+    StringCchCopyW(snapshot->ethernetNetworkName,
+                   ARRAYSIZE(snapshot->ethernetNetworkName),
+                   g_EthernetNetworkName);
+    snapshot->ethernetHasInternet = g_EthernetHasInternet;
+    snapshot->ethernetAdapterGuid = g_EthernetAdapterGuid;
+    snapshot->hasEthernetAdapterGuid = g_HasEthernetAdapterGuid;
+    snapshot->currentNetworkCategory = g_CurrentNetworkCategory;
+    snapshot->lastReliableNetworkCategory = g_LastReliableNetworkCategory;
+    snapshot->lastReliableNetworkCategoryTick = g_LastReliableNetworkCategoryTick;
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
+
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
 typedef int (WINAPI *GdipDrawImageRectIFunc)(void*, void*, int, int, int, int);
@@ -3141,11 +3187,11 @@ static HICON CopyNetworkCenterIcon(int resourceId, int targetWidth, int targetHe
         return NULL;
     }
 
-    // DirectUI requests the icon at a DPI-relative size (e.g. 24rp); fall back
-    // to the classic 24x24 base size if the caller didn't specify one.
     int wantWidth  = (targetWidth  > 0) ? targetWidth  : 24;
     int wantHeight = (targetHeight > 0) ? targetHeight : 24;
 
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!*source || *cachedWidth != wantWidth || *cachedHeight != wantHeight) {
         if (*source) {
             DestroyIcon(*source);
@@ -3155,7 +3201,33 @@ static HICON CopyNetworkCenterIcon(int resourceId, int targetWidth, int targetHe
         *cachedWidth = wantWidth;
         *cachedHeight = wantHeight;
     }
-    return *source ? CopyIcon(*source) : NULL;
+    if (*source)
+        copy = CopyIcon(*source);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
+}
+
+static HICON CopyCachedBase64Icon(HICON* cache, int* cachedWidth,
+                                  int* cachedHeight, const WCHAR* base64,
+                                  int wantWidth, int wantHeight) {
+    if (!cache || !cachedWidth || !cachedHeight || !base64)
+        return NULL;
+
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (!*cache || *cachedWidth != wantWidth || *cachedHeight != wantHeight) {
+        if (*cache) {
+            DestroyIcon(*cache);
+            *cache = NULL;
+        }
+        *cache = CreateIconFromBase64PNG(base64, wantWidth, wantHeight);
+        *cachedWidth = wantWidth;
+        *cachedHeight = wantHeight;
+    }
+    if (*cache)
+        copy = CopyIcon(*cache);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
 }
 
 static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, int lineHeight) {
@@ -3314,19 +3386,21 @@ static BOOL ConnectivityIsActive(NLM_CONNECTIVITY connectivity) {
 
 static int StabilizeNetworkCategoryResult(int detectedCategory) {
     DWORD now = GetTickCount();
+    int result = -1;
+
+    EnterCriticalSection(&g_Ctx.csLock);
     if (IsValidNetworkCategoryValue(detectedCategory)) {
         g_LastReliableNetworkCategory = detectedCategory;
         g_LastReliableNetworkCategoryTick = now;
-        return detectedCategory;
+        result = detectedCategory;
+    } else if (IsValidNetworkCategoryValue(g_LastReliableNetworkCategory) &&
+               now - g_LastReliableNetworkCategoryTick < 30000) {
+        // Avoid a one-refresh flicker to the generic icon if NLM/registry is
+        // temporarily unavailable while the network stack is settling.
+        result = g_LastReliableNetworkCategory;
     }
-
-    // Avoid a one-refresh flicker to the generic icon if NLM/registry is
-    // temporarily unavailable while the network stack is settling.
-    if (IsValidNetworkCategoryValue(g_LastReliableNetworkCategory) &&
-        now - g_LastReliableNetworkCategoryTick < 30000) {
-        return g_LastReliableNetworkCategory;
-    }
-    return -1;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return result;
 }
 
 static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
@@ -3647,65 +3721,59 @@ static int DetectNetworkLocationCategory(INetworkListManager* pNLMOverride = nul
         if (pNLM && !g_pNLM) g_pNLM = pNLM;
     }
 
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+
     int detected = -1;
 
-    // Exact GUID join first: no name-matching ambiguity, and Ethernet is
-    // checked before Wi-Fi to match the header's display priority (fixes the
-    // case where a missed Ethernet registry lookup let a Wi-Fi lookup run
-    // first and show the wrong network's icon).
-    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
-        TryGetCategoryByAdapterProfileGuid(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+    if (pNLM && state.ethernetConnected && state.hasEthernetAdapterGuid &&
+        TryGetCategoryByAdapterProfileGuid(pNLM, &state.ethernetAdapterGuid, &detected, L"Ethernet")) {
         return StabilizeNetworkCategoryResult(detected);
     }
-    if (pNLM && !g_EthernetConnected) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryByAdapterProfileGuid(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+    if (pNLM && !state.ethernetConnected) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByAdapterProfileGuid(pNLM, &state.networks[i].interfaceGuid, &detected, L"Wi-Fi")) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
     }
 
-    // The registry profile is the most stable source for the icon Windows shows
-    // in Network and Sharing Center. Prefer it before NLM exact-adapter data so
-    // a Public profile cannot be overridden by a separate domain/VPN network.
-    if (g_EthernetConnected &&
-        TryGetCategoryFromRegistryProfileName(g_EthernetNetworkName, &detected)) {
+    if (state.ethernetConnected &&
+        TryGetCategoryFromRegistryProfileName(state.ethernetNetworkName, &detected)) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-            TryGetCategoryFromRegistryProfileName(g_NetworkList[i].ssid, &detected)) {
+    for (int i = 0; i < state.networkCount; i++) {
+        if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+            TryGetCategoryFromRegistryProfileName(state.networks[i].ssid, &detected)) {
             return StabilizeNetworkCategoryResult(detected);
         }
     }
 
-    // The header shows Ethernet before Wi-Fi when both are present, so use the
-    // same priority for the exact-adapter NLM fallback.
-    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
-        TryGetCategoryForAdapter(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+    if (pNLM && state.ethernetConnected && state.hasEthernetAdapterGuid &&
+        TryGetCategoryForAdapter(pNLM, &state.ethernetAdapterGuid, &detected, L"Ethernet")) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
-    if (pNLM && !g_EthernetConnected) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryForAdapter(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+    if (pNLM && !state.ethernetConnected) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryForAdapter(pNLM, &state.networks[i].interfaceGuid, &detected, L"Wi-Fi")) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
     }
 
-    if (pNLM && g_EthernetConnected &&
-        TryGetCategoryByNlmName(pNLM, g_EthernetNetworkName, &detected)) {
+    if (pNLM && state.ethernetConnected &&
+        TryGetCategoryByNlmName(pNLM, state.ethernetNetworkName, &detected)) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
     if (pNLM) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryByNlmName(pNLM, g_NetworkList[i].ssid, &detected)) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByNlmName(pNLM, state.networks[i].ssid, &detected)) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
@@ -3739,12 +3807,19 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
     // Use the stable reliable category when the current one is momentarily
     // unknown (e.g. during a reconnect).  This keeps the correct Home/Public/Work
     // icon on screen instead of briefly flashing the generic PC icon.
-    int effectiveCategory = g_CurrentNetworkCategory;
+    int effectiveCategory = -1;
+    int lastReliableCategory = -1;
+    DWORD lastReliableCategoryTick = 0;
+    EnterCriticalSection(&g_Ctx.csLock);
+    effectiveCategory = g_CurrentNetworkCategory;
+    lastReliableCategory = g_LastReliableNetworkCategory;
+    lastReliableCategoryTick = g_LastReliableNetworkCategoryTick;
+    LeaveCriticalSection(&g_Ctx.csLock);
     if (!IsValidNetworkCategoryValue(effectiveCategory) &&
-        IsValidNetworkCategoryValue(g_LastReliableNetworkCategory)) {
+        IsValidNetworkCategoryValue(lastReliableCategory)) {
         DWORD now = GetTickCount();
-        if (now - g_LastReliableNetworkCategoryTick < 30000)
-            effectiveCategory = g_LastReliableNetworkCategory;
+        if (now - lastReliableCategoryTick < 30000)
+            effectiveCategory = lastReliableCategory;
     }
     
     switch (effectiveCategory) {
@@ -3786,16 +3861,15 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
 // size it requests, using CreateIconFromBase64PNG's HighQualityBicubic (mode
 // 7) path, instead of passing it the 35rp flyout icon and letting it upscale.
 static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
-    // With no connected network, show a disabled gray public/bench icon.
-    bool hasConnectedNetwork = false;
-    for (int i = 0; i < g_NetworkCount; ++i)
-        if (g_NetworkList[i].connState == CONN_STATE_CONNECTED) { hasConnectedNetwork = true; break; }
-    if (!hasConnectedNetwork && !g_EthernetConnected) {
-        // Last-ditch live check: the flyout-side refresh state can be
-        // empty/stale in this process (page opened without the flyout having
-        // run). Never show the gray offline bench while the machine is
-        // actually online. IsInternetConnected() creates its own local NLM
-        // instance, so it is safe to call from any thread here.
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+
+    bool hasConnectedNetwork = state.ethernetConnected != FALSE;
+    for (int i = 0; !hasConnectedNetwork && i < state.networkCount; ++i) {
+        if (state.networks[i].connState == CONN_STATE_CONNECTED)
+            hasConnectedNetwork = true;
+    }
+    if (!hasConnectedNetwork) {
         if (!IsInternetConnected()) {
             int wantW = targetWidth > 0 ? targetWidth : ScaleDpi(36);
             int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(36);
@@ -3803,12 +3877,13 @@ static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
         }
         hasConnectedNetwork = true;
     }
-    int category = g_CurrentNetworkCategory;
+
+    int category = state.currentNetworkCategory;
     if (!IsValidNetworkCategoryValue(category) &&
-        IsValidNetworkCategoryValue(g_LastReliableNetworkCategory)) {
+        IsValidNetworkCategoryValue(state.lastReliableNetworkCategory)) {
         DWORD now = GetTickCount();
-        if (now - g_LastReliableNetworkCategoryTick < 30000)
-            category = g_LastReliableNetworkCategory;
+        if (now - state.lastReliableNetworkCategoryTick < 30000)
+            category = state.lastReliableNetworkCategory;
     }
 
     const WCHAR* png = NULL;
@@ -3817,18 +3892,14 @@ static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
         case (int)NLM_NETWORK_CATEGORY_PUBLIC:               png = NETLOC_PUBLIC_ICON_BASE64; break;
         case (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED: png = NETLOC_WORK_ICON_BASE64;   break;
         default:
-            // Category still unknown even after the reliable-category fallback
-            // above, but we know a network IS connected (checked earlier).
-            // Never return NULL here: DirectUI would render no icon at all,
-            // which shows up as the generic gray icon in the Network Center
-            // map. Fall back to Public, mirroring GetNetworkLocationIcon's
-            // behavior for the flyout header.
             png = NETLOC_PUBLIC_ICON_BASE64;
             break;
     }
 
     int wantW = targetWidth  > 0 ? targetWidth  : ScaleDpi(48);
     int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(48);
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!g_hIconNetLocDUI || g_iconNetLocDUIW != wantW ||
         g_iconNetLocDUIH != wantH || g_iconNetLocDUICategory != category) {
         if (g_hIconNetLocDUI) {
@@ -3840,11 +3911,16 @@ static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
         g_iconNetLocDUIH = wantH;
         g_iconNetLocDUICategory = category;
     }
-    return g_hIconNetLocDUI ? CopyIcon(g_hIconNetLocDUI) : NULL;
+    if (g_hIconNetLocDUI)
+        copy = CopyIcon(g_hIconNetLocDUI);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
 }
 
 void SetKeyboardFocus(int index) {
-    if (index < -1 || index >= g_NetworkCount) return;
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    if (index < -1 || index >= state.networkCount) return;
     ClearKeyboardFocus();
     g_KeyboardSelectedIndex = index;
     if (index >= 0 && g_bListExpanded) {
@@ -3900,23 +3976,44 @@ void InitRefreshButtonRect(void) {
 // -------------------------------------------------------
 // SSID display helper
 // -------------------------------------------------------
-static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
+static void FormatDisplaySSID(const WifiNetworkItem& item, int displayIndex,
+                              WCHAR* buf, int bufLen) {
+    if (!buf || bufLen <= 0)
+        return;
     if (g_Settings.privacyMode) {
-        StringCchPrintfW(buf, bufLen, LOC(STR_NETWORK_PRIVACY_FMT), index + 1);
+        StringCchPrintfW(buf, bufLen, LOC(STR_NETWORK_PRIVACY_FMT), displayIndex + 1);
         return;
     }
-    int suffix = g_NetworkList[index].displaySuffix;
+    int suffix = item.displaySuffix;
     if (suffix >= 2) {
-        StringCchPrintfW(buf, bufLen, L"%s %d", g_NetworkList[index].ssid, suffix);
+        StringCchPrintfW(buf, bufLen, L"%s %d", item.ssid, suffix);
     } else {
-        StringCchCopyW(buf, bufLen, g_NetworkList[index].ssid);
+        StringCchCopyW(buf, bufLen, item.ssid);
     }
+}
+
+static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
+    if (!buf || bufLen <= 0)
+        return;
+    buf[0] = L'\0';
+
+    WifiNetworkItem item = {};
+    BOOL haveItem = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        item = g_NetworkList[index];
+        haveItem = TRUE;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (haveItem)
+        FormatDisplaySSID(item, index, buf, bufLen);
 }
 
 // -------------------------------------------------------
 // Icons and resources
 // -------------------------------------------------------
 void LoadSystemIcons() {
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!g_hIconNetworkMap)
         g_hIconNetworkMap = CreateIconFromBase64PNG(PC_ICON_BASE64, ScaleDpi(48), ScaleDpi(48));
 
@@ -3944,8 +4041,8 @@ void LoadSystemIcons() {
     if (!g_hIconAvailable)
         g_hIconAvailable = CreateIconFromBase64PNG(AVAILABLE_ICON_BASE64,
                                                     ScaleDpi(36), ScaleDpi(36));
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
-
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
     g_hGdiPlus = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -4023,6 +4120,7 @@ static void ShutdownGdiPlusRendering() {
 }
 
 void FreeSystemIcons() {
+    EnterCriticalSection(&g_Ctx.csLock);
     // Free network location icons
     if (g_hIconNetLocHome)   { DestroyIcon(g_hIconNetLocHome);   g_hIconNetLocHome = NULL; }
     if (g_hIconNetLocPublic) { DestroyIcon(g_hIconNetLocPublic); g_hIconNetLocPublic = NULL; }
@@ -4055,6 +4153,7 @@ void FreeSystemIcons() {
     g_iconNetLocDUICategory = -1;
     for (int i = 0; i < 6; i++)
         if (g_hIconSignalBars[i]) { DestroyIcon(g_hIconSignalBars[i]); g_hIconSignalBars[i] = NULL; }
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
 
 void InitGlobalFonts() {
@@ -4651,18 +4750,26 @@ void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOv
     // one-off priming calls at mod startup and after a settings change, so
     // the category is already known (instead of falling back to the generic
     // PC icon) the first time the flyout is actually shown.
-    BOOL isAnyConnected = (g_EthernetConnected || 
-                           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED));
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL isAnyConnected = (state.ethernetConnected ||
+                           (state.networkCount > 0 &&
+                            state.networks[0].connState == CONN_STATE_CONNECTED));
     BOOL flyoutVisible = forceDetection ||
                          (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
     if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
-        g_CurrentNetworkCategory = DetectNetworkLocationCategory(pNLMOverride);
+        int category = DetectNetworkLocationCategory(pNLMOverride);
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_CurrentNetworkCategory = category;
+        LeaveCriticalSection(&g_Ctx.csLock);
     } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
         // Don't wipe the reliable fallback just because the connection is
         // momentarily settling (e.g. during a reconnect). While the flyout is
         // merely hidden, g_CurrentNetworkCategory is left untouched below so
         // the first paint after reopening doesn't flash the generic icon.
+        EnterCriticalSection(&g_Ctx.csLock);
         g_CurrentNetworkCategory = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
     }
     
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
@@ -5322,34 +5429,45 @@ static unsigned __stdcall ReapConnectThreadHandleProc(void* p) {
 }
 
 static BOOL AskForPasswordAndConnect(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
-    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
-        g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
-        g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-        Wh_Log(L"Previous pending connection %d reset", g_PendingConnectIndex);
+    if (!g_Ctx.hWlanClient) return FALSE;
+
+    WifiNetworkItem item = {};
+    BOOL haveItem = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        item = g_NetworkList[index];
+        haveItem = TRUE;
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount &&
+            g_PendingConnectIndex != index) {
+            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
+            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+            Wh_Log(L"Previous pending connection %d reset", g_PendingConnectIndex);
+        }
     }
-    
-    WifiNetworkItem* item = &g_NetworkList[index];
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!haveItem) return FALSE;
     
     AsyncConnectContext* ctx = (AsyncConnectContext*)calloc(1, sizeof(AsyncConnectContext));
     if (!ctx) {
+        EnterCriticalSection(&g_Ctx.csLock);
         g_PendingConnectIndex = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
     ZeroMemory(ctx, sizeof(AsyncConnectContext));
     ctx->hWndNotify = g_hWndFlyout;
-    ctx->interfaceGuid = item->interfaceGuid;
-    ctx->dot11BssType = item->dot11BssType;
-    ctx->hasProfile = item->hasProfile;
-    ctx->isSecured = item->isSecured;
-    ctx->authAlgorithm = item->authAlgorithm;
-    ctx->cipherAlgorithm = item->cipherAlgorithm;
-    StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item->ssid);
-    ctx->hasBssid = item->hasBssid;
-    if (item->hasBssid) {
-        CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
+    ctx->interfaceGuid = item.interfaceGuid;
+    ctx->dot11BssType = item.dot11BssType;
+    ctx->hasProfile = item.hasProfile;
+    ctx->isSecured = item.isSecured;
+    ctx->authAlgorithm = item.authAlgorithm;
+    ctx->cipherAlgorithm = item.cipherAlgorithm;
+    StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item.ssid);
+    ctx->hasBssid = item.hasBssid;
+    if (item.hasBssid) {
+        CopyMemory(ctx->bssid, item.bssid, sizeof(DOT11_MAC_ADDRESS));
     }
-    BOOL needsPassword = (item->isSecured && !item->hasProfile);
+    BOOL needsPassword = (item.isSecured && !item.hasProfile);
     if (needsPassword) {
         WCHAR password[65] = {0};
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
@@ -5417,8 +5535,15 @@ static BOOL AskForPasswordAndConnect(int index) {
     HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, AsyncConnectThreadProc, ctx, 0, NULL);
     if (!hThread) {
         Wh_Log(L"Failed to create async connect thread");
-        item->connState = CONN_STATE_IDLE;
-        g_PendingConnectIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        if (resolvedIndex >= 0 && resolvedIndex < g_NetworkCount) {
+            g_NetworkList[resolvedIndex].connState = CONN_STATE_IDLE;
+            g_NetworkList[resolvedIndex].operationStartTime = 0;
+        }
+        if (g_PendingConnectIndex == resolvedIndex)
+            g_PendingConnectIndex = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
+        SecureZeroMemory(ctx->password, sizeof(ctx->password));
         free(ctx);
         return FALSE;
     }
@@ -5450,54 +5575,101 @@ static BOOL AskForPasswordAndConnect(int index) {
 }
 
 void ConnectToNetwork(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
-    if (item->connState == CONN_STATE_CONNECTED) {
+    if (!g_Ctx.hWlanClient) return;
+
+    WifiNetworkItem item = {};
+    BOOL haveItem = FALSE;
+    BOOL shouldDisconnect = FALSE;
+    BOOL alreadyConnecting = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        haveItem = TRUE;
+        item = g_NetworkList[index];
+        if (item.connState == CONN_STATE_CONNECTED) {
+            shouldDisconnect = TRUE;
+        } else if (item.connState == CONN_STATE_CONNECTING) {
+            alreadyConnecting = TRUE;
+        } else {
+            for (int i = 0; i < g_NetworkCount; i++) {
+                if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                                   g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+                    g_NetworkList[i].connState = CONN_STATE_IDLE;
+                    g_NetworkList[i].operationStartTime = 0;
+                }
+            }
+        }
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (!haveItem)
+        return;
+    if (shouldDisconnect) {
         DisconnectFromNetwork(index);
         return;
     }
-    if (item->connState == CONN_STATE_CONNECTING) {
-        LogSsidSafe(L"Already connecting to, ignoring", item->ssid);
+    if (alreadyConnecting) {
+        LogSsidSafe(L"Already connecting to, ignoring", item.ssid);
         return;
-    }
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
-                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
-            g_NetworkList[i].connState = CONN_STATE_IDLE;
-            g_NetworkList[i].operationStartTime = 0;
-        }
     }
     AskForPasswordAndConnect(index);
 }
 
 void DisconnectFromNetwork(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
-    if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
-                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
-            g_NetworkList[i].connState = CONN_STATE_IDLE;
-            g_NetworkList[i].operationStartTime = 0;
+    if (!g_Ctx.hWlanClient) return;
+
+    WifiNetworkItem item = {};
+    BOOL canDisconnect = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        item = g_NetworkList[index];
+        canDisconnect = (item.connState == CONN_STATE_CONNECTED ||
+                         item.connState == CONN_STATE_CONNECTING);
+        if (canDisconnect) {
+            for (int i = 0; i < g_NetworkCount; i++) {
+                if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                                   g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+                    g_NetworkList[i].connState = CONN_STATE_IDLE;
+                    g_NetworkList[i].operationStartTime = 0;
+                }
+            }
+            g_NetworkList[index].connState = CONN_STATE_DISCONNECTING;
+            g_NetworkList[index].operationStartTime = GetTickCount();
+            g_PendingConnectIndex = index;
         }
     }
-    item->connState = CONN_STATE_DISCONNECTING;
-    item->operationStartTime = GetTickCount();
-    g_PendingConnectIndex = index;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!canDisconnect)
+        return;
+
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 1000, NULL);
     }
     UpdateLayoutGeometry();
     if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
-    DWORD res = WlanDisconnect(g_Ctx.hWlanClient, &item->interfaceGuid, NULL);
+
+    DWORD res = WlanDisconnect(g_Ctx.hWlanClient, &item.interfaceGuid, NULL);
     if (res != ERROR_SUCCESS) {
         Wh_Log(L"WlanDisconnect failed: %lu", res);
-        item->connState = CONN_STATE_ERROR;
-        if (g_PendingConnectIndex == index) g_PendingConnectIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        int resolvedIndex = -1;
+        for (int i = 0; i < g_NetworkCount; ++i) {
+            if (IsEqualGUID(g_NetworkList[i].interfaceGuid, item.interfaceGuid) &&
+                wcscmp(g_NetworkList[i].ssid, item.ssid) == 0) {
+                resolvedIndex = i;
+                break;
+            }
+        }
+        if (resolvedIndex >= 0) {
+            g_NetworkList[resolvedIndex].connState = CONN_STATE_ERROR;
+            g_NetworkList[resolvedIndex].operationStartTime = 0;
+            if (g_PendingConnectIndex == index)
+                g_PendingConnectIndex = -1;
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
         UpdateLayoutGeometry();
         if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
     } else {
-        LogSsidSafe(L"WlanDisconnect request successful for", item->ssid);
+        LogSsidSafe(L"WlanDisconnect request successful for", item.ssid);
     }
 }
 
@@ -5772,22 +5944,28 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
         SendMessage(g_hTooltip, TTM_DELTOOL, 0, (LPARAM)&ti);
         g_lastTooltipId = 0;
     }
-    if (index < 0 || index >= g_NetworkCount) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
+    WifiNetworkItem item = {};
+    EnterCriticalSection(&g_Ctx.csLock);
+    BOOL haveItem = (index >= 0 && index < g_NetworkCount);
+    if (haveItem)
+        item = g_NetworkList[index];
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!haveItem) return;
+
     WCHAR ssidBuf[33];
-    GetDisplaySSID(index, ssidBuf, 33);
+    FormatDisplaySSID(item, index, ssidBuf, ARRAYSIZE(ssidBuf));
     const WCHAR* statusText;
-    switch (item->connState) {
-        case CONN_STATE_CONNECTED:    statusText = LOC(STR_STATUS_CONNECTED); break;
-        case CONN_STATE_CONNECTING:   statusText = LOC(STR_STATUS_CONNECTING); break;
+    switch (item.connState) {
+        case CONN_STATE_CONNECTED:     statusText = LOC(STR_STATUS_CONNECTED); break;
+        case CONN_STATE_CONNECTING:    statusText = LOC(STR_STATUS_CONNECTING); break;
         case CONN_STATE_DISCONNECTING: statusText = LOC(STR_DISCONNECTING); break;
-        default:                      statusText = LOC(STR_STATUS_NOT_CONNECTED); break;
+        default:                       statusText = LOC(STR_STATUS_NOT_CONNECTED); break;
     }
     StringCchPrintfW(g_TooltipBuffer, 1024,
         L"SSID: %s\n%s %s\n%s %s\n%s",
         ssidBuf,
-        LOC(STR_SIGNAL_STRENGTH), SignalQualityToString(item->signalQuality),
-        LOC(STR_SECURITY_TYPE), item->isSecured ? L"WPA2-PSK" : L"Open",
+        LOC(STR_SIGNAL_STRENGTH), SignalQualityToString(item.signalQuality),
+        LOC(STR_SECURITY_TYPE), item.isSecured ? L"WPA2-PSK" : L"Open",
         statusText);
     RECT rcRow;
     if (!GetRowRect(index, &rcRow)) return;
@@ -5802,11 +5980,17 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     g_lastTooltipId = (UINT_PTR)(index + 1);
 }
 
-static int GetTotalListHeight() {
+static int GetTotalListHeightForCount(int networkCount) {
     int h = 0;
-    for (int i = 0; i < g_NetworkCount; i++)
+    for (int i = 0; i < networkCount; i++)
         h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     return h;
+}
+
+static int GetTotalListHeight() {
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    return GetTotalListHeightForCount(state.networkCount);
 }
 
 static void ClampScrollPos() {
@@ -5817,9 +6001,9 @@ static void ClampScrollPos() {
     if (g_ScrollPos < 0) g_ScrollPos = 0;
 }
 
-BOOL GetRowRect(int index, RECT* rcRow) {
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
+static BOOL GetRowRectForCount(int index, int networkCount, RECT* rcRow) {
+    BOOL showWifiList = (networkCount > 0);
+    if (!showWifiList || index < 0 || index >= networkCount || !g_bListExpanded) return FALSE;
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
@@ -5836,12 +6020,20 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     return TRUE;
 }
 
+BOOL GetRowRect(int index, RECT* rcRow) {
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    return GetRowRectForCount(index, state.networkCount, rcRow);
+}
+
 int HitTestRows(int x, int y) {
-    BOOL showWifiList = (g_NetworkCount > 0);
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL showWifiList = (state.networkCount > 0);
     if (!showWifiList) return -1;
-    for (int i = 0; i < g_NetworkCount; i++) {
+    for (int i = 0; i < state.networkCount; i++) {
         RECT rc;
-        if (GetRowRect(i, &rc) && x>=rc.left && x<=rc.right && y>=rc.top && y<=rc.bottom) return i;
+        if (GetRowRectForCount(i, state.networkCount, &rc) && x>=rc.left && x<=rc.right && y>=rc.top && y<=rc.bottom) return i;
     }
     return -1;
 }
@@ -5861,41 +6053,25 @@ static void InvalidateToolbarCache() {
 static BYTE* g_netcenterBase = NULL;
 static BYTE* g_netcenterEnd  = NULL;
 
-// netcenter.dll is loaded on demand (only once the Network and Sharing
-// Center page is actually opened), so g_netcenterBase/g_netcenterEnd can't
-// be resolved once up front in Wh_ModInit like g_pniduiBase is - at that
-// point the module usually isn't loaded yet, so they were previously left
-// permanently NULL and IsInNetCenter() always returned false. Retry the
-// lookup lazily instead, the same way InitPniduiInfo() resolves pnidui.dll,
-// caching the result once it succeeds.
-static bool EnsureNetCenterRange() {
-    if (g_netcenterBase && g_netcenterEnd)
-        return true;
-
-    HMODULE h = GetModuleHandleW(L"netcenter.dll");
-    if (!h)
-        return false;
-
-    MODULEINFO mi{};
-    if (!GetModuleInformation(GetCurrentProcess(), h, &mi, sizeof(mi)))
-        return false;
-
-    g_netcenterBase = (BYTE*)mi.lpBaseOfDll;
-    g_netcenterEnd  = g_netcenterBase + mi.SizeOfImage;
-    return true;
-}
+// netcenter.dll is loaded on demand. Cache its range only when
+// SetXMLFromResource_Hook receives the known netcenter HMODULE, never from the
+// DrawTextW hook itself.
 
 static bool IsInNetCenter(void* ra) {
-    if (!(g_netcenterBase && g_netcenterEnd) && !EnsureNetCenterRange())
+    // DrawTextW is a very hot shell path. The hook is installed only after
+    // SetXMLFromResource_Hook has observed netcenter.dll and cached this range,
+    // so never probe the loader/module list from here on the miss path.
+    if (!ra || !(g_netcenterBase && g_netcenterEnd))
         return false;
-    return ra >= (void*)g_netcenterBase && ra < (void*)g_netcenterEnd;
+    BYTE* address = static_cast<BYTE*>(ra);
+    return address >= g_netcenterBase && address < g_netcenterEnd;
 }
 
 // Resolves and caches netcenter.dll's base+size from a known-good HMODULE.
 // Call this from SetXMLFromResource_Hook (which always runs before the page
 // draws any text and already has the netcenter HMODULE in hand) instead of
 // letting every DrawTextW call in the process hit GetModuleHandleW's loader
-// lock + module-list walk via EnsureNetCenterRange().
+// lock + module-list walk.
 static void CacheNetCenterRange(HMODULE h) {
     if (g_netcenterBase && g_netcenterEnd)
         return;
@@ -5987,8 +6163,11 @@ void RecalcArrowRect() {
 
 void UpdateLayoutGeometry(int scrollbarOffset) {
     if (!SafeToAccessUI()) return;
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || g_SelectedRowIndex < 0 || g_SelectedRowIndex >= g_NetworkCount) {
+    NetworkStateSnapshot layoutState;
+    CaptureNetworkState(&layoutState);
+    BOOL showWifiList = (layoutState.networkCount > 0);
+    int selectedRowIndex = g_SelectedRowIndex;
+    if (!showWifiList || selectedRowIndex < 0 || selectedRowIndex >= layoutState.networkCount) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
@@ -5997,15 +6176,15 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         return;
     }
     int rowY = LIST_Y_START;
-    for (int i = 0; i < g_SelectedRowIndex; i++) {
-        rowY += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    for (int i = 0; i < selectedRowIndex; i++) {
+        rowY += (i == selectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     }
     int rowYRelative = rowY - g_ScrollPos;
     int rowHeight = ROW_HEIGHT_EXPANDED;
-    WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-    BOOL isConnected = (item->connState == CONN_STATE_CONNECTED);
-    BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
-                         item->connState == CONN_STATE_DISCONNECTING);
+    const WifiNetworkItem& item = layoutState.networks[selectedRowIndex];
+    BOOL isConnected = (item.connState == CONN_STATE_CONNECTED);
+    BOOL isConnecting = (item.connState == CONN_STATE_CONNECTING ||
+                         item.connState == CONN_STATE_DISCONNECTING);
     if (rowYRelative + rowHeight <= LIST_Y_START || rowYRelative >= LIST_Y_END) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
@@ -6096,26 +6275,30 @@ static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID parameter) {
 }
 
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
-    WifiNetworkItem item = {};
+    WifiNetworkItem menuItem = {};
     EnterCriticalSection(&g_Ctx.csLock);
     if (itemIndex < 0 || itemIndex >= g_NetworkCount) {
         LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
-    item = g_NetworkList[itemIndex];
+    menuItem = g_NetworkList[itemIndex];
     LeaveCriticalSection(&g_Ctx.csLock);
-    g_ContextMenuTargetIndex = itemIndex;
+
+    GUID targetGuid = menuItem.interfaceGuid;
+    WCHAR targetSsid[33] = {0};
+    StringCchCopyW(targetSsid, ARRAYSIZE(targetSsid), menuItem.ssid);
+
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
-    if (item.connState == CONN_STATE_CONNECTED) {
+    if (menuItem.connState == CONN_STATE_CONNECTED) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, LOC(STR_CTX_DISCONNECT));
         AppendMenuW(hMenu, MF_STRING, IDM_STATUS,     LOC(STR_CTX_STATUS));
-    } else if (item.connState == CONN_STATE_CONNECTING) {
+    } else if (menuItem.connState == CONN_STATE_CONNECTING) {
         AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CONNECT, LOC(STR_CONNECTING));
     } else {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, LOC(STR_CTX_CONNECT));
     }
-    if (item.hasProfile) {
+    if (menuItem.hasProfile) {
         AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
     }
     if (g_Settings.theme == 1) {
@@ -6126,35 +6309,39 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
         DarkContextMenu::Restore();
     }
     if (cmd > 0) {
+        WifiNetworkItem targetItem = {};
+        int targetIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_ContextMenuTargetIndex = -1;
+        for (int i = 0; i < g_NetworkCount; ++i) {
+            if (IsEqualGUID(g_NetworkList[i].interfaceGuid, targetGuid) &&
+                wcscmp(g_NetworkList[i].ssid, targetSsid) == 0) {
+                targetIndex = i;
+                targetItem = g_NetworkList[i];
+                g_ContextMenuTargetIndex = i;
+                break;
+            }
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (targetIndex < 0) {
+            DestroyMenu(hMenu);
+            return;
+        }
+
         switch (cmd) {
         case IDM_CONNECT:
-            ConnectToNetwork(g_ContextMenuTargetIndex);
+            ConnectToNetwork(targetIndex);
             break;
         case IDM_DISCONNECT:
-            DisconnectFromNetwork(g_ContextMenuTargetIndex);
+            DisconnectFromNetwork(targetIndex);
             break;
         case IDM_STATUS:
         case IDM_PROPERTIES:
             {
                 BOOL launched = FALSE;
-                WifiNetworkItem item = {};
-                BOOL haveItem = FALSE;
-                // The network list is rebuilt by the refresh worker. Take a
-                // stable copy before constructing the shell target: passing a
-                // GUID while that worker is replacing the row can hand Explorer
-                // an invalid namespace argument and make its process unstable.
-                EnterCriticalSection(&g_Ctx.csLock);
-                if (g_ContextMenuTargetIndex >= 0 && g_ContextMenuTargetIndex < g_NetworkCount) {
-                    item = g_NetworkList[g_ContextMenuTargetIndex];
-                    haveItem = TRUE;
-                }
-                LeaveCriticalSection(&g_Ctx.csLock);
 
-                // Properties belongs to the WLAN profile, not the adapter.
-                // It is modal, therefore run it outside the hotkey thread so
-                // that shutdown can join a tracked worker safely.
-                if (cmd == IDM_PROPERTIES && haveItem && item.hasProfile &&
-                    !IsEqualGUID(item.interfaceGuid, GUID_NULL)) {
+                if (cmd == IDM_PROPERTIES && targetItem.hasProfile &&
+                    !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
                     if (g_hProfileDialogThread &&
                         WaitForSingleObject(g_hProfileDialogThread, 0) == WAIT_OBJECT_0) {
                         CloseHandle(g_hProfileDialogThread);
@@ -6163,51 +6350,35 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
                     if (!g_hProfileDialogThread) {
                         std::unique_ptr<WlanProfileDialogContext> context(
                             new WlanProfileDialogContext{});
-                        StringCchCopyW(context->profileName, ARRAYSIZE(context->profileName), item.ssid);
-                        context->interfaceGuid = item.interfaceGuid;
-                        // Transfer ownership only after preparing the worker
-                        // context. If CreateThread fails, delete it locally.
+                        StringCchCopyW(context->profileName, ARRAYSIZE(context->profileName), targetItem.ssid);
+                        context->interfaceGuid = targetItem.interfaceGuid;
                         WlanProfileDialogContext* rawContext = context.release();
                         HANDLE thread = CreateThread(NULL, 0, WlanProfileDialogThreadProc,
                                                      rawContext, 0, NULL);
                         if (thread) {
                             g_hProfileDialogThread = thread;
-                            launched = TRUE; // The native profile UI owns rawContext.
+                            launched = TRUE;
                         } else {
                             delete rawContext;
                         }
+                    } else {
+                        launched = TRUE;
                     }
                 }
 
-                if (!launched && haveItem && !IsEqualGUID(item.interfaceGuid, GUID_NULL)) {
+                if (!launched && !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
                     WCHAR szGuid[64] = {0};
-                    if (StringFromGUID2(item.interfaceGuid, szGuid, ARRAYSIZE(szGuid)) > 0) {
+                    if (StringFromGUID2(targetItem.interfaceGuid, szGuid, ARRAYSIZE(szGuid)) > 0) {
                         std::wstring path = L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" + std::wstring(szGuid);
-                        // Resolve the namespace name before invoking it. This
-                        // avoids passing an unchecked parser string to a new
-                        // explorer.exe process, which was the crash-prone path.
                         LPITEMIDLIST pidl = nullptr;
                         if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
                             SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                            // Suppress shell-generated error UI for an absent
-                            // verb: some Windows builds report success after
-                            // launching explorer.exe, then show “Invalid
-                            // parameter” from that new process.
                             sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
                             sei.hwnd = hwnd;
                             sei.lpIDList = pidl;
                             sei.nShow = SW_SHOWNORMAL;
-
-                            // Request Status explicitly. Do not use the `open`
-                            // or default verb here: on affected builds those are
-                            // implemented by explorer.exe with an invalid raw
-                            // argument, which produces the error dialog above.
                             sei.lpVerb = (cmd == IDM_STATUS) ? L"status" : L"properties";
                             launched = ShellExecuteExW(&sei);
-
-                            // Last-resort adapter fallback. It is deliberately
-                            // attempted only after Status, and remains PIDL-based
-                            // so it cannot reintroduce the explorer crash.
                             if (!launched) {
                                 sei.lpVerb = L"properties";
                                 launched = ShellExecuteExW(&sei);
@@ -6217,8 +6388,6 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
                     }
                 }
                 if (!launched) {
-                    // Fallback to the Network Connections root through the
-                    // same direct shell invocation.
                     ShellExecuteW(hwnd, L"open",
                                   L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}",
                                   NULL, NULL, SW_SHOWNORMAL);
@@ -6357,26 +6526,34 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_ASYNC_CONNECT_COMPLETE: {
         BOOL opSuccess = (BOOL)wParam;
         DWORD errorCode = (DWORD)lParam;
-        Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)", 
+        Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)",
                opSuccess, errorCode, errorCode);
         if (!opSuccess && errorCode == ERROR_SUCCESS) {
+            WCHAR disconnectedSsid[33] = {0};
+            BOOL loggedDisconnect = FALSE;
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
                 if (item->connState == CONN_STATE_DISCONNECTING) {
-                    LogSsidSafe(L"Disconnection confirmed by notification for", item->ssid);
+                    StringCchCopyW(disconnectedSsid, ARRAYSIZE(disconnectedSsid), item->ssid);
                     item->connState = CONN_STATE_IDLE;
                     item->operationStartTime = 0;
                     g_PendingConnectIndex = -1;
+                    loggedDisconnect = TRUE;
                 }
             }
+            int pendingIndex = g_PendingConnectIndex;
             for (int i = 0; i < g_NetworkCount; i++) {
-                if (i == g_PendingConnectIndex) continue;
+                if (i == pendingIndex) continue;
                 if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
                     g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
                     g_NetworkList[i].connState = CONN_STATE_IDLE;
                     g_NetworkList[i].operationStartTime = 0;
                 }
             }
+            LeaveCriticalSection(&g_Ctx.csLock);
+            if (loggedDisconnect)
+                LogSsidSafe(L"Disconnection confirmed by notification for", disconnectedSsid);
             if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
             RefreshNetworkData();
             UpdateLayoutGeometry();
@@ -6384,11 +6561,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             break;
         }
         if (opSuccess) {
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
                 g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
                 g_PendingConnectIndex = -1;
             }
+            LeaveCriticalSection(&g_Ctx.csLock);
             if (g_TimeoutTimer) {
                 KillTimer(hwnd, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
@@ -6397,48 +6576,57 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             // new networks and writes the category to the registry.  We just
             // re-detect on the next refresh and show the correct icon.
         } else {
+            static const DWORD authFailureCodes[] = {
+                0x00038001,
+                0x00038002,
+                0x00028001,
+                0x00028002,
+                0x00030001,
+            };
+            BOOL isAuthFailure = FALSE;
+            for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
+                if (errorCode == authFailureCodes[i]) {
+                    isAuthFailure = TRUE;
+                    break;
+                }
+            }
+
+            WCHAR failedSsid[33] = {0};
+            BOOL havePendingItem = FALSE;
+            BOOL hadProfile = FALSE;
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-                static const DWORD authFailureCodes[] = {
-                    0x00038001,  
-                    0x00038002,  
-                    0x00028001,  
-                    0x00028002,  
-                    0x00030001,  
-                };
-                BOOL isAuthFailure = FALSE;
-                for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
-                    if (errorCode == authFailureCodes[i]) {
-                        isAuthFailure = TRUE;
-                        break;
-                    }
-                }
-                if (isAuthFailure && item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile", 
-                           item->ssid, errorCode);
+                StringCchCopyW(failedSsid, ARRAYSIZE(failedSsid), item->ssid);
+                hadProfile = item->hasProfile;
+                if (isAuthFailure && item->hasProfile)
                     item->hasProfile = FALSE;
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                item->connState = CONN_STATE_ERROR;
+                item->operationStartTime = 0;
+                g_PendingConnectIndex = -1;
+                havePendingItem = TRUE;
+            }
+            LeaveCriticalSection(&g_Ctx.csLock);
+
+            if (havePendingItem) {
+                if (isAuthFailure && hadProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile",
+                           failedSsid, errorCode);
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE),
                                MB_OK | MB_ICONERROR);
-                } else if (isAuthFailure && !item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong", 
-                           item->ssid, errorCode);
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                } else if (isAuthFailure && !hadProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong",
+                           failedSsid, errorCode);
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE),
                                MB_OK | MB_ICONERROR);
                 } else {
-                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact", 
-                           item->ssid, errorCode);
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
+                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact",
+                           failedSsid, errorCode);
                     WCHAR errMsg[256];
-                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
+                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg),
                                    LOC(STR_CONNECTION_ERROR), errorCode);
                     MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
                 }
-                g_PendingConnectIndex = -1;
             }
             if (g_TimeoutTimer) {
                 KillTimer(hwnd, g_TimeoutTimer);
@@ -6453,31 +6641,34 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS | DLGC_WANTCHARS;
     case WM_KEYDOWN: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        NetworkStateSnapshot keyState;
+        CaptureNetworkState(&keyState);
+        int keyNetworkCount = keyState.networkCount;
+        BOOL showWifiList = (keyNetworkCount > 0);
         switch (wParam) {
             case VK_UP:
-                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
-                    int newIndex = (g_KeyboardSelectedIndex > 0) ? g_KeyboardSelectedIndex - 1 : g_NetworkCount - 1;
+                if (showWifiList && g_bListExpanded && keyNetworkCount > 0) {
+                    int newIndex = (g_KeyboardSelectedIndex > 0) ? g_KeyboardSelectedIndex - 1 : keyNetworkCount - 1;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_DOWN:
-                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
-                    int newIndex = (g_KeyboardSelectedIndex < g_NetworkCount - 1) ? g_KeyboardSelectedIndex + 1 : 0;
+                if (showWifiList && g_bListExpanded && keyNetworkCount > 0) {
+                    int newIndex = (g_KeyboardSelectedIndex < keyNetworkCount - 1) ? g_KeyboardSelectedIndex + 1 : 0;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_RETURN:
-                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount)
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < keyNetworkCount)
                     ConnectToNetwork(g_KeyboardSelectedIndex);
                 return 0;
             case VK_LEFT:
                 ShowWindow(hwnd, SW_HIDE);
                 return 0;
             case VK_RIGHT:
-                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount) {
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < keyNetworkCount) {
                     RECT rcRow;
                     if (GetRowRect(g_KeyboardSelectedIndex, &rcRow)) {
                         POINT pt = {rcRow.left + 20, rcRow.top + 13};
@@ -6564,10 +6755,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         HBRUSH hBrF = CreateSolidBrush(GetFooterBgColor());
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
 
-        BOOL showWifiList = (g_NetworkCount > 0);
+        NetworkStateSnapshot paintState;
+        CaptureNetworkState(&paintState);
+        const int paintNetworkCount = paintState.networkCount;
+        BOOL showWifiList = (paintNetworkCount > 0);
         
         if (showWifiList) {
-            int totalHeight = GetTotalListHeight();
+            int totalHeight = GetTotalListHeightForCount(paintNetworkCount);
             int visibleHeight = LIST_Y_END - LIST_Y_START;
             SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
             SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
@@ -6591,8 +6785,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         DeleteObject(hPenBevelDark);
         DeleteObject(hPenBevelLight);
 
-        BOOL isWifiConnected = (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
-        BOOL isAnyConnected = (g_EthernetConnected || isWifiConnected);
+        BOOL isWifiConnected = (paintNetworkCount > 0 &&
+                                paintState.networks[0].connState == CONN_STATE_CONNECTED);
+        BOOL isAnyConnected = (paintState.ethernetConnected || isWifiConnected);
         SetBkMode(hdc, TRANSPARENT);
         
         if (isAnyConnected) {
@@ -6602,18 +6797,18 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             SetTextColor(hdc, GetTextColor());
             
             WCHAR displayName[64] = {0};
-            BOOL showEthernetInHeader = g_EthernetConnected;
+            BOOL showEthernetInHeader = paintState.ethernetConnected;
             if (showEthernetInHeader) {
                 if (g_Settings.privacyMode) {
                     StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 1);
                 } else {
-                    StringCchCopyW(displayName, ARRAYSIZE(displayName), g_EthernetNetworkName);
+                    StringCchCopyW(displayName, ARRAYSIZE(displayName), paintState.ethernetNetworkName);
                     if (displayName[0] == L'\0') {
                         StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 2);
                     }
                 }
             } else {
-                GetDisplaySSID(0, displayName, 33);
+                FormatDisplaySSID(paintState.networks[0], 0, displayName, ARRAYSIZE(displayName));
             }
             
             DrawTextWithWrap(hdc, displayName, ScaleDpi(56), ScaleDpi(36), WINDOW_WIDTH - ScaleDpi(70), ScaleDpi(18));
@@ -6648,7 +6843,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 // User prefers the original generic PC/network icon
                 hLargeIcon = g_hIconNetworkMap;
             }
-        } else if (g_NetworkCount > 0) {
+        } else if (paintNetworkCount > 0) {
             // Networks are available but none is connected.
             hLargeIcon = g_hIconAvailable ? g_hIconAvailable : g_hIconSignalBars[0];
             drawAvailableIcon = (g_hIconAvailable != NULL);
@@ -6671,7 +6866,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                        hLargeIcon, drawSize, drawSize, 0, NULL, DI_NORMAL);
         }
         if (showWifiList) {
-            int totalHeight = GetTotalListHeight();
+            int totalHeight = GetTotalListHeightForCount(paintNetworkCount);
             int visibleHeight = LIST_Y_END - LIST_Y_START;
             BOOL hasScrollbar = (totalHeight > visibleHeight);
             int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
@@ -6831,9 +7026,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
                 UpdateLayoutGeometry(scrollbarOffset);  
                 
-                for (int i = 0; i < g_NetworkCount; i++) {
+                for (int i = 0; i < paintNetworkCount; i++) {
                     RECT rcRow;
-                    if (!GetRowRect(i, &rcRow)) continue;
+                    if (!GetRowRectForCount(i, paintNetworkCount, &rcRow)) continue;
                     BOOL isSelected = (i == g_SelectedRowIndex);
                     BOOL isHovered  = (i == g_HoveredRowIndex);
                     BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
@@ -6853,8 +7048,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     if (hasKeyboardFocus && !isSelected)
                         DrawFocusRectangle(hdc, &rcRow);
                     
-                    WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
-                    BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
+                    WCHAR ssidBuf[33];
+                    FormatDisplaySSID(paintState.networks[i], i, ssidBuf, ARRAYSIZE(ssidBuf));
+                    BOOL isConnected = (paintState.networks[i].connState == CONN_STATE_CONNECTED);
                     SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
                     SetTextColor(hdc, GetNetworkNameColor());
                     // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
@@ -6864,7 +7060,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     const int ROW_TEXT_Y_OFFSET = ScaleDpi(4);
                     DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + ROW_TEXT_Y_OFFSET,
                                      rcRow.right - rcRow.left - 10, ScaleDpi(24));
-                    WifiNetworkItem* item = &g_NetworkList[i];
+                    const WifiNetworkItem* item = &paintState.networks[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
@@ -7338,7 +7534,7 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         DetectNetworkButtonId(hWnd, &detectedId);
                         g_ToolbarCache.networkId = detectedId;
                         g_ToolbarCache.buttonCount = currentCount;
-                        g_ToolbarCache.valid = TRUE;
+                        g_ToolbarCache.valid = (detectedId != -1);
                     }
                     if (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId) {
                         // Record flyout visibility at button-DOWN time, before
@@ -8882,20 +9078,11 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                 return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = (width  > 0) ? width  : ScaleDpi(48);
             int wantH = (height > 0) ? height : ScaleDpi(48);
-            if (!g_hIconNetworkMapDUI || g_iconNetworkMapDUIW != wantW || g_iconNetworkMapDUIH != wantH) {
-                if (g_hIconNetworkMapDUI) { DestroyIcon(g_hIconNetworkMapDUI); g_hIconNetworkMapDUI = NULL; }
-                g_hIconNetworkMapDUI = CreateIconFromBase64PNG(PC_ICON_BASE64, wantW, wantH);
-                g_iconNetworkMapDUIW = wantW;
-                g_iconNetworkMapDUIH = wantH;
-            }
-            Wh_Log(L"[NetMap-Icon] kComputerIconId requested at %dx%d, g_hIconNetworkMapDUI=%p", wantW, wantH, g_hIconNetworkMapDUI);
-            if (g_hIconNetworkMapDUI) {
-                HICON copy = CopyIcon(g_hIconNetworkMapDUI);
-                Wh_Log(L"[NetMap-Icon] Returning PC icon: %p", copy);
-                return copy;
-            }
-            Wh_Log(L"[NetMap-Icon] g_hIconNetworkMapDUI is NULL");
-            return NULL;
+            HICON copy = CopyCachedBase64Icon(&g_hIconNetworkMapDUI,
+                &g_iconNetworkMapDUIW, &g_iconNetworkMapDUIH,
+                PC_ICON_BASE64, wantW, wantH);
+            Wh_Log(L"[NetMap-Icon] kComputerIconId requested at %dx%d, copy=%p", wantW, wantH, copy);
+            return copy;
         }
         if (resourceId == kGlobeIconId) {
             if (!IsNetCenter(hInst))
@@ -8905,6 +9092,8 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
             // The same connectivity test used by the flyout selects a gray
             // globe whenever this connection has no Internet access.
             BOOL online = IsInternetConnected();
+            HICON copy = NULL;
+            EnterCriticalSection(&g_Ctx.csLock);
             if (!g_hIconGlobeDUI || g_iconGlobeDUIW != wantW ||
                 g_iconGlobeDUIH != wantH || g_iconGlobeDUIOnline != online) {
                 if (g_hIconGlobeDUI) { DestroyIcon(g_hIconGlobeDUI); g_hIconGlobeDUI = NULL; }
@@ -8915,9 +9104,12 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                 g_iconGlobeDUIH = wantH;
                 g_iconGlobeDUIOnline = online;
             }
-            Wh_Log(L"[NetMap-Icon] Globe requested at %dx%d (online=%d), icon=%p",
-                   wantW, wantH, online, g_hIconGlobeDUI);
-            return g_hIconGlobeDUI ? CopyIcon(g_hIconGlobeDUI) : NULL;
+            if (g_hIconGlobeDUI)
+                copy = CopyIcon(g_hIconGlobeDUI);
+            LeaveCriticalSection(&g_Ctx.csLock);
+            Wh_Log(L"[NetMap-Icon] Globe requested at %dx%d (online=%d), copy=%p",
+                   wantW, wantH, online, copy);
+            return copy;
         }
 
         if (resourceId == kNoInternetXIconId) {
@@ -8925,15 +9117,9 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                 return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = (width > 0) ? width : ScaleDpi(16);
             int wantH = (height > 0) ? height : ScaleDpi(16);
-            if (!g_hIconNoInternetXDUI || g_iconNoInternetXDUIW != wantW ||
-                g_iconNoInternetXDUIH != wantH) {
-                if (g_hIconNoInternetXDUI) { DestroyIcon(g_hIconNoInternetXDUI); g_hIconNoInternetXDUI = NULL; }
-                g_hIconNoInternetXDUI = CreateIconFromBase64PNG(
-                    NETWORK_NO_INTERNET_X_BASE64, wantW, wantH);
-                g_iconNoInternetXDUIW = wantW;
-                g_iconNoInternetXDUIH = wantH;
-            }
-            return g_hIconNoInternetXDUI ? CopyIcon(g_hIconNoInternetXDUI) : NULL;
+            return CopyCachedBase64Icon(&g_hIconNoInternetXDUI,
+                &g_iconNoInternetXDUIW, &g_iconNoInternetXDUIH,
+                NETWORK_NO_INTERNET_X_BASE64, wantW, wantH);
         }
 
         if (resourceId == kOfflineNetworkIconId) {
@@ -8941,19 +9127,11 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                 return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
             int wantW = width > 0 ? width : ScaleDpi(36);
             int wantH = height > 0 ? height : ScaleDpi(36);
-            if (!g_hIconOfflineNetworkDUI || g_iconOfflineNetworkDUIW != wantW ||
-                g_iconOfflineNetworkDUIH != wantH) {
-                if (g_hIconOfflineNetworkDUI) {
-                    DestroyIcon(g_hIconOfflineNetworkDUI);
-                    g_hIconOfflineNetworkDUI = NULL;
-                }
-                g_hIconOfflineNetworkDUI = CreateIconFromBase64PNG(
-                    NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
-                g_iconOfflineNetworkDUIW = wantW;
-                g_iconOfflineNetworkDUIH = wantH;
-                Wh_Log(L"[NetMap-Icon] Decoded offline gray network icon at %dx%d", wantW, wantH);
-            }
-            return g_hIconOfflineNetworkDUI ? CopyIcon(g_hIconOfflineNetworkDUI) : NULL;
+            HICON copy = CopyCachedBase64Icon(&g_hIconOfflineNetworkDUI,
+                &g_iconOfflineNetworkDUIW, &g_iconOfflineNetworkDUIH,
+                NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+            Wh_Log(L"[NetMap-Icon] Offline gray network icon requested at %dx%d, copy=%p", wantW, wantH, copy);
+            return copy;
         }
 
         if (resourceId == kNetMapCategoryIconId) {
@@ -9124,11 +9302,16 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
 
     // Category only if still unknown. Failures are non-fatal: the icon
     // then falls back to the colored Public icon, never the gray one.
-    BOOL isAnyConnected = g_EthernetConnected ||
-        (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL isAnyConnected = state.ethernetConnected ||
+        (state.networkCount > 0 && state.networks[0].connState == CONN_STATE_CONNECTED);
     if (isAnyConnected && g_Settings.useNetworkLocationIcons &&
-        !IsValidNetworkCategoryValue(g_CurrentNetworkCategory)) {
-        g_CurrentNetworkCategory = DetectNetworkLocationCategory(localNlm.get());
+        !IsValidNetworkCategoryValue(state.currentNetworkCategory)) {
+        int category = DetectNetworkLocationCategory(localNlm.get());
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_CurrentNetworkCategory = category;
+        LeaveCriticalSection(&g_Ctx.csLock);
     }
 
     if (comInitializedHere)
@@ -9350,9 +9533,9 @@ static bool Init() {
     // when the feature is off, so installing the hooks unconditionally has
     // no behavioral effect while it's disabled, and lets it turn on and off
     // correctly at runtime without a mod reload. The DrawTextW hook is the
-    // one exception is deferred until SetXMLFromResource_Hook observes
-    // netcenter.dll, so an unused privacy feature never hooks DrawTextW.
-    // unlike the others, it sits on a very hot user32 path.
+    // one exception: unlike the others, it sits on a very hot user32 path, so
+    // it is deferred until SetXMLFromResource_Hook observes netcenter.dll.
+    // That way, an unused privacy feature never hooks DrawTextW.
     if (!HookAll()) {
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
         return false;
