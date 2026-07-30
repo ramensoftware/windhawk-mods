@@ -173,6 +173,7 @@ resolved, Windows 11 support) was assisted by Claude.
 #include <string.h>
 #include <atomic>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <string>
 #include <ole2.h>
@@ -1603,7 +1604,7 @@ static void SetSysCmdGuard(HWND hWnd, bool set) {
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (g_enabled.load(std::memory_order_relaxed)) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
-            if (!IsInSysCmdOnThisThread(hWnd)) {
+            if (!IsInSysCmdOnThisThread(hWnd) && IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
                 SetDwmTransitions(hWnd, FALSE);
                 StartGenieAnim(hWnd, FALSE);
             }
