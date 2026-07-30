@@ -2,12 +2,76 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-30T21:46:19.000Z</updated>
+    <updated>2026-07-30T22:29:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar audio device switcher 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-device-switcher#ca9e7ad4464eaf177d708b5646e0a22b264c879b</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-device-switcher"/>
+        <updated>2026-07-30T22:29:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaraudiodeviceswitcher">Taskbar audio device switcher</h1>
+<p>Adds one tray (notification area) icon per connected audio device. The icon of
+the device that is currently the default one is drawn normally, all the other
+ones are dimmed and grayed out. <strong>Left click</strong> on an icon makes that device the
+default playback/recording device, <strong>right click</strong> opens a menu with additional
+options.</p>
+<p>Each device uses its own icon, the one Windows shows in the sound settings, so
+headphones, speakers, HDMI output and a microphone are easy to tell apart.</p>
+<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/tray-icons.png" alt="Tray icons" /><br />
+<em>Two playback devices: the default one is drawn normally, the other one dimmed</em></p>
+<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/context-menu.png" alt="Right click menu" /><br />
+<em>The right click menu of a device</em></p>
+<h2 id="howthisdiffersfromtheotheraudioswitchingmods">How this differs from the other audio switching mods</h2>
+<p>The catalog already has several mods for switching audio devices, but the
+interaction model here is different: instead of one icon that you click through
+or scroll on, every device gets its own icon, with its own graphic, and you
+click the device you want directly. Nothing is cycled, and no list of devices
+has to be configured in advance.</p>
+<ul>
+<li><strong>Audioswap</strong> / <strong>Microswap</strong> — a single tray icon which cycles through a
+preconfigured list of up to 6 devices.</li>
+<li><strong>Mic Tray Control</strong> — one microphone icon, focused on mute and volume.</li>
+<li><strong>Audio scroll switcher</strong> — switches devices by scrolling over the taskbar,
+without adding any icon.</li>
+</ul>
+<h2 id="choosingwhichdevicesareshown">Choosing which devices are shown</h2>
+<p>The right click menu has a <strong>Shown devices</strong> submenu which lists every device,
+including the ones which are currently hidden, with a check mark next to the
+ones that have an icon. Clicking an entry shows or hides that device, and the
+choice is remembered across restarts. There is also <strong>Hide this icon</strong> for the
+device that was clicked, and <strong>Show all devices</strong> to undo everything.</p>
+<p>The icon of the last remaining device can't be hidden, otherwise there would be
+no menu left to bring the other ones back. For the same reason, if every device
+that is currently connected happens to be hidden — say the only visible one was
+unplugged — the hidden ones are shown anyway until that changes.</p>
+<h2 id="windows11note">Windows 11 note</h2>
+<p>New tray icons are hidden inside the overflow ("^") flyout by default. To make
+the audio device icons always visible, either drag them out of the flyout onto
+the taskbar, or go to
+<em>Settings → Personalization → Taskbar → Other system tray icons</em> and turn the
+<code>windhawk.exe</code> entries on.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod runs in a dedicated <code>windhawk.exe</code> process and doesn't hook anything,
+see <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Mods as
+tools</a>.</li>
+<li>Devices are refreshed automatically when a device is plugged in/out, enabled,
+disabled, or when the default device changes from somewhere else.</li>
+<li>Switching the default device uses the undocumented <code>IPolicyConfig</code> interface,
+the same one used by nircmd, SoundSwitch and similar tools.</li>
+<li>Middle click sets the device as the communications device only. With the
+default settings a left click already does that too, so middle click is only
+useful if the <em>Switch the communications device too</em> option is turned off.</li>
+</ul>]]></content>
+        <author>
+            <name>Maksim Chingin</name>
+            <uri>https://github.com/umnik1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.0.0]]></title>
         <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#06f19979b14e80d76a5ca4508def5ec55767a251</id>
@@ -1111,41 +1175,6 @@ Feedback: Feel free to suggest new animation ideas or curves in the mod topic or
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Windows Photo Viewer Redirect 1.4.0]]></title>
-        <id>https://windhawk.net/mods/classic-photo-viewer#361304dca127c7c6ac8ae9e6af9e8cbcf96399f3</id>
-        <link href="https://windhawk.net/mods/classic-photo-viewer"/>
-        <updated>2026-07-10T14:07:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicwindowsphotoviewerredirect">Classic Windows Photo Viewer Redirect</h1>
-<p>This mod restores the classic Windows Photo Viewer from Windows 7 without altering system configurations.</p>
-<h3 id="howitworks">How it works</h3>
-<p>This mod hooks <code>ShellExecuteExW</code> and, when it detects a call with the "open" verb
-targeting a file with one of the configured image extensions, redirects the call
-to launch the classic Photo Viewer (<code>shimgvw.dll</code> via <code>rundll32.exe</code>) instead of
-whatever application would normally handle it.</p>
-<h3 id="screenshot">Screenshot</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/photo.png" alt="Screenshot" /></p>
-<h3 id="keyfeatures">Key Features</h3>
-<ul>
-<li>No Registry modifications: The mod does not alter file associations or create any keys in HKLM or HKCU.</li>
-<li>Purely runtime effect: The redirection occurs exclusively in memory. Disabling the mod instantly restores the default Windows behavior.</li>
-<li>Supported formats: Covers major raster formats including JPG, JPEG, JFIF, PNG, BMP, DIB, GIF, TIF, TIFF, ICO, WDP, and JXR.</li>
-</ul>
-<h3 id="knownlimitations">Known Limitations</h3>
-<ul>
-<li>The redirection only applies when the file is opened via <code>ShellExecuteExW</code>, which is
-how the Explorer context menu's "Open" command works. This is the main path this
-mod is able to intercept.</li>
-<li>Double-click and Enter often go through app activation for the UWP Photos app
-instead of <code>ShellExecuteExW</code>, which this mod cannot intercept. In practice, the
-redirect mainly fires for the right-click → Open path.</li>
-<li>Modern formats not natively supported by the legacy viewer (such as HEIC or WebP) are ignored by the hook and will continue to open with the default modern application.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

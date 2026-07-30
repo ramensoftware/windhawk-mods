@@ -11201,6 +11201,34 @@
         "version": "0.10.3"
       }
     },
+    "taskbar-audio-device-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785450553000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785450553000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Maksim Chingin",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -lgdi32 -luser32",
+        "description": "Shows a tray icon for every connected audio device and switches the default device with a click",
+        "github": "https://github.com/umnik1",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Taskbar audio device switcher",
+        "version": "1.5.0"
+      }
+    },
     "taskbar-auto-hide-custom-activation-area": {
       "details": {
         "defaultSorting": 3950,
