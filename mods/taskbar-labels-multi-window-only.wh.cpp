@@ -7,7 +7,7 @@
 // @github          https://github.com/amaztony
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -1277,7 +1277,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(public: __cdecl winrt::impl::consume_Taskbar_ITaskbarAppItemViewModel<struct winrt::Taskbar::ITaskbarAppItemViewModel>::HasLabel(void)const )"},
             &ITaskbarAppItemViewModel_HasLabels_Original,
@@ -1370,7 +1370,10 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(
+        module,
+        taskbarViewDllHooks,
+        ARRAYSIZE(taskbarViewDllHooks));
 }
 
 bool HookTaskbarDllSymbols() {
@@ -1381,7 +1384,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
             &CTaskListWnd_HandleClick_Original,
@@ -1432,7 +1435,10 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(
+        module,
+        taskbarDllHooks,
+        ARRAYSIZE(taskbarDllHooks));
 }
 
 BOOL ModInitWithTaskbarView(HMODULE module) {
