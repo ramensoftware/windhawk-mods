@@ -59,7 +59,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
-- **Control Panel refresh**: Live refresh is now driven by `INetworkListManagerEvents`, so the Network Map section normally updates automatically on connectivity changes. In rare cases (e.g. very rapid transitions) it may lag slightly behind; closing and re-opening the Control Panel window always shows the current state.
+- **"View full map"**: This link opens the Network shell folder, the same as on Windows 10/11 which is the most similar concept to the classic Windows 7 map.
 
 ## Hotkeys
 | Key | Action |
@@ -194,6 +194,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <memory>
 #include <type_traits>
 #include <stdlib.h>
+#include <cwctype>
 
 // =========================================================
 // Dark context menu support (right-click menu only)
@@ -1960,23 +1961,47 @@ enum class AppMode {
 
 using FlushMenuThemes_T     = void(WINAPI*)();
 using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
+using AllowDarkModeForWindow_T = bool(WINAPI*)(HWND, bool);
 static HMODULE g_hUxtheme = NULL;
 static FlushMenuThemes_T     pFlushMenuThemes    = nullptr;
 static SetPreferredAppMode_T pSetPreferredAppMode = nullptr;
+static AllowDarkModeForWindow_T pAllowDarkModeForWindow = nullptr;
 
-void Apply(BOOL dark) {
-    if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
-    pFlushMenuThemes();
-    pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
+// Opts a specific control (e.g. a tooltip) into dark rendering. Unlike
+// SetWindowTheme(hwnd, L"DarkMode_Explorer", ...) alone, which several common
+// controls (tooltips included) silently ignore, this - followed by
+// WM_THEMECHANGED - is what actually makes such controls pick up the dark
+// variant. Safe to call even if the private API wasn't resolved.
+void AllowDarkModeForWindow(HWND hwnd, bool allow) {
+    if (pAllowDarkModeForWindow)
+        pAllowDarkModeForWindow(hwnd, allow);
 }
 
 static AppMode g_initialAppMode = AppMode::Default;
+
+void Apply(BOOL dark) {
+    if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
+    pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
+    pFlushMenuThemes();
+}
+
+// Puts the process-wide preferred app mode back to whatever it was before
+// this mod touched it (g_initialAppMode), instead of Apply(FALSE)'s hardcoded
+// Default - which would stomp AllowDark/ForceDark set by other mods for the
+// rest of explorer.exe. Use this (not Apply()) anywhere the menu is only
+// being reverted to its pre-mod state, e.g. after a context menu closes.
+void Restore() {
+    if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
+    pSetPreferredAppMode(g_initialAppMode);
+    pFlushMenuThemes();
+}
 
 void Init() {
     g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (g_hUxtheme) {
         pSetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
         pFlushMenuThemes     = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
+        pAllowDarkModeForWindow = (AllowDarkModeForWindow_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133));
         // Save the current app mode so Uninit can restore it instead of
         // blindly resetting to Default (which would overwrite other mods'
         // dark-mode settings like AllowDark/ForceDark).
@@ -3968,7 +3993,11 @@ static BOOL InitGdiPlusRendering() {
     return TRUE;
 }
 
-static void ShutdownGdiPlusRendering() {
+// Shared by ShutdownGdiPlusRendering() and FreeSystemIcons(), which
+// previously duplicated this exact sequence and could drift out of sync.
+static void DisposeGdiPlusBitmapCaches() {
+    if (!g_hGdiPlus || !pGdipDisposeImage)
+        return;
     for (int i = 0; i < 6; i++) {
         if (g_pBitmapSignalBars[i]) {
             pGdipDisposeImage(g_pBitmapSignalBars[i]);
@@ -3980,6 +4009,10 @@ static void ShutdownGdiPlusRendering() {
     if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
     if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
     if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
+}
+
+static void ShutdownGdiPlusRendering() {
+    DisposeGdiPlusBitmapCaches();
     if (g_hGdiPlus) {
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
@@ -4001,19 +4034,7 @@ void FreeSystemIcons() {
     if (g_hIconChevronDown)   { DestroyIcon(g_hIconChevronDown);   g_hIconChevronDown = NULL; }
     if (g_hIconChevronDownHL) { DestroyIcon(g_hIconChevronDownHL); g_hIconChevronDownHL = NULL; }
     g_chevronsLoaded = FALSE;
-    if (g_hGdiPlus && pGdipDisposeImage) {
-        for (int i = 0; i < 6; i++) {
-            if (g_pBitmapSignalBars[i]) {
-                pGdipDisposeImage(g_pBitmapSignalBars[i]);
-                g_pBitmapSignalBars[i] = NULL;
-            }
-        }
-        // Free network location icon bitmap caches
-        if (g_pBitmapNetLocHome)   { pGdipDisposeImage(g_pBitmapNetLocHome);   g_pBitmapNetLocHome = NULL; }
-        if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
-        if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
-        if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
-    }
+    DisposeGdiPlusBitmapCaches();
     if (g_hIconRefreshNormal) { DestroyIcon(g_hIconRefreshNormal); g_hIconRefreshNormal = NULL; }
     if (g_hIconRefreshHover)  { DestroyIcon(g_hIconRefreshHover);  g_hIconRefreshHover = NULL; }
     if (g_hIconNetworkCenterConnect) { DestroyIcon(g_hIconNetworkCenterConnect); g_hIconNetworkCenterConnect = NULL; }
@@ -4118,12 +4139,18 @@ void RefreshWifiData(HANDLE hClient) {
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     if (WlanEnumInterfaces(hClient, NULL, &pIfList) != ERROR_SUCCESS) return;
     
-    g_WlanInterfaceCount = 0;
+    int localWlanIfCount = 0;
+    GUID localWlanIfGuids[16];
     if (pIfList) {
-        for (DWORD i = 0; i < pIfList->dwNumberOfItems && g_WlanInterfaceCount < 16; i++) {
-            g_WlanInterfaceGuids[g_WlanInterfaceCount++] = pIfList->InterfaceInfo[i].InterfaceGuid;
+        for (DWORD i = 0; i < pIfList->dwNumberOfItems && localWlanIfCount < 16; i++) {
+            localWlanIfGuids[localWlanIfCount++] = pIfList->InterfaceInfo[i].InterfaceGuid;
         }
     }
+    EnterCriticalSection(&g_Ctx.csLock);
+    g_WlanInterfaceCount = localWlanIfCount;
+    for (int i = 0; i < localWlanIfCount; i++)
+        g_WlanInterfaceGuids[i] = localWlanIfGuids[i];
+    LeaveCriticalSection(&g_Ctx.csLock);
     WifiNetworkItem tempList[50];
     int tempCount = 0;
     ZeroMemory(tempList, sizeof(tempList));
@@ -4438,12 +4465,14 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr) {
                     
                     // Check if this adapter GUID belongs to a Wi-Fi card
                     BOOL isWifiGuid = FALSE;
+                    EnterCriticalSection(&g_Ctx.csLock);
                     for (int w = 0; w < g_WlanInterfaceCount; w++) {
                         if (IsEqualGUID(pCurr->NetworkGuid, g_WlanInterfaceGuids[w])) {
                             isWifiGuid = TRUE;
                             break;
                         }
                     }
+                    LeaveCriticalSection(&g_Ctx.csLock);
                     if (isWifiGuid) continue;
                     
                     // Check if description or friendly name indicates a virtual/Bluetooth/wireless adapter
@@ -5331,6 +5360,7 @@ static BOOL AskForPasswordAndConnect(int index) {
             LogSsidSafe(L"Empty password provided for", item->ssid);
             MessageBoxW(g_hWndFlyout, LOC(STR_PWD_EMPTY), LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
             g_PendingConnectIndex = -1;
+            SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return FALSE;
         }
@@ -5686,7 +5716,9 @@ void InitTooltip(HWND hwnd) {
     if (g_Settings.theme == 1) {
         SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)RGB(30, 30, 30),   0);
         SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)RGB(100, 200, 255), 0);
+        DarkContextMenu::AllowDarkModeForWindow(g_hTooltip, true);
         SetWindowTheme(g_hTooltip, L"DarkMode_Explorer", NULL);
+        SendMessageW(g_hTooltip, WM_THEMECHANGED, 0, 0);
     }
 }
 
@@ -5823,6 +5855,25 @@ static bool IsInNetCenter(void* ra) {
     return ra >= (void*)g_netcenterBase && ra < (void*)g_netcenterEnd;
 }
 
+// Resolves and caches netcenter.dll's base+size from a known-good HMODULE.
+// Call this from SetXMLFromResource_Hook (which always runs before the page
+// draws any text and already has the netcenter HMODULE in hand) instead of
+// letting every DrawTextW call in the process hit GetModuleHandleW's loader
+// lock + module-list walk via EnsureNetCenterRange().
+static void CacheNetCenterRange(HMODULE h) {
+    if (g_netcenterBase && g_netcenterEnd)
+        return;
+    if (!h)
+        return;
+
+    MODULEINFO mi{};
+    if (!GetModuleInformation(GetCurrentProcess(), h, &mi, sizeof(mi)))
+        return;
+
+    g_netcenterBase = (BYTE*)mi.lpBaseOfDll;
+    g_netcenterEnd  = g_netcenterBase + mi.SizeOfImage;
+}
+
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
 
@@ -5927,16 +5978,16 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         g_bShowCheckboxLabel = FALSE;
         return;
     }
-    int btnX = WINDOW_WIDTH - 114 - scrollbarOffset;  
-    int chkX = 18;
+    int btnX = WINDOW_WIDTH - ScaleDpi(114) - scrollbarOffset;
+    int chkX = ScaleDpi(18);
     int chkYOffset = 0;
     if (scrollbarOffset > 0) {
         chkX -= (WINDOW_WIDTH * 19) / 1000;   
         chkX -= (WINDOW_WIDTH * 5) / 1000;    
         chkYOffset -= (WINDOW_HEIGHT * 13) / 1000;  
     }
-    int btnY = rowYRelative + 35;  
-    int chkY = rowYRelative + 36 + chkYOffset;
+    int btnY = rowYRelative + ScaleDpi(35);
+    int chkY = rowYRelative + ScaleDpi(36) + chkYOffset;
     if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
     if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
     if (chkY < LIST_Y_START) chkY = LIST_Y_START + 2;
@@ -5945,12 +5996,12 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         if (!isConnected && !isConnecting) {
             int boxSize = ScaleDpi(13);
             int chkNativeW = boxSize + ScaleDpi(4);
-            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, 20, TRUE);
+            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, ScaleDpi(20), TRUE);
             ShowWindow(g_hWndCheckboxConnect, SW_SHOW);
             g_rcCheckboxLabel.left   = chkX + boxSize + ScaleDpi(5);
             g_rcCheckboxLabel.top    = chkY;
-            g_rcCheckboxLabel.right  = chkX + 160;
-            g_rcCheckboxLabel.bottom = chkY + 20;
+            g_rcCheckboxLabel.right  = chkX + ScaleDpi(160);
+            g_rcCheckboxLabel.bottom = chkY + ScaleDpi(20);
             g_bShowCheckboxLabel = TRUE;
         } else {
             ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
@@ -6001,7 +6052,7 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     }
     int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN|TPM_RIGHTBUTTON|TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, NULL);
     if (g_Settings.theme == 1) {
-        DarkContextMenu::Apply(FALSE);
+        DarkContextMenu::Restore();
     }
     if (cmd > 0) {
         switch (cmd) {
@@ -8072,6 +8123,15 @@ static HWND g_ncMsgWindow = nullptr;
 static bool g_ncMsgClassRegistered = false;
 static const PCWSTR kNcMsgClassName = L"Win7NetFlyout_NcMsgWnd";
 
+// Tracks whether PrimeNetworkCategoryForNetCenterHost() personally called
+// CoInitializeEx on this thread (S_OK or S_FALSE), as opposed to it already
+// having an apartment (RPC_E_CHANGED_MODE) or the prime never having run.
+// Only ever call CoUninitialize() when this is true, and only once, from the
+// same thread - paired in the message-only window's teardown branch
+// (NcMsgWndProc), which runs on this same STA thread whether the page is
+// closed normally or the mod is being unloaded.
+static bool g_ncComInitializedByUs = false;
+
 // Private message posted from ConnectivityChanged (which may run on an
 // arbitrary NLM thread) to ask the message-only window - which lives on the
 // correct DirectUI thread - to perform the actual refresh.
@@ -8133,6 +8193,52 @@ static void UnadviseConnectivityEvents() {
     g_ncP4 = nullptr;
 }
 
+// The real top-level window that hosts the NetCenter page on this thread.
+// Subclassed purely to learn when the page goes away (WM_NCDESTROY) - unlike
+// the previous approach this mod's comments warn against, it is never used
+// to marshal SetXML() calls (that's still g_ncMsgWindow's job) and is looked
+// up fresh each time a page is parsed, so it can't go stale the way a
+// one-shot EnumThreadWindows search elsewhere in Explorer's shared UI thread
+// could.
+static HWND g_ncHostWindow = nullptr;
+
+static LRESULT CALLBACK NcHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                            UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (uMsg == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, NcHostSubclassProc, uIdSubclass);
+        if (g_ncHostWindow == hWnd)
+            g_ncHostWindow = nullptr;
+        // The page (and its DUIXmlParser) is going away right now, so drop
+        // the tracked instance before it can be freed out from under a
+        // later ConnectivityChanged-triggered refresh.
+        UnadviseConnectivityEvents();
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+static BOOL CALLBACK FindNcHostEnumProc(HWND hWnd, LPARAM lParam) {
+    if (!GetWindow(hWnd, GW_OWNER)) {
+        *reinterpret_cast<HWND*>(lParam) = hWnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// Subclasses the current thread's top-level (unowned) window so its
+// destruction can be observed. Must be called on the STA thread that owns
+// the NetCenter page, right after a successful SetXML().
+static void EnsureNcHostSubclassed() {
+    HWND host = nullptr;
+    EnumThreadWindows(GetCurrentThreadId(), FindNcHostEnumProc,
+                       reinterpret_cast<LPARAM>(&host));
+    if (!host || host == g_ncHostWindow)
+        return;
+    if (g_ncHostWindow)
+        RemoveWindowSubclass(g_ncHostWindow, NcHostSubclassProc, 0);
+    if (SetWindowSubclass(host, NcHostSubclassProc, 0, 0))
+        g_ncHostWindow = host;
+}
+
 static UINT GetNcRefreshMessage() {
     if (!g_ncRefreshMsg)
         g_ncRefreshMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcRefresh");
@@ -8172,8 +8278,19 @@ static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         Wh_Log(L"[NetMap] NetCenter live-refresh window tearing down");
         KillTimer(hWnd, kNcDelayedRefreshTimerId);
         UnadviseConnectivityEvents();
+        if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
+            RemoveWindowSubclass(g_ncHostWindow, NcHostSubclassProc, 0);
+        }
+        g_ncHostWindow = nullptr;
         if (g_ncMsgWindow == hWnd)
             g_ncMsgWindow = nullptr;
+        // Balances the CoInitializeEx() in PrimeNetworkCategoryForNetCenterHost():
+        // this message window always lives on the same STA thread that call
+        // ran on, so this is the one place that can safely pair it.
+        if (g_ncComInitializedByUs) {
+            CoUninitialize();
+            g_ncComInitializedByUs = false;
+        }
         DestroyWindow(hWnd);
         return 0;
     }
@@ -8184,6 +8301,11 @@ static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         KillTimer(hWnd, kNcDelayedRefreshTimerId);
         if (g_ncMsgWindow == hWnd)
             g_ncMsgWindow = nullptr;
+        UnadviseConnectivityEvents();
+        if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
+            RemoveWindowSubclass(g_ncHostWindow, NcHostSubclassProc, 0);
+        }
+        g_ncHostWindow = nullptr;
     }
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
@@ -8202,8 +8324,9 @@ static HWND EnsureNcMsgWindow() {
         wc.lpfnWndProc   = NcMsgWndProc;
         wc.hInstance     = hInst;
         wc.lpszClassName = kNcMsgClassName;
-        if (RegisterClassW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS)
-            g_ncMsgClassRegistered = true;
+        if (!RegisterClassW(&wc))
+            return nullptr;
+        g_ncMsgClassRegistered = true;
     }
     if (!g_ncMsgClassRegistered)
         return nullptr;
@@ -8307,6 +8430,10 @@ static void TeardownNetCenterHost() {
         // No live message window (e.g. hook never fired, or it was already
         // destroyed): still clear any leftover state directly.
         UnadviseConnectivityEvents();
+        if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
+            RemoveWindowSubclass(g_ncHostWindow, NcHostSubclassProc, 0);
+        }
+        g_ncHostWindow = nullptr;
     }
     g_ncMsgWindow = nullptr;
 }
@@ -8352,6 +8479,18 @@ static bool MaskConnectedNetworkText(LPCWSTR text, int textLength,
         const std::wstring needle(realName);
         size_t pos = 0;
         while ((pos = masked.find(needle, pos)) != std::wstring::npos) {
+            // Require a non-alphanumeric boundary (or start/end of string) on
+            // both sides, so a short/generic name like "Net" or "Home" only
+            // matches as a whole label/word - e.g. inside "Wi-Fi (MyNetwork)"
+            // or standing alone - rather than also rewriting an unrelated
+            // NetCenter string that merely contains it as a substring.
+            bool leftOk = (pos == 0) || !iswalnum(masked[pos - 1]);
+            size_t endPos = pos + needle.length();
+            bool rightOk = (endPos >= masked.size()) || !iswalnum(masked[endPos]);
+            if (!leftOk || !rightOk) {
+                pos += 1;
+                continue;
+            }
             masked.replace(pos, needle.length(), privateName);
             pos += lstrlenW(privateName);
             changed = true;
@@ -8533,14 +8672,6 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
 // non-explorer-host branch knows it's safe/necessary to close it).
 static bool g_ncCategoryPrimeAttempted = false;
 static bool g_ncOwnsWlanHandleInNonExplorerHost = false;
-// Tracks whether we personally called CoInitializeEx on this thread (S_OK or
-// S_FALSE), as opposed to it already having an apartment (RPC_E_CHANGED_MODE)
-// or us not having tried. Only ever call CoUninitialize() when this is true,
-// and only once, from the same thread - paired in the message-only window's
-// teardown branch (NcMsgWndProc), which runs on this same STA thread whether
-// the page is closed normally or the mod is being unloaded.
-static bool g_ncComInitializedByUs = false;
-
 // Wh_ModInit() deliberately skips all WLAN/NLM priming when the mod is
 // injected into a non-explorer host (see the g_IsExplorerHost branch there):
 // that infrastructure was designed to run only inside explorer.exe's own
@@ -8625,12 +8756,18 @@ static void PrimeNetworkCategoryForNetCenterHost() {
 // explorer.exe, where the priming helper returns early by design and where
 // the flyout-side machinery is otherwise the only thing keeping
 // g_NetworkList / g_EthernetConnected up to date.
-static void EnsureNetCenterNetworkDataFresh() {
-    static DWORD s_lastRefreshTick = 0;
-    DWORD now = GetTickCount();
-    if (now - s_lastRefreshTick < 2000)
-        return;
-    s_lastRefreshTick = now;
+// Guards against overlapping worker runs (Patch() can trigger a refresh
+// request again - immediate + the 350 ms delayed pass - before a previous
+// one finishes).
+static LONG volatile g_ncRefreshInFlight = 0;
+
+static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
+    // Thread pool threads have no COM apartment by default, but the
+    // CoCreateInstance() below needs one. Balance whatever we do here at
+    // the end of this same function - this thread is never reused for
+    // anything else by the pool in a way this mod depends on.
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool comInitializedHere = (hrCo == S_OK || hrCo == S_FALSE);
 
     try {
         // Reuse the process-wide WLAN handle if the flyout/hotkey side (or
@@ -8681,6 +8818,48 @@ static void EnsureNetCenterNetworkDataFresh() {
     } catch (...) {
         Wh_Log(L"[NetMap] Exception during NetCenter data refresh; keeping previous state");
     }
+
+    if (comInitializedHere)
+        CoUninitialize();
+
+    InterlockedExchange(&g_ncRefreshInFlight, 0);
+
+    // Nudge a re-render now that fresher data is available. Same
+    // immediate-plus-later-catch-up shape as the connectivity-event path:
+    // whatever this Patch() call already rendered may be one refresh cycle
+    // stale, but the live-refresh window will push a corrected paint as soon
+    // as this finishes, instead of blocking the UI thread to get it right
+    // the first time.
+    if (g_ncMsgWindow && g_ncRefreshMsg)
+        PostMessageW(g_ncMsgWindow, g_ncRefreshMsg, 0, 0);
+    return 0;
+}
+
+// Kicks off a background refresh of WLAN/adapter/NLM data for the NetCenter
+// page, throttled to once every 2 seconds (Patch() can run several times
+// per page load) and skipped entirely when nothing is around to show the
+// result. The actual WLAN/COM work runs on a worker thread - see
+// NcNetworkDataRefreshWorker() - instead of blocking whatever Explorer UI
+// thread happens to be rendering the page or handling a connectivity event.
+static void EnsureNetCenterNetworkDataFresh() {
+    static DWORD s_lastRefreshTick = 0;
+    DWORD now = GetTickCount();
+    if (now - s_lastRefreshTick < 2000)
+        return;
+    s_lastRefreshTick = now;
+
+    // Nothing live to show a fresher result to (no open NetCenter page, no
+    // flyout) - don't pay the WLAN/NLM cost at all.
+    if (!g_ncTarget && !g_hWndFlyout)
+        return;
+
+    if (InterlockedCompareExchange(&g_ncRefreshInFlight, 1, 0) != 0)
+        return; // a refresh is already running
+
+    if (!QueueUserWorkItem(NcNetworkDataRefreshWorker, nullptr, WT_EXECUTEDEFAULT)) {
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        Wh_Log(L"[NetMap] QueueUserWorkItem failed, skipping this refresh");
+    }
 }
 
 static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp, HMODULE m,
@@ -8693,6 +8872,11 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
         (UINT)(UINT_PTR)n != 110)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    // Resolve and cache netcenter.dll's address range here, on the one path
+    // guaranteed to run before the page draws any text, instead of paying a
+    // GetModuleHandleW lookup on every DrawTextW call via IsInNetCenter().
+    CacheNetCenterRange(m);
 
     // One-shot, best-effort: only does anything the first time, and only in
     // a non-explorer host (see PrimeNetworkCategoryForNetCenterHost's
@@ -8736,6 +8920,7 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         g_ncModule = m;
         g_ncP4 = p4;
         EnsureConnectivityEventsAdvised();
+        EnsureNcHostSubclassed();
 
         // Create (once per thread) the mod's own message-only window here,
         // i.e. on the exact STA thread that owns this page - no searching
@@ -8849,6 +9034,11 @@ static void SettingsChanged() {
     // DrawTextW hook now (it was skipped in HookAll() while privacy mode
     // was off) and explicitly apply it, since hooks registered outside
     // Wh_ModInit stay pending until Wh_ApplyHookOperations() is called.
+    // Note: turning privacy mode back off deliberately does NOT remove the
+    // hook again - MaskConnectedNetworkText() already no-ops when
+    // g_Settings.privacyMode is false, and unhooking/rehooking DrawTextW on
+    // every toggle isn't worth the added complexity for a hot user32 entry
+    // point that's already cheap to no-op through.
     if (g_Settings.privacyMode && g_hookInstalled && !g_textHookInstalled) {
         g_textHookInstalled = WindhawkUtils::SetFunctionHook(
             DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
@@ -8984,6 +9174,21 @@ void Wh_ModUninit() {
             }
             g_Ctx.hWlanClient = NULL;
         }
+        if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
+            UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandle(NULL));
+            Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+        }
+        // Mirror the explorer-host branch below: release the NLM instance
+        // PrimeNetworkCategoryForNetCenterHost()/UpdateEthernetStatus() may
+        // have created and published here, and balance InitGdiPlusRendering's
+        // GdiplusStartup token / gdiplus.dll reference. Neither was
+        // previously released in this process, so every reload/unload of
+        // control.exe leaked both.
+        if (g_pNLM) {
+            g_pNLM->Release();
+            g_pNLM = NULL;
+        }
+        ShutdownGdiPlusRendering();
         FreeSystemIcons();
         DeleteCriticalSection(&g_Ctx.csLock);
         return;
@@ -8993,6 +9198,10 @@ void Wh_ModUninit() {
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
     DarkContextMenu::Uninit();
+    if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
+        UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandle(NULL));
+        Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+    }
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
 }
