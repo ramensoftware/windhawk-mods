@@ -6081,22 +6081,90 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
         case IDM_PROPERTIES:
             {
                 BOOL launched = FALSE;
+                WifiNetworkItem item = {};
+                BOOL haveItem = FALSE;
+                // The network list is rebuilt by the refresh worker. Take a
+                // stable copy before constructing the shell target: passing a
+                // GUID while that worker is replacing the row can hand Explorer
+                // an invalid namespace argument and make its process unstable.
+                EnterCriticalSection(&g_Ctx.csLock);
                 if (g_ContextMenuTargetIndex >= 0 && g_ContextMenuTargetIndex < g_NetworkCount) {
-                    WifiNetworkItem* item = &g_NetworkList[g_ContextMenuTargetIndex];
-                    if (!IsEqualGUID(item->interfaceGuid, GUID_NULL)) {
-                        WCHAR szGuid[64] = {0};
-                        if (StringFromGUID2(item->interfaceGuid, szGuid, ARRAYSIZE(szGuid)) > 0) {
-                            std::wstring path = L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" + std::wstring(szGuid);
-                            HINSTANCE hInst = ShellExecuteW(NULL, L"open", L"explorer.exe", path.c_str(), NULL, SW_SHOWNORMAL);
-                            if ((INT_PTR)hInst > 32) {
-                                launched = TRUE;
+                    item = g_NetworkList[g_ContextMenuTargetIndex];
+                    haveItem = TRUE;
+                }
+                LeaveCriticalSection(&g_Ctx.csLock);
+
+                // Properties belongs to the WLAN profile, not to the adapter.
+                // WlanUIEditProfile is the supported native UI for exactly this
+                // operation and displays the “Wireless Network Properties”
+                // dialog (Connection/Security tabs) for the selected SSID.
+                // Resolve it dynamically so the mod has no wlanui.lib link-time
+                // dependency and can retain the safe fallbacks on old builds.
+                if (cmd == IDM_PROPERTIES && haveItem && item.hasProfile &&
+                    !IsEqualGUID(item.interfaceGuid, GUID_NULL)) {
+                    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
+                        DWORD, LPCWSTR, GUID*, HWND, DWORD, PVOID, DWORD*);
+                    HMODULE hWlanUi = LoadLibraryW(L"wlanui.dll");
+                    if (hWlanUi) {
+                        WlanUIEditProfile_t editProfile = reinterpret_cast<WlanUIEditProfile_t>(
+                            GetProcAddress(hWlanUi, "WlanUIEditProfile"));
+                        if (editProfile) {
+                            DWORD reasonCode = 0;
+                            // 1 is WLAN_UI_API_VERSION and 0 selects the
+                            // Connection page, matching the classic dialog.
+                            // Do not parent it to the flyout at the right edge:
+                            // a null owner lets the native dialog center itself
+                            // on the screen.
+                            launched = (editProfile(1, item.ssid, &item.interfaceGuid,
+                                                    nullptr, 0, nullptr, &reasonCode) == ERROR_SUCCESS);
+                        }
+                        FreeLibrary(hWlanUi);
+                    }
+                }
+
+                if (!launched && haveItem && !IsEqualGUID(item.interfaceGuid, GUID_NULL)) {
+                    WCHAR szGuid[64] = {0};
+                    if (StringFromGUID2(item.interfaceGuid, szGuid, ARRAYSIZE(szGuid)) > 0) {
+                        std::wstring path = L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" + std::wstring(szGuid);
+                        // Resolve the namespace name before invoking it. This
+                        // avoids passing an unchecked parser string to a new
+                        // explorer.exe process, which was the crash-prone path.
+                        LPITEMIDLIST pidl = nullptr;
+                        if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
+                            SHELLEXECUTEINFOW sei = { sizeof(sei) };
+                            // Suppress shell-generated error UI for an absent
+                            // verb: some Windows builds report success after
+                            // launching explorer.exe, then show “Invalid
+                            // parameter” from that new process.
+                            sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
+                            sei.hwnd = hwnd;
+                            sei.lpIDList = pidl;
+                            sei.nShow = SW_SHOWNORMAL;
+
+                            // Request Status explicitly. Do not use the `open`
+                            // or default verb here: on affected builds those are
+                            // implemented by explorer.exe with an invalid raw
+                            // argument, which produces the error dialog above.
+                            sei.lpVerb = L"status";
+                            launched = ShellExecuteExW(&sei);
+
+                            // Last-resort adapter fallback. It is deliberately
+                            // attempted only after Status, and remains PIDL-based
+                            // so it cannot reintroduce the explorer crash.
+                            if (!launched) {
+                                sei.lpVerb = L"properties";
+                                launched = ShellExecuteExW(&sei);
                             }
+                            CoTaskMemFree(pidl);
                         }
                     }
                 }
                 if (!launched) {
-                    // Fallback to static CLSID
-                    ShellExecuteW(NULL, L"open", L"explorer.exe", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", NULL, SW_SHOWNORMAL);
+                    // Fallback to the Network Connections root through the
+                    // same direct shell invocation.
+                    ShellExecuteW(hwnd, L"open",
+                                  L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}",
+                                  NULL, NULL, SW_SHOWNORMAL);
                 }
                 ShowWindow(hwnd, SW_HIDE);
             }
@@ -7340,8 +7408,10 @@ void ToggleFlyoutWindow() {
         }
         if (IsWindowVisible(g_hWndFlyout)) {
             ClearKeyboardFocus();
-            ShowWindow(g_hWndFlyout, SW_HIDE);
+            // Hiding can synchronously transfer activation. Do not let the
+            // recipient of that activation block behind csLock.
             LeaveCriticalSection(&g_Ctx.csLock);
+            ShowWindow(g_hWndFlyout, SW_HIDE);
         } else {
             if (!g_Ctx.hWlanClient) {
                 DWORD dwMaxClient = 2, dwCurVer = 0;
@@ -7380,6 +7450,10 @@ void ToggleFlyoutWindow() {
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
             ShowWindow(g_hWndFlyout, SW_SHOW);
+            // ToggleFlyoutWindow is the normal show path; WM_SHOW_FLYOUT is
+            // not posted here. Restore the timer stopped on deactivation.
+            if (!g_RefreshTimer && g_Settings.refreshInterval > 0)
+                g_RefreshTimer = SetTimer(g_hWndFlyout, 1000, g_Settings.refreshInterval, NULL);
             SetForegroundWindow(g_hWndFlyout);
             InvalidateRect(g_hWndFlyout,NULL,TRUE);
         }
@@ -7851,7 +7925,7 @@ static std::wstring GetConnectedNetworkName() {
 // Defined further down alongside the rest of the NetCenter live-refresh
 // state; forward-declared here since NetworkMapVisual() (used well before
 // that point in the file) needs to check it.
-extern bool g_ncForceFreshConnectivity;
+extern thread_local bool g_ncForceFreshConnectivity;
 
 static std::wstring NetworkMapVisual() {
     // DirectUI's valid endellipsis layout is left-aligned. In privacy mode,
@@ -8220,7 +8294,7 @@ static UINT g_ncTeardownMsg = 0;
 // the event handler can still observe the pre-change state. Set for the
 // duration of a forced refresh so NetworkMapVisual()'s 500ms connectivity
 // cache is bypassed instead of possibly reusing a stale cached value.
-bool g_ncForceFreshConnectivity = false;
+thread_local bool g_ncForceFreshConnectivity = false;
 
 // Timer id used to schedule a short-delay second refresh after
 // ConnectivityChanged, to catch the rare case where NLM's internal state was
@@ -8277,7 +8351,7 @@ static void UnadviseConnectivityEvents() {
 static LRESULT CALLBACK NcHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                                             UINT_PTR uIdSubclass) {
     if (uMsg == WM_NCDESTROY) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, NcHostSubclassProc);
+        // The subclass wrapper removes itself before dispatching WM_NCDESTROY.
         if (g_ncHostWindow == hWnd) {
             g_ncHostWindow = nullptr;
             SyncNcRegistry();
@@ -8286,6 +8360,10 @@ static LRESULT CALLBACK NcHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
         // the tracked instance before it can be freed out from under a
         // later ConnectivityChanged-triggered refresh.
         UnadviseConnectivityEvents();
+        // The message-only window is per page thread; retaining it after its
+        // page died leaves an unnecessary registry entry until mod unload.
+        if (g_ncMsgWindow && IsWindow(g_ncMsgWindow))
+            DestroyWindow(g_ncMsgWindow);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -8468,7 +8546,7 @@ static HWND EnsureNcMsgWindow() {
 
 class NetworkEventsSink : public INetworkListManagerEvents {
    public:
-    NetworkEventsSink() : m_refCount(1) {}
+    explicit NetworkEventsSink(HWND msgWindow) : m_refCount(1), m_msgWindow(msgWindow) {}
     virtual ~NetworkEventsSink() {}
 
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
@@ -8505,20 +8583,16 @@ class NetworkEventsSink : public INetworkListManagerEvents {
     // marshal. Never touch g_ncTarget/SetXML from here: just hand off to the
     // message-only window that lives on the correct thread.
     STDMETHODIMP ConnectivityChanged(NLM_CONNECTIVITY) override {
-        EnterCriticalSection(&g_Ctx.csLock);
-        std::vector<NcThreadContext> registryCopy = g_ncRegistry;
-        LeaveCriticalSection(&g_Ctx.csLock);
-
-        for (const auto& item : registryCopy) {
-            if (item.msgWindow && IsWindow(item.msgWindow) && g_ncRefreshMsg) {
-                PostMessageW(item.msgWindow, g_ncRefreshMsg, 0, 0);
-            }
-        }
+        // This sink is advised by its owning page thread. Refresh only that
+        // thread's message window; broadcasting makes N pages refresh N² times.
+        if (m_msgWindow && IsWindow(m_msgWindow) && g_ncRefreshMsg)
+            PostMessageW(m_msgWindow, g_ncRefreshMsg, 0, 0);
         return S_OK;
     }
 
    private:
     LONG m_refCount;
+    HWND m_msgWindow;
 };
 
 static void EnsureConnectivityEventsAdvised() {
@@ -8541,7 +8615,7 @@ static void EnsureConnectivityEventsAdvised() {
 
     // Advise retains the sink on success. The local reference is released on
     // every path, including an Advise failure.
-    ComPtr<NetworkEventsSink> sink(new NetworkEventsSink());
+    ComPtr<NetworkEventsSink> sink(new NetworkEventsSink(g_ncMsgWindow));
     DWORD cookie = 0;
     if (SUCCEEDED(connectionPoint->Advise(
             static_cast<IUnknown*>(static_cast<INetworkListManagerEvents*>(sink.get())),
@@ -8670,6 +8744,19 @@ static int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, int textLength,
     if (DrawTextW_Orig && MaskConnectedNetworkText(text, textLength, masked))
         return DrawTextW_Orig(hdc, masked.c_str(), (int)masked.length(), rect, format);
     return DrawTextW_Orig ? DrawTextW_Orig(hdc, text, textLength, rect, format) : 0;
+}
+
+// Install only after netcenter.dll has actually been observed. This keeps the
+// hot DrawTextW path completely unhooked for users who never open this page.
+static void EnsurePrivacyTextHookInstalled() {
+    if (!g_Settings.privacyMode || g_textHookInstalled)
+        return;
+    g_textHookInstalled = WindhawkUtils::SetFunctionHook(
+        DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
+    if (g_textHookInstalled)
+        Wh_ApplyHookOperations();
+    else
+        Wh_Log(L"Network Center links: privacy text hook unavailable");
 }
 
 // DirectUI loads icon() graphics through LoadImageW. Only the two private
@@ -9030,6 +9117,13 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     if (!SetXML || g_inHook)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
 
+    // A different parser on this page thread means the previously tracked
+    // page has been replaced (including in-place navigation to any other
+    // Control Panel page). Drop it before the UIFILE filter below: otherwise
+    // a later event could call SetXML on a freed DUIXmlParser.
+    if (g_ncTarget && g_ncTarget != t)
+        UnadviseConnectivityEvents();
+
     if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
         (UINT)(UINT_PTR)n != 110)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
@@ -9038,6 +9132,7 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     // guaranteed to run before the page draws any text, instead of paying a
     // GetModuleHandleW lookup on every DrawTextW call via IsInNetCenter().
     CacheNetCenterRange(m);
+    EnsurePrivacyTextHookInstalled();
 
     // One-shot, best-effort: only does anything the first time, and only in
     // a non-explorer host (see PrimeNetworkCategoryForNetCenterHost's
@@ -9069,28 +9164,12 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     g_inHook--;
 
     if (SUCCEEDED(hr)) {
-        // If a different page instance was previously tracked, it's now
-        // stale: either this is a fresh page-open (the old page/window is
-        // gone) or the same DirectUIHWND navigated to a new instance of this
-        // page. Either way the old DUIXmlParser this thread advised for is
-        // no longer the live one, so drop the old registration before
-        // installing the new one rather than leaving g_ncTarget pointing at
-        // a parser that may be destroyed at any time (the same use-after-
-        // free a foreign-window subclass was previously trying to guard
-        // against). This is a cheap approximation - it only catches the case
-        // where *this* thread parses again - but is exact for the normal
-        // single-page-per-thread case and requires no window at all to know
-        // about the parser's lifetime.
-        if (g_ncTarget && g_ncTarget != t)
-            UnadviseConnectivityEvents();
-
         // Remember this page instance so connectivity-change notifications
         // can re-push a freshly patched XML into it later (live refresh),
         // instead of only ever showing the state from when the page opened.
         g_ncTarget = t;
         g_ncModule = m;
         g_ncP4 = p4;
-        EnsureConnectivityEventsAdvised();
         EnsureNcHostSubclassed();
 
         // Create (once per thread) the mod's own message-only window here,
@@ -9106,6 +9185,7 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
                 g_ncComInitializedByUs = false;
             }
         } else {
+            EnsureConnectivityEventsAdvised();
             // Kick the refresh once so that we render the correct and fresh data
             // the very first time the page is opened (per Issue 6).
             EnsureNetCenterNetworkDataFresh();
@@ -9170,16 +9250,6 @@ static bool HookAll() {
         if (!g_iconHookInstalled)
             Wh_Log(L"Network Center links: custom icon hook unavailable; using Windows icons");
     }
-    // DrawTextW is one of the hottest user32 entry points in the shell.
-    // Only install this hook when privacy mode is actually in use, instead
-    // of unconditionally in every explorer.exe/control.exe process where it
-    // would otherwise do nothing but a pointer-range check on every call.
-    if (g_hookInstalled && g_Settings.privacyMode && !g_textHookInstalled) {
-        g_textHookInstalled = WindhawkUtils::SetFunctionHook(
-            DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
-        if (!g_textHookInstalled)
-            Wh_Log(L"Network Center links: privacy text hook unavailable");
-    }
     return g_hookInstalled;
 }
 
@@ -9224,14 +9294,10 @@ static void SettingsChanged() {
     // g_Settings.privacyMode is false, and unhooking/rehooking DrawTextW on
     // every toggle isn't worth the added complexity for a hot user32 entry
     // point that's already cheap to no-op through.
-    if (g_Settings.privacyMode && g_hookInstalled && !g_textHookInstalled) {
-        g_textHookInstalled = WindhawkUtils::SetFunctionHook(
-            DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
-        if (g_textHookInstalled)
-            Wh_ApplyHookOperations();
-        else
-            Wh_Log(L"Network Center links: privacy text hook unavailable");
-    }
+    // If the page is already loaded, apply the runtime setting now. Otherwise
+    // SetXMLFromResource_Hook installs it when netcenter.dll is first used.
+    if (g_Settings.privacyMode && g_hookInstalled && g_netcenterBase)
+        EnsurePrivacyTextHookInstalled();
 }
 
 #undef NCL_THISCALL
