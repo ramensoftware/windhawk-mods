@@ -2,18 +2,20 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.8
+// @version         0.1.9
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
 //
-// The Win32 menu and DirectWrite hook techniques are based in part on the
-// open-source Windhawk "Text Replace" mod by m417z.
+// The Win32 menu hook technique is based in part on the open-source Windhawk
+// "Text Replace" mod by m417z. The XAML diagnostics connection is based on the
+// Windows 11 styler mods by m417z and ExplorerTAP from TranslucentTB.
 
 // ==WindhawkModReadme==
 /*
@@ -55,17 +57,17 @@ keyboard shortcut text are also preserved.
   Existing tooltip controls are discovered when the mod is enabled in a
   running Explorer. Basic or classic-theme tooltips drawn directly with
   `DrawTextW` aren't covered.
-- Windows 11 XAML context menus and pointer tooltips use an experimental,
-  display-only DirectWrite hook. Taskbar thumbnail previews and XAML popups
-  related to them are explicitly excluded. While an eligible popup is visible,
-  other XAML text laid out on the same UI thread can also be transformed;
-  unrelated Explorer threads remain unaffected. This path is disabled by
-  default; enable `modernUiText` to opt in.
+- Windows 11 XAML context menus and pointer tooltips are handled at the XAML
+  element level. Only `TextBlock` elements below a `MenuFlyoutPresenter` or
+  `ToolTip` are changed; ordinary XAML text and taskbar thumbnail previews are
+  outside this scope. Popup visibility is maintained from accessibility
+  show/hide/destroy events, and modified text is restored when an element is
+  unloaded. This path is disabled by default; enable `modernUiText` to opt in.
 
-The modern path is intentionally conservative and can miss text if a Windows
-build uses a different popup window class. It remains opt-in because
-DirectWrite doesn't identify the target XAML element; disable `modernUiText`
-again if it causes a problem.
+The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
+hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
+so another diagnostics-based customization tool can prevent this path from
+initializing.
 
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
 flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
@@ -73,10 +75,11 @@ flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
 
 The mod doesn't edit system files, registry values, or file names. A file name
 shown in a classic menu can nevertheless be displayed with inserted spaces.
-The modern DirectWrite path changes display text only. The classic path updates
-strings stored in active `HMENU` objects, so menu text read through
-accessibility APIs also contains the inserted spaces while the popup is open.
-Rewritten strings are recorded and restored when the popup closes.
+The modern path temporarily changes target `TextBlock` values and restores
+them when the elements are unloaded. The classic path updates strings stored in
+active `HMENU` objects, so menu text read through accessibility APIs also
+contains the inserted spaces while the popup is open. Rewritten strings are
+recorded and restored when the popup closes.
 */
 // ==/WindhawkModReadme==
 
@@ -89,8 +92,8 @@ Rewritten strings are recorded and restored when the popup closes.
   $name: Classic Win32 tooltips
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: false
-  $name: Windows 11 context menus and tooltips (experimental)
-  $description: Process DirectWrite text in Explorer XAML context menus and pointer tooltips.
+  $name: Windows 11 context menus and tooltips
+  $description: Process text elements in Explorer XAML context menus and pointer tooltips.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -100,10 +103,13 @@ Rewritten strings are recorded and restored when the popup closes.
 */
 // ==/WindhawkModSettings==
 
+#include <xamlom.h>
+
 #include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -115,9 +121,18 @@ Rewritten strings are recorded and restored when the popup closes.
 #include <windows.h>
 
 #include <commctrl.h>  // TOOLTIPS_CLASSW
-#include <dwrite.h>
 #include <uxtheme.h>
 #include <vsstyle.h>
+
+#undef GetCurrentTime
+
+#include <winrt/base.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
 
 namespace {
 
@@ -947,6 +962,12 @@ bool IsClassicTooltipWindow(HWND window) {
            _wcsicmp(className, TOOLTIPS_CLASSW) == 0;
 }
 
+bool IsClassicTooltipTarget(HTHEME theme, HDC dc) {
+    const HWND window = dc ? WindowFromDC(dc) : nullptr;
+    return window ? IsClassicTooltipWindow(window)
+                  : IsTrackedClassicTooltipTheme(theme);
+}
+
 BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
     DWORD processId;
     GetWindowThreadProcessId(window, &processId);
@@ -1062,7 +1083,7 @@ HRESULT WINAPI GetThemeTextExtentHook(HTHEME theme,
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
         !IsClassicTooltipTextPart(partId) ||
-        !IsTrackedClassicTooltipTheme(theme)) {
+        !IsClassicTooltipTarget(theme, dc)) {
         return g_originalGetThemeTextExtent(
             theme, dc, partId, stateId, text, textLength, textFlags,
             boundingRectangle, extentRectangle);
@@ -1099,7 +1120,7 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
         !IsClassicTooltipTextPart(partId) ||
-        !IsTrackedClassicTooltipTheme(theme)) {
+        !IsClassicTooltipTarget(theme, dc)) {
         return g_originalDrawThemeText(
             theme, dc, partId, stateId, text, textLength, textFlags,
             textFlags2, rectangle);
@@ -1135,7 +1156,7 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
     if (!g_classicTooltips.load(std::memory_order_relaxed) ||
         g_rewritingClassicTooltipText ||
         !IsClassicTooltipTextPart(partId) ||
-        !IsTrackedClassicTooltipTheme(theme)) {
+        !IsClassicTooltipTarget(theme, dc)) {
         return g_originalDrawThemeTextEx(
             theme, dc, partId, stateId, text, textLength, textFlags,
             rectangle, options);
@@ -1160,137 +1181,38 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
 }
 
 // -------------------------------------------------------------------------
-// Windows 11 XAML popup detection
+// Windows 11 XAML context menus and tooltips
 // -------------------------------------------------------------------------
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-using CreateWindowInBand_t = HWND(WINAPI*)(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band);
-using CreateWindowInBandEx_t = HWND(WINAPI*)(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band,
-    DWORD typeFlags);
+namespace wf = winrt::Windows::Foundation;
+namespace wux = winrt::Windows::UI::Xaml;
+namespace mux = winrt::Microsoft::UI::Xaml;
 
-CreateWindowExW_t g_originalCreateWindowExW;
-CreateWindowInBand_t g_originalCreateWindowInBand;
-CreateWindowInBandEx_t g_originalCreateWindowInBandEx;
-
-enum class ModernWindowKind {
-    Other,
-    Popup,
-    TaskbarThumbnail,
-};
-
-struct TrackedModernWindow {
+struct VisibleModernPopup {
     DWORD threadId;
-    ModernWindowKind kind;
 };
 
-std::mutex g_trackedModernWindowsMutex;
-std::unordered_map<HWND, TrackedModernWindow>
-    g_trackedModernWindows;
-std::atomic_uint g_trackedModernWindowCount{0};
-std::atomic_uint g_trackedModernPopupCount{0};
+std::mutex g_visibleModernPopupsMutex;
+std::unordered_map<HWND, VisibleModernPopup> g_visibleModernPopups;
+HWINEVENTHOOK g_modernPopupWinEventHook;
 
-void UpdateTrackedModernWindowCountsLocked() {
-    unsigned int popupCount = 0;
-    for (const auto& entry : g_trackedModernWindows) {
-        if (entry.second.kind == ModernWindowKind::Popup) {
-            ++popupCount;
-        }
-    }
-
-    g_trackedModernWindowCount.store(
-        static_cast<unsigned int>(
-            g_trackedModernWindows.size()),
-        std::memory_order_relaxed);
-    g_trackedModernPopupCount.store(
-        popupCount, std::memory_order_relaxed);
+bool IsModernPopupClassName(LPCWSTR className) {
+    return className &&
+           (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
+            _wcsicmp(className,
+                     L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0);
 }
 
-ModernWindowKind ClassifyModernWindowClassName(LPCWSTR className) {
-    if (!className) {
-        return ModernWindowKind::Other;
-    }
-
-    if (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0) {
-        return ModernWindowKind::Popup;
-    }
-
-    if (_wcsicmp(className, L"TaskListThumbnailWnd") == 0) {
-        return ModernWindowKind::TaskbarThumbnail;
-    }
-
-    return ModernWindowKind::Other;
-}
-
-ModernWindowKind ClassifyModernWindow(HWND window) {
+bool IsModernPopupWindow(HWND window) {
     wchar_t className[128];
-    const int length = GetClassNameW(window, className, ARRAYSIZE(className));
-    return length > 0 ? ClassifyModernWindowClassName(className)
-                      : ModernWindowKind::Other;
+    return window &&
+           GetClassNameW(window, className, ARRAYSIZE(className)) > 0 &&
+           IsModernPopupClassName(className);
 }
 
-bool HasWindowClass(HWND window, LPCWSTR expectedClassName) {
-    if (!window) {
-        return false;
-    }
-
-    wchar_t className[128];
-    const int length = GetClassNameW(window, className, ARRAYSIZE(className));
-    return length > 0 && _wcsicmp(className, expectedClassName) == 0;
-}
-
-bool IsTaskbarThumbnailSurface(HWND window) {
-    if (!window) {
-        return false;
-    }
-
-    const HWND root = GetAncestor(window, GA_ROOT);
-    const HWND rootOwner = GetAncestor(window, GA_ROOTOWNER);
-    const HWND candidates[] = {window, root, rootOwner};
-
-    for (HWND candidate : candidates) {
-        if (HasWindowClass(candidate, L"TaskListThumbnailWnd") ||
-            HasWindowClass(candidate, L"XamlExplorerHostIslandWindow")) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool IsCursorInsideTaskbarThumbnailSurface() {
-    POINT cursor;
-    return GetCursorPos(&cursor) &&
-           IsTaskbarThumbnailSurface(WindowFromPoint(cursor));
-}
-
-bool TrackModernWindow(HWND window, ModernWindowKind kind) {
-    if (!window || kind == ModernWindowKind::Other) {
+bool TrackVisibleModernPopup(HWND window) {
+    if (!window || !IsWindowVisible(window) ||
+        !IsModernPopupWindow(window)) {
         return false;
     }
 
@@ -1301,362 +1223,718 @@ bool TrackModernWindow(HWND window, ModernWindowKind kind) {
         return false;
     }
 
-    bool inserted;
-    {
-        std::lock_guard<std::mutex> guard(
-            g_trackedModernWindowsMutex);
-        const auto [iterator, wasInserted] =
-            g_trackedModernWindows.try_emplace(
-                window, TrackedModernWindow{threadId, kind});
-        if (!wasInserted) {
-            iterator->second = {threadId, kind};
-        }
-        inserted = wasInserted;
-        UpdateTrackedModernWindowCountsLocked();
-    }
-
-    if (inserted) {
-        if (kind == ModernWindowKind::TaskbarThumbnail) {
-            Wh_Log(L"Tracking excluded taskbar thumbnail");
-        } else {
-            Wh_Log(L"Tracking modern popup");
-        }
-    }
+    std::lock_guard<std::mutex> guard(g_visibleModernPopupsMutex);
+    g_visibleModernPopups[window] = {threadId};
     return true;
 }
 
-bool TrackModernWindowIfRelevant(HWND window) {
-    const ModernWindowKind kind = ClassifyModernWindow(window);
-    return TrackModernWindow(window, kind);
-}
+struct FindVisibleModernPopupData {
+    bool found;
+};
 
-void TrackCreatedModernWindow(HWND window, LPCWSTR className) {
-    if (!window) {
-        return;
-    }
-
-    const ModernWindowKind kind =
-        className && !IS_INTRESOURCE(className)
-            ? ClassifyModernWindowClassName(className)
-            : ClassifyModernWindow(window);
-    TrackModernWindow(window, kind);
-}
-
-BOOL CALLBACK EnumExistingModernWindow(HWND window, LPARAM) {
-    DWORD processId;
-    GetWindowThreadProcessId(window, &processId);
-    if (processId == GetCurrentProcessId()) {
-        TrackModernWindowIfRelevant(window);
+BOOL CALLBACK FindVisibleModernPopupForThread(HWND window, LPARAM parameter) {
+    auto* data =
+        reinterpret_cast<FindVisibleModernPopupData*>(parameter);
+    if (IsWindowVisible(window) && IsModernPopupWindow(window)) {
+        data->found = true;
+        TrackVisibleModernPopup(window);
+        return FALSE;
     }
 
     return TRUE;
 }
 
-void DiscoverExistingModernWindows() {
-    EnumWindows(EnumExistingModernWindow, 0);
-}
-
-void ClearTrackedModernWindows() {
-    std::lock_guard<std::mutex> guard(
-        g_trackedModernWindowsMutex);
-    g_trackedModernWindows.clear();
-    g_trackedModernWindowCount.store(0, std::memory_order_relaxed);
-    g_trackedModernPopupCount.store(0, std::memory_order_relaxed);
-}
-
-bool IsModernPopupActiveForCurrentThread() {
-    if (g_trackedModernPopupCount.load(
-            std::memory_order_relaxed) == 0) {
-        return false;
-    }
-
-    const DWORD currentThreadId = GetCurrentThreadId();
-    bool popupActive = false;
-    bool taskbarThumbnailActive = false;
-    bool removedWindow = false;
-
+bool IsModernPopupVisibleOnThread(DWORD threadId) {
     {
         std::lock_guard<std::mutex> guard(
-            g_trackedModernWindowsMutex);
-        for (auto iterator = g_trackedModernWindows.begin();
-             iterator != g_trackedModernWindows.end();) {
+            g_visibleModernPopupsMutex);
+        for (auto iterator = g_visibleModernPopups.begin();
+             iterator != g_visibleModernPopups.end();) {
             if (!IsWindow(iterator->first) ||
-                ClassifyModernWindow(iterator->first) !=
-                    iterator->second.kind) {
-                iterator =
-                    g_trackedModernWindows.erase(iterator);
-                removedWindow = true;
+                !IsWindowVisible(iterator->first) ||
+                !IsModernPopupWindow(iterator->first)) {
+                iterator = g_visibleModernPopups.erase(iterator);
                 continue;
             }
 
-            if (IsWindowVisible(iterator->first)) {
-                if (iterator->second.kind ==
-                        ModernWindowKind::TaskbarThumbnail ||
-                    (iterator->second.kind ==
-                         ModernWindowKind::Popup &&
-                     IsTaskbarThumbnailSurface(
-                         iterator->first))) {
-                    taskbarThumbnailActive = true;
-                } else if (
-                    iterator->second.threadId ==
-                        currentThreadId &&
-                    iterator->second.kind ==
-                        ModernWindowKind::Popup) {
-                    popupActive = true;
-                }
+            if (iterator->second.threadId == threadId) {
+                return true;
             }
 
             ++iterator;
         }
+    }
 
-        if (removedWindow) {
-            UpdateTrackedModernWindowCountsLocked();
+    // SHOW normally populates the map before XAML Loaded runs. This fallback
+    // covers an already-visible popup and delayed out-of-context delivery.
+    FindVisibleModernPopupData data{};
+    EnumThreadWindows(
+        threadId, FindVisibleModernPopupForThread,
+        reinterpret_cast<LPARAM>(&data));
+    return data.found;
+}
+
+BOOL CALLBACK DiscoverVisibleModernPopup(HWND window, LPARAM) {
+    DWORD processId;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId() &&
+        IsWindowVisible(window)) {
+        TrackVisibleModernPopup(window);
+    }
+
+    return TRUE;
+}
+
+void ClearVisibleModernPopups() {
+    std::lock_guard<std::mutex> guard(g_visibleModernPopupsMutex);
+    g_visibleModernPopups.clear();
+}
+
+bool IsTargetModernAncestorClass(std::wstring_view className) {
+    return className.ends_with(L".MenuFlyoutPresenter") ||
+           className.ends_with(L".ToolTip");
+}
+
+template <typename TextBlock, typename VisualTreeHelper>
+bool IsTargetModernTextElement(const TextBlock& textBlock) {
+    auto current = VisualTreeHelper::GetParent(textBlock);
+    for (unsigned int depth = 0; depth < 64; ++depth) {
+        if (!current) {
+            return false;
+        }
+
+        const auto className = winrt::get_class_name(current);
+        if (IsTargetModernAncestorClass(
+                std::wstring_view(className.c_str(), className.size()))) {
+            return true;
+        }
+
+        current = VisualTreeHelper::GetParent(current);
+    }
+
+    return false;
+}
+
+class ModernTextStateBase {
+public:
+    explicit ModernTextStateBase(DWORD threadId)
+        : m_threadId(threadId) {}
+    virtual ~ModernTextStateBase() = default;
+
+    DWORD ThreadId() const {
+        return m_threadId;
+    }
+
+    virtual void Apply() = 0;
+    virtual void Restore() = 0;
+    virtual void Detach() = 0;
+
+private:
+    DWORD m_threadId;
+};
+
+std::mutex g_modernTextStatesMutex;
+std::vector<std::weak_ptr<ModernTextStateBase>> g_modernTextStates;
+
+void RegisterModernTextState(
+    const std::shared_ptr<ModernTextStateBase>& state) {
+    std::lock_guard<std::mutex> guard(g_modernTextStatesMutex);
+    g_modernTextStates.emplace_back(state);
+}
+
+void RefreshModernTextStates(DWORD threadId, bool apply) {
+    std::vector<std::shared_ptr<ModernTextStateBase>> states;
+    {
+        std::lock_guard<std::mutex> guard(g_modernTextStatesMutex);
+        auto output = g_modernTextStates.begin();
+        for (auto iterator = g_modernTextStates.begin();
+             iterator != g_modernTextStates.end(); ++iterator) {
+            if (auto state = iterator->lock()) {
+                *output++ = *iterator;
+                if (state->ThreadId() == threadId) {
+                    states.push_back(std::move(state));
+                }
+            }
+        }
+        g_modernTextStates.erase(output, g_modernTextStates.end());
+    }
+
+    for (const auto& state : states) {
+        apply ? state->Apply() : state->Restore();
+    }
+}
+
+template <typename TextBlock, typename VisualTreeHelper>
+class ModernTextState final
+    : public ModernTextStateBase,
+      public std::enable_shared_from_this<
+          ModernTextState<TextBlock, VisualTreeHelper>> {
+public:
+    explicit ModernTextState(const TextBlock& textBlock)
+        : ModernTextStateBase(GetCurrentThreadId()),
+          m_textBlock(winrt::make_weak(textBlock)) {}
+
+    void Attach() {
+        auto textBlock = m_textBlock.get();
+        if (!textBlock) {
+            return;
+        }
+
+        const auto self = this->shared_from_this();
+        m_loadedToken = textBlock.Loaded(
+            [self](const auto&, const auto&) {
+                self->Apply();
+            });
+        m_unloadedToken = textBlock.Unloaded(
+            [self](const auto&, const auto&) {
+                self->Restore();
+            });
+        m_attached = true;
+    }
+
+    void Apply() override {
+        if (!g_modernUiText.load(std::memory_order_relaxed) ||
+            !IsModernPopupVisibleOnThread(ThreadId())) {
+            return;
+        }
+
+        try {
+            auto textBlock = m_textBlock.get();
+            if (!textBlock || !textBlock.IsLoaded() ||
+                !IsTargetModernTextElement<TextBlock, VisualTreeHelper>(
+                    textBlock)) {
+                return;
+            }
+
+            if (m_modified) {
+                const auto current = textBlock.Text();
+                if (std::wstring_view(current.c_str(), current.size()) ==
+                    m_spacedText) {
+                    return;
+                }
+
+                // The app updated the text while the popup was open. Use the
+                // new value instead of restoring stale text over it.
+                m_modified = false;
+                m_originalText.clear();
+                m_spacedText.clear();
+            }
+
+            const auto current = textBlock.Text();
+            const std::wstring_view original(current.c_str(),
+                                             current.size());
+            if (!ContainsCjkCodePoint(original)) {
+                return;
+            }
+
+            std::wstring spaced = AddCjkSpacing(original, false);
+            if (spaced.size() == original.size()) {
+                return;
+            }
+
+            m_originalText.assign(original);
+            m_spacedText = std::move(spaced);
+            m_modified = true;
+            textBlock.Text(winrt::hstring(m_spacedText));
+            Wh_Log(L"Applied CJK spacing (modern XAML TextBlock)");
+        } catch (const winrt::hresult_error& error) {
+            Wh_Log(L"Couldn't update modern XAML text: 0x%08X",
+                   error.code());
         }
     }
 
-    if (!popupActive || taskbarThumbnailActive) {
-        return false;
-    }
-
-    return !IsCursorInsideTaskbarThumbnailSurface();
-}
-
-HWND WINAPI CreateWindowExWHook(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter) {
-    HWND window = g_originalCreateWindowExW(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter);
-    TrackCreatedModernWindow(window, className);
-    return window;
-}
-
-HWND WINAPI CreateWindowInBandHook(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band) {
-    HWND window = g_originalCreateWindowInBand(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter, band);
-    TrackCreatedModernWindow(window, className);
-    return window;
-}
-
-HWND WINAPI CreateWindowInBandExHook(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band,
-    DWORD typeFlags) {
-    HWND window = g_originalCreateWindowInBandEx(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter, band, typeFlags);
-    TrackCreatedModernWindow(window, className);
-    return window;
-}
-
-// -------------------------------------------------------------------------
-// DirectWrite text layout used by Windows 11 XAML popups
-// -------------------------------------------------------------------------
-
-using IDWriteFactory_CreateTextLayout_t =
-    HRESULT(STDMETHODCALLTYPE*)(IDWriteFactory* factory,
-                                const WCHAR* text,
-                                UINT32 textLength,
-                                IDWriteTextFormat* textFormat,
-                                FLOAT maxWidth,
-                                FLOAT maxHeight,
-                                IDWriteTextLayout** textLayout);
-
-using IDWriteFactory_CreateGdiCompatibleTextLayout_t =
-    HRESULT(STDMETHODCALLTYPE*)(IDWriteFactory* factory,
-                                const WCHAR* text,
-                                UINT32 textLength,
-                                IDWriteTextFormat* textFormat,
-                                FLOAT layoutWidth,
-                                FLOAT layoutHeight,
-                                FLOAT pixelsPerDip,
-                                const DWRITE_MATRIX* transform,
-                                BOOL useGdiNatural,
-                                IDWriteTextLayout** textLayout);
-
-IDWriteFactory_CreateTextLayout_t g_originalCreateTextLayout;
-IDWriteFactory_CreateGdiCompatibleTextLayout_t
-    g_originalCreateGdiCompatibleTextLayout;
-
-HRESULT CreateTextLayoutWithSpacing(
-    IDWriteFactory_CreateTextLayout_t originalFunction,
-    const wchar_t* source,
-    IDWriteFactory* factory,
-    const WCHAR* text,
-    UINT32 textLength,
-    IDWriteTextFormat* textFormat,
-    FLOAT maxWidth,
-    FLOAT maxHeight,
-    IDWriteTextLayout** textLayout) {
-    if (g_modernUiText.load(std::memory_order_relaxed) && text) {
-        const std::wstring_view original(text, textLength);
-        if (!ContainsCjkCodePoint(original) ||
-            !IsModernPopupActiveForCurrentThread()) {
-            return originalFunction(factory, text, textLength, textFormat,
-                                    maxWidth, maxHeight, textLayout);
+    void Restore() override {
+        if (!m_modified) {
+            return;
         }
 
-        const std::wstring spaced = AddCjkSpacing(original, false);
-        if (spaced.size() != original.size()) {
-            Wh_Log(L"Applied CJK spacing (%s)", source);
-            return originalFunction(
-                factory, spaced.c_str(), static_cast<UINT32>(spaced.size()),
-                textFormat, maxWidth, maxHeight, textLayout);
+        try {
+            auto textBlock = m_textBlock.get();
+            if (textBlock) {
+                const auto current = textBlock.Text();
+                if (std::wstring_view(current.c_str(), current.size()) ==
+                    m_spacedText) {
+                    textBlock.Text(winrt::hstring(m_originalText));
+                }
+            }
+        } catch (const winrt::hresult_error& error) {
+            Wh_Log(L"Couldn't restore modern XAML text: 0x%08X",
+                   error.code());
+        }
+
+        m_modified = false;
+        m_originalText.clear();
+        m_spacedText.clear();
+    }
+
+    void Detach() override {
+        Restore();
+        if (!m_attached) {
+            return;
+        }
+
+        try {
+            auto textBlock = m_textBlock.get();
+            if (textBlock) {
+                textBlock.Loaded(m_loadedToken);
+                textBlock.Unloaded(m_unloadedToken);
+            }
+        } catch (const winrt::hresult_error& error) {
+            Wh_Log(L"Couldn't detach modern XAML events: 0x%08X",
+                   error.code());
+        }
+
+        m_attached = false;
+    }
+
+private:
+    winrt::weak_ref<TextBlock> m_textBlock;
+    winrt::event_token m_loadedToken{};
+    winrt::event_token m_unloadedToken{};
+    bool m_attached = false;
+    bool m_modified = false;
+    std::wstring m_originalText;
+    std::wstring m_spacedText;
+};
+
+class VisualTreeWatcher
+    : public winrt::implements<VisualTreeWatcher,
+                               IVisualTreeServiceCallback2,
+                               winrt::non_agile> {
+public:
+    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
+        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
+        AddRef();
+        HANDLE thread = CreateThread(
+            nullptr, 0,
+            [](LPVOID parameter) -> DWORD {
+                auto* watcher =
+                    static_cast<VisualTreeWatcher*>(parameter);
+                const HRESULT result =
+                    watcher->m_xamlDiagnostics
+                        .as<IVisualTreeService3>()
+                        ->AdviseVisualTreeChange(watcher);
+                if (FAILED(result)) {
+                    Wh_Log(L"AdviseVisualTreeChange failed: 0x%08X",
+                           result);
+                }
+                watcher->Release();
+                return 0;
+            },
+            this, 0, nullptr);
+        if (thread) {
+            CloseHandle(thread);
+        } else {
+            Release();
+            Wh_Log(L"Couldn't create XAML watcher thread");
         }
     }
 
-    return originalFunction(factory, text, textLength, textFormat, maxWidth,
-                            maxHeight, textLayout);
-}
-
-HRESULT CreateGdiCompatibleTextLayoutWithSpacing(
-    IDWriteFactory_CreateGdiCompatibleTextLayout_t originalFunction,
-    const wchar_t* source,
-    IDWriteFactory* factory,
-    const WCHAR* text,
-    UINT32 textLength,
-    IDWriteTextFormat* textFormat,
-    FLOAT layoutWidth,
-    FLOAT layoutHeight,
-    FLOAT pixelsPerDip,
-    const DWRITE_MATRIX* transform,
-    BOOL useGdiNatural,
-    IDWriteTextLayout** textLayout) {
-    if (g_modernUiText.load(std::memory_order_relaxed) && text) {
-        const std::wstring_view original(text, textLength);
-        if (!ContainsCjkCodePoint(original) ||
-            !IsModernPopupActiveForCurrentThread()) {
-            return originalFunction(
-                factory, text, textLength, textFormat, layoutWidth,
-                layoutHeight, pixelsPerDip, transform, useGdiNatural,
-                textLayout);
+    void UnadviseVisualTreeChange() {
+        const HRESULT result =
+            m_xamlDiagnostics.as<IVisualTreeService3>()
+                ->UnadviseVisualTreeChange(this);
+        if (FAILED(result)) {
+            Wh_Log(L"UnadviseVisualTreeChange failed: 0x%08X",
+                   result);
         }
 
-        const std::wstring spaced = AddCjkSpacing(original, false);
-        if (spaced.size() != original.size()) {
-            Wh_Log(L"Applied CJK spacing (%s)", source);
-            return originalFunction(
-                factory, spaced.c_str(), static_cast<UINT32>(spaced.size()),
-                textFormat, layoutWidth, layoutHeight, pixelsPerDip, transform,
-                useGdiNatural, textLayout);
+        for (auto& [handle, state] : m_textStates) {
+            state->Detach();
+        }
+        m_textStates.clear();
+    }
+
+private:
+    wf::IInspectable FromHandle(InstanceHandle handle) {
+        wf::IInspectable object;
+        winrt::check_hresult(
+            m_xamlDiagnostics->GetIInspectableFromHandle(
+                handle,
+                reinterpret_cast<::IInspectable**>(
+                    winrt::put_abi(object))));
+        return object;
+    }
+
+    template <typename TextBlock, typename VisualTreeHelper>
+    void RegisterTextBlock(InstanceHandle handle,
+                           const TextBlock& textBlock) {
+        if (!IsTargetModernTextElement<TextBlock, VisualTreeHelper>(
+                textBlock)) {
+            return;
+        }
+
+        auto state = std::make_shared<
+            ModernTextState<TextBlock, VisualTreeHelper>>(textBlock);
+        state->Attach();
+        RegisterModernTextState(state);
+        state->Apply();
+
+        if (auto iterator = m_textStates.find(handle);
+            iterator != m_textStates.end()) {
+            iterator->second->Detach();
+            iterator->second = std::move(state);
+        } else {
+            m_textStates.emplace(handle, std::move(state));
         }
     }
 
-    return originalFunction(factory, text, textLength, textFormat, layoutWidth,
-                            layoutHeight, pixelsPerDip, transform,
-                            useGdiNatural, textLayout);
+    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
+        ParentChildRelation,
+        VisualElement element,
+        VisualMutationType mutationType) override try {
+        if (mutationType == Add &&
+            g_modernUiText.load(std::memory_order_relaxed)) {
+            const std::wstring_view type(
+                element.Type ? element.Type : L"");
+            if (!type.ends_with(L".TextBlock")) {
+                return S_OK;
+            }
+
+            const auto inspectable = FromHandle(element.Handle);
+            if (auto textBlock =
+                    inspectable.try_as<
+                        wux::Controls::TextBlock>()) {
+                RegisterTextBlock<
+                    wux::Controls::TextBlock,
+                    wux::Media::VisualTreeHelper>(
+                        element.Handle, textBlock);
+            } else if (auto textBlock =
+                           inspectable.try_as<
+                               mux::Controls::TextBlock>()) {
+                RegisterTextBlock<
+                    mux::Controls::TextBlock,
+                    mux::Media::VisualTreeHelper>(
+                        element.Handle, textBlock);
+            }
+        } else if (mutationType == Remove) {
+            if (auto iterator = m_textStates.find(element.Handle);
+                iterator != m_textStates.end()) {
+                iterator->second->Detach();
+                m_textStates.erase(iterator);
+            }
+        }
+
+        return S_OK;
+    } catch (...) {
+        Wh_Log(L"XAML visual-tree callback failed: 0x%08X",
+               winrt::to_hresult());
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnElementStateChanged(
+        InstanceHandle,
+        VisualElementState,
+        LPCWSTR) noexcept override {
+        return S_OK;
+    }
+
+    winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
+    std::unordered_map<
+        InstanceHandle,
+        std::shared_ptr<ModernTextStateBase>> m_textStates;
+};
+
+std::mutex g_visualTreeWatchersMutex;
+std::vector<winrt::com_ptr<VisualTreeWatcher>>
+    g_visualTreeWatchers;
+std::atomic_bool g_stoppingModernUi{false};
+
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
+            &module)) {
+        return nullptr;
+    }
+
+    return module;
 }
 
-HRESULT STDMETHODCALLTYPE CreateTextLayoutHook(
-    IDWriteFactory* factory,
-    const WCHAR* text,
-    UINT32 textLength,
-    IDWriteTextFormat* textFormat,
-    FLOAT maxWidth,
-    FLOAT maxHeight,
-    IDWriteTextLayout** textLayout) {
-    return CreateTextLayoutWithSpacing(
-        g_originalCreateTextLayout, L"modern/DirectWrite/CreateTextLayout",
-        factory, text, textLength, textFormat, maxWidth, maxHeight,
-        textLayout);
+class WindhawkTap
+    : public winrt::implements<WindhawkTap,
+                               IObjectWithSite,
+                               winrt::non_agile> {
+public:
+    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
+        m_site.copy_from(site);
+        if (!site || g_stoppingModernUi.load(
+                         std::memory_order_relaxed)) {
+            return S_OK;
+        }
+
+        // Balance the reference added when XAML Diagnostics loads this module.
+        if (HMODULE module = GetCurrentModuleHandle()) {
+            FreeLibrary(module);
+        }
+
+        auto watcher =
+            winrt::make_self<VisualTreeWatcher>(m_site);
+        {
+            std::lock_guard<std::mutex> guard(
+                g_visualTreeWatchersMutex);
+            g_visualTreeWatchers.push_back(watcher);
+        }
+        m_watcher = std::move(watcher);
+        return S_OK;
+    } catch (...) {
+        const HRESULT result = winrt::to_hresult();
+        Wh_Log(L"Couldn't create XAML watcher: 0x%08X", result);
+        return result;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetSite(
+        REFIID interfaceId,
+        void** object) noexcept override {
+        return m_site.as(interfaceId, object);
+    }
+
+private:
+    winrt::com_ptr<IUnknown> m_site;
+    winrt::com_ptr<VisualTreeWatcher> m_watcher;
+};
+
+template <typename Class>
+struct SimpleFactory
+    : winrt::implements<SimpleFactory<Class>,
+                        IClassFactory,
+                        winrt::non_agile> {
+    HRESULT STDMETHODCALLTYPE CreateInstance(
+        IUnknown* outer,
+        REFIID interfaceId,
+        void** object) override try {
+        if (outer) {
+            return CLASS_E_NOAGGREGATION;
+        }
+
+        *object = nullptr;
+        return winrt::make<Class>().as(interfaceId, object);
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+
+    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
+        return S_OK;
+    }
+};
+
+// {3245D18D-2C18-4EA3-9A10-9C5A2B553976}
+constexpr CLSID CLSID_CjkSpacerTap = {
+    0x3245d18d,
+    0x2c18,
+    0x4ea3,
+    {0x9a, 0x10, 0x9c, 0x5a, 0x2b, 0x55, 0x39, 0x76}};
+
+}  // namespace
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
+
+__declspec(dllexport) _Use_decl_annotations_
+STDAPI DllGetClassObject(REFCLSID classId,
+                         REFIID interfaceId,
+                         void** object) try {
+    if (classId != CLSID_CjkSpacerTap) {
+        return CLASS_E_CLASSNOTAVAILABLE;
+    }
+
+    *object = nullptr;
+    return winrt::make<SimpleFactory<WindhawkTap>>().as(
+        interfaceId, object);
+} catch (...) {
+    return winrt::to_hresult();
 }
 
-HRESULT STDMETHODCALLTYPE CreateGdiCompatibleTextLayoutHook(
-    IDWriteFactory* factory,
-    const WCHAR* text,
-    UINT32 textLength,
-    IDWriteTextFormat* textFormat,
-    FLOAT layoutWidth,
-    FLOAT layoutHeight,
-    FLOAT pixelsPerDip,
-    const DWRITE_MATRIX* transform,
-    BOOL useGdiNatural,
-    IDWriteTextLayout** textLayout) {
-    return CreateGdiCompatibleTextLayoutWithSpacing(
-        g_originalCreateGdiCompatibleTextLayout,
-        L"modern/DirectWrite/CreateGdiCompatibleTextLayout", factory, text,
-        textLength, textFormat, layoutWidth, layoutHeight, pixelsPerDip,
-        transform, useGdiNatural, textLayout);
+__declspec(dllexport) _Use_decl_annotations_
+STDAPI DllCanUnloadNow() {
+    return winrt::get_module_lock() ? S_FALSE : S_OK;
 }
 
-bool HookDirectWrite() {
-    HMODULE dwrite =
-        LoadLibraryExW(L"dwrite.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!dwrite) {
-        Wh_Log(L"Couldn't load dwrite.dll");
-        return false;
+#pragma clang diagnostic pop
+
+namespace {
+
+using InitializeXamlDiagnosticsEx_t =
+    decltype(&InitializeXamlDiagnosticsEx);
+
+std::mutex g_xamlDiagnosticsInitializationMutex;
+bool g_windowsUiXamlDiagnosticsConnected;
+bool g_microsoftUiXamlDiagnosticsConnected;
+
+HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
+                              LPCWSTR connectionPrefix) {
+    const auto initialize =
+        reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
+            GetProcAddress(xamlModule,
+                           "InitializeXamlDiagnosticsEx"));
+    if (!initialize) {
+        return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    using DWriteCreateFactory_t =
-        HRESULT(WINAPI*)(DWRITE_FACTORY_TYPE, REFIID, IUnknown**);
-    const auto createFactory = reinterpret_cast<DWriteCreateFactory_t>(
-        GetProcAddress(dwrite, "DWriteCreateFactory"));
-    if (!createFactory) {
-        Wh_Log(L"Couldn't find DWriteCreateFactory");
-        return false;
+    const HMODULE module = GetCurrentModuleHandle();
+    if (!module) {
+        return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    IDWriteFactory* factory = nullptr;
-    const HRESULT result =
-        createFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-                      reinterpret_cast<IUnknown**>(&factory));
-    if (FAILED(result) || !factory) {
-        Wh_Log(L"DirectWrite factory creation failed: 0x%08X", result);
-        return false;
+    wchar_t modulePath[MAX_PATH];
+    const DWORD pathLength =
+        GetModuleFileNameW(module, modulePath,
+                           ARRAYSIZE(modulePath));
+    if (!pathLength || pathLength == ARRAYSIZE(modulePath)) {
+        return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    void** vtable = *reinterpret_cast<void***>(factory);
-    const bool textLayoutHooked = Wh_SetFunctionHook(
-        vtable[18], reinterpret_cast<void*>(CreateTextLayoutHook),
-        reinterpret_cast<void**>(&g_originalCreateTextLayout));
-    const bool gdiLayoutHooked = Wh_SetFunctionHook(
-        vtable[19],
-        reinterpret_cast<void*>(CreateGdiCompatibleTextLayoutHook),
-        reinterpret_cast<void**>(
-            &g_originalCreateGdiCompatibleTextLayout));
-
-    factory->Release();
-
-    if (!textLayoutHooked || !gdiLayoutHooked) {
-        Wh_Log(L"Couldn't install one or more DirectWrite hooks");
+    HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    for (int index = 1; index <= 10000; ++index) {
+        wchar_t connectionName[256];
+        _snwprintf_s(connectionName, _TRUNCATE, L"%s%d",
+                     connectionPrefix, index);
+        result = initialize(
+            connectionName, GetCurrentProcessId(), L"",
+            modulePath, CLSID_CjkSpacerTap, nullptr);
+        if (result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+            break;
+        }
     }
 
-    return textLayoutHooked || gdiLayoutHooked;
+    return result;
+}
+
+void EnsureModernXamlDiagnostics() {
+    if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> guard(
+        g_xamlDiagnosticsInitializationMutex);
+
+    if (!g_windowsUiXamlDiagnosticsConnected) {
+        if (HMODULE module =
+                GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
+            const HRESULT result = InjectXamlDiagnostics(
+                module, L"VisualDiagConnection");
+            if (SUCCEEDED(result)) {
+                g_windowsUiXamlDiagnosticsConnected = true;
+                Wh_Log(L"Connected to Windows.UI.Xaml diagnostics");
+            } else if (result !=
+                       HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+                Wh_Log(L"Windows.UI.Xaml diagnostics failed: "
+                       L"0x%08X", result);
+            }
+        }
+    }
+
+    if (!g_microsoftUiXamlDiagnosticsConnected) {
+        if (HMODULE module = GetModuleHandleW(
+                L"Microsoft.Internal.FrameworkUdk.dll")) {
+            const HRESULT result = InjectXamlDiagnostics(
+                module, L"WinUIVisualDiagConnection");
+            if (SUCCEEDED(result)) {
+                g_microsoftUiXamlDiagnosticsConnected = true;
+                Wh_Log(L"Connected to Microsoft.UI.Xaml diagnostics");
+            } else if (result !=
+                       HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+                Wh_Log(L"Microsoft.UI.Xaml diagnostics failed: "
+                       L"0x%08X", result);
+            }
+        }
+    }
+}
+
+void CALLBACK ModernPopupWinEventProc(
+    HWINEVENTHOOK,
+    DWORD event,
+    HWND window,
+    LONG objectId,
+    LONG childId,
+    DWORD,
+    DWORD) {
+    if (!window || objectId != OBJID_WINDOW ||
+        childId != CHILDID_SELF ||
+        !g_modernUiText.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    DWORD processId;
+    const DWORD threadId =
+        GetWindowThreadProcessId(window, &processId);
+    if (!threadId || processId != GetCurrentProcessId()) {
+        return;
+    }
+
+    if (event == EVENT_OBJECT_SHOW) {
+        if (!TrackVisibleModernPopup(window)) {
+            return;
+        }
+
+        EnsureModernXamlDiagnostics();
+        if (GetCurrentThreadId() == threadId) {
+            RefreshModernTextStates(threadId, true);
+        }
+    } else if (event == EVENT_OBJECT_HIDE ||
+               event == EVENT_OBJECT_DESTROY) {
+        bool wasTracked;
+        {
+            std::lock_guard<std::mutex> guard(
+                g_visibleModernPopupsMutex);
+            wasTracked =
+                g_visibleModernPopups.erase(window) != 0;
+        }
+
+        if (wasTracked && GetCurrentThreadId() == threadId) {
+            // Restore on the UI thread which generated the in-context event.
+            // Loaded applies spacing if a reusable popup is shown again.
+            RefreshModernTextStates(threadId, false);
+        }
+    }
+}
+
+bool InitializeModernUi() {
+    g_stoppingModernUi.store(false, std::memory_order_relaxed);
+
+    g_modernPopupWinEventHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+        GetCurrentModuleHandle(), ModernPopupWinEventProc,
+        GetCurrentProcessId(), 0, WINEVENT_INCONTEXT);
+    if (!g_modernPopupWinEventHook) {
+        Wh_Log(L"In-context popup event hook failed, trying "
+               L"out-of-context");
+        g_modernPopupWinEventHook = SetWinEventHook(
+            EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
+            ModernPopupWinEventProc, GetCurrentProcessId(), 0,
+            WINEVENT_OUTOFCONTEXT);
+    }
+
+    EnumWindows(DiscoverVisibleModernPopup, 0);
+    EnsureModernXamlDiagnostics();
+    return g_modernPopupWinEventHook != nullptr;
+}
+
+void UninitializeModernUi() {
+    g_stoppingModernUi.store(true, std::memory_order_relaxed);
+
+    if (g_modernPopupWinEventHook) {
+        UnhookWinEvent(g_modernPopupWinEventHook);
+        g_modernPopupWinEventHook = nullptr;
+    }
+
+    std::vector<winrt::com_ptr<VisualTreeWatcher>> watchers;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_visualTreeWatchersMutex);
+        watchers.swap(g_visualTreeWatchers);
+    }
+    for (const auto& watcher : watchers) {
+        watcher->UnadviseVisualTreeChange();
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(g_modernTextStatesMutex);
+        g_modernTextStates.clear();
+    }
+    ClearVisibleModernPopups();
 }
 
 template <typename Function>
@@ -1838,41 +2116,7 @@ BOOL Wh_ModInit() {
     }
 
     if (modernUiTextEnabled) {
-        installedAnyHook |= InstallHook(
-            CreateWindowExW, CreateWindowExWHook,
-            &g_originalCreateWindowExW, L"CreateWindowExW");
-
-        HMODULE user32Module =
-            GetModuleHandleW(L"user32.dll");
-        if (user32Module) {
-            const auto createWindowInBand =
-                reinterpret_cast<CreateWindowInBand_t>(
-                    GetProcAddress(user32Module, "CreateWindowInBand"));
-            if (createWindowInBand) {
-                installedAnyHook |= InstallHook(
-                    createWindowInBand, CreateWindowInBandHook,
-                    &g_originalCreateWindowInBand,
-                    L"CreateWindowInBand");
-            } else {
-                Wh_Log(L"Couldn't find CreateWindowInBand");
-            }
-
-            const auto createWindowInBandEx =
-                reinterpret_cast<CreateWindowInBandEx_t>(
-                    GetProcAddress(user32Module, "CreateWindowInBandEx"));
-            if (createWindowInBandEx) {
-                installedAnyHook |= InstallHook(
-                    createWindowInBandEx, CreateWindowInBandExHook,
-                    &g_originalCreateWindowInBandEx,
-                    L"CreateWindowInBandEx");
-            } else {
-                Wh_Log(L"Couldn't find CreateWindowInBandEx");
-            }
-        } else {
-            Wh_Log(L"Couldn't find user32.dll");
-        }
-
-        installedAnyHook |= HookDirectWrite();
+        installedAnyHook |= InitializeModernUi();
     }
 
     Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
@@ -1888,15 +2132,14 @@ void Wh_ModAfterInit() {
         DiscoverExistingClassicTooltipThemes();
     }
 
-    if (g_modernUiText.load(std::memory_order_relaxed)) {
-        DiscoverExistingModernWindows();
-    }
 }
 
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
     ClearTrackedClassicTooltipThemes();
-    ClearTrackedModernWindows();
+    if (g_modernUiText.load(std::memory_order_relaxed)) {
+        UninitializeModernUi();
+    }
     Wh_Log(L"CJK Spacer uninitialized");
 }
 
