@@ -200,6 +200,18 @@ If you encounter issues, please report them to the author of the mod.
 #include <stdlib.h>
 #include <cwctype>
 
+// Use the mod's own module as the HINSTANCE for every RegisterClass /
+// UnregisterClass / CreateWindowEx call in this file, instead of the host
+// EXE's (GetModuleHandle(NULL)). A class is keyed by (name, hInstance) and
+// Windows does not remove the registration when the mod DLL is unmapped, so
+// registering against the EXE's long-lived hInstance leaves a registration
+// that survives across loads/unloads while its lpfnWndProc still points into
+// the (now unmapped or relocated) old mod image. Using the mod's own,
+// per-load HINSTANCE makes a leftover registration harmless, since the next
+// load gets a different hInstance and therefore a distinct class.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+
 // =========================================================
 // Dark context menu support (right-click menu only)
 #define WINDOW_WIDTH_BASE        300
@@ -342,8 +354,6 @@ static HANDLE g_hConnectThread = NULL;
 // this and the connect thread run code in the mod's own image, so leaving
 // either alive when Windhawk unloads the DLL crashes the process on return.
 static HANDLE g_hReapThread = NULL;
-// Modal native Wi-Fi profile UI runs here, never on the hotkey thread.
-static HANDLE g_hProfileDialogThread = NULL;
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -2422,7 +2432,6 @@ static GdipCreateHICONFromBitmapFunc pGdipCreateHICONFromBitmap = NULL;
 static BOOL g_inPasswordPrompt = FALSE;
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 static WCHAR g_TooltipBuffer[1024] = {0};
-
 // -------------------------------------------------------
 // Localization
 // -------------------------------------------------------
@@ -2472,6 +2481,9 @@ typedef enum {
     STR_PWD_EMPTY,
     STR_TRAY_TROUBLESHOOT,
     STR_TRAY_NETWORK_SETTINGS,
+    // New strings for HomeGroup fallback
+    STR_ADVANCED_SHARING_TITLE,
+    STR_ADVANCED_SHARING_DESC,
     STR_COUNT
 } LocaleStringId;
 
@@ -5138,15 +5150,21 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
 BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize) {
     if (!SafeToAccessUI()) return FALSE;
     g_inPasswordPrompt = TRUE;
-    HINSTANCE hInst = GetModuleHandle(NULL);
+    HINSTANCE hInst = HINST_THISCOMPONENT;
     WNDCLASSW wc = {0};
     wc.lpfnWndProc   = Win7PasswordWndProc;
     wc.hInstance     = hInst;
     wc.lpszClassName = L"Win7NetPwdClass";
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
-    UnregisterClassW(wc.lpszClassName, hInst);
-    RegisterClassW(&wc);
+    // Registered against the mod's own HINSTANCE (see HINST_THISCOMPONENT),
+    // so a leftover registration from a previous load can never collide with
+    // this one - no need to pre-emptively UnregisterClassW, which would
+    // otherwise fail (and thus be a no-op) whenever a window of the class
+    // still exists, letting CreateWindowExW below create a window on a
+    // stale class with a dangling WndProc.
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        Wh_Log(L"PromptNetworkPassword: RegisterClassW failed (%lu)", GetLastError());
     
     PasswordDlgData data = { passwordBuffer, bufferSize, FALSE };
     RECT rcWork;
@@ -6253,31 +6271,11 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     }
 }
 
-struct WlanProfileDialogContext {
-    WCHAR profileName[33];
-    GUID interfaceGuid;
-};
-
-static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID parameter) {
-    std::unique_ptr<WlanProfileDialogContext> context(
-        static_cast<WlanProfileDialogContext*>(parameter));
-    if (!context) return ERROR_INVALID_PARAMETER;
-    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
-        DWORD, LPCWSTR, GUID*, HWND, DWORD, PVOID, DWORD*);
-    HMODULE hWlanUi = LoadLibraryExW(L"wlanui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hWlanUi) return GetLastError();
-    WlanUIEditProfile_t editProfile = reinterpret_cast<WlanUIEditProfile_t>(
-        GetProcAddress(hWlanUi, "WlanUIEditProfile"));
-    DWORD result = ERROR_PROC_NOT_FOUND;
-    if (editProfile) {
-        DWORD reasonCode = 0;
-        // No owner makes the native dialog center on the screen.
-        result = editProfile(1, context->profileName, &context->interfaceGuid,
-                             nullptr, 0, nullptr, &reasonCode);
-    }
-    FreeLibrary(hWlanUi);
-    return result;
-}
+// WlanProfileDialogContext/WlanProfileDialogThreadProc, which used to open
+// WlanUIEditProfile on a mod-owned thread for IDM_PROPERTIES, were removed:
+// see the comment at the IDM_PROPERTIES handler in ShowContextMenu() for why
+// (that modal dialog could hang Wh_ModUninit indefinitely). IDM_PROPERTIES
+// now goes through the same native shell fallback as IDM_STATUS below.
 
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     WifiNetworkItem menuItem = {};
@@ -6345,31 +6343,19 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
             {
                 BOOL launched = FALSE;
 
-                if (cmd == IDM_PROPERTIES && targetItem.hasProfile &&
-                    !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
-                    if (g_hProfileDialogThread &&
-                        WaitForSingleObject(g_hProfileDialogThread, 0) == WAIT_OBJECT_0) {
-                        CloseHandle(g_hProfileDialogThread);
-                        g_hProfileDialogThread = NULL;
-                    }
-                    if (!g_hProfileDialogThread) {
-                        std::unique_ptr<WlanProfileDialogContext> context(
-                            new WlanProfileDialogContext{});
-                        StringCchCopyW(context->profileName, ARRAYSIZE(context->profileName), targetItem.ssid);
-                        context->interfaceGuid = targetItem.interfaceGuid;
-                        WlanProfileDialogContext* rawContext = context.release();
-                        HANDLE thread = CreateThread(NULL, 0, WlanProfileDialogThreadProc,
-                                                     rawContext, 0, NULL);
-                        if (thread) {
-                            g_hProfileDialogThread = thread;
-                            launched = TRUE;
-                        } else {
-                            delete rawContext;
-                        }
-                    } else {
-                        launched = TRUE;
-                    }
-                }
+                // IDM_PROPERTIES used to open WlanUIEditProfile (a modal,
+                // user-driven property sheet) on a mod-owned thread. That
+                // dialog can refuse to close (e.g. it puts up its own
+                // confirmation), and the thread proc still runs FreeLibrary
+                // plus the mod's own unload epilogue - so if the dialog was
+                // still open when the mod is disabled/updated/reloaded,
+                // Wh_ModUninit had to block indefinitely (WaitForSingleObject
+                // ... INFINITE) until the user closed it by hand. Route
+                // IDM_PROPERTIES through the same native shell fallback used
+                // below for IDM_STATUS (SHParseDisplayName + ShellExecuteExW
+                // with the "properties"/"status" verb): it opens the same
+                // native UI without the mod owning any thread for it, which
+                // removes the hang entirely.
 
                 if (!launched && !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
                     WCHAR szGuid[64] = {0};
@@ -7645,15 +7631,21 @@ void ToggleFlyoutWindow() {
             UINT dpi = hScreenDC ? (UINT)GetDeviceCaps(hScreenDC, LOGPIXELSX) : 96;
             if (hScreenDC) ReleaseDC(NULL, hScreenDC);
             RecalcDpiMetrics(dpi);
-            HINSTANCE hInst = GetModuleHandle(NULL);
+            HINSTANCE hInst = HINST_THISCOMPONENT;
             WNDCLASSW wc = {0};
             wc.lpfnWndProc   = FlyoutWndProc;
             wc.hInstance     = hInst;
             wc.lpszClassName = L"Win7NetworkFlyoutSafe";
             wc.hCursor       = LoadCursor(NULL,IDC_ARROW);
             wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
-            UnregisterClassW(wc.lpszClassName,hInst);
-            RegisterClassW(&wc);
+            // Own HINSTANCE (see HINST_THISCOMPONENT) means a leftover
+            // registration from a previous load/unload cycle can't collide
+            // with this one, so the pre-emptive UnregisterClassW - which
+            // silently failed (and did nothing) while a window of the class
+            // was still alive, letting CreateWindowExW below reuse the
+            // stale class with a dangling WndProc - is no longer needed.
+            if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+                Wh_Log(L"ToggleFlyoutWindow: RegisterClassW failed (%lu)", GetLastError());
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
             DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; 
@@ -7852,18 +7844,6 @@ void SafeCleanup() {
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-        if (g_hProfileDialogThread) {
-        // Ask the modal native profile UI to close before joining its worker.
-        if (DWORD tid = GetThreadId(g_hProfileDialogThread)) {
-            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                return TRUE;
-            }, 0);
-        }
-        WaitForSingleObject(g_hProfileDialogThread, INFINITE);
-        CloseHandle(g_hProfileDialogThread);
-        g_hProfileDialogThread = NULL;
-    }
     if (g_hConnectThread) {
         // AsyncConnectThreadProc can wait up to 10s on g_hConnectMutex before
         // doing anything, so any join timeout shorter than that (previously
@@ -7939,18 +7919,20 @@ static bool g_textHookInstalled = false;
 // ---------------------------------------------------------------------------
 struct LangPack {
     WORD lang;
-    const wchar_t *cTitle, *cDesc, *hTitle, *hDesc, *mTitle, *mDesc, *fullMap;
-    // Fallback label used by GetConnectedNetworkName() when neither Wi-Fi
-    // nor Ethernet report a name, and the Network Map's Internet node label
-    // in NetworkMapVisual() - both were previously hardcoded in English.
+    const wchar_t *cTitle, *cDesc;      // Connect to a Network
+    const wchar_t *hTitle, *hDesc;      // HomeGroup (original)
+    const wchar_t *hFallbackTitle, *hFallbackDesc; // Advanced Sharing (fallback)
+    const wchar_t *mTitle, *mDesc;      // View Network Map
+    const wchar_t *fullMap;             // View full map
     const wchar_t *networkFallback, *internetLabel;
 };
-
 static const LangPack kLang[] = {
     {0x09, L"Connect to a Network",
      L"Connect to an available wireless, VPN, or dial-up network.",
      L"Choose Homegroup and Sharing Options",
      L"View or change your homegroup settings and network sharing preferences.",
+     L"Advanced Sharing Settings",
+     L"Configure advanced network sharing settings.",
      L"View Network Map",
      L"See a map of your network and connected devices.",
      L"View full map", L"Network", L"Internet"},
@@ -7958,6 +7940,8 @@ static const LangPack kLang[] = {
      L"Connettere o riconnettere una rete wireless, VPN o di accesso remoto disponibile.",
      L"Selezione delle opzioni del gruppo home e della condivisione",
      L"Accedere alle impostazioni del gruppo home e configurare le opzioni di condivisione della rete.",
+     L"Impostazioni di condivisione avanzate",
+     L"Configura le impostazioni avanzate di condivisione della rete.",
      L"Visualizza mappa di rete",
      L"Visualizza una mappa della rete e dei dispositivi connessi.",
      L"Visualizza mappa completa", L"Rete", L"Internet"},
@@ -7965,6 +7949,8 @@ static const LangPack kLang[] = {
      L"Connectez-vous aux r\u00e9seaux sans fil, VPN ou distants disponibles.",
      L"Choisir les options de groupe r\u00e9sidentiel et de partage",
      L"Affichez ou modifiez les param\u00e8tres de groupe r\u00e9sidentiel et de partage.",
+     L"Param\u00e8tres de partage avanc\u00e9s",
+     L"Configurez les param\u00e8tres de partage avanc\u00e9s du r\u00e9seau.",
      L"Afficher la carte du r\u00e9seau",
      L"Voir une carte de votre r\u00e9seau et des appareils connect\u00e9s.",
      L"Afficher la carte compl\u00e8te", L"R\u00e9seau", L"Internet"},
@@ -7972,6 +7958,8 @@ static const LangPack kLang[] = {
      L"Con\u00e9ctese a redes inal\u00e1mbricas, VPN o de acceso telef\u00f3nico disponibles.",
      L"Elegir opciones de grupo en el hogar y uso compartido",
      L"Vea o cambie la configuraci\u00f3n del grupo en el hogar y uso compartido de red.",
+     L"Configuraci\u00f3n avanzada de uso compartido",
+     L"Configura las opciones avanzadas de uso compartido de red.",
      L"Ver mapa de red",
      L"Vea un mapa de su red y los dispositivos conectados.",
      L"Ver mapa completo", L"Red", L"Internet"},
@@ -7979,6 +7967,8 @@ static const LangPack kLang[] = {
      L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u043c \u0431\u0435\u0441\u043f\u0440\u043e\u0432\u043e\u0434\u043d\u044b\u043c \u0441\u0435\u0442\u044f\u043c, VPN \u0438\u043b\u0438 \u0441\u0435\u0442\u044f\u043c \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
      L"\u0412\u044b\u0431\u043e\u0440 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0441\u0435\u0442\u0438.",
+     L"\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
+     L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u044b\u0445 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438",
      L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438 \u0438 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u044b\u0445 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432.",
      L"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u043e\u043b\u043d\u0443\u044e \u043a\u0430\u0440\u0442\u0443", L"\u0421\u0435\u0442\u044c", L"\u0418\u043d\u0442\u0435\u0440\u043d\u0435\u0442"},
@@ -7986,6 +7976,8 @@ static const LangPack kLang[] = {
      L"Verbindung mit verf\u00fcgbaren Drahtlos-, VPN- oder DF\u00dc-Netzwerken herstellen.",
      L"Heimnetzgruppen- und Freigabeoptionen ausw\u00e4hlen",
      L"Einstellungen f\u00fcr Heimnetzgruppen und Netzwerkfreigaben anzeigen oder \u00e4ndern.",
+     L"Erweiterte Freigabeeinstellungen",
+     L"Konfiguriere erweiterte Netzwerkfreigabeeinstellungen.",
      L"Netzwerkkarte anzeigen",
      L"Zeigen Sie eine Karte Ihres Netzwerks und der verbundenen Ger\u00e4te an.",
      L"Vollst\u00e4ndige Karte anzeigen", L"Netzwerk", L"Internet"},
@@ -7993,6 +7985,8 @@ static const LangPack kLang[] = {
      L"Ligue-se a redes sem fios, VPN ou de acesso telef\u00f3nico dispon\u00edveis.",
      L"Escolher op\u00e7\u00f5es de Grupo Dom\u00e9stico e partilha",
      L"Veja ou altere as defini\u00e7\u00f5es do Grupo Dom\u00e9stico e da partilha de rede.",
+     L"Defini\u00e7\u00f5es avan\u00e7adas de partilha",
+     L"Configure defini\u00e7\u00f5es avan\u00e7adas de partilha de rede.",
      L"Ver mapa de rede",
      L"Veja um mapa da sua rede e dispositivos ligados.",
      L"Ver mapa completo", L"Rede", L"Internet"},
@@ -8000,13 +7994,17 @@ static const LangPack kLang[] = {
      L"Połącz z dostępną siecią bezprzewodową, VPN lub modemową.",
      L"Wybierz opcje grupy domowej i udostępniania",
      L"Wyświetl lub zmień ustawienia grupy domowej i udostępniania sieci.",
-     L"Wyświetl mapę sieci",
-     L"Wyświetl mapę sieci i podłączonych urządzeń.",
-     L"Wyświetl pełną mapę", L"Sieć", L"Internet"},
+     L"Zaawansowane ustawienia udost\u0119pniania",
+     L"Skonfiguruj zaawansowane ustawienia udost\u0119pniania sieci.",
+     L"Wy\u015bwietl map\u0119 sieci",
+     L"Wy\u015bwietl map\u0119 sieci i pod\u0142\u0105czonych urz\u0105dze\u0144.",
+     L"Wy\u015bwietl pe\u0142n\u0105 map\u0119", L"Sie\u0107", L"Internet"},
     {0x13, L"Verbinding maken met een netwerk",
      L"Verbinding maken met een beschikbare draadloos-, VPN- of inbelnetwerk.",
-     L"Heimgroep- en delensopties kiezen",
-     L"Bekijk of wijzig uw heimgroep- en netwerkinstellingen.",
+     L"Thuisgroep- en delingsopties kiezen",
+     L"Bekijk of wijzig uw thuisgroep- en netwerkinstellingen.",
+     L"Geavanceerde deelinstellingen",
+     L"Configureer geavanceerde netwerkdeelinstellingen.",
      L"Netwerkkaart weergeven",
      L"Bekijk een kaart van uw netwerk en verbonden apparaten.",
      L"Volledige kaart weergeven", L"Netwerk", L"Internet"},
@@ -8014,9 +8012,11 @@ static const LangPack kLang[] = {
      L"Conectați-vă la o rețea fără fir, VPN sau dial-up disponibilă.",
      L"Alegeți opțiunile de grup de domiciliu și partajare",
      L"Vizualizați sau modificați setările grupului de domiciliu și partajarea în rețea.",
-     L"Vizualizare hartă rețea",
-     L"Vizualizați o hartă a rețelei și dispozitivelor conectate.",
-     L"Vizualizare hartă completă", L"Rețea", L"Internet"},
+     L"Set\u0103ri avansate de partajare",
+     L"Configura\u021Bi set\u0103rile avansate de partajare \u00een re\u021Bea.",
+     L"Vizualizare hart\u0103 re\u021Bea",
+     L"Vizualiza\u021Bi o hart\u0103 a re\u021Belei \u0219i dispozitivelor conectate.",
+     L"Vizualizare hart\u0103 complet\u0103", L"Re\u021Bea", L"Internet"},
 };
 
 static const LangPack* GetLang() {
@@ -8445,10 +8445,27 @@ static std::wstring Patch(const std::wstring& in) {
     if (g_addConnect)
         mid += Link(L->cTitle, L->cDesc, L"%SystemRoot%\\explorer.exe",
                     L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", 22);
-    if (g_addHomegroup)
+if (g_addHomegroup) {
+    // Check if HomeGroup exists on the system (removed in Windows 10 1803+)
+    HKEY hKey;
+    bool homeGroupExists = (RegOpenKeyExW(
+        HKEY_CLASSES_ROOT,
+        L"CLSID\\{67CA7650-96E6-4FDD-BB43-A8E774F73A57}",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS);
+    if (homeGroupExists) {
+        RegCloseKey(hKey);
+        // Windows 7 / Windows 10 pre-1803: use HomeGroup
         mid += Link(L->hTitle, L->hDesc, L"%SystemRoot%\\explorer.exe",
                     L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 27);
-
+    } else {
+        // Windows 10 1803+ / Windows 11: fallback to Advanced Sharing Settings
+        const wchar_t* fallbackTitle = LOC(STR_ADVANCED_SHARING_TITLE);
+        const wchar_t* fallbackDesc = LOC(STR_ADVANCED_SHARING_DESC);
+        mid += Link(fallbackTitle, fallbackDesc,
+                    L"%SystemRoot%\\system32\\control.exe",
+                    L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
+    }
+}
     xml.insert(insertAt, createBlock + mid + diagBlock);
     return xml;
 }
@@ -8808,16 +8825,30 @@ static HWND EnsureNcMsgWindow() {
     g_ncMsgWindow = nullptr; // stale handle from a destroyed window, if any
     SyncNcRegistry();
 
-    HINSTANCE hInst = GetModuleHandleW(NULL);
+    // Own HINSTANCE (see HINST_THISCOMPONENT), so a leftover registration
+    // from a previous load/unload can never collide with this one.
+    HINSTANCE hInst = HINST_THISCOMPONENT;
+    // Each Explorer browser window (and each control.exe instance) runs the
+    // Network Center page on its own thread, so two pages can both reach
+    // here concurrently and race on g_ncMsgClassRegistered. Serialize under
+    // the same lock SyncNcRegistry() above already takes, so only one
+    // thread ever calls RegisterClassW and every other racing thread sees
+    // the flag already set instead of also seeing "not registered" and
+    // failing its own RegisterClassW call (which used to leave that page
+    // with no message window and therefore no live refresh).
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!g_ncMsgClassRegistered) {
         WNDCLASSW wc = {0};
         wc.lpfnWndProc   = NcMsgWndProc;
         wc.hInstance     = hInst;
         wc.lpszClassName = kNcMsgClassName;
-        if (!RegisterClassW(&wc))
-            return nullptr;
-        g_ncMsgClassRegistered = true;
+        if (RegisterClassW(&wc))
+            g_ncMsgClassRegistered = true;
     }
+    bool classReady = g_ncMsgClassRegistered;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!classReady)
+        return nullptr;
 
     GetNcRefreshMessage();
     GetNcTeardownMessage();
@@ -9041,17 +9072,34 @@ static int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, int textLength,
     return DrawTextW_Orig ? DrawTextW_Orig(hdc, text, textLength, rect, format) : 0;
 }
 
-// Install only after netcenter.dll has actually been observed. This keeps the
-// hot DrawTextW path completely unhooked for users who never open this page.
-static void EnsurePrivacyTextHookInstalled() {
-    if (!g_Settings.privacyMode || g_textHookInstalled)
+// Installs the hook if it isn't already installed. Callable from either the
+// NetCenter page's UI thread (via SetXMLFromResource_Hook, the first time
+// netcenter.dll is actually observed) or the Windhawk settings-callback
+// thread (via SettingsChanged(), when privacy mode is toggled on at
+// runtime) - so the check-and-set on g_textHookInstalled is serialized under
+// g_Ctx.csLock. Without that, both callers could see it as false at the same
+// time and both call SetFunctionHook on DrawTextW, registering the hook
+// twice. applyNow lets the Wh_ModInit-time caller (HookAll(), below) skip
+// the explicit Wh_ApplyHookOperations() call, since Windhawk already applies
+// all hooks registered during Wh_ModInit on its own right after it returns;
+// calling it again there would just be redundant work on that path.
+static void EnsurePrivacyTextHookInstalled(bool applyNow = true) {
+    if (!g_Settings.privacyMode)
         return;
-    g_textHookInstalled = WindhawkUtils::SetFunctionHook(
-        DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
-    if (g_textHookInstalled)
+    EnterCriticalSection(&g_Ctx.csLock);
+    bool alreadyInstalled = g_textHookInstalled;
+    bool justInstalled = false;
+    if (!alreadyInstalled) {
+        justInstalled = WindhawkUtils::SetFunctionHook(
+            DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
+        if (justInstalled)
+            g_textHookInstalled = true;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (alreadyInstalled || !justInstalled)
+        return;
+    if (applyNow)
         Wh_ApplyHookOperations();
-    else
-        Wh_Log(L"Network Center links: privacy text hook unavailable");
 }
 
 // DirectUI loads icon() graphics through LoadImageW. Only the two private
@@ -9566,6 +9614,18 @@ static bool HookAll() {
         if (!g_iconHookInstalled)
             Wh_Log(L"Network Center links: custom icon hook unavailable; using Windows icons");
     }
+    // DrawTextW_Hook's fast path (a null check plus two pointer compares
+    // against g_netcenterBase/g_netcenterEnd) costs essentially nothing, so
+    // when privacy mode is already on at load time there's no reason to
+    // defer installing it until SetXMLFromResource_Hook first observes
+    // netcenter.dll - just install it here, in Wh_ModInit, like every other
+    // hook in this mod. This call is Wh_ModInit-time (via Init() below), so
+    // Wh_ApplyHookOperations() - which Windhawk calls automatically right
+    // after Wh_ModInit returns - will pick it up; applyNow=false skips the
+    // redundant explicit call. If privacy mode gets turned on later at
+    // runtime, EnsurePrivacyTextHookInstalled() is still called from
+    // SettingsChanged()/SetXMLFromResource_Hook and applies the hook itself.
+    EnsurePrivacyTextHookInstalled(/*applyNow=*/false);
     return g_hookInstalled;
 }
 
@@ -9769,7 +9829,7 @@ void Wh_ModUninit() {
             // busy/hung). Only clear the flag on real success so the state
             // stays truthful - otherwise a later RegisterClassW on the next
             // load will fail against a class we think is gone.
-            if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandleW(NULL))) {
+            if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
                 Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
             } else {
                 Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
@@ -9786,12 +9846,12 @@ void Wh_ModUninit() {
     DeleteCriticalSection(&g_Ctx.csLock);
     DarkContextMenu::Uninit();
     if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
-        if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandleW(NULL))) {
+        if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
             Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
         } else {
             Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
         }
     }
-    UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
-    UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
+    UnregisterClassW(L"Win7NetworkFlyoutSafe", HINST_THISCOMPONENT);
+    UnregisterClassW(L"Win7NetPwdClass", HINST_THISCOMPONENT);
 }
