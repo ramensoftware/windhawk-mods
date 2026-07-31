@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.4
+// @version         1.1.5
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -409,7 +409,7 @@ static void UndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden
     } else {
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         if (!(originalExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
     }
     UpdateDwmTransitions(hWnd, TRUE);
@@ -510,7 +510,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
 
     int targetX = t->fallbackX;
     bool uiaFound = false;
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     bool coInit = (hr == S_OK || hr == S_FALSE);
     if (hr == S_OK || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
         IUIAutomation* pAutomation = nullptr;
@@ -523,12 +523,18 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
             if (hTray) {
                 IUIAutomationElement* pTrayElement = nullptr;
                 if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
+                    if (g_unloading.load(std::memory_order_relaxed)) {
+                        pTrayElement->Release();
+                        pAutomation->Release();
+                        if (coInit) CoUninitialize();
+                        return 0;
+                    }
                     IUIAutomationCondition* pButtonCond = nullptr;
                     IUIAutomationCondition* pListItemCond = nullptr;
                     IUIAutomationCondition* pOrCond = nullptr;
-                    VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
+                    VARIANT varBtn{}; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
                     pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
-                    VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
+                    VARIANT varList{}; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
                     pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
                     if (pButtonCond && pListItemCond) pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
                     IUIAutomationElementArray* pArray = nullptr;
@@ -541,6 +547,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
                         int monRight = mi.rcMonitor.right;
                         int bestScore = 0;
                         for (int i = 0; i < length; i++) {
+                            if (g_unloading.load(std::memory_order_relaxed)) break;
                             IUIAutomationElement* pItem = nullptr;
                             if (SUCCEEDED(pArray->GetElement(i, &pItem)) && pItem) {
                                 BSTR name;
@@ -584,8 +591,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         }
         if (coInit) CoUninitialize();
     }
-    
-    if (uiaFound) {
+    if (uiaFound && !g_unloading.load(std::memory_order_relaxed)) {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         g_TaskbarDockXs[t->hWndApp] = targetX;
         if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
@@ -1161,7 +1167,9 @@ public:
             if (data->hiddenByCloak) SetWindowCloak(data->hRealWnd, FALSE);
             else {
                 SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
-                if (!(data->originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+                if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                    SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, GetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+                }
             }
             UpdateDwmTransitions(data->hRealWnd, TRUE);
             DwmFlush();
@@ -1449,7 +1457,9 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle) {
     if (h) CloseHandle(h); else {
         g_workerCount.fetch_sub(1, std::memory_order_release); delete ld;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-        if (!(originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+        if (!(originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+        }
         UpdateDwmTransitions(hWnd, TRUE);
     }
 }
@@ -1614,7 +1624,9 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
         if (IsWindow(hWnd)) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            if (!(originalExStyle & WS_EX_LAYERED)) SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+            if (!(originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+            }
             UpdateDwmTransitions(hWnd, TRUE);
         }
         g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
