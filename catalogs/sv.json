@@ -4496,6 +4496,39 @@
         "version": "1.2.0"
       }
     },
+    "explorer-command-bar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785493651000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785493651000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DanRotaru",
+        "compilerOptions": "-ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32",
+        "description": "Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones",
+        "github": "https://github.com/DanRotaru",
+        "homepage": "https://dan13.me/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Command Bar",
+        "version": "1.0.0"
+      }
+    },
     "explorer-context-menu-classic": {
       "details": {
         "defaultSorting": 426590,

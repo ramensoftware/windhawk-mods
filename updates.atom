@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-31T10:16:48.000Z</updated>
+    <updated>2026-07-31T10:27:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Command Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-command-bar#9dc2bcf409eb82f0361d261ca6353d1ad0d60923</id>
+        <link href="https://windhawk.net/mods/explorer-command-bar"/>
+        <updated>2026-07-31T10:27:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercommandbar">Explorer Command Bar</h1>
+<p>Add your own buttons and dropdown menus to the <strong>Windows 11 File Explorer
+command bar</strong> (the toolbar with New / Sort / View), and hide the built-in
+buttons, separators and spacing you don't want.</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/main.gif" alt="Explorer Command Bar demo" /></p>
+<p>Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
+Explorer.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Custom buttons</strong> - add as many toolbar buttons as you like, each running a
+command of your choice.</li>
+<li><strong>Dropdown menus & submenus</strong> - a button can open a menu, and menu entries
+can themselves be submenus (three levels deep).</li>
+<li><strong>Path & selection placeholders</strong> - <code>%path%</code> (active tab folder) and <code>%sel%</code>
+(selected file/folder) are substituted into the command parameters.</li>
+<li><strong>Flexible icons</strong> - a Segoe Fluent Icons glyph, an <code>.exe</code> / <code>.dll</code> / <code>.ico</code>
+file, a Store-app icon (<code>shell:AppsFolder\…</code>), the command executable's own
+icon, or no icon at all.</li>
+<li><strong>Hide built-in elements</strong> - individually hide New, Cut, Copy, Paste, Rename,
+Share, Delete, Sort, View, the group separators, the "See more" (…) overflow
+menu, the contextual commands (Set as background, Rotate left, Rotate right,
+Extract all) and the Details pane toggle.</li>
+<li><strong>Custom item spacing</strong> - set the exact spacing between the command bar
+buttons.</li>
+<li><strong>Open menus on hover</strong> - optionally open dropdowns on hover, with a
+configurable delay.</li>
+<li><strong>Rock solid</strong> - buttons are re-applied automatically across tab switches,
+navigation, new tabs and new windows, and everything is cleanly restored when
+the mod is disabled.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p>Hiding built‑in buttons and separators:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-buttons.gif" alt="Hide buttons" /></p>
+<p>You may hide even all options, and use only your custom ones:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-all-buttons.jpg" alt="Hide All buttons" /></p>
+<h2 id="commandparameters">Command parameters</h2>
+<p>The following placeholders can be used in an item's parameters:</p>
+<ul>
+<li><code>%path%</code> - the folder path of the currently active tab.</li>
+<li><code>%sel%</code> - the full path of the selected file or folder in the active tab (the
+first one, if several are selected).</li>
+</ul>
+<p>Wrap placeholders in quotes so paths with spaces work, e.g. <code>-d "%path%"</code>. If a
+used placeholder has no value (nothing selected, or a non-filesystem location
+like <em>This PC</em>), the command is launched without any parameters. Commands run
+with the active tab's folder as their working directory.</p>
+<h2 id="icons">Icons</h2>
+<p>The <strong>Icon glyph or icon path</strong> field accepts several forms:</p>
+<ul>
+<li><strong>A glyph</strong> - a hex code point of a
+<a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font">Segoe Fluent Icons</a>
+glyph, e.g. <code>E756</code>.</li>
+<li><strong>A file path</strong> - an <code>.exe</code>, <code>.dll</code> or <code>.ico</code> file to take the icon from,
+optionally with an icon index, e.g. <code>C:\Windows\System32\shell32.dll,3</code>.</li>
+<li><strong>A Store app</strong> - <code>shell:AppsFolder\&lt;AppUserModelID&gt;</code> to use a modern Store
+app's icon (useful for apps whose <code>.exe</code> stub carries a legacy icon, such as
+Notepad and Calculator).</li>
+<li><strong>Empty</strong> - the icon is extracted from the command's executable (app
+execution aliases such as <code>wt.exe</code> are resolved to their real target).</li>
+<li><strong>Hide icon</strong> - enable the toggle to show no icon at all.</li>
+</ul>
+<h2 id="defaultconfiguration">Default configuration</h2>
+<p>Out of the box the mod adds:</p>
+<ul>
+<li><strong>Open in Terminal</strong> - <code>wt.exe -d "%path%"</code></li>
+<li><strong>Open in Notepad</strong> - <code>notepad.exe "%sel%"</code></li>
+<li><strong>Additional</strong> ▾ (dropdown)</li>
+<li>Open in VS Code - <code>code.exe "%path%"</code></li>
+<li>Open Paint - <code>mspaint.exe</code></li>
+<li>Open Calculator - <code>calc.exe</code></li>
+<li><strong>Commands</strong> ▸ - <code>vite</code>, <code>npm init</code>, <code>npm install</code>, <code>npm run dev</code>,
+<code>npm run build</code>, <code>npm run start</code></li>
+<li><strong>AI</strong> ▸ - <code>Claude</code>, <code>Codex</code></li>
+</ul>
+<p>Items whose command isn't installed simply do nothing when clicked (the failure
+is written to the mod log), so remove the ones you don't need and add your own.
+All of the built-in buttons stay visible by default. Everything is configurable
+in the mod settings.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
+(<code>FileExplorerExtensions.dll</code>) which run when the command bar is built, and
+finds the command bars from there by walking the XAML tree. The configured
+buttons are then inserted and the visibility / spacing settings are applied. The
+mod also listens for the command bar being rebuilt so the buttons stay in place
+across navigation, new tabs and new windows, and it restores the original state
+of any element it touches when disabled.</p>
+<p>Notably, the mod does <strong>not</strong> use XAML Diagnostics
+(<code>InitializeXamlDiagnosticsEx</code>), since only one XAML diagnostics consumer can be
+active in a process at a time. That makes it compatible with mods and tools
+which do use it, such as <strong>Windows 11 File Explorer Styler</strong>, ExplorerBlurMica
+and TranslucentTB.</p>
+<p>File Explorer windows which are already open when the mod is enabled are
+handled too, but if the buttons don't show up in one of them right away, opening
+a new tab or navigating to another folder makes them appear.</p>]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
         <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
@@ -620,67 +724,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>Amrsatrio</name>
             <uri>https://github.com/Amrsatrio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[BT Battery Monitor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/bt-battery-monitor#93e8be7ddb883a9fa154bf1d50a23dd6f9ecab59</id>
-        <link href="https://windhawk.net/mods/bt-battery-monitor"/>
-        <updated>2026-07-22T13:45:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="btbatterymonitor">BT Battery Monitor</h1>
-<p>See every connected Bluetooth device's battery level right in your system tray — no more digging into Bluetooth settings to find out which keyboard or mouse needs charging.</p>
-<blockquote>
-  <p>Works great alongside <strong><a href="https://windhawk.net/mods/audioswap">AudioSwap</a></strong> and <strong><a href="https://windhawk.net/mods/microswap">MicSwitch</a></strong> — companion mods that bring the same tray experience to audio output and microphone control.</p>
-</blockquote>
-<p><img src="https://i.imgur.com/QDHrOTO.png" alt="Controller connected" /></p>
-<p><img src="https://i.imgur.com/GWzrttu.png" alt="Right-click menu" /></p>
-<hr />
-<h2 id="howtouse">How to Use</h2>
-<ol>
-<li><strong>Open Settings</strong> — Right-click the tray icon and select <strong>Mod Settings</strong> to open the configuration dashboard.</li>
-<li><strong>Set Polling Interval</strong> — Choose how often to scan for battery updates (default: 10 seconds).</li>
-<li><strong>Set Warning Threshold</strong> — Pick the battery percentage that triggers the red/black flashing icon.</li>
-<li><strong>Choose Icons</strong> — Pick a preset icon per device type, or click <strong>Browse…</strong> to load a custom <code>.ico</code> file.</li>
-<li>Click <strong>Save and Apply</strong> — the tray icon updates immediately, no restart needed.</li>
-</ol>
-<h3 id="leftclicktorescan">Left-click to rescan</h3>
-<p>Left-click the tray icon to trigger an immediate Bluetooth rescan. Use it when you've just paired or disconnected a device and want the battery readout to refresh without waiting for the next polling interval.</p>
-<h3 id="rightclickdevicelist">Right-click device list</h3>
-<p>Right-click the tray icon to see every connected Bluetooth device with its battery percentage, rescan immediately, or open Bluetooth Settings.</p>
-<h3 id="lowbatterywarning">Low Battery Warning</h3>
-<p>When any connected device drops below the configured threshold (default 30%), the tray icon starts alternating between solid red and black every second. Hover over the icon to see which device is running low and exactly how much juice it has left.</p>
-<h3 id="deviceicons">Device Icons</h3>
-<p>The mod detects device types automatically and lets you pick a different icon for each:</p>
-<ul>
-<li><strong>Keyboard</strong>, <strong>Mouse</strong>, <strong>Headphones</strong>, <strong>Controller</strong> — each gets its own icon so you can tell them apart instantly.</li>
-<li><strong>Multiple Devices</strong> — shown when more than one device is connected.</li>
-<li><strong>No Connected Devices</strong> — a clear visual indicator that nothing's paired.</li>
-</ul>
-<h3 id="pollinginterval">Polling Interval</h3>
-<p>Pick how often the mod checks for updates, from <strong>every second</strong> to <strong>once an hour</strong> (default: 10 seconds). Quick polling keeps the battery readout fresh, while slower polling saves a tiny bit of CPU.</p>
-<hr />
-<h2 id="knownbugs">Known Bugs</h2>
-<ul>
-<li><strong>Bluetooth devices that don't report battery</strong>: Some older Bluetooth peripherals simply don't broadcast battery info — the mod can't show what the hardware doesn't tell it. Check your device specs to see if battery reporting is supported.</li>
-</ul>
-<hr />
-<h2 id="changelog">Changelog</h2>
-<h1 id="100">1.0.0</h1>
-<ul>
-<li><strong>New:</strong> Tray icon shows battery percentage for every connected Bluetooth device — keyboard, mouse, headphones, controller, you name it.</li>
-<li><strong>New:</strong> Left-click triggers an immediate Bluetooth rescan to refresh battery readouts.</li>
-<li><strong>New:</strong> Low battery warning — tray icon flashes red and black when any device drops below your threshold.</li>
-<li><strong>New:</strong> Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.</li>
-<li><strong>New:</strong> Configurable polling interval (1s–1h) and warning threshold (0–50%).</li>
-<li><strong>New:</strong> Automatic Bluetooth rescan on device arrival/removal — no manual refresh needed.</li>
-<li><strong>New:</strong> Right-click → Bluetooth Settings shortcut for quick pairing.</li>
-<li><strong>New:</strong> Choose preset icons from <code>ddores.dll</code> per device type or browse for custom <code>.ico</code> files.</li>
-<li><strong>New:</strong> Clean tray icon identity — independent from Windhawk, no taskbar grouping issues.</li>
-<li><strong>New:</strong> Safe tool mod — runs in a dedicated <code>windhawk.exe</code> child process, no Explorer injection needed.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>

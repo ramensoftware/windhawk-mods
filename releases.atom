@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-31T10:16:48.000Z</updated>
+    <updated>2026-07-31T10:27:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Command Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-command-bar#9dc2bcf409eb82f0361d261ca6353d1ad0d60923</id>
+        <link href="https://windhawk.net/mods/explorer-command-bar"/>
+        <updated>2026-07-31T10:27:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercommandbar">Explorer Command Bar</h1>
+<p>Add your own buttons and dropdown menus to the <strong>Windows 11 File Explorer
+command bar</strong> (the toolbar with New / Sort / View), and hide the built-in
+buttons, separators and spacing you don't want.</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/main.gif" alt="Explorer Command Bar demo" /></p>
+<p>Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
+Explorer.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Custom buttons</strong> - add as many toolbar buttons as you like, each running a
+command of your choice.</li>
+<li><strong>Dropdown menus & submenus</strong> - a button can open a menu, and menu entries
+can themselves be submenus (three levels deep).</li>
+<li><strong>Path & selection placeholders</strong> - <code>%path%</code> (active tab folder) and <code>%sel%</code>
+(selected file/folder) are substituted into the command parameters.</li>
+<li><strong>Flexible icons</strong> - a Segoe Fluent Icons glyph, an <code>.exe</code> / <code>.dll</code> / <code>.ico</code>
+file, a Store-app icon (<code>shell:AppsFolder\…</code>), the command executable's own
+icon, or no icon at all.</li>
+<li><strong>Hide built-in elements</strong> - individually hide New, Cut, Copy, Paste, Rename,
+Share, Delete, Sort, View, the group separators, the "See more" (…) overflow
+menu, the contextual commands (Set as background, Rotate left, Rotate right,
+Extract all) and the Details pane toggle.</li>
+<li><strong>Custom item spacing</strong> - set the exact spacing between the command bar
+buttons.</li>
+<li><strong>Open menus on hover</strong> - optionally open dropdowns on hover, with a
+configurable delay.</li>
+<li><strong>Rock solid</strong> - buttons are re-applied automatically across tab switches,
+navigation, new tabs and new windows, and everything is cleanly restored when
+the mod is disabled.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p>Hiding built‑in buttons and separators:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-buttons.gif" alt="Hide buttons" /></p>
+<p>You may hide even all options, and use only your custom ones:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-all-buttons.jpg" alt="Hide All buttons" /></p>
+<h2 id="commandparameters">Command parameters</h2>
+<p>The following placeholders can be used in an item's parameters:</p>
+<ul>
+<li><code>%path%</code> - the folder path of the currently active tab.</li>
+<li><code>%sel%</code> - the full path of the selected file or folder in the active tab (the
+first one, if several are selected).</li>
+</ul>
+<p>Wrap placeholders in quotes so paths with spaces work, e.g. <code>-d "%path%"</code>. If a
+used placeholder has no value (nothing selected, or a non-filesystem location
+like <em>This PC</em>), the command is launched without any parameters. Commands run
+with the active tab's folder as their working directory.</p>
+<h2 id="icons">Icons</h2>
+<p>The <strong>Icon glyph or icon path</strong> field accepts several forms:</p>
+<ul>
+<li><strong>A glyph</strong> - a hex code point of a
+<a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font">Segoe Fluent Icons</a>
+glyph, e.g. <code>E756</code>.</li>
+<li><strong>A file path</strong> - an <code>.exe</code>, <code>.dll</code> or <code>.ico</code> file to take the icon from,
+optionally with an icon index, e.g. <code>C:\Windows\System32\shell32.dll,3</code>.</li>
+<li><strong>A Store app</strong> - <code>shell:AppsFolder\&lt;AppUserModelID&gt;</code> to use a modern Store
+app's icon (useful for apps whose <code>.exe</code> stub carries a legacy icon, such as
+Notepad and Calculator).</li>
+<li><strong>Empty</strong> - the icon is extracted from the command's executable (app
+execution aliases such as <code>wt.exe</code> are resolved to their real target).</li>
+<li><strong>Hide icon</strong> - enable the toggle to show no icon at all.</li>
+</ul>
+<h2 id="defaultconfiguration">Default configuration</h2>
+<p>Out of the box the mod adds:</p>
+<ul>
+<li><strong>Open in Terminal</strong> - <code>wt.exe -d "%path%"</code></li>
+<li><strong>Open in Notepad</strong> - <code>notepad.exe "%sel%"</code></li>
+<li><strong>Additional</strong> ▾ (dropdown)</li>
+<li>Open in VS Code - <code>code.exe "%path%"</code></li>
+<li>Open Paint - <code>mspaint.exe</code></li>
+<li>Open Calculator - <code>calc.exe</code></li>
+<li><strong>Commands</strong> ▸ - <code>vite</code>, <code>npm init</code>, <code>npm install</code>, <code>npm run dev</code>,
+<code>npm run build</code>, <code>npm run start</code></li>
+<li><strong>AI</strong> ▸ - <code>Claude</code>, <code>Codex</code></li>
+</ul>
+<p>Items whose command isn't installed simply do nothing when clicked (the failure
+is written to the mod log), so remove the ones you don't need and add your own.
+All of the built-in buttons stay visible by default. Everything is configurable
+in the mod settings.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
+(<code>FileExplorerExtensions.dll</code>) which run when the command bar is built, and
+finds the command bars from there by walking the XAML tree. The configured
+buttons are then inserted and the visibility / spacing settings are applied. The
+mod also listens for the command bar being rebuilt so the buttons stay in place
+across navigation, new tabs and new windows, and it restores the original state
+of any element it touches when disabled.</p>
+<p>Notably, the mod does <strong>not</strong> use XAML Diagnostics
+(<code>InitializeXamlDiagnosticsEx</code>), since only one XAML diagnostics consumer can be
+active in a process at a time. That makes it compatible with mods and tools
+which do use it, such as <strong>Windows 11 File Explorer Styler</strong>, ExplorerBlurMica
+and TranslucentTB.</p>
+<p>File Explorer windows which are already open when the mod is enabled are
+handled too, but if the buttons don't show up in one of them right away, opening
+a new tab or navigating to another folder makes them appear.</p>]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
         <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
@@ -1073,57 +1177,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>AhmedAwad7</name>
             <uri>https://github.com/AhmedAwad7</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Low Battery Alarm 1.0.0]]></title>
-        <id>https://windhawk.net/mods/low-battery-alarm#e0077ff36df5d27591e24a8f90f5e7434ba67217</id>
-        <link href="https://windhawk.net/mods/low-battery-alarm"/>
-        <updated>2026-07-12T18:23:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lowbatteryalarm">Low Battery Alarm</h1>
-<p>Low Battery Alarm plays a repeating, clearly audible alarm when a laptop is
-discharging and reaches a configured low or critical battery level. It is useful
-when the laptop is left performing a long-running task in another room and a
-normal desktop notification might not be noticed.</p>
-<p>By default, low-battery alerts begin at 10% and repeat every 120 seconds.
-Critical alerts begin at 5% and repeat every 30 seconds. Critical alerts continue
-below 5%; 5% is the entry threshold, not a lower cutoff. Alerts stop when external
-power is connected and can start again during a later discharge cycle. AC/DC
-changes are handled through Windows power notifications, so an active waveform is
-stopped immediately instead of waiting for the next polling interval.</p>
-<h2 id="customsoundandfallback">Custom sound and fallback</h2>
-<p>Enter the complete WAV path manually in <strong>WAV file path</strong>, or use <strong>Browse…</strong>
-in the custom configuration window to select it with Windows Explorer. A manual
-path change saved in Windhawk replaces a path previously selected in the custom
-window. To open the window, enable <strong>Open alarm configuration</strong> and save the
-settings. The topmost window also lists the Windows default output roles and
-every active Core Audio output device. It stores the selected device by its
-stable endpoint ID. To reopen the window, disable the option and save, then
-enable it and save again. An enabled request is handled only once, so saving
-unrelated settings does not reopen the window. It also opens automatically on
-the first run, before an output selection has been stored.</p>
-<p>WAV is the guaranteed supported custom format. If no file has been selected, or
-if the selected file is later removed, becomes inaccessible, is not a WAV file,
-or cannot be played, the mod logs the reason. When the fallback option is
-enabled, the Windows critical system sound is used instead. A short, clearly
-audible, and recognizable WAV file is recommended.</p>
-<h2 id="volumeandtesting">Volume and testing</h2>
-<p>The mod can temporarily change the selected output device's master volume and can
-temporarily unmute it while an alert is playing. The previous volume and mute
-state are normally restored afterward. If the user changes the volume during
-playback, the new value is preserved when the change can be detected by comparing
-it with the exact value applied by the mod.</p>
-<p>Enable <strong>Test sound after settings change</strong> and save the settings to request one
-test alert. The test uses the current sound and volume settings without changing
-the battery state machine. The option is evaluated only when settings are saved;
-it does not run during normal polling.</p>
-<p>Desktop computers without a system battery are ignored. The mod creates no
-persistent UI, console, tray icon, or external player. It runs in a dedicated
-Windhawk tool process and uses low-overhead battery-monitoring, power-notification,
-and controlled sound-playback threads.</p>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
