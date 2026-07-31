@@ -61,6 +61,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
 - **"View full map"**: This link opens the Network shell folder, the same as on Windows 10/11 which is the most similar concept to the classic Windows 7 map.
+- **Control Panel custom page refresh**: On some Windows builds, the customized Network and Sharing Center page may not fully refresh its custom map/details while it is already open. This is a minor visual limitation; close and reopen the page to refresh the custom data.
 
 ## Hotkeys
 | Key | Action |
@@ -8011,9 +8012,12 @@ void ToggleFlyoutWindow() {
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
                 0, 0, rcClient.right-rcClient.left, rcClient.bottom-rcClient.top,
                 NULL, NULL, hInst, NULL);
-            if (g_hWndFlyout) {
-                g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
+            if (!g_hWndFlyout) {
+                Wh_Log(L"ToggleFlyoutWindow: CreateWindowExW failed (%lu)", GetLastError());
+                LeaveCriticalSection(&g_Ctx.csLock);
+                return;
             }
+            g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
         }
         if (IsWindowVisible(g_hWndFlyout)) {
             ClearKeyboardFocus();
@@ -8223,13 +8227,19 @@ void SafeCleanup() {
     }
     if (g_hProfileDialogThread) {
         DWORD tid = GetThreadId(g_hProfileDialogThread);
-        if (tid) {
-            EnumThreadWindows(tid, [](HWND h, LPARAM) -> BOOL {
-                PostMessageW(h, WM_CLOSE, 0, 0);
-                return TRUE;
-            }, 0);
+        // WlanUIEditProfile can spend time loading before it creates the
+        // property-sheet windows, or it can have a nested modal open when the
+        // first close arrives. Keep asking the thread's windows to close while
+        // still preserving the important invariant: never return from uninit
+        // while the thread can still be executing code in this mod image.
+        while (WaitForSingleObject(g_hProfileDialogThread, 250) == WAIT_TIMEOUT) {
+            if (tid) {
+                EnumThreadWindows(tid, [](HWND h, LPARAM) -> BOOL {
+                    PostMessageW(h, WM_CLOSE, 0, 0);
+                    return TRUE;
+                }, 0);
+            }
         }
-        WaitForSingleObject(g_hProfileDialogThread, INFINITE);
         CloseHandle(g_hProfileDialogThread);
         g_hProfileDialogThread = NULL;
     }
@@ -8539,6 +8549,84 @@ static std::wstring GetComputerNameStr() {
     return L"PC";
 }
 
+static BOOL TryGetConnectedNlmNetworkInfo(std::wstring* outName, int* outCategory) {
+    if (outName) outName->clear();
+    if (outCategory) *outCategory = -1;
+
+    ComPtr<INetworkListManager> nlm;
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                IID_INetworkListManager, (void**)nlm.put())) || !nlm)
+        return FALSE;
+
+    ComPtr<IEnumNetworks> networks;
+    if (FAILED(nlm->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, networks.put())) || !networks)
+        return FALSE;
+
+    BOOL foundActive = FALSE;
+    std::wstring activeName;
+    int activeCategory = -1;
+    std::wstring internetName;
+    int internetCategory = -1;
+
+    ULONG fetched = 0;
+    ComPtr<INetwork> network;
+    while (networks->Next(1, network.put(), &fetched) == S_OK && network) {
+        NLM_CONNECTIVITY connectivity = NLM_CONNECTIVITY_DISCONNECTED;
+        if (FAILED(network->GetConnectivity(&connectivity)) || !ConnectivityIsActive(connectivity)) {
+            network.reset();
+            continue;
+        }
+
+        int category = -1;
+        NLM_NETWORK_CATEGORY nlmCategory;
+        if (SUCCEEDED(network->GetCategory(&nlmCategory)) &&
+            IsValidNetworkCategoryValue((int)nlmCategory)) {
+            category = (int)nlmCategory;
+        }
+
+        std::wstring name;
+        BSTR bstrName = NULL;
+        if (SUCCEEDED(network->GetName(&bstrName)) && bstrName) {
+            name.assign(bstrName);
+            SafeSysFreeString(bstrName);
+        }
+
+        if (!foundActive) {
+            foundActive = TRUE;
+            activeName = name;
+            activeCategory = category;
+        }
+
+        if (connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) {
+            internetName = name;
+            internetCategory = category;
+            break;
+        }
+
+        network.reset();
+    }
+
+    if (!internetName.empty() || IsValidNetworkCategoryValue(internetCategory)) {
+        if (outName) *outName = internetName;
+        if (outCategory) *outCategory = internetCategory;
+        return TRUE;
+    }
+    if (foundActive) {
+        if (outName) *outName = activeName;
+        if (outCategory) *outCategory = activeCategory;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void RefreshNetCenterCategoryFromNlmQuick() {
+    int category = -1;
+    if (TryGetConnectedNlmNetworkInfo(nullptr, &category) &&
+        IsValidNetworkCategoryValue(category)) {
+        PublishNetworkLocationCategory(category, FALSE);
+    }
+}
+
 static std::wstring GetConnectedNetworkName() {
     if (g_Settings.privacyMode) {
         WCHAR privateName[64] = {0};
@@ -8546,6 +8634,15 @@ static std::wstring GetConnectedNetworkName() {
                          LOC(STR_NETWORK_PRIVACY_FMT), 1);
         return std::wstring(privateName);
     }
+
+    // The custom Network Map lives in Control Panel and should mirror the
+    // native "View active networks" section. Prefer NLM's current connected
+    // network name over the shared WLAN scan cache, which can lag behind a
+    // Control Panel live refresh and leave the custom map showing the previous
+    // SSID while the native section below has already updated.
+    std::wstring nlmName;
+    if (TryGetConnectedNlmNetworkInfo(&nlmName, nullptr) && !nlmName.empty())
+        return nlmName;
     
     // Copy shared data under the critical section so reads are safe
     // against RefreshWifiData() on the flyout thread.
@@ -8902,6 +8999,10 @@ static thread_local HINSTANCE g_ncP4 = nullptr;
 static thread_local IConnectionPoint* g_ncCP = nullptr;
 static thread_local DWORD g_ncCookie = 0;
 static thread_local bool g_ncEventsAdvised = false;
+// Whether the current page instance is displaying XML that this mod patched.
+// Needed so runtime settings changes and teardown can push the original XML
+// back when Patch() becomes a no-op (e.g. the feature is turned off).
+static thread_local bool g_ncPagePatched = false;
 
 // The mod's own message-only window, created on the page's STA thread the
 // first time that thread parses the NetCenter UIFILE. Everything that needs
@@ -8972,7 +9073,7 @@ thread_local bool g_ncForceFreshConnectivity = false;
 static const UINT_PTR kNcDelayedRefreshTimerId = 0x4E430001; // 'NC' + 0001
 static const UINT kNcDelayedRefreshDelayMs = 350;
 
-static void RefreshNetworkCenterXml() {
+static void RefreshNetworkCenterXml(bool forceOriginal = false, bool pushUnchangedOriginal = false) {
     if (!g_ncTarget || !g_ncModule || !SetXML || g_inHook)
         return;
 
@@ -8980,21 +9081,51 @@ static void RefreshNetworkCenterXml() {
     if (xml.empty())
         return;
 
-    std::wstring patched = Patch(xml);
-    if (patched == xml)
+    if (!forceOriginal && g_addNetworkMap)
+        RefreshNetCenterCategoryFromNlmQuick();
+
+    std::wstring nextXml = forceOriginal ? xml : Patch(xml);
+    bool nextIsPatched = !forceOriginal && nextXml != xml;
+
+    // If the page is already showing original XML and Patch() currently has
+    // nothing to add, there is normally nothing to push. Settings refreshes can
+    // still ask for an unchanged original push to force a redraw for features
+    // implemented outside Patch(), e.g. privacy-mode DrawText masking.
+    // If it *was* patched before, still call SetXML with the original XML to
+    // revert runtime settings and mod teardown in-place instead of requiring
+    // the page to be reopened.
+    if (!nextIsPatched && !g_ncPagePatched && !pushUnchangedOriginal)
         return;
 
     g_inHook++;
-    SetXML(g_ncTarget, patched.c_str(), g_ncModule, g_ncP4);
+    HRESULT hr = S_OK;
+    if (nextIsPatched && g_ncPagePatched) {
+        // DirectUI sometimes updates only parts of the already patched tree;
+        // the native section refreshes, but our injected Network Map can keep
+        // stale text/icons. Rebuild conservatively by first restoring the
+        // original UIFILE for this page instance, then applying the freshly
+        // generated patched XML.
+        hr = SetXML(g_ncTarget, xml.c_str(), g_ncModule, g_ncP4);
+    }
+    if (SUCCEEDED(hr))
+        hr = SetXML(g_ncTarget, nextXml.c_str(), g_ncModule, g_ncP4);
     g_inHook--;
-    Wh_Log(L"[NetMap] Live refresh pushed after connectivity change");
+    if (SUCCEEDED(hr)) {
+        g_ncPagePatched = nextIsPatched;
+        if (nextIsPatched)
+            Wh_Log(L"[NetMap] Live refresh pushed patched XML");
+        else
+            Wh_Log(L"[NetMap] Live refresh reverted to original XML");
+    } else {
+        Wh_Log(L"[NetMap] Live refresh SetXML failed (hr=0x%08X)", hr);
+    }
 }
 
 // Forces IsInternetConnected() to be re-queried (rather than served from
 // NetworkMapVisual()'s 500ms cache) for the duration of one refresh push.
-static void RefreshNetworkCenterXmlForced() {
+static void RefreshNetworkCenterXmlForced(bool forceOriginal = false, bool pushUnchangedOriginal = false) {
     g_ncForceFreshConnectivity = true;
-    RefreshNetworkCenterXml();
+    RefreshNetworkCenterXml(forceOriginal, pushUnchangedOriginal);
     g_ncForceFreshConnectivity = false;
 }
 
@@ -9010,6 +9141,7 @@ static void UnadviseConnectivityEvents() {
     g_ncTarget = nullptr;
     g_ncModule = nullptr;
     g_ncP4 = nullptr;
+    g_ncPagePatched = false;
 }
 
 // The real window that hosts the NetCenter page on this thread (DirectUIHWND).
@@ -9116,22 +9248,46 @@ static UINT GetNcTeardownMessage() {
     return g_ncTeardownMsg;
 }
 
+static void RequestNetCenterRefreshFromSettings() {
+    std::vector<NcThreadContext> registryCopy;
+    EnterCriticalSection(&g_Ctx.csLock);
+    registryCopy = g_ncRegistry;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    UINT refreshMsg = GetNcRefreshMessage();
+    for (const auto& item : registryCopy) {
+        if (item.msgWindow && IsWindow(item.msgWindow) && refreshMsg) {
+            // wParam=1 marks a settings-driven refresh. Unlike an NLM event or
+            // worker completion, this should be allowed to kick the async data
+            // refresh path from Patch() if the Network Map was just enabled.
+            PostMessageW(item.msgWindow, refreshMsg, 1, 0);
+        }
+    }
+}
+
 // WndProc for the mod's own message-only window. Runs entirely on the STA
 // thread that owns the NetCenter page, so it is always safe to touch
 // g_ncTarget / g_ncCP here.
 static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == g_ncRefreshMsg && g_ncRefreshMsg) {
-        // Posted from ConnectivityChanged, possibly from an arbitrary NLM
-        // thread; we're on the right thread now, so it's safe to refresh.
+        // Posted from ConnectivityChanged/refresh workers or from runtime
+        // settings changes. We're on the right thread now, so it's safe to
+        // touch the DUI parser. Settings refreshes use wParam=1 and are
+        // allowed to let Patch() kick a fresh async data pass if needed;
+        // worker/event refreshes suppress that to avoid refresh loops.
         if (g_ncTarget) {
-            g_ncSkipRefreshOnThisPass = true;
-            RefreshNetworkCenterXmlForced();
+            bool settingsRefresh = (wParam == 1);
+            g_ncSkipRefreshOnThisPass = !settingsRefresh;
+            RefreshNetworkCenterXmlForced(/*forceOriginal=*/false,
+                                          /*pushUnchangedOriginal=*/settingsRefresh);
             g_ncSkipRefreshOnThisPass = false;
-            // NLM occasionally reports the change before its own
-            // connectivity state has fully settled, which the immediate
-            // refresh above can miss. Schedule one more forced refresh
-            // shortly after to catch that case.
-            SetTimer(hWnd, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
+            if (!settingsRefresh) {
+                // NLM occasionally reports the change before its own
+                // connectivity state has fully settled, which the immediate
+                // refresh above can miss. Schedule one more forced refresh
+                // shortly after to catch that case.
+                SetTimer(hWnd, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
+            }
         }
         return 0;
     }
@@ -9147,6 +9303,10 @@ static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     if (uMsg == g_ncTeardownMsg && g_ncTeardownMsg) {
         Wh_Log(L"[NetMap] NetCenter live-refresh window tearing down");
         KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        // Revert the already-open page to the original Network Center XML
+        // before the WndProc goes away. This keeps disabling/updating the mod
+        // reversible without requiring the user to reopen Control Panel.
+        RefreshNetworkCenterXmlForced(/*forceOriginal=*/true);
         UnadviseConnectivityEvents();
         if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NcHostSubclassProc);
@@ -9323,20 +9483,20 @@ static void TeardownNetCenterHost() {
 
     for (const auto& item : registryCopy) {
         if (item.msgWindow && IsWindow(item.msgWindow)) {
-            // A single timed-out attempt is the only thing standing between
-            // a busy/hung page thread and a dangling WndProc pointing into
-            // the unmapped mod image (plus a UnregisterClass that will keep
-            // failing forever afterward). Retry a few times before giving
-            // up, since the page thread may simply be transiently busy.
+            // Do not fall through while a live message-only window still has a
+            // WndProc in this mod image. If the UI thread is merely busy it will
+            // eventually process the teardown; returning early would let
+            // Windhawk unmap the DLL and leave the next message/timer to jump
+            // into unmapped code.
             DWORD_PTR dwResult = 0;
-            LRESULT sent = 0;
-            for (int attempt = 0; attempt < 3 && IsWindow(item.msgWindow); attempt++) {
-                sent = SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
-                                            SMTO_ABORTIFHUNG, 5000, &dwResult);
-                if (sent != 0) break;
-            }
-            if (sent == 0 && IsWindow(item.msgWindow)) {
-                Wh_Log(L"[NetMap] NC teardown message timed out after retries; window still alive");
+            int attempt = 0;
+            while (IsWindow(item.msgWindow)) {
+                LRESULT sent = SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
+                                                    SMTO_ABORTIFHUNG, 5000, &dwResult);
+                if (sent != 0 || !IsWindow(item.msgWindow))
+                    break;
+                attempt++;
+                Wh_Log(L"[NetMap] NC teardown message timed out (attempt %d); waiting", attempt);
             }
         } else {
             if (item.hostWindow && IsWindow(item.hostWindow)) {
@@ -9835,25 +9995,29 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     }
 
     std::wstring patched = Patch(xml);
-    if (patched == xml) {
-        if (g_ncComInitializedByUs) {
-            CoUninitialize();
-            g_ncComInitializedByUs = false;
-        }
-        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+    bool pageWasPatched = (patched != xml);
+
+    HRESULT hr = S_OK;
+    if (pageWasPatched) {
+        g_inHook++;
+        hr = SetXML(t, patched.c_str(), m, p4);
+        g_inHook--;
+    } else {
+        // No current layout change (for example the feature is disabled), but
+        // still let the native loader initialize the page and then remember the
+        // parser/message window. That makes runtime enabling/language/privacy
+        // changes visible without requiring the user to close and reopen the
+        // Network and Sharing Center page.
+        hr = SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
     }
 
-    g_inHook++;
-    HRESULT hr = SetXML(t, patched.c_str(), m, p4);
-    g_inHook--;
-
     if (SUCCEEDED(hr)) {
-        // Remember this page instance so connectivity-change notifications
-        // can re-push a freshly patched XML into it later (live refresh),
-        // instead of only ever showing the state from when the page opened.
+        // Remember this page instance so connectivity/settings-change
+        // notifications can re-push freshly patched or original XML later.
         g_ncTarget = t;
         g_ncModule = m;
         g_ncP4 = p4;
+        g_ncPagePatched = pageWasPatched;
         EnsureNcHostSubclassed();
 
         // Create (once per thread) the mod's own message-only window here,
@@ -9871,8 +10035,11 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         } else {
             EnsureConnectivityEventsAdvised();
             // Kick the refresh once so that we render the correct and fresh data
-            // the very first time the page is opened (per Issue 6).
-            EnsureNetCenterNetworkDataFresh();
+            // the very first time the page is opened (per Issue 6). Skip it
+            // when Patch() was a no-op; settings-refresh can start it later if
+            // the Network Map is enabled at runtime.
+            if (pageWasPatched)
+                EnsureNetCenterNetworkDataFresh();
         }
     } else {
         if (g_ncComInitializedByUs) {
@@ -9881,7 +10048,7 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
         }
     }
 
-    return FAILED(hr) ? SetXMLFromResource_Orig(t, n, tp, m, p4, p5) : hr;
+    return hr;
 }
 
 static bool HookAll() {
@@ -9999,6 +10166,13 @@ static void SettingsChanged() {
     // inside the DirectUI SetXML hook.
     if (g_Settings.privacyMode && g_hookInstalled)
         EnsurePrivacyTextHookInstalled();
+
+    // Push runtime settings to already-open Network and Sharing Center pages.
+    // This covers toggling the restored layout, privacy mode, network-location
+    // icons and language. RefreshNetworkCenterXml() also reverts to the stock
+    // XML if Patch() is now a no-op, so turning the feature off is visible
+    // immediately instead of only after reopening the page.
+    RequestNetCenterRefreshFromSettings();
 }
 
 #undef NCL_THISCALL
@@ -10148,11 +10322,9 @@ void Wh_ModUninit() {
         }
         if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
             // UnregisterClass fails while any window of the class still
-            // exists (TeardownNetCenterHost's SendMessageTimeout above can
-            // return without actually destroying it if the page thread is
-            // busy/hung). Only clear the flag on real success so the state
-            // stays truthful - otherwise a later RegisterClassW on the next
-            // load will fail against a class we think is gone.
+            // exists. TeardownNetCenterHost now waits for message-only windows
+            // to be destroyed before returning, but keep the flag truthful if
+            // an unexpected window is still alive.
             if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
                 Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
             } else {
