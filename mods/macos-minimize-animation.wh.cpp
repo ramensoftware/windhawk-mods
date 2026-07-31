@@ -1112,7 +1112,8 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             // measured from the START of the frame, so the period is
             // max(render, interval), not render + interval (a render faster than
             // the interval just sleeps the difference; a slower one runs as-is).
-            // Capped wait keeps the g_unloading check responsive.
+            // Capped wait keeps the g_unloading check responsive. When a frame
+            // overruns its budget, SwitchToThread still yields the quantum.
             if (hFrameTimer) {
                 LARGE_INTEGER qpcAfter;
                 QueryPerformanceCounter(&qpcAfter);
@@ -1123,6 +1124,8 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
                     SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
                     WaitForSingleObject(hFrameTimer, 100);
+                } else {
+                    SwitchToThread();   // overran the budget - yield the quantum anyway
                 }
             } else {
                 Sleep(1);   // last resort: never spin
@@ -1466,7 +1469,8 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         // measured from the START of the frame, so the period is
         // max(render, interval), not render + interval (a render faster than
         // the interval just sleeps the difference; a slower one runs as-is).
-        // Capped wait keeps the g_unloading check responsive.
+        // Capped wait keeps the g_unloading check responsive. When a frame
+        // overruns its budget, SwitchToThread still yields the quantum.
         if (hFrameTimer) {
             LARGE_INTEGER qpcAfter;
             QueryPerformanceCounter(&qpcAfter);
@@ -1477,6 +1481,8 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
                 due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
                 SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
                 WaitForSingleObject(hFrameTimer, 100);
+            } else {
+                SwitchToThread();   // overran the budget - yield the quantum anyway
             }
         } else {
             Sleep(1);   // last resort: never spin
