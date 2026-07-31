@@ -212,6 +212,8 @@ std::mutex g_StateMutex;
 std::atomic<HWINEVENTHOOK> g_hForegroundHook{NULL};
 HANDLE g_hAltTabThread = NULL;
 HANDLE g_hWinEventThread = NULL;
+std::atomic<bool> g_winEventThreadStarted{false};
+DWORD WINAPI WinEventHookThread(LPVOID lpParam);
 
 struct alignas(8) SharedAnimState {
     volatile LONG64 lastAltTabTime;
@@ -446,6 +448,13 @@ std::wstring GetProcessNameCached(HWND hWnd) {
     }
     return procNameLower;
 }
+void EnsureWinEventThreadStarted() {
+    if (!g_switchAnimation.load(std::memory_order_relaxed)) return;
+    bool expected = false;
+    if (g_winEventThreadStarted.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+        g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
+    }
+}
 static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd) || GetAncestor(hWnd, GA_ROOT) != hWnd) return false;
     const LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
@@ -454,7 +463,13 @@ static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     const auto cls = GetClassNameStr(hWnd);
     if (ContainsClass(cls, kAlwaysExcludedClasses) || (!forSwitch && ContainsClass(cls, kGdiExcludedClasses))) return false;
     RECT r{};
-    return GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
+    bool isMain = GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
+    
+    if (isMain && !forSwitch) {
+        EnsureWinEventThreadStarted();
+    }
+    
+    return isMain;
 }
 static bool UseSafeClose(HWND hWnd) { return ContainsClass(GetClassNameStr(hWnd), kSafeCloseClasses); }
 static bool ShouldAnimateWindow(HWND hWnd) {
@@ -614,8 +629,12 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
     
     UiaTask* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX};
-    
     g_workerCount.fetch_add(1, std::memory_order_relaxed);
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
+        delete task;
+        return fallbackX;
+    }
     
     HANDLE hThread = CreateThread(NULL, 0, UiaWorkerThread, task, 0, NULL);
     if (hThread) {
@@ -772,6 +791,14 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND
     SetWindowCloak(hWnd, TRUE);
     auto* data = new SwitchAnimData{hWnd, g_switchDurationMs.load(std::memory_order_relaxed)};
     g_workerCount.fetch_add(1, std::memory_order_relaxed);
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
+        SetWindowCloak(hWnd, FALSE);
+        delete data;
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        g_AnimActive.erase(hWnd);
+        return;
+    }
     HANDLE hThread = CreateThread(NULL, 0, SwitchingAnimThread, data, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
@@ -1278,6 +1305,17 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         return false;
     }
     
+    g_workerCount.fetch_add(1, std::memory_order_relaxed);
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
+        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else {
+            bool owned;
+            { std::lock_guard<std::mutex> lock(g_StateMutex); owned = g_AnimActive.count(hWnd) != 0; }
+            if (!owned) UpdateDwmTransitions(hWnd, TRUE);
+        }
+        return false;
+    }
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi; mi.cbSize = sizeof(mi);
     if (!GetMonitorInfoW(hMon, &mi)) {
@@ -1315,7 +1353,8 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         ReleaseDC(NULL, hScreenDC);
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden); else UpdateDwmTransitions(hWnd, TRUE);
         if (data->hBitmap) DeleteObject(data->hBitmap); delete data;
-        std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd);
+        { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd); }
+        g_workerCount.fetch_sub(1, std::memory_order_release);
         return false;
     }
     auto CopySnapshot = [&](void* sourceBits) {
@@ -1384,7 +1423,6 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         }
     }
     bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     HANDLE hThread = CreateThread(NULL, 0, MainAnimThread, data, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
@@ -1520,6 +1558,9 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     return ShowWindowAsync_Original(hWnd, cmd);
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
+    if (!(flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW))) {
+        return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+    }
     if (!IsOurWindow(hWnd)) return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") &&
         g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
@@ -1566,6 +1607,9 @@ BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     return result;
 }
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg != WM_DESTROY && msg != WM_CLOSE && msg != WM_SYSCOMMAND) {
+        return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+    }
     if (!IsOurWindow(hWnd)) return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
     if (msg == WM_DESTROY) {
         RemovePropW(hWnd, L"AnimCloseBypass");
@@ -1646,14 +1690,22 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
 }
 
+static BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        if (IsAppMainWindow(hWnd, false)) { 
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
 void StartSwitchThreads() {
     if (IsExplorerProcess() && !g_hAltTabThread) {
         g_altTabThreadRunning.store(true, std::memory_order_relaxed);
         g_hAltTabThread = CreateThread(NULL, 0, AltTabTrackerThread, NULL, 0, NULL);
     }
-    if (!g_hWinEventThread) {
-        g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
-    }
+    EnumWindows(EnumWindowsInitProc, 0);
 }
 
 void StopSwitchThreads() {
@@ -1674,6 +1726,7 @@ void StopSwitchThreads() {
         WaitForSingleObject(g_hWinEventThread, 2000);
         CloseHandle(g_hWinEventThread);
         g_hWinEventThread = NULL;
+        g_winEventThreadStarted.store(false, std::memory_order_relaxed);
     }
 }
 
@@ -1716,8 +1769,10 @@ void Wh_ModBeforeUninit() {
     }
     
     StopSwitchThreads();
-    while (g_workerCount.load(std::memory_order_acquire) > 0) {
+    int timeoutRetries = 500;
+    while (g_workerCount.load(std::memory_order_acquire) > 0 && timeoutRetries > 0) {
         Sleep(10);
+        timeoutRetries--;
     }
 }
 void Wh_ModUninit() {
