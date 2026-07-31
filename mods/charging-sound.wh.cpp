@@ -20,18 +20,18 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 */
 // ==/WindhawkModReadme==
 
+// clang-format off
 // ==WindhawkModSettings==
 /*
 - soundPath: "Notification.IM"
   $name: Plugged-in Sound File Path
-  $description: "The absolute path to a .wav file or a system sound alias (e.g.,
-Notification.IM) to play when plugged in."
+  $description: "The absolute path to a .wav file or a system sound alias (e.g., Notification.IM) to play when plugged in."
 - unpluggedSoundPath: ""
   $name: Unplugged Sound File Path
-  $description: "The absolute path to a .wav file or a system sound alias to
-play when unplugged. Leave empty to disable."
+  $description: "The absolute path to a .wav file or a system sound alias to play when unplugged. Leave empty to disable."
 */
 // ==/WindhawkModSettings==
+// clang-format on
 
 #include <mmsystem.h>
 #include <windows.h>
