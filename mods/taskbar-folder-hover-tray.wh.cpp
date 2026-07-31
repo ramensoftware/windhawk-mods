@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.22
+// @version         1.23
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -573,7 +573,10 @@ HWND FindCurrentProcessTaskbarWnd() {
 }
 
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+    if (!taskbarHostSharedPtr[0] || !taskbarHostSharedPtr[1]) {
+        if (taskbarHostSharedPtr[1] && std__Ref_count_base__Decref_Original) {
+            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+        }
         return nullptr;
     }
     if (!TaskbarHost_FrameHeight_Original ||
@@ -3094,6 +3097,9 @@ int LevelIndexUnderCursor() {
 }
 
 void ShowItemContextMenu(std::wstring path, POINT screenPt) {
+    if (g_unloading) {
+        return;
+    }
     if (!g_menuOwnerWnd ||
         GetWindowThreadProcessId(g_menuOwnerWnd, nullptr) !=
             GetCurrentThreadId()) {
@@ -3903,10 +3909,15 @@ void ApplyButtonIconOnUiThread(void* parameter) {
     }
 
     // Skip if the user switched this slot to a literal emoji icon.
-    if (delivery->folderIndex >= 0 &&
-        delivery->folderIndex < (int)g_settings.folders.size()) {
-        const auto& entry = g_settings.folders[delivery->folderIndex];
-        if (!entry.icon.empty() && !IconSettingIsFile(entry.icon)) {
+    if (delivery->folderIndex >= 0) {
+        std::wstring icon;
+        {
+            std::lock_guard<std::mutex> lock(g_foldersMutex);
+            if (delivery->folderIndex < (int)g_settings.folders.size()) {
+                icon = g_settings.folders[delivery->folderIndex].icon;
+            }
+        }
+        if (!icon.empty() && !IconSettingIsFile(icon)) {
             return;
         }
     }
@@ -4356,6 +4367,7 @@ std::wstring FolderPathForButton(int folderIndex) {
 }
 
 std::wstring FolderNameForButton(int folderIndex) {
+    std::lock_guard<std::mutex> lock(g_foldersMutex);
     if (folderIndex < 0 || folderIndex >= (int)g_settings.folders.size()) {
         return L"";
     }
@@ -4436,8 +4448,16 @@ Grid BuildHostGrid(TaskbarHost* host) {
 
     host->buttonStates.clear();
 
-    for (size_t i = 0; i < g_settings.folders.size(); i++) {
-        const auto& entry = g_settings.folders[i];
+    // Snapshot under the mutex — ResolvePendingFolderEntries / LoadFolders may
+    // mutate g_settings.folders from another thread while we build UI.
+    std::vector<FolderEntry> folders;
+    {
+        std::lock_guard<std::mutex> lock(g_foldersMutex);
+        folders = g_settings.folders;
+    }
+
+    for (size_t i = 0; i < folders.size(); i++) {
+        const auto& entry = folders[i];
 
         ColumnDefinition column;
         column.Width({1.0, GridUnitType::Auto});
