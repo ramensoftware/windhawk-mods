@@ -462,6 +462,9 @@ static SettingsSnapshot CopySettings() {
 
 static void SendParsedHotkey(const std::wstring& combo);
 
+// Bridge: per-trigger contextMenuMatch (defined below near other thread_locals)
+extern thread_local std::wstring g_pendingCtxMenuMatch;
+
 // Helper: set per-trigger contextMenuMatch before dispatching "openWithContextMenu".
 // Falls back to global setting if per-trigger is empty.
 static void SetCtxMenuMatch(PCWSTR action, StringSetting& perTriggerMatch) {
@@ -840,7 +843,7 @@ static thread_local std::wstring g_pendingDblClickCombo;
 
 // Bridge: per-trigger contextMenuMatch set by subclass proc before PostDoAction,
 // consumed by OpenWithContextMenu. Cleared after use.
-static thread_local std::wstring g_pendingCtxMenuMatch;
+thread_local std::wstring g_pendingCtxMenuMatch;
 
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
