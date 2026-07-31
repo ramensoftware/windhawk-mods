@@ -219,6 +219,8 @@ struct GhostAnimData {
     int targetDockX;
     int iconButtonWidth;
     BOOL isRising;
+    BOOL animSetLayered;
+    BOOL dwmTransitionsDisabled;
     int mode;
     int durationMs;
     LONG_PTR cleanupExStyle;
@@ -647,9 +649,12 @@ static void FinalizeRealWindow(GhostAnimData* data) {
     if (!IsWindow(data->hRealWnd)) return;
     if (data->isRising) {
         SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
-        SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->cleanupExStyle);
+        if (data->animSetLayered) {
+            SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE,
+                GetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+        }
     }
-    SetDwmTransitions(data->hRealWnd, TRUE);
+    SetDwmTransitions(data->hRealWnd, data->dwmTransitionsDisabled ? FALSE : TRUE);
 }
 
 static void RunCpuAnim(GhostAnimData* data, HWND hGhost,
@@ -1477,16 +1482,17 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     return 0;
 }
 
-void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle) {
+void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle, BOOL animSetLayered, BOOL dwmTransitionsDisabled) {
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
 
     if (w <= 0 || h <= 0) {
-        if (rising) {
+        if (rising && animSetLayered) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, cleanupExStyle);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
+                GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
         return;
     }
@@ -1518,6 +1524,8 @@ void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle) {
     data->mode = g_mode.load(std::memory_order_relaxed);
     data->durationMs = g_durations[data->mode].load(std::memory_order_relaxed);
     data->cleanupExStyle = cleanupExStyle;
+    data->animSetLayered = animSetLayered;
+    data->dwmTransitionsDisabled = dwmTransitionsDisabled;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -1592,9 +1600,10 @@ void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle) {
     ResetEvent(g_allAnimsDone);
     HANDLE hThread = CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
     if (!hThread) {
-        if (rising) {
+        if (rising && data->animSetLayered) {
             SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, cleanupExStyle);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
+                GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
         if (hReady) CloseHandle(hReady);
         DeleteObject(data->hBitmap);
@@ -1610,19 +1619,23 @@ void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle) {
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (g_enabled.load(std::memory_order_relaxed)) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
+            BOOL origTransitionsDisabled = FALSE;
+            DwmGetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &origTransitionsDisabled, sizeof(origTransitionsDisabled));
             SetDwmTransitions(hWnd, FALSE);
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            StartGenieAnim(hWnd, FALSE, exStyle);
+            StartGenieAnim(hWnd, FALSE, exStyle, FALSE, origTransitionsDisabled);
             return ShowWindow_Original(hWnd, nCmdShow);
         }
         else if (nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) {
             if (IsIconic(hWnd)) {
+                BOOL origTransitionsDisabled = FALSE;
+                DwmGetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &origTransitionsDisabled, sizeof(origTransitionsDisabled));
                 SetDwmTransitions(hWnd, FALSE);
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
                 BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-                StartGenieAnim(hWnd, TRUE, exStyle);
+                StartGenieAnim(hWnd, TRUE, exStyle, TRUE, origTransitionsDisabled);
                 return res;
             }
         }
@@ -1645,18 +1658,22 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     if (g_enabled.load(std::memory_order_relaxed) && Msg == WM_SYSCOMMAND) {
         UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
+            BOOL origTransitionsDisabled = FALSE;
+            DwmGetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &origTransitionsDisabled, sizeof(origTransitionsDisabled));
             SetDwmTransitions(hWnd, FALSE);
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            StartGenieAnim(hWnd, FALSE, exStyle);
+            StartGenieAnim(hWnd, FALSE, exStyle, FALSE, origTransitionsDisabled);
             return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
         }
         else if (cmd == SC_RESTORE && IsIconic(hWnd)) {
+            BOOL origTransitionsDisabled = FALSE;
+            DwmGetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &origTransitionsDisabled, sizeof(origTransitionsDisabled));
             SetDwmTransitions(hWnd, FALSE);
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-            StartGenieAnim(hWnd, TRUE, exStyle);
+            StartGenieAnim(hWnd, TRUE, exStyle, TRUE, origTransitionsDisabled);
             return res;
         }
     }
