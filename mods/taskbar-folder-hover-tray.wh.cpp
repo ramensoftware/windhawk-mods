@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.19
+// @version         1.20
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -423,6 +423,13 @@ bool IconSettingIsFile(const std::wstring& icon) {
 
 void LoadFolders(std::vector<FolderEntry>* out) {
     out->clear();
+    // ResolveFolderPath uses SHParseDisplayName, which needs a COM apartment.
+    // LoadFolders runs on the Windhawk settings callback thread, which has
+    // none. Init STA for the resolve loop; if the thread already has a
+    // different apartment (RPC_E_CHANGED_MODE), leave it alone and skip
+    // CoUninitialize.
+    bool comInited =
+        SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
     for (int i = 0; i < 64; i++) {
         auto rawPath =
             WindhawkUtils::StringSetting::make(L"folders[%d].path", i);
@@ -449,6 +456,9 @@ void LoadFolders(std::vector<FolderEntry>* out) {
             entry.name = entry.path;
         }
         out->push_back(std::move(entry));
+    }
+    if (comInited) {
+        CoUninitialize();
     }
 }
 
