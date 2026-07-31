@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.1
+// @version         3.1.2
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -32,10 +32,14 @@ Definitely not inspired from MacOS.
 There are two genie styles, selectable in the settings (**Animation style**):
 
 - **Modern** (default) - the Direct2D genie engine contributed by **Potassiumuncher**:
-  a smooth mesh warp that necks the window down into the taskbar. The demo GIF above
-  shows it.
+  a smooth mesh warp that necks the window down into the taskbar:
+
+![Modern genie demo](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/99a9a78e9a06c49b282cc8e337854840a9f7fa73/Desktop2026.07.02-19.32.49.05-ezgif.com-video-to-gif-converter.gif)
+
 - **Classic** - this mod's original strip-based genie: lighter, with a slightly
-  different look. Kept because some people preferred it.
+  different look. Kept because some people preferred it:
+
+![Classic genie demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif)
 
 ## Credits
 The **Modern** genie style - the Direct2D genie rendering engine (a configurable
@@ -736,15 +740,18 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
-// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, DwmFlush
-// pacing, the first-frame sync event, g_AnimActive teardown - with HIS's Direct2D
-// mesh renderer as the per-frame draw call. HIS's original busy for(;;) with no
-// compose gating is dropped in favor of MINE's DwmFlush vsync pace-gate.
+// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, the
+// first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
+// renderer as the per-frame draw call. Rendering is uncapped like HIS's original
+// busy for(;;), so DWM always composites the freshest frame at each vsync.
 // -------------------------------------------------------------------------
 DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
 
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    // Matches the standalone custom-animations-genie mod's render thread so the
+    // animation is equally smooth: TIME_CRITICAL preempts other work for the
+    // duration of the (~450ms) animation, keeping the mesh render fed at full speed.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     // Full virtual-screen canvas: HIS's genie mesh is written in screen-space
     // coordinates (it can spill outside the window rect), so the ghost and its
@@ -870,29 +877,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     BOOL firstFrame = TRUE;
 
-    // Potassiumuncher's v1.5 frame pacer: cap delivery at ~120fps so frames land
-    // at even intervals when per-frame cost varies (it does not change the
-    // animation's duration). On <=120Hz displays MINE's DwmFlush below already
-    // paces slower than this, so the pacer is a no-op there; on faster displays
-    // it keeps the mesh render cost bounded.
-    const double kTargetFrameMs = 1000.0 / 120.0;
-    LARGE_INTEGER qpcLastFrame = qpcStart;
-
+    // Render continuously, exactly like the standalone custom-animations-genie
+    // mod this engine was ported from: no ~120fps pacer and no per-frame
+    // DwmFlush. Gating every frame behind a timer AND the DWM compose tick
+    // serializes to render_time + vsync per frame, which halves the delivered
+    // frame rate as soon as the mesh render takes longer than one refresh
+    // interval - visibly choppier than the uncapped standalone loop, where DWM
+    // always composites the freshest frame at each vsync.
     if (d2dOk) {
         for (;;) {
-            for (;;) {
-                QueryPerformanceCounter(&qpcNow);
-                double sinceLastMs = (qpcNow.QuadPart - qpcLastFrame.QuadPart) * 1000.0 / qpcFreq.QuadPart;
-                if (sinceLastMs >= kTargetFrameMs) break;
-                double remainingMs = kTargetFrameMs - sinceLastMs;
-                if (remainingMs > 2.0) {
-                    Sleep((DWORD)(remainingMs - 1.0));
-                } else {
-                    YieldProcessor();
-                }
-            }
-            qpcLastFrame = qpcNow;
-
+            QueryPerformanceCounter(&qpcNow);
             double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
             BOOL lastFrame = (elapsedMs >= animDur);
 
@@ -1076,15 +1070,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             // transitions.
             if (g_unloading.load(std::memory_order_relaxed)) break;
 
-            // Block until the next DWM compose cycle - the vsync sync point (MINE).
-            DwmFlush();
-
+            // The first real frame has been presented on the ghost. For a
+            // minimize the hook is holding the REAL minimize (or, on the
+            // auto-hide path, the cloak-hide) back until this moment - otherwise
+            // the window would vanish a few frames before the genie appears.
+            // One DwmFlush here guarantees it is composed on screen before the
+            // handoff; every subsequent frame renders uncapped like the
+            // standalone mod.
             if (firstFrame && !degenerate) {
+                DwmFlush();
                 firstFrame = FALSE;
-                // The first real frame has now been composed on screen. For a
-                // minimize the hook is holding the REAL minimize (or, on the
-                // auto-hide path, the cloak-hide) back until this moment - otherwise
-                // the window would vanish a few frames before the genie appears.
                 if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
             }
         }
