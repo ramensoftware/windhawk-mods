@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              click-on-empty-explorer
 // @name            Click on Empty Explorer
-// @description     Configure double/triple click, middle click, double middle click, and modifier+click actions on empty space in File Explorer. "Open in..." actions reuse the folder's right-click background context menu, so any registered program (VS Code, Terminal, Cursor, Git Bash...) works.
+// @description     Configure double/triple click, middle click, double middle click, and modifier+click actions on empty space in File Explorer. Supports 17 actions including navigation, tabs, custom hotkeys, and invoking any right-click context menu entry.
 // @version         2.7.0
 // @author          LiHua81
 // @github          https://github.com/LiHua81
