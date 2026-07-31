@@ -1099,7 +1099,7 @@ BOOL Wh_ModInit() {
             }
         }
 
-        const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+        const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
                 {
 #ifdef _WIN64
@@ -1114,7 +1114,7 @@ BOOL Wh_ModInit() {
             }
         };
 
-        if (!WindhawkUtils::HookSymbols(hShell32, shell32Hooks, ARRAYSIZE(shell32Hooks))) {
+        if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
             Wh_Log(L"[Windows 7 Legacy Applet Restorer] Failed to hook CControlPanelAppletList::s_SortAppletsInCategory");
         }
     }
