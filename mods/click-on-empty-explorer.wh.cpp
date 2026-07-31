@@ -328,7 +328,9 @@ require Windows 11 for tabbed Explorer support.
 #include <comutil.h>
 #include <winrt/base.h>
 
+#include <algorithm>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -594,21 +596,9 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
         mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
 
-        // Skip separators (wID == 0). Without this, offset = 0 - 1 = UINT_MAX is
-        // passed to GetCommandString/InvokeCommand → undefined behaviour / crash.
-        if (mii.wID == 0) continue;
-
-        // Command-ID range guard: the context menu's QueryContextMenu uses
-        // the range [idCmdFirst..0x7FFF]. Non-context-menu submenus (e.g.
-        // "New", "View", "Sort by") contain items with system-assigned IDs
-        // outside this range. Passing an out-of-range offset to GetCommandString
-        // or InvokeCommand is array-index OOB → instant Explorer crash.
-        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
-
+        // Cascading submenu — check before wID guards, since submenu items
+        // carry an HMENU as wID (not a valid command ID in the context-menu range).
         if (mii.hSubMenu != NULL) {
-            // Cascading submenu: populate it by forwarding WM_INITMENUPOPUP to
-            // IContextMenu2 (e.g. the Windows Terminal / 7-Zip cascades). Without
-            // this the submenu is empty and its entries can never be matched.
             if (pcm2)
                 pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
             if (EnumContextMenuMatch(mii.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst))
@@ -616,7 +606,11 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
             continue;
         }
 
-        // Leaf item: read verb + display text.
+        // Leaf item: skip separators and items outside the context-menu command range.
+        if (mii.wID == 0) continue;                                     // separator
+        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;  // outside range
+
+        // Read verb + display text.
         UINT offset = mii.wID - idCmdFirst;
 
         CHAR verbA[MAX_PATH] = {};
@@ -654,13 +648,12 @@ static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMen
         MENUITEMINFOW mii = { sizeof(mii) };
         mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
-        if (mii.wID == 0) continue; // separator
-        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
 
         wchar_t indent[64] = {};
         for (int d = 0; d < depth && d < 31; d++) indent[d] = L' ';
         indent[depth < 31 ? depth : 31] = 0;
 
+        // Cascading submenu — check before wID guards.
         if (mii.hSubMenu != NULL) {
             wchar_t stext[MAX_PATH] = {};
             MENUITEMINFOW miiT = { sizeof(miiT) };
@@ -675,6 +668,10 @@ static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMen
             DumpContextMenuRecursive(mii.hSubMenu, pcm, pcm2, idCmdFirst, depth + 2);
             continue;
         }
+
+        // Leaf item: skip separators and items outside the context-menu command range.
+        if (mii.wID == 0) continue;
+        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
 
         UINT offset = mii.wID - idCmdFirst;
         CHAR verbA[MAX_PATH] = {};
@@ -748,9 +745,9 @@ static bool InvokeFolderContextMenuVerb(PCWSTR folderPath, HWND hwnd, PCWSTR mat
 
 // ---- Duplicate Tab infrastructure ----
 
-static wchar_t g_pendingNavPath[MAX_PATH] = {};
-static winrt::com_ptr<IShellBrowser> g_pendingNavBrowser;
-static HWND g_pendingNavHwnd = NULL;
+static thread_local wchar_t g_pendingNavPath[MAX_PATH] = {};
+static thread_local winrt::com_ptr<IShellBrowser> g_pendingNavBrowser;
+static thread_local HWND g_pendingNavHwnd = NULL;
 
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
@@ -761,18 +758,35 @@ static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
 // If both single and double are configured, single is delayed by
 // GetDoubleClickTime() (~500ms) to detect double clicks.
 
-static HWND g_midClickPendingHwnd = NULL;
-static UINT_PTR g_midClickTimerId = 0;
+static thread_local HWND g_midClickPendingHwnd = NULL;
+static thread_local UINT_PTR g_midClickTimerId = 0;
 
 // Pending double-click timer — used when triple-click is configured.
 // When triple-click is enabled, double-click is delayed by GetDoubleClickTime()
 // so a third click can arrive and override it with the triple-click action.
-static HWND g_pendingDblClickHwnd = NULL;
-static UINT_PTR g_pendingDblClickTimerId = 0;
-static std::wstring g_pendingDblClickAction;
-static std::wstring g_pendingDblClickCombo;
+static thread_local HWND g_pendingDblClickHwnd = NULL;
+static thread_local UINT_PTR g_pendingDblClickTimerId = 0;
+static thread_local std::wstring g_pendingDblClickAction;
+static thread_local std::wstring g_pendingDblClickCombo;
+
+// Private message: dequeues action dispatch from mouse handlers to avoid
+// blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
+// wParam = (WPARAM)strdup(actionString), lParam = (LPARAM)hWnd
+static UINT g_msgDoAction = 0;
 
 static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action);
+
+// Post an action to be handled asynchronously — avoids synchronously activating
+// context-menu handlers inside the mouse-down handler.
+static void PostDoAction(HWND hWnd, PCWSTR action) {
+    if (!g_msgDoAction || !action || !*action) return;
+    size_t len = wcslen(action) + 1;
+    wchar_t* s = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, len * sizeof(wchar_t));
+    if (!s) return;
+    wcscpy_s(s, len, action);
+    if (!PostMessage(hWnd, g_msgDoAction, (WPARAM)s, (LPARAM)hWnd))
+        HeapFree(GetProcessHeap(), 0, s);
+}
 
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     KillTimer(hwnd, idEvent);
@@ -796,8 +810,8 @@ static void CancelPendingMidClick() {
 }
 
 static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    CHECK_INIT_OR_RETURN_VOID();
     KillTimer(hwnd, idEvent);
+    CHECK_INIT_OR_RETURN_VOID();
     g_pendingDblClickTimerId = 0;
     if (g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd)) {
         if (!g_pendingDblClickAction.empty()) {
@@ -972,10 +986,8 @@ public:
     void OpenInTerminal() {
         wchar_t path[MAX_PATH] = {};
         if (!GetCurrentFolderPath(path, MAX_PATH)) return;
-        // Try English first (matches verb "WindowsTerminal" etc.), then Chinese
-        if (InvokeFolderContextMenuVerb(path, hShellTab, L"Terminal")) return;
-        if (InvokeFolderContextMenuVerb(path, hShellTab, L"终端")) return;
-        Wh_Log(L"OpenInTerminal: no matching context menu entry found");
+        if (!InvokeFolderContextMenuVerb(path, hShellTab, L"Terminal"))
+            Wh_Log(L"OpenInTerminal: no matching context menu entry found");
     }
 
     void OpenInCursor() {
@@ -1031,8 +1043,17 @@ public:
 
 // ---- Globals ----
 
-std::vector<ExplorerWrapper> g_Wrappers;
+// g_Wrappers holds per-thread COM pointers — its destructor would run on the
+// CRT shutdown thread, releasing IShellBrowser on STA objects whose threads
+// are already dead. Suppress automatic destruction; Wh_ModUninit handles cleanup.
+[[clang::no_destroy]] static std::optional<std::vector<ExplorerWrapper>> g_Wrappers;
 static std::mutex g_wrappersMutex;
+
+// Track subclassed windows independently of g_Wrappers so Wh_ModUninit
+// can remove subclasses even for windows created after init.
+struct SubclassEntry { HWND hWnd; bool isListView; };
+static std::vector<SubclassEntry> g_subclassed;
+static std::mutex g_subclassMutex;
 
 // Lazily initialized on first use (Explorer UI thread has COM already).
 // Intentionally leaked (raw pointer) to avoid Release() during DLL_PROCESS_DETACH.
@@ -1049,8 +1070,8 @@ static IUIAutomation* GetUIAutomation() {
 // ---- NavigateNewTabProc (timer callback for duplicate tab) ----
 
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    CHECK_INIT_OR_RETURN_VOID();
     KillTimer(hwnd, 0x4D43);
+    CHECK_INIT_OR_RETURN_VOID();
 
     if (!g_pendingNavPath[0] || !g_pendingNavBrowser) {
         g_pendingNavPath[0] = L'\0';
@@ -1088,7 +1109,7 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
             HWND shellTab = parent;
             {
                 std::lock_guard<std::mutex> lock(g_wrappersMutex);
-                for (ExplorerWrapper& w : g_Wrappers) {
+                for (ExplorerWrapper& w : *g_Wrappers) {
                     if (w.hShellTab == shellTab) {
                         browser = w.GetBrowser();
                         break;
@@ -1114,6 +1135,23 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
 LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                                       DWORD_PTR dwRefData) {
     CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
+
+    // Remove from subclass tracking on destroy (even during teardown)
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    if (g_msgDoAction && uMsg == g_msgDoAction) {
+        PCWSTR action = (PCWSTR)wParam;
+        HWND target = (HWND)lParam;
+        if (action && *action && target)
+            FindShellTabAndDoAction(target, action);
+        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        return 0;
+    }
 
     // Fast path: skip settings copy for messages we don't handle
     if (uMsg != WM_LBUTTONDOWN && uMsg != WM_LBUTTONDBLCLK && uMsg != WM_MBUTTONDOWN)
@@ -1144,7 +1182,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.tripleClick.c_str());
+                PostDoAction(hWnd, s.tripleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1155,13 +1193,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (ctrlOn && ctrlDown) {
             if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
-                FindShellTabAndDoAction(hWnd, s.ctrlClick.c_str());
+                PostDoAction(hWnd, s.ctrlClick.c_str());
         } else if (altOn && altDown) {
             if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
-                FindShellTabAndDoAction(hWnd, s.altClick.c_str());
+                PostDoAction(hWnd, s.altClick.c_str());
         } else if (shiftOn && shiftDown) {
             if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
-                FindShellTabAndDoAction(hWnd, s.shiftClick.c_str());
+                PostDoAction(hWnd, s.shiftClick.c_str());
         }
 
     } else if (uMsg == WM_LBUTTONDBLCLK) {
@@ -1190,7 +1228,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         } else {
             // Instant double-click (no triple-click configured)
             if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+                PostDoAction(hWnd, s.doubleClick.c_str());
         }
 
     } else if (uMsg == WM_MBUTTONDOWN) {
@@ -1210,7 +1248,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (singleOn && !doubleOn) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+                PostDoAction(hWnd, s.middleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1219,7 +1257,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (isDouble) {
             CancelPendingMidClick();
             if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+                PostDoAction(hWnd, s.doubleMiddleClick.c_str());
         } else {
             CancelPendingMidClick();
             g_midClickPendingHwnd = hWnd;
@@ -1239,12 +1277,29 @@ struct ClickHelper {
     HWND hWnd = NULL;
 };
 
-static ClickHelper g_currentClick;
-static ClickHelper g_lastClick;
+static thread_local ClickHelper g_currentClick;
+static thread_local ClickHelper g_lastClick;
 
 LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                               DWORD_PTR dwRefData) {
     CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
+
+    // Remove from subclass tracking on destroy (even during teardown)
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    if (g_msgDoAction && uMsg == g_msgDoAction) {
+        PCWSTR action = (PCWSTR)wParam;
+        HWND target = (HWND)lParam;
+        if (action && *action && target)
+            FindShellTabAndDoAction(target, action);
+        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        return 0;
+    }
 
     if (uMsg != WM_PARENTNOTIFY)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1277,7 +1332,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (singleOn && !doubleOn) {
                         if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                            FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+                            PostDoAction(hWnd, s.middleClick.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
 
@@ -1286,7 +1341,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                     if (isDouble) {
                         CancelPendingMidClick();
                         if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
-                            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+                            PostDoAction(hWnd, s.doubleMiddleClick.c_str());
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
@@ -1331,7 +1386,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.tripleClick.c_str());
+                PostDoAction(hWnd, s.tripleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1361,7 +1416,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                 } else {
                     // Instant double-click (no triple-click configured)
                     if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                        FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+                        PostDoAction(hWnd, s.doubleClick.c_str());
                 }
             }
             g_lastClick.time = 0;   // prevent next click from being another double-click
@@ -1373,13 +1428,13 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
             if (ctrlOn && ctrlDown) {
                 if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
-                    FindShellTabAndDoAction(hWnd, s.ctrlClick.c_str());
+                    PostDoAction(hWnd, s.ctrlClick.c_str());
             } else if (altOn && altDown) {
                 if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
-                    FindShellTabAndDoAction(hWnd, s.altClick.c_str());
+                    PostDoAction(hWnd, s.altClick.c_str());
             } else if (shiftOn && shiftDown) {
                 if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
-                    FindShellTabAndDoAction(hWnd, s.shiftClick.c_str());
+                    PostDoAction(hWnd, s.shiftClick.c_str());
             }
 
             g_lastClick.time = now;
@@ -1426,13 +1481,20 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
 
     if (wcscmp(className, L"SysListView32") == 0) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SysListViewSubclass, 0);
+        { std::lock_guard<std::mutex> lk(g_subclassMutex);
+          g_subclassed.push_back({ hWnd, true });
+        }
         { std::lock_guard<std::mutex> lk(g_wrappersMutex);
           for (auto& w : g_Wrappers)
             if (w.hShellTab == shellTab) { w.hListView = hWnd; break; }
         }
     } else {
-        if (IsWindow(defView))
+        if (IsWindow(defView)) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(defView, DUISubclass, 0);
+            { std::lock_guard<std::mutex> lk(g_subclassMutex);
+              g_subclassed.push_back({ defView, false });
+            }
+        }
         { std::lock_guard<std::mutex> lk(g_wrappersMutex);
           for (auto& w : g_Wrappers)
             if (w.hShellTab == shellTab) { w.hListView = defView; break; }
@@ -1457,7 +1519,11 @@ HRESULT __cdecl FileCabinet_CreateViewWindow2Hook(
     if (shellTab && IsWindow(shellTab)) {
         {
             std::lock_guard<std::mutex> lock(g_wrappersMutex);
-            g_Wrappers.push_back(ExplorerWrapper(shellTab, pBrowser));
+            // Prune dead entries and stale entries for the same HWND
+            std::erase_if(*g_Wrappers, [shellTab](const ExplorerWrapper& w) {
+                return w.hShellTab == shellTab || !IsWindow(w.hShellTab);
+            });
+            g_Wrappers->push_back(ExplorerWrapper(shellTab, pBrowser));
         }
         if (g_pendingNavPath[0] && !g_pendingNavBrowser) {
             g_pendingNavBrowser.copy_from(pBrowser);
@@ -1476,10 +1542,9 @@ BOOL CALLBACK InitEnumChildWindowsProc(HWND hWnd, LPARAM lParam) {
         GetClassName(hWnd, className, 256);
         if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
             HWND shellTab = (HWND)lParam;
-            auto browser = winrt::com_ptr<IShellBrowser>{
-                reinterpret_cast<IShellBrowser*>((void*)SendMessage(shellTab, WM_USER + 7, 0, 0)),
-                winrt::take_ownership_from_abi
-            };
+            winrt::com_ptr<IShellBrowser> browser;
+            browser.copy_from(reinterpret_cast<IShellBrowser*>(
+                (void*)SendMessage(shellTab, WM_USER + 7, 0, 0)));
             if (browser != NULL) {
                 ExplorerWrapper wrapper(shellTab, browser.get());
                 HWND lv = FindWindowEx(hWnd, NULL, L"SysListView32", NULL);
@@ -1497,7 +1562,7 @@ BOOL CALLBACK InitEnumChildWindowsProc(HWND hWnd, LPARAM lParam) {
                 }
                 if (wrapper.hListView) {
                     std::lock_guard<std::mutex> lk(g_wrappersMutex);
-                    g_Wrappers.push_back(wrapper);
+                    g_Wrappers->push_back(wrapper);
                 } else Wh_Log(L"Failed to setup wrapper for %p", shellTab);
                 return FALSE;
             }
@@ -1526,6 +1591,8 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Click on Empty Explorer Init");
 
+    g_msgDoAction = RegisterWindowMessage(L"ClickOnEmptyExplorer_DoAction");
+    g_Wrappers.emplace();
     LoadSettings();
 
     HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -1575,24 +1642,24 @@ void Wh_ModUninit() {
     g_pendingNavBrowser = nullptr;
     g_pendingNavPath[0] = L'\0';
 
-    // Collect HWNDs under lock, then remove subclasses outside the lock
-    // (RemoveWindowSubclassFromAnyThread does SendMessage which can deadlock
-    //  if the target thread is waiting on g_wrappersMutex)
-    struct SubclassInfo { HWND hWnd; bool isListView; };
-    std::vector<SubclassInfo> toRemove;
+    // Collect subclassed HWNDs under lock, remove subclasses outside the lock.
+    // Use g_subclassed (populated at subclass time and cleaned by WM_NCDESTROY)
+    // instead of iterating g_Wrappers (which may not have entries for
+    // post-init windows — see issue 1 in review).
+    std::vector<SubclassEntry> toRemove;
+    {
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::swap(toRemove, g_subclassed);
+    }
+    for (auto& e : toRemove) {
+        if (e.hWnd && IsWindow(e.hWnd))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                e.hWnd, e.isListView ? SysListViewSubclass : DUISubclass);
+    }
+
+    // Release wrapper COM references
     {
         std::lock_guard<std::mutex> lk(g_wrappersMutex);
-        for (ExplorerWrapper& wrapper : g_Wrappers) {
-            HWND hWnd = wrapper.hListView;
-            if (hWnd && IsWindow(hWnd)) {
-                wchar_t className[256];
-                if (GetClassName(hWnd, className, 256))
-                    toRemove.push_back({ hWnd, wcscmp(className, L"SysListView32") == 0 });
-            }
-        }
-        g_Wrappers.clear();
+        g_Wrappers.reset();
     }
-    for (auto& info : toRemove)
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            info.hWnd, info.isListView ? SysListViewSubclass : DUISubclass);
 }
