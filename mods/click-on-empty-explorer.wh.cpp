@@ -65,10 +65,7 @@ no file or folder is located) and performs the action you've configured.
 - **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
-- **Open in VS Code** — Invoke the "Open in VS Code" entry from the folder's right-click background context menu (no hard-coded path; works if the verb is registered)
-- **Open in Terminal** — Invoke the "Open in Terminal" / Windows Terminal entry from the context menu
-- **Open in Cursor** — Invoke the "Open in Cursor" entry from the context menu
-- **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Lets you open the folder in Git Bash, PowerShell 7, any editor, etc.
+- **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for VS Code (`Code`), Terminal (`Terminal`), Cursor (`Cursor`), Git Bash (`gitbash`), or any program that registered a context menu entry.
 - **None** — Do nothing
 
 ## Custom Hotkey
@@ -149,9 +146,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - doubleClickCustomHotkey: ""
@@ -174,9 +168,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - tripleClickCustomHotkey: ""
@@ -199,9 +190,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - middleClickCustomHotkey: ""
@@ -224,9 +212,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - doubleMiddleClickCustomHotkey: ""
@@ -249,9 +234,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - ctrlClickCustomHotkey: ""
@@ -274,9 +256,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - altClickCustomHotkey: ""
@@ -299,9 +278,6 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
-    - openInVSCode: Open in VS Code
-    - openInTerminal: Open in Terminal
-    - openInCursor: Open in Cursor
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - shiftClickCustomHotkey: ""
@@ -445,42 +421,27 @@ static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
 // ---- Helper: Send key combination ----
 
 static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
-    // Release any physically-held modifiers before injecting, then restore after.
-    // Prevents Shift+Click→NewTab from injecting Ctrl+Shift+T (= reopen tab, not new tab).
-    std::vector<WORD> heldMods;
-    for (WORD vk : {VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN}) {
-        if (GetKeyState(vk) & 0x8000) heldMods.push_back(vk);
-    }
-    for (WORD vk : heldMods) {
-        INPUT up = {INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = KEYEVENTF_KEYUP}}};
-        SendInput(1, &up, sizeof(INPUT));
-    }
-
-    INPUT inputs[6] = {};
-    int count = 0;
-    auto Press = [&](WORD vk) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = vk;
-        count++;
+    // Release held modifiers before injecting, restore after — all in one
+    // atomic SendInput batch so nothing can interleave. Side-specific VKs
+    // handle Left/Right variants (VK_CONTROL only reports combined state).
+    static constexpr WORD kSideMods[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
+                                         VK_RMENU, VK_LSHIFT, VK_RSHIFT};
+    std::vector<INPUT> in;
+    auto Key = [&](WORD vk, DWORD flags) {
+        in.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
     };
-    auto Release = [&](WORD vk) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = vk;
-        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
-        count++;
-    };
-    Press(vk1);
-    Press(vk2);
-    if (vk3) Press(vk3);
-    Release(vk2);
-    if (vk3) Release(vk3);
-    Release(vk1);
-    SendInput(count, inputs, sizeof(INPUT));  // single atomic call
 
-    for (WORD vk : heldMods) {
-        INPUT down = {INPUT_KEYBOARD, {.ki = {.wVk = vk}}};
-        SendInput(1, &down, sizeof(INPUT));
-    }
+    std::vector<WORD> held;
+    for (WORD vk : kSideMods)
+        if (GetKeyState(vk) & 0x8000) held.push_back(vk);
+
+    for (WORD vk : held) Key(vk, KEYEVENTF_KEYUP);
+    Key(vk1, 0); Key(vk2, 0); if (vk3) Key(vk3, 0);
+    if (vk3) Key(vk3, KEYEVENTF_KEYUP);
+    Key(vk2, KEYEVENTF_KEYUP); Key(vk1, KEYEVENTF_KEYUP);
+    for (WORD vk : held) Key(vk, 0);
+
+    SendInput((UINT)in.size(), in.data(), sizeof(INPUT));
 }
 
 // ---- Custom hotkey parsing ----
@@ -711,6 +672,40 @@ static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMen
     }
 }
 
+// Get the background context menu directly from the shell view.
+// Works for virtual folders (This PC, Libraries, Recycle Bin, search results)
+// where SHGetPathFromIDListW returns FALSE.
+static bool InvokeFolderContextMenuFromBrowser(IShellBrowser* browser, HWND hwnd, PCWSTR matchText) {
+    if (!browser || !matchText || !matchText[0]) return false;
+
+    IShellView* psv = nullptr;
+    if (FAILED(browser->QueryActiveShellView(&psv)) || !psv) return false;
+
+    IContextMenu* pcm = nullptr;
+    HRESULT hr = psv->GetItemObject(SVGIO_BACKGROUND, IID_IContextMenu, (void**)&pcm);
+    psv->Release();
+    if (FAILED(hr) || !pcm) return false;
+
+    IContextMenu2* pcm2 = nullptr;
+    pcm->QueryInterface(IID_IContextMenu2, (void**)&pcm2);
+
+    bool found = false;
+    HMENU hMenu = CreatePopupMenu();
+    if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
+        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1);
+        if (!found) {
+            Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
+            DumpContextMenuRecursive(hMenu, pcm, pcm2, 1, 0);
+        }
+    }
+    if (hMenu) DestroyMenu(hMenu);
+    if (pcm2) pcm2->Release();
+    pcm->Release();
+    return found;
+}
+
+// Legacy path-based fallback — only used by brand-specific actions (OpenInVSCode etc.)
+// which are kept for backward compatibility. The browser-based version above is preferred.
 static bool InvokeFolderContextMenuVerb(PCWSTR folderPath, HWND hwnd, PCWSTR matchText) {
     if (!folderPath || !folderPath[0] || !matchText || !matchText[0]) return false;
 
@@ -986,35 +981,9 @@ public:
         }
     }
 
-    // ---- External program launchers (via the folder background context menu) ----
-    // These borrow the right-click-on-empty-space menu, so they adapt to whatever
-    // program registered the corresponding verb (path-independent).
-
-    void OpenInVSCode() {
-        wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
-        // "Code" matches verb "VSCode" and display "Open with Code" / "通过 Code 打开"
-        if (!InvokeFolderContextMenuVerb(path, hShellTab, L"Code"))
-            Wh_Log(L"OpenInVSCode: no matching context menu entry found");
-    }
-
-    void OpenInTerminal() {
-        wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
-        if (!InvokeFolderContextMenuVerb(path, hShellTab, L"Terminal"))
-            Wh_Log(L"OpenInTerminal: no matching context menu entry found");
-    }
-
-    void OpenInCursor() {
-        wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
-        if (!InvokeFolderContextMenuVerb(path, hShellTab, L"Cursor"))
-            Wh_Log(L"OpenInCursor: no matching context menu entry found");
-    }
+    // ---- Context-menu action (via browser — works for virtual folders too) ----
 
     void OpenWithContextMenu() {
-        // Thread-safe read: copy the match string under the settings lock so
-        // a concurrent Wh_ModSettingsChanged() cannot free it mid-use (UAF).
         std::wstring match;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -1025,9 +994,8 @@ public:
             Wh_Log(L"OpenWithContextMenu: no match text configured (Context Menu Match setting)");
             return;
         }
-        wchar_t path[MAX_PATH] = {};
-        if (!GetCurrentFolderPath(path, MAX_PATH)) return;
-        if (!InvokeFolderContextMenuVerb(path, hShellTab, match.c_str()))
+        // Use browser directly — works for virtual folders too (This PC, Libraries, etc.)
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, match.c_str()))
             Wh_Log(L"OpenWithContextMenu: no context menu entry matching '%s'", match.c_str());
     }
 
@@ -1048,9 +1016,6 @@ public:
         else if (wcscmp(action, L"newFolder") == 0)   NewFolder();
         else if (wcscmp(action, L"copyPath") == 0)    CopyPath();
         else if (wcscmp(action, L"paste") == 0)       Paste();
-        else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode();
-        else if (wcscmp(action, L"openInTerminal") == 0) OpenInTerminal();
-        else if (wcscmp(action, L"openInCursor") == 0)   OpenInCursor();
         else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu();
         // "none" or unknown — do nothing
     }
@@ -1217,7 +1182,9 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         }
 
     } else if (uMsg == WM_LBUTTONDBLCLK) {
-        if (wcscmp(s.doubleClick.c_str(), L"none") == 0)
+        bool dblOn    = (wcscmp(s.doubleClick.c_str(), L"none") != 0);
+        bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
+        if (!dblOn && !tripleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
@@ -1229,13 +1196,12 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (ListView_SubItemHitTest(hWnd, &ht) != -1)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam); // clicked on an item
 
-        bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
-
         if (tripleOn) {
-            // Delay double-click to wait for possible third click that overrides it
+            // Delay double-click to wait for possible third click that overrides it.
+            // Store empty action when dbl=none — DblClickTimerProc already guards on .empty().
             CancelPendingDblClick();
             g_pendingDblClickHwnd = hWnd;
-            g_pendingDblClickAction = s.doubleClick;
+            g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
             g_pendingDblClickCombo = s.doubleClickCombo;
             g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
                 GetDoubleClickTime(), nullptr);
@@ -1428,20 +1394,19 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
               g_lastClick.className == L"UIItemsView")) &&
             delta <= (DWORD)GetDoubleClickTime()) {
             // This is a double-click
-            if (dblOn) {
-                if (tripleOn) {
-                    // Delay double-click to wait for possible third click
-                    CancelPendingDblClick();
-                    g_pendingDblClickHwnd = hWnd;
-                    g_pendingDblClickAction = s.doubleClick;
-                    g_pendingDblClickCombo = s.doubleClickCombo;
-                    g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
-                        GetDoubleClickTime(), nullptr);
-                } else {
-                    // Instant double-click (no triple-click configured)
-                    if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                        PostDoAction(hWnd, s.doubleClick.c_str());
-                }
+            if (tripleOn) {
+                // Delay to wait for possible third click.
+                // Store empty action when dbl=none (DblClickTimerProc guards on .empty()).
+                CancelPendingDblClick();
+                g_pendingDblClickHwnd = hWnd;
+                g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
+                g_pendingDblClickCombo = s.doubleClickCombo;
+                g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
+                    GetDoubleClickTime(), nullptr);
+            } else if (dblOn) {
+                // Instant double-click (no triple-click configured)
+                if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
+                    PostDoAction(hWnd, s.doubleClick.c_str());
             }
             g_lastClick.time = 0;   // prevent next click from being another double-click
         } else {
