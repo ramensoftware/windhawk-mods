@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.17
+// @version         1.18
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -160,9 +160,10 @@ do not conflict.
 - maxItems: 60
   $name: Maximum items
   $description: >-
-    Limit how many entries the grid shows. 0 means unlimited, but that is only
-    sensible for small folders — the grid is also clipped to what fits on the
-    monitor, so extras are not shown.
+    Limit how many entries the grid shows and caches. The cache also caps to
+    roughly what can fit on screen (columns × rows, tighter for large icons)
+    and a ~64 MB bitmap budget, so very large maxItems values do not keep
+    hundreds of oversized icons resident. 0 uses that automatic on-screen cap.
 
 - includeSubfolders: true
   $name: Show subfolders
@@ -1528,15 +1529,27 @@ struct FolderData {
     // LRU bookkeeping for FolderCache eviction (separate from scan freshness).
     ULONGLONG lastUsedTick = 0;
     int scannedIconSize = 0;
+    // Approximate resident bytes of icon pixel buffers (width*height*4).
+    size_t approxBytes = 0;
 };
 
 // Bound folder-path → FolderData entries. PrefetchSubfolders can enqueue many
 // paths; without a cap the map grows without bound across a session.
 constexpr size_t kMaxCachedFolders = 32;
+// Soft ceiling on cached icon bitmaps across all folders (~64 MB).
+constexpr size_t kMaxCachedFolderBytes = 64ull * 1024 * 1024;
+
+enum class ScanRequestKind { Folder, ButtonIcon };
 
 struct ScanRequest {
+    ScanRequestKind kind = ScanRequestKind::Folder;
     std::wstring path;
     int iconPixelSize = 32;
+    // ButtonIcon: extract on the STA scan worker, deliver pixels on the UI thread.
+    int folderIndex = -1;
+    uint32_t iconGeneration = 0;
+    HWND taskbarWnd = nullptr;
+    bool resourceSpec = false;
 };
 
 // Keyed by resolved folder path so subfolders opened on hover share the same
@@ -1553,25 +1566,64 @@ std::unordered_map<std::wstring, std::shared_ptr<FolderData>>& FolderCache() {
     return *g_folderCache;
 }
 
-// How many GridItems (with bitmaps) to retain per cached folder. Layout already
-// trims to what fits on screen; the cache must not keep more than can ever be
-// shown (+ a small margin). maxItems > 0 follows the setting; maxItems:0 uses a
-// hard ceiling from columns × ~16 rows (columns setting max is 24).
+// How many GridItems (with bitmaps) to retain per cached folder. Prefer an
+// on-screen capacity related to ComputeLevelLayout (columns × ~rows) over the
+// raw maxItems ceiling — large iconSize values leave few cells visible, and
+// caching hundreds of 256–512 px bitmaps is pure RAM waste.
 int MaxCachedItemsPerFolder() {
-    if (g_settings.maxItems > 0) {
-        return g_settings.maxItems;
-    }
     int cols = g_settings.columns > 0 ? g_settings.columns : 12;
-    return std::clamp(cols * 16, 60, 192);
+    int maxRows = 16;
+    if (g_settings.iconSize >= 128) {
+        maxRows = 6;
+    } else if (g_settings.iconSize >= 64) {
+        maxRows = 10;
+    }
+    int screenCap = std::clamp(cols * maxRows, 24, 192);
+    if (g_settings.maxItems > 0) {
+        return std::min(g_settings.maxItems, screenCap);
+    }
+    return screenCap;
 }
 
-// Caller must hold g_cacheMutex. Drops least-recently-used entries until size
-// fits kMaxCachedFolders. Never erases keepKey (the entry just inserted/used).
-// Erasing only releases the cache's shared_ptr; open PopupLevels that copied
-// items (and their shared_ptr icons) keep working.
+size_t EstimateFolderDataBytes(const FolderData& data) {
+    size_t bytes = 0;
+    const int fallbackPx = data.scannedIconSize > 0 ? data.scannedIconSize : 32;
+    const size_t fallbackIconBytes =
+        (size_t)fallbackPx * (size_t)fallbackPx * 4;
+    for (const auto& item : data.items) {
+        if (!item.icon) {
+            continue;
+        }
+        const UINT w = item.icon->GetWidth();
+        const UINT h = item.icon->GetHeight();
+        if (w > 0 && h > 0) {
+            bytes += (size_t)w * (size_t)h * 4;
+        } else {
+            bytes += fallbackIconBytes;
+        }
+    }
+    return bytes;
+}
+
+// Caller must hold g_cacheMutex. Drops least-recently-used entries until both
+// the entry cap and the approximate byte budget are satisfied. Never erases
+// keepKey (the entry just inserted/used). Erasing only releases the cache's
+// shared_ptr; open PopupLevels that copied items (and their shared_ptr icons)
+// keep working.
 void EvictFolderCacheIfNeeded(const std::wstring& keepKey) {
     auto& cache = FolderCache();
-    while (cache.size() > kMaxCachedFolders) {
+    auto totalBytes = [&]() -> size_t {
+        size_t sum = 0;
+        for (const auto& entry : cache) {
+            if (entry.second) {
+                sum += entry.second->approxBytes;
+            }
+        }
+        return sum;
+    };
+
+    while (cache.size() > kMaxCachedFolders ||
+           (cache.size() > 1 && totalBytes() > kMaxCachedFolderBytes)) {
         auto oldest = cache.end();
         for (auto it = cache.begin(); it != cache.end(); ++it) {
             if (it->first == keepKey) {
@@ -1589,10 +1641,45 @@ void EvictFolderCacheIfNeeded(const std::wstring& keepKey) {
     }
 }
 
+// UNC shares and mapped/unavailable network drives — shell I/O on these can
+// block for the full SMB/WebDAV timeout. Used to skip sync work on the UI
+// thread and to bound scan-thread hangs.
+bool IsLikelyRemotePath(const std::wstring& p) {
+    if (p.empty()) {
+        return false;
+    }
+    if (PathIsUNCW(p.c_str())) {
+        return true;
+    }
+    if (p.size() >= 2 && p[1] == L':') {
+        WCHAR root[4] = {p[0], L':', L'\\', 0};
+        UINT type = GetDriveTypeW(root);
+        return type == DRIVE_REMOTE || type == DRIVE_NO_ROOT_DIR;
+    }
+    return false;
+}
+
+// File portion of an "app.exe,3" icon resource spec (or the whole string).
+std::wstring IconSpecFilePart(const std::wstring& spec) {
+    size_t comma = spec.find_last_of(L',');
+    if (comma != std::wstring::npos && comma + 1 < spec.size()) {
+        PCWSTR numStart = spec.c_str() + comma + 1;
+        WCHAR* end = nullptr;
+        (void)wcstol(numStart, &end, 10);
+        if (end && *end == L'\0') {
+            return spec.substr(0, comma);
+        }
+    }
+    return spec;
+}
+
 std::mutex g_scanMutex;
 std::vector<ScanRequest> g_scanQueue;
 // Atomic: ScanFolderInto reads this outside the mutex during icon extraction.
 std::atomic<bool> g_scanThreadStop{false};
+// True while StopScanThread has swapped the worker out and is joining — blocks
+// StartScanThread from spawning a sibling against handles about to be closed.
+std::atomic<bool> g_scanThreadJoining{false};
 // Manual-reset stop + auto-reset work. Idle wait is MsgWaitForMultipleObjects
 // with QS_ALLINPUT (no 50 ms poll). Created lazily with the scan thread.
 HANDLE g_scanStopEvent = nullptr;
@@ -1711,6 +1798,11 @@ std::wstring ResolveFolderShortcutTarget(const std::wstring& path) {
         return {};
     }
 
+    // GetFileAttributesW on an offline share blocks for the network timeout.
+    if (IsLikelyRemotePath(target)) {
+        return {};
+    }
+
     DWORD attrs = GetFileAttributesW(target);
     if (attrs == INVALID_FILE_ATTRIBUTES ||
         (attrs & FILE_ATTRIBUTE_DIRECTORY) == 0) {
@@ -1730,8 +1822,15 @@ void ScanFolderInto(const std::wstring& path,
                     FolderData* out) {
     out->items.clear();
     out->scannedIconSize = iconPixelSize;
+    out->approxBytes = 0;
 
     if (path.empty()) {
+        return;
+    }
+
+    // FindFirstFileExW on an offline share blocks StopScanThread's join.
+    if (IsLikelyRemotePath(path)) {
+        Wh_Log(L"Skipping scan of remote/unavailable path %s", path.c_str());
         return;
     }
 
@@ -1819,6 +1918,11 @@ void ScanFolderInto(const std::wstring& path,
         }
         const std::wstring& iconSource =
             item.iconPath.empty() ? item.fullPath : item.iconPath;
+        if (IsLikelyRemotePath(iconSource)) {
+            // Leave null icon; PaintLevel draws without it.
+            PumpScanThreadMessages();
+            continue;
+        }
         HICON hIcon = GetShellIconForPath(iconSource, iconPixelSize);
         if (hIcon) {
             item.icon = HIconToBitmap(hIcon, iconPixelSize);
@@ -1827,9 +1931,33 @@ void ScanFolderInto(const std::wstring& path,
         // Keep the STA responsive for in-process shell icon handlers.
         PumpScanThreadMessages();
     }
+
+    out->approxBytes = EstimateFolderDataBytes(*out);
 }
 
 void StartScanThread();
+
+// Delivered from the scan STA to the taskbar UI thread (WriteableBitmap only).
+struct ButtonIconDelivery {
+    int folderIndex = -1;
+    uint32_t iconGeneration = 0;
+    int iconExtent = 0;
+    HWND taskbarWnd = nullptr;
+    std::shared_ptr<Gdiplus::Bitmap> bitmap;
+};
+
+void ApplyButtonIconOnUiThread(void* parameter);
+
+void DeliverButtonIconToUi(std::unique_ptr<ButtonIconDelivery> delivery) {
+    if (!delivery || !delivery->taskbarWnd || !delivery->bitmap) {
+        return;
+    }
+    HWND hwnd = delivery->taskbarWnd;
+    ButtonIconDelivery* raw = delivery.release();
+    if (!RunFromWindowThread(hwnd, ApplyButtonIconOnUiThread, raw)) {
+        delete raw;
+    }
+}
 
 void ScanThreadMain() {
     // Shell icon extractors (SHGetFileInfo / IExtractIcon) expect STA. MTA
@@ -1874,12 +2002,55 @@ void ScanThreadMain() {
                 lock.lock();
             }
 
-            request = g_scanQueue.front();
+            request = std::move(g_scanQueue.front());
             g_scanQueue.erase(g_scanQueue.begin());
         }
 
         if (request.iconPixelSize <= 0) {
             request.iconPixelSize = 32;
+        }
+
+        if (request.kind == ScanRequestKind::ButtonIcon) {
+            std::shared_ptr<Gdiplus::Bitmap> bitmap;
+            if (!request.path.empty()) {
+                const std::wstring checkPath =
+                    request.resourceSpec ? IconSpecFilePart(request.path)
+                                         : request.path;
+                if (IsLikelyRemotePath(checkPath)) {
+                    Wh_Log(L"Skipping button icon for remote path %s",
+                           checkPath.c_str());
+                } else if (request.resourceSpec) {
+                    if (HICON hIcon = ExtractIconFromResourceSpec(
+                            request.path, request.iconPixelSize)) {
+                        bitmap = HIconToBitmap(hIcon, request.iconPixelSize);
+                        DestroyIcon(hIcon);
+                    }
+                } else {
+                    std::wstring resolved = ResolveFolderPath(request.path);
+                    if (!resolved.empty() && !IsLikelyRemotePath(resolved)) {
+                        if (HICON hIcon = GetShellIconForPath(
+                                resolved, request.iconPixelSize)) {
+                            bitmap =
+                                HIconToBitmap(hIcon, request.iconPixelSize);
+                            DestroyIcon(hIcon);
+                        }
+                    }
+                }
+                PumpScanThreadMessages();
+            }
+
+            if (bitmap && !g_unloading &&
+                !g_scanThreadStop.load(std::memory_order_relaxed)) {
+                auto delivery = std::make_unique<ButtonIconDelivery>();
+                delivery->folderIndex = request.folderIndex;
+                delivery->iconGeneration = request.iconGeneration;
+                // iconPixelSize is the extract size (display extent × 2).
+                delivery->iconExtent = std::max(8, request.iconPixelSize / 2);
+                delivery->taskbarWnd = request.taskbarWnd;
+                delivery->bitmap = std::move(bitmap);
+                DeliverButtonIconToUi(std::move(delivery));
+            }
+            continue;
         }
 
         auto fresh = std::make_shared<FolderData>();
@@ -1918,16 +2089,72 @@ void RequestScan(const std::wstring& path, int iconPixelSize) {
     StartScanThread();
 
     std::lock_guard<std::mutex> lock(g_scanMutex);
-    if (g_unloading || g_scanThreadStop.load(std::memory_order_relaxed)) {
+    if (g_unloading || g_scanThreadStop.load(std::memory_order_relaxed) ||
+        g_scanThreadJoining.load(std::memory_order_relaxed)) {
         return;
     }
     for (const auto& queued : g_scanQueue) {
-        if (queued.iconPixelSize == iconPixelSize &&
+        if (queued.kind == ScanRequestKind::Folder &&
+            queued.iconPixelSize == iconPixelSize &&
             _wcsicmp(queued.path.c_str(), path.c_str()) == 0) {
             return;
         }
     }
-    g_scanQueue.push_back({path, iconPixelSize});
+    ScanRequest req;
+    req.kind = ScanRequestKind::Folder;
+    req.path = path;
+    req.iconPixelSize = iconPixelSize;
+    g_scanQueue.push_back(std::move(req));
+    if (g_scanWorkEvent) {
+        SetEvent(g_scanWorkEvent);
+    }
+}
+
+// Extract a taskbar button icon on the STA scan worker. The UI shows an emoji
+// fallback until ApplyButtonIconOnUiThread installs a WriteableBitmap.
+void RequestButtonIcon(const std::wstring& pathOrSpec,
+                       int iconPixelSize,
+                       int folderIndex,
+                       uint32_t iconGeneration,
+                       HWND taskbarWnd,
+                       bool resourceSpec) {
+    if (pathOrSpec.empty() || g_unloading || !taskbarWnd || folderIndex < 0) {
+        return;
+    }
+
+    const std::wstring checkPath =
+        resourceSpec ? IconSpecFilePart(pathOrSpec) : pathOrSpec;
+    if (IsLikelyRemotePath(checkPath)) {
+        Wh_Log(L"Skipping button icon request for remote path %s",
+               checkPath.c_str());
+        return;
+    }
+
+    StartScanThread();
+
+    std::lock_guard<std::mutex> lock(g_scanMutex);
+    if (g_unloading || g_scanThreadStop.load(std::memory_order_relaxed) ||
+        g_scanThreadJoining.load(std::memory_order_relaxed)) {
+        return;
+    }
+    for (const auto& queued : g_scanQueue) {
+        if (queued.kind == ScanRequestKind::ButtonIcon &&
+            queued.folderIndex == folderIndex &&
+            queued.iconGeneration == iconGeneration &&
+            queued.taskbarWnd == taskbarWnd &&
+            queued.iconPixelSize == iconPixelSize) {
+            return;
+        }
+    }
+    ScanRequest req;
+    req.kind = ScanRequestKind::ButtonIcon;
+    req.path = pathOrSpec;
+    req.iconPixelSize = iconPixelSize;
+    req.folderIndex = folderIndex;
+    req.iconGeneration = iconGeneration;
+    req.taskbarWnd = taskbarWnd;
+    req.resourceSpec = resourceSpec;
+    g_scanQueue.push_back(std::move(req));
     if (g_scanWorkEvent) {
         SetEvent(g_scanWorkEvent);
     }
@@ -1960,11 +2187,12 @@ std::shared_ptr<FolderData> GetFolderDataAndRefresh(const std::wstring& path,
 
 void StartScanThread() {
     std::lock_guard<std::mutex> lock(g_scanMutex);
-    if (g_unloading) {
+    if (g_unloading ||
+        g_scanThreadJoining.load(std::memory_order_relaxed)) {
         return;
     }
-    // Already running (or StopScanThread is joining). Never clear stop while
-    // a join is in progress — RequestScan drops work via g_scanThreadStop.
+    // Already running. Never clear stop while a join is in progress —
+    // g_scanThreadJoining blocks spawn; RequestScan also drops work.
     if (g_scanThread) {
         return;
     }
@@ -1993,27 +2221,33 @@ void StartScanThread() {
 }
 
 void StopScanThread() {
+    std::optional<std::thread> thread;
+    HANDLE stopEvent = nullptr;
+    HANDLE workEvent = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_scanMutex);
         g_scanThreadStop.store(true, std::memory_order_relaxed);
+        g_scanThreadJoining.store(true, std::memory_order_relaxed);
         g_scanQueue.clear();
         if (g_scanStopEvent) {
             SetEvent(g_scanStopEvent);
         }
+        // Move globals out under the lock so RequestScan/StartScanThread cannot
+        // touch the thread or SetEvent a handle we are about to close.
+        thread.swap(g_scanThread);
+        std::swap(stopEvent, g_scanStopEvent);
+        std::swap(workEvent, g_scanWorkEvent);
     }
-    if (g_scanThread && g_scanThread->joinable()) {
-        g_scanThread->join();
+    if (thread && thread->joinable()) {
+        thread->join();
     }
-    g_scanThread.reset();
-
-    if (g_scanStopEvent) {
-        CloseHandle(g_scanStopEvent);
-        g_scanStopEvent = nullptr;
+    if (stopEvent) {
+        CloseHandle(stopEvent);
     }
-    if (g_scanWorkEvent) {
-        CloseHandle(g_scanWorkEvent);
-        g_scanWorkEvent = nullptr;
+    if (workEvent) {
+        CloseHandle(workEvent);
     }
+    g_scanThreadJoining.store(false, std::memory_order_relaxed);
 }
 
 void ResetFolderData() {
@@ -3453,6 +3687,8 @@ struct ButtonState {
     winrt::event_token enterToken{};
     winrt::event_token exitToken{};
     int folderIndex = -1;
+    // Bumped when the button is rebuilt so late icon deliveries are ignored.
+    uint32_t iconGeneration = 0;
 };
 
 // One injected host per taskbar window (primary + each secondary monitor).
@@ -3483,6 +3719,7 @@ std::vector<std::unique_ptr<TaskbarHost>>& TaskbarHosts() {
 }
 
 std::atomic<bool> g_injectionLive{false};
+std::atomic<uint32_t> g_buttonIconGeneration{1};
 
 // Lifetime retry worker: stays alive until StopRetryThread (settings/uninit).
 // StartRetryThread ensures the worker exists and SetEvent(kick) — never joins
@@ -3506,26 +3743,28 @@ constexpr GUID kIBufferByteAccessGuid = {
     0x11df,
     {0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda}};
 
-ImageSource HIconToImageSource(HICON hIcon, int size) {
+// WriteableBitmap must be created on the taskbar UI thread.
+// GDI+ Image getters are non-const in the MinGW headers Windhawk ships.
+ImageSource BitmapToImageSource(Gdiplus::Bitmap& bitmap) {
     try {
-        auto bitmap = HIconToBitmap(hIcon, size);
-        if (!bitmap) {
+        const int width = (int)bitmap.GetWidth();
+        const int height = (int)bitmap.GetHeight();
+        if (width <= 0 || height <= 0) {
             return nullptr;
         }
 
         Gdiplus::BitmapData bd{};
-        Gdiplus::Rect lockRect(0, 0, size, size);
+        Gdiplus::Rect lockRect(0, 0, width, height);
         // HIconToBitmap stores PARGB; WriteableBitmap also wants premultiplied
         // BGRA.
-        if (bitmap->LockBits(&lockRect, Gdiplus::ImageLockModeRead,
-                             PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
+        if (bitmap.LockBits(&lockRect, Gdiplus::ImageLockModeRead,
+                            PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
             return nullptr;
         }
 
         try {
-            // Activation can throw; keep it inside the LockBits guard.
             winrt::Windows::UI::Xaml::Media::Imaging::WriteableBitmap writeable(
-                size, size);
+                width, height);
             auto buffer = writeable.PixelBuffer();
             IBufferByteAccess* byteAccess = nullptr;
             auto* bufferUnknown = (IUnknown*)winrt::get_abi(buffer);
@@ -3535,23 +3774,69 @@ ImageSource HIconToImageSource(HICON hIcon, int size) {
                 byteAccess) {
                 BYTE* dest = nullptr;
                 if (SUCCEEDED(byteAccess->Buffer(&dest)) && dest) {
-                    for (int y = 0; y < size; y++) {
-                        memcpy(dest + (size_t)y * size * 4,
+                    for (int y = 0; y < height; y++) {
+                        memcpy(dest + (size_t)y * width * 4,
                                (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
-                               (size_t)size * 4);
+                               (size_t)width * 4);
                     }
                 }
                 byteAccess->Release();
             }
-            bitmap->UnlockBits(&bd);
+            bitmap.UnlockBits(&bd);
             writeable.Invalidate();
             return writeable;
         } catch (...) {
-            bitmap->UnlockBits(&bd);
+            bitmap.UnlockBits(&bd);
             return nullptr;
         }
     } catch (...) {
         return nullptr;
+    }
+}
+
+void ApplyButtonIconOnUiThread(void* parameter) {
+    std::unique_ptr<ButtonIconDelivery> delivery(
+        static_cast<ButtonIconDelivery*>(parameter));
+    if (g_unloading || !delivery || !delivery->bitmap || !g_taskbarHosts) {
+        return;
+    }
+
+    // Skip if the user switched this slot to a literal emoji icon.
+    if (delivery->folderIndex >= 0 &&
+        delivery->folderIndex < (int)g_settings.folders.size()) {
+        const auto& entry = g_settings.folders[delivery->folderIndex];
+        if (!entry.icon.empty() && !IconSettingIsFile(entry.icon)) {
+            return;
+        }
+    }
+
+    for (auto& host : *g_taskbarHosts) {
+        if (!host || host->hwnd != delivery->taskbarWnd) {
+            continue;
+        }
+        for (auto& state : host->buttonStates) {
+            if (state.folderIndex != delivery->folderIndex ||
+                state.iconGeneration != delivery->iconGeneration ||
+                !state.button) {
+                continue;
+            }
+            try {
+                auto source = BitmapToImageSource(*delivery->bitmap);
+                if (!source) {
+                    return;
+                }
+                Image image;
+                image.Width(delivery->iconExtent);
+                image.Height(delivery->iconExtent);
+                image.Stretch(Stretch::Uniform);
+                image.HorizontalAlignment(HorizontalAlignment::Center);
+                image.VerticalAlignment(VerticalAlignment::Center);
+                image.Source(source);
+                state.button.Content(image);
+            } catch (...) {
+            }
+            return;
+        }
     }
 }
 
@@ -3599,11 +3884,28 @@ void ApplyNativeButtonStyle(Button const& button) {
     button.UseSystemFocusVisuals(false);
 }
 
-UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
+UIElement MakeFolderEmojiFallback(int iconExtent) {
+    TextBlock fallback;
+    fallback.Text(L"\U0001F4C1");
+    fallback.FontFamily(FontFamily(L"Segoe UI Emoji"));
+    fallback.FontSize(iconExtent * 0.92);
+    fallback.HorizontalAlignment(HorizontalAlignment::Center);
+    fallback.VerticalAlignment(VerticalAlignment::Center);
+    return fallback;
+}
+
+// Shell icon / resource extraction runs on the STA scan worker. Only XAML
+// BitmapImage (async decode) and emoji TextBlocks stay on the UI thread.
+UIElement MakeButtonContent(const FolderEntry& entry,
+                            double buttonSize,
+                            int folderIndex,
+                            HWND taskbarWnd,
+                            uint32_t iconGeneration) {
     int iconExtent = g_settings.buttonIconSize > 0
                          ? g_settings.buttonIconSize
                          : (int)std::lround(buttonSize * 0.545);
     iconExtent = std::clamp<int>(iconExtent, 8, 128);
+    const int extractSize = iconExtent * 2;
 
     // Emoji or any other short literal text.
     if (!entry.icon.empty() && !IconSettingIsFile(entry.icon)) {
@@ -3617,15 +3919,6 @@ UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
         text.IsTextSelectionEnabled(false);
         return text;
     }
-
-    Image image;
-    image.Width(iconExtent);
-    image.Height(iconExtent);
-    image.Stretch(Stretch::Uniform);
-    image.HorizontalAlignment(HorizontalAlignment::Center);
-    image.VerticalAlignment(VerticalAlignment::Center);
-
-    bool loaded = false;
 
     if (!entry.icon.empty()) {
         std::wstring icon = entry.icon;
@@ -3641,71 +3934,46 @@ UIElement MakeButtonContent(const FolderEntry& entry, double buttonSize) {
         }
 
         if (isImageFile) {
-            try {
-                WCHAR url[2048];
-                DWORD urlLen = ARRAYSIZE(url);
-                if (SUCCEEDED(UrlCreateFromPathW(icon.c_str(), url, &urlLen,
-                                                 0))) {
-                    winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage
-                        bitmap;
-                    bitmap.DecodePixelWidth(iconExtent * 2);
-                    bitmap.UriSource(
-                        winrt::Windows::Foundation::Uri(winrt::hstring(url)));
-                    image.Source(bitmap);
-                    loaded = true;
-                }
-            } catch (...) {
-                loaded = false;
-            }
-        }
-
-        if (!loaded) {
-            HICON hIcon = ExtractIconFromResourceSpec(icon, iconExtent * 2);
-            if (hIcon) {
-                auto source = HIconToImageSource(hIcon, iconExtent * 2);
-                DestroyIcon(hIcon);
-                if (source) {
-                    image.Source(source);
-                    loaded = true;
-                }
-            }
-        }
-    }
-
-    // No icon configured, or the configured one failed: fall back to the
-    // folder's own shell icon. Skip UNC/network paths — SHGetFileInfo can
-    // block the taskbar UI thread for a long time on unavailable shares.
-    if (!loaded) {
-        std::wstring resolved = ResolveFolderPath(entry.path);
-        if (!resolved.empty()) {
-            if (PathIsUNCW(resolved.c_str())) {
-                Wh_Log(L"Skipping sync shell icon for UNC path %s",
-                       resolved.c_str());
-            } else {
-                HICON hIcon = GetShellIconForPath(resolved, iconExtent * 2);
-                if (hIcon) {
-                    auto source = HIconToImageSource(hIcon, iconExtent * 2);
-                    DestroyIcon(hIcon);
-                    if (source) {
-                        image.Source(source);
-                        loaded = true;
+            // BitmapImage decodes off-thread; skip sync shell extraction.
+            if (!IsLikelyRemotePath(icon)) {
+                try {
+                    WCHAR url[2048];
+                    DWORD urlLen = ARRAYSIZE(url);
+                    if (SUCCEEDED(UrlCreateFromPathW(icon.c_str(), url, &urlLen,
+                                                     0))) {
+                        Image image;
+                        image.Width(iconExtent);
+                        image.Height(iconExtent);
+                        image.Stretch(Stretch::Uniform);
+                        image.HorizontalAlignment(HorizontalAlignment::Center);
+                        image.VerticalAlignment(VerticalAlignment::Center);
+                        winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage
+                            bitmap;
+                        bitmap.DecodePixelWidth(extractSize);
+                        bitmap.UriSource(winrt::Windows::Foundation::Uri(
+                            winrt::hstring(url)));
+                        image.Source(bitmap);
+                        return image;
                     }
+                } catch (...) {
                 }
             }
+            return MakeFolderEmojiFallback(iconExtent);
         }
+
+        // app.exe,0 / .ico via SHDefExtractIcon — never on the UI thread.
+        RequestButtonIcon(icon, extractSize, folderIndex, iconGeneration,
+                          taskbarWnd, /*resourceSpec=*/true);
+        return MakeFolderEmojiFallback(iconExtent);
     }
 
-    if (!loaded) {
-        TextBlock fallback;
-        fallback.Text(L"\U0001F4C1");
-        fallback.FontFamily(FontFamily(L"Segoe UI Emoji"));
-        fallback.FontSize(iconExtent * 0.92);
-        fallback.HorizontalAlignment(HorizontalAlignment::Center);
-        fallback.VerticalAlignment(VerticalAlignment::Center);
-        return fallback;
+    // No icon configured: folder shell icon on the scan worker. Never call
+    // ResolveFolderPath / GetShellIconForPath here (UI thread).
+    if (!entry.path.empty()) {
+        RequestButtonIcon(entry.path, extractSize, folderIndex, iconGeneration,
+                          taskbarWnd, /*resourceSpec=*/false);
     }
-
-    return image;
+    return MakeFolderEmojiFallback(iconExtent);
 }
 
 RECT GetElementScreenRect(FrameworkElement const& element) {
@@ -4063,7 +4331,15 @@ Grid BuildHostGrid(TaskbarHost* host) {
         button.Width(host->buttonWidth);
         button.Height(host->buttonHeight);
         ApplyNativeButtonStyle(button);
-        button.Content(MakeButtonContent(entry, host->buttonHeight));
+
+        ButtonState state;
+        state.button = button;
+        state.folderIndex = (int)i;
+        state.iconGeneration =
+            g_buttonIconGeneration.fetch_add(1, std::memory_order_relaxed);
+
+        button.Content(MakeButtonContent(entry, host->buttonHeight, (int)i,
+                                         host->hwnd, state.iconGeneration));
 
         // No taskbar-button tooltip; the folder name is shown in the hover
         // grid.
@@ -4071,10 +4347,6 @@ Grid BuildHostGrid(TaskbarHost* host) {
 
         Grid::SetColumn(button, (int)i);
         hostGrid.Children().Append(button);
-
-        ButtonState state;
-        state.button = button;
-        state.folderIndex = (int)i;
 
         int folderIndex = (int)i;
         HWND taskbarWnd = host->hwnd;
