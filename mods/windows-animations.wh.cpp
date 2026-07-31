@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.2
+// @version         1.1.3
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -69,8 +69,11 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 
 // ==WindhawkModSettings==
 /*
-- open_animation: true
-  $name: Animate window restore (open)
+- minimize_animation: true
+  $name: Animate window minimize
+  $description: Play the genie animation when a window is minimized to the taskbar.
+- restore_animation: true
+  $name: Animate window restore
   $description: Play the reverse genie animation when a window is restored from the taskbar.
 - duration_ms: 360
   $name: Minimize/Restore duration (ms)
@@ -224,12 +227,14 @@ std::atomic<int> g_durationMs{360};
 std::atomic<int> g_closeDurationMs{900};
 std::atomic<int> g_closeEffectStyle{1};
 std::atomic<int> g_shatterBlockSize{12};
-std::atomic<bool> g_openAnimation{true};
+std::atomic<bool> g_minimizeAnimation{true};
+std::atomic<bool> g_restoreAnimation{true};
 std::atomic<bool> g_closeAnimation{true};
 std::atomic<bool> g_launchAnimation{false};
 std::atomic<bool> g_switchAnimation{true};
 std::atomic<int> g_switchDurationMs{200};
 std::atomic<bool> g_unloading{false};
+std::atomic<bool> g_altTabThreadRunning{false};
 std::atomic<int>  g_workerCount{0};
 template <typename T> static T Clamp(T value, T min, T max) {
     return value < min ? min : (value > max ? max : value);
@@ -384,7 +389,8 @@ void LoadAnimSettings() {
         g_closeEffectStyle.store(value, std::memory_order_relaxed);
         Wh_FreeStringSetting(style);
     }
-    g_openAnimation.store(Wh_GetIntSetting(L"open_animation") != 0, std::memory_order_relaxed);
+    g_minimizeAnimation.store(Wh_GetIntSetting(L"minimize_animation") != 0, std::memory_order_relaxed);
+    g_restoreAnimation.store(Wh_GetIntSetting(L"restore_animation") != 0, std::memory_order_relaxed);
     g_closeAnimation.store(Wh_GetIntSetting(L"close_animation") != 0, std::memory_order_relaxed);
     g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
     g_switchAnimation.store(Wh_GetIntSetting(L"switch_animation") != 0, std::memory_order_relaxed);
@@ -479,22 +485,19 @@ HWND FindTaskbarForMonitor(HMONITOR hMon) {
     }
     return hMainTray;
 }
-int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
-    std::wstring procNameLower = GetProcessNameCached(hWndApp);
-    std::wstring processKey = procNameLower;
-    if (!processKey.empty() && hMon) {
-        processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_StateMutex);
-        if (g_TaskbarDockXs.count(hWndApp)) {
-            return g_TaskbarDockXs[hWndApp];
-        }
-        if (!processKey.empty() && g_ProcessDockXs.count(processKey)) {
-            return g_ProcessDockXs[processKey];
-        }
-    }
-    int targetX = fallbackX;
+
+struct UiaTask { 
+    HWND hWndApp; 
+    std::wstring titleLower; 
+    std::wstring procNameLower; 
+    std::wstring processKey; 
+    HMONITOR hMon; 
+    int fallbackX; 
+};
+
+DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
+    UiaTask* t = (UiaTask*)lpParam;
+    int targetX = t->fallbackX;
     bool uiaFound = false;
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     bool coInit = (hr == S_OK || hr == S_FALSE);
@@ -505,14 +508,10 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
             hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
         }
         if (SUCCEEDED(hrUia) && pAutomation) {
-            HWND hTray = FindTaskbarForMonitor(hMon);
+            HWND hTray = FindTaskbarForMonitor(t->hMon);
             if (hTray) {
                 IUIAutomationElement* pTrayElement = nullptr;
                 if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
-                    WCHAR titleW[512] = {0};
-                    GetWindowTextW(hWndApp, titleW, 512);
-                    std::wstring titleLower = titleW;
-                    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
                     IUIAutomationCondition* pButtonCond = nullptr;
                     IUIAutomationCondition* pListItemCond = nullptr;
                     IUIAutomationCondition* pOrCond = nullptr;
@@ -527,7 +526,7 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
                         pArray->get_Length(&length);
                         MONITORINFO mi = {0};
                         mi.cbSize = sizeof(MONITORINFO);
-                        GetMonitorInfoW(hMon, &mi);
+                        GetMonitorInfoW(t->hMon, &mi);
                         int monRight = mi.rcMonitor.right;
                         int bestScore = 0;
                         for (int i = 0; i < length; i++) {
@@ -539,10 +538,10 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
                                     std::transform(uiaNameLower.begin(), uiaNameLower.end(), uiaNameLower.begin(), ::towlower);
                                     if (!uiaNameLower.empty()) {
                                         int score = 0;
-                                        if (titleLower == uiaNameLower) score += 1000;
-                                        if (!titleLower.empty() && titleLower.find(uiaNameLower) != std::wstring::npos) score += 500;
-                                        if (!uiaNameLower.empty() && uiaNameLower.find(titleLower) != std::wstring::npos) score += 500;
-                                        if (!procNameLower.empty() && uiaNameLower.find(procNameLower) != std::wstring::npos) score += 400;
+                                        if (t->titleLower == uiaNameLower) score += 1000;
+                                        if (!t->titleLower.empty() && t->titleLower.find(uiaNameLower) != std::wstring::npos) score += 500;
+                                        if (!uiaNameLower.empty() && uiaNameLower.find(t->titleLower) != std::wstring::npos) score += 500;
+                                        if (!t->procNameLower.empty() && uiaNameLower.find(t->procNameLower) != std::wstring::npos) score += 400;
                                         if (uiaNameLower.find(L"start") != std::wstring::npos) score -= 500;
                                         if (uiaNameLower.find(L"search") != std::wstring::npos) score -= 500;
                                         if (uiaNameLower.find(L"task view") != std::wstring::npos) score -= 500;
@@ -574,20 +573,45 @@ int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
         }
         if (coInit) CoUninitialize();
     }
+    
+    if (uiaFound) {
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        g_TaskbarDockXs[t->hWndApp] = targetX;
+        if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
+    }
+    delete t;
+    return 0;
+}
+
+int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallbackX, HMONITOR hMon) {
+    std::wstring procNameLower = GetProcessNameCached(hWndApp);
+    std::wstring processKey = procNameLower;
+    if (!processKey.empty() && hMon) {
+        processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+    }
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
-        if (uiaFound) {
-            g_TaskbarDockXs[hWndApp] = targetX;
-            if (!processKey.empty()) g_ProcessDockXs[processKey] = targetX;
-        }
+        if (g_TaskbarDockXs.count(hWndApp)) return g_TaskbarDockXs[hWndApp];
+        if (!processKey.empty() && g_ProcessDockXs.count(processKey)) return g_ProcessDockXs[processKey];
     }
-    return targetX;
+    std::wstring titleLower = windowTitle ? windowTitle : L"";
+    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
+    
+    UiaTask* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX};
+    
+    HANDLE hThread = CreateThread(NULL, 0, UiaWorkerThread, task, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+    } else {
+        delete task;
+    }
+    return fallbackX;
 }
 DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
     bool altTabSession = false;
     HWND stableForeground = GetForegroundWindow();
 
-    while (!g_unloading.load(std::memory_order_relaxed)) {
+    while (g_altTabThreadRunning.load(std::memory_order_relaxed) && !g_unloading.load(std::memory_order_relaxed)) {
         const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) ||
                              (GetAsyncKeyState(VK_LMENU) & 0x8000) ||
                              (GetAsyncKeyState(VK_RMENU) & 0x8000);
@@ -1114,17 +1138,14 @@ public:
         if (data->hFirstFrameShown) { SetEvent(data->hFirstFrameShown); CloseHandle(data->hFirstFrameShown); }
         
         if (data->isClosing) {
+            if (data->hWaitFinish) { SetEvent(data->hWaitFinish); CloseHandle(data->hWaitFinish); data->hWaitFinish = NULL; }
+
             if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
                 SetPropW(data->hRealWnd, L"AnimCloseBypass", (HANDLE)1);
                 if (data->closeMsg == ANIM_DEFER_SW_HIDE) ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
                 else if (data->closeMsg == WM_CLOSE) PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
                 else if (data->closeMsg == WM_SYSCOMMAND) PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
                 else PostMessageW(data->hRealWnd, data->closeMsg, 0, 0);
-            }
-            
-            if (data->hWaitFinish) { 
-                SetEvent(data->hWaitFinish); 
-                CloseHandle(data->hWaitFinish);
             }
             
             if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
@@ -1135,7 +1156,10 @@ public:
                 if (IsWindow(data->hRealWnd)) {
                     RemovePropW(data->hRealWnd, L"AnimCloseBypass");
                     RemovePropW(data->hRealWnd, L"AnimClosed");
-                    SetWindowCloak(data->hRealWnd, FALSE);
+                    
+                    if (!IsWindowVisible(data->hRealWnd)) {
+                        SetWindowCloak(data->hRealWnd, FALSE);
+                    }
                     UpdateDwmTransitions(data->hRealWnd, TRUE);
                 }
             }
@@ -1233,8 +1257,10 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         learnedTargetX = pt.x;
         std::lock_guard<std::mutex> lock(g_StateMutex);
         g_TaskbarDockXs[hWnd] = learnedTargetX;
-    } else {
-        learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
+    } else if (!isClosing) {
+        WCHAR windowTitle[256] = {0};
+        GetWindowTextW(hWnd, windowTitle, 256);
+        learnedTargetX = GetTaskbarButtonX_Async(hWnd, windowTitle, learnedTargetX, hMon);
     }
     auto* data = new WindowAnimData{
         hWnd, nullptr, nullptr, rect, hMon, w, h, learnedTargetX, rising, originalExStyle, cloakHidden, nullptr,
@@ -1363,6 +1389,7 @@ static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
     return started;
 }
 static void TryMinimizeAnim(HWND hWnd) {
+    if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return;
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
     if (!ShouldAnimateWindow(hWnd)) return;
     UpdateDwmTransitions(hWnd, FALSE);
@@ -1402,14 +1429,14 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         }
     }
     if (IsMinimizeCommand(cmd)) {
-        if (ShouldAnimateWindow(hWnd)) {
+        if (g_minimizeAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
             UpdateDwmTransitions(hWnd, FALSE);
             StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
         }
         return ShowWindow_Original(hWnd, cmd);
     }
     if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) && IsIconic(hWnd)) {
-        if (g_openAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
+        if (g_restoreAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
             UpdateDwmTransitions(hWnd, FALSE);
             SetWindowCloak(hWnd, TRUE);
             BOOL result = ShowWindow_Original(hWnd, cmd);
@@ -1504,13 +1531,13 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     if (msg == WM_SYSCOMMAND) {
         const UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
-            if (ShouldAnimateWindow(hWnd)) {
+            if (g_minimizeAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
                 UpdateDwmTransitions(hWnd, FALSE);
                 StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
             }
             return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
         }
-        if (cmd == SC_RESTORE && IsIconic(hWnd) && g_openAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
+        if (cmd == SC_RESTORE && IsIconic(hWnd) && g_restoreAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
             UpdateDwmTransitions(hWnd, FALSE);
             SetWindowCloak(hWnd, TRUE);
             LRESULT result = DefWindowProcW_Original(hWnd, msg, wParam, lParam);
@@ -1562,6 +1589,38 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     StartAnimation(hWnd, TRUE, originalExStyle);
     g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
 }
+
+void StartSwitchThreads() {
+    if (IsExplorerProcess() && !g_hAltTabThread) {
+        g_altTabThreadRunning.store(true, std::memory_order_relaxed);
+        g_hAltTabThread = CreateThread(NULL, 0, AltTabTrackerThread, NULL, 0, NULL);
+    }
+    if (!g_hWinEventThread) {
+        g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
+    }
+}
+
+void StopSwitchThreads() {
+    if (g_hAltTabThread) {
+        g_altTabThreadRunning.store(false, std::memory_order_relaxed);
+        WaitForSingleObject(g_hAltTabThread, 2000);
+        CloseHandle(g_hAltTabThread);
+        g_hAltTabThread = NULL;
+    }
+    
+    if (g_hWinEventThread) {
+        DWORD tid = GetThreadId(g_hWinEventThread);
+        if (tid) {
+            while (!PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
+                if (WaitForSingleObject(g_hWinEventThread, 10) != WAIT_TIMEOUT) break;
+            }
+        }
+        WaitForSingleObject(g_hWinEventThread, 2000);
+        CloseHandle(g_hWinEventThread);
+        g_hWinEventThread = NULL;
+    }
+}
+
 BOOL Wh_ModInit() {
     LoadAnimSettings();
     InitSharedMemory();
@@ -1575,14 +1634,24 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
     Wh_SetFunctionHook((void*)DestroyWindow, (void*)DestroyWindow_Hook, (void**)&DestroyWindow_Original);
     
-    if (explorerProcess) {
-        g_hAltTabThread = CreateThread(NULL, 0, AltTabTrackerThread, NULL, 0, NULL);
+    if (g_switchAnimation.load(std::memory_order_relaxed)) {
+        StartSwitchThreads();
     }
-    g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
     
     return TRUE;
 }
-void Wh_ModSettingsChanged() { LoadAnimSettings(); }
+void Wh_ModSettingsChanged() { 
+    bool wasSwitchAnim = g_switchAnimation.load(std::memory_order_relaxed);
+    LoadAnimSettings(); 
+    bool isSwitchAnim = g_switchAnimation.load(std::memory_order_relaxed);
+
+    if (isSwitchAnim && !wasSwitchAnim) {
+        StartSwitchThreads();
+    } 
+    else if (!isSwitchAnim && wasSwitchAnim) {
+        StopSwitchThreads();
+    }
+}
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
     
@@ -1590,21 +1659,14 @@ void Wh_ModBeforeUninit() {
         UnhookWinEvent(hook);
     }
     
-    if (g_hWinEventThread) {
-        PostThreadMessageW(GetThreadId(g_hWinEventThread), WM_QUIT, 0, 0);
-    }
+    StopSwitchThreads();
 
-    while (g_workerCount.load(std::memory_order_acquire) > 0) {
+    int maxRetries = 300; 
+    while (g_workerCount.load(std::memory_order_acquire) > 0 && maxRetries-- > 0) {
         Sleep(10);
     }
-    
-    if (g_hAltTabThread) WaitForSingleObject(g_hAltTabThread, INFINITE);
-    if (g_hWinEventThread) WaitForSingleObject(g_hWinEventThread, INFINITE);
 }
 void Wh_ModUninit() {
-    if (g_hAltTabThread) { CloseHandle(g_hAltTabThread); g_hAltTabThread = NULL; }
-    if (g_hWinEventThread) { CloseHandle(g_hWinEventThread); g_hWinEventThread = NULL; }
-
     std::lock_guard<std::mutex> lock(g_StateMutex);
     for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
     g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear(); g_ProcessNameCache.clear(); g_LaunchSeen.clear();
