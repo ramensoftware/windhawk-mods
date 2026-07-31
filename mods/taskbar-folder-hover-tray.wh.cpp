@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.21
+// @version         1.22
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -319,10 +319,10 @@ using namespace winrt::Windows::UI::Xaml::Media;
 
 struct FolderEntry {
     std::wstring name;
-    std::wstring path;
-    std::wstring resolvedPath;  // ResolveFolderPath(path), computed once in LoadFolders
+    std::wstring path;          // Expanded settings path (may be shell:...)
+    std::wstring resolvedPath;  // Filesystem path; shell: filled on an STA later
     std::wstring icon;
-    bool likelyRemote = false;  // IsLikelyRemotePath(resolvedPath), set in LoadFolders
+    bool likelyRemote = false;  // IsLikelyRemotePath(resolvedPath), after resolve
 };
 
 enum class SortMode { Name, Modified };
@@ -359,6 +359,9 @@ struct Settings {
 };
 
 Settings g_settings;
+// Guards FolderEntry::resolvedPath / likelyRemote fills from STA resolve helpers
+// while UI and the scan worker may read them.
+std::mutex g_foldersMutex;
 
 std::atomic<bool> g_unloading{false};
 
@@ -377,6 +380,8 @@ HINSTANCE GetCurrentModuleHandle() {
 
 std::wstring ResolveFolderPath(const std::wstring& raw);
 bool IsLikelyRemotePath(const std::wstring& p);
+bool IsShellFolderPath(const std::wstring& path);
+void ResolvePendingFolderEntries();
 
 std::wstring Trim(std::wstring s) {
     size_t b = s.find_first_not_of(L" \t\r\n");
@@ -422,14 +427,12 @@ bool IconSettingIsFile(const std::wstring& icon) {
 }
 
 void LoadFolders(std::vector<FolderEntry>* out) {
+    // String-only load: no CoInitialize / SHParseDisplayName. Wh_ModInit can
+    // run on Explorer's main thread before the process starts executing; creating
+    // then destroying an STA there is unsafe. shell: paths stay unresolved
+    // until ResolvePendingFolderEntries on the taskbar UI STA or scan STA.
+    std::lock_guard<std::mutex> lock(g_foldersMutex);
     out->clear();
-    // ResolveFolderPath uses SHParseDisplayName, which needs a COM apartment.
-    // LoadFolders runs on the Windhawk settings callback thread, which has
-    // none. Init STA for the resolve loop; if the thread already has a
-    // different apartment (RPC_E_CHANGED_MODE), leave it alone and skip
-    // CoUninitialize.
-    bool comInited =
-        SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
     for (int i = 0; i < 64; i++) {
         auto rawPath =
             WindhawkUtils::StringSetting::make(L"folders[%d].path", i);
@@ -447,18 +450,19 @@ void LoadFolders(std::vector<FolderEntry>* out) {
         FolderEntry entry;
         entry.name = Trim(std::wstring(rawName.get()));
         entry.path = ExpandEnv(path);
-        // Resolve shell: targets here (Windhawk callback thread), not on hover.
-        std::wstring resolved = ResolveFolderPath(entry.path);
-        entry.resolvedPath = resolved.empty() ? entry.path : resolved;
-        entry.likelyRemote = IsLikelyRemotePath(entry.resolvedPath);
+        if (IsShellFolderPath(entry.path)) {
+            entry.resolvedPath.clear();
+            entry.likelyRemote = false;
+        } else {
+            // Non-shell branch of ResolveFolderPath is pure string work.
+            entry.resolvedPath = ResolveFolderPath(entry.path);
+            entry.likelyRemote = IsLikelyRemotePath(entry.resolvedPath);
+        }
         entry.icon = Trim(std::wstring(rawIcon.get()));
         if (entry.name.empty()) {
             entry.name = entry.path;
         }
         out->push_back(std::move(entry));
-    }
-    if (comInited) {
-        CoUninitialize();
     }
 }
 
@@ -1738,10 +1742,16 @@ std::wstring CacheKey(const std::wstring& path) {
     return key;
 }
 
+bool IsShellFolderPath(const std::wstring& path) {
+    return path.size() > 6 && _wcsnicmp(path.c_str(), L"shell:", 6) == 0;
+}
+
 // A `shell:` target is resolved to a filesystem path so the plain directory
-// walk below can handle every configured folder the same way.
+// walk below can handle every configured folder the same way. The shell:
+// branch needs a live COM apartment — call only from the scan STA or the
+// taskbar UI thread, never from Wh_ModInit / LoadFolders.
 std::wstring ResolveFolderPath(const std::wstring& raw) {
-    if (raw.size() > 6 && _wcsnicmp(raw.c_str(), L"shell:", 6) == 0) {
+    if (IsShellFolderPath(raw)) {
         PIDLIST_ABSOLUTE pidl = nullptr;
         if (SUCCEEDED(
                 SHParseDisplayName(raw.c_str(), nullptr, &pidl, 0, nullptr)) &&
@@ -1761,6 +1771,29 @@ std::wstring ResolveFolderPath(const std::wstring& raw) {
         path.pop_back();
     }
     return path;
+}
+
+void ResolveFolderEntry(FolderEntry& entry) {
+    if (!entry.resolvedPath.empty()) {
+        return;
+    }
+    std::wstring resolved = ResolveFolderPath(entry.path);
+    if (resolved.empty()) {
+        return;
+    }
+    entry.resolvedPath = std::move(resolved);
+    entry.likelyRemote = IsLikelyRemotePath(entry.resolvedPath);
+}
+
+// Fill FolderEntry::resolvedPath for any still-pending shell: entries. Must run
+// on an STA that already owns COM (taskbar UI or scan worker) — no CoInit here.
+void ResolvePendingFolderEntries() {
+    std::lock_guard<std::mutex> lock(g_foldersMutex);
+    for (auto& entry : g_settings.folders) {
+        if (entry.resolvedPath.empty()) {
+            ResolveFolderEntry(entry);
+        }
+    }
 }
 
 std::wstring MakeDisplayName(const std::wstring& fileName, bool isFolder) {
@@ -1993,6 +2026,10 @@ void ScanThreadMain() {
     // causes many extractions to fail with the generic document icon.
     winrt::init_apartment(winrt::apartment_type::single_threaded);
 
+    // Resolve shell: folder settings on this STA (no CoInitializeEx). Also
+    // re-run when settings reload restarts the worker.
+    ResolvePendingFolderEntries();
+
     // Capture event handles once; StopScanThread closes them only after join.
     HANDLE stopEvent = g_scanStopEvent;
     HANDLE workEvent = g_scanWorkEvent;
@@ -2034,6 +2071,9 @@ void ScanThreadMain() {
             request = std::move(g_scanQueue.front());
             g_scanQueue.erase(g_scanQueue.begin());
         }
+
+        // Settings may have reloaded with new shell: entries while we idled.
+        ResolvePendingFolderEntries();
 
         if (request.iconPixelSize <= 0) {
             request.iconPixelSize = 32;
@@ -2082,8 +2122,17 @@ void ScanThreadMain() {
             continue;
         }
 
+        std::wstring scanPath = request.path;
+        if (IsShellFolderPath(scanPath)) {
+            scanPath = ResolveFolderPath(scanPath);
+        }
+        if (scanPath.empty()) {
+            Wh_Log(L"Skipping scan; unresolved path %s", request.path.c_str());
+            continue;
+        }
+
         auto fresh = std::make_shared<FolderData>();
-        ScanFolderInto(request.path, request.iconPixelSize, fresh.get());
+        ScanFolderInto(scanPath, request.iconPixelSize, fresh.get());
         fresh->ready = true;
         fresh->scannedAtTick = GetTickCount64();
         fresh->lastUsedTick = fresh->scannedAtTick;
@@ -2095,12 +2144,12 @@ void ScanThreadMain() {
 
         {
             std::lock_guard<std::mutex> lock(g_cacheMutex);
-            const std::wstring key = CacheKey(request.path);
+            const std::wstring key = CacheKey(scanPath);
             FolderCache()[key] = fresh;
             EvictFolderCacheIfNeeded(key);
         }
 
-        Wh_Log(L"Scanned %s: %d items", request.path.c_str(),
+        Wh_Log(L"Scanned %s: %d items", scanPath.c_str(),
                (int)fresh->items.size());
     }
 
@@ -4020,11 +4069,12 @@ UIElement MakeButtonContent(const FolderEntry& entry,
     }
 
     // No icon configured: folder shell icon on the scan worker. Never call
-    // ResolveFolderPath / GetShellIconForPath here (UI thread). Path was
-    // resolved and remote-checked once in LoadFolders.
+    // GetShellIconForPath here. resolvedPath / likelyRemote are filled by
+    // ResolvePendingFolderEntries on this taskbar STA (or the scan STA).
     if (!entry.path.empty() && !entry.likelyRemote) {
         const std::wstring& iconPath =
             !entry.resolvedPath.empty() ? entry.resolvedPath : entry.path;
+        // Unresolved shell: still OK — the scan worker ResolveFolderPath's it.
         RequestButtonIcon(iconPath, extractSize, folderIndex, iconGeneration,
                           taskbarWnd, /*resourceSpec=*/false);
     }
@@ -4289,11 +4339,20 @@ RECT ComputeHoverAnchorRect(Button const& button) {
 }
 
 std::wstring FolderPathForButton(int folderIndex) {
+    std::lock_guard<std::mutex> lock(g_foldersMutex);
     if (folderIndex < 0 || folderIndex >= (int)g_settings.folders.size()) {
         return L"";
     }
     const FolderEntry& entry = g_settings.folders[folderIndex];
-    return !entry.resolvedPath.empty() ? entry.resolvedPath : entry.path;
+    if (!entry.resolvedPath.empty()) {
+        return entry.resolvedPath;
+    }
+    // Unresolved shell: not a filesystem path — OpenRootLevel / FindFirstFile
+    // must wait for ResolvePendingFolderEntries on an STA.
+    if (IsShellFolderPath(entry.path)) {
+        return L"";
+    }
+    return entry.path;
 }
 
 std::wstring FolderNameForButton(int folderIndex) {
@@ -4314,6 +4373,8 @@ void OnPointerEnteredButton(int folderIndex,
         g_taskbarWnd = taskbarWnd;
     }
 
+    // Taskbar UI STA: finish any pending shell: resolve before open/scan.
+    ResolvePendingFolderEntries();
     std::wstring path = FolderPathForButton(folderIndex);
     if (path.empty()) {
         return;
@@ -4357,6 +4418,7 @@ void OnButtonClicked(int folderIndex) {
     if (!g_settings.openFolderOnClick) {
         return;
     }
+    ResolvePendingFolderEntries();
     std::wstring path = FolderPathForButton(folderIndex);
     if (path.empty()) {
         return;
@@ -4695,6 +4757,10 @@ bool InjectHostGridsOnTaskbarThread() {
         // Register classes and create the menu owner on this (taskbar) thread so
         // DestroyWindow / UnregisterClass later stay same-thread-safe.
         EnsureMenuOwnerWindow();
+
+        // Taskbar UI thread already has an STA — resolve shell: paths here so
+        // hover/open and RequestScan see filesystem paths (no CoInitializeEx).
+        ResolvePendingFolderEntries();
 
         if (g_settings.folders.empty()) {
             Wh_Log(L"No folders configured, nothing to inject");
