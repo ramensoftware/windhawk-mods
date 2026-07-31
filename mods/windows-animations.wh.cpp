@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.1
+// @version         1.1.2
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -40,7 +40,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
     
     ![Perlin Dissolve Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/perlin_close.gif)
 
-* **🧞 Fluid Minimize & Restore:** The beloved, ultra-smooth "suck into the taskbar" Genie effect, mathematically optimized for instant responsiveness.
+* **🧞 Fluid Minimize & Restore:** The beloved, ultra-smooth "suck into the taskbar" Genie effect, mathematically optimized for instant responsiveness. Minimize animation engine derived from macos-minimize-animation by Abdullah Masood under MIT license
   
   ![Genie Minimize Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif)
 
@@ -64,7 +64,6 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Shatter block size (px):** Determines the size of the dust/shatter particles. 
   * *Performance Tip:* Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).
 * **Toggles:** Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
-* **Multi-monitor support:** Accurately targets the minimize/restore animations to the taskbar of the specific monitor where the window currently resides.
 */
 // ==/WindhawkModReadme==
 
@@ -91,7 +90,8 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
   $description: How long the shatter/disintegration close animation lasts. Clamped to 50-5000.
 - shatter_block_size: 12
   $name: Dust/Shatter block size (px)
-  $description: Base size of the disintegrated dust. 1 = true pixel dust (Heavy CPU). Clamped to 1-100.
+  $description: >- 
+    Base size of the disintegrated dust. 1 = true pixel dust (Heavy CPU). Clamped to 1-100. WARNING: Setting this to 1-4 on a 4K display may allocate a significant amount of RAM per close animation.
 - switch_animation: true
   $name: Animate window switch (Alt+Tab strictly)
   $description: Play a scale and fade-in animation ONLY when switching to a window via Alt+Tab.
@@ -100,12 +100,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
   $description: How long the switching animation lasts. Clamped to 50-1000.
 - launch_animation: false
   $name: Animate app launch
-  $description: >-
-    Play the restore animation when an application window first opens.
-- multi_monitor: false
-  $name: Multi-monitor support
-  $description: >-
-    Play the minimize/restore animations to the taskbar of the specific monitor where the window currently resides.
+  $description: Play the restore animation when an application window first opens.
 */
 // ==/WindhawkModSettings==
 
@@ -128,6 +123,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #include <uiautomation.h>
 #include <shellapi.h>
 #include <string_view>
+#include <exception>
 #ifndef DWMWA_EXTENDED_FRAME_BOUNDS
 #define DWMWA_EXTENDED_FRAME_BOUNDS 9
 #endif
@@ -210,8 +206,7 @@ std::unordered_set<HWND> g_LaunchSeen;
 std::unordered_set<HWND> g_AnimActive;
 std::mutex g_StateMutex;
 
-HWINEVENTHOOK g_hForegroundHook = NULL;
-DWORD g_hookThreadId = 0;
+std::atomic<HWINEVENTHOOK> g_hForegroundHook{NULL};
 HANDLE g_hAltTabThread = NULL;
 HANDLE g_hWinEventThread = NULL;
 
@@ -232,7 +227,6 @@ std::atomic<int> g_shatterBlockSize{12};
 std::atomic<bool> g_openAnimation{true};
 std::atomic<bool> g_closeAnimation{true};
 std::atomic<bool> g_launchAnimation{false};
-std::atomic<bool> g_multiMonitor{false};
 std::atomic<bool> g_switchAnimation{true};
 std::atomic<int> g_switchDurationMs{200};
 std::atomic<bool> g_unloading{false};
@@ -393,7 +387,6 @@ void LoadAnimSettings() {
     g_openAnimation.store(Wh_GetIntSetting(L"open_animation") != 0, std::memory_order_relaxed);
     g_closeAnimation.store(Wh_GetIntSetting(L"close_animation") != 0, std::memory_order_relaxed);
     g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
-    g_multiMonitor.store(Wh_GetIntSetting(L"multi_monitor") != 0, std::memory_order_relaxed);
     g_switchAnimation.store(Wh_GetIntSetting(L"switch_animation") != 0, std::memory_order_relaxed);
     g_switchDurationMs.store(Clamp(Wh_GetIntSetting(L"switch_duration_ms"), 50, 1000), std::memory_order_relaxed);
 }
@@ -748,22 +741,23 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND
     }
 }
 DWORD WINAPI WinEventHookThread(LPVOID lpParam) {
-    g_hookThreadId = GetCurrentThreadId();
-    g_hForegroundHook = SetWinEventHook(
+    HWINEVENTHOOK hook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND,
         EVENT_SYSTEM_FOREGROUND,
         NULL,
         ForegroundEventProc,
         GetCurrentProcessId(), 0,
         WINEVENT_OUTOFCONTEXT);
+    g_hForegroundHook.store(hook, std::memory_order_release);
+        
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
-    if (g_hForegroundHook) {
-        UnhookWinEvent(g_hForegroundHook);
-        g_hForegroundHook = NULL;
+    
+    if (HWINEVENTHOOK oldHook = g_hForegroundHook.exchange(NULL, std::memory_order_acquire)) {
+        UnhookWinEvent(oldHook);
     }
     return 0;
 }
@@ -906,17 +900,18 @@ public:
         origLeft = data->targetRect.left;
         origTop  = data->targetRect.top;
         origCenterX = (float)origLeft + W * 0.5f;
-        RECT mon;
+        
+        HMONITOR hMon = MonitorFromWindow(data->hRealWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mmi; mmi.cbSize = sizeof(mmi);
-        if (data->hMon && GetMonitorInfoW(data->hMon, &mmi)) {
-            mon = mmi.rcMonitor;
+        if (hMon && GetMonitorInfoW(hMon, &mmi)) {
         } else {
-            mon.left = 0; mon.top = 0;
-            mon.right = GetSystemMetrics(SM_CXSCREEN);
-            mon.bottom = GetSystemMetrics(SM_CYSCREEN);
+            mmi.rcMonitor.left = 0; mmi.rcMonitor.top = 0;
+            mmi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
+            mmi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
         }
-        const int monLeft = (int)mon.left, monTop = (int)mon.top;
-        const int monRight = (int)mon.right, monBottom = (int)mon.bottom;
+        
+        const int monLeft = (int)mmi.rcMonitor.left, monTop = (int)mmi.rcMonitor.top;
+        const int monRight = (int)mmi.rcMonitor.right, monBottom = (int)mmi.rcMonitor.bottom;
         const int dockX = Clamp(data->targetDockX, monLeft, monRight);
         dockXf = (float)dockX;
         dockY = (float)monBottom;
@@ -983,83 +978,94 @@ public:
         
         return true;
     }
-    void PrecalcPhysics() {
-        if (!data->isClosing) return;
+    bool PrecalcPhysics() {
+        if (!data->isClosing) return true;
+        
         float cx = W / 2.0f;
         float cy = H / 2.0f;
         float maxDist = (float)(W + H);
-        shatterBlocks.reserve((W / blockSizeSetting + 1) * (H / blockSizeSetting + 1));
-        if (closeEffect == 2) {
-            auto pseudo_hash = [](int ix, int iy) -> float {
-                unsigned int h = (ix * 73856093) ^ (iy * 19349663);
-                return (h % 10000) / 10000.0f;
-            };
-            auto smooth_noise = [&](float x, float y) -> float {
-                int ix = (int)floorf(x);
-                int iy = (int)floorf(y);
-                float fx = x - ix;
-                float fy = y - iy;
-                float ux = fx * fx * (3.0f - 2.0f * fx);
-                float uy = fy * fy * (3.0f - 2.0f * fy);
-                float a = pseudo_hash(ix, iy);
-                float b = pseudo_hash(ix + 1, iy);
-                float c = pseudo_hash(ix, iy + 1);
-                float d = pseudo_hash(ix + 1, iy + 1);
-                return a*(1.0f-ux)*(1.0f-uy) + b*ux*(1.0f-uy) + c*(1.0f-ux)*uy + d*ux*uy;
-            };
-            for (int srcY = 0; srcY < H; srcY += blockSizeSetting) {
-                for (int srcX = 0; srcX < W; srcX += blockSizeSetting) {
-                    float nx = (float)srcX / AnimConstants::PerlinNoiseScale;
-                    float ny = (float)srcY / AnimConstants::PerlinNoiseScale;
-                    float v = 0.0f;
-                    float amp = 0.5f;
-                    float tx = nx, ty = ny;
-                    for (int i = 0; i < 3; i++) {
-                        v += amp * smooth_noise(tx, ty);
-                        tx *= 2.0f; ty *= 2.0f;
-                        amp *= 0.5f;
-                    }
-                    float startTime = v * 0.9f;
-                    shatterBlocks.push_back({srcX, srcY, 0, 0, 0, 0, startTime});
-                }
-            }
-        }
-        else {
-            for (int srcY = 0; srcY < H; srcY += blockSizeSetting) {
-                for (int srcX = 0; srcX < W; srcX += blockSizeSetting) {
-                    unsigned int hash = (srcX * 73856093) ^ (srcY * 19349663);
-                    if (closeEffect == 0) {
-                        float force = ((hash >> 8) % 100) / 100.0f;
-                        float noiseX = ((hash % 2000) / 1000.0f) - 1.0f;
-                        float noiseY = (((hash >> 4) % 2000) / 1000.0f) - 1.0f;
-                        float dirX = (srcX + blockSizeSetting / 2.0f) - cx;
-                        float dirY = (srcY + blockSizeSetting / 2.0f) - cy;
-                        float dist = sqrtf(dirX * dirX + dirY * dirY);
-                        if (dist > 0.1f) { dirX /= dist; dirY /= dist; }
-                        shatterBlocks.push_back({srcX, srcY, dirX, dirY, force, noiseX, noiseY});
-                    } else {
-                        float distFromBottomRight = (float)((W - srcX) + (H - srcY));
-                        float baseStartTime = (distFromBottomRight / maxDist) * AnimConstants::ThanosBaseStartMax;
-                        float waveNoise = (((hash % 100) / 100.0f) - 0.5f) * AnimConstants::ThanosWaveNoiseMult;
-                        float startTime = baseStartTime + waveNoise;
-                        if (startTime < 0.0f) startTime = 0.0f;
-                        if (startTime > 0.65f) startTime = 0.65f;
-                        float noiseX = (((hash >> 4) % 200) / 100.0f) - 1.0f;
-                        float noiseY = (((hash >> 8) % 200) / 100.0f) - 1.0f;
-                        float baseWindX = W * 0.5f;
-                        float baseWindY = H * 0.2f;
-                        float swirl = ((srcY / (float)H) - 0.5f) * 2.0f;
-                        baseWindY += swirl * (H * 0.3f);
-                        float windX = baseWindX + noiseX * (W * 0.2f);
-                        float windY = baseWindY + noiseY * (H * 0.3f);
-                        float curveX = noiseY * (W * 0.4f);
-                        float curveY = -noiseX * (H * 0.4f);
-                        shatterBlocks.push_back({srcX, srcY, windX, windY, curveX, curveY, startTime});
+        
+        try {
+            shatterBlocks.reserve((W / blockSizeSetting + 1) * (H / blockSizeSetting + 1));
+            
+            if (closeEffect == 2) {
+                auto pseudo_hash = [](int ix, int iy) -> float {
+                    uint32_t h = ((uint32_t)ix * 73856093u) ^ ((uint32_t)iy * 19349663u);
+                    return (h % 10000) / 10000.0f;
+                };
+                auto smooth_noise = [&](float x, float y) -> float {
+                    int ix = (int)floorf(x);
+                    int iy = (int)floorf(y);
+                    float fx = x - ix;
+                    float fy = y - iy;
+                    float ux = fx * fx * (3.0f - 2.0f * fx);
+                    float uy = fy * fy * (3.0f - 2.0f * fy);
+                    float a = pseudo_hash(ix, iy);
+                    float b = pseudo_hash(ix + 1, iy);
+                    float c = pseudo_hash(ix, iy + 1);
+                    float d = pseudo_hash(ix + 1, iy + 1);
+                    return a*(1.0f-ux)*(1.0f-uy) + b*ux*(1.0f-uy) + c*(1.0f-ux)*uy + d*ux*uy;
+                };
+                for (int srcY = 0; srcY < H; srcY += blockSizeSetting) {
+                    for (int srcX = 0; srcX < W; srcX += blockSizeSetting) {
+                        float nx = (float)srcX / AnimConstants::PerlinNoiseScale;
+                        float ny = (float)srcY / AnimConstants::PerlinNoiseScale;
+                        float v = 0.0f;
+                        float amp = 0.5f;
+                        float tx = nx, ty = ny;
+                        for (int i = 0; i < 3; i++) {
+                            v += amp * smooth_noise(tx, ty);
+                            tx *= 2.0f; ty *= 2.0f;
+                            amp *= 0.5f;
+                        }
+                        float startTime = v * 0.9f;
+                        shatterBlocks.push_back({srcX, srcY, 0, 0, 0, 0, startTime});
                     }
                 }
             }
+            else {
+                for (int srcY = 0; srcY < H; srcY += blockSizeSetting) {
+                    for (int srcX = 0; srcX < W; srcX += blockSizeSetting) {
+                        uint32_t hash = ((uint32_t)srcX * 73856093u) ^ ((uint32_t)srcY * 19349663u);
+                        if (closeEffect == 0) {
+                            float force = ((hash >> 8) % 100) / 100.0f;
+                            float noiseX = ((hash % 2000) / 1000.0f) - 1.0f;
+                            float noiseY = (((hash >> 4) % 2000) / 1000.0f) - 1.0f;
+                            float dirX = (srcX + blockSizeSetting / 2.0f) - cx;
+                            float dirY = (srcY + blockSizeSetting / 2.0f) - cy;
+                            float dist = sqrtf(dirX * dirX + dirY * dirY);
+                            if (dist > 0.1f) { dirX /= dist; dirY /= dist; }
+                            shatterBlocks.push_back({srcX, srcY, dirX, dirY, force, noiseX, noiseY});
+                        } else {
+                            float distFromBottomRight = (float)((W - srcX) + (H - srcY));
+                            float baseStartTime = (distFromBottomRight / maxDist) * AnimConstants::ThanosBaseStartMax;
+                            float waveNoise = (((hash % 100) / 100.0f) - 0.5f) * AnimConstants::ThanosWaveNoiseMult;
+                            float startTime = baseStartTime + waveNoise;
+                            if (startTime < 0.0f) startTime = 0.0f;
+                            if (startTime > 0.65f) startTime = 0.65f;
+                            float noiseX = (((hash >> 4) % 200) / 100.0f) - 1.0f;
+                            float noiseY = (((hash >> 8) % 200) / 100.0f) - 1.0f;
+                            float baseWindX = W * 0.5f;
+                            float baseWindY = H * 0.2f;
+                            float swirl = ((srcY / (float)H) - 0.5f) * 2.0f;
+                            baseWindY += swirl * (H * 0.3f);
+                            float windX = baseWindX + noiseX * (W * 0.2f);
+                            float windY = baseWindY + noiseY * (H * 0.3f);
+                            float curveX = noiseY * (W * 0.4f);
+                            float curveY = -noiseX * (H * 0.4f);
+                            shatterBlocks.push_back({srcX, srcY, windX, windY, curveX, curveY, startTime});
+                        }
+                    }
+                }
+            }
+        } catch (const std::exception&) {
+            shatterBlocks.clear();
+            return false;
         }
+        
+        return true;
     }
+    
     void RunLoop() {
         LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
         QueryPerformanceFrequency(&qpcFreq);
@@ -1157,8 +1163,9 @@ DWORD WINAPI MainAnimThread(LPVOID lpParam) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     AnimationEngine engine((WindowAnimData*)lpParam);
     if (engine.Initialize()) {
-        engine.PrecalcPhysics();
-        engine.RunLoop();
+        if (engine.PrecalcPhysics()) {
+            engine.RunLoop();
+        }
     }
     engine.Teardown();
     return 0;
@@ -1207,12 +1214,13 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         }
         return false;
     }
-    bool multiMon = g_multiMonitor.load(std::memory_order_relaxed);
-    HMONITOR hMon = multiMon ? MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi; mi.cbSize = sizeof(mi);
     if (!GetMonitorInfoW(hMon, &mi)) {
         mi.rcMonitor.left = 0; mi.rcMonitor.top = 0; mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN); mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
     }
+    
     int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
     DWORD alignVal = 1, dataSize = sizeof(alignVal);
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarAl", RRF_RT_REG_DWORD, NULL, &alignVal, &dataSize);
@@ -1578,16 +1586,20 @@ void Wh_ModSettingsChanged() { LoadAnimSettings(); }
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
     
-    if (g_hForegroundHook) {
-        UnhookWinEvent(g_hForegroundHook);
-        g_hForegroundHook = NULL;
+    if (HWINEVENTHOOK hook = g_hForegroundHook.exchange(NULL, std::memory_order_acquire)) {
+        UnhookWinEvent(hook);
     }
     
-    if (g_hookThreadId) PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-    for (int i = 0; i < 300 && g_workerCount.load(std::memory_order_acquire) > 0; ++i) Sleep(10);
+    if (g_hWinEventThread) {
+        PostThreadMessageW(GetThreadId(g_hWinEventThread), WM_QUIT, 0, 0);
+    }
+
+    while (g_workerCount.load(std::memory_order_acquire) > 0) {
+        Sleep(10);
+    }
     
-    if (g_hAltTabThread) WaitForSingleObject(g_hAltTabThread, 2000);
-    if (g_hWinEventThread) WaitForSingleObject(g_hWinEventThread, 2000);
+    if (g_hAltTabThread) WaitForSingleObject(g_hAltTabThread, INFINITE);
+    if (g_hWinEventThread) WaitForSingleObject(g_hWinEventThread, INFINITE);
 }
 void Wh_ModUninit() {
     if (g_hAltTabThread) { CloseHandle(g_hAltTabThread); g_hAltTabThread = NULL; }
