@@ -121,6 +121,7 @@ struct BlobEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> anchor;
     winrt::event_token sizeToken{};
     winrt::event_token unloadToken{};
+    winrt::event_token themeToken{};
     bool unloadAttached = false;
 
     // Whether the blob's Translation is glued to its button's offset chain,
@@ -316,8 +317,22 @@ inline winrt::Windows::UI::Color ApplyOpacity(winrt::Windows::UI::Color c, doubl
     return c;
 }
 
-std::vector<winrt::Windows::UI::Color> GetBlobShapeColors(const Settings& localSettings) {
-    bool isLight = (winrt::Windows::UI::Xaml::Application::Current().RequestedTheme() == winrt::Windows::UI::Xaml::ApplicationTheme::Light);
+// The taskbar switches themes at runtime via the element tree's ActualTheme;
+// Application::Current().RequestedTheme() is fixed at startup, so it only
+// serves as the fallback when the element reports Default.
+bool IsElementLightMode(winrt::Windows::UI::Xaml::FrameworkElement const& element) {
+    if (!element) return false;
+    try {
+        auto theme = element.ActualTheme();
+        if (theme == winrt::Windows::UI::Xaml::ElementTheme::Light) return true;
+        if (theme == winrt::Windows::UI::Xaml::ElementTheme::Dark) return false;
+        return winrt::Windows::UI::Xaml::Application::Current().RequestedTheme() == winrt::Windows::UI::Xaml::ApplicationTheme::Light;
+    } catch (...) {
+        return false;
+    }
+}
+
+std::vector<winrt::Windows::UI::Color> GetBlobShapeColors(const Settings& localSettings, bool isLight) {
     double opacity = isLight ? localSettings.BgOpacityLight : localSettings.BgOpacityDark;
 
     auto c = isLight ? localSettings.ParsedLightColor : localSettings.ParsedDarkColor;
@@ -612,10 +627,19 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // flag is used instead of a local Opacity because the
     // RunningIndicatorStates transition storyboards hold ANIMATED values on
     // BackgroundElement, which outrank local values in XAML's precedence.
+    // The RunningIndicator line is part of the button and renders above the
+    // blob (which sits below the repeater in z-order), so it is suppressed
+    // together with the background while the blob is shown.
+    auto runningIndicator = FindChildByName(iconPanel, L"RunningIndicator");
     auto setNativeHidden = [&](bool hidden) {
         if (bg) {
             try {
                 ElementCompositionPreview::GetElementVisual(bg).IsVisible(!hidden);
+            } catch (...) {}
+        }
+        if (runningIndicator) {
+            try {
+                ElementCompositionPreview::GetElementVisual(runningIndicator).IsVisible(!hidden);
             } catch (...) {}
         }
     };
@@ -636,6 +660,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             auto e = weakEntry.lock();
             if (!e) return;
             if (auto blob = e->blobShape.get()) {
+                try { blob.ActualThemeChanged(e->themeToken); } catch (...) {}
                 try {
                     ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
                 } catch (...) {}
@@ -655,6 +680,8 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                     auto iconPanel = FindChildByName(btn, L"IconPanel");
                     auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
                     if (bg) ElementCompositionPreview::GetElementVisual(bg).IsVisible(true);
+                    auto indicator = iconPanel ? FindChildByName(iconPanel, L"RunningIndicator") : nullptr;
+                    if (indicator) ElementCompositionPreview::GetElementVisual(indicator).IsVisible(true);
                 } catch (...) {}
                 if (auto anchor = e->anchor.get()) {
                     try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
@@ -709,6 +736,22 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         entry->boundAdjX = -1e9f;
         entry->boundYBase = -1e9f;
         entry->geoW = -1.0;
+
+        // Repaint on theme switches: without this, untouched buttons would
+        // keep the previous theme's fill until their next state change.
+        std::weak_ptr<BlobEntry> weakThemeEntry = entry;
+        entry->themeToken = blobShape.ActualThemeChanged([weakThemeEntry](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto e = weakThemeEntry.lock();
+            if (!e) return;
+            auto btn = e->button.get();
+            if (!btn) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try {
+                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+            } catch (...) {}
+        });
     } else {
         // If the button was re-hosted under a different taskbar's grid
         // (containers recycled across monitors), move the blob with it and
@@ -759,7 +802,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // Fill color — compared against the last applied color list so gradient
     // configurations don't rebuild a brush (and its stops) on every
     // hover/press state change.
-    std::vector<winrt::Windows::UI::Color> newColors = GetBlobShapeColors(localSettings);
+    std::vector<winrt::Windows::UI::Color> newColors = GetBlobShapeColors(localSettings, IsElementLightMode(button));
     bool sameColor = blobShape.Fill() && newColors.size() == entry->lastColors.size();
     if (sameColor) {
         for (size_t i = 0; i < newColors.size(); i++) {
@@ -958,6 +1001,7 @@ void Wh_ModBeforeUninit() {
                     try { anchor.SizeChanged(entry->sizeToken); } catch (...) {}
                 }
                 if (blobShape) {
+                    try { blobShape.ActualThemeChanged(entry->themeToken); } catch (...) {}
                     auto vis = ElementCompositionPreview::GetElementVisual(blobShape);
                     vis.Properties().StopAnimation(L"Translation");
                     if (auto parent = VisualTreeHelper::GetParent(blobShape)) {
@@ -978,6 +1022,10 @@ void Wh_ModBeforeUninit() {
                     auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
                     if (bg) {
                         try { ElementCompositionPreview::GetElementVisual(bg).IsVisible(true); } catch (...) {}
+                    }
+                    auto indicator = iconPanel ? FindChildByName(iconPanel, L"RunningIndicator") : nullptr;
+                    if (indicator) {
+                        try { ElementCompositionPreview::GetElementVisual(indicator).IsVisible(true); } catch (...) {}
                     }
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
