@@ -93,7 +93,17 @@ jobs:
               # x86/x86-64 plus arm64, without the x86-64 build being skipped for a
               # mod whose targets are all common system processes.
               cli="$windhawk_path\windhawk-cli.exe"
-              MSYS_NO_PATHCONV=1 "$cli" \
-                mod install --disabled --arch all --file "$ALL_CHANGED_AND_MODIFIED_FILES"
+              result="${{ runner.temp }}/compile_result.json"
+              MSYS_NO_PATHCONV=1 "$cli" --json \
+                mod install --disabled --arch all --file "$ALL_CHANGED_AND_MODIFIED_FILES" \
+                > "$result"
+
+              # The CLI exits with 0 for a compile that only produced warnings, and
+              # omits the "warnings" key when there were none. The warning text
+              # itself is printed to stderr above.
+              if jq -e '.data.warnings' "$result" > /dev/null; then
+                echo "::error::The mod compiled with warnings"
+                exit 1
+              fi
             fi
           fi
