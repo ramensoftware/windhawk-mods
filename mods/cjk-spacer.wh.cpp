@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.15
+// @version         0.1.16
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -23,6 +23,12 @@
 
 Adds a normal ASCII space at a direct boundary between a CJK character and a
 letter or digit in UI text hosted by `explorer.exe`.
+
+On Windows 11, the primary Explorer and desktop context menus are modern XAML
+menus. The `modernUiText` setting is disabled by default because XAML
+Diagnostics permits only one consumer per connection; enable it if you want
+those menus and pointer tooltips processed. `classicMenus` still covers the
+Win32 menu opened through "Show more options".
 
 Examples:
 
@@ -50,7 +56,9 @@ keyboard shortcut text are also preserved.
 - Classic Win32 popup menus are rewritten through public `HMENU` APIs. This
   happens only while `TrackPopupMenu` is active, including items added or
   changed while the menu is open. It covers File Explorer, desktop, taskbar,
-  tray, and jump-list context menus hosted by `explorer.exe`.
+  and jump-list context menus that Explorer itself hosts. Context menus shown
+  by third-party notification-area icon processes are outside the injected
+  `explorer.exe` process and aren't covered.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
   both text measurement and drawing without touching unrelated GDI text.
@@ -100,7 +108,7 @@ Rewritten strings are recorded and restored when the popup closes.
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: false
   $name: Windows 11 context menus and tooltips
-  $description: Process text elements in Explorer XAML context menus and pointer tooltips. Uses exclusive XAML Diagnostics connections and can conflict with Windows 11 Taskbar Styler, Windows 11 File Explorer Styler, or other diagnostics-based tools.
+  $description: Process text elements in Explorer XAML context menus and pointer tooltips (disabled by default; enable for the primary Windows 11 menu). Uses exclusive XAML Diagnostics connections and can conflict with Windows 11 Taskbar Styler, Windows 11 File Explorer Styler, or other diagnostics-based tools.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -111,6 +119,8 @@ Rewritten strings are recorded and restored when the popup closes.
 // ==/WindhawkModSettings==
 
 #include <xamlom.h>
+
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cstdint>
@@ -426,6 +436,8 @@ struct RewrittenMenuItem {
     std::wstring spaced;
 };
 
+constexpr UINT kUnknownMenuItemIndex = static_cast<UINT>(-1);
+
 std::mutex g_rewrittenMenuItemsMutex;
 std::vector<RewrittenMenuItem> g_rewrittenMenuItems;
 thread_local unsigned int g_classicPopupMenuDepth = 0;
@@ -504,10 +516,11 @@ BOOL WINAPI InsertMenuWHook(HMENU menu,
                         menu, static_cast<UINT>(itemId),
                         false);
                 }
-                if (index >= 0) {
-                    RememberRewrittenMenuItem(
-                        menu, static_cast<UINT>(index), newItem, spaced);
-                }
+                RememberRewrittenMenuItem(
+                    menu,
+                    index >= 0 ? static_cast<UINT>(index)
+                               : kUnknownMenuItemIndex,
+                    newItem, spaced);
             }
             return result;
         }
@@ -557,9 +570,12 @@ BOOL WINAPI ModifyMenuWHook(HMENU menu,
                 menu, position, (flags & MF_BYPOSITION) != 0);
             const BOOL result = g_originalModifyMenuW(
                 menu, position, flags, itemId, spaced.c_str());
-            if (result && index >= 0) {
+            if (result) {
                 RememberRewrittenMenuItem(
-                    menu, static_cast<UINT>(index), newItem, spaced);
+                    menu,
+                    index >= 0 ? static_cast<UINT>(index)
+                               : kUnknownMenuItemIndex,
+                    newItem, spaced);
             }
             return result;
         }
@@ -636,7 +652,12 @@ void RememberRewrittenMenuItem(HMENU menu,
                                std::wstring spaced) {
     std::lock_guard<std::mutex> guard(g_rewrittenMenuItemsMutex);
 
-    if (g_rewrittenMenuItems.size() >= 256) {
+    constexpr size_t kRewrittenMenuCleanupThreshold = 256;
+    if (g_rewrittenMenuItems.size() >=
+        kRewrittenMenuCleanupThreshold) {
+        // Popup teardown normally clears this vector. If a menu is destroyed
+        // before teardown, remove only entries that can no longer be restored;
+        // never evict a live entry just to enforce an arbitrary cap.
         std::erase_if(g_rewrittenMenuItems, [](const auto& item) {
             return !IsMenu(item.menu);
         });
@@ -675,10 +696,13 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
             continue;
         }
 
-        int index = static_cast<int>(iterator->index);
+        int index = iterator->index == kUnknownMenuItemIndex
+                        ? -1
+                        : static_cast<int>(iterator->index);
         std::wstring current;
-        if (!ReadMenuItemText(
-                iterator->menu, iterator->index, &current) ||
+        if (index < 0 ||
+            !ReadMenuItemText(
+                iterator->menu, static_cast<UINT>(index), &current) ||
             current != iterator->spaced) {
             index = FindMenuItemIndexByText(
                 iterator->menu, iterator->spaced);
@@ -729,11 +753,12 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
                         : byPosition
                               ? GetMenuItemCount(menu) - 1
                               : FindMenuItemIndexByText(menu, spaced);
-                if (insertedIndex >= 0) {
-                    RememberRewrittenMenuItem(
-                        menu, static_cast<UINT>(insertedIndex),
-                        itemInfo->dwTypeData, spaced);
-                }
+                RememberRewrittenMenuItem(
+                    menu,
+                    insertedIndex >= 0
+                        ? static_cast<UINT>(insertedIndex)
+                        : kUnknownMenuItemIndex,
+                    itemInfo->dwTypeData, spaced);
             }
             return result;
         }
@@ -760,9 +785,11 @@ BOOL WINAPI SetMenuItemInfoWHook(HMENU menu,
             copy.dwTypeData = const_cast<wchar_t*>(spaced.c_str());
             const BOOL result = g_originalSetMenuItemInfoW(
                 menu, item, byPosition, &copy);
-            if (result && index >= 0) {
+            if (result) {
                 RememberRewrittenMenuItem(
-                    menu, static_cast<UINT>(index),
+                    menu,
+                    index >= 0 ? static_cast<UINT>(index)
+                               : kUnknownMenuItemIndex,
                     itemInfo->dwTypeData, spaced);
             }
             return result;
@@ -892,8 +919,6 @@ GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
-HMODULE g_loadedUxThemeModule;
-
 std::shared_mutex g_classicTooltipThemesMutex;
 std::unordered_set<HTHEME> g_classicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
@@ -1011,6 +1036,8 @@ HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
     HTHEME theme = g_originalOpenThemeData(window, classList);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme);
+    } else {
+        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
@@ -1023,6 +1050,8 @@ HTHEME WINAPI OpenThemeDataExHook(HWND window,
         g_originalOpenThemeDataEx(window, classList, flags);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme);
+    } else {
+        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
@@ -1035,6 +1064,8 @@ HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
         g_originalOpenThemeDataForDpi(window, classList, dpi);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme);
+    } else {
+        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
@@ -1256,7 +1287,7 @@ struct TooltipContentAccess {
 class ModernTextStateBase {
 public:
     virtual ~ModernTextStateBase() = default;
-    virtual void Apply() = 0;
+    virtual bool Apply() = 0;
     virtual void Restore() = 0;
 };
 
@@ -1266,40 +1297,38 @@ public:
     explicit ModernTextState(const Element& element)
         : m_element(winrt::make_weak(element)) {}
 
-    void Apply() override {
-        if (!g_modernUiText.load(std::memory_order_relaxed)) {
-            return;
-        }
-
+    bool Apply() override {
         try {
             auto element = m_element.get();
             if (!element) {
-                return;
+                return false;
             }
 
             std::wstring current;
             if (!SourceAccess::Read(element, &current)) {
-                return;
+                return false;
             }
 
             if (!ContainsCjkCodePoint(current)) {
-                return;
+                return false;
             }
 
             std::wstring spaced = AddCjkSpacing(current, false);
             if (spaced.size() == current.size()) {
-                return;
+                return false;
             }
 
             m_originalText = std::move(current);
             m_spacedText = std::move(spaced);
-            m_modified = true;
             SourceAccess::Write(element, m_spacedText);
+            m_modified = true;
             Wh_Log(L"Applied CJK spacing (modern XAML %s)",
                    SourceAccess::Name());
+            return true;
         } catch (const winrt::hresult_error& error) {
             Wh_Log(L"Couldn't update modern XAML source: 0x%08X",
                    error.code());
+            return false;
         }
     }
 
@@ -1363,7 +1392,7 @@ bool IsModernTooltipSourceType(std::wstring_view type) {
 
 using ModernTextStateMap =
     std::unordered_map<ModernElementKey,
-                       std::shared_ptr<ModernTextStateBase>,
+                       std::unique_ptr<ModernTextStateBase>,
                        ModernElementKeyHash>;
 
 struct ModernThreadState {
@@ -1431,6 +1460,7 @@ void RegisterModernTextStateThread() {
 
     std::lock_guard<std::mutex> guard(
         g_modernTextStateThreadsMutex);
+    PruneModernTextStateThreadsLocked();
     g_modernTextStateThreads[GetCurrentThreadId()] = creationTime;
 }
 
@@ -1564,19 +1594,23 @@ private:
             return false;
         }
 
-        auto state =
-            std::make_shared<ModernTextState<Element, SourceAccess>>(
-                element);
         const ModernElementKey key{this, handle};
         auto& threadState = *g_modernTextStatesForThread;
         if (threadState.states.contains(key)) {
             RemoveModernTextState(threadState, key);
         }
+
+        auto state =
+            std::make_unique<ModernTextState<Element, SourceAccess>>(
+                element);
+        if (!state->Apply()) {
+            return false;
+        }
+
         if (threadState.states.empty()) {
             RegisterModernTextStateThread();
         }
-        threadState.states.emplace(key, state);
-        state->Apply();
+        threadState.states.emplace(key, std::move(state));
         return true;
     }
 
@@ -2152,13 +2186,8 @@ HWND FindWindowForThread(DWORD threadId) {
         threadId,
         [](HWND window, LPARAM parameter) -> BOOL {
             auto* result = reinterpret_cast<HWND*>(parameter);
-            DWORD processId;
-            GetWindowThreadProcessId(window, &processId);
-            if (processId == GetCurrentProcessId()) {
-                *result = window;
-                return FALSE;
-            }
-            return TRUE;
+            *result = window;
+            return FALSE;
         },
         reinterpret_cast<LPARAM>(&result));
     return result;
@@ -2228,9 +2257,7 @@ bool InstallHook(Function target,
                  Function hook,
                  Function* original,
                  const wchar_t* name) {
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(target),
-                            reinterpret_cast<void*>(hook),
-                            reinterpret_cast<void**>(original))) {
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
         Wh_Log(L"Couldn't hook %s", name);
         return false;
     }
@@ -2241,12 +2268,7 @@ bool InstallHook(Function target,
 bool HookClassicTooltipThemeDrawing() {
     HMODULE themeModule = GetModuleHandleW(L"uxtheme.dll");
     if (!themeModule) {
-        themeModule = LoadLibraryExW(
-            L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        g_loadedUxThemeModule = themeModule;
-    }
-    if (!themeModule) {
-        Wh_Log(L"Couldn't load uxtheme.dll");
+        Wh_Log(L"Couldn't find loaded uxtheme.dll");
         return false;
     }
 
@@ -2337,10 +2359,6 @@ bool HookClassicTooltipThemeDrawing() {
         Wh_Log(L"Couldn't find DrawThemeTextEx");
     }
 
-    if (!hooked && g_loadedUxThemeModule) {
-        FreeLibrary(g_loadedUxThemeModule);
-        g_loadedUxThemeModule = nullptr;
-    }
     return hooked;
 }
 
@@ -2353,12 +2371,12 @@ void LoadSettings() {
     g_modernUiText.store(Wh_GetIntSetting(L"modernUiText") != 0,
                          std::memory_order_relaxed);
 
-    PCWSTR characterMode = Wh_GetStringSetting(L"characterMode");
+    auto characterMode =
+        WindhawkUtils::StringSetting::make(L"characterMode");
     const bool unicodeMode =
         _wcsicmp(characterMode, L"ascii") != 0;
     g_unicodeLettersAndDigits.store(unicodeMode,
                                     std::memory_order_relaxed);
-    Wh_FreeStringSetting(characterMode);
 }
 
 }  // namespace
@@ -2434,7 +2452,9 @@ BOOL Wh_ModInit() {
            g_classicMenus.load(), g_classicTooltips.load(),
            g_modernUiText.load(),
            g_unicodeLettersAndDigits.load());
-    return installedAnyHook ? TRUE : FALSE;
+    // The modern path can still initialize against XAML modules that are
+    // already loaded even if the late-load notification hook is unavailable.
+    return installedAnyHook || modernUiTextEnabled ? TRUE : FALSE;
 }
 
 void Wh_ModAfterInit() {
@@ -2450,10 +2470,6 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
     ClearTrackedClassicTooltipThemes();
-    if (g_loadedUxThemeModule) {
-        FreeLibrary(g_loadedUxThemeModule);
-        g_loadedUxThemeModule = nullptr;
-    }
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         UninitializeModernUi();
     }
