@@ -155,6 +155,9 @@ require Windows 11 for tabbed Explorer support.
 - doubleClickCustomHotkey: ""
   $name: Double Click Custom Hotkey
   $description: "Format: modifier keys + main key. Modifiers: Ctrl, Shift, Alt, Win (can combine multiple, e.g. Ctrl+Shift+N, Win+Shift+S). Main key: letter, F1-F24, Tab, Enter, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Insert"
+- doubleClickContextMenuMatch: ""
+  $name: Double Click Context Menu Match
+  $description: "When Double Click Action is 'Open Context Menu Item', use this match text instead of the global 'Context Menu Match'. Leave empty to use the global setting."
 - tripleClickAction: none
   $name: Triple Click Action
   $description: What to do when triple left clicking empty space. When enabled, double-click is delayed ~500ms; if a third click arrives, only the triple-click action fires (double-click is cancelled).
@@ -179,6 +182,9 @@ require Windows 11 for tabbed Explorer support.
 - tripleClickCustomHotkey: ""
   $name: Triple Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+W, Win+D, Ctrl+Shift+Esc"
+- tripleClickContextMenuMatch: ""
+  $name: Triple Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - middleClickAction: none
   $name: Middle Click Action
   $description: What to do when single middle clicking empty space. If only single click is set, fires instantly. If both single and double are set, single is delayed ~500ms to detect double clicks.
@@ -203,6 +209,9 @@ require Windows 11 for tabbed Explorer support.
 - middleClickCustomHotkey: ""
   $name: Middle Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+V, Ctrl+T, Win+D, Ctrl+Shift+Esc"
+- middleClickContextMenuMatch: ""
+  $name: Middle Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - doubleMiddleClickAction: none
   $name: Double Middle Click Action
   $description: What to do when double middle clicking empty space. Two middle clicks within ~500ms count as a double click. If only double is set, single middle clicks are ignored.
@@ -227,6 +236,9 @@ require Windows 11 for tabbed Explorer support.
 - doubleMiddleClickCustomHotkey: ""
   $name: Double Middle Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+W, Alt+Tab, Win+E, Alt+Shift+F4"
+- doubleMiddleClickContextMenuMatch: ""
+  $name: Double Middle Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - ctrlClickAction: none
   $name: Ctrl+Click Action
   $description: What to do when Ctrl+left clicking empty space. Hold Ctrl and single-click on empty area.
@@ -251,6 +263,9 @@ require Windows 11 for tabbed Explorer support.
 - ctrlClickCustomHotkey: ""
   $name: Ctrl+Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Ex: Ctrl+N, Ctrl+Shift+E"
+- ctrlClickContextMenuMatch: ""
+  $name: Ctrl+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - altClickAction: none
   $name: Alt+Click Action
   $description: What to do when Alt+left clicking empty space. Hold Alt and single-click on empty area.
@@ -275,6 +290,9 @@ require Windows 11 for tabbed Explorer support.
 - altClickCustomHotkey: ""
   $name: Alt+Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Ex: Alt+F4, Alt+Tab"
+- altClickContextMenuMatch: ""
+  $name: Alt+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - shiftClickAction: none
   $name: Shift+Click Action
   $description: What to do when Shift+left clicking empty space. Hold Shift and single-click on empty area.
@@ -299,6 +317,9 @@ require Windows 11 for tabbed Explorer support.
 - shiftClickCustomHotkey: ""
   $name: Shift+Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Ex: Shift+F10, Ctrl+Shift+N"
+- shiftClickContextMenuMatch: ""
+  $name: Shift+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - contextMenuMatch: ""
   $name: Context Menu Match
   $description: "Used by the 'Open Context Menu Item' action. Text to match (case-insensitive substring) against the folder background right-click menu entries' display text or verb. Ex: VS Code, Terminal, Git Bash, PowerShell, Cursor. Any program that registered an 'Open in ...' entry works regardless of install path."
@@ -366,6 +387,13 @@ static StringSetting g_doubleMiddleClickCustomCombo;
 static StringSetting g_ctrlClickCustomCombo;
 static StringSetting g_altClickCustomCombo;
 static StringSetting g_shiftClickCustomCombo;
+static StringSetting g_doubleClickCtxMatch;
+static StringSetting g_tripleClickCtxMatch;
+static StringSetting g_middleClickCtxMatch;
+static StringSetting g_doubleMiddleClickCtxMatch;
+static StringSetting g_ctrlClickCtxMatch;
+static StringSetting g_altClickCtxMatch;
+static StringSetting g_shiftClickCtxMatch;
 static StringSetting g_contextMenuMatch;
 
 static void LoadSettings() {
@@ -384,6 +412,13 @@ static void LoadSettings() {
     g_ctrlClickCustomCombo.Load(L"ctrlClickCustomHotkey");
     g_altClickCustomCombo.Load(L"altClickCustomHotkey");
     g_shiftClickCustomCombo.Load(L"shiftClickCustomHotkey");
+    g_doubleClickCtxMatch.Load(L"doubleClickContextMenuMatch");
+    g_tripleClickCtxMatch.Load(L"tripleClickContextMenuMatch");
+    g_middleClickCtxMatch.Load(L"middleClickContextMenuMatch");
+    g_doubleMiddleClickCtxMatch.Load(L"doubleMiddleClickContextMenuMatch");
+    g_ctrlClickCtxMatch.Load(L"ctrlClickContextMenuMatch");
+    g_altClickCtxMatch.Load(L"altClickContextMenuMatch");
+    g_shiftClickCtxMatch.Load(L"shiftClickContextMenuMatch");
     g_contextMenuMatch.Load(L"contextMenuMatch");
 }
 
@@ -426,6 +461,14 @@ static SettingsSnapshot CopySettings() {
 }
 
 static void SendParsedHotkey(const std::wstring& combo);
+
+// Helper: set per-trigger contextMenuMatch before dispatching "openWithContextMenu".
+// Falls back to global setting if per-trigger is empty.
+static void SetCtxMenuMatch(PCWSTR action, StringSetting& perTriggerMatch) {
+    if (action && wcscmp(action, L"openWithContextMenu") == 0) {
+        g_pendingCtxMenuMatch = perTriggerMatch.Get() ? perTriggerMatch.Get() : L"";
+    }
+}
 
 // Helper: execute custom hotkey if the selected action is "customHotkey"
 static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
@@ -795,6 +838,10 @@ static thread_local UINT_PTR g_pendingDblClickTimerId = 0;
 static thread_local std::wstring g_pendingDblClickAction;
 static thread_local std::wstring g_pendingDblClickCombo;
 
+// Bridge: per-trigger contextMenuMatch set by subclass proc before PostDoAction,
+// consumed by OpenWithContextMenu. Cleared after use.
+static thread_local std::wstring g_pendingCtxMenuMatch;
+
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
 // wParam = (WPARAM)strdup(actionString), lParam = (LPARAM)hWnd
@@ -1010,8 +1057,11 @@ public:
     }
 
     void OpenWithContextMenu() {
-        std::wstring match;
-        {
+        // Prefer per-trigger match (set by subclass proc before dispatching),
+        // fall back to global Context Menu Match setting.
+        std::wstring match = std::move(g_pendingCtxMenuMatch);
+        g_pendingCtxMenuMatch.clear();
+        if (match.empty()) {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             PCWSTR s = g_contextMenuMatch.Get();
             if (s) match = s;
@@ -1189,6 +1239,8 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
+            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
                 PostDoAction(hWnd, s.tripleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
@@ -1200,12 +1252,15 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (ctrlOn && ctrlDown) {
             if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
+                SetCtxMenuMatch(s.ctrlClick.c_str(), g_ctrlClickCtxMatch);
                 PostDoAction(hWnd, s.ctrlClick.c_str());
         } else if (altOn && altDown) {
             if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
+                SetCtxMenuMatch(s.altClick.c_str(), g_altClickCtxMatch);
                 PostDoAction(hWnd, s.altClick.c_str());
         } else if (shiftOn && shiftDown) {
             if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
+                SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
                 PostDoAction(hWnd, s.shiftClick.c_str());
         }
 
@@ -1236,6 +1291,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         } else {
             // Instant double-click (no triple-click configured)
             if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
+                SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
                 PostDoAction(hWnd, s.doubleClick.c_str());
         }
 
@@ -1256,6 +1312,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (singleOn && !doubleOn) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
+                SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
                 PostDoAction(hWnd, s.middleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
@@ -1265,6 +1322,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (isDouble) {
             CancelPendingMidClick();
             if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
+                SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
                 PostDoAction(hWnd, s.doubleMiddleClick.c_str());
         } else {
             CancelPendingMidClick();
@@ -1350,6 +1408,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (singleOn && !doubleOn) {
                         if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
+                            SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
                             PostDoAction(hWnd, s.middleClick.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
@@ -1357,9 +1416,11 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                     bool isDouble = (g_midClickTimerId != 0 && g_midClickPendingHwnd == hWnd);
 
                     if (isDouble) {
-                        CancelPendingMidClick();
-                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
+                            CancelPendingMidClick();
+                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo)) {
+                            SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
                             PostDoAction(hWnd, s.doubleMiddleClick.c_str());
+                        }
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
@@ -1404,6 +1465,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
+            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
                 PostDoAction(hWnd, s.tripleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
@@ -1434,7 +1497,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
             } else if (dblOn) {
                 // Instant double-click (no triple-click configured)
                 if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                    PostDoAction(hWnd, s.doubleClick.c_str());
+                    SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
+                PostDoAction(hWnd, s.doubleClick.c_str());
             }
             g_lastClick.time = 0;   // prevent next click from being another double-click
         } else {
@@ -1451,6 +1515,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                     PostDoAction(hWnd, s.altClick.c_str());
             } else if (shiftOn && shiftDown) {
                 if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
+                    SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
                     PostDoAction(hWnd, s.shiftClick.c_str());
             }
 
