@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.10
+// @version         0.1.11
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -130,11 +130,9 @@ Rewritten strings are recorded and restored when the popup closes.
 
 #include <winrt/base.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
 namespace {
@@ -1041,7 +1039,9 @@ HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
 }
 
 HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
-    UntrackClassicTooltipTheme(theme);
+    if (g_classicTooltipThemeCount.load(std::memory_order_relaxed) != 0) {
+        UntrackClassicTooltipTheme(theme);
+    }
     return g_originalCloseThemeData(theme);
 }
 
@@ -1340,14 +1340,16 @@ struct TooltipContentAccess {
             return false;
         }
 
-        try {
-            const auto value =
-                winrt::unbox_value<winrt::hstring>(content);
-            text->assign(value.c_str(), value.size());
-            return true;
-        } catch (const winrt::hresult_error&) {
+        const auto propertyValue =
+            content.template try_as<wf::IPropertyValue>();
+        if (!propertyValue ||
+            propertyValue.Type() != wf::PropertyType::String) {
             return false;
         }
+
+        const auto value = propertyValue.GetString();
+        text->assign(value.c_str(), value.size());
+        return true;
     }
 
     template <typename Element>
@@ -1384,7 +1386,7 @@ public:
 
         try {
             auto element = m_element.get();
-            if (!element || !element.IsLoaded()) {
+            if (!element) {
                 return;
             }
 
@@ -1505,13 +1507,11 @@ using ModernTextStateMap =
                        std::shared_ptr<ModernTextStateBase>,
                        ModernElementKeyHash>;
 
-[[clang::no_destroy]] thread_local
-    std::optional<ModernTextStateMap>
-        g_modernTextStatesForThread{std::in_place};
+thread_local std::optional<ModernTextStateMap>
+    g_modernTextStatesForThread{std::in_place};
 
 std::mutex g_modernTextStateThreadsMutex;
-[[clang::no_destroy]] std::unordered_set<DWORD>
-    g_modernTextStateThreads;
+std::unordered_set<DWORD> g_modernTextStateThreads;
 
 void RegisterModernTextStateThread() {
     std::lock_guard<std::mutex> guard(
@@ -1753,14 +1753,17 @@ class WindhawkTap
 public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
         m_site.copy_from(site);
-        if (!site || g_stoppingModernUi.load(
-                         std::memory_order_relaxed)) {
+        if (!site) {
             return S_OK;
         }
 
         // Balance the reference added when XAML Diagnostics loads this module.
         if (HMODULE module = GetCurrentModuleHandle()) {
             FreeLibrary(module);
+        }
+
+        if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+            return S_OK;
         }
 
         auto watcher =
@@ -1855,6 +1858,7 @@ using InitializeXamlDiagnosticsEx_t =
     decltype(&InitializeXamlDiagnosticsEx);
 
 std::mutex g_xamlDiagnosticsInitializationMutex;
+std::mutex g_xamlDiagnosticsWorkerMutex;
 bool g_windowsUiXamlDiagnosticsConnected;
 bool g_microsoftUiXamlDiagnosticsConnected;
 HANDLE g_xamlDiagnosticsWakeEvent;
@@ -1942,11 +1946,12 @@ void EnsureModernXamlDiagnostics() {
     }
 }
 
-DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID) {
+DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
+    const HANDLE wakeEvent = static_cast<HANDLE>(parameter);
     const HRESULT initializeResult =
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    while (WaitForSingleObject(
-               g_xamlDiagnosticsWakeEvent, INFINITE) == WAIT_OBJECT_0) {
+    while (WaitForSingleObject(wakeEvent, INFINITE) ==
+           WAIT_OBJECT_0) {
         if (g_stopXamlDiagnosticsWorker.load(
                 std::memory_order_relaxed)) {
             break;
@@ -1963,24 +1968,31 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID) {
 bool StartXamlDiagnosticsWorker() {
     g_stopXamlDiagnosticsWorker.store(
         false, std::memory_order_relaxed);
-    g_xamlDiagnosticsWakeEvent =
+    const HANDLE wakeEvent =
         CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_xamlDiagnosticsWakeEvent) {
+    if (!wakeEvent) {
         return false;
     }
 
-    g_xamlDiagnosticsWorkerThread = CreateThread(
-        nullptr, 0, XamlDiagnosticsWorkerProc, nullptr, 0, nullptr);
-    if (!g_xamlDiagnosticsWorkerThread) {
-        CloseHandle(g_xamlDiagnosticsWakeEvent);
-        g_xamlDiagnosticsWakeEvent = nullptr;
+    const HANDLE workerThread = CreateThread(
+        nullptr, 0, XamlDiagnosticsWorkerProc, wakeEvent, 0, nullptr);
+    if (!workerThread) {
+        CloseHandle(wakeEvent);
         return false;
     }
 
+    {
+        std::lock_guard<std::mutex> guard(
+            g_xamlDiagnosticsWorkerMutex);
+        g_xamlDiagnosticsWakeEvent = wakeEvent;
+        g_xamlDiagnosticsWorkerThread = workerThread;
+    }
     return true;
 }
 
 void RequestXamlDiagnosticsInitialization() {
+    std::lock_guard<std::mutex> guard(
+        g_xamlDiagnosticsWorkerMutex);
     if (!g_xamlDiagnosticsWakeEvent ||
         g_stoppingModernUi.load(std::memory_order_relaxed)) {
         return;
@@ -2000,18 +2012,27 @@ void RequestXamlDiagnosticsInitialization() {
 }
 
 void StopXamlDiagnosticsWorker() {
-    if (!g_xamlDiagnosticsWorkerThread) {
-        return;
+    HANDLE workerThread;
+    HANDLE wakeEvent;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_xamlDiagnosticsWorkerMutex);
+        workerThread = g_xamlDiagnosticsWorkerThread;
+        wakeEvent = g_xamlDiagnosticsWakeEvent;
+        if (!workerThread) {
+            return;
+        }
+
+        g_xamlDiagnosticsWorkerThread = nullptr;
+        g_xamlDiagnosticsWakeEvent = nullptr;
+        g_stopXamlDiagnosticsWorker.store(
+            true, std::memory_order_relaxed);
+        SetEvent(wakeEvent);
     }
 
-    g_stopXamlDiagnosticsWorker.store(
-        true, std::memory_order_relaxed);
-    SetEvent(g_xamlDiagnosticsWakeEvent);
-    WaitForSingleObject(g_xamlDiagnosticsWorkerThread, INFINITE);
-    CloseHandle(g_xamlDiagnosticsWorkerThread);
-    CloseHandle(g_xamlDiagnosticsWakeEvent);
-    g_xamlDiagnosticsWorkerThread = nullptr;
-    g_xamlDiagnosticsWakeEvent = nullptr;
+    WaitForSingleObject(workerThread, INFINITE);
+    CloseHandle(workerThread);
+    CloseHandle(wakeEvent);
 }
 
 void CALLBACK ModernPopupWinEventProc(
@@ -2065,7 +2086,7 @@ bool RunFromWindowThread(HWND window,
                          RunFromWindowThreadProc_t procedure,
                          PVOID parameter) {
     static const UINT message = RegisterWindowMessageW(
-        L"Windhawk_RunFromWindowThread_CJKSpacer");
+        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RunParameter {
         RunFromWindowThreadProc_t procedure;
@@ -2193,9 +2214,8 @@ void UninitializeModernUi() {
                     CleanupModernTextStatesForCurrentThread();
                 },
                 nullptr)) {
-            // The thread-local state is deliberately no_destroy. If its UI
-            // thread can't be reached, retaining weak references is safer than
-            // releasing thread-affine XAML objects from this thread.
+            // Don't call Restore from the wrong thread. The state contains
+            // weak references only and is released when its UI thread exits.
             Wh_Log(L"Leaving modern XAML state for unreachable thread %u",
                    threadId);
         }
