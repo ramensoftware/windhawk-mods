@@ -21,7 +21,7 @@
 
 Welcome to **Windows Animations**, the ultimate lightweight window transition suite for your desktop. Built from the ground up to deliver breathtaking, cinematic window animations without sacrificing a single frame of system performance. 
 
-By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and absolute zero-latency execution.
+By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and absolute minimal to zero latency execution.
 
 ## ✨ Key Features
 
@@ -51,7 +51,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
   * **After:**
     
     ![Alt Tab Switch After](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif)
-* **🛡️ Rock-Solid Stability:** Features flawless lifecycle management for System Tray apps (like Discord, Steam, etc.)—guaranteeing zero ghosting, no stuck transparent windows, and no UI thread blocking.
+* **🛡️ Rock-Solid Stability:** Features flawless lifecycle management for System Tray apps (like Discord, Steam, etc.)—guaranteeing zero ghosting and no stuck transparent windows.
 
 ## ⚙️ Customization & Settings
 
@@ -1198,9 +1198,7 @@ public:
                     RemovePropW(data->hRealWnd, L"AnimCloseBypass");
                     RemovePropW(data->hRealWnd, L"AnimClosed");
                     
-                    if (!IsWindowVisible(data->hRealWnd)) {
-                        SetWindowCloak(data->hRealWnd, FALSE);
-                    }
+                    SetWindowCloak(data->hRealWnd, FALSE);
                     UpdateDwmTransitions(data->hRealWnd, TRUE);
                 }
             }
@@ -1442,9 +1440,10 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
     if (!IsLaunchCommand(nCmdShow)) return false;
     if (IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
     if (!IsLaunchWindow(hWnd)) return false;
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_LAYERED) return false;
     { std::lock_guard<std::mutex> lock(g_StateMutex); if (!g_LaunchSeen.insert(hWnd).second) return false; }
     UpdateDwmTransitions(hWnd, FALSE);
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     *origExOut = exStyle;
     SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
@@ -1463,7 +1462,13 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle) {
         UpdateDwmTransitions(hWnd, TRUE);
     }
 }
+static bool IsOurWindow(HWND hWnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    return pid == GetCurrentProcessId();
+}
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
+    if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindow_Original(hWnd, cmd);
         if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
@@ -1497,6 +1502,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     return ShowWindow_Original(hWnd, cmd);
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
+    if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindowAsync_Original(hWnd, cmd);
         if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
@@ -1514,6 +1520,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     return ShowWindowAsync_Original(hWnd, cmd);
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
+    if (!IsOurWindow(hWnd)) return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") &&
         g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
         
@@ -1537,7 +1544,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     bool animated = false;
 
-    if (g_closeAnimation.load(std::memory_order_relaxed) &&
+    if (GetWindowThreadProcessId(hWnd, NULL) == GetCurrentThreadId() &&
+        g_closeAnimation.load(std::memory_order_relaxed) &&
         IsAppMainWindow(hWnd) &&
         !IsAnimating(hWnd) &&
         !GetPropW(hWnd, L"AnimCloseBypass") &&
@@ -1558,6 +1566,7 @@ BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     return result;
 }
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (!IsOurWindow(hWnd)) return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
     if (msg == WM_DESTROY) {
         RemovePropW(hWnd, L"AnimCloseBypass");
         RemovePropW(hWnd, L"AnimClosed");
@@ -1591,6 +1600,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
 }
 BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement) {
+    if (!IsOurWindow(hWnd)) return SetWindowPlacement_Original(hWnd, placement);
     if (placement) {
         if (IsMinimizeCommand(placement->showCmd)) TryMinimizeAnim(hWnd);
         else if (placement->showCmd == SW_HIDE && !GetPropW(hWnd, L"AnimCloseBypass") &&
@@ -1610,6 +1620,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
     return SetWindowPlacement_Original(hWnd, placement);
 }
 BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
+    if (!IsOurWindow(hWnd)) return CloseWindow_Original(hWnd);
     TryMinimizeAnim(hWnd);
     return CloseWindow_Original(hWnd);
 }
@@ -1705,9 +1716,7 @@ void Wh_ModBeforeUninit() {
     }
     
     StopSwitchThreads();
-
-    int maxRetries = 300; 
-    while (g_workerCount.load(std::memory_order_acquire) > 0 && maxRetries-- > 0) {
+    while (g_workerCount.load(std::memory_order_acquire) > 0) {
         Sleep(10);
     }
 }
