@@ -464,11 +464,9 @@ static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     if (ContainsClass(cls, kAlwaysExcludedClasses) || (!forSwitch && ContainsClass(cls, kGdiExcludedClasses))) return false;
     RECT r{};
     bool isMain = GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
-    
     if (isMain && !forSwitch) {
         EnsureWinEventThreadStarted();
     }
-    
     return isMain;
 }
 static bool UseSafeClose(HWND hWnd) { return ContainsClass(GetClassNameStr(hWnd), kSafeCloseClasses); }
@@ -1507,6 +1505,11 @@ static bool IsOurWindow(HWND hWnd) {
 }
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
+    if (cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWMAXIMIZED || cmd == SW_RESTORE || 
+        cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMINIMIZED || cmd == SW_SHOWMINNOACTIVE || 
+        cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) {
+        EnsureWinEventThreadStarted();
+    }
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindow_Original(hWnd, cmd);
         if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
@@ -1541,6 +1544,11 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
+    if (cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWMAXIMIZED || cmd == SW_RESTORE || 
+        cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMINIMIZED || cmd == SW_SHOWMINNOACTIVE || 
+        cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) {
+        EnsureWinEventThreadStarted();
+    }
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindowAsync_Original(hWnd, cmd);
         if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
@@ -1562,6 +1570,9 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
         return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
     }
     if (!IsOurWindow(hWnd)) return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+    if (flags & SWP_SHOWWINDOW) {
+        EnsureWinEventThreadStarted();
+    }
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") &&
         g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
         
@@ -1694,8 +1705,9 @@ static BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
-        if (IsAppMainWindow(hWnd, false)) { 
-            return FALSE;
+        if (IsWindowVisible(hWnd)) {
+            EnsureWinEventThreadStarted();
+            return FALSE; 
         }
     }
     return TRUE;
