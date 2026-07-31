@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods
-// @version         0.1.21
+// @version         0.1.22
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -52,6 +52,9 @@ After:
 The transformation is idempotent. Punctuation and existing whitespace break a
 boundary and are preserved. Win32 `&` mnemonic markers and tab-separated
 keyboard shortcut text are also preserved.
+Hiragana, fullwidth Katakana, and halfwidth Katakana letters are all
+classified as CJK characters for boundary detection; kana punctuation remains
+excluded.
 
 ## Supported UI
 
@@ -223,10 +226,12 @@ bool IsCjkCodePoint(uint32_t codePoint) {
         return true;
     }
 
-    // CJK radicals, Kangxi radicals, kana, Bopomofo, Hangul compatibility
-    // Jamo, CJK strokes, and Katakana phonetic extensions. CJK punctuation is
-    // deliberately excluded except for the ideographic iteration mark and
-    // ideographic zero.
+    // CJK radicals, Kangxi radicals, Hiragana, fullwidth Katakana, Bopomofo,
+    // Hangul compatibility Jamo, CJK strokes, and Katakana phonetic
+    // extensions. All Hiragana and Katakana letters, including halfwidth
+    // Katakana below, are treated as CJK for spacing purposes. Kana/CJK
+    // punctuation is deliberately excluded except for the ideographic
+    // iteration mark and ideographic zero.
     const bool isKana =
         IsInRange(codePoint, 0x3040, 0x30FF) &&
         codePoint != 0x30A0 && codePoint != 0x30FB;
@@ -467,6 +472,39 @@ std::vector<RewrittenMenuItem> g_rewrittenMenuItems;
 thread_local unsigned int g_classicPopupMenuDepth = 0;
 thread_local HMENU g_classicPopupRootMenu = nullptr;
 thread_local bool g_restoringClassicMenuText = false;
+
+class ScopedBoolValue final {
+public:
+    ScopedBoolValue(bool& value, bool replacement)
+        : m_value(value), m_previous(value) {
+        m_value = replacement;
+    }
+
+    ~ScopedBoolValue() {
+        m_value = m_previous;
+    }
+
+private:
+    bool& m_value;
+    bool m_previous;
+};
+
+class ClassicPopupMenuStateGuard final {
+public:
+    explicit ClassicPopupMenuStateGuard(HMENU rootMenu)
+        : m_previousRootMenu(g_classicPopupRootMenu) {
+        g_classicPopupRootMenu = rootMenu;
+        ++g_classicPopupMenuDepth;
+    }
+
+    ~ClassicPopupMenuStateGuard() {
+        --g_classicPopupMenuDepth;
+        g_classicPopupRootMenu = m_previousRootMenu;
+    }
+
+private:
+    HMENU m_previousRootMenu;
+};
 
 void RememberRewrittenMenuItem(HMENU menu,
                                UINT index,
@@ -715,8 +753,7 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
         }
     }
 
-    const bool wasRestoring = g_restoringClassicMenuText;
-    g_restoringClassicMenuText = true;
+    ScopedBoolValue restoringGuard(g_restoringClassicMenuText, true);
     for (auto iterator = items.rbegin(); iterator != items.rend();
          ++iterator) {
         if (!IsMenu(iterator->menu)) {
@@ -748,7 +785,6 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
             iterator->menu, static_cast<UINT>(index), TRUE,
             &replacement);
     }
-    g_restoringClassicMenuText = wasRestoring;
 }
 
 BOOL WINAPI InsertMenuItemWHook(HMENU menu,
@@ -888,15 +924,11 @@ BOOL WINAPI TrackPopupMenuHook(HMENU menu,
                                HWND owner,
                                const RECT* rect) {
     if (g_classicMenus.load(std::memory_order_relaxed)) {
-        const HMENU previousRootMenu = g_classicPopupRootMenu;
-        g_classicPopupRootMenu = menu;
-        ++g_classicPopupMenuDepth;
+        ClassicPopupMenuStateGuard stateGuard(menu);
         RewriteMenuTree(menu);
         const BOOL result = g_originalTrackPopupMenu(
             menu, flags, x, y, reserved, owner, rect);
         RestoreRewrittenMenuItems(menu);
-        --g_classicPopupMenuDepth;
-        g_classicPopupRootMenu = previousRootMenu;
         return result;
     }
 
@@ -910,15 +942,11 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
                                  HWND owner,
                                  LPTPMPARAMS parameters) {
     if (g_classicMenus.load(std::memory_order_relaxed)) {
-        const HMENU previousRootMenu = g_classicPopupRootMenu;
-        g_classicPopupRootMenu = menu;
-        ++g_classicPopupMenuDepth;
+        ClassicPopupMenuStateGuard stateGuard(menu);
         RewriteMenuTree(menu);
         const BOOL result = g_originalTrackPopupMenuEx(
             menu, flags, x, y, owner, parameters);
         RestoreRewrittenMenuItems(menu);
-        --g_classicPopupMenuDepth;
-        g_classicPopupRootMenu = previousRootMenu;
         return result;
     }
 
@@ -933,6 +961,7 @@ using OpenThemeData_t = decltype(&OpenThemeData);
 using OpenThemeDataEx_t = decltype(&OpenThemeDataEx);
 using OpenThemeDataForDpi_t = decltype(&OpenThemeDataForDpi);
 using CloseThemeData_t = decltype(&CloseThemeData);
+using GetWindowTheme_t = decltype(&GetWindowTheme);
 using GetThemeTextExtent_t = decltype(&GetThemeTextExtent);
 using DrawThemeText_t = decltype(&DrawThemeText);
 using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
@@ -941,21 +970,27 @@ OpenThemeData_t g_originalOpenThemeData;
 OpenThemeDataEx_t g_originalOpenThemeDataEx;
 OpenThemeDataForDpi_t g_originalOpenThemeDataForDpi;
 CloseThemeData_t g_originalCloseThemeData;
+GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 HMODULE g_loadedUxThemeModule;
 std::shared_mutex g_classicTooltipThemesMutex;
-// A theme handle can be shared by multiple tooltip windows. Keep a reference
-// count for matching OpenThemeData calls so CloseThemeData can release the
-// right number of references without letting the last window overwrite the
-// rest.
-std::unordered_map<HTHEME, unsigned int> g_classicTooltipThemes;
+struct ClassicTooltipTheme {
+    unsigned int references = 0;
+    bool hasTooltipWindow = false;
+};
+
+// A theme handle can be shared by multiple tooltip windows. Count every
+// matching OpenThemeData call, while separately remembering whether at least
+// one real tooltips_class32 window owns the handle for draw-time filtering.
+std::unordered_map<HTHEME, ClassicTooltipTheme> g_classicTooltipThemes;
 std::vector<HTHEME> g_discoveredClassicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
 
 void ClearUxThemeFunctionPointers() {
+    g_getWindowTheme = nullptr;
     g_originalOpenThemeData = nullptr;
     g_originalOpenThemeDataEx = nullptr;
     g_originalOpenThemeDataForDpi = nullptr;
@@ -999,11 +1034,13 @@ bool IsTrackedClassicTooltipTheme(HTHEME theme) {
 
     std::shared_lock<std::shared_mutex> guard(
         g_classicTooltipThemesMutex);
-    return g_classicTooltipThemes.contains(theme);
+    const auto iterator = g_classicTooltipThemes.find(theme);
+    return iterator != g_classicTooltipThemes.end() &&
+           iterator->second.hasTooltipWindow;
 }
 
 void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
-    if (!theme || !window || !IsClassicTooltipWindow(window)) {
+    if (!theme) {
         return;
     }
 
@@ -1012,9 +1049,12 @@ void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
         std::lock_guard<std::shared_mutex> guard(
             g_classicTooltipThemesMutex);
         auto [iterator, wasInserted] =
-            g_classicTooltipThemes.try_emplace(theme, 0);
+            g_classicTooltipThemes.try_emplace(theme);
         inserted = wasInserted;
-        ++iterator->second;
+        ++iterator->second.references;
+        if (window && IsClassicTooltipWindow(window)) {
+            iterator->second.hasTooltipWindow = true;
+        }
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
             std::memory_order_relaxed);
@@ -1039,7 +1079,7 @@ bool UntrackClassicTooltipTheme(HTHEME theme) {
         return false;
     }
 
-    if (--iterator->second == 0) {
+    if (--iterator->second.references == 0) {
         g_classicTooltipThemes.erase(iterator);
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
@@ -1078,15 +1118,23 @@ BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
     DWORD processId;
     GetWindowThreadProcessId(window, &processId);
     if (processId == GetCurrentProcessId() &&
-        IsClassicTooltipWindow(window) && g_originalOpenThemeData &&
-        g_originalCloseThemeData) {
+        IsClassicTooltipWindow(window) && g_getWindowTheme &&
+        g_originalOpenThemeData && g_originalCloseThemeData) {
         // GetWindowTheme does not add a theme-data reference. Open the
         // handle ourselves so the discovery entry can be released exactly
         // once during module teardown.
+        const HTHEME windowTheme = g_getWindowTheme(window);
         if (HTHEME theme =
                 g_originalOpenThemeData(window, L"TOOLTIP")) {
-            TrackClassicTooltipTheme(theme, window);
-            g_discoveredClassicTooltipThemes.push_back(theme);
+            if (theme == windowTheme) {
+                TrackClassicTooltipTheme(theme, window);
+                g_discoveredClassicTooltipThemes.push_back(theme);
+            } else {
+                // A different DPI/theme context may resolve a different
+                // cached handle. Do not retain a handle the control does not
+                // actually use.
+                g_originalCloseThemeData(theme);
+            }
         }
     }
 
@@ -1094,7 +1142,8 @@ BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
 }
 
 void DiscoverExistingClassicTooltipThemes() {
-    if (g_originalOpenThemeData && g_originalCloseThemeData) {
+    if (g_getWindowTheme && g_originalOpenThemeData &&
+        g_originalCloseThemeData) {
         EnumWindows(EnumExistingClassicTooltipWindow, 0);
     }
 }
@@ -1107,7 +1156,6 @@ void CloseDiscoveredClassicTooltipThemes() {
 
     for (HTHEME theme : g_discoveredClassicTooltipThemes) {
         g_originalCloseThemeData(theme);
-        UntrackClassicTooltipTheme(theme);
     }
     g_discoveredClassicTooltipThemes.clear();
 }
@@ -1210,12 +1258,12 @@ HRESULT WINAPI GetThemeTextExtentHook(HTHEME theme,
 
     Wh_Log(L"Applied CJK spacing "
            L"(classic tooltip/GetThemeTextExtent)");
-    g_rewritingClassicTooltipText = true;
+    ScopedBoolValue rewritingGuard(
+        g_rewritingClassicTooltipText, true);
     const HRESULT result = g_originalGetThemeTextExtent(
         theme, dc, partId, stateId, spaced.c_str(),
         static_cast<int>(spaced.size()), textFlags,
         boundingRectangle, extentRectangle);
-    g_rewritingClassicTooltipText = false;
     return result;
 }
 
@@ -1246,12 +1294,12 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
     }
 
     Wh_Log(L"Applied CJK spacing (classic tooltip/DrawThemeText)");
-    g_rewritingClassicTooltipText = true;
+    ScopedBoolValue rewritingGuard(
+        g_rewritingClassicTooltipText, true);
     const HRESULT result = g_originalDrawThemeText(
         theme, dc, partId, stateId, spaced.c_str(),
         static_cast<int>(spaced.size()), textFlags, textFlags2,
         rectangle);
-    g_rewritingClassicTooltipText = false;
     return result;
 }
 
@@ -1282,12 +1330,12 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
     }
 
     Wh_Log(L"Applied CJK spacing (classic tooltip/DrawThemeTextEx)");
-    g_rewritingClassicTooltipText = true;
+    ScopedBoolValue rewritingGuard(
+        g_rewritingClassicTooltipText, true);
     const HRESULT result = g_originalDrawThemeTextEx(
         theme, dc, partId, stateId, spaced.c_str(),
         static_cast<int>(spaced.size()), textFlags, rectangle,
         options);
-    g_rewritingClassicTooltipText = false;
     return result;
 }
 
@@ -1567,14 +1615,14 @@ void CleanupModernTextStatesForCurrentThread() {
 }
 
 HMODULE AcquireCurrentModuleReference();
-void RequestModernXamlDiagnosticsInitialization(
-    bool retryFailedConnections = false);
-
 enum class XamlDiagnosticsFlavor {
     None,
     Windows,
     Microsoft,
 };
+
+void RequestModernXamlDiagnosticsInitialization(
+    XamlDiagnosticsFlavor retryFlavor = XamlDiagnosticsFlavor::None);
 
 extern std::atomic_bool g_windowsUiXamlDiagnosticsConnected;
 extern std::atomic_bool g_microsoftUiXamlDiagnosticsConnected;
@@ -1869,19 +1917,16 @@ public:
                 XamlDiagnosticsFlavor::Windows) {
                 g_windowsUiXamlDiagnosticsConnected.store(
                     false, std::memory_order_release);
-                g_windowsUiXamlDiagnosticsAttempted.store(
-                    false, std::memory_order_release);
             } else if (disconnectedFlavor ==
                        XamlDiagnosticsFlavor::Microsoft) {
                 g_microsoftUiXamlDiagnosticsConnected.store(
-                    false, std::memory_order_release);
-                g_microsoftUiXamlDiagnosticsAttempted.store(
                     false, std::memory_order_release);
             }
             if (disconnectedFlavor != XamlDiagnosticsFlavor::None &&
                 !g_stoppingModernUi.load(
                     std::memory_order_relaxed)) {
-                RequestModernXamlDiagnosticsInitialization();
+                RequestModernXamlDiagnosticsInitialization(
+                    disconnectedFlavor);
             }
             return S_OK;
         }
@@ -2181,19 +2226,20 @@ bool NeedsXamlDiagnosticsConnection() {
 }
 
 void RequestModernXamlDiagnosticsInitialization(
-    bool retryFailedConnections) {
+    XamlDiagnosticsFlavor retryFlavor) {
     const uint64_t generation =
         g_modernUiGeneration.load(std::memory_order_acquire);
     if (!IsCurrentModernUiGeneration(generation)) {
         return;
     }
 
-    if (retryFailedConnections) {
-        // A new XAML module load or a previously established connection being
-        // torn down is an explicit retry opportunity. Window creation alone
-        // must not keep retrying a connection another diagnostics tool denied.
+    // A new XAML module load or a previously established connection being
+    // torn down is an explicit retry opportunity. Window creation alone must
+    // not keep retrying a connection another diagnostics tool denied.
+    if (retryFlavor == XamlDiagnosticsFlavor::Windows) {
         g_windowsUiXamlDiagnosticsAttempted.store(
             false, std::memory_order_release);
+    } else if (retryFlavor == XamlDiagnosticsFlavor::Microsoft) {
         g_microsoftUiXamlDiagnosticsAttempted.store(
             false, std::memory_order_release);
     }
@@ -2288,26 +2334,44 @@ void RequestModernXamlDiagnosticsInitialization(
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t g_originalLoadLibraryExW;
 
-bool IsXamlDiagnosticsTriggerModule(LPCWSTR path) {
+PCWSTR GetModuleFileNamePart(LPCWSTR path) {
     if (!path) {
-        return false;
+        return nullptr;
     }
 
     PCWSTR fileName = wcsrchr(path, L'\\');
-    fileName = fileName ? fileName + 1 : path;
-    return _wcsicmp(fileName, L"Windows.UI.Xaml.dll") == 0 ||
-           _wcsicmp(fileName,
-                    L"Microsoft.Internal.FrameworkUdk.dll") == 0 ||
-           _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0;
+    return fileName ? fileName + 1 : path;
+}
+
+XamlDiagnosticsFlavor GetXamlDiagnosticsTriggerFlavor(LPCWSTR path) {
+    const PCWSTR fileName = GetModuleFileNamePart(path);
+    if (!fileName) {
+        return XamlDiagnosticsFlavor::None;
+    }
+
+    if (_wcsicmp(fileName, L"Windows.UI.Xaml.dll") == 0) {
+        return XamlDiagnosticsFlavor::Windows;
+    }
+    if (_wcsicmp(fileName,
+                 L"Microsoft.Internal.FrameworkUdk.dll") == 0) {
+        return XamlDiagnosticsFlavor::Microsoft;
+    }
+    return XamlDiagnosticsFlavor::None;
+}
+
+bool IsXamlDiagnosticsTriggerModule(LPCWSTR path) {
+    const PCWSTR fileName = GetModuleFileNamePart(path);
+    return GetXamlDiagnosticsTriggerFlavor(path) !=
+               XamlDiagnosticsFlavor::None ||
+           (fileName && _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0);
 }
 
 bool IsXamlDiagnosticsTriggerModuleLoaded(LPCWSTR path) {
-    if (!path) {
+    const PCWSTR fileName = GetModuleFileNamePart(path);
+    if (!fileName) {
         return false;
     }
 
-    PCWSTR fileName = wcsrchr(path, L'\\');
-    fileName = fileName ? fileName + 1 : path;
     return GetModuleHandleW(fileName) != nullptr;
 }
 
@@ -2316,6 +2380,8 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
                                   DWORD flags) {
     const bool triggerModule =
         IsXamlDiagnosticsTriggerModule(fileName);
+    const XamlDiagnosticsFlavor triggerFlavor =
+        GetXamlDiagnosticsTriggerFlavor(fileName);
     const bool triggerModuleWasLoaded =
         triggerModule &&
         IsXamlDiagnosticsTriggerModuleLoaded(fileName);
@@ -2327,7 +2393,9 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
         // Don't load the TAP or activate COM while the caller might hold the
         // Windows loader lock.
         RequestModernXamlDiagnosticsInitialization(
-            !triggerModuleWasLoaded);
+            !triggerModuleWasLoaded
+                ? triggerFlavor
+                : XamlDiagnosticsFlavor::None);
     }
     return module;
 }
@@ -2372,7 +2440,8 @@ void OnModernXamlHostWindowCreated(HWND window,
                                    HWND parent,
                                    LPCWSTR className,
                                    LPCWSTR source) {
-    if (!IsModernXamlHostWindow(window, parent, className)) {
+    if (!g_modernUiText.load(std::memory_order_relaxed) ||
+        !IsModernXamlHostWindow(window, parent, className)) {
         return;
     }
 
@@ -2672,6 +2741,12 @@ bool HookClassicTooltipThemeDrawing() {
     }
 
     bool hooked = false;
+
+    g_getWindowTheme = reinterpret_cast<GetWindowTheme_t>(
+        GetProcAddress(themeModule, "GetWindowTheme"));
+    if (!g_getWindowTheme) {
+        Wh_Log(L"Couldn't find GetWindowTheme");
+    }
 
     const auto openThemeData =
         reinterpret_cast<OpenThemeData_t>(
