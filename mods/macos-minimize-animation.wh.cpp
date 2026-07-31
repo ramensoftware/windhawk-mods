@@ -242,9 +242,10 @@ Check out the documentation
 #define PW_RENDERFULLCONTENT 2
 #endif
 
-// High-resolution waitable timer flag (Win10 1803+). The OS rejects it at
-// CreateWaitableTimerExW time if the old timer resolution is in use, in which
-// case the pacer falls back to the ordinary timer silently.
+// High-resolution waitable timer flag (Win10 1803+). The kernel rejects the
+// flag on 1709 and earlier (and Win7/8.1), so CreateWaitableTimerExW is retried
+// without it; the pacer then just ticks coarser. A plain Sleep(1) floor keeps
+// the loop from ever degrading to a busy spin.
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
@@ -902,10 +903,17 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     HANDLE hFrameTimer = CreateWaitableTimerExW(
         nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
         TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
 
     if (d2dOk) {
         for (;;) {
             QueryPerformanceCounter(&qpcNow);
+            const LARGE_INTEGER qpcFrameStart = qpcNow;
             double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
             BOOL lastFrame = (elapsedMs >= animDur);
 
@@ -1100,13 +1108,24 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                 if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
             }
 
-            // Rate-limit to ~2x refresh so we never busy-spin. Relative deadline;
-            // capped wait keeps the g_unloading check responsive.
+            // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+            // measured from the START of the frame, so the period is
+            // max(render, interval), not render + interval (a render faster than
+            // the interval just sleeps the difference; a slower one runs as-is).
+            // Capped wait keeps the g_unloading check responsive.
             if (hFrameTimer) {
-                LARGE_INTEGER due;
-                due.QuadPart = -(LONGLONG)(frameIntervalMs * 10000.0);   // 100ns units
-                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
-                WaitForSingleObject(hFrameTimer, 100);
+                LARGE_INTEGER qpcAfter;
+                QueryPerformanceCounter(&qpcAfter);
+                double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+                double waitMs = frameIntervalMs - spentMs;
+                if (waitMs > 0.1) {
+                    LARGE_INTEGER due;
+                    due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                    SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                    WaitForSingleObject(hFrameTimer, 100);
+                }
+            } else {
+                Sleep(1);   // last resort: never spin
             }
         }
     }
@@ -1337,10 +1356,17 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     HANDLE hFrameTimer = CreateWaitableTimerExW(
         nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
         TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
 
     BOOL firstFrame = TRUE;
     for (;;) {
         QueryPerformanceCounter(&qpcNow);
+        const LARGE_INTEGER qpcFrameStart = qpcNow;
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
         BOOL lastFrame = (elapsedMs >= totalMs);
         float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
@@ -1436,13 +1462,24 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
         }
 
-        // Rate-limit to ~2x refresh so we never busy-spin; capped wait keeps the
-        // g_unloading check responsive.
+        // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+        // measured from the START of the frame, so the period is
+        // max(render, interval), not render + interval (a render faster than
+        // the interval just sleeps the difference; a slower one runs as-is).
+        // Capped wait keeps the g_unloading check responsive.
         if (hFrameTimer) {
-            LARGE_INTEGER due;
-            due.QuadPart = -(LONGLONG)(frameIntervalMs * 10000.0);   // 100ns units
-            SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
-            WaitForSingleObject(hFrameTimer, 100);
+            LARGE_INTEGER qpcAfter;
+            QueryPerformanceCounter(&qpcAfter);
+            double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+            double waitMs = frameIntervalMs - spentMs;
+            if (waitMs > 0.1) {
+                LARGE_INTEGER due;
+                due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                WaitForSingleObject(hFrameTimer, 100);
+            }
+        } else {
+            Sleep(1);   // last resort: never spin
         }
     }
 
