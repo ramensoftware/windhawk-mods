@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.23
+// @version         1.24
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -51,7 +51,7 @@ Each record in the **Folder shortcuts** setting has three fields:
 | Field | Example | Notes |
 |-------|---------|-------|
 | Name  | `Apps` | Shown as the title at the top of the hover grid |
-| Folder path | `%USERPROFILE%\Desktop` | Environment variables are expanded. `shell:` targets such as `shell:Desktop` also work. |
+| Folder path | `%USERPROFILE%\Desktop` | Environment variables are expanded. `shell:` targets that map to a **filesystem folder** also work (e.g. `shell:Desktop`, `shell:Downloads`). Virtual namespaces such as Control Panel, Recycle Bin, or This PC are not supported — use [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) for those. |
 | Icon | an emoji, `C:\icons\apps.ico`, or `C:\Windows\explorer.exe,0` | Leave empty to use the folder's own icon |
 
 A good setup is to make a folder somewhere, fill it with shortcuts to the apps
@@ -116,7 +116,9 @@ do not conflict.
       $name: Folder path
       $description: >-
         A folder path. Environment variables such as %USERPROFILE% are expanded.
-        Shell targets such as shell:Desktop also work.
+        shell: targets that map to a filesystem folder work (e.g. shell:Desktop,
+        shell:Downloads). Virtual namespaces such as Control Panel, Recycle Bin,
+        or This PC are not supported.
     - icon: ''
       $name: Icon
       $description: >-
@@ -302,6 +304,12 @@ do not conflict.
 #ifndef SEE_MASK_ASYNCOK
 #define SEE_MASK_ASYNCOK 0x00100000
 #endif
+#ifndef CMIC_MASK_ASYNCOK
+#define CMIC_MASK_ASYNCOK SEE_MASK_ASYNCOK
+#endif
+#ifndef CMIC_MASK_PTINVOKE
+#define CMIC_MASK_PTINVOKE 0x20000000
+#endif
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
@@ -323,6 +331,7 @@ struct FolderEntry {
     std::wstring resolvedPath;  // Filesystem path; shell: filled on an STA later
     std::wstring icon;
     bool likelyRemote = false;  // IsLikelyRemotePath(resolvedPath), after resolve
+    bool resolveFailed = false; // shell: that does not map to a filesystem folder
 };
 
 enum class SortMode { Name, Modified };
@@ -453,10 +462,12 @@ void LoadFolders(std::vector<FolderEntry>* out) {
         if (IsShellFolderPath(entry.path)) {
             entry.resolvedPath.clear();
             entry.likelyRemote = false;
+            entry.resolveFailed = false;
         } else {
             // Non-shell branch of ResolveFolderPath is pure string work.
             entry.resolvedPath = ResolveFolderPath(entry.path);
             entry.likelyRemote = IsLikelyRemotePath(entry.resolvedPath);
+            entry.resolveFailed = entry.resolvedPath.empty();
         }
         entry.icon = Trim(std::wstring(rawIcon.get()));
         if (entry.name.empty()) {
@@ -1777,11 +1788,14 @@ std::wstring ResolveFolderPath(const std::wstring& raw) {
 }
 
 void ResolveFolderEntry(FolderEntry& entry) {
-    if (!entry.resolvedPath.empty()) {
+    if (entry.resolveFailed || !entry.resolvedPath.empty()) {
         return;
     }
     std::wstring resolved = ResolveFolderPath(entry.path);
     if (resolved.empty()) {
+        entry.resolveFailed = true;
+        Wh_Log(L"Folder path does not resolve to a filesystem folder: %s",
+               entry.path.c_str());
         return;
     }
     entry.resolvedPath = std::move(resolved);
@@ -1793,7 +1807,7 @@ void ResolveFolderEntry(FolderEntry& entry) {
 void ResolvePendingFolderEntries() {
     std::lock_guard<std::mutex> lock(g_foldersMutex);
     for (auto& entry : g_settings.folders) {
-        if (entry.resolvedPath.empty()) {
+        if (entry.resolvedPath.empty() && !entry.resolveFailed) {
             ResolveFolderEntry(entry);
         }
     }
@@ -2395,6 +2409,8 @@ std::vector<std::unique_ptr<PopupLevel>>& Levels() {
 RECT g_rootAnchorRect{};
 int g_popupDpi = 96;
 std::atomic<bool> g_menuActive{false};
+// True while a shell verb is queued (PostMessage) or running via InvokeCommand.
+std::atomic<bool> g_invokeActive{false};
 ULONGLONG g_outsideSinceTick = 0;
 
 std::wstring g_pendingRootPath;
@@ -2408,6 +2424,18 @@ ULONGLONG g_closeDeeperSinceTick = 0;
 
 IContextMenu2* g_activeContextMenu2 = nullptr;
 IContextMenu3* g_activeContextMenu3 = nullptr;
+
+// Deferred shell verb: stash after TrackPopupMenuEx so PopupWndProc /
+// ShowItemContextMenu can return before InvokeCommand (and any modal UI).
+struct PendingShellCommand {
+    IContextMenu* contextMenu = nullptr;
+    int commandOffset = -1;
+    POINT invokePoint{};
+};
+PendingShellCommand g_pendingShellCommand;
+
+// Posted to g_menuOwnerWnd after the context menu loop unwinds.
+constexpr UINT WM_APP_INVOKE_SHELL_VERB = WM_APP + 41;
 
 // Both take their arguments by value: reopening a level destroys the PopupLevel
 // the caller may have read them from.
@@ -3096,6 +3124,54 @@ int LevelIndexUnderCursor() {
     return -1;
 }
 
+void ClearPendingShellCommand() {
+    if (g_pendingShellCommand.contextMenu) {
+        g_pendingShellCommand.contextMenu->Release();
+    }
+    g_pendingShellCommand = {};
+    g_invokeActive = false;
+}
+
+void InvokePendingShellCommand(HWND owner) {
+    IContextMenu* contextMenu = g_pendingShellCommand.contextMenu;
+    int commandOffset = g_pendingShellCommand.commandOffset;
+    POINT invokePoint = g_pendingShellCommand.invokePoint;
+    g_pendingShellCommand = {};
+    if (!contextMenu || commandOffset < 0) {
+        if (contextMenu) {
+            contextMenu->Release();
+        }
+        g_invokeActive = false;
+        return;
+    }
+
+    // Keep g_invokeActive true for the duration of InvokeCommand so uninit
+    // waits. CMIC_MASK_ASYNCOK lets many verbs return quickly; some still show
+    // modal UI on this thread despite the flag.
+    struct InvokeActiveGuard {
+        InvokeActiveGuard() { g_invokeActive = true; }
+        ~InvokeActiveGuard() { g_invokeActive = false; }
+        InvokeActiveGuard(const InvokeActiveGuard&) = delete;
+        InvokeActiveGuard& operator=(const InvokeActiveGuard&) = delete;
+    } invokeActiveGuard;
+
+    CMINVOKECOMMANDINFOEX info{};
+    info.cbSize = sizeof(info);
+    info.fMask = CMIC_MASK_UNICODE | CMIC_MASK_ASYNCOK | CMIC_MASK_PTINVOKE;
+    info.hwnd = owner;
+    info.lpVerb = MAKEINTRESOURCEA(commandOffset);
+    info.lpVerbW = MAKEINTRESOURCEW(commandOffset);
+    info.nShow = SW_SHOWNORMAL;
+    info.ptInvoke = invokePoint;
+
+    HRESULT hr = contextMenu->InvokeCommand(
+        reinterpret_cast<CMINVOKECOMMANDINFO*>(&info));
+    if (FAILED(hr)) {
+        Wh_Log(L"InvokeCommand failed hr=0x%08X offset=%d", hr, commandOffset);
+    }
+    contextMenu->Release();
+}
+
 void ShowItemContextMenu(std::wstring path, POINT screenPt) {
     if (g_unloading) {
         return;
@@ -3108,17 +3184,6 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
     if (path.empty()) {
         return;
     }
-
-    // Stay raised for the whole modal body, including InvokeCommand which also
-    // pumps messages - otherwise OnTick can tear down levels under the menu.
-    // RAII so a shell-extension exception cannot leave the flag stuck true
-    // (which would freeze OnTick and leak COM/PIDL state below).
-    struct MenuActiveGuard {
-        MenuActiveGuard() { g_menuActive = true; }
-        ~MenuActiveGuard() { g_menuActive = false; }
-        MenuActiveGuard(const MenuActiveGuard&) = delete;
-        MenuActiveGuard& operator=(const MenuActiveGuard&) = delete;
-    } menuActiveGuard;
 
     struct CoTaskMemDeleter {
         void operator()(void* p) const noexcept { CoTaskMemFree(p); }
@@ -3171,50 +3236,72 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
         return;
     }
 
-    g_activeContextMenu3 = nullptr;
-    g_activeContextMenu2 = nullptr;
-    if (FAILED(contextMenu->QueryInterface(IID_IContextMenu3,
-                                           (void**)&g_activeContextMenu3))) {
-        contextMenu->QueryInterface(IID_IContextMenu2,
-                                    (void**)&g_activeContextMenu2);
-    }
+    UINT cmd = 0;
+    {
+        // Raised only while TrackPopupMenuEx runs — cleared before the verb
+        // is invoked so Wh_ModUninit does not EndMenu-wait on verb dialogs.
+        // RAII so a shell-extension exception cannot leave the flag stuck.
+        struct MenuActiveGuard {
+            MenuActiveGuard() { g_menuActive = true; }
+            ~MenuActiveGuard() { g_menuActive = false; }
+            MenuActiveGuard(const MenuActiveGuard&) = delete;
+            MenuActiveGuard& operator=(const MenuActiveGuard&) = delete;
+        } menuActiveGuard;
 
-    // A never-shown 0x0 owner cannot become foreground; park a 1x1
-    // window at the click so TrackPopupMenuEx dismisses correctly.
-    SetWindowPos(g_menuOwnerWnd, HWND_TOPMOST, screenPt.x, screenPt.y, 1, 1,
-                 SWP_SHOWWINDOW);
-    SetForegroundWindow(g_menuOwnerWnd);
-    UINT cmd = TrackPopupMenuEx(menu,
-                                TPM_RETURNCMD | TPM_RIGHTBUTTON |
-                                    TPM_LEFTALIGN | TPM_BOTTOMALIGN,
-                                screenPt.x, screenPt.y, g_menuOwnerWnd,
-                                nullptr);
-    PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
-
-    if (g_activeContextMenu3) {
-        g_activeContextMenu3->Release();
         g_activeContextMenu3 = nullptr;
-    }
-    if (g_activeContextMenu2) {
-        g_activeContextMenu2->Release();
         g_activeContextMenu2 = nullptr;
-    }
+        if (FAILED(contextMenu->QueryInterface(IID_IContextMenu3,
+                                               (void**)&g_activeContextMenu3))) {
+            contextMenu->QueryInterface(IID_IContextMenu2,
+                                        (void**)&g_activeContextMenu2);
+        }
 
-    if (cmd) {
-        // Dismiss the hover chain before the shell verb runs so
-        // Explorer windows are not covered by stale grids.
-        CloseChain();
-        CMINVOKECOMMANDINFOEX info{};
-        info.cbSize = sizeof(info);
-        info.fMask = CMIC_MASK_UNICODE;
-        info.hwnd = g_menuOwnerWnd;
-        info.lpVerb = (LPCSTR)(INT_PTR)(cmd - 1);
-        info.lpVerbW = (LPCWSTR)(INT_PTR)(cmd - 1);
-        info.nShow = SW_SHOWNORMAL;
-        contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
-    }
+        // A never-shown 0x0 owner cannot become foreground; park a 1x1
+        // window at the click so TrackPopupMenuEx dismisses correctly.
+        SetWindowPos(g_menuOwnerWnd, HWND_TOPMOST, screenPt.x, screenPt.y, 1, 1,
+                     SWP_SHOWWINDOW);
+        SetForegroundWindow(g_menuOwnerWnd);
+        cmd = TrackPopupMenuEx(menu,
+                               TPM_RETURNCMD | TPM_RIGHTBUTTON |
+                                   TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+                               screenPt.x, screenPt.y, g_menuOwnerWnd,
+                               nullptr);
+        PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
+
+        if (g_activeContextMenu3) {
+            g_activeContextMenu3->Release();
+            g_activeContextMenu3 = nullptr;
+        }
+        if (g_activeContextMenu2) {
+            g_activeContextMenu2->Release();
+            g_activeContextMenu2 = nullptr;
+        }
+    }  // g_menuActive = false before any verb runs
 
     ShowWindow(g_menuOwnerWnd, SW_HIDE);
+
+    if (!cmd || g_unloading) {
+        return;
+    }
+
+    // Dismiss the hover chain before the shell verb runs so Explorer
+    // windows are not covered by stale grids.
+    CloseChain();
+
+    // Defer InvokeCommand until after PopupWndProc (WM_RBUTTONUP) returns —
+    // same pattern as taskbar-folder-menus. Keep IContextMenu alive across
+    // the post; ASYNCOK lets many verbs leave this thread quickly.
+    ClearPendingShellCommand();
+    g_pendingShellCommand.contextMenu = contextMenu.detach();
+    g_pendingShellCommand.commandOffset = (int)cmd - 1;
+    g_pendingShellCommand.invokePoint = screenPt;
+    g_invokeActive = true;
+    if (!PostMessageW(g_menuOwnerWnd, WM_APP_INVOKE_SHELL_VERB, 0, 0)) {
+        Wh_Log(L"PostMessage WM_APP_INVOKE_SHELL_VERB failed (error %u); "
+               L"invoking inline",
+               GetLastError());
+        InvokePendingShellCommand(g_menuOwnerWnd);
+    }
 }
 
 // Launch on the UI thread via SEE_MASK_ASYNCOK so the shell does the work on
@@ -3244,6 +3331,16 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
     // retry so secondary taskbars still get folder buttons.
     if (uMsg == WM_DISPLAYCHANGE && !g_unloading) {
         StartRetryThread();
+    }
+
+    if (uMsg == WM_APP_INVOKE_SHELL_VERB) {
+        // Runs after ShowItemContextMenu / PopupWndProc have returned.
+        if (g_unloading) {
+            ClearPendingShellCommand();
+        } else {
+            InvokePendingShellCommand(hWnd);
+        }
+        return 0;
     }
 
     if (uMsg == WM_INITMENUPOPUP || uMsg == WM_DRAWITEM ||
@@ -5135,6 +5232,7 @@ void Wh_ModUninit() {
     // a mod-owned window (level popup or menu owner) when the taskbar HWND is
     // already gone — never DestroyWindow from this Windhawk callback thread.
     auto teardownOnUiThread = [](void*) {
+        ClearPendingShellCommand();
         CloseChain();
         RemoveAllHostGrids();
 
@@ -5185,6 +5283,18 @@ void Wh_ModUninit() {
         }
         if (g_menuActive) {
             Wh_Log(L"Uninit: shell context menu still active after wait");
+        }
+    }
+
+    // Also wait out a deferred/synchronous shell verb. ASYNCOK usually makes
+    // this short; verbs that ignore it and show modal UI can still outlive
+    // this wait — see CMIC_MASK_ASYNCOK on the invoke path.
+    if (g_invokeActive) {
+        for (int i = 0; g_invokeActive && i < 100; i++) {
+            Sleep(20);
+        }
+        if (g_invokeActive) {
+            Wh_Log(L"Uninit: shell verb still active after wait");
         }
     }
 
