@@ -235,7 +235,11 @@ static int  ROW_HEIGHT_EXPANDED = ROW_HEIGHT_EXPANDED_BASE;
 static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
 }
-
+typedef struct {
+    WCHAR profileName[33];
+    GUID interfaceGuid;
+} WlanProfileDialogContext;
+static HANDLE g_hProfileDialogThread = NULL;
 // Shared by InitRefreshButtonRect (hit-testing) and the paint handler
 // (drawing), so the two can't drift apart the way two copies of this
 // expression could.
@@ -6271,12 +6275,95 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     }
 }
 
-// WlanProfileDialogContext/WlanProfileDialogThreadProc, which used to open
-// WlanUIEditProfile on a mod-owned thread for IDM_PROPERTIES, were removed:
-// see the comment at the IDM_PROPERTIES handler in ShowContextMenu() for why
-// (that modal dialog could hang Wh_ModUninit indefinitely). IDM_PROPERTIES
-// now goes through the same native shell fallback as IDM_STATUS below.
+static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID lpParam) {
+    std::unique_ptr<WlanProfileDialogContext> context(
+        static_cast<WlanProfileDialogContext*>(lpParam));
 
+    if (!context)
+        return ERROR_INVALID_PARAMETER;
+
+    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
+        DWORD dwClientVersion,
+        LPCWSTR wstrProfileName,
+        GUID* pInterfaceGuid,
+        HWND hWnd,
+        DWORD wlStartPage,
+        PVOID pReserved,
+        DWORD* pdwReasonCode);
+
+    HMODULE hWlanUi = LoadLibraryExW(
+        L"wlanui.dll",
+        nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (!hWlanUi)
+        return GetLastError();
+
+    WlanUIEditProfile_t editProfile =
+        reinterpret_cast<WlanUIEditProfile_t>(
+            GetProcAddress(hWlanUi, "WlanUIEditProfile"));
+
+    DWORD result = ERROR_PROC_NOT_FOUND;
+
+    if (editProfile) {
+        DWORD reasonCode = 0;
+
+        // This opens the native Wireless Network Properties dialog for the
+        // saved Wi-Fi profile itself. Do not replace this with the Network
+        // Connections shell "properties" verb: that opens the adapter/connection
+        // properties on many systems, which is a fidelity regression from the
+        // intended Windows 7 behavior and from the documented Native Network
+        // Menus feature.
+        result = editProfile(
+            1,
+            context->profileName,
+            &context->interfaceGuid,
+            nullptr,
+            0,
+            nullptr,
+            &reasonCode);
+    }
+
+    FreeLibrary(hWlanUi);
+    return result;
+}
+// Keep WlanUIEditProfile as the primary implementation for the
+// "Properties" command on saved Wi-Fi profiles.
+//
+// This is intentional. There are two different native Windows dialogs that
+// are easy to confuse:
+//
+// 1. The Network Connections shell "properties" verb, invoked through
+//    shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\::{adapter-guid}
+//    with lpVerb = "properties". On many systems this opens the adapter or
+//    connection properties page. That is useful as a fallback, but it is not
+//    the same UI that Windows 7 showed for a saved Wi-Fi network profile.
+//
+// 2. WlanUIEditProfile from wlanui.dll. This opens the native Wireless
+//    Network Properties dialog for the saved Wi-Fi profile itself, including
+//    the profile-specific wireless/security settings. This is the dialog the
+//    Windows 7-style flyout is expected to open when the user right-clicks a
+//    saved Wi-Fi network and chooses "Properties".
+//
+// Replacing WlanUIEditProfile with the shell "properties" verb makes the code
+// simpler from a teardown/threading point of view, but it changes the visible
+// behavior: "Properties" starts opening the network adapter properties instead
+// of the saved wireless profile properties. That is a fidelity regression from
+// the intended Windows 7 behavior and from the documented "Native Network
+// Menus" feature in this mod's README.
+//
+// Therefore the order here is deliberate:
+// - First try WlanUIEditProfile for saved Wi-Fi profiles.
+// - Only if that path is unavailable or cannot be started, fall back to the
+//   Network Connections shell verb.
+// - If even that fails, fall back to opening the Network Connections folder.
+//
+// The WlanUIEditProfile dialog is still native Windows UI. The mod does not
+// implement or fake the property sheet; it only asks wlanui.dll to show the
+// same profile editor that Windows provides. The worker thread is used only so
+// the flyout's UI thread is not blocked by a modal native dialog. Cleanup code
+// must account for that thread, but removing this path entirely would trade a
+// lifecycle concern for a user-visible behavior regression.
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     WifiNetworkItem menuItem = {};
     EnterCriticalSection(&g_Ctx.csLock);
@@ -6339,53 +6426,119 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
             DisconnectFromNetwork(targetIndex);
             break;
         case IDM_STATUS:
-        case IDM_PROPERTIES:
-            {
-                BOOL launched = FALSE;
+case IDM_PROPERTIES:
+{
+    BOOL launched = FALSE;
 
-                // IDM_PROPERTIES used to open WlanUIEditProfile (a modal,
-                // user-driven property sheet) on a mod-owned thread. That
-                // dialog can refuse to close (e.g. it puts up its own
-                // confirmation), and the thread proc still runs FreeLibrary
-                // plus the mod's own unload epilogue - so if the dialog was
-                // still open when the mod is disabled/updated/reloaded,
-                // Wh_ModUninit had to block indefinitely (WaitForSingleObject
-                // ... INFINITE) until the user closed it by hand. Route
-                // IDM_PROPERTIES through the same native shell fallback used
-                // below for IDM_STATUS (SHParseDisplayName + ShellExecuteExW
-                // with the "properties"/"status" verb): it opens the same
-                // native UI without the mod owning any thread for it, which
-                // removes the hang entirely.
+    // For saved Wi-Fi profiles, "Properties" should open the native
+    // Wireless Network Properties dialog for the profile itself, not the
+    // adapter properties page. Routing IDM_PROPERTIES directly through the
+    // Network Connections shell PIDL opens the adapter/connection properties
+    // on many systems, which is a fidelity regression from the intended
+    // Windows 7-style behavior and from the documented "Native Network Menus"
+    // feature. Keep WlanUIEditProfile as the first choice, and use the shell
+    // verb path only as a safe fallback for unsupported cases.
+    if (cmd == IDM_PROPERTIES && targetItem.hasProfile &&
+        !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
+        if (g_hProfileDialogThread &&
+            WaitForSingleObject(g_hProfileDialogThread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_hProfileDialogThread);
+            g_hProfileDialogThread = NULL;
+        }
 
-                if (!launched && !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
-                    WCHAR szGuid[64] = {0};
-                    if (StringFromGUID2(targetItem.interfaceGuid, szGuid, ARRAYSIZE(szGuid)) > 0) {
-                        std::wstring path = L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" + std::wstring(szGuid);
-                        LPITEMIDLIST pidl = nullptr;
-                        if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
-                            SHELLEXECUTEINFOW sei = { sizeof(sei) };
-                            sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
-                            sei.hwnd = hwnd;
-                            sei.lpIDList = pidl;
-                            sei.nShow = SW_SHOWNORMAL;
-                            sei.lpVerb = (cmd == IDM_STATUS) ? L"status" : L"properties";
-                            launched = ShellExecuteExW(&sei);
-                            if (!launched) {
-                                sei.lpVerb = L"properties";
-                                launched = ShellExecuteExW(&sei);
-                            }
-                            CoTaskMemFree(pidl);
-                        }
-                    }
-                }
-                if (!launched) {
-                    ShellExecuteW(hwnd, L"open",
-                                  L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}",
-                                  NULL, NULL, SW_SHOWNORMAL);
-                }
-                ShowWindow(hwnd, SW_HIDE);
+        if (!g_hProfileDialogThread) {
+            std::unique_ptr<WlanProfileDialogContext> context(
+                new WlanProfileDialogContext{});
+
+            StringCchCopyW(
+                context->profileName,
+                ARRAYSIZE(context->profileName),
+                targetItem.ssid);
+
+            context->interfaceGuid = targetItem.interfaceGuid;
+
+            WlanProfileDialogContext* rawContext = context.release();
+
+            HANDLE thread = CreateThread(
+                NULL,
+                0,
+                WlanProfileDialogThreadProc,
+                rawContext,
+                0,
+                NULL);
+
+            if (thread) {
+                g_hProfileDialogThread = thread;
+                launched = TRUE;
+            } else {
+                delete rawContext;
             }
-            break;
+        } else {
+            // A profile-properties dialog is already open. Do not fall through
+            // to adapter properties, because that would show a different UI for
+            // the same "Properties" command.
+            launched = TRUE;
+        }
+    }
+
+    if (!launched && !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
+        WCHAR szGuid[64] = {0};
+
+        if (StringFromGUID2(
+                targetItem.interfaceGuid,
+                szGuid,
+                ARRAYSIZE(szGuid)) > 0) {
+            std::wstring path =
+                L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" +
+                std::wstring(szGuid);
+
+            LPITEMIDLIST pidl = nullptr;
+
+            if (SUCCEEDED(SHParseDisplayName(
+                    path.c_str(),
+                    nullptr,
+                    &pidl,
+                    0,
+                    nullptr)) && pidl) {
+                SHELLEXECUTEINFOW sei = { sizeof(sei) };
+
+                sei.fMask =
+                    SEE_MASK_INVOKEIDLIST |
+                    SEE_MASK_IDLIST |
+                    SEE_MASK_FLAG_NO_UI;
+
+                sei.hwnd = hwnd;
+                sei.lpIDList = pidl;
+                sei.nShow = SW_SHOWNORMAL;
+
+                sei.lpVerb =
+                    (cmd == IDM_STATUS) ? L"status" : L"properties";
+
+                launched = ShellExecuteExW(&sei);
+
+                if (!launched) {
+                    sei.lpVerb = L"properties";
+                    launched = ShellExecuteExW(&sei);
+                }
+
+                CoTaskMemFree(pidl);
+            }
+        }
+    }
+
+    if (!launched) {
+        ShellExecuteW(
+            hwnd,
+            L"open",
+            L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}",
+            NULL,
+            NULL,
+            SW_SHOWNORMAL);
+    }
+
+    ShowWindow(hwnd, SW_HIDE);
+}
+break;
         }
     }
     DestroyMenu(hMenu);
@@ -8270,10 +8423,9 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    // Keep DirectUI's known-valid endellipsis token. Give every map label
-    // 90rp rather than the old 69rp so localized Internet/network names and
-    // long computer names have substantially more room before truncating.
-    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
+    // Keep DirectUI's known-valid endellipsis token. Centering is handled by
+    // the icon/container geometry; this avoids an unsupported XML value.
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(pcName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8294,7 +8446,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(networkName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8325,7 +8477,7 @@ static std::wstring NetworkMapVisual() {
     xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
     xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
     xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
-    xml += L"width=\"90rp\" contentalign=\"endellipsis\" ";
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
     xml += L"content=\"" + Esc(internetName.c_str()) + L"\"/>";
     xml += L"</element>";
     xml += L"</element>";
@@ -8334,6 +8486,7 @@ static std::wstring NetworkMapVisual() {
 
     return xml;
 }
+
 
 
 // Add the Windows 7-style Home/Public/Work icon to the left of the active
@@ -8459,11 +8612,12 @@ if (g_addHomegroup) {
                     L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 27);
     } else {
         // Windows 10 1803+ / Windows 11: fallback to Advanced Sharing Settings
-        const wchar_t* fallbackTitle = LOC(STR_ADVANCED_SHARING_TITLE);
-        const wchar_t* fallbackDesc = LOC(STR_ADVANCED_SHARING_DESC);
-        mid += Link(fallbackTitle, fallbackDesc,
-                    L"%SystemRoot%\\system32\\control.exe",
-                    L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
+        // Use the already-populated LangPack fallback strings. This doesn't change the
+        // fallback behavior; it only prevents the Advanced Sharing row from rendering
+        // blank when HomeGroup is unavailable.
+            mid += Link(L->hFallbackTitle, L->hFallbackDesc,
+            L"%SystemRoot%\\system32\\control.exe",
+            L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
     }
 }
     xml.insert(insertAt, createBlock + mid + diagBlock);
@@ -9673,7 +9827,11 @@ static void SettingsChanged() {
     // point that's already cheap to no-op through.
     // If the page is already loaded, apply the runtime setting now. Otherwise
     // SetXMLFromResource_Hook installs it when netcenter.dll is first used.
-    if (g_Settings.privacyMode && g_hookInstalled && g_netcenterBase)
+    // Install the hook from the settings path when privacy mode is enabled. The hook
+    // still no-ops until netcenter.dll is observed and its range is cached, so this
+    // doesn't change privacy behavior; it only avoids applying hook operations from
+    // inside the DirectUI SetXML hook.
+    if (g_Settings.privacyMode && g_hookInstalled)
         EnsurePrivacyTextHookInstalled();
 }
 
