@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and may conflict with other XAML Diagnostics mods
-// @version         0.1.19
+// @version         0.1.20
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -66,8 +66,9 @@ keyboard shortcut text are also preserved.
 - Classic Win32 tooltips, including legacy notification-area icon tooltips, are
   rewritten only through theme handles opened for the `TOOLTIP` class, covering
   both text measurement and drawing without touching unrelated GDI text.
-  Each tracked theme is tied to the Tooltip window that opened it, and a DC
-  mapped to another window is rejected.
+  Shared theme handles retain a reference for every Tooltip window that opened
+  them. A DC mapped to another window is rejected, while buffered DCs that do
+  not map to a window are accepted.
   Existing tooltip controls are discovered when the mod is enabled in a
   running Explorer. Basic or classic-theme tooltips drawn directly with
   `DrawTextW` aren't covered.
@@ -625,6 +626,9 @@ MENUITEMINFOW CopyMenuItemInfoForRewrite(
         itemInfo->cbSize < sizeof(copy) ? itemInfo->cbSize
                                         : sizeof(copy);
     std::memcpy(&copy, itemInfo, copySize);
+    // Keep the copied structure self-consistent when callers provide a
+    // smaller version of MENUITEMINFOW.
+    copy.cbSize = static_cast<UINT>(copySize);
     return copy;
 }
 
@@ -941,7 +945,10 @@ DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 HMODULE g_loadedUxThemeModule;
 std::shared_mutex g_classicTooltipThemesMutex;
-std::unordered_map<HTHEME, HWND> g_classicTooltipThemes;
+// A theme handle can be shared by multiple tooltip windows. Keep one entry
+// per matching OpenThemeData call so CloseThemeData can release the right
+// number of references without letting the last window overwrite the rest.
+std::unordered_map<HTHEME, std::vector<HWND>> g_classicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
 
@@ -979,27 +986,22 @@ bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
     return false;
 }
 
-HWND FindTrackedClassicTooltipWindow(HTHEME theme) {
+bool IsClassicTooltipWindow(HWND window);
+
+bool IsTrackedClassicTooltipTheme(HTHEME theme) {
     if (!theme ||
         g_classicTooltipThemeCount.load(
             std::memory_order_relaxed) == 0) {
-        return nullptr;
+        return false;
     }
 
     std::shared_lock<std::shared_mutex> guard(
         g_classicTooltipThemesMutex);
-    const auto iterator = g_classicTooltipThemes.find(theme);
-    return iterator != g_classicTooltipThemes.end()
-               ? iterator->second
-               : nullptr;
-}
-
-bool IsTrackedClassicTooltipTheme(HTHEME theme) {
-    return FindTrackedClassicTooltipWindow(theme) != nullptr;
+    return g_classicTooltipThemes.contains(theme);
 }
 
 void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
-    if (!theme || !window) {
+    if (!theme || !window || !IsClassicTooltipWindow(window)) {
         return;
     }
 
@@ -1007,10 +1009,10 @@ void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
     {
         std::lock_guard<std::shared_mutex> guard(
             g_classicTooltipThemesMutex);
-        inserted = g_classicTooltipThemes.emplace(theme, window).second;
-        if (!inserted) {
-            g_classicTooltipThemes[theme] = window;
-        }
+        auto [iterator, wasInserted] =
+            g_classicTooltipThemes.try_emplace(theme);
+        inserted = wasInserted;
+        iterator->second.push_back(window);
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
             std::memory_order_relaxed);
@@ -1021,28 +1023,30 @@ void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
     }
 }
 
-void UntrackClassicTooltipTheme(HTHEME theme) {
+bool UntrackClassicTooltipTheme(HTHEME theme) {
     if (!theme ||
         g_classicTooltipThemeCount.load(
             std::memory_order_relaxed) == 0) {
-        return;
-    }
-
-    {
-        std::shared_lock<std::shared_mutex> guard(
-            g_classicTooltipThemesMutex);
-        if (!g_classicTooltipThemes.contains(theme)) {
-            return;
-        }
+        return false;
     }
 
     std::lock_guard<std::shared_mutex> guard(
         g_classicTooltipThemesMutex);
-    if (g_classicTooltipThemes.erase(theme) != 0) {
+    const auto iterator = g_classicTooltipThemes.find(theme);
+    if (iterator == g_classicTooltipThemes.end()) {
+        return false;
+    }
+
+    if (!iterator->second.empty()) {
+        iterator->second.pop_back();
+    }
+    if (iterator->second.empty()) {
+        g_classicTooltipThemes.erase(iterator);
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
             std::memory_order_relaxed);
     }
+    return true;
 }
 
 void ClearTrackedClassicTooltipThemes() {
@@ -1060,13 +1064,15 @@ bool IsClassicTooltipWindow(HWND window) {
 }
 
 bool IsClassicTooltipTarget(HTHEME theme, HDC dc) {
-    const HWND trackedWindow = FindTrackedClassicTooltipWindow(theme);
-    if (!trackedWindow || !IsClassicTooltipWindow(trackedWindow)) {
+    if (!IsTrackedClassicTooltipTheme(theme)) {
         return false;
     }
 
     const HWND window = dc ? WindowFromDC(dc) : nullptr;
-    return !window || window == trackedWindow;
+    // Buffered theme drawing may not expose an HWND through WindowFromDC.
+    // When it does, accept any actual classic tooltip window: a single HTHEME
+    // is commonly shared by several tooltips in the same process.
+    return !window || IsClassicTooltipWindow(window);
 }
 
 BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
@@ -1090,8 +1096,6 @@ HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
     HTHEME theme = g_originalOpenThemeData(window, classList);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme, window);
-    } else {
-        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
@@ -1104,8 +1108,6 @@ HTHEME WINAPI OpenThemeDataExHook(HWND window,
         g_originalOpenThemeDataEx(window, classList, flags);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme, window);
-    } else {
-        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
@@ -1118,17 +1120,13 @@ HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
         g_originalOpenThemeDataForDpi(window, classList, dpi);
     if (IsClassicTooltipThemeClassList(classList)) {
         TrackClassicTooltipTheme(theme, window);
-    } else {
-        UntrackClassicTooltipTheme(theme);
     }
 
     return theme;
 }
 
 HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
-    if (IsTrackedClassicTooltipTheme(theme)) {
-        UntrackClassicTooltipTheme(theme);
-    }
+    UntrackClassicTooltipTheme(theme);
     return g_originalCloseThemeData(theme);
 }
 
@@ -2132,10 +2130,26 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
     }
 }
 
+bool NeedsXamlDiagnosticsConnection() {
+    return (!g_windowsUiXamlDiagnosticsConnected.load(
+                 std::memory_order_acquire) &&
+            GetModuleHandleW(L"Windows.UI.Xaml.dll")) ||
+           (!g_microsoftUiXamlDiagnosticsConnected.load(
+                 std::memory_order_acquire) &&
+            GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll"));
+}
+
 void RequestModernXamlDiagnosticsInitialization() {
     const uint64_t generation =
         g_modernUiGeneration.load(std::memory_order_acquire);
     if (!IsCurrentModernUiGeneration(generation)) {
+        return;
+    }
+
+    // Host-window creation can be noisy. Once all currently loaded XAML
+    // diagnostics connections are established, avoid creating another worker
+    // until SetSite(nullptr) explicitly marks one as disconnected.
+    if (!NeedsXamlDiagnosticsConnection()) {
         return;
     }
 
