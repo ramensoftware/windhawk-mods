@@ -2,7 +2,7 @@
 // @id              taskbar-media-presence
 // @name            Taskbar Media Presence
 // @description     Taskbar music controls with adaptive album art, per-app volume, safe multi-monitor placement, and Discord Rich Presence.
-// @version         1.0.18
+// @version         1.0.21
 // @author          MrBoxik
 // @github          https://github.com/MrBoxik
 // @homepage        https://github.com/MrBoxik/Taskbar-Media-Presence
@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Media Presence 1.0.18
+# Taskbar Media Presence 1.0.21
 
 A compact Windows 11 taskbar player for any application that publishes a Windows media session.
 
@@ -48,7 +48,7 @@ MusicBee users can install the project-owned [`mb_TaskbarMediaPresence.dll`](htt
 
 The Windhawk mod never downloads or launches the companion automatically; installation is a separate manual choice. The companion source and build project are available in [`MusicBeeVolumeBridge`](https://github.com/MrBoxik/Taskbar-Media-Presence/tree/main/MusicBeeVolumeBridge).
 
-Discord publishing is disabled by default. When enabled, the mod sends the selected track, artist, playback state, and progress to the local Discord desktop client. Discord then broadcasts that activity to the user's profile according to their Discord activity-privacy settings. The mod performs no external HTTP requests itself.
+Discord publishing is disabled by default. When enabled, the mod sends the selected track, artist, playback state, and progress to the local Discord desktop client. Discord then broadcasts that activity to the user's profile according to their Discord activity-privacy settings. The default Discord Application ID belongs to this project and is owned by MrBoxik, so activity is attributed to **Taskbar Media Presence** unless the user replaces the ID with their own. The mod performs no external HTTP requests itself.
 
 ## Links
 
@@ -628,10 +628,10 @@ Created and maintained by **[MrBoxik](https://github.com/MrBoxik)**. Based on **
 - DiscordPresenceSettings:
   - enabled: false
     $name: Publish Discord Rich Presence
-    $description: Disabled by default. When enabled, sends the selected track, artist, playback state, and progress to the running Discord desktop client, which broadcasts the activity on your Discord profile to people allowed by your Discord privacy settings. The project Application ID is included below and can be replaced.
+    $description: Disabled by default. When enabled, sends the selected track, artist, playback state, and progress to the running Discord desktop client, which broadcasts the activity on your Discord profile to people allowed by your Discord privacy settings. The included default Application ID belongs to Taskbar Media Presence and is owned by MrBoxik; replace it below to attribute activity to your own Discord application.
   - applicationId: "1528896038163710112"
     $name: Discord Application ID
-    $description: The Taskbar Media Presence application ID is included by default. You can replace it with another numeric Application ID. This value is public, not a secret.
+    $description: The default ID belongs to the Taskbar Media Presence Discord application owned by MrBoxik. Activity published with it is attributed to Taskbar Media Presence. You can replace it with another numeric Application ID; this value is public, not a secret.
   - showPaused: true
     $name: Show paused songs
   - activityName: "{title}"
@@ -1757,6 +1757,13 @@ static bool WaitForAsyncTasks(DWORD timeoutMs) {
                     TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
+                if (timeoutMs != INFINITE && GetTickCount64() >= deadline) {
+                    if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+                        break;
+                    }
+                    allStopped = false;
+                    break;
+                }
                 continue;
             }
             allStopped = false;
@@ -1979,7 +1986,7 @@ struct MirrorPlayerInstance {
 };
 
 [[clang::no_destroy]] static std::vector<std::shared_ptr<MirrorPlayerInstance>> g_mirrorPlayers;
-[[clang::no_destroy]] static std::mutex g_mirrorPlayersMtx;
+static std::mutex g_mirrorPlayersMtx;
 
 static std::vector<std::shared_ptr<MirrorPlayerInstance>>
 SnapshotMirrorPlayers() {
@@ -2981,11 +2988,17 @@ static bool StopDiscordPresenceThread(bool shutdownCleanup = false) {
             cancelSynchronousIo(g_discordPresenceThread);
         }
 
-        DWORD timeoutMs = shutdownCleanup ? 3000 : INFINITE;
+        constexpr DWORD timeoutMs = 3000;
         if (!WaitForThreadExit(g_discordPresenceThread, timeoutMs)) {
-            Wh_Log(
-                L"Discord presence: worker didn't stop within the unload "
-                L"deadline; continuing instead of hanging Explorer");
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Discord presence: worker didn't stop within the unload "
+                    L"deadline; continuing instead of hanging Explorer");
+            } else {
+                Wh_Log(
+                    L"Discord presence: worker didn't stop within the settings-change "
+                    L"deadline; continuing instead of hanging Explorer");
+            }
             return false;
         }
     }
@@ -3979,8 +3992,8 @@ static constexpr wchar_t kProgressHitName[] = L"TaskbarMediaPresence_ProgressHit
 static constexpr wchar_t kProgressTrackName[] = L"TaskbarMediaPresence_ProgressTrack";
 static constexpr wchar_t kProgressFillName[] = L"TaskbarMediaPresence_ProgressFill";
 
-static int  g_idleSeconds  = 0;
-static bool g_hiddenByIdle = false;
+static std::atomic<int>  g_idleSeconds{0};
+static std::atomic<bool> g_hiddenByIdle{false};
 static std::chrono::steady_clock::time_point g_lastMediaTime = std::chrono::steady_clock::now();
 
 static void ShowAppVolumeFlyout(FrameworkElement const& target);
@@ -4010,7 +4023,6 @@ static bool MediaIdentityMatchesForSeek(
            g_media.thumbnailHash == expectedThumbnailHash;
 }
 
-[[maybe_unused]]
 static void SendMediaSeekAsync(
     int64_t targetSeconds,
     uint64_t expectedGeneration,
@@ -4623,7 +4635,6 @@ static bool SetAppVolumeStateByAUMID(
 static std::wstring GetWindowAppUserModelId(HWND hWnd);
 static void ShowMediaContextMenu(FrameworkElement const& target);
 
-[[maybe_unused]]
 static void ExecuteMediaAction(const std::wstring& action, FrameworkElement const& sourceElement = nullptr) {
     if (action == L"none") {
         return;
@@ -4683,38 +4694,58 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
 
             struct WindowSearch {
                 std::wstring targetAumid;
+                std::set<DWORD> matchingProcessIds;
                 bool comAvailable = false;
                 HWND aumidHwnd = nullptr;
                 HWND processHwnd = nullptr;
             };
             WindowSearch search;
             search.comAvailable = comAvailable;
-            search.targetAumid = appAumid;
-            std::transform(search.targetAumid.begin(), search.targetAumid.end(), search.targetAumid.begin(), ::towlower);
+            search.targetAumid = ToLowerCopy(appAumid);
+
+            // Reuse the strict audio-session identity matcher to resolve the
+            // process IDs that actually belong to the selected media source.
+            // This avoids foregrounding an unrelated process merely because a
+            // short executable name appears inside an AUMID.
+            if (!appAumid.empty()) {
+                ForEachMatchingAudioSession(
+                    appAumid, nullptr,
+                    [&](IAudioSessionControl*,
+                        IAudioSessionControl2* sessionControl2) {
+                        DWORD processId = 0;
+                        if (sessionControl2 &&
+                            SUCCEEDED(sessionControl2->GetProcessId(&processId)) &&
+                            processId) {
+                            search.matchingProcessIds.insert(processId);
+                        }
+                    });
+            }
 
             EnumWindows([](HWND hwnd, LPARAM lParam) CALLBACK -> BOOL {
                 if (!IsWindowVisible(hwnd)) return TRUE;
                 WINDOWINFO wi{};
                 wi.cbSize = sizeof(wi);
-                GetWindowInfo(hwnd, &wi);
-                if ((wi.dwStyle & WS_CHILD) != 0) return TRUE;
+                if (!GetWindowInfo(hwnd, &wi)) return TRUE;
+                if ((wi.dwStyle & WS_CHILD) != 0 ||
+                    (wi.dwExStyle & WS_EX_TOOLWINDOW) != 0) {
+                    return TRUE;
+                }
 
                 auto* s = reinterpret_cast<WindowSearch*>(lParam);
 
                 if (s->comAvailable && !s->aumidHwnd &&
                     !s->targetAumid.empty()) {
                     IPropertyStore* pps = nullptr;
-                    if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&pps)))) {
+                    if (SUCCEEDED(SHGetPropertyStoreForWindow(
+                            hwnd, IID_PPV_ARGS(&pps))) && pps) {
                         PROPVARIANT var;
                         PropVariantInit(&var);
-                        if (SUCCEEDED(pps->GetValue(PKEY_AppUserModel_ID, &var)) && var.vt == VT_LPWSTR) {
-                            std::wstring winAumid(var.pwszVal);
-                            std::transform(winAumid.begin(), winAumid.end(), winAumid.begin(), ::towlower);
-                            if (winAumid == s->targetAumid ||
-                                winAumid.find(s->targetAumid) != std::wstring::npos ||
-                                s->targetAumid.find(winAumid) != std::wstring::npos) {
-                                s->aumidHwnd = hwnd;
-                            }
+                        if (SUCCEEDED(pps->GetValue(
+                                PKEY_AppUserModel_ID, &var)) &&
+                            var.vt == VT_LPWSTR && var.pwszVal &&
+                            SamePackagedAppIdentity(
+                                s->targetAumid, var.pwszVal)) {
+                            s->aumidHwnd = hwnd;
                         }
                         PropVariantClear(&var);
                         pps->Release();
@@ -4724,28 +4755,36 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                 if (!s->processHwnd && !s->targetAumid.empty()) {
                     DWORD pid = 0;
                     GetWindowThreadProcessId(hwnd, &pid);
-                    if (pid) {
-                        wchar_t procPath[MAX_PATH]{};
-                        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-                        if (hProc) {
-                            DWORD sz = MAX_PATH;
-                            QueryFullProcessImageNameW(hProc, 0, procPath, &sz);
-                            CloseHandle(hProc);
-                        }
-                        if (procPath[0]) {
-                            std::wstring stem = procPath;
-                            auto slash = stem.find_last_of(L"\\/");
-                            if (slash != std::wstring::npos) stem = stem.substr(slash + 1);
-                            auto dot = stem.rfind(L'.');
-                            if (dot != std::wstring::npos) stem = stem.substr(0, dot);
-                            std::transform(stem.begin(), stem.end(), stem.begin(), ::towlower);
+                    if (!pid) return TRUE;
 
-                            if (!stem.empty() &&
-                                (s->targetAumid.find(stem) != std::wstring::npos ||
-                                 stem.find(s->targetAumid) != std::wstring::npos)) {
-                                s->processHwnd = hwnd;
-                            }
-                        }
+                    if (s->matchingProcessIds.find(pid) !=
+                        s->matchingProcessIds.end()) {
+                        s->processHwnd = hwnd;
+                        return TRUE;
+                    }
+
+                    // Some players don't expose a normal audio session. Keep a
+                    // conservative process-name fallback, but require a proper
+                    // identifier token or a known explicit alias. Short loose
+                    // substring matches such as "vlc", "mpc", or "tv" are
+                    // intentionally rejected.
+                    const std::wstring processPath = [&]() {
+                        HANDLE process = OpenProcess(
+                            PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                        if (!process) return std::wstring{};
+                        std::wstring path = QueryProcessImagePath(process);
+                        CloseHandle(process);
+                        return path;
+                    }();
+                    const std::wstring processStem =
+                        ToLowerCopy(PathFileStem(processPath));
+                    if (!processStem.empty() &&
+                        (KnownMediaPlayerProcessAlias(
+                             s->targetAumid, processStem) ||
+                         (s->targetAumid.size() >= 8 &&
+                          ContainsIdentifierToken(
+                              s->targetAumid, processStem)))) {
+                        s->processHwnd = hwnd;
                     }
                 }
 
@@ -4814,7 +4853,7 @@ static UINT g_volumePopupDpi = 96;
 static HMODULE g_modModuleHandle = nullptr;
 static bool g_volumePopupClassRegistered = false;
 static constexpr wchar_t kVolumePopupClass[] =
-    L"TaskbarMediaPresenceVolumePopup_v101";
+    L"TaskbarMediaPresenceVolumePopup";
 static constexpr UINT kVolumeStateChangedMessage = WM_APP + 0x431;
 static constexpr int kVolumePopupLogicalWidth = 84;
 static constexpr int kVolumePopupLogicalHeight = 184;
@@ -5862,22 +5901,31 @@ static std::wstring TrimCopy(std::wstring value) {
 }
 
 static bool IsIgnoredMediaApp(const std::wstring& appUserModelId) {
-    if (Cfg()->ignoredProcesses.empty() || appUserModelId.empty()) return false;
+    auto cfg = Cfg();
+    const std::wstring ignoredProcesses = cfg->ignoredProcesses;
+    if (ignoredProcesses.empty() || appUserModelId.empty()) return false;
 
-    std::wstring appLower = ToLowerCopy(appUserModelId);
-    std::wstring appStemLower = ToLowerCopy(PathFileStem(appUserModelId));
+    const std::wstring appLower = ToLowerCopy(appUserModelId);
+    const std::wstring appStemLower =
+        ToLowerCopy(PathFileStem(appUserModelId));
     size_t start = 0;
-    while (start <= Cfg()->ignoredProcesses.size()) {
-        size_t end = Cfg()->ignoredProcesses.find(L';', start);
-        std::wstring item = TrimCopy(Cfg()->ignoredProcesses.substr(
-            start, end == std::wstring::npos ? std::wstring::npos : end - start));
+    while (start <= ignoredProcesses.size()) {
+        size_t end = ignoredProcesses.find(L';', start);
+        std::wstring item = TrimCopy(ignoredProcesses.substr(
+            start, end == std::wstring::npos
+                       ? std::wstring::npos
+                       : end - start));
         if (!item.empty()) {
-            std::wstring itemLower = ToLowerCopy(item);
-            std::wstring itemStemLower = ToLowerCopy(PathFileStem(item));
+            const std::wstring itemLower = ToLowerCopy(item);
+            const std::wstring itemStemLower =
+                ToLowerCopy(PathFileStem(item));
             if (appLower == itemLower ||
-                appStemLower == itemStemLower ||
-                appLower.find(itemLower) != std::wstring::npos ||
-                appLower.find(itemStemLower) != std::wstring::npos) {
+                (!itemStemLower.empty() &&
+                 appStemLower == itemStemLower) ||
+                (itemLower.size() >= 8 &&
+                 ContainsIdentifierToken(appLower, itemLower)) ||
+                (!itemStemLower.empty() &&
+                 ContainsIdentifierToken(appLower, itemStemLower))) {
                 return true;
             }
         }
@@ -7281,23 +7329,34 @@ static void StartMediaThread() {
 static bool StopMediaThread(bool shutdownCleanup = false) {
     SignalWorkerEventHandle(g_mediaStopEvent);
     bool threadStopped = true;
-    DWORD timeoutMs = shutdownCleanup ? 5000 : INFINITE;
+    constexpr DWORD timeoutMs = 5000;
     if (g_mediaThread) {
         threadStopped = WaitForThreadExit(g_mediaThread, timeoutMs);
         if (threadStopped) {
             CloseHandle(g_mediaThread);
             g_mediaThread = nullptr;
         } else {
-            Wh_Log(
-                L"Media thread didn't stop within the unload deadline; "
-                L"continuing instead of hanging Explorer");
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Media thread didn't stop within the unload deadline; "
+                    L"continuing instead of hanging Explorer");
+            } else {
+                Wh_Log(
+                    L"Media thread didn't stop within the settings-change deadline; "
+                    L"continuing instead of hanging Explorer");
+            }
         }
     }
 
     bool callbacksIdle = threadStopped &&
         WaitForMediaEventCallbacksIdle(timeoutMs);
-    if (!callbacksIdle && shutdownCleanup) {
-        Wh_Log(L"Media callbacks didn't drain within the unload deadline");
+    if (!callbacksIdle) {
+        if (shutdownCleanup) {
+            Wh_Log(L"Media callbacks didn't drain within the unload deadline");
+        } else {
+            Wh_Log(
+                L"Media callbacks didn't drain within the settings-change deadline");
+        }
     }
     if (threadStopped && callbacksIdle) {
         CloseWorkerEventHandle(g_mediaStopEvent);
@@ -7788,6 +7847,8 @@ static LRESULT CALLBACK TaskbarTopologyNotificationWindowProc(
         switch (message) {
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
+            g_taskbarCenteredState.store(-1, std::memory_order_release);
+            [[fallthrough]];
         case WM_DEVICECHANGE:
         case WM_POWERBROADCAST:
             state->changePending = true;
@@ -8187,26 +8248,27 @@ static DWORD TimerThreadMain() {
             }
             if (playing) {
                 idleStoppedSinceTick = 0;
-                g_idleSeconds = 0;
-                if (g_hiddenByIdle) {
-                    g_hiddenByIdle = false;
+                g_idleSeconds.store(0, std::memory_order_relaxed);
+                if (g_hiddenByIdle.load(std::memory_order_relaxed)) {
+                    g_hiddenByIdle.store(false, std::memory_order_relaxed);
                     needsUpdate = true;
                 }
             } else {
                 if (!idleStoppedSinceTick) idleStoppedSinceTick = nowTick;
-                g_idleSeconds = static_cast<int>(
+                const int idleSeconds = static_cast<int>(
                     (nowTick - idleStoppedSinceTick) / 1000);
-                if (!g_hiddenByIdle &&
-                    g_idleSeconds >= Cfg()->idleHideSeconds) {
-                    g_hiddenByIdle = true;
+                g_idleSeconds.store(idleSeconds, std::memory_order_relaxed);
+                if (!g_hiddenByIdle.load(std::memory_order_relaxed) &&
+                    idleSeconds >= Cfg()->idleHideSeconds) {
+                    g_hiddenByIdle.store(true, std::memory_order_relaxed);
                     needsUpdate = true;
                 }
             }
         } else {
             idleStoppedSinceTick = 0;
-            if (g_hiddenByIdle) {
-                g_hiddenByIdle = false;
-                g_idleSeconds = 0;
+            if (g_hiddenByIdle.load(std::memory_order_relaxed)) {
+                g_hiddenByIdle.store(false, std::memory_order_relaxed);
+                g_idleSeconds.store(0, std::memory_order_relaxed);
                 needsUpdate = true;
             }
         }
@@ -8265,16 +8327,22 @@ static bool StopTimerThread(bool shutdownCleanup = false,
     bool discordStopped = StopDiscordPresenceThread(shutdownCleanup);
     SignalWorkerEventHandle(g_timerStopEvent);
     bool timerStopped = true;
-    DWORD timeoutMs = shutdownCleanup ? 5000 : INFINITE;
+    constexpr DWORD timeoutMs = 5000;
     if (g_timerThread) {
         timerStopped = WaitForThreadExit(g_timerThread, timeoutMs);
         if (timerStopped) {
             CloseHandle(g_timerThread);
             g_timerThread = nullptr;
         } else {
-            Wh_Log(
-                L"Timer thread didn't stop within the unload deadline; "
-                L"continuing instead of hanging Explorer");
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Timer thread didn't stop within the unload deadline; "
+                    L"continuing instead of hanging Explorer");
+            } else {
+                Wh_Log(
+                    L"Timer thread didn't stop within the settings-change deadline; "
+                    L"continuing instead of hanging Explorer");
+            }
         }
     }
     if (timerStopped) {
@@ -10247,7 +10315,6 @@ static double ProgressFractionFromPointer(
     return std::clamp(x / width, 0.0, 1.0);
 }
 
-[[maybe_unused]]
 static bool PointInsideElement(
     FrameworkElement const& element,
     PointerRoutedEventArgs const& eventArgs) {
@@ -14309,7 +14376,7 @@ static bool IsFullscreenActive() {
 static bool ShouldHidePlayer() {
     bool hide = false;
     if (Cfg()->hideFullscreen && IsFullscreenActive()) hide = true;
-    if (!hide && g_hiddenByIdle) hide = true;
+    if (!hide && g_hiddenByIdle.load(std::memory_order_relaxed)) hide = true;
 
     if (!hide) {
         bool hasMedia = false, hasSession = false;
@@ -14445,8 +14512,8 @@ static bool ApplySettings() {
     uint64_t restartGeneration =
         g_taskbarRestartGeneration.load(std::memory_order_acquire);
     if (TaskbarRestartSettleWindowActive()) return false;
-    g_idleSeconds  = 0;
-    g_hiddenByIdle = false;
+    g_idleSeconds.store(0, std::memory_order_relaxed);
+    g_hiddenByIdle.store(false, std::memory_order_relaxed);
     if (restartGeneration !=
             g_taskbarRestartGeneration.load(std::memory_order_acquire) ||
         TaskbarRestartSettleWindowActive()) {
@@ -15101,8 +15168,18 @@ static void ModSettingsChangedImpl() {
 
     PauseAsyncTasks();
     bool scrollTimerStopped = StopTimerThread();
-    StopMediaThread();
-    WaitForAsyncTasks(INFINITE);
+    bool mediaThreadStopped = StopMediaThread();
+    bool asyncTasksStopped = WaitForAsyncTasks(5000);
+    if (!mediaThreadStopped) {
+        Wh_Log(
+            L"Wh_ModSettingsChanged: media worker cleanup exceeded the "
+            L"settings-change deadline; continuing without hanging Explorer");
+    }
+    if (!asyncTasksStopped) {
+        Wh_Log(
+            L"Wh_ModSettingsChanged: background tasks exceeded the "
+            L"settings-change deadline; continuing without hanging Explorer");
+    }
 
     // Values selected from the compact context menu are persistent overrides
     // across Explorer/Windows restarts. Applying the full Windhawk settings
