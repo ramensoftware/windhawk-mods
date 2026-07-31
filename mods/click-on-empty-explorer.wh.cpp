@@ -1485,7 +1485,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
           g_subclassed.push_back({ hWnd, true });
         }
         { std::lock_guard<std::mutex> lk(g_wrappersMutex);
-          for (auto& w : g_Wrappers)
+          for (auto& w : *g_Wrappers)
             if (w.hShellTab == shellTab) { w.hListView = hWnd; break; }
         }
     } else {
@@ -1496,7 +1496,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
             }
         }
         { std::lock_guard<std::mutex> lk(g_wrappersMutex);
-          for (auto& w : g_Wrappers)
+          for (auto& w : *g_Wrappers)
             if (w.hShellTab == shellTab) { w.hListView = defView; break; }
         }
     }
