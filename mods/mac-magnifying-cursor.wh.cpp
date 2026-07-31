@@ -2,11 +2,11 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.4
+// @version      1.4.5
 // @github       https://github.com/alivca
 // @author       Jaali
 // @include      windhawk.exe
-// @compilerOptions -luser32 -lgdi32
+// @compilerOptions -luser32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,9 +21,9 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 - maxScalePercent: 400
   $name: Maximum size (%)
   $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
-- shakeThreshold: 2500
+- shakeThreshold: 3500
   $name: Shake sensitivity threshold
-  $description: "Total mouse movement distance required to trigger the effect (recommended: 2000-3000)."
+  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 3000-4000)."
 - lerpSpeedUpPercent: 40
   $name: Enlarge speed (%)
   $description: "How fast the cursor expands (recommended: 20-40)."
@@ -35,9 +35,10 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 
 #define OEMRESOURCE
 #include <windows.h>
+#include <shellapi.h>
+#include <deque>
 #include <vector>
 #include <cmath>
-#include <atomic>
 #include <windhawk_api.h>
 
 #ifndef OCR_NORMAL
@@ -79,87 +80,56 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 #ifndef OCR_APPSTARTING
 #define OCR_APPSTARTING 32650
 #endif
+#ifndef OCR_HELP
+#define OCR_HELP 32651
+#endif
 
-const DWORD g_cursorIds[13] = {
+const DWORD g_cursorIds[] = {
     OCR_NORMAL, OCR_IBEAM, OCR_WAIT, OCR_CROSS, OCR_UP,
     OCR_SIZENWSE, OCR_SIZENESW, OCR_SIZEWE, OCR_SIZENS,
-    OCR_SIZEALL, OCR_NO, OCR_HAND, OCR_APPSTARTING
+    OCR_SIZEALL, OCR_NO, OCR_HAND, OCR_APPSTARTING, OCR_HELP
 };
+const size_t kCursorCount = sizeof(g_cursorIds) / sizeof(g_cursorIds[0]);
 
 struct Settings {
     float maxScale       = 4.0f;
     float minScale       = 1.0f;
     float lerpSpeedUp    = 0.40f;
     float lerpSpeedDown  = 0.15f;
-    float shakeThreshold = 2500.0f;
+    float shakeThreshold = 800.0f;
     int   shakeWindowMs  = 500;
 } g_settings;
 
 void LoadSettings() {
     int maxScalePct = Wh_GetIntSetting(L"maxScalePercent");
-    if (maxScalePct > 0) {
-        if (maxScalePct > 1000) maxScalePct = 1000;
-        if (maxScalePct < 100) maxScalePct = 100;
-        g_settings.maxScale = maxScalePct / 100.0f;
-    }
+    if (maxScalePct < 100) maxScalePct = 400;
+    if (maxScalePct > 1000) maxScalePct = 1000;
+    g_settings.maxScale = maxScalePct / 100.0f;
 
     int thresh = Wh_GetIntSetting(L"shakeThreshold");
-    if (thresh > 0) g_settings.shakeThreshold = static_cast<float>(thresh);
+    g_settings.shakeThreshold = (thresh > 0) ? static_cast<float>(thresh) : 800.0f;
 
     int speedUp = Wh_GetIntSetting(L"lerpSpeedUpPercent");
-    if (speedUp > 0) g_settings.lerpSpeedUp = speedUp / 100.0f;
+    g_settings.lerpSpeedUp = (speedUp > 0 && speedUp <= 100) ? (speedUp / 100.0f) : 0.40f;
 
     int speedDown = Wh_GetIntSetting(L"lerpSpeedDownPercent");
-    if (speedDown > 0) g_settings.lerpSpeedDown = speedDown / 100.0f;
+    g_settings.lerpSpeedDown = (speedDown > 0 && speedDown <= 100) ? (speedDown / 100.0f) : 0.15f;
 }
-
-typedef int (WINAPI *pfn_GetObjectW)(HANDLE, int, LPVOID);
-typedef HDC (WINAPI *pfn_CreateCompatibleDC)(HDC);
-typedef HBITMAP (WINAPI *pfn_CreateDIBSection)(HDC, CONST BITMAPINFO *, UINT, VOID **, HANDLE, DWORD);
-typedef HGDIOBJ (WINAPI *pfn_SelectObject)(HDC, HGDIOBJ);
-typedef BOOL (WINAPI *pfn_DeleteObject)(HGDIOBJ);
-typedef BOOL (WINAPI *pfn_DeleteDC)(HDC);
-typedef BOOL (WINAPI *pfn_SetWindowBand)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
-typedef BOOL (WINAPI *pfn_SetThreadDpiAwarenessContext)(HANDLE);
-
-struct GdiApi {
-    pfn_GetObjectW pGetObjectW = nullptr;
-    pfn_CreateCompatibleDC pCreateCompatibleDC = nullptr;
-    pfn_CreateDIBSection pCreateDIBSection = nullptr;
-    pfn_SelectObject pSelectObject = nullptr;
-    pfn_DeleteObject pDeleteObject = nullptr;
-    pfn_DeleteDC pDeleteDC = nullptr;
-
-    bool Init() {
-        HMODULE hGdi = GetModuleHandleW(L"gdi32.dll");
-        if (!hGdi) hGdi = LoadLibraryW(L"gdi32.dll");
-        if (!hGdi) return false;
-
-        pGetObjectW = (pfn_GetObjectW)GetProcAddress(hGdi, "GetObjectW");
-        pCreateCompatibleDC = (pfn_CreateCompatibleDC)GetProcAddress(hGdi, "CreateCompatibleDC");
-        pCreateDIBSection = (pfn_CreateDIBSection)GetProcAddress(hGdi, "CreateDIBSection");
-        pSelectObject = (pfn_SelectObject)GetProcAddress(hGdi, "SelectObject");
-        pDeleteObject = (pfn_DeleteObject)GetProcAddress(hGdi, "DeleteObject");
-        pDeleteDC = (pfn_DeleteDC)GetProcAddress(hGdi, "DeleteDC");
-
-        return pGetObjectW && pCreateCompatibleDC && pCreateDIBSection && 
-               pSelectObject && pDeleteObject && pDeleteDC;
-    }
-} g_gdi;
 
 struct PointTime {
     POINT pt;
-    DWORD time;
+    ULONGLONG time;
 };
 
 struct ModState {
     HWND hwndOverlay = NULL;
     HANDLE hThread = NULL;
-    std::atomic<bool> running{false};
-    std::vector<PointTime> history;
+    DWORD dwThreadId = 0;
+    std::deque<PointTime> history;
     float currentScale = 1.0f;
     float targetScale = 1.0f;
     bool cursorHidden = false;
+    bool isVisible = false;
     HCURSOR hSavedCursor = NULL;
 } g_state;
 
@@ -168,8 +138,10 @@ HCURSOR CreateBlankCursor() {
     int h = GetSystemMetrics(SM_CYCURSOR);
     if (w <= 0) w = 32;
     if (h <= 0) h = 32;
-    std::vector<BYTE> andMask((w * h) / 8, 0xFF);
-    std::vector<BYTE> xorMask((w * h) / 8, 0x00);
+
+    size_t maskSize = (static_cast<size_t>(w + 7) / 8) * h;
+    std::vector<BYTE> andMask(maskSize, 0xFF);
+    std::vector<BYTE> xorMask(maskSize, 0x00);
     return CreateCursor(GetModuleHandle(NULL), 0, 0, w, h, andMask.data(), xorMask.data());
 }
 
@@ -177,10 +149,15 @@ void HideAllSystemCursors() {
     if (!g_state.cursorHidden) {
         HCURSOR hBlank = CreateBlankCursor();
         if (hBlank) {
-            for (int i = 0; i < 13; ++i) {
-                SetSystemCursor(CopyIcon(hBlank), g_cursorIds[i]);
+            for (size_t i = 0; i < kCursorCount; ++i) {
+                HCURSOR hCopy = CopyIcon(hBlank);
+                if (hCopy) {
+                    if (!SetSystemCursor(hCopy, g_cursorIds[i])) {
+                        DestroyIcon(hCopy);
+                    }
+                }
             }
-            DestroyIcon(hBlank);
+            DestroyCursor(hBlank);
             g_state.cursorHidden = true;
         }
     }
@@ -204,15 +181,15 @@ float GetDistance(POINT a, POINT b) {
 }
 
 void UpdateFrame() {
-    DWORD now = GetTickCount();
+    ULONGLONG now = GetTickCount64();
 
     POINT pt;
     GetCursorPos(&pt);
 
     g_state.history.push_back({ pt, now });
 
-    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<DWORD>(g_settings.shakeWindowMs))) {
-        g_state.history.erase(g_state.history.begin());
+    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<ULONGLONG>(g_settings.shakeWindowMs))) {
+        g_state.history.pop_front();
     }
 
     float totalPath = 0.0f;
@@ -222,9 +199,10 @@ void UpdateFrame() {
         }
         float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
 
-        if (totalPath > g_settings.shakeThreshold && (totalPath / (netDisp + 1.0f) > 1.3f)) {
+        float shakeRatio = totalPath / (netDisp + 1.0f);
+        if (totalPath > g_settings.shakeThreshold && shakeRatio > 1.2f) {
             g_state.targetScale = g_settings.maxScale;
-        } else if (totalPath < 80.0f) {
+        } else if (totalPath < g_settings.shakeThreshold * 0.4f || shakeRatio <= 1.1f) {
             g_state.targetScale = g_settings.minScale;
         }
     }
@@ -248,12 +226,12 @@ void UpdateFrame() {
             ICONINFO ii = { 0 };
             if (GetIconInfo(g_state.hSavedCursor, &ii)) {
                 BITMAP bm = { 0 };
-                g_gdi.pGetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
+                GetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
 
                 int baseWidth = bm.bmWidth;
                 int baseHeight = ii.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
-                if (baseWidth == 0) baseWidth = 32;
-                if (baseHeight == 0) baseHeight = 32;
+                if (baseWidth <= 0) baseWidth = 32;
+                if (baseHeight <= 0) baseHeight = 32;
 
                 int scaledW = static_cast<int>(baseWidth * g_state.currentScale);
                 int scaledH = static_cast<int>(baseHeight * g_state.currentScale);
@@ -266,7 +244,7 @@ void UpdateFrame() {
 
                 HDC hdcScreen = GetDC(NULL);
                 if (hdcScreen) {
-                    HDC hdcMem = g_gdi.pCreateCompatibleDC(hdcScreen);
+                    HDC hdcMem = CreateCompatibleDC(hdcScreen);
                     if (hdcMem) {
                         BITMAPINFO bmi = { 0 };
                         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -277,13 +255,13 @@ void UpdateFrame() {
                         bmi.bmiHeader.biCompression = BI_RGB;
 
                         void* pBits = nullptr;
-                        HBITMAP hbmMem = g_gdi.pCreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+                        HBITMAP hbmMem = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
                         if (hbmMem && pBits) {
-                            HBITMAP hOldBm = static_cast<HBITMAP>(g_gdi.pSelectObject(hdcMem, hbmMem));
-                            
+                            HBITMAP hOldBm = static_cast<HBITMAP>(SelectObject(hdcMem, hbmMem));
+
                             DWORD* pPixels = static_cast<DWORD*>(pBits);
                             size_t pixelCount = static_cast<size_t>(scaledW) * scaledH;
-                            
+
                             for (size_t i = 0; i < pixelCount; ++i) {
                                 pPixels[i] = 0x00000001;
                             }
@@ -315,23 +293,28 @@ void UpdateFrame() {
 
                             UpdateLayeredWindow(g_state.hwndOverlay, hdcScreen, &ptWin, &sizeWin, hdcMem, &ptZero, 0, &blend, ULW_ALPHA);
 
-                            g_gdi.pSelectObject(hdcMem, hOldBm);
-                            g_gdi.pDeleteObject(hbmMem);
+                            SelectObject(hdcMem, hOldBm);
+                            DeleteObject(hbmMem);
                         }
-                        g_gdi.pDeleteDC(hdcMem);
+                        DeleteDC(hdcMem);
                     }
                     ReleaseDC(NULL, hdcScreen);
                 }
 
-                if (ii.hbmMask) g_gdi.pDeleteObject(ii.hbmMask);
-                if (ii.hbmColor) g_gdi.pDeleteObject(ii.hbmColor);
+                if (ii.hbmMask) DeleteObject(ii.hbmMask);
+                if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-                SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, winX, winY, scaledW, scaledH,
-                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
+                SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+                g_state.isVisible = true;
             }
         }
     } else {
-        ShowWindow(g_state.hwndOverlay, SW_HIDE);
+        if (g_state.isVisible) {
+            ShowWindow(g_state.hwndOverlay, SW_HIDE);
+            g_state.isVisible = false;
+        }
         RestoreAllSystemCursors();
     }
 }
@@ -345,23 +328,27 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         case WM_ERASEBKGND:
             return 1;
+        case WM_QUERYENDSESSION:
+        case WM_ENDSESSION:
+            RestoreAllSystemCursors();
+            return TRUE;
         case WM_DESTROY:
             KillTimer(hwnd, 1);
+            RestoreAllSystemCursors();
             PostQuitMessage(0);
             return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
+typedef BOOL (WINAPI *pfn_SetThreadDpiAwarenessContext)(HANDLE);
+
 DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    
     if (hUser32) {
         auto pSetDpi = (pfn_SetThreadDpiAwarenessContext)GetProcAddress(hUser32, "SetThreadDpiAwarenessContext");
         if (pSetDpi) pSetDpi((HANDLE)-4);
     }
-
-    if (!g_gdi.Init()) return 0;
 
     const wchar_t* kClassName = L"WindhawkShakeCursorExclusiveOverlay";
 
@@ -370,28 +357,21 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = kClassName;
 
-    UnregisterClass(kClassName, wc.hInstance);
     if (!RegisterClassEx(&wc)) {
-        return 0;
+        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+            return 0;
+        }
     }
 
     g_state.hwndOverlay = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        wc.lpszClassName, L"", WS_POPUP,
-        0, 0, 100, 100,
-        NULL, NULL, wc.hInstance, NULL
+        kClassName, L"", WS_POPUP,
+        0, 0, 1, 1,
+        NULL, NULL, GetModuleHandle(NULL), NULL
     );
 
     if (!g_state.hwndOverlay) {
-        UnregisterClass(kClassName, wc.hInstance);
         return 0;
-    }
-
-    if (hUser32) {
-        auto pSetWindowBand = (pfn_SetWindowBand)GetProcAddress(hUser32, "SetWindowBand");
-        if (pSetWindowBand) {
-            pSetWindowBand(g_state.hwndOverlay, NULL, 2);
-        }
     }
 
     SetTimer(g_state.hwndOverlay, 1, 16, NULL);
@@ -409,18 +389,14 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
         g_state.hwndOverlay = NULL;
     }
 
-    UnregisterClass(kClassName, wc.hInstance);
     return 0;
 }
 
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
-
-    g_state.running = true;
-    g_state.hThread = CreateThread(NULL, 0, CursorMonitorThread, NULL, 0, NULL);
-    return TRUE;
+    g_state.hThread = CreateThread(NULL, 0, CursorMonitorThread, NULL, 0, &g_state.dwThreadId);
+    return g_state.hThread != NULL;
 }
 
 void Wh_ModSettingsChanged() {
@@ -428,10 +404,12 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    g_state.running = false;
     if (g_state.hwndOverlay) {
         PostMessage(g_state.hwndOverlay, WM_CLOSE, 0, 0);
+    } else if (g_state.dwThreadId != 0) {
+        PostThreadMessage(g_state.dwThreadId, WM_QUIT, 0, 0);
     }
+
     if (g_state.hThread) {
         WaitForSingleObject(g_state.hThread, 2000);
         CloseHandle(g_state.hThread);
