@@ -2,10 +2,11 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.2.1
+// @version      1.4.3
 // @github       https://github.com/alivca
 // @author       Jaali
-// @include      explorer.exe
+// @include      windhawk.exe
+// @compilerOptions -luser32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -36,6 +37,7 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 #include <windows.h>
 #include <vector>
 #include <cmath>
+#include <atomic>
 #include <windhawk_api.h>
 
 #ifndef OCR_NORMAL
@@ -89,13 +91,17 @@ struct Settings {
     float minScale       = 1.0f;
     float lerpSpeedUp    = 0.40f;
     float lerpSpeedDown  = 0.15f;
-    float shakeThreshold = 4500.0f;
+    float shakeThreshold = 3500.0f;
     int   shakeWindowMs  = 500;
 } g_settings;
 
 void LoadSettings() {
     int maxScalePct = Wh_GetIntSetting(L"maxScalePercent");
-    if (maxScalePct > 0) g_settings.maxScale = maxScalePct / 100.0f;
+    if (maxScalePct > 0) {
+        if (maxScalePct > 1000) maxScalePct = 1000;
+        if (maxScalePct < 100) maxScalePct = 100;
+        g_settings.maxScale = maxScalePct / 100.0f;
+    }
 
     int thresh = Wh_GetIntSetting(L"shakeThreshold");
     if (thresh > 0) g_settings.shakeThreshold = static_cast<float>(thresh);
@@ -149,7 +155,7 @@ struct PointTime {
 struct ModState {
     HWND hwndOverlay = NULL;
     HANDLE hThread = NULL;
-    bool running = false;
+    std::atomic<bool> running{false};
     std::vector<PointTime> history;
     float currentScale = 1.0f;
     float targetScale = 1.0f;
@@ -191,21 +197,136 @@ void RestoreAllSystemCursors() {
     }
 }
 
-LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
-    }
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-
 float GetDistance(POINT a, POINT b) {
     float dx = static_cast<float>(a.x - b.x);
     float dy = static_cast<float>(a.y - b.y);
     return std::sqrt(dx * dx + dy * dy);
+}
+
+void UpdateFrame() {
+    DWORD now = GetTickCount();
+
+    POINT pt;
+    GetCursorPos(&pt);
+
+    g_state.history.push_back({ pt, now });
+
+    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<DWORD>(g_settings.shakeWindowMs))) {
+        g_state.history.erase(g_state.history.begin());
+    }
+
+    float totalPath = 0.0f;
+    if (g_state.history.size() >= 2) {
+        for (size_t i = 1; i < g_state.history.size(); ++i) {
+            totalPath += GetDistance(g_state.history[i - 1].pt, g_state.history[i].pt);
+        }
+        float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
+
+        if (totalPath > g_settings.shakeThreshold && (totalPath / (netDisp + 1.0f) > 1.3f)) {
+            g_state.targetScale = g_settings.maxScale;
+        } else if (totalPath < 80.0f) {
+            g_state.targetScale = g_settings.minScale;
+        }
+    }
+
+    float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp : g_settings.lerpSpeedDown;
+    g_state.currentScale += (g_state.targetScale - g_state.currentScale) * lerpSpeed;
+
+    if (g_state.currentScale > 1.02f) {
+        if (!g_state.cursorHidden) {
+            CURSORINFO ci = { sizeof(CURSORINFO) };
+            if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) && ci.hCursor) {
+                if (g_state.hSavedCursor) DestroyIcon(g_state.hSavedCursor);
+                g_state.hSavedCursor = CopyIcon(ci.hCursor);
+                if (g_state.hSavedCursor) {
+                    HideAllSystemCursors();
+                }
+            }
+        }
+
+        if (g_state.hSavedCursor) {
+            ICONINFO ii = { 0 };
+            if (GetIconInfo(g_state.hSavedCursor, &ii)) {
+                BITMAP bm = { 0 };
+                g_gdi.pGetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
+
+                int baseWidth = bm.bmWidth;
+                int baseHeight = ii.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
+                if (baseWidth == 0) baseWidth = 32;
+                if (baseHeight == 0) baseHeight = 32;
+
+                int scaledW = static_cast<int>(baseWidth * g_state.currentScale);
+                int scaledH = static_cast<int>(baseHeight * g_state.currentScale);
+
+                int hotspotX = static_cast<int>(ii.xHotspot * g_state.currentScale);
+                int hotspotY = static_cast<int>(ii.yHotspot * g_state.currentScale);
+
+                int winX = pt.x - hotspotX;
+                int winY = pt.y - hotspotY;
+
+                HDC hdcScreen = GetDC(NULL);
+                if (hdcScreen) {
+                    HDC hdcMem = g_gdi.pCreateCompatibleDC(hdcScreen);
+                    if (hdcMem) {
+                        BITMAPINFO bmi = { 0 };
+                        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                        bmi.bmiHeader.biWidth = scaledW;
+                        bmi.bmiHeader.biHeight = -scaledH;
+                        bmi.bmiHeader.biPlanes = 1;
+                        bmi.bmiHeader.biBitCount = 32;
+                        bmi.bmiHeader.biCompression = BI_RGB;
+
+                        void* pBits = nullptr;
+                        HBITMAP hbmMem = g_gdi.pCreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+                        if (hbmMem && pBits) {
+                            HBITMAP hOldBm = static_cast<HBITMAP>(g_gdi.pSelectObject(hdcMem, hbmMem));
+                            ZeroMemory(pBits, static_cast<size_t>(scaledW) * scaledH * 4);
+
+                            DrawIconEx(hdcMem, 0, 0, g_state.hSavedCursor, scaledW, scaledH, 0, NULL, DI_NORMAL);
+
+                            POINT ptZero = { 0, 0 };
+                            SIZE sizeWin = { scaledW, scaledH };
+                            POINT ptWin = { winX, winY };
+                            BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+                            UpdateLayeredWindow(g_state.hwndOverlay, hdcScreen, &ptWin, &sizeWin, hdcMem, &ptZero, 0, &blend, ULW_ALPHA);
+
+                            g_gdi.pSelectObject(hdcMem, hOldBm);
+                            g_gdi.pDeleteObject(hbmMem);
+                        }
+                        g_gdi.pDeleteDC(hdcMem);
+                    }
+                    ReleaseDC(NULL, hdcScreen);
+                }
+
+                if (ii.hbmMask) g_gdi.pDeleteObject(ii.hbmMask);
+                if (ii.hbmColor) g_gdi.pDeleteObject(ii.hbmColor);
+
+                SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, winX, winY, scaledW, scaledH,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
+            }
+        }
+    } else {
+        ShowWindow(g_state.hwndOverlay, SW_HIDE);
+        RestoreAllSystemCursors();
+    }
+}
+
+LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_TIMER:
+            if (wParam == 1) {
+                UpdateFrame();
+            }
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_DESTROY:
+            KillTimer(hwnd, 1);
+            PostQuitMessage(0);
+            return 0;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
@@ -218,11 +339,17 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
 
     if (!g_gdi.Init()) return 0;
 
+    const wchar_t* kClassName = L"WindhawkShakeCursorExclusiveOverlay";
+
     WNDCLASSEX wc = { sizeof(WNDCLASSEX) };
     wc.lpfnWndProc = OverlayWndProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"WindhawkShakeCursorExclusiveOverlay";
-    RegisterClassEx(&wc);
+    wc.lpszClassName = kClassName;
+
+    UnregisterClass(kClassName, wc.hInstance);
+    if (!RegisterClassEx(&wc)) {
+        return 0;
+    }
 
     g_state.hwndOverlay = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -231,7 +358,10 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
         NULL, NULL, wc.hInstance, NULL
     );
 
-    if (!g_state.hwndOverlay) return 0;
+    if (!g_state.hwndOverlay) {
+        UnregisterClass(kClassName, wc.hInstance);
+        return 0;
+    }
 
     if (hUser32) {
         auto pSetWindowBand = (pfn_SetWindowBand)GetProcAddress(hUser32, "SetWindowBand");
@@ -240,144 +370,61 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
         }
     }
 
-    DWORD lastTime = GetTickCount();
+    SetTimer(g_state.hwndOverlay, 1, 16, NULL);
 
-    while (g_state.running) {
-        DWORD now = GetTickCount();
-        DWORD dt = now - lastTime;
-        if (dt < 16) {
-            Sleep(16 - dt);
-            now = GetTickCount();
-        }
-        lastTime = now;
-
-        POINT pt;
-        GetCursorPos(&pt);
-
-        g_state.history.push_back({ pt, now });
-
-        while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<DWORD>(g_settings.shakeWindowMs))) {
-            g_state.history.erase(g_state.history.begin());
-        }
-
-        float totalPath = 0.0f;
-        if (g_state.history.size() >= 2) {
-            for (size_t i = 1; i < g_state.history.size(); ++i) {
-                totalPath += GetDistance(g_state.history[i - 1].pt, g_state.history[i].pt);
-            }
-            float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
-
-            if (totalPath > g_settings.shakeThreshold && (totalPath / (netDisp + 1.0f) > 1.3f)) {
-                g_state.targetScale = g_settings.maxScale;
-            } else if (totalPath < 80.0f) {
-                g_state.targetScale = g_settings.minScale;
-            }
-        }
-
-        float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp : g_settings.lerpSpeedDown;
-        g_state.currentScale += (g_state.targetScale - g_state.currentScale) * lerpSpeed;
-
-        if (g_state.currentScale > 1.02f) {
-            if (!g_state.cursorHidden) {
-                CURSORINFO ci = { sizeof(CURSORINFO) };
-                if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) && ci.hCursor) {
-                    if (g_state.hSavedCursor) DestroyIcon(g_state.hSavedCursor);
-                    g_state.hSavedCursor = CopyIcon(ci.hCursor);
-                }
-                HideAllSystemCursors();
-            }
-
-            if (g_state.hSavedCursor) {
-                ICONINFO ii = { 0 };
-                if (GetIconInfo(g_state.hSavedCursor, &ii)) {
-                    BITMAP bm = { 0 };
-                    g_gdi.pGetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
-
-                    int baseWidth = bm.bmWidth;
-                    int baseHeight = ii.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
-                    if (baseWidth == 0) baseWidth = 32;
-                    if (baseHeight == 0) baseHeight = 32;
-
-                    int scaledW = static_cast<int>(baseWidth * g_state.currentScale);
-                    int scaledH = static_cast<int>(baseHeight * g_state.currentScale);
-
-                    int hotspotX = static_cast<int>(ii.xHotspot * g_state.currentScale);
-                    int hotspotY = static_cast<int>(ii.yHotspot * g_state.currentScale);
-
-                    int winX = pt.x - hotspotX;
-                    int winY = pt.y - hotspotY;
-
-                    HDC hdcScreen = GetDC(NULL);
-                    HDC hdcMem = g_gdi.pCreateCompatibleDC(hdcScreen);
-
-                    BITMAPINFO bmi = { 0 };
-                    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                    bmi.bmiHeader.biWidth = scaledW;
-                    bmi.bmiHeader.biHeight = -scaledH;
-                    bmi.bmiHeader.biPlanes = 1;
-                    bmi.bmiHeader.biBitCount = 32;
-                    bmi.bmiHeader.biCompression = BI_RGB;
-
-                    void* pBits = nullptr;
-                    HBITMAP hbmMem = g_gdi.pCreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-                    HBITMAP hOldBm = static_cast<HBITMAP>(g_gdi.pSelectObject(hdcMem, hbmMem));
-
-                    ZeroMemory(pBits, scaledW * scaledH * 4);
-
-                    DrawIconEx(hdcMem, 0, 0, g_state.hSavedCursor, scaledW, scaledH, 0, NULL, DI_NORMAL);
-
-                    POINT ptZero = { 0, 0 };
-                    SIZE sizeWin = { scaledW, scaledH };
-                    POINT ptWin = { winX, winY };
-                    
-                    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-
-                    UpdateLayeredWindow(g_state.hwndOverlay, hdcScreen, &ptWin, &sizeWin, hdcMem, &ptZero, 0, &blend, ULW_ALPHA);
-
-                    g_gdi.pSelectObject(hdcMem, hOldBm);
-                    g_gdi.pDeleteObject(hbmMem);
-                    g_gdi.pDeleteDC(hdcMem);
-                    ReleaseDC(NULL, hdcScreen);
-
-                    if (ii.hbmMask) g_gdi.pDeleteObject(ii.hbmMask);
-                    if (ii.hbmColor) g_gdi.pDeleteObject(ii.hbmColor);
-
-                    SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, winX, winY, scaledW, scaledH,
-                                 SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
-                }
-            }
-        } else {
-            ShowWindow(g_state.hwndOverlay, SW_HIDE);
-            RestoreAllSystemCursors();
-        }
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     RestoreAllSystemCursors();
 
     if (g_state.hwndOverlay) {
         DestroyWindow(g_state.hwndOverlay);
+        g_state.hwndOverlay = NULL;
     }
-    UnregisterClass(wc.lpszClassName, wc.hInstance);
+
+    UnregisterClass(kClassName, wc.hInstance);
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
+
+    SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
+
     g_state.running = true;
     g_state.hThread = CreateThread(NULL, 0, CursorMonitorThread, NULL, 0, NULL);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_state.running = false;
+    if (g_state.hwndOverlay) {
+        PostMessage(g_state.hwndOverlay, WM_CLOSE, 0, 0);
+    }
     if (g_state.hThread) {
-        WaitForSingleObject(g_state.hThread, 1000);
+        WaitForSingleObject(g_state.hThread, INFINITE);
         CloseHandle(g_state.hThread);
         g_state.hThread = NULL;
     }
     RestoreAllSystemCursors();
+}
+
+// === Обязательные точки входа Windhawk ===
+BOOL Wh_ModInit() {
+    return WhTool_ModInit();
+}
+
+void Wh_ModSettingsChanged() {
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    WhTool_ModUninit();
 }
