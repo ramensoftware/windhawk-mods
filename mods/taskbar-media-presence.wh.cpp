@@ -2,7 +2,7 @@
 // @id              taskbar-media-presence
 // @name            Taskbar Media Presence
 // @description     Taskbar music controls with adaptive album art, per-app volume, safe multi-monitor placement, and Discord Rich Presence.
-// @version         1.0.17
+// @version         1.0.18
 // @author          MrBoxik
 // @github          https://github.com/MrBoxik
 // @homepage        https://github.com/MrBoxik/Taskbar-Media-Presence
@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Media Presence 1.0.17
+# Taskbar Media Presence 1.0.18
 
 A compact Windows 11 taskbar player for any application that publishes a Windows media session.
 
@@ -27,7 +27,7 @@ A compact Windows 11 taskbar player for any application that publishes a Windows
 - A single optional MusicBee companion adds its Windows media session and exact internal-volume control.
 - Selected-monitor or compatible all-monitor placement with reserved presets and custom overlay anchors.
 - One-way title marquee, ellipsis, and bounce modes.
-- Transparent widget and transparent Windows taskbar options.
+- Transparent widget and transparent Windows taskbar options. Taskbar transparency is skipped while another known taskbar-transparency provider is loaded.
 - Context-menu choices persist across Explorer and Windows restarts.
 - Opt-in Discord Rich Presence with playback progress and a configurable static artwork asset.
 
@@ -298,7 +298,7 @@ Created and maintained by **[MrBoxik](https://github.com/MrBoxik)**. Based on **
   - TaskbarAppearanceSettings:
     - transparentTaskbar: false
       $name: Transparent taskbar
-      $description: Makes the Windows taskbar background fully transparent on every monitor. This is independent from the media widget background and is restored when the option or mod is disabled.
+      $description: Makes the Windows taskbar background fully transparent on every monitor. This is independent from the media widget background and is restored when the option or mod is disabled. The option is skipped while another known taskbar-transparency provider is loaded.
     $name: Windows taskbar
 
   - ProgressBarStyleSettings:
@@ -1560,6 +1560,7 @@ static bool ApplySettings();
 static bool ApplyTaskbarTransparencyToAll(
     bool shutdownCleanup = false,
     std::optional<bool> transparentOverride = std::nullopt);
+static bool HasExternalTaskbarTransparencyProvider();
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_applyingSettings{false};
@@ -1694,31 +1695,8 @@ static void WaitForThreadExit(HANDLE thread) {
             }
             continue;
         }
+        WaitForSingleObject(thread, INFINITE);
         return;
-    }
-}
-
-static bool WaitForThreadExitBounded(HANDLE thread, DWORD timeoutMs) {
-    if (!thread) return true;
-    ULONGLONG deadline = GetTickCount64() + timeoutMs;
-    while (true) {
-        ULONGLONG now = GetTickCount64();
-        DWORD remaining = now < deadline
-            ? static_cast<DWORD>(deadline - now)
-            : 0;
-        DWORD result = MsgWaitForMultipleObjects(
-            1, &thread, FALSE, remaining, QS_SENDMESSAGE);
-        if (result == WAIT_OBJECT_0) return true;
-        if (result == WAIT_OBJECT_0 + 1) {
-            MSG message;
-            while (PeekMessageW(&message, nullptr, 0, 0,
-                                PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
-            continue;
-        }
-        return WaitForSingleObject(thread, 0) == WAIT_OBJECT_0;
     }
 }
 
@@ -2181,6 +2159,21 @@ static void WaitForWindowDispatchCompletion(HANDLE completedEvent) {
     }
 }
 
+static bool UnhookWindowDispatchHookConfirmed(
+    HHOOK hook, DWORD* errorOut = nullptr) {
+    if (errorOut) *errorOut = ERROR_SUCCESS;
+    if (!hook) return true;
+
+    if (UnhookWindowsHookEx(hook)) return true;
+
+    DWORD error = GetLastError();
+    if (errorOut) *errorOut = error;
+
+    // An invalid hook handle means the hook is no longer registered, so there
+    // is no callback target left to keep this module alive for.
+    return error == ERROR_INVALID_HOOK_HANDLE;
+}
+
 static bool RunFromWindowThreadImpl(
     HWND hWnd, WindowThreadProc proc, void* param,
     bool allowDuringShutdown, DWORD timeoutMs) {
@@ -2252,11 +2245,12 @@ static bool RunFromWindowThreadImpl(
             std::memory_order_acq_rel);
     }
 
-    if (!UnhookWindowsHookEx(hook)) {
+    DWORD unhookError = ERROR_SUCCESS;
+    if (!UnhookWindowDispatchHookConfirmed(hook, &unhookError)) {
         std::lock_guard<std::mutex> lock(g_failedWindowDispatchHooksMtx);
         g_failedWindowDispatchHooks.push_back(hook);
         Wh_Log(L"RunFromWindowThread: UnhookWindowsHookEx failed (%u)",
-               GetLastError());
+               unhookError);
     }
 
     {
@@ -2322,7 +2316,8 @@ static bool RetryFailedWindowDispatchHooks() {
 
     std::vector<HHOOK> failedAgain;
     for (HHOOK hook : hooks) {
-        if (!UnhookWindowsHookEx(hook)) {
+        DWORD error = ERROR_SUCCESS;
+        if (!UnhookWindowDispatchHookConfirmed(hook, &error)) {
             failedAgain.push_back(hook);
         }
     }
@@ -2334,6 +2329,32 @@ static bool RetryFailedWindowDispatchHooks() {
             failedAgain.begin(), failedAgain.end());
     }
     return failedAgain.empty();
+}
+
+static void WaitForFailedWindowDispatchHooksRemoved() {
+    ULONGLONG nextLogTick = GetTickCount64() + 5000;
+    while (!RetryFailedWindowDispatchHooks()) {
+        // A registered WH_CALLWNDPROC hook points directly into this module.
+        // Unloading before every hook is removed would leave Explorer with a
+        // dangling callback address. Retry without a final timeout, while still
+        // pumping sent messages so the taskbar UI thread cannot deadlock us.
+        MsgWaitForMultipleObjectsEx(
+            0, nullptr, 10, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
+        MSG message{};
+        while (PeekMessageW(
+            &message, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (now >= nextLogTick) {
+            Wh_Log(
+                L"Wh_ModUninit: still waiting for a window-dispatch hook "
+                L"to unregister");
+            nextLogTick = now + 5000;
+        }
+    }
 }
 
 struct MediaState {
@@ -2871,20 +2892,12 @@ static void StopDiscordPresenceThread() {
         if (cancelSynchronousIo) {
             cancelSynchronousIo(g_discordPresenceThread);
         }
-        // Discord IPC is local named-pipe I/O. CancelSynchronousIo normally
-        // wakes it immediately, but keep the stop path bounded. If a pathological
-        // client hang remains, retain the worker handles for diagnostics and let
-        // Windhawk manage the module lifetime normally.
-        if (!WaitForThreadExitBounded(g_discordPresenceThread, 6000)) {
-            Wh_Log(
-                L"Discord presence: worker did not stop within 6 seconds; "
-                L"cleanup deferred");
-            if (g_unloading) {
-                ReportOutstandingCallbackRisk(
-                    L"Discord presence worker still stopping");
-            }
-            return;
-        }
+
+        // The worker executes code from this module. Never let Wh_ModUninit
+        // return while it is still running, because Windhawk may unmap the DLL.
+        // Discord pipe reads are stop-aware and bounded, and
+        // CancelSynchronousIo wakes any current synchronous operation.
+        WaitForThreadExit(g_discordPresenceThread);
     }
     ReapStoppedDiscordPresenceThread();
 }
@@ -7196,6 +7209,8 @@ static HANDLE g_timerUpdateEvent = nullptr;
 [[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_scrollDispatcherTimer{nullptr};
 static winrt::event_token                        g_scrollDispatcherTimerToken{};
 static bool                                       g_scrollDispatcherTimerHasToken = false;
+static int                                        g_scrollDispatcherTimerIntervalMs = 0;
+static ULONGLONG                                  g_nextProgressAnimationTick = 0;
 static std::atomic<bool>                          g_scrollDispatcherTimerRegistered{false};
 static std::atomic<HWND>                          g_scrollDispatcherTimerOwnerWindow{nullptr};
 static std::atomic<DWORD>                         g_scrollDispatcherTimerOwnerThreadId{0};
@@ -7249,29 +7264,98 @@ static void TickScrollState(TextScrollState& s, int stepPx, int pauseMs, const s
 }
 
 static void UpdateScrollTransforms();
+static void RefreshProgressBars();
+
+static bool HasActiveScrollAnimation() {
+    if (g_titleScroll.active || g_artistScroll.active) return true;
+    for (const auto& instance : g_mirrorPlayers) {
+        if (!instance || !instance->visualState ||
+            instance->ownerThreadId != GetCurrentThreadId()) {
+            continue;
+        }
+        if (instance->visualState->titleScroll.active ||
+            instance->visualState->artistScroll.active) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool HasActiveProgressAnimation() {
+    if (!Cfg()->showProgressBar) return false;
+    std::lock_guard<std::mutex> lock(g_mediaMtx);
+    return g_media.hasMedia && g_media.isPlaying &&
+           g_media.durationSeconds > 0;
+}
+
+static void SetScrollDispatcherTimerInterval(int intervalMs) {
+    if (!g_scrollDispatcherTimer ||
+        g_scrollDispatcherTimerIntervalMs == intervalMs) {
+        return;
+    }
+    g_scrollDispatcherTimer.Interval(
+        winrt::Windows::Foundation::TimeSpan{
+            std::chrono::milliseconds(intervalMs)});
+    g_scrollDispatcherTimerIntervalMs = intervalMs;
+}
+
+static void RefreshScrollDispatcherTimerCadence() {
+    if (!g_scrollDispatcherTimerRegistered.load(
+            std::memory_order_acquire) ||
+        !g_scrollDispatcherTimer ||
+        g_scrollDispatcherTimerOwnerThreadId.load(
+            std::memory_order_acquire) != GetCurrentThreadId()) {
+        return;
+    }
+
+    if (HasActiveScrollAnimation()) {
+        SetScrollDispatcherTimerInterval(16);
+    } else if (HasActiveProgressAnimation()) {
+        SetScrollDispatcherTimerInterval(250);
+    } else {
+        // Keep one inexpensive idle heartbeat so a newly published media state
+        // can resume progress animation without a cross-thread hook dispatch.
+        SetScrollDispatcherTimerInterval(1000);
+    }
+}
 
 static void ScrollTimerTick(winrt::Windows::Foundation::IInspectable const&,
                              winrt::Windows::Foundation::IInspectable const&) {
     if (TaskbarXamlCallbacksSuppressed()) return;
     try {
-        bool needsScroll =
-            g_titleScroll.active || g_artistScroll.active;
-        if (!needsScroll) return;
-        int stepPx = std::max(1, Cfg()->scrollSpeed);
-        int pauseMs = Cfg()->scrollPauseDuration;
-        TickScrollState(
-            g_titleScroll, stepPx, pauseMs, Cfg()->scrollMode);
-        TickScrollState(
-            g_artistScroll, stepPx, pauseMs, Cfg()->scrollMode);
-        UpdateScrollTransforms();
+        bool needsScroll = HasActiveScrollAnimation();
+        bool needsProgress = HasActiveProgressAnimation();
+
+        if (needsScroll) {
+            int stepPx = std::max(1, Cfg()->scrollSpeed);
+            int pauseMs = Cfg()->scrollPauseDuration;
+            TickScrollState(
+                g_titleScroll, stepPx, pauseMs, Cfg()->scrollMode);
+            TickScrollState(
+                g_artistScroll, stepPx, pauseMs, Cfg()->scrollMode);
+            UpdateScrollTransforms();
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (needsProgress) {
+            if (!g_nextProgressAnimationTick ||
+                now >= g_nextProgressAnimationTick) {
+                RefreshProgressBars();
+                g_nextProgressAnimationTick = now + 250;
+            }
+        } else {
+            g_nextProgressAnimationTick = 0;
+        }
+
+        RefreshScrollDispatcherTimerCadence();
     } catch (...) {
-        Wh_Log(L"Scroll timer callback failed");
+        Wh_Log(L"Taskbar UI animation timer callback failed");
     }
 }
 
 static bool StartScrollTimer() {
     if (g_scrollDispatcherTimerRegistered.load(std::memory_order_acquire)) {
-        return false;
+        return true;
     }
     HWND hWnd = g_playerOwnerWindow.load();
     DWORD ownerThreadId = g_playerOwnerThreadId.load();
@@ -7294,8 +7378,11 @@ static bool StartScrollTimer() {
     bool dispatched = RunFromWindowThread(hWnd, [](void* parameter) {
         auto* workItem = static_cast<StartScrollTimerWork*>(parameter);
         if (g_scrollDispatcherTimerRegistered.load(
-                std::memory_order_acquire) ||
-            GetCurrentThreadId() != workItem->ownerThreadId) {
+                std::memory_order_acquire)) {
+            workItem->started = true;
+            return;
+        }
+        if (GetCurrentThreadId() != workItem->ownerThreadId) {
             return;
         }
         HANDLE ownerThreadHandle = OpenTaskbarOwnerThreadHandle(
@@ -7309,7 +7396,9 @@ static bool StartScrollTimer() {
             if (!g_scrollDispatcherTimer) {
                 g_scrollDispatcherTimer = winrt::Windows::UI::Xaml::DispatcherTimer();
                 g_scrollDispatcherTimer.Interval(
-                    winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(16)});
+                    winrt::Windows::Foundation::TimeSpan{
+                        std::chrono::milliseconds(250)});
+                g_scrollDispatcherTimerIntervalMs = 250;
                 g_scrollDispatcherTimerToken = g_scrollDispatcherTimer.Tick(&ScrollTimerTick);
                 g_scrollDispatcherTimerHasToken = true;
             }
@@ -7326,6 +7415,8 @@ static bool StartScrollTimer() {
                         g_scrollDispatcherTimerHasToken = false;
                     }
                     g_scrollDispatcherTimer = nullptr;
+                    g_scrollDispatcherTimerIntervalMs = 0;
+                    g_nextProgressAnimationTick = 0;
                 }
             } catch (...) {
                 rolledBack = false;
@@ -7375,6 +7466,8 @@ static bool StopScrollTimer(bool shutdownCleanup = false) {
                     g_scrollDispatcherTimerHasToken = false;
                 }
                 g_scrollDispatcherTimer = nullptr;
+                g_scrollDispatcherTimerIntervalMs = 0;
+                g_nextProgressAnimationTick = 0;
             }
             g_scrollDispatcherTimerOwnerWindow = nullptr;
             g_scrollDispatcherTimerOwnerThreadId = 0;
@@ -7542,7 +7635,6 @@ static void DispatchMediaUpdate() {
 }
 
 static void RefreshPlayerContents();
-static void RefreshProgressBars();
 static void UpdateVisibility();
 static void RefreshThemeColors();
 static winrt::Windows::UI::Color ProgressFillColor();
@@ -7723,6 +7815,8 @@ static DWORD TimerThreadMain() {
     ULONGLONG idleStoppedSinceTick = 0;
     uint64_t lastTaskbarTopology = GetTaskbarTopologyFingerprint();
     bool topologyOwnerWasLive = true;
+    bool externalTransparencyProviderPresent =
+        HasExternalTaskbarTransparencyProvider();
     HANDLE stopEvent = SnapshotWorkerEventHandle(g_timerStopEvent);
     HANDLE updateEvent = SnapshotWorkerEventHandle(g_timerUpdateEvent);
     if (!stopEvent || !updateEvent) return 0;
@@ -7764,12 +7858,6 @@ static DWORD TimerThreadMain() {
         handles[handleCount++] = updateEvent;
 
         DWORD waitTimeout = 1000;
-        {
-            std::lock_guard<std::mutex> lock(g_mediaMtx);
-            if (g_media.hasMedia && g_media.isPlaying) {
-                waitTimeout = 250;
-            }
-        }
         HWND waitPopupWindow =
             g_volumePopupWindow.load(std::memory_order_acquire);
         if (waitPopupWindow && IsWindowVisible(waitPopupWindow)) {
@@ -7830,6 +7918,19 @@ static DWORD TimerThreadMain() {
             ? (committedOwnerLive ? committedOwnerWindow : nullptr)
             : selectedTaskbar;
         if (!selectedTaskbar && !uiUpdateWindow) continue;
+
+        bool externalTransparencyProviderNow =
+            HasExternalTaskbarTransparencyProvider();
+        if (externalTransparencyProviderNow !=
+                externalTransparencyProviderPresent) {
+            externalTransparencyProviderPresent =
+                externalTransparencyProviderNow;
+            if (Cfg()->transparentTaskbar) {
+                // Restore our captured values when another provider appears,
+                // or reapply the user's setting after that provider unloads.
+                ApplyTaskbarTransparencyToAll();
+            }
+        }
 
         if (themeIndex != MAXDWORD &&
             wait == WAIT_OBJECT_0 + themeIndex) {
@@ -7920,7 +8021,8 @@ static DWORD TimerThreadMain() {
                     try {
                         if (InjectPlayerGrid() &&
                             (Cfg()->enableTitleScrolling ||
-                             Cfg()->enableArtistScrolling)) {
+                             Cfg()->enableArtistScrolling ||
+                             Cfg()->showProgressBar)) {
                             StartScrollTimer();
                         }
                     } catch (...) {
@@ -7962,12 +8064,6 @@ static DWORD TimerThreadMain() {
         }
 
         bool needsUpdate = g_needsUiUpdate.exchange(false);
-        bool progressRefreshDue = false;
-        if (!needsUpdate && Cfg()->showProgressBar) {
-            std::lock_guard<std::mutex> lock(g_mediaMtx);
-            progressRefreshDue = g_media.hasMedia &&
-                g_media.isPlaying && g_media.durationSeconds > 0;
-        }
 
         if (Cfg()->idleHideSeconds > 0) {
             bool playing = false;
@@ -8010,12 +8106,7 @@ static DWORD TimerThreadMain() {
                     g_hookFailCount = 0;
                     RefreshPlayerContents();
                     UpdateVisibility();
-                }
-            }, nullptr);
-        } else if (progressRefreshDue && uiUpdateWindow) {
-            RunFromWindowThread(uiUpdateWindow, [](void*) {
-                if (!TaskbarXamlCallbacksSuppressed() && g_playerGrid) {
-                    RefreshProgressBars();
+                    RefreshScrollDispatcherTimerCadence();
                 }
             }, nullptr);
         }
@@ -8758,8 +8849,13 @@ static bool ApplyTaskbarTransparencyToAll(
         if (!conflictLogged.exchange(true)) {
             Wh_Log(
                 L"Taskbar transparency: another transparency provider is "
-                L"loaded; applying the explicit user request anyway");
+                L"loaded; skipping this mod's taskbar-background changes");
         }
+
+        // Treat the request as disabled while the external provider is active.
+        // If this mod applied transparency earlier, the normal false path below
+        // restores only the values that this mod captured.
+        transparent = false;
     }
 
     bool allSucceeded = true;
@@ -9422,7 +9518,8 @@ static bool ApplyQuickMonitorRebuild() {
         workItem->injected = InjectPlayerGrid();
         if (workItem->injected &&
             (Cfg()->enableTitleScrolling ||
-             Cfg()->enableArtistScrolling)) {
+             Cfg()->enableArtistScrolling ||
+             Cfg()->showProgressBar)) {
             workItem->injected = StartScrollTimer();
         }
         g_needsUiUpdate = true;
@@ -10154,10 +10251,15 @@ static void UpdateProgressBarForGrid(
         }
         hitElement.Opacity(
             Cfg()->progressBarSeekEnabled && canSeek ? 1.0 : 0.68);
-        hitElement.UpdateLayout();
-        trackElement.UpdateLayout();
         double width = trackElement.ActualWidth();
         if (width <= 0.0) width = hitElement.ActualWidth();
+        if (width <= 0.0) {
+            // Layout is normally already valid on the taskbar UI thread. Only
+            // force one pass for the first frame after injection.
+            playerGrid.UpdateLayout();
+            width = trackElement.ActualWidth();
+            if (width <= 0.0) width = hitElement.ActualWidth();
+        }
         fillElement.Width(std::max(0.0, width * fraction));
         UpdateProgressBarThicknessForGrid(playerGrid, visualState);
         if (visualState->progressHovered || visualState->progressDragging) {
@@ -10177,20 +10279,12 @@ static void RefreshProgressBars() {
 
     auto mirrors = g_mirrorPlayers;
     for (const auto& instance : mirrors) {
-        if (!instance || !instance->playerGrid || !instance->visualState) {
+        if (!instance || !instance->playerGrid || !instance->visualState ||
+            instance->ownerThreadId != GetCurrentThreadId()) {
             continue;
         }
-        struct ProgressRefreshWork {
-            std::shared_ptr<MirrorPlayerInstance> instance;
-        } work{instance};
-        RunFromWindowThread(instance->taskbarWindow, [](void* parameter) {
-            if (TaskbarXamlCallbacksSuppressed()) return;
-            auto* workItem = static_cast<ProgressRefreshWork*>(parameter);
-            auto const& mirror = workItem->instance;
-            if (!mirror || !mirror->playerGrid || !mirror->visualState) return;
-            UpdateProgressBarForGrid(
-                mirror->playerGrid, mirror->visualState);
-        }, &work);
+        UpdateProgressBarForGrid(
+            instance->playerGrid, instance->visualState);
     }
 }
 
@@ -13995,6 +14089,8 @@ static void RefreshPlayerContentsForGrid(
                 }
             }
     }
+
+    RefreshScrollDispatcherTimerCadence();
 }
 
 static void RefreshPlayerContents() {
@@ -14253,7 +14349,8 @@ static bool ApplySettings() {
             injected = InjectPlayerGrid();
             if (injected &&
                 (Cfg()->enableTitleScrolling ||
-                 Cfg()->enableArtistScrolling)) {
+                 Cfg()->enableArtistScrolling ||
+                 Cfg()->showProgressBar)) {
                 injected = StartScrollTimer();
             }
         } catch (...) {
@@ -14756,12 +14853,11 @@ static void ModUninitImpl() {
         }
     }
 
-    RetryFailedWindowDispatchHooks();
-    WaitForWindowDispatchActivityIdle();
-    bool hooksUnregistered = RetryFailedWindowDispatchHooks();
-    // If the final unhook succeeds, a callback that entered just before that
-    // success can still be on-stack. With the hook now removed no new callback
-    // can enter, so this second drain closes the last unload race.
+    WaitForFailedWindowDispatchHooksRemoved();
+    bool hooksUnregistered = true;
+    // A callback that entered just before the final unhook can still be
+    // on-stack. With every hook now removed no new callback can enter, so this
+    // drain closes the last unload race before the module can be unmapped.
     WaitForWindowDispatchActivityIdle();
 
     bool requestsDrained = false;
