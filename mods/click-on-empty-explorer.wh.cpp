@@ -445,6 +445,17 @@ static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
 // ---- Helper: Send key combination ----
 
 static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
+    // Release any physically-held modifiers before injecting, then restore after.
+    // Prevents Shift+Click→NewTab from injecting Ctrl+Shift+T (= reopen tab, not new tab).
+    std::vector<WORD> heldMods;
+    for (WORD vk : {VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN}) {
+        if (GetKeyState(vk) & 0x8000) heldMods.push_back(vk);
+    }
+    for (WORD vk : heldMods) {
+        INPUT up = {INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = KEYEVENTF_KEYUP}}};
+        SendInput(1, &up, sizeof(INPUT));
+    }
+
     INPUT inputs[6] = {};
     int count = 0;
     auto Press = [&](WORD vk) {
@@ -465,6 +476,11 @@ static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
     if (vk3) Release(vk3);
     Release(vk1);
     SendInput(count, inputs, sizeof(INPUT));  // single atomic call
+
+    for (WORD vk : heldMods) {
+        INPUT down = {INPUT_KEYBOARD, {.ki = {.wVk = vk}}};
+        SendInput(1, &down, sizeof(INPUT));
+    }
 }
 
 // ---- Custom hotkey parsing ----
@@ -1144,11 +1160,11 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     // Uses nullptr callback (TIMERPROC lives in mod image, unsafe across unload).
     if (uMsg == WM_TIMER) {
         switch (wParam) {
-        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); break;
-        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); break;
-        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); break;
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
         }
-        return 0;
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
     }
 
     // Fast path: skip settings copy for messages we don't handle
@@ -1302,11 +1318,11 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
     if (uMsg == WM_TIMER) {
         switch (wParam) {
-        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); break;
-        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); break;
-        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); break;
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
         }
-        return 0;
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
     }
 
     if (uMsg != WM_PARENTNOTIFY)
@@ -1561,9 +1577,11 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         wchar_t className[256];
         GetClassName(hWnd, className, 256);
         if (wcscmp(className, L"CabinetWClass") == 0) {
-            HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
-            if (shellTab != NULL)
+            for (HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
+                 shellTab;
+                 shellTab = FindWindowEx(hWnd, shellTab, L"ShellTabWindowClass", NULL)) {
                 EnumChildWindows(shellTab, InitEnumChildWindowsProc, (LPARAM)shellTab);
+            }
         }
     }
     return TRUE;
