@@ -1099,10 +1099,10 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
         if (wcscmp(className, L"ShellTabWindowClass") == 0) {
             HWND shellTab = parent;
             // Query the browser on-demand instead of caching in g_Wrappers
-            // (CWM_GETISHELLBROWSER returns a borrowed pointer, so copy_from to AddRef)
+            // (WM_USER+7 returns a borrowed pointer, so copy_from to AddRef)
             winrt::com_ptr<IShellBrowser> browser;
             browser.copy_from(reinterpret_cast<IShellBrowser*>(
-                (void*)SendMessage(shellTab, CWM_GETISHELLBROWSER, 0, 0)));
+                (void*)SendMessage(shellTab, WM_USER + 7, 0, 0)));
             if (browser) {
                 ExplorerWrapper tmp(shellTab, browser.get(), hWnd);
                 tmp.DoAction(action);
