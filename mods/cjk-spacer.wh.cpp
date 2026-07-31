@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.13
+// @version         0.1.14
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -69,7 +69,9 @@ The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
-initializing.
+initializing. Connection attempts are scheduled outside the Windows loader
+path so XAML modules that load later are handled without doing COM activation
+under the loader lock.
 
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
 flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
@@ -1278,18 +1280,6 @@ public:
                 return;
             }
 
-            if (m_modified) {
-                if (current == m_spacedText) {
-                    return;
-                }
-
-                // The application updated the source while it was tracked.
-                // Preserve that update and use it as the new source.
-                m_modified = false;
-                m_originalText.clear();
-                m_spacedText.clear();
-            }
-
             if (!ContainsCjkCodePoint(current)) {
                 return;
             }
@@ -1439,7 +1429,6 @@ void RegisterModernTextStateThread() {
 
     std::lock_guard<std::mutex> guard(
         g_modernTextStateThreadsMutex);
-    PruneModernTextStateThreadsLocked();
     g_modernTextStateThreads[GetCurrentThreadId()] = creationTime;
 }
 
@@ -1684,6 +1673,19 @@ HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
+HMODULE AcquireCurrentModuleReference() {
+    HMODULE module;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(
+                &AcquireCurrentModuleReference),
+            &module)) {
+        return nullptr;
+    }
+
+    return module;
+}
+
 class WindhawkTap
     : public winrt::implements<WindhawkTap,
                                IObjectWithSite,
@@ -1807,6 +1809,8 @@ using InitializeXamlDiagnosticsEx_t =
 std::mutex g_xamlDiagnosticsInitializationMutex;
 bool g_windowsUiXamlDiagnosticsConnected;
 bool g_microsoftUiXamlDiagnosticsConnected;
+std::atomic_bool g_xamlDiagnosticsWorkerRunning{false};
+thread_local bool g_loadingXamlDiagnostics;
 
 HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
                               LPCWSTR connectionPrefix) {
@@ -1852,9 +1856,22 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
 }
 
 void EnsureModernXamlDiagnostics() {
-    if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+    if (g_stoppingModernUi.load(std::memory_order_relaxed) ||
+        g_loadingXamlDiagnostics) {
         return;
     }
+
+    struct LoadingGuard {
+        explicit LoadingGuard(bool& flag) : flag(flag) {
+            flag = true;
+        }
+
+        ~LoadingGuard() {
+            flag = false;
+        }
+
+        bool& flag;
+    } loadingGuard(g_loadingXamlDiagnostics);
 
     std::lock_guard<std::mutex> guard(
         g_xamlDiagnosticsInitializationMutex);
@@ -1919,9 +1936,58 @@ void EnsureModernXamlDiagnostics() {
     }
 }
 
+void RequestModernXamlDiagnosticsInitialization() {
+    if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    bool expected = false;
+    if (!g_xamlDiagnosticsWorkerRunning.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    // The worker isn't joined during unload, so keep the mod image loaded
+    // until the worker exits through FreeLibraryAndExitThread.
+    HMODULE module = AcquireCurrentModuleReference();
+    if (!module) {
+        g_xamlDiagnosticsWorkerRunning.store(
+            false, std::memory_order_release);
+        Wh_Log(L"Couldn't retain the mod for XAML diagnostics");
+        return;
+    }
+
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID parameter) -> DWORD {
+            HMODULE module = static_cast<HMODULE>(parameter);
+            const HRESULT initializeResult =
+                CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            EnsureModernXamlDiagnostics();
+            if (SUCCEEDED(initializeResult)) {
+                CoUninitialize();
+            }
+
+            g_xamlDiagnosticsWorkerRunning.store(
+                false, std::memory_order_release);
+            FreeLibraryAndExitThread(module, 0);
+        },
+        module, 0, nullptr);
+    if (!thread) {
+        const DWORD error = GetLastError();
+        g_xamlDiagnosticsWorkerRunning.store(
+            false, std::memory_order_release);
+        FreeLibrary(module);
+        Wh_Log(L"Couldn't create the XAML diagnostics thread: %u",
+               error);
+        return;
+    }
+
+    CloseHandle(thread);
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t g_originalLoadLibraryExW;
-thread_local bool g_loadingXamlDiagnostics;
 
 bool IsXamlDiagnosticsTriggerModule(LPCWSTR path) {
     if (!path) {
@@ -1942,12 +2008,11 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
     HMODULE module =
         g_originalLoadLibraryExW(fileName, file, flags);
     if (module &&
-        !g_loadingXamlDiagnostics &&
         g_modernUiText.load(std::memory_order_relaxed) &&
         IsXamlDiagnosticsTriggerModule(fileName)) {
-        g_loadingXamlDiagnostics = true;
-        EnsureModernXamlDiagnostics();
-        g_loadingXamlDiagnostics = false;
+        // Don't load the TAP or activate COM while the caller might hold the
+        // Windows loader lock.
+        RequestModernXamlDiagnosticsInitialization();
     }
     return module;
 }
@@ -2267,9 +2332,22 @@ BOOL Wh_ModInit() {
 
     if (modernUiTextEnabled) {
         InitializeModernUi();
-        installedAnyHook |= InstallHook(
-            LoadLibraryExW, LoadLibraryExWHook,
-            &g_originalLoadLibraryExW, L"LoadLibraryExW");
+        HMODULE kernelBaseModule =
+            GetModuleHandleW(L"kernelbase.dll");
+        const auto loadLibraryExW =
+            kernelBaseModule
+                ? reinterpret_cast<LoadLibraryExW_t>(
+                      GetProcAddress(kernelBaseModule,
+                                     "LoadLibraryExW"))
+                : nullptr;
+        if (loadLibraryExW) {
+            installedAnyHook |= InstallHook(
+                loadLibraryExW, LoadLibraryExWHook,
+                &g_originalLoadLibraryExW,
+                L"kernelbase!LoadLibraryExW");
+        } else {
+            Wh_Log(L"Couldn't find kernelbase!LoadLibraryExW");
+        }
     }
 
     Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
@@ -2286,7 +2364,7 @@ void Wh_ModAfterInit() {
     }
 
     if (g_modernUiText.load(std::memory_order_relaxed)) {
-        EnsureModernXamlDiagnostics();
+        RequestModernXamlDiagnosticsInitialization();
     }
 }
 
