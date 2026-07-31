@@ -40,34 +40,37 @@ This mod is based on a fork of the original mod by Anixx (https://github.com/Ani
 /*
 - enablePersonalization: true
   $name: Personalization
-  $description: Adds "Personalization" icon to the Control Panel
+  $description: This setting adds the "Personalization" icon to the Control Panel
 - enableNotificationIcons: true
   $name: Notification area icons
-  $description: Adds "Notification area icons" icon to the Control Panel (intended for Windows 10 taskbar)
+  $description: This setting adds the "Notification area icons" icon to the Control Panel (intended for Windows 10 taskbar)
 - enableNetworkConnections: true
   $name: Network connections
-  $description: Adds "Network connections" icon to the Control Panel
+  $description: This setting adds the "Network connections" icon to the Control Panel
 - enablePrintersAndFaxes: true
   $name: Printers and Faxes
-  $description: Adds "Printers and Faxes" icon to the Control Panel
+  $description: This setting adds the "Printers and Faxes" icon to the Control Panel
 - enableHomeGroup: true
   $name: HomeGroup
-  $description: Adds "HomeGroup" icon to the Control Panel (legacy, partially functional)
+  $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
-  $description: Restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
+  $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
-  $description: Removes the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} non-functional icon
+  $description: This setting removes the {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} non-functional icon
+- suppressWindowsToGo: false
+  $name: Suppress Windows To Go
+  $description: This setting hides Windows To Go when that legacy Control Panel item is registered on this Windows installation
+- suppressInfrared: false
+  $name: Suppress Infrared
+  $description: This setting hides the legacy Infrared Control Panel item when it is registered on this Windows installation
 - restoreClassicTaskLinks: true
   $name: Restore Classic Task Links
-  $description: Restores the localized, classic task links for Personalization and other sections in category view
+  $description: This setting restores the localized, classic task links for Personalization and other sections in category view
 - restoreWin7CategoryBlueLinks: true
   $name: Restore Windows 7 Category Blue Links
-  $description: Restores the classic blue task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) like Windows 7 had
-- enableLogging: false
-  $name: Enable debug logging
-  $description: Logs Windows version, CLSID availability, and Control Panel option status to the Windhawk log for troubleshooting across different Windows builds
+  $description: This setting restores the classic blue task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) like Windows 7 had
 */
 // ==/WindhawkModSettings==
 
@@ -88,9 +91,11 @@ Anixx's mod is detected and log a warning.
 The original author (Anixx) was contacted about merging these changes but did 
 not reply. As a precaution, automatic detection ensures only one mod runs at a time.
 
-Testing has been limited to Windows 10 1809. An optional debug logging flag 
-(enableLogging) helps users on other builds report issues. If you encounter 
-problems, please enable logging and submit an issue with the log output.
+Testing has been limited to Windows 10 1809 x64, where the Personalization
+sort hook is required and works correctly. The hook remains intentionally enabled
+on x64 to preserve that behavior. If a specific Windows build is reported to
+misbehave, that build will be added to the explicit sort-hook denylist, leaving
+the rest of the mod active without custom applet ordering.
 */
 #include <string>
 #include <algorithm>
@@ -113,13 +118,16 @@ struct Settings {
     std::atomic<bool> enableHomeGroup;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
+    std::atomic<bool> suppressWindowsToGo;
+    std::atomic<bool> suppressInfrared;
     std::atomic<bool> restoreClassicTaskLinks;
     std::atomic<bool> restoreWin7CategoryBlueLinks;
-    std::atomic<bool> enableLogging;
 } g_settings;
 
-// Logging macro - only logs when enableLogging is true
-#define LOG_IF_ENABLED(fmt, ...) do { if (g_settings.enableLogging.load()) Wh_Log(L##fmt, ##__VA_ARGS__); } while(0)
+// Registry hooks are on Explorer's hot path. Keep routine diagnostics compiled
+// out so normal use does not spend time formatting/logging every registry call.
+// Direct Wh_Log calls are retained only for errors, conflicts, and lifecycle events.
+#define LOG_IF_ENABLED(...) ((void)0)
 
 // Windows version info
 typedef LONG (WINAPI *RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
@@ -163,6 +171,13 @@ void DetectWindowsVersion() {
 }
 
 std::wstring g_personalizationName;
+// HomeGroup is only injected when Windows itself still registers its legacy CLSID.
+// The entry is intentionally retained for users of external HomeGroup-restoration
+// projects. The mod's narrowly defined goal is satisfied when the legacy page can
+// be opened: this preserves a navigation target for present or future restoration
+// projects without claiming that the removed networking service itself works. If
+// Windows no longer exposes the CLSID, no virtual replacement is made.
+static std::atomic<bool> g_homeGroupClsidAvailable{ false };
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -170,6 +185,7 @@ std::wstring g_classicTaskLinksFilePath;
 
 // Forward declarations (defined further below; KeyTracker::Track needs them)
 std::wstring ToLower(const std::wstring& str);
+bool ContainsRelevantKeywordInsensitive(const std::wstring& path);
 bool ContainsRelevantKeyword(const std::wstring& lowerPath);
 
 // Tracks the "virtual path" behind every HKEY the mod cares about (both real
@@ -195,7 +211,7 @@ public:
 
     void Track(HKEY hKey, const std::wstring& path) {
         if (!hKey || IsSpecialRoot(hKey)) return;
-        if (!ContainsRelevantKeyword(ToLower(path))) return;
+        if (!ContainsRelevantKeywordInsensitive(path)) return;
         std::lock_guard<std::mutex> lock(mutex_);
         paths_[hKey] = path;
     }
@@ -275,6 +291,8 @@ std::wstring g_homeGroupGuidLower;
 std::wstring g_displayGuidLower;
 std::wstring g_realPersonalizationGuidLower;
 std::wstring g_suppressedGuidLower;
+std::wstring g_windowsToGoGuidLower;
+std::wstring g_infraredGuidLower;
 
 static const std::wstring kPersonalizationGuid     = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
 static const std::wstring kNotificationIconsGuid   = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
@@ -284,6 +302,8 @@ static const std::wstring kHomeGroupGuid           = L"{67ca7650-96e6-4fdd-bb43-
 static const std::wstring kDisplayGuid             = L"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}"; // Also used as RealDisplayGuid
 static const std::wstring kRealPersonalizationGuid = L"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}";
 static const std::wstring kSuppressedGuid          = L"{98f2ab62-0e29-4e4c-8ee7-b542e66740b1}";
+static const std::wstring kWindowsToGoGuid          = L"{8e0c279d-0bd1-43c3-9ebd-31c3dc5b8a77}";
+static const std::wstring kInfraredGuid             = L"{a0275511-0e86-4eca-97c2-ecd8f1221d08}";
 
 static const DWORD kCategoryAppearance = 1;
 static const DWORD kCategoryHardware   = 2;
@@ -298,6 +318,59 @@ std::wstring ToLower(const std::wstring& str) {
 bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     if (str.size() < suffix.size()) return false;
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool IsRegisteredClsid(const std::wstring& guid) {
+    HKEY key = nullptr;
+    const std::wstring path = L"CLSID\\" + guid;
+    const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, path.c_str(), 0, KEY_READ, &key);
+    if (status != ERROR_SUCCESS) return false;
+    RegCloseKey(key);
+    return true;
+}
+
+bool IsHomeGroupAvailable() {
+    return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
+}
+
+// Returns the source-file path when Anixx's overlapping mod is installed.
+// Windhawk stores authored sources under %ProgramData%\Windhawk\ModsSource.
+std::wstring FindAnixxModSourcePath() {
+    wchar_t programData[MAX_PATH] = {};
+    DWORD length = GetEnvironmentVariableW(L"ProgramData", programData, ARRAYSIZE(programData));
+    if (!length || length >= ARRAYSIZE(programData)) return L"";
+
+    const std::wstring root = std::wstring(programData) + L"\\Windhawk\\";
+    const wchar_t* locations[] = {
+        L"ModsSource\\restore-classic-cpls.wh.cpp",
+        L"Engine\\Mods\\restore-classic-cpls.wh.cpp",
+    };
+    for (const wchar_t* relative : locations) {
+        const std::wstring candidate = root + relative;
+        DWORD attributes = GetFileAttributesW(candidate.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return candidate;
+    }
+    return L"";
+}
+
+// Allocation-free case-insensitive check for the registry-hook hot path.
+// Most keys opened by Explorer are unrelated, so avoid creating a lowercase
+// std::wstring until a path is actually relevant to this mod.
+bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
+    static const wchar_t kClsid[] = L"clsid";
+    static const wchar_t kControlPanel[] = L"controlpanel";
+    const auto contains = [&path](const wchar_t* needle) {
+        const size_t needleLength = wcslen(needle);
+        if (path.size() < needleLength) return false;
+        for (size_t i = 0; i + needleLength <= path.size(); ++i) {
+            size_t j = 0;
+            while (j < needleLength && towlower(path[i + j]) == needle[j]) ++j;
+            if (j == needleLength) return true;
+        }
+        return false;
+    };
+    return contains(kClsid) || contains(kControlPanel);
 }
 
 bool ContainsRelevantKeyword(const std::wstring& lowerPath) {
@@ -375,7 +448,7 @@ bool EnsureClassicTaskLinksFile() {
     static const TaskLinkTexts kTaskLinkTexts[] = {
         { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you" },
         { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia i colori delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamenti predefiniti delle icone", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola la risoluzione dello schermo", "Controlla lo stato del computer", "Esegui il backup del computer", "Trova e correggi problemi", "Verifica stato del firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine dell'account", "Aggiungi o rimuovi account utente", "Configura controlli parentali per qualsiasi utente", "Cambia data e ora", "Cambia metodi di immissione", "Consenti a Windows di suggerire le impostazioni" },
-        { L"es", "cambiar el tema", "Cambiar fondo de escritorio", "Cambiar colores de vidrio de ventana", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar los iconos del sistema", "Restaurar los comportamientos predeterminados de los iconos", "Ver el estado y las tareas de la red", "Conectarse a una red", "Ver computadoras y dispositivos de la red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar la configuración de la impresora", "Ver dispositivos e impresoras", "Elija el grupo en el hogar y las opciones para compartir", "Compartir impresoras", "Ajustar la resolución de la pantalla", "Revisa el estado de tu computadora", "Haz una copia de seguridad de tu computadora", "Encontrar y solucionar problemas", "Comprobar el estado del cortafuegos", "Desinstalar un programa", "Activar o desactivar las funciones de Windows", "Cambiar imagen de cuenta", "Agregar o eliminar cuentas de usuario", "Configurar controles parentales para cualquier usuario", "Cambiar la fecha y la hora", "Cambiar métodos de entrada", "Deje que Windows le sugiera configuraciones" },
+        { L"es", "Cambiar el tema", "Cambiar fondo de escritorio", "Cambiar colores de vidrio de ventana", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar los iconos del sistema", "Restaurar los comportamientos predeterminados de los iconos", "Ver el estado y las tareas de la red", "Conectarse a una red", "Ver computadoras y dispositivos de la red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar la configuración de la impresora", "Ver dispositivos e impresoras", "Elija el grupo en el hogar y las opciones para compartir", "Compartir impresoras", "Ajustar la resolución de la pantalla", "Revisa el estado de tu computadora", "Haz una copia de seguridad de tu computadora", "Encontrar y solucionar problemas", "Comprobar el estado del cortafuegos", "Desinstalar un programa", "Activar o desactivar las funciones de Windows", "Cambiar imagen de cuenta", "Agregar o eliminar cuentas de usuario", "Configurar controles parentales para cualquier usuario", "Cambiar la fecha y la hora", "Cambiar métodos de entrada", "Deje que Windows le sugiera configuraciones" },
         { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres" },
         { L"de", "Ändern Sie das Thema", "Desktop-Hintergrund ändern", "Fensterglasfarben ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Stellen Sie das Standardverhalten von Symbolen wieder her", "Netzwerkstatus und Aufgaben anzeigen", "Stellen Sie eine Verbindung zu einem Netzwerk her", "Netzwerkcomputer und -geräte anzeigen", "Fügen Sie dem Netzwerk ein drahtloses Gerät hinzu", "Fügen Sie einen Drucker hinzu", "Richten Sie Standarddrucker ein", "Ändern Sie die Druckereinstellungen", "Geräte und Drucker anzeigen", "Wählen Sie Heimnetzgruppen- und Freigabeoptionen", "Drucker freigeben", "Passen Sie die Bildschirmauflösung an", "Überprüfen Sie den Status Ihres Computers", "Sichern Sie Ihren Computer", "Probleme finden und beheben", "Überprüfen Sie den Firewall-Status", "Deinstallieren Sie ein Programm", "Schalten Sie Windows-Funktionen ein oder aus", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Richten Sie die Kindersicherung für jeden Benutzer ein", "Ändern Sie Datum und Uhrzeit", "Eingabemethoden ändern", "Lassen Sie sich von Windows Einstellungen vorschlagen" },
         { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você" },
@@ -386,7 +459,7 @@ bool EnsureClassicTaskLinksFile() {
         { L"uk", "Змінити тему", "Змінити фон робочого столу", "Змінити колір віконного скла", "Змінити звукові ефекти", "Змінити заставку", "Увімкнути або вимкнути системні значки", "Відновити поведінку піктограм за замовчуванням", "Переглянути стан мережі та завдання", "Підключитися до мережі", "Переглянути мережеві комп’ютери й пристрої", "Додати бездротовий пристрій до мережі", "Додати принтер", "Налаштувати принтери за замовчуванням", "Змінити налаштування принтера", "Переглянути пристрої та принтери", "Вибрати домашню групу та параметри спільного доступу", "Спільно використовувати принтери", "Налаштувати роздільну здатність екрана", "Перевірити стан комп’ютера", "Створити резервну копію комп’ютера", "Знайти й усунути проблеми", "Перевірити стан брандмауера", "Видалити програму", "Увімкнути або вимкнути компоненти Windows", "Змінити зображення облікового запису", "Додати або видалити облікові записи користувачів", "Налаштувати батьківський контроль для будь-якого користувача", "Змінити дату й час", "Змінити методи введення", "Дозволити Windows пропонувати параметри" },
         { L"tr", "Temayı değiştir", "Masaüstü arka planını değiştir", "Pencere camı renklerini değiştirme", "Ses efektlerini değiştir", "Ekran koruyucuyu değiştir", "Sistem simgelerini açma veya kapatma", "Varsayılan simge davranışlarını geri yükle", "Ağ durumunu ve görevlerini görüntüleyin", "Bir ağa bağlanma", "Ağ bilgisayarlarını ve cihazlarını görüntüleyin", "Ağa kablosuz cihaz ekleme", "Yazıcı ekle", "Varsayılan yazıcıları ayarlama", "Yazıcı ayarlarını değiştirin", "Cihazları ve yazıcıları görüntüleyin", "Ev grubu ve paylaşım seçeneklerini seçin", "Yazıcıları paylaş", "Ekran çözünürlüğünü ayarlayın", "Bilgisayarınızın durumunu inceleyin", "Bilgisayarınızı yedekleyin", "Sorunları bulun ve düzeltin", "Güvenlik duvarı durumunu kontrol edin", "Bir programı kaldırma", "Windows özelliklerini açma veya kapatma", "Hesap resmini değiştir", "Kullanıcı hesaplarını ekleme veya kaldırma", "Herhangi bir kullanıcı için ebeveyn denetimlerini ayarlayın", "Tarihi ve saati değiştirme", "Giriş yöntemlerini değiştirin", "Windows'un sizin için ayarlar önermesine izin verin" },
         { L"ar", "تغيير الموضوع", "تغيير خلفية سطح المكتب", "تغيير ألوان زجاج النوافذ", "تغيير المؤثرات الصوتية", "تغيير شاشة التوقف", "تشغيل أيقونات النظام أو إيقاف تشغيلها", "استعادة سلوكيات الأيقونة الافتراضية", "عرض حالة الشبكة والمهام", "الاتصال بالشبكة", "عرض أجهزة الكمبيوتر والأجهزة المتصلة بالشبكة", "إضافة جهاز لاسلكي إلى الشبكة", "إضافة طابعة", "إعداد الطابعات الافتراضية", "تغيير إعدادات الطابعة", "عرض الأجهزة والطابعات", "اختيار مجموعة المشاركة المنزلية وخيارات المشاركة", "مشاركة الطابعات", "ضبط دقة الشاشة", "مراجعة حالة الكمبيوتر", "إنشاء نسخة احتياطية للكمبيوتر", "البحث عن المشاكل وإصلاحها", "التحقق من حالة جدار الحماية", "إلغاء تثبيت برنامج", "تشغيل ميزات Windows أو إيقاف تشغيلها", "تغيير صورة الحساب", "إضافة أو إزالة حسابات المستخدمين", "إعداد الضوابط الأبوية لأي مستخدم", "تغيير التاريخ والوقت", "تغيير طرق الإدخال", "السماح لـ Windows باقتراح الإعدادات" },
-        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "Turn system icons on or off", "Restore default icon behaviors", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "Choose homegroup and sharing options", "שתף מדפסות", "התאם את רזולוציית המסך", "Review your computer's status", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "Turn Windows features on or off", "שנה את תמונת החשבון", "Add or remove user accounts", "Set up parental controls for any user", "שנה את התאריך והשעה", "שנה שיטות קלט", "Let Windows suggest settings for you" },
+        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "הפעל או כבה את סמלי המערכת", "שחזר את התנהגויות ברירת המחדל של סמלים", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "בחר קבוצה ביתית ואפשרויות שיתוף", "שתף מדפסות", "התאם את רזולוציית המסך", "בדוק את מצב המחשב שלך", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "הפעל או כבה את תכונות Windows", "שנה את תמונת החשבון", "הוסף או הסר חשבונות משתמש", "הגדר בקרת הורים עבור כל משתמש", "שנה את התאריך והשעה", "שנה שיטות קלט", "תן ל-Windows להציע עבורך הגדרות" },
         { L"ja", "テーマを変更する", "デスクトップの背景を変更する", "窓ガラスの色を変更する", "効果音を変更する", "スクリーンセーバーを変更する", "システムアイコンをオンまたはオフにする", "デフォルトのアイコン動作を復元する", "ネットワークのステータスとタスクを表示する", "ネットワークに接続する", "ネットワークのコンピュータとデバイスを表示する", "ワイヤレスデバイスをネットワークに追加する", "プリンターを追加する", "デフォルトのプリンターを設定する", "プリンターの設定を変更する", "デバイスとプリンターを表示する", "ホームグループと共有オプションを選択する", "プリンターを共有する", "画面解像度を調整する", "コンピュータのステータスを確認する", "コンピュータをバックアップする", "問題を見つけて解決する", "ファイアウォールのステータスを確認する", "プログラムをアンインストールする", "Windows の機能をオンまたはオフにする", "アカウントの写真を変更する", "ユーザーアカウントの追加または削除", "任意のユーザーに対してペアレントコントロールを設定する", "日付と時刻を変更する", "入力方法を変更する", "Windows が設定を提案してくれるようにする" },
         { L"ko", "테마 변경", "데스크탑 배경 변경", "창유리 색상 변경", "음향 효과 변경", "화면 보호기 변경", "시스템 아이콘 켜기 또는 끄기", "기본 아이콘 동작 복원", "네트워크 상태 및 작업 보기", "네트워크에 연결", "네트워크 컴퓨터 및 장치 보기", "네트워크에 무선 장치 추가", "프린터 추가", "기본 프린터 설정", "프린터 설정 변경", "장치 및 프린터 보기", "홈 그룹 및 공유 옵션 선택", "프린터 공유", "화면 해상도 조정", "컴퓨터 상태 검토", "컴퓨터 백업", "문제 찾기 및 수정", "방화벽 상태 확인", "프로그램 제거", "Windows 기능 켜기 또는 끄기", "계정 사진 변경", "사용자 계정 추가 또는 제거", "모든 사용자에 대해 자녀 보호 기능 설정", "날짜 및 시간 변경", "입력 방법 변경", "Windows에서 설정을 제안하도록 허용" },
         { L"zh-CN", "更改主题", "更改桌面背景", "改变窗玻璃颜色", "改变音效", "更改屏幕保护程序", "打开或关闭系统图标", "恢复默认图标行为", "查看网络状态和任务", "连接到网络", "查看网络计算机和设备", "将无线设备添加到网络", "添加打印机", "设置默认打印机", "更改打印机设置", "查看设备和打印机", "选择家庭组和共享选项", "共享打印机", "调整屏幕分辨率", "查看计算机的状态", "备份您的计算机", "发现并解决问题", "检查防火墙状态", "卸载程序", "打开或关闭 Windows 功能", "更改账户图片", "添加或删除用户帐户", "为任何用户设置家长控制", "更改日期和时间", "更改输入法", "让 Windows 为您建议设置" },
@@ -406,7 +479,11 @@ bool EnsureClassicTaskLinksFile() {
     };
 
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
-    GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH);
+    const LANGID uiLanguage = GetUserDefaultUILanguage();
+    if (!LCIDToLocaleName(MAKELCID(uiLanguage, SORT_DEFAULT), localeName,
+                          LOCALE_NAME_MAX_LENGTH, 0)) {
+        wcscpy_s(localeName, L"en-US");
+    }
     const TaskLinkTexts* texts = &kTaskLinkTexts[0];
     for (const auto& candidate : kTaskLinkTexts) {
         size_t prefixLength = wcslen(candidate.locale);
@@ -585,16 +662,25 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{LETWINDOWSSUGGEST}", texts->letWindowsSuggest);
 
 
-    std::ofstream file(g_classicTaskLinksFilePath.c_str(), std::ios::binary | std::ios::trunc);
+    const std::wstring targetPath = g_classicTaskLinksFilePath;
+    const std::wstring temporaryPath = targetPath + L".tmp." + std::to_wstring(GetCurrentProcessId());
+    std::ofstream file(temporaryPath.c_str(), std::ios::binary | std::ios::trunc);
     if (!file) {
         g_classicTaskLinksFilePath.clear();
         return false;
     }
 
     file.write(taskList.data(), static_cast<std::streamsize>(taskList.size()));
-    bool ok = file.good();
-    LOG_IF_ENABLED("[TaskLinks] XML file written to: %s (size=%zu, ok=%d)",
-        g_classicTaskLinksFilePath.c_str(), taskList.size(), ok);
+    const bool wroteFile = file.good();
+    file.close();
+    if (!wroteFile || !MoveFileExW(temporaryPath.c_str(), targetPath.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(temporaryPath.c_str());
+        g_classicTaskLinksFilePath.clear();
+        return false;
+    }
+    const bool ok = true;
+    LOG_IF_ENABLED("[TaskLinks] XML atomically replaced: %s (size=%zu)",
+        targetPath.c_str(), taskList.size());
     LOG_IF_ENABLED("[TaskLinks] Locale selected: %s", texts->locale);
     LOG_IF_ENABLED("[TaskLinks] BlueLinks=%d CatAppearance=%d",
         g_settings.restoreWin7CategoryBlueLinks.load(), g_settings.enableCategoryAppearanceLinks.load());
@@ -609,9 +695,10 @@ void LoadSettings() {
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
+    g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
+    g_settings.suppressInfrared.store(Wh_GetIntSetting(L"suppressInfrared"));
     g_settings.restoreClassicTaskLinks.store(Wh_GetIntSetting(L"restoreClassicTaskLinks"));
     g_settings.restoreWin7CategoryBlueLinks.store(Wh_GetIntSetting(L"restoreWin7CategoryBlueLinks"));
-    g_settings.enableLogging.store(Wh_GetIntSetting(L"enableLogging"));
 }
 
 void InitDisplayNames() {
@@ -638,6 +725,8 @@ void InitDisplayNames() {
     g_displayGuidLower            = ToLower(kDisplayGuid);
     g_realPersonalizationGuidLower = ToLower(kRealPersonalizationGuid);
     g_suppressedGuidLower         = ToLower(kSuppressedGuid);
+    g_windowsToGoGuidLower         = ToLower(kWindowsToGoGuid);
+    g_infraredGuidLower            = ToLower(kInfraredGuid);
 }
 
 // GetTrackedPath/TrackKey/UntrackKey/CreateFakeHandle/FreeFakeHandle now live
@@ -659,14 +748,26 @@ struct ClassifyResult {
     DWORD    category;
 };
 
+bool IsSuppressedGuid(const std::wstring& guidLower) {
+    return (g_settings.suppressCompanySync.load() && guidLower == g_suppressedGuidLower) ||
+           (g_settings.suppressWindowsToGo.load() && guidLower == g_windowsToGoGuidLower) ||
+           (g_settings.suppressInfrared.load() && guidLower == g_infraredGuidLower);
+}
+
+bool HasActiveSuppression() {
+    return g_settings.suppressCompanySync.load() ||
+           g_settings.suppressWindowsToGo.load() ||
+           g_settings.suppressInfrared.load();
+}
+
 bool IsSuppressedNamespaceKey(const std::wstring& lower) {
-    if (!g_settings.suppressCompanySync.load()) return false;
-    return EndsWith(lower, L"controlpanel\\namespace\\" + g_suppressedGuidLower);
+    const size_t marker = lower.rfind(L"controlpanel\\namespace\\");
+    if (marker == std::wstring::npos) return false;
+    return IsSuppressedGuid(lower.substr(marker + wcslen(L"controlpanel\\namespace\\")));
 }
 
 bool IsSuppressedNamespaceEntry(LPCWSTR name) {
-    if (!g_settings.suppressCompanySync.load() || !name) return false;
-    return ToLower(name) == g_suppressedGuidLower;
+    return name && IsSuppressedGuid(ToLower(name));
 }
 
 ClassifyResult ClassifyFullVirtual(const std::wstring& lower,
@@ -682,15 +783,16 @@ ClassifyResult ClassifyFullVirtual(const std::wstring& lower,
 }
 
 ClassifyResult ClassifyPath(const std::wstring& path) {
-    std::wstring lower = ToLower(path);
-    
-    // Early out if path doesn't contain relevant keywords
-    if (!ContainsRelevantKeyword(lower))
+    // Early out before allocating/copying a lowercase path. This function runs
+    // for many unrelated registry calls in Explorer.
+    if (!ContainsRelevantKeywordInsensitive(path))
         return { VNode::None, ItemKind::None, 0 };
 
-    if (g_settings.suppressCompanySync.load()) {
-        if (EndsWith(lower, L"clsid\\" + g_suppressedGuidLower) ||
-            EndsWith(lower, L"controlpanel\\namespace\\" + g_suppressedGuidLower))
+    std::wstring lower = ToLower(path);
+
+    for (const std::wstring* guid : { &g_suppressedGuidLower, &g_windowsToGoGuidLower, &g_infraredGuidLower }) {
+        if ((EndsWith(lower, L"clsid\\" + *guid) ||
+             EndsWith(lower, L"controlpanel\\namespace\\" + *guid)) && IsSuppressedGuid(*guid))
             return { VNode::Suppressed, ItemKind::Suppressed, 0 };
     }
 
@@ -715,6 +817,7 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
+        if (item.guidLower == &g_homeGroupGuidLower && !g_homeGroupClsidAvailable.load()) continue;
         if (EndsWith(lower, L"clsid\\" + *item.guidLower))
             return { VNode::ClsidRootCategoryOnly, ItemKind::CategoryOnly, item.cat };
     }
@@ -868,11 +971,12 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
+    result.reserve(5);
     if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
-    if (g_settings.enableHomeGroup.load())          result.push_back(kHomeGroupGuid);
+    if (IsHomeGroupAvailable())                     result.push_back(kHomeGroupGuid);
     return result;
 }
 
@@ -917,7 +1021,7 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
             return ERROR_FILE_NOT_FOUND;
         }
 
-        if (g_settings.suppressCompanySync.load() && lpSubKey) {
+        if (HasActiveSuppression() && lpSubKey) {
             std::wstring basePath = g_keyTracker.GetPath(hKey);
             std::wstring fullPath = basePath;
             if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
@@ -1275,60 +1379,27 @@ static bool g_sortHookSafe = false;
 
 // Returns true only if [ptr, ptr+size) is entirely within a single committed,
 // readable memory region (i.e. safe to dereference without crashing).
-static bool IsReadableMemory(const void *ptr, size_t size) {
-    if (!ptr || size == 0) return false;
-    MEMORY_BASIC_INFORMATION mbi{};
-    if (!VirtualQuery(ptr, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    if (mbi.Protect == 0) return false;
-    auto start = (uintptr_t)ptr;
-    auto regionEnd = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
-    if (start + size < start) return false; // overflow
-    return (start + size) <= regionEnd;
-}
-
-// Validates that lpszApplet points to a readable, null-terminated string that
-// actually looks like one of our "::{GUID}" applet monikers, reading it one
-// safely-validated chunk at a time (never dereferences past what VirtualQuery
-// confirmed is committed/readable).
-static bool LooksLikeAppletMoniker(LPCWSTR lpszApplet) {
-    if (!IsReadableMemory(lpszApplet, sizeof(wchar_t) * 3)) return false;
-    if (lpszApplet[0] != L':' || lpszApplet[1] != L':' || lpszApplet[2] != L'{') return false;
-
-    // GUID monikers ("::{8-4-4-4-12}") are 40 characters; cap the scan well
-    // above that so a corrupt/non-terminated pointer can't run away.
-    const size_t kMaxLen = 64;
-    for (size_t i = 0; i < kMaxLen; i++) {
-        if (!IsReadableMemory(&lpszApplet[i], sizeof(wchar_t))) return false;
-        if (lpszApplet[i] == L'\0') return i > 3 && lpszApplet[i - 1] == L'}';
-    }
-    return false;
-}
-
 void ValidateSortHookOffsets() {
-    // Runtime pointer/format validation (above) is what actually keeps this
-    // hook safe; this build check is just an extra, conservative gate on top
-    // of it. The x86 offsets are known-wrong (different pointer size changes
-    // every subsequent byte offset), so the hook stays off there regardless.
+    g_sortHookSafe = false;
 #ifdef _WIN64
-    g_sortHookSafe = true;
-    LOG_IF_ENABLED("[SortHook] Enabled for x64 (build %u); runtime pointer validation active", g_winBuild);
+    // The private offsets below were verified only on the author's Windows 10
+    // 1809 x64 shell32 layout. Do not resolve/install the hook elsewhere.
+    if (g_winBuild == 17763) {
+        g_sortHookSafe = true;
+        LOG_IF_ENABLED("[SortHook] Enabled for verified Win10 x64 build 17763");
+    } else {
+        LOG_IF_ENABLED("[SortHook] Disabled: shell32 layout is unverified on build %u", g_winBuild);
+    }
 #else
-    LOG_IF_ENABLED("[SortHook] Disabled: x86 offsets unverified (build %u)", g_winBuild);
+    LOG_IF_ENABLED("[SortHook] Disabled: x86 layout is unverified");
 #endif
 }
 
 int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
     void *p1, void *p2, LPARAM lParam
 ) {
-    if (!g_sortHookSafe)
+    if (!g_sortHookSafe || !p1 || !p2 || !lParam)
         return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    if (!IsReadableMemory(p1, sizeof(int)) || !IsReadableMemory(p2, sizeof(int)) ||
-        !IsReadableMemory((void *)lParam, sizeof(void *) * 2 + sizeof(DWORD) * 33)) {
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-    }
 
     HDPA hDpa = (HDPA)CControlPanelAppletList_HDPA(lParam);
     if (!hDpa) return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
@@ -1338,17 +1409,11 @@ int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
 
     LPVOID pThing1 = DPA_GetPtr(hDpa, *(int *)p1);
     LPVOID pThing2 = DPA_GetPtr(hDpa, *(int *)p2);
-    if (!IsReadableMemory(pThing1, 520 + sizeof(wchar_t)) ||
-        !IsReadableMemory(pThing2, 520 + sizeof(wchar_t))) {
+    if (!pThing1 || !pThing2)
         return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-    }
 
     LPCWSTR pszApplet1 = (LPCWSTR)((char *)pThing1 + 520);
     LPCWSTR pszApplet2 = (LPCWSTR)((char *)pThing2 + 520);
-    if (!LooksLikeAppletMoniker(pszApplet1) || !LooksLikeAppletMoniker(pszApplet2)) {
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-    }
-
     int iApplet1 = FindApplet(pszApplet1, category);
     int iApplet2 = FindApplet(pszApplet2, category);
 
@@ -1382,12 +1447,13 @@ void Wh_ModSettingsChanged() {
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    LOG_IF_ENABLED("[Settings] Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Suppress=%d TaskLinks=%d BlueLinks=%d Log=%d",
+    LOG_IF_ENABLED("[Settings] Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Company=%d ToGo=%d Infrared=%d TaskLinks=%d BlueLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
-        g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryBlueLinks.load(), g_settings.enableLogging.load());
+        g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
+        g_settings.suppressInfrared.load(), g_settings.restoreClassicTaskLinks.load(),
+        g_settings.restoreWin7CategoryBlueLinks.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -1396,16 +1462,19 @@ void Wh_ModSettingsChanged() {
 BOOL Wh_ModInit() {
   try {
     LoadSettings();
-    // Conflict detection: check if the original mod (restore-classic-cpls) is loaded
-    // If both mods are active, they would both inject the same CLSIDs, causing conflicts.
-    if (GetModuleHandleW(L"restore-classic-cpls.wh.cpp") ||
-        FindWindowW(L"WindhawkMod_restore-classic-cpls", nullptr)) {
-        Wh_Log(L"CONFLICT: Original mod (restore-classic-cpls) detected. This mod will deactivate to avoid conflicts.");
-        Wh_Log(L"To use this mod, please disable the original restore-classic-cpls mod first.");
-        return FALSE;
+    // The overlapping Anixx mod is detected by its actual Windhawk source file,
+    // rather than by a non-existent module/window name.
+    const std::wstring anixxSourcePath = FindAnixxModSourcePath();
+    if (!anixxSourcePath.empty()) {
+        // A source file can exist while its mod is disabled, so it is not proof
+        // of an active conflict. Keep this as a diagnostic only; otherwise a
+        // disabled copy of the source would prevent all virtual applets here.
+        Wh_Log(L"NOTICE: restore-classic-cpls source found at %s. Do not enable both mods at the same time.", anixxSourcePath.c_str());
     }
 
     DetectWindowsVersion();
+    g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
+    LOG_IF_ENABLED("[HomeGroup] Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
     ValidateSortHookOffsets();
 
@@ -1454,6 +1523,7 @@ BOOL Wh_ModInit() {
             }
         }
 
+        if (g_sortHookSafe) {
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
                 {
@@ -1474,6 +1544,8 @@ BOOL Wh_ModInit() {
         } else {
             LOG_IF_ENABLED("[Hooks] CControlPanelAppletList::s_SortAppletsInCategory hooked OK");
         }
+        }
+
     }
 
     LOG_IF_ENABLED("[Hooks] All hooks set successfully");
