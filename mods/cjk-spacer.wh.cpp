@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.11
+// @version         0.1.12
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -58,12 +58,13 @@ keyboard shortcut text are also preserved.
   running Explorer. Basic or classic-theme tooltips drawn directly with
   `DrawTextW` aren't covered.
 - Windows 11 XAML context menus and pointer tooltips are handled at the XAML
-  source-element level. Only the `Text` source of XAML menu items and
-  string-valued `ToolTip.Content` are changed; presenter `TextBlock` bindings,
-  ordinary XAML text, and taskbar thumbnail previews are untouched. Popup
-  visibility is maintained from accessibility show/hide/destroy events, and
-  each source is restored only when its owning popup closes. This path is
-  disabled by default; enable `modernUiText` to opt in.
+  source-element level. Only plain local string values in the `Text` source of
+  XAML menu items and `ToolTip.Content` are changed; bindings, styles,
+  presenter `TextBlock` values, ordinary XAML text, and taskbar thumbnail
+  previews are untouched. Popup visibility is maintained from accessibility
+  show/hide/destroy events, and each source is restored only when its owning
+  popup closes. This path is disabled by default; enable `modernUiText` to opt
+  in.
 
 The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
@@ -110,6 +111,7 @@ Rewritten strings are recorded and restored when the popup closes.
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -456,9 +458,10 @@ int FindMenuItemIndex(HMENU menu, UINT item, bool byPosition) {
     for (int index = 0; index < itemCount; ++index) {
         MENUITEMINFOW itemInfo = {};
         itemInfo.cbSize = sizeof(itemInfo);
-        itemInfo.fMask = MIIM_ID;
+        itemInfo.fMask = MIIM_ID | MIIM_SUBMENU;
         if (GetMenuItemInfoW(
                 menu, index, TRUE, &itemInfo) &&
+            !itemInfo.hSubMenu &&
             itemInfo.wID == item) {
             return index;
         }
@@ -485,6 +488,9 @@ BOOL WINAPI InsertMenuWHook(HMENU menu,
                 if (flags & MF_BYPOSITION) {
                     index = FindMenuItemIndex(
                         menu, position, true);
+                    if (index < 0) {
+                        index = GetMenuItemCount(menu) - 1;
+                    }
                 } else if (flags & MF_POPUP) {
                     index = FindMenuItemIndexByText(
                         menu, spaced);
@@ -712,9 +718,15 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
                         ? item
                         : itemInfo->wID,
                     byPosition != FALSE);
-                if (index >= 0) {
+                const int insertedIndex =
+                    index >= 0
+                        ? index
+                        : byPosition
+                              ? GetMenuItemCount(menu) - 1
+                              : FindMenuItemIndexByText(menu, spaced);
+                if (insertedIndex >= 0) {
                     RememberRewrittenMenuItem(
-                        menu, static_cast<UINT>(index),
+                        menu, static_cast<UINT>(insertedIndex),
                         itemInfo->dwTypeData, spaced);
                 }
             }
@@ -875,6 +887,7 @@ GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
+HMODULE g_loadedUxThemeModule;
 
 std::shared_mutex g_classicTooltipThemesMutex;
 std::unordered_set<HTHEME> g_classicTooltipThemes;
@@ -983,25 +996,9 @@ BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
     return TRUE;
 }
 
-BOOL CALLBACK EnumExistingClassicTooltipTopLevelWindow(
-    HWND window,
-    LPARAM) {
-    DWORD processId;
-    GetWindowThreadProcessId(window, &processId);
-    if (processId != GetCurrentProcessId()) {
-        return TRUE;
-    }
-
-    EnumExistingClassicTooltipWindow(window, 0);
-    EnumChildWindows(
-        window, EnumExistingClassicTooltipWindow, 0);
-    return TRUE;
-}
-
 void DiscoverExistingClassicTooltipThemes() {
     if (g_getWindowTheme) {
-        EnumWindows(
-            EnumExistingClassicTooltipTopLevelWindow, 0);
+        EnumWindows(EnumExistingClassicTooltipWindow, 0);
     }
 }
 
@@ -1314,12 +1311,33 @@ void ClearVisibleModernPopups() {
     g_visibleModernPopups.clear();
 }
 
+template <typename Element, typename DependencyProperty>
+bool ReadLocalStringValue(const Element& element,
+                          DependencyProperty property,
+                          std::wstring* text) {
+    const auto localValue = element.ReadLocalValue(property);
+    if (!localValue ||
+        localValue == DependencyProperty::UnsetValue()) {
+        return false;
+    }
+
+    const auto propertyValue =
+        localValue.template try_as<wf::IPropertyValue>();
+    if (!propertyValue ||
+        propertyValue.Type() != wf::PropertyType::String) {
+        return false;
+    }
+
+    const auto value = propertyValue.GetString();
+    text->assign(value.c_str(), value.size());
+    return true;
+}
+
 struct TextSourceAccess {
     template <typename Element>
     static bool Read(const Element& element, std::wstring* text) {
-        const auto value = element.Text();
-        text->assign(value.c_str(), value.size());
-        return true;
+        return ReadLocalStringValue(
+            element, Element::TextProperty(), text);
     }
 
     template <typename Element>
@@ -1332,24 +1350,12 @@ struct TextSourceAccess {
     }
 };
 
+template <typename ContentControl>
 struct TooltipContentAccess {
     template <typename Element>
     static bool Read(const Element& element, std::wstring* text) {
-        const auto content = element.Content();
-        if (!content) {
-            return false;
-        }
-
-        const auto propertyValue =
-            content.template try_as<wf::IPropertyValue>();
-        if (!propertyValue ||
-            propertyValue.Type() != wf::PropertyType::String) {
-            return false;
-        }
-
-        const auto value = propertyValue.GetString();
-        text->assign(value.c_str(), value.size());
-        return true;
+        return ReadLocalStringValue(
+            element, ContentControl::ContentProperty(), text);
     }
 
     template <typename Element>
@@ -1366,7 +1372,7 @@ class ModernTextStateBase {
 public:
     virtual ~ModernTextStateBase() = default;
     virtual void Apply(HWND popupWindow) = 0;
-    virtual void Restore() = 0;
+    virtual void Restore(bool clearOwnership) = 0;
     virtual HWND PopupWindow() const = 0;
 };
 
@@ -1385,16 +1391,17 @@ public:
         }
 
         try {
-            auto element = m_element.get();
-            if (!element) {
-                return;
-            }
-
             if (m_popupWindow && m_popupWindow != popupWindow) {
                 if (IsTrackedModernPopup(m_popupWindow, threadId)) {
                     return;
                 }
-                Restore();
+                Restore(true);
+            }
+            m_popupWindow = popupWindow;
+
+            auto element = m_element.get();
+            if (!element) {
+                return;
             }
 
             std::wstring current;
@@ -1410,7 +1417,6 @@ public:
                 // The application updated the source while the popup was
                 // visible. Preserve that update and use it as the new source.
                 m_modified = false;
-                m_popupWindow = nullptr;
                 m_originalText.clear();
                 m_spacedText.clear();
             }
@@ -1426,7 +1432,6 @@ public:
 
             m_originalText = std::move(current);
             m_spacedText = std::move(spaced);
-            m_popupWindow = popupWindow;
             m_modified = true;
             SourceAccess::Write(element, m_spacedText);
             Wh_Log(L"Applied CJK spacing (modern XAML %s)",
@@ -1437,9 +1442,11 @@ public:
         }
     }
 
-    void Restore() override {
+    void Restore(bool clearOwnership) override {
         if (!m_modified) {
-            m_popupWindow = nullptr;
+            if (clearOwnership) {
+                m_popupWindow = nullptr;
+            }
             return;
         }
 
@@ -1458,7 +1465,9 @@ public:
         }
 
         m_modified = false;
-        m_popupWindow = nullptr;
+        if (clearOwnership) {
+            m_popupWindow = nullptr;
+        }
         m_originalText.clear();
         m_spacedText.clear();
     }
@@ -1507,7 +1516,18 @@ using ModernTextStateMap =
                        std::shared_ptr<ModernTextStateBase>,
                        ModernElementKeyHash>;
 
-thread_local std::optional<ModernTextStateMap>
+using ModernElementKeySet =
+    std::unordered_set<ModernElementKey, ModernElementKeyHash>;
+
+struct ModernThreadState {
+    ModernTextStateMap states;
+    // Newly observed sources wait for the next popup SHOW. Ownership is kept
+    // across HIDE so another popup can't claim a cached source.
+    ModernElementKeySet pending;
+    std::unordered_map<HWND, ModernElementKeySet> ownedByPopup;
+};
+
+thread_local std::optional<ModernThreadState>
     g_modernTextStatesForThread{std::in_place};
 
 std::mutex g_modernTextStateThreadsMutex;
@@ -1530,23 +1550,92 @@ void ApplyModernTextStatesForPopup(HWND popupWindow) {
         return;
     }
 
-    for (const auto& [key, state] :
-         *g_modernTextStatesForThread) {
-        state->Apply(popupWindow);
+    auto& threadState = *g_modernTextStatesForThread;
+    if (auto ownerIterator =
+            threadState.ownedByPopup.find(popupWindow);
+        ownerIterator != threadState.ownedByPopup.end()) {
+        for (auto iterator = ownerIterator->second.begin();
+             iterator != ownerIterator->second.end();) {
+            const auto stateIterator =
+                threadState.states.find(*iterator);
+            if (stateIterator == threadState.states.end()) {
+                iterator = ownerIterator->second.erase(iterator);
+                continue;
+            }
+
+            stateIterator->second->Apply(popupWindow);
+            ++iterator;
+        }
+    }
+
+    ModernElementKeySet pending;
+    pending.swap(threadState.pending);
+    if (!pending.empty()) {
+        auto& owned = threadState.ownedByPopup[popupWindow];
+        for (const auto& key : pending) {
+            const auto iterator = threadState.states.find(key);
+            if (iterator == threadState.states.end()) {
+                continue;
+            }
+
+            iterator->second->Apply(popupWindow);
+            owned.insert(key);
+        }
     }
 }
 
-void RestoreModernTextStatesForPopup(HWND popupWindow) {
+void RestoreModernTextStatesForPopup(HWND popupWindow,
+                                     bool clearOwnership) {
     if (!g_modernTextStatesForThread) {
         return;
     }
 
-    for (const auto& [key, state] :
-         *g_modernTextStatesForThread) {
-        if (state->PopupWindow() == popupWindow) {
-            state->Restore();
+    auto& threadState = *g_modernTextStatesForThread;
+    const auto ownerIterator =
+        threadState.ownedByPopup.find(popupWindow);
+    if (ownerIterator == threadState.ownedByPopup.end()) {
+        return;
+    }
+
+    for (const auto& key : ownerIterator->second) {
+        const auto stateIterator = threadState.states.find(key);
+        if (stateIterator == threadState.states.end()) {
+            continue;
+        }
+
+        stateIterator->second->Restore(clearOwnership);
+        if (clearOwnership) {
+            threadState.pending.insert(key);
         }
     }
+
+    if (clearOwnership) {
+        threadState.ownedByPopup.erase(ownerIterator);
+    }
+}
+
+void RemoveModernTextState(ModernThreadState& threadState,
+                           const ModernElementKey& key) {
+    threadState.pending.erase(key);
+    const auto stateIterator = threadState.states.find(key);
+    if (stateIterator == threadState.states.end()) {
+        return;
+    }
+
+    if (const HWND popupWindow =
+            stateIterator->second->PopupWindow()) {
+        if (auto ownerIterator =
+                threadState.ownedByPopup.find(popupWindow);
+            ownerIterator != threadState.ownedByPopup.end()) {
+            ownerIterator->second.erase(key);
+            if (ownerIterator->second.empty()) {
+                threadState.ownedByPopup.erase(ownerIterator);
+            }
+        }
+    }
+
+    stateIterator->second->Restore(true);
+    threadState.states.erase(stateIterator);
 }
 
 void CleanupModernTextStatesForCurrentThread() {
@@ -1555,8 +1644,8 @@ void CleanupModernTextStatesForCurrentThread() {
     }
 
     for (const auto& [key, state] :
-         *g_modernTextStatesForThread) {
-        state->Restore();
+         g_modernTextStatesForThread->states) {
+        state->Restore(true);
     }
     g_modernTextStatesForThread.reset();
     UnregisterModernTextStateThread();
@@ -1628,20 +1717,23 @@ private:
             std::make_shared<ModernTextState<Element, SourceAccess>>(
                 element);
         const ModernElementKey key{this, handle};
-        auto& states = *g_modernTextStatesForThread;
-        if (auto iterator = states.find(key);
-            iterator != states.end()) {
-            iterator->second->Restore();
-            iterator->second = state;
-        } else {
-            if (states.empty()) {
-                RegisterModernTextStateThread();
-            }
-            states.emplace(key, state);
+        auto& threadState = *g_modernTextStatesForThread;
+        if (threadState.states.contains(key)) {
+            RemoveModernTextState(threadState, key);
         }
+        if (threadState.states.empty()) {
+            RegisterModernTextStateThread();
+        }
+        threadState.states.emplace(key, state);
 
-        state->Apply(
-            GetMostRecentModernPopupForThread(GetCurrentThreadId()));
+        const HWND popupWindow =
+            GetMostRecentModernPopupForThread(GetCurrentThreadId());
+        if (popupWindow) {
+            state->Apply(popupWindow);
+            threadState.ownedByPopup[popupWindow].insert(key);
+        } else {
+            threadState.pending.insert(key);
+        }
         return true;
     }
 
@@ -1654,7 +1746,8 @@ private:
         }
 
         const ModernElementKey key{this, element.Handle};
-        auto& states = *g_modernTextStatesForThread;
+        auto& threadState = *g_modernTextStatesForThread;
+        auto& states = threadState.states;
 
         if (mutationType == Add &&
             g_modernUiText.load(std::memory_order_relaxed)) {
@@ -1690,20 +1783,20 @@ private:
             } else {
                 if (TryRegisterSource<
                         wux::Controls::ToolTip,
-                        TooltipContentAccess>(
+                        TooltipContentAccess<
+                            wux::Controls::ContentControl>>(
                         element.Handle, inspectable) ||
                     TryRegisterSource<
                         mux::Controls::ToolTip,
-                        TooltipContentAccess>(
+                        TooltipContentAccess<
+                            mux::Controls::ContentControl>>(
                         element.Handle, inspectable)) {
                     return S_OK;
                 }
             }
         } else if (mutationType == Remove) {
-            if (auto iterator = states.find(key);
-                iterator != states.end()) {
-                iterator->second->Restore();
-                states.erase(iterator);
+            if (states.contains(key)) {
+                RemoveModernTextState(threadState, key);
                 if (states.empty()) {
                     UnregisterModernTextStateThread();
                 }
@@ -2049,6 +2142,18 @@ void CALLBACK ModernPopupWinEventProc(
         return;
     }
 
+    if (event == EVENT_OBJECT_DESTROY) {
+        {
+            std::lock_guard<std::mutex> guard(
+                g_visibleModernPopupsMutex);
+            g_visibleModernPopups.erase(window);
+        }
+        // The in-context callback still runs on the popup's UI thread even
+        // after the HWND is no longer valid.
+        RestoreModernTextStatesForPopup(window, true);
+        return;
+    }
+
     DWORD processId;
     const DWORD threadId =
         GetWindowThreadProcessId(window, &processId);
@@ -2064,8 +2169,7 @@ void CALLBACK ModernPopupWinEventProc(
 
         RequestXamlDiagnosticsInitialization();
         ApplyModernTextStatesForPopup(window);
-    } else if (event == EVENT_OBJECT_HIDE ||
-               event == EVENT_OBJECT_DESTROY) {
+    } else if (event == EVENT_OBJECT_HIDE) {
         bool wasTracked;
         {
             std::lock_guard<std::mutex> guard(
@@ -2075,7 +2179,7 @@ void CALLBACK ModernPopupWinEventProc(
         }
 
         if (wasTracked) {
-            RestoreModernTextStatesForPopup(window);
+            RestoreModernTextStatesForPopup(window, false);
         }
     }
 }
@@ -2240,8 +2344,12 @@ bool InstallHook(Function target,
 }
 
 bool HookClassicTooltipThemeDrawing() {
-    HMODULE themeModule = LoadLibraryExW(
-        L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE themeModule = GetModuleHandleW(L"uxtheme.dll");
+    if (!themeModule) {
+        themeModule = LoadLibraryExW(
+            L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        g_loadedUxThemeModule = themeModule;
+    }
     if (!themeModule) {
         Wh_Log(L"Couldn't load uxtheme.dll");
         return false;
@@ -2334,6 +2442,10 @@ bool HookClassicTooltipThemeDrawing() {
         Wh_Log(L"Couldn't find DrawThemeTextEx");
     }
 
+    if (!hooked && g_loadedUxThemeModule) {
+        FreeLibrary(g_loadedUxThemeModule);
+        g_loadedUxThemeModule = nullptr;
+    }
     return hooked;
 }
 
@@ -2427,6 +2539,10 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
     ClearTrackedClassicTooltipThemes();
+    if (g_loadedUxThemeModule) {
+        FreeLibrary(g_loadedUxThemeModule);
+        g_loadedUxThemeModule = nullptr;
+    }
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         UninitializeModernUi();
     }
