@@ -2,7 +2,7 @@
 // @id              charging-sound
 // @name            Charging Sound
 // @description     Plays a custom sound when the laptop is plugged in or unplugged
-// @version         1.4
+// @version         1.5
 // @author          khonloi
 // @github          https://github.com/khonloi
 // @license         MIT
@@ -29,6 +29,9 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 - unpluggedSoundPath: ""
   $name: Unplugged Sound File Path
   $description: "The absolute path to a .wav file or a system sound alias to play when unplugged. Leave empty to disable."
+- suppressWhenBusy: true
+  $name: Don't play while busy
+  $description: "Skip the sound when a full-screen app is running, presentation mode is active, or notifications are otherwise suppressed."
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -37,7 +40,6 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 
 #include <mmsystem.h>
 #include <shellapi.h>
-#include <winnt.h>
 
 #include <cstring>
 #include <mutex>
@@ -49,6 +51,7 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 struct {
     std::wstring pluggedInSoundPath;
     std::wstring unpluggedSoundPath;
+    bool suppressWhenBusy;
     std::mutex mtx;
 } g_settings;
 
@@ -64,11 +67,18 @@ void PlaySoundPath(const std::wstring& path) {
         return;
     }
 
-    QUERY_USER_NOTIFICATION_STATE quns;
-    if (SUCCEEDED(SHQueryUserNotificationState(&quns))) {
-        if (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN ||
-            quns == QUNS_PRESENTATION_MODE || quns == QUNS_APP) {
-            Wh_Log(L"User is busy or in fullscreen. Suppressing sound.");
+    bool suppress = false;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mtx);
+        suppress = g_settings.suppressWhenBusy;
+    }
+
+    if (suppress) {
+        QUERY_USER_NOTIFICATION_STATE quns;
+        if (SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+            quns != QUNS_ACCEPTS_NOTIFICATIONS && quns != QUNS_NOT_PRESENT) {
+            Wh_Log(L"Notifications are suppressed (state %d), skipping sound.",
+                   quns);
             return;
         }
     }
@@ -80,13 +90,13 @@ void PlaySoundPath(const std::wstring& path) {
     DWORD flags = SND_ASYNC | SND_NODEFAULT;
 
     if (isFilePath) {
-        if (PlaySoundW(path.c_str(), nullptr, flags | SND_FILENAME)) {
-            return;
+        if (!PlaySoundW(path.c_str(), nullptr, flags | SND_FILENAME)) {
+            Wh_Log(L"PlaySoundW failed for: %s", path.c_str());
         }
-    }
-
-    if (!PlaySoundW(path.c_str(), nullptr, flags | SND_ALIAS)) {
-        Wh_Log(L"PlaySoundW failed for: %s", path.c_str());
+    } else {
+        if (!PlaySoundW(path.c_str(), nullptr, flags | SND_ALIAS | SND_SYSTEM)) {
+            Wh_Log(L"PlaySoundW failed for: %s", path.c_str());
+        }
     }
 }
 
@@ -135,6 +145,7 @@ LRESULT CALLBACK PowerWindowProc(HWND hwnd,
                 }
             }
         }
+        return TRUE;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
@@ -204,9 +215,12 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"pluggedInSoundPath");
     auto unpluggedSoundPath =
         WindhawkUtils::StringSetting::make(L"unpluggedSoundPath");
+    bool suppressWhenBusy = Wh_GetIntSetting(L"suppressWhenBusy") != 0;
+
     std::lock_guard<std::mutex> lock(g_settings.mtx);
     g_settings.pluggedInSoundPath = pluggedInSoundPath.get();
     g_settings.unpluggedSoundPath = unpluggedSoundPath.get();
+    g_settings.suppressWhenBusy = suppressWhenBusy;
 }
 
 BOOL WhTool_ModInit() {
@@ -279,12 +293,14 @@ BOOL Wh_ModInit() {
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
+
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -293,6 +309,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -321,6 +338,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
@@ -334,6 +352,7 @@ BOOL Wh_ModInit() {
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        
         return TRUE;
     }
 
@@ -349,6 +368,7 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
+
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
@@ -357,11 +377,13 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
+
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -370,6 +392,7 @@ void Wh_ModAfterInit() {
             return;
         }
     }
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -378,6 +401,7 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
+
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
@@ -385,6 +409,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
+
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
@@ -396,6 +421,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
