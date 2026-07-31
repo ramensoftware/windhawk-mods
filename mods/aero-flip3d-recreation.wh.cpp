@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm
+// @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -34,8 +34,7 @@ The mod has been tested on Windows 10 1809.
 
 ### While Aero Flip 3D is open
 
-- Navigate: arrow keys or mouse wheel
-- `Tab` is swallowed to prevent Task View interference
+- Navigate: `Tab` / `Shift+Tab`, arrow keys, or mouse wheel
 - Select: `Enter` or `Space`
 - Close: `Esc`
 - Emergency exit: `Ctrl+Shift+Esc` opens Task Manager
@@ -43,8 +42,10 @@ The mod has been tested on Windows 10 1809.
 ## Settings
 
 - Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.
+- Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default.
+- Number of visible windows: how many cards are shown in the deck at once. Defaults to auto-detecting a value from your PC's RAM/CPU, but can be overridden.
 
-The mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.
+By default, the mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.
 
 ## Performance
 
@@ -56,7 +57,7 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 
 - Windows 10 version 1809 or later (64-bit)
 - DWM enabled (default on Windows)
-- 2-4 GB RAM 
+- 2 GB RAM or more (2-4 GB machines get a reduced-effects mode automatically)
 
 ## Notes
 
@@ -75,6 +76,9 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 - autoCycle: false
   $name: Auto-cycle while Win is held
   $description: Automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default so Tab lets you step to an exact window.
+- visibleWindowCount: 0
+  $name: Number of visible windows
+  $description: How many cards are shown in the deck at once. 0 = auto-detect based on your PC's RAM/CPU (the default).
 */
 // ==/WindhawkModSettings==
 
@@ -141,6 +145,7 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 #include <cstdint>
 #include <cstdlib>
 #include <cwchar>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -259,13 +264,6 @@ public:
     HBITMAP* put() {
         reset();
         return &bitmap_;
-    }
-
-    // Gives up ownership (caller becomes responsible for DeleteObject).
-    HBITMAP release() {
-        HBITMAP bitmap = bitmap_;
-        bitmap_ = nullptr;
-        return bitmap;
     }
 
     explicit operator bool() const {
@@ -557,7 +555,6 @@ struct FlipWindowEntry {
     HWND hwnd = nullptr;
     ThumbnailHandle thumbnail;          // Flat fallback / simulated deep card.
     std::vector<ThumbnailHandle> slices;  // Simulated 3D vertical DWM strips.
-    int stripCount = 0;
     bool stripsHidden = false;
     SIZE sourceSize = {0, 0};
     RECT sourceRect = {0, 0, 0, 0};
@@ -607,23 +604,32 @@ static HWND g_hControllerWnd = nullptr;  // message-only window on UI thread
 static HWND g_hOverlayWnd = nullptr;     // visible fullscreen stack overlay
 static bool g_overlayClassRegistered = false;
 static bool g_controllerClassRegistered = false;
-[[clang::no_destroy]] static ScopedBitmap g_desktopSnapshotBitmap;    // real desktop captured via GDI
+static ScopedBitmap g_desktopSnapshotBitmap;    // real desktop captured via GDI
 static SIZE g_desktopSnapshotSize = {0, 0};
-[[clang::no_destroy]] static ScopedBitmap g_backdropCompositeBitmap;  // snapshot + veil, pre-blended once
+static ScopedBitmap g_backdropCompositeBitmap;  // snapshot + veil, pre-blended once
 static SIZE g_backdropCompositeSize = {0, 0};
 static DWORD g_hookThreadId = 0;
 static DWORD g_overlayThreadId = 0;
-[[clang::no_destroy]] static ScopedHandle g_hookThread;       // UI/controller thread.
-[[clang::no_destroy]] static ScopedHandle g_inputThread;      // LL-hook-only thread.
+static ScopedHandle g_hookThread;       // UI/controller thread.
+static ScopedHandle g_inputThread;      // LL-hook-only thread.
 static DWORD g_inputThreadId = 0;
-[[clang::no_destroy]] static ScopedHandle g_hookReadyEvent;
+static ScopedHandle g_hookReadyEvent;
 static std::atomic<bool> g_hookInstallOk{false};
 static std::atomic<bool> g_hookSessionActive{false};
 
-[[clang::no_destroy]] static ScopedHook g_keyboardHook;
-[[clang::no_destroy]] static ScopedHook g_mouseHook;
+static ScopedHook g_keyboardHook;
+static ScopedHook g_mouseHook;
 
-[[clang::no_destroy]] static std::vector<FlipWindowEntry> g_windows;
+[[clang::no_destroy]] static std::optional<std::vector<FlipWindowEntry>> g_windowsStorage;
+
+// g_windowsStorage holds a DwmUnregisterThumbnail (out-of-process) call in
+// each element's destructor, which must never run on the process-shutdown
+// thread -- so the container itself is wrapped in std::optional and reset()
+// explicitly on the UI thread during WhTool_ModUninitImpl instead of being
+// left for static destruction.
+static std::vector<FlipWindowEntry>& GWindows() {
+    return *g_windowsStorage;
+}
 static int g_selectedIndex = 0;
 static bool g_desktopSelected = false;  // true = front slot empty, desktop showing (Win7-style entry)
 static std::atomic<bool> g_persistentMode{false};   // true = Win+Tab: switcher stays open after key release
@@ -679,13 +685,15 @@ static Flip3DSettings g_settings;
 
 struct Flip3DPerfProfile {
     bool lowEnd = false;        // 4 GB RAM or less / few cores.
-    bool veryLowEnd = false;    // 2 GB RAM or less: strictest budget.
+    bool veryLowEnd = false;    // ~2 GB RAM or less: strictest budget.
     UINT frameIntervalMs = 16;  // Animation timer period while a transition runs.
-    int maxDeckCards = 8;       // Visible cascade cap.
-    bool allowSnapshot = true;  // Full-screen desktop capture allowed.
+    int maxDeckCards = 8;       // Visible cascade cap. May be overridden by
+                                // the "Number of visible windows" setting.
 };
 
 static Flip3DPerfProfile g_perf;
+
+inline int ClampInt(int value, int minValue, int maxValue);  // Defined below.
 
 static void DetectPerformanceProfile() {
     Flip3DPerfProfile p;
@@ -703,38 +711,42 @@ static void DetectPerformanceProfile() {
 
     // totalMb == 0 means the query failed: assume the worst.
     const bool lowRam = (totalMb == 0) || (totalMb <= 4200);   // ~4 GB (allow for reserved RAM).
+    const bool veryLowRam = (totalMb == 0) || (totalMb <= 2200);  // ~2 GB.
     const bool fewCores = cores <= 2;
 
-    // On machines with 4 GB RAM or fewer, treat as very-low-end regardless
-    // of core count: HDD + low RAM means every ALPC round-trip and GDI blit
-    // is amplified by disk paging, so the stricter budget is necessary to
-    // keep the animation smooth.
+    // On machines with 4 GB RAM or fewer, treat as low-end regardless of core
+    // count: HDD + low RAM means every ALPC round-trip and GDI blit is
+    // amplified by disk paging, so the stricter budget is necessary to keep
+    // the animation smooth. veryLowEnd is a strictly tighter predicate (~2 GB)
+    // so it actually differs from lowEnd instead of tracking it 1:1.
     p.lowEnd = lowRam || fewCores;
-    p.veryLowEnd = lowRam;  // 4 GB or less: strictest budget (no snapshot, fewer cards).
+    p.veryLowEnd = veryLowRam;
 
     if (p.veryLowEnd) {
         // Strictest budget: fewer DWM strips + lower frame rate to keep the
-        // switcher responsive even on a 4 GB / HDD machine. The desktop
-        // snapshot is always kept -- without it the overlay would show a blank
-        // Aero gradient instead of the real wallpaper, which risks getting
-        // stuck visually.
+        // switcher responsive even on a ~2 GB / HDD machine.
         p.frameIntervalMs = 25;       // 40 fps.
         p.maxDeckCards = 5;
-        p.allowSnapshot = true;       // Mandatory: the backdrop must show the real desktop.
     } else if (p.lowEnd) {
         p.frameIntervalMs = 20;       // 50 fps: close to the original 60 fps feel.
         p.maxDeckCards = 6;
-        p.allowSnapshot = true;
+    }
+
+    // Let the user override the auto-detected deck size via the
+    // "Number of visible windows" setting; 0 keeps the auto-detected default.
+    const int visibleWindowCountOverride = Wh_GetIntSetting(L"visibleWindowCount");
+    if (visibleWindowCountOverride > 0) {
+        p.maxDeckCards = ClampInt(visibleWindowCountOverride, 1, 32);
     }
 
     g_perf = p;
 
     Wh_Log(L"DetectPerformanceProfile: ram=%llu MB cores=%u -> lowEnd=%d veryLowEnd=%d "
-                L"fps=%u deck=%d snapshot=%d",
+                L"fps=%u deck=%d",
                 totalMb, static_cast<unsigned>(cores),
                 p.lowEnd ? 1 : 0, p.veryLowEnd ? 1 : 0,
                 p.frameIntervalMs ? (1000u / p.frameIntervalMs) : 0u,
-                p.maxDeckCards, p.allowSnapshot ? 1 : 0);
+                p.maxDeckCards);
 }
 
 static void LoadSettings() {
@@ -756,8 +768,8 @@ static constexpr UINT_PTR kWinTabClaimTimerId = 4;
 static constexpr UINT kWinTabClaimIntervalMs = 100;
 static constexpr int kWinTabClaimAttempts = 20;
 // Baseline animation period (~60 fps). The value actually used is
-// g_perf.frameIntervalMs, which drops to 30 or 25 fps on low-end machines.
-// This limits DWM strip updates during animations.
+// g_perf.frameIntervalMs, which drops to 20 ms (50 fps) or 25 ms (40 fps) on
+// low-end machines. This limits DWM strip updates during animations.
 static constexpr DWORD kEntryAnimationDurationMs = 460;
 static constexpr DWORD kLayoutAnimationDurationMs = 400;
 static constexpr DWORD kExitAnimationDurationMs = 320;
@@ -776,7 +788,6 @@ static constexpr int kHotkeyWinTab = 0x4001;      // Win+Tab (transient mode)
 // intermittently skipped the Win7-style "Desktop" entry and landed on the
 // next window instead. When NOT owned (registration failed/lost), the LL
 // hook remains the sole fallback trigger, so functionality never regresses.
-static std::atomic<bool> g_stickyHotkeyOwned{false};
 static std::atomic<bool> g_winTabHotkeyOwned{false};
 static int g_winTabClaimAttempt = 0;
 
@@ -799,20 +810,32 @@ static constexpr double kPerspectiveStrength = 0.68;
 // cards carry the same trapezoid distortion instead of rendering flat.
 static constexpr double kDeckCardTilt = 0.10;
 inline int StripCountForDepth(int depth) {
+    // Base (high-end) strip counts.
+    int base;
     switch (depth) {
-        case 0: return 20;
-        case 1: return 14;
-        case 2: return 10;
-        case 3: return 8;
+        case 0: base = 20; break;
+        case 1: base = 14; break;
+        case 2: base = 10; break;
+        case 3: base = 8; break;
         // Deep cards keep 8 strips as well: returning 0 here forced every card
         // at depth >= 4 onto the flat fallback, which is why distant cards lost
         // the perspective distortion entirely.
-        default: return 8;
+        default: base = 8; break;
     }
+
+    // Each strip is a live DWM thumbnail: a synchronous ALPC update per
+    // frame. On low-RAM/HDD machines that cost is amplified by paging, so
+    // the strip count must scale with g_perf just like frameIntervalMs and
+    // maxDeckCards already do -- otherwise the front card alone issues 20
+    // ALPC round-trips every frame regardless of hardware.
+    if (g_perf.veryLowEnd) {
+        base = std::max(3, base / 4);   // e.g. 20 -> 5, 8 -> 3.
+    } else if (g_perf.lowEnd) {
+        base = std::max(4, base / 2);   // e.g. 20 -> 10, 8 -> 4.
+    }
+
+    return base;
 }
-
-
-inline int ClampInt(int value, int minValue, int maxValue);  // Defined below.
 
 
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -1118,21 +1141,10 @@ static HWND FindPlainDesktopWindow() {
 // can leak. Must be called BEFORE the overlay window becomes visible,
 // otherwise the overlay itself would be captured.
 static void CaptureDesktopSnapshot() {
-    // Reuse an existing bitmap only when its dimensions still match.
-    bool reuseExisting = false;
-    if (g_desktopSnapshotBitmap) {
-        BITMAP bm = {};
-        if (GetObjectW(g_desktopSnapshotBitmap.get(), sizeof(bm), &bm) == sizeof(bm)) {
-            if (bm.bmWidth > 0 && bm.bmHeight > 0) {
-                reuseExisting = true;
-            }
-        }
-    }
-
-    // No usable bitmap: release stale state before creating a replacement.
-    if (!reuseExisting) {
-        ReleaseDesktopSnapshot();
-    }
+    // Always start from a clean slate: CleanupFlipResourcesOnOverlayThread
+    // releases the snapshot on every close, so there is never a stale bitmap
+    // to reuse here.
+    ReleaseDesktopSnapshot();
 
     HWND desktopHwnd = FindPlainDesktopWindow();
     if (!desktopHwnd || !IsWindow(desktopHwnd)) {
@@ -1148,11 +1160,11 @@ static void CaptureDesktopSnapshot() {
         return;
     }
 
-    RECT desktopRect = {};
-    if (!GetWindowRect(desktopHwnd, &desktopRect) ||
-        RectWidth(desktopRect) <= 0 || RectHeight(desktopRect) <= 0) {
-        desktopRect = GetPrimaryMonitorRect();
-    }
+    // Capture exactly the rect the overlay covers. Progman/WorkerW spans the
+    // entire virtual desktop on multi-monitor setups, while the overlay only
+    // covers the primary monitor, so using the window rect here would
+    // capture too much and get squashed into the overlay's client rect.
+    RECT desktopRect = GetPrimaryMonitorRect();
 
     const int width = RectWidth(desktopRect);
     const int height = RectHeight(desktopRect);
@@ -1161,23 +1173,7 @@ static void CaptureDesktopSnapshot() {
         return;
     }
 
-    // Validate the dimensions before reusing a bitmap.
-    if (reuseExisting) {
-        BITMAP bm = {};
-        if (GetObjectW(g_desktopSnapshotBitmap.get(), sizeof(bm), &bm) == sizeof(bm)) {
-            if (bm.bmWidth != width || bm.bmHeight != height) {
-                // Different dimensions: recreate it.
-                ReleaseDesktopSnapshot();
-                reuseExisting = false;
-            }
-        } else {
-            reuseExisting = false;
-            ReleaseDesktopSnapshot();
-        }
-    }
-
-    // If we do not have a valid bitmap, create a new one
-    if (!reuseExisting) {
+    {
         ScopedDc screenDc = ScopedDc::fromScreen(nullptr);
         if (!screenDc) {
             Wh_Log(L"CaptureDesktopSnapshot: GetDC failed (code %u)", static_cast<unsigned>(GetLastError()));
@@ -1352,15 +1348,9 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
         }
     }
 
-    // Use LOAD_LIBRARY_SEARCH_SYSTEM32 to avoid DLL planting.
-    static HMODULE msimg32 = LoadLibraryExW(L"msimg32.dll", nullptr,
-                                             LOAD_LIBRARY_SEARCH_SYSTEM32);
-    using AlphaBlend_t = BOOL(WINAPI*)(HDC, int, int, int, int, HDC, int, int, int, int, BLENDFUNCTION);
-    static AlphaBlend_t pAlphaBlend =
-        msimg32 ? reinterpret_cast<AlphaBlend_t>(GetProcAddress(msimg32, "AlphaBlend"))
-                : nullptr;
-
-    if (pAlphaBlend) {
+    // Windhawk loads mods with LOAD_WITH_ALTERED_SEARCH_PATH, so a static
+    // import of msimg32 is safe; no need for runtime LoadLibrary/GetProcAddress.
+    {
         ScopedDc veilDc = ScopedDc::compatible(refDc);
         if (veilDc) {
             ScopedBitmap veilBitmap(CreateCompatibleBitmap(refDc, w, h));
@@ -1382,7 +1372,7 @@ static bool EnsureBackdropComposite(HDC refDc, const RECT& rc) {
                     blend.SourceConstantAlpha = 55;
                     blend.AlphaFormat = 0;
 
-                    pAlphaBlend(compositeDc.get(), 0, 0, w, h, veilDc.get(), 0, 0, w, h, blend);
+                    AlphaBlend(compositeDc.get(), 0, 0, w, h, veilDc.get(), 0, 0, w, h, blend);
                 }
             }
         }
@@ -1432,11 +1422,13 @@ try {
             return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
         }
 
-        if (active && keyDown && (IsCtrlKey(vk) || IsShiftKey(vk) || IsAltKey(vk) || vk == VK_F12)) {
+        const bool manualShortcut = (vk == VK_F12 && ctrlDown && altDown && !winDown);
+
+        if (active && keyDown && !manualShortcut &&
+            (IsCtrlKey(vk) || IsShiftKey(vk) || IsAltKey(vk) || vk == VK_F12)) {
             return CallNextHookEx(g_keyboardHook.get(), nCode, wParam, lParam);
         }
 
-        const bool manualShortcut = (vk == VK_F12 && ctrlDown && altDown && !winDown);
         if (manualShortcut && keyDown) {
             if (active) {
                 g_hookSessionActive.store(false, std::memory_order_relaxed);
@@ -2051,7 +2043,7 @@ static void ApplyCardThumbnails(FlipWindowEntry& entry) {
 }
 
 inline std::vector<int> BuildBackToFrontOrder() {
-    const int count = static_cast<int>(g_windows.size());
+    const int count = static_cast<int>(GWindows().size());
     std::vector<int> order;
     order.reserve(count > 0 ? count : 1);
     for (int i = 0; i < count; ++i) {
@@ -2083,10 +2075,10 @@ static void InvalidateOrderCache() {
 
 static const std::vector<int>& GetBackToFrontOrderCached() {
     if (g_cachedOrderSelection != g_selectedIndex ||
-        g_cachedOrderCount != g_windows.size()) {
+        g_cachedOrderCount != GWindows().size()) {
         g_cachedOrder = BuildBackToFrontOrder();
         g_cachedOrderSelection = g_selectedIndex;
-        g_cachedOrderCount = g_windows.size();
+        g_cachedOrderCount = GWindows().size();
     }
     return g_cachedOrder;
 }
@@ -2099,21 +2091,21 @@ static const std::vector<int>& GetBackToFrontOrderCached() {
 // card registered before the new front card would end up on top.)
 
 static void ApplyAllThumbnailProperties() {
-    if (g_windows.empty()) {
+    if (GWindows().empty()) {
         return;
     }
     const std::vector<int>& order = GetBackToFrontOrderCached();
-    const int winCount = static_cast<int>(g_windows.size());
+    const int winCount = static_cast<int>(GWindows().size());
     for (int index : order) {
         if (index < 0 || index >= winCount) {
             continue;  // Defensive bounds check.
         }
-        ApplyCardThumbnails(g_windows[index]);
+        ApplyCardThumbnails(GWindows()[index]);
     }
 }
 
 static void RebuildThumbnailZOrder() {
-    if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || g_windows.empty()) {
+    if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || GWindows().empty()) {
         return;
     }
 
@@ -2122,7 +2114,7 @@ static void RebuildThumbnailZOrder() {
     // follows registration order -- the outgoing card, re-registered before
     // the new front card, would end up on top of the rest of the deck that
     // was not re-registered at all.
-    const int count = static_cast<int>(g_windows.size());
+    const int count = static_cast<int>(GWindows().size());
 
     // DWM thumbnails do not expose an explicit z-order API. Updating properties
     // isn't always enough on Win10/11: re-register only when the selection
@@ -2135,10 +2127,9 @@ static void RebuildThumbnailZOrder() {
     // depth to keep the per-frame ALPC budget sane.
     const std::vector<int>& order = GetBackToFrontOrderCached();
 
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         entry.thumbnail.reset();
         entry.slices.clear();
-        entry.stripCount = 0;
         entry.stripsHidden = false;
         entry.everApplied = false;
     }
@@ -2147,12 +2138,19 @@ static void RebuildThumbnailZOrder() {
         if (index < 0 || index >= count) {
             continue;
         }
-        auto& entry = g_windows[index];
+        auto& entry = GWindows()[index];
         if (!entry.hwnd || !IsWindow(entry.hwnd)) {
             continue;
         }
 
         const int depth = StackDepthForIndex(index, g_selectedIndex, count);
+        if (depth >= g_perf.maxDeckCards) {
+            // Beyond the visible deck cap: no strips, no flat thumbnail.
+            // ComputeSimulatedStackLayout already hides these cards
+            // (opacity 0), so registering them with DWM would only add
+            // ALPC cost for something never shown.
+            continue;
+        }
         // Only use strips when perspective is enabled.
         const int stripsWanted = g_settings.perspective ? StripCountForDepth(depth) : 0;
 
@@ -2173,7 +2171,6 @@ static void RebuildThumbnailZOrder() {
 
             if (allStripsOk && static_cast<int>(strips.size()) == stripsWanted) {
                 entry.slices = std::move(strips);
-                entry.stripCount = stripsWanted;
                 DwmQueryThumbnailSourceSize(entry.slices[0].get(), &entry.sourceSize);
                 ApplyCardThumbnails(entry);
                 continue;
@@ -2182,7 +2179,6 @@ static void RebuildThumbnailZOrder() {
         }
 
         // Flat single-thumbnail path (deep cards or failed strip setup).
-        entry.stripCount = 0;
         {
             HRESULT hr = DwmRegisterThumbnail(g_hOverlayWnd, entry.hwnd, entry.thumbnail.put());
             if (SUCCEEDED(hr) && entry.thumbnail) {
@@ -2271,7 +2267,7 @@ static void UpdateAnimationFrame() {
     bool done = linear >= 1.0;
     double eased = done ? 1.0 : EaseOutCubic(linear);
 
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         entry.currentRect = done ? entry.targetRect : LerpRect(entry.startRect, entry.targetRect, eased);
         entry.currentOpacity = done ? entry.targetOpacity : LerpOpacity(entry.startOpacity, entry.targetOpacity, eased);
         entry.currentTilt = done ? entry.targetTilt
@@ -2299,7 +2295,7 @@ static void UpdateAnimationFrame() {
 }
 
 static void BeginTransitionFromCurrent(FlipAnimationKind kind, DWORD durationMs) {
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         entry.startRect = entry.currentRect;
         entry.startOpacity = entry.currentOpacity;
         entry.startTilt = entry.currentTilt;
@@ -2313,11 +2309,11 @@ static void BeginTransitionFromCurrent(FlipAnimationKind kind, DWORD durationMs)
 }
 
 static void CleanupThumbnails() {
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         entry.thumbnail.reset();
         entry.slices.clear();
     }
-    g_windows.clear();
+    GWindows().clear();
     InvalidateOrderCache();
 }
 
@@ -2411,7 +2407,17 @@ static void ComputeSimulatedStackLayout(std::vector<FlipWindowEntry>& windows,
         if (desktopSelected) {
             depth += 1;
         }
-        int visualDepth = std::min(depth, maxVisibleDepth - 1);
+        if (depth >= maxVisibleDepth) {
+            // Beyond the visible deck cap: collapse and hide instead of
+            // stacking invisibly on top of the last visible card. These
+            // cards must not be registered with DWM either (see
+            // RebuildThumbnailZOrder).
+            windows[i].targetOpacity = 0;
+            windows[i].targetRect = {originX, originY, originX, originY};
+            windows[i].targetTilt = g_settings.perspective ? kDeckCardTilt : 0.0;
+            continue;
+        }
+        int visualDepth = depth;
         double d = static_cast<double>(visualDepth);
 
         // 1. Place this card in 3D world space: it recedes along +Z and
@@ -2476,7 +2482,7 @@ static void ComputeSimulatedStackLayout(std::vector<FlipWindowEntry>& windows,
 }
 
 static void RecomputeTargetsForCurrentSelection() {
-    if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || g_windows.empty()) {
+    if (!g_hOverlayWnd || !IsWindow(g_hOverlayWnd) || GWindows().empty()) {
         return;
     }
 
@@ -2490,9 +2496,9 @@ static void RecomputeTargetsForCurrentSelection() {
     Wh_Log(L"RecomputeTargetsForCurrentSelection: selectedIndex=%d desktopSelected=%d "
                 L"clientRect=%dx%d dpi=%u cardCount=%u",
                 g_selectedIndex, g_desktopSelected ? 1 : 0,
-                RectWidth(clientRect), RectHeight(clientRect), dpi, static_cast<unsigned>(g_windows.size()));
+                RectWidth(clientRect), RectHeight(clientRect), dpi, static_cast<unsigned>(GWindows().size()));
 
-    ComputeSimulatedStackLayout(g_windows,
+    ComputeSimulatedStackLayout(GWindows(),
                        g_selectedIndex,
                        g_desktopSelected,
                        RectWidth(clientRect),
@@ -2501,7 +2507,7 @@ static void RecomputeTargetsForCurrentSelection() {
 }
 
 static void NavigateSelection(int delta) {
-    const int count = static_cast<int>(g_windows.size());
+    const int count = static_cast<int>(GWindows().size());
     if (count <= 0 || delta == 0 || g_exitInProgress) {
         return;
     }
@@ -2705,15 +2711,15 @@ static void DeactivateFlip3D(bool activateSelected) {
     if (activateSelected) {
         if (g_desktopSelected) {
             selectedHwnd = g_initialForegroundHwnd;
-        } else if (g_selectedIndex >= 0 && g_selectedIndex < static_cast<int>(g_windows.size())) {
-            selectedHwnd = g_windows[g_selectedIndex].hwnd;
+        } else if (g_selectedIndex >= 0 && g_selectedIndex < static_cast<int>(GWindows().size())) {
+            selectedHwnd = GWindows()[g_selectedIndex].hwnd;
         }
     }
     if (selectedHwnd && !IsWindow(selectedHwnd)) {
         selectedHwnd = nullptr;
     }
 
-    if (g_windows.empty()) {
+    if (GWindows().empty()) {
         g_pendingActivateHwnd = selectedHwnd;
         FinishExitAfterAnimation();
         return;
@@ -2730,7 +2736,7 @@ static void DeactivateFlip3D(bool activateSelected) {
         clientRect = {0, 0, 1, 1};
     }
 
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         RECT dst = MakeOverlayRelativeRect(entry.sourceRect);
         if (!IntersectsRect(dst, clientRect)) {
             int cx = (entry.currentRect.left + entry.currentRect.right) / 2;
@@ -2798,7 +2804,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
 
     CaptureDesktopSnapshot();
 
-    g_windows.clear();
+    GWindows().clear();
     InvalidateOrderCache();
     int skippedNoRect = 0;
     int skippedThumbnailFailed = 0;
@@ -2823,21 +2829,21 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
             }
             DwmQueryThumbnailSourceSize(entry.thumbnail.get(), &entry.sourceSize);
 
-        g_windows.push_back(std::move(entry));
+        GWindows().push_back(std::move(entry));
     }
 
     Wh_Log(L"ActivateFlip3D: %u card(s) prepared (simulated DWM; skipped: %d no-rect, %d thumbnail-failed)",
-                static_cast<unsigned>(g_windows.size()), skippedNoRect, skippedThumbnailFailed);
+                static_cast<unsigned>(GWindows().size()), skippedNoRect, skippedThumbnailFailed);
 
-    if (g_windows.empty()) {
+    if (GWindows().empty()) {
         Wh_Log(L"ActivateFlip3D: no thumbnails registered");
         DeactivateFlip3D(false);
         return false;
     }
 
     int foregroundIndex = 0;
-    for (int i = 0; i < static_cast<int>(g_windows.size()); ++i) {
-        if (g_windows[i].hwnd == foregroundBefore) {
+    for (int i = 0; i < static_cast<int>(GWindows().size()); ++i) {
+        if (GWindows()[i].hwnd == foregroundBefore) {
             foregroundIndex = i;
             break;
         }
@@ -2856,7 +2862,7 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
         clientRect = {0, 0, 1, 1};
     }
 
-    for (auto& entry : g_windows) {
+    for (auto& entry : GWindows()) {
         RECT startRect = MakeOverlayRelativeRect(entry.sourceRect);
         if (!IntersectsRect(startRect, clientRect)) {
             int cx = (entry.targetRect.left + entry.targetRect.right) / 2;
@@ -2896,10 +2902,9 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
     SetFocus(g_hOverlayWnd);
 
     RebuildThumbnailZOrder();
-    ApplyAllThumbnailProperties();
     BeginTransitionFromCurrent(FlipAnimationKind::Entry, kEntryAnimationDurationMs);
     Wh_Log(L"ActivateFlip3D: switcher opened with %u card(s), persistent=%d",
-                static_cast<unsigned>(g_windows.size()), g_persistentMode.load(std::memory_order_relaxed) ? 1 : 0);
+                static_cast<unsigned>(GWindows().size()), g_persistentMode.load(std::memory_order_relaxed) ? 1 : 0);
     return true;
 }
 
@@ -3300,7 +3305,6 @@ static DWORD WINAPI InputThreadProc(LPVOID) {
 // -----------------------------------------------------------------------------
 
 static void UnregisterAllHotkeys() {
-    g_stickyHotkeyOwned.store(false, std::memory_order_relaxed);
     const bool wasWinTabOwned = g_winTabHotkeyOwned.exchange(false, std::memory_order_relaxed);
     if (!g_hControllerWnd || !IsWindow(g_hControllerWnd)) return;
     KillTimer(g_hControllerWnd, kWinTabClaimTimerId);
@@ -3359,6 +3363,11 @@ static void ContinueWinTabClaim() {
 }
 
 static DWORD HookThreadProcImpl(LPVOID) {
+    // Opt this thread into per-monitor DPI awareness so the physical-pixel
+    // rects computed for the overlay/thumbnails are not DPI-virtualized by
+    // the window manager on a scaled primary monitor.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     MSG dummy;
     PeekMessageW(&dummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -3396,10 +3405,8 @@ static DWORD HookThreadProcImpl(LPVOID) {
     g_hControllerWnd = CreateControllerWindow();
     if (g_hControllerWnd) {
         Wh_Log(L"HookThread: controller window created, hwnd=%p", g_hControllerWnd);
-        g_stickyHotkeyOwned.store(
-            TryRegisterHotkey(kStickyHotkeyId, MOD_CONTROL | MOD_ALT, VK_F12,
-                              L"RegisterHotKey(Ctrl+Alt+F12)"),
-            std::memory_order_relaxed);
+        TryRegisterHotkey(kStickyHotkeyId, MOD_CONTROL | MOD_ALT, VK_F12,
+                          L"RegisterHotKey(Ctrl+Alt+F12)");
         // Claim modern Win+Tab at startup with a bounded 20-attempt sequence.
         // When Windows keeps the combo reserved, the dedicated LL hook remains
         // the fallback and blocks Task View without any permanent polling.
@@ -3484,7 +3491,15 @@ static bool WhTool_ModInitImpl() {
     LoadSettings();
     DetectPerformanceProfile();
 
+    g_windowsStorage.emplace();
+
     g_hookInstallOk.store(false, std::memory_order_relaxed);
+    g_hookReadyEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!g_hookReadyEvent) {
+        Wh_Log(L"CreateEvent(hookReady) failed: %u", GetLastError());
+        return false;
+    }
+
     // Capture the thread ID from CreateThread so we can always post
     // WM_QUIT even if the thread has not executed yet.
     DWORD tid = 0;
@@ -3494,7 +3509,13 @@ static bool WhTool_ModInitImpl() {
         return false;
     }
     g_hookThreadId = tid;  // Pre-set so unload never misses the quit.
-    return true;
+
+    // Wait for the hook thread to finish installing (controller window,
+    // hotkeys, input thread) before reporting init success/failure, so a
+    // failed CreateControllerWindow is actually surfaced instead of always
+    // returning true as soon as CreateThread returns.
+    WaitForSingleObject(g_hookReadyEvent.get(), INFINITE);
+    return g_hookInstallOk.load(std::memory_order_acquire);
 }
 
 static void WhTool_ModUninitImpl() {
@@ -3528,6 +3549,12 @@ static void WhTool_ModUninitImpl() {
     }
     g_hookThreadId = 0;
     g_hookSessionActive.store(false, std::memory_order_relaxed);
+
+    // The UI thread has fully exited by this point (joined above), so it is
+    // safe to tear down the deck here rather than leaving it for static
+    // destruction: each entry's destructor calls DwmUnregisterThumbnail,
+    // an out-of-process call that must not run on the shutdown thread.
+    g_windowsStorage.reset();
 }
 
 BOOL WhTool_ModInit() {
