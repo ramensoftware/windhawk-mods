@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.3
+// @version         1.1.4
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -497,6 +497,17 @@ struct UiaTask {
 
 DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     UiaTask* t = (UiaTask*)lpParam;
+    struct UiaCleanupGuard {
+        UiaTask* task;
+        ~UiaCleanupGuard() {
+            delete task;
+            g_workerCount.fetch_sub(1, std::memory_order_release);
+        }
+    } guard{ t };
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        return 0;
+    }
+
     int targetX = t->fallbackX;
     bool uiaFound = false;
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -579,7 +590,6 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         g_TaskbarDockXs[t->hWndApp] = targetX;
         if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
     }
-    delete t;
     return 0;
 }
 
@@ -599,10 +609,13 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     
     UiaTask* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX};
     
+    g_workerCount.fetch_add(1, std::memory_order_relaxed);
+    
     HANDLE hThread = CreateThread(NULL, 0, UiaWorkerThread, task, 0, NULL);
     if (hThread) {
         CloseHandle(hThread);
     } else {
+        g_workerCount.fetch_sub(1, std::memory_order_release);
         delete task;
     }
     return fallbackX;
@@ -940,9 +953,31 @@ public:
         dockXf = (float)dockX;
         dockY = (float)monBottom;
         neckW = Clamp(W * 0.03f, 12.0f, 60.0f);
+        blockSizeSetting = std::max(1, g_shatterBlockSize.load(std::memory_order_relaxed));
+        closeEffect = g_closeEffectStyle.load(std::memory_order_relaxed);
+        
         if (data->isClosing) {
-            boundLeft = monLeft; boundTop = monTop;
-            boundW = monRight - monLeft; boundH = monBottom - monTop;
+            int padLeft = 0, padTop = 0, padRight = 0, padBottom = 0;
+            
+            if (closeEffect == 0) {
+                int maxShatter = (int)(AnimConstants::ShatterTravelBase + AnimConstants::ShatterTravelMult) + 50;
+                padLeft = padTop = padRight = padBottom = maxShatter;
+            } else if (closeEffect == 1) {
+                padLeft = W / 2;
+                padRight = (int)(W * 1.5f);
+                padTop = H / 2;
+                padBottom = (int)(H * 1.5f);
+            } else {
+                padLeft = padTop = padRight = padBottom = 50; 
+            }
+            
+            boundLeft = std::max(monLeft, origLeft - padLeft);
+            boundTop = std::max(monTop, origTop - padTop);
+            int boundRight = std::min(monRight, origLeft + W + padRight);
+            int boundBottom = std::min(monBottom, origTop + H + padBottom);
+            
+            boundW = boundRight - boundLeft;
+            boundH = boundBottom - boundTop;
         } else {
             boundLeft = std::max(monLeft, std::min(origLeft, dockX) - W / 2);
             const int boundRight = std::min(monRight, std::max(origLeft + W, dockX) + W / 2);
@@ -953,8 +988,6 @@ public:
         if (boundW < 1) boundW = 1;
         if (boundH < 1) boundH = 1;
         totalMs = (double)data->durationMs;
-        blockSizeSetting = std::max(1, g_shatterBlockSize.load(std::memory_order_relaxed));
-        closeEffect = g_closeEffectStyle.load(std::memory_order_relaxed);
     }
     
     bool Initialize() {
