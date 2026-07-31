@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              cjk-spacer
 // @name            CJK Spacer
-// @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and may conflict with other XAML Diagnostics mods
-// @version         0.1.20
+// @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods
+// @version         0.1.21
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -93,6 +93,9 @@ In addition to the XAML DLL load hook, creation of the Explorer/taskbar XAML
 host windows is used as an independent initialization trigger, so a module
 loaded through a static import, delay-load helper, or lower-level loader path
 still gets a connection attempt after an Explorer restart.
+If a connection attempt is denied or otherwise fails, host-window creation does
+not retry it repeatedly; a newly loaded XAML module or an established
+connection being disconnected provides the next retry opportunity.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, enabling this path can show its confirmation dialog.
 Each reload switches to a new modern-UI generation, so detached workers and
@@ -930,7 +933,6 @@ using OpenThemeData_t = decltype(&OpenThemeData);
 using OpenThemeDataEx_t = decltype(&OpenThemeDataEx);
 using OpenThemeDataForDpi_t = decltype(&OpenThemeDataForDpi);
 using CloseThemeData_t = decltype(&CloseThemeData);
-using GetWindowTheme_t = decltype(&GetWindowTheme);
 using GetThemeTextExtent_t = decltype(&GetThemeTextExtent);
 using DrawThemeText_t = decltype(&DrawThemeText);
 using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
@@ -939,21 +941,21 @@ OpenThemeData_t g_originalOpenThemeData;
 OpenThemeDataEx_t g_originalOpenThemeDataEx;
 OpenThemeDataForDpi_t g_originalOpenThemeDataForDpi;
 CloseThemeData_t g_originalCloseThemeData;
-GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
 HMODULE g_loadedUxThemeModule;
 std::shared_mutex g_classicTooltipThemesMutex;
-// A theme handle can be shared by multiple tooltip windows. Keep one entry
-// per matching OpenThemeData call so CloseThemeData can release the right
-// number of references without letting the last window overwrite the rest.
-std::unordered_map<HTHEME, std::vector<HWND>> g_classicTooltipThemes;
+// A theme handle can be shared by multiple tooltip windows. Keep a reference
+// count for matching OpenThemeData calls so CloseThemeData can release the
+// right number of references without letting the last window overwrite the
+// rest.
+std::unordered_map<HTHEME, unsigned int> g_classicTooltipThemes;
+std::vector<HTHEME> g_discoveredClassicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
 
 void ClearUxThemeFunctionPointers() {
-    g_getWindowTheme = nullptr;
     g_originalOpenThemeData = nullptr;
     g_originalOpenThemeDataEx = nullptr;
     g_originalOpenThemeDataForDpi = nullptr;
@@ -1010,9 +1012,9 @@ void TrackClassicTooltipTheme(HTHEME theme, HWND window) {
         std::lock_guard<std::shared_mutex> guard(
             g_classicTooltipThemesMutex);
         auto [iterator, wasInserted] =
-            g_classicTooltipThemes.try_emplace(theme);
+            g_classicTooltipThemes.try_emplace(theme, 0);
         inserted = wasInserted;
-        iterator->second.push_back(window);
+        ++iterator->second;
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
             std::memory_order_relaxed);
@@ -1037,10 +1039,7 @@ bool UntrackClassicTooltipTheme(HTHEME theme) {
         return false;
     }
 
-    if (!iterator->second.empty()) {
-        iterator->second.pop_back();
-    }
-    if (iterator->second.empty()) {
+    if (--iterator->second == 0) {
         g_classicTooltipThemes.erase(iterator);
         g_classicTooltipThemeCount.store(
             static_cast<unsigned int>(g_classicTooltipThemes.size()),
@@ -1079,17 +1078,38 @@ BOOL CALLBACK EnumExistingClassicTooltipWindow(HWND window, LPARAM) {
     DWORD processId;
     GetWindowThreadProcessId(window, &processId);
     if (processId == GetCurrentProcessId() &&
-        IsClassicTooltipWindow(window)) {
-        TrackClassicTooltipTheme(g_getWindowTheme(window), window);
+        IsClassicTooltipWindow(window) && g_originalOpenThemeData &&
+        g_originalCloseThemeData) {
+        // GetWindowTheme does not add a theme-data reference. Open the
+        // handle ourselves so the discovery entry can be released exactly
+        // once during module teardown.
+        if (HTHEME theme =
+                g_originalOpenThemeData(window, L"TOOLTIP")) {
+            TrackClassicTooltipTheme(theme, window);
+            g_discoveredClassicTooltipThemes.push_back(theme);
+        }
     }
 
     return TRUE;
 }
 
 void DiscoverExistingClassicTooltipThemes() {
-    if (g_getWindowTheme) {
+    if (g_originalOpenThemeData && g_originalCloseThemeData) {
         EnumWindows(EnumExistingClassicTooltipWindow, 0);
     }
+}
+
+void CloseDiscoveredClassicTooltipThemes() {
+    if (!g_originalCloseThemeData) {
+        g_discoveredClassicTooltipThemes.clear();
+        return;
+    }
+
+    for (HTHEME theme : g_discoveredClassicTooltipThemes) {
+        g_originalCloseThemeData(theme);
+        UntrackClassicTooltipTheme(theme);
+    }
+    g_discoveredClassicTooltipThemes.clear();
 }
 
 HTHEME WINAPI OpenThemeDataHook(HWND window, LPCWSTR classList) {
@@ -1547,7 +1567,8 @@ void CleanupModernTextStatesForCurrentThread() {
 }
 
 HMODULE AcquireCurrentModuleReference();
-void RequestModernXamlDiagnosticsInitialization();
+void RequestModernXamlDiagnosticsInitialization(
+    bool retryFailedConnections = false);
 
 enum class XamlDiagnosticsFlavor {
     None,
@@ -1557,6 +1578,8 @@ enum class XamlDiagnosticsFlavor {
 
 extern std::atomic_bool g_windowsUiXamlDiagnosticsConnected;
 extern std::atomic_bool g_microsoftUiXamlDiagnosticsConnected;
+extern std::atomic_bool g_windowsUiXamlDiagnosticsAttempted;
+extern std::atomic_bool g_microsoftUiXamlDiagnosticsAttempted;
 extern std::atomic_bool g_stoppingModernUi;
 extern std::atomic_uint64_t g_modernUiGeneration;
 extern thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics;
@@ -1846,9 +1869,13 @@ public:
                 XamlDiagnosticsFlavor::Windows) {
                 g_windowsUiXamlDiagnosticsConnected.store(
                     false, std::memory_order_release);
+                g_windowsUiXamlDiagnosticsAttempted.store(
+                    false, std::memory_order_release);
             } else if (disconnectedFlavor ==
                        XamlDiagnosticsFlavor::Microsoft) {
                 g_microsoftUiXamlDiagnosticsConnected.store(
+                    false, std::memory_order_release);
+                g_microsoftUiXamlDiagnosticsAttempted.store(
                     false, std::memory_order_release);
             }
             if (disconnectedFlavor != XamlDiagnosticsFlavor::None &&
@@ -1976,6 +2003,8 @@ using InitializeXamlDiagnosticsEx_t =
 std::mutex g_xamlDiagnosticsInitializationMutex;
 std::atomic_bool g_windowsUiXamlDiagnosticsConnected{false};
 std::atomic_bool g_microsoftUiXamlDiagnosticsConnected{false};
+std::atomic_bool g_windowsUiXamlDiagnosticsAttempted{false};
+std::atomic_bool g_microsoftUiXamlDiagnosticsAttempted{false};
 std::atomic_bool g_xamlDiagnosticsWorkerRunning{false};
 std::atomic_bool g_xamlDiagnosticsRequestPending{false};
 thread_local bool g_loadingXamlDiagnostics;
@@ -2066,9 +2095,13 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
     }
 
     if (!g_windowsUiXamlDiagnosticsConnected.load(
+            std::memory_order_acquire) &&
+        !g_windowsUiXamlDiagnosticsAttempted.load(
             std::memory_order_acquire)) {
         if (HMODULE module =
                 GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
+            g_windowsUiXamlDiagnosticsAttempted.store(
+                true, std::memory_order_release);
             const uint64_t watcherGeneration =
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire);
@@ -2098,9 +2131,13 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
     }
 
     if (!g_microsoftUiXamlDiagnosticsConnected.load(
+            std::memory_order_acquire) &&
+        !g_microsoftUiXamlDiagnosticsAttempted.load(
             std::memory_order_acquire)) {
         if (HMODULE module = GetModuleHandleW(
                 L"Microsoft.Internal.FrameworkUdk.dll")) {
+            g_microsoftUiXamlDiagnosticsAttempted.store(
+                true, std::memory_order_release);
             const uint64_t watcherGeneration =
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire);
@@ -2133,17 +2170,32 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
 bool NeedsXamlDiagnosticsConnection() {
     return (!g_windowsUiXamlDiagnosticsConnected.load(
                  std::memory_order_acquire) &&
+            !g_windowsUiXamlDiagnosticsAttempted.load(
+                std::memory_order_acquire) &&
             GetModuleHandleW(L"Windows.UI.Xaml.dll")) ||
            (!g_microsoftUiXamlDiagnosticsConnected.load(
                  std::memory_order_acquire) &&
+            !g_microsoftUiXamlDiagnosticsAttempted.load(
+                std::memory_order_acquire) &&
             GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll"));
 }
 
-void RequestModernXamlDiagnosticsInitialization() {
+void RequestModernXamlDiagnosticsInitialization(
+    bool retryFailedConnections) {
     const uint64_t generation =
         g_modernUiGeneration.load(std::memory_order_acquire);
     if (!IsCurrentModernUiGeneration(generation)) {
         return;
+    }
+
+    if (retryFailedConnections) {
+        // A new XAML module load or a previously established connection being
+        // torn down is an explicit retry opportunity. Window creation alone
+        // must not keep retrying a connection another diagnostics tool denied.
+        g_windowsUiXamlDiagnosticsAttempted.store(
+            false, std::memory_order_release);
+        g_microsoftUiXamlDiagnosticsAttempted.store(
+            false, std::memory_order_release);
     }
 
     // Host-window creation can be noisy. Once all currently loaded XAML
@@ -2249,17 +2301,33 @@ bool IsXamlDiagnosticsTriggerModule(LPCWSTR path) {
            _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0;
 }
 
+bool IsXamlDiagnosticsTriggerModuleLoaded(LPCWSTR path) {
+    if (!path) {
+        return false;
+    }
+
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    fileName = fileName ? fileName + 1 : path;
+    return GetModuleHandleW(fileName) != nullptr;
+}
+
 HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
                                   HANDLE file,
                                   DWORD flags) {
+    const bool triggerModule =
+        IsXamlDiagnosticsTriggerModule(fileName);
+    const bool triggerModuleWasLoaded =
+        triggerModule &&
+        IsXamlDiagnosticsTriggerModuleLoaded(fileName);
     HMODULE module =
         g_originalLoadLibraryExW(fileName, file, flags);
     if (module &&
         g_modernUiText.load(std::memory_order_relaxed) &&
-        IsXamlDiagnosticsTriggerModule(fileName)) {
+        triggerModule) {
         // Don't load the TAP or activate COM while the caller might hold the
         // Windows loader lock.
-        RequestModernXamlDiagnosticsInitialization();
+        RequestModernXamlDiagnosticsInitialization(
+            !triggerModuleWasLoaded);
     }
     return module;
 }
@@ -2500,6 +2568,10 @@ void InitializeModernUi() {
         false, std::memory_order_release);
     g_microsoftUiXamlDiagnosticsConnected.store(
         false, std::memory_order_release);
+    g_windowsUiXamlDiagnosticsAttempted.store(
+        false, std::memory_order_release);
+    g_microsoftUiXamlDiagnosticsAttempted.store(
+        false, std::memory_order_release);
     g_xamlDiagnosticsWorkerRunning.store(
         false, std::memory_order_release);
     g_xamlDiagnosticsRequestPending.store(
@@ -2600,12 +2672,6 @@ bool HookClassicTooltipThemeDrawing() {
     }
 
     bool hooked = false;
-
-    g_getWindowTheme = reinterpret_cast<GetWindowTheme_t>(
-        GetProcAddress(themeModule, "GetWindowTheme"));
-    if (!g_getWindowTheme) {
-        Wh_Log(L"Couldn't find GetWindowTheme");
-    }
 
     const auto openThemeData =
         reinterpret_cast<OpenThemeData_t>(
@@ -2831,6 +2897,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
+    CloseDiscoveredClassicTooltipThemes();
     ClearTrackedClassicTooltipThemes();
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         UninitializeModernUi();
