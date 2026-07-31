@@ -591,7 +591,7 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
     int count = GetMenuItemCount(hMenu);
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_TYPE | MIIM_SUBMENU;
+        mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
 
         // Skip separators (wID == 0). Without this, offset = 0 - 1 = UINT_MAX is
@@ -652,7 +652,7 @@ static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMen
     int count = GetMenuItemCount(hMenu);
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_TYPE | MIIM_SUBMENU;
+        mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
         if (mii.wID == 0) continue; // separator
         if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
