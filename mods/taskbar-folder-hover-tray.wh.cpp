@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.20
+// @version         1.21
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -2342,7 +2342,7 @@ std::vector<std::unique_ptr<PopupLevel>>& Levels() {
 
 RECT g_rootAnchorRect{};
 int g_popupDpi = 96;
-bool g_menuActive = false;
+std::atomic<bool> g_menuActive{false};
 ULONGLONG g_outsideSinceTick = 0;
 
 std::wstring g_pendingRootPath;
@@ -3056,87 +3056,110 @@ void ShowItemContextMenu(std::wstring path, POINT screenPt) {
 
     // Stay raised for the whole modal body, including InvokeCommand which also
     // pumps messages - otherwise OnTick can tear down levels under the menu.
-    g_menuActive = true;
+    // RAII so a shell-extension exception cannot leave the flag stuck true
+    // (which would freeze OnTick and leak COM/PIDL state below).
+    struct MenuActiveGuard {
+        MenuActiveGuard() { g_menuActive = true; }
+        ~MenuActiveGuard() { g_menuActive = false; }
+        MenuActiveGuard(const MenuActiveGuard&) = delete;
+        MenuActiveGuard& operator=(const MenuActiveGuard&) = delete;
+    } menuActiveGuard;
 
-    PIDLIST_ABSOLUTE pidl = nullptr;
-    if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) ||
-        !pidl) {
-        g_menuActive = false;
+    struct CoTaskMemDeleter {
+        void operator()(void* p) const noexcept { CoTaskMemFree(p); }
+    };
+    using UniquePidlAbs =
+        std::unique_ptr<ITEMIDLIST, CoTaskMemDeleter>;
+
+    PIDLIST_ABSOLUTE rawPidl = nullptr;
+    if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &rawPidl, 0,
+                                  nullptr)) ||
+        !rawPidl) {
         return;
     }
+    UniquePidlAbs pidl(rawPidl);
 
-    IShellFolder* parentFolder = nullptr;
+    winrt::com_ptr<IShellFolder> parentFolder;
     PCUITEMID_CHILD child = nullptr;
-    if (FAILED(SHBindToParent(pidl, IID_IShellFolder, (void**)&parentFolder,
+    if (FAILED(SHBindToParent(pidl.get(), IID_PPV_ARGS(parentFolder.put()),
                               &child)) ||
         !parentFolder) {
-        CoTaskMemFree(pidl);
-        g_menuActive = false;
         return;
     }
 
-    IContextMenu* contextMenu = nullptr;
-    if (SUCCEEDED(parentFolder->GetUIObjectOf(g_menuOwnerWnd, 1, &child,
-                                              IID_IContextMenu, nullptr,
-                                              (void**)&contextMenu)) &&
-        contextMenu) {
-        HMENU menu = CreatePopupMenu();
-        if (menu) {
-            if (SUCCEEDED(contextMenu->QueryContextMenu(
-                    menu, 0, 1, 0x7FFF, CMF_NORMAL | CMF_EXPLORE))) {
-                g_activeContextMenu3 = nullptr;
-                g_activeContextMenu2 = nullptr;
-                if (FAILED(contextMenu->QueryInterface(
-                        IID_IContextMenu3, (void**)&g_activeContextMenu3))) {
-                    contextMenu->QueryInterface(IID_IContextMenu2,
-                                                (void**)&g_activeContextMenu2);
-                }
-
-                // A never-shown 0x0 owner cannot become foreground; park a 1x1
-                // window at the click so TrackPopupMenuEx dismisses correctly.
-                SetWindowPos(g_menuOwnerWnd, HWND_TOPMOST, screenPt.x, screenPt.y,
-                             1, 1, SWP_SHOWWINDOW);
-                SetForegroundWindow(g_menuOwnerWnd);
-                UINT cmd = TrackPopupMenuEx(menu,
-                                            TPM_RETURNCMD | TPM_RIGHTBUTTON |
-                                                TPM_LEFTALIGN | TPM_BOTTOMALIGN,
-                                            screenPt.x, screenPt.y,
-                                            g_menuOwnerWnd, nullptr);
-                PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
-
-                if (g_activeContextMenu3) {
-                    g_activeContextMenu3->Release();
-                    g_activeContextMenu3 = nullptr;
-                }
-                if (g_activeContextMenu2) {
-                    g_activeContextMenu2->Release();
-                    g_activeContextMenu2 = nullptr;
-                }
-
-                if (cmd) {
-                    // Dismiss the hover chain before the shell verb runs so
-                    // Explorer windows are not covered by stale grids.
-                    CloseChain();
-                    CMINVOKECOMMANDINFOEX info{};
-                    info.cbSize = sizeof(info);
-                    info.fMask = CMIC_MASK_UNICODE;
-                    info.hwnd = g_menuOwnerWnd;
-                    info.lpVerb = (LPCSTR)(INT_PTR)(cmd - 1);
-                    info.lpVerbW = (LPCWSTR)(INT_PTR)(cmd - 1);
-                    info.nShow = SW_SHOWNORMAL;
-                    contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
-                }
-
-                ShowWindow(g_menuOwnerWnd, SW_HIDE);
-            }
-            DestroyMenu(menu);
-        }
-        contextMenu->Release();
+    winrt::com_ptr<IContextMenu> contextMenu;
+    if (FAILED(parentFolder->GetUIObjectOf(g_menuOwnerWnd, 1, &child,
+                                           IID_IContextMenu, nullptr,
+                                           contextMenu.put_void())) ||
+        !contextMenu) {
+        return;
     }
 
-    parentFolder->Release();
-    CoTaskMemFree(pidl);
-    g_menuActive = false;
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+    struct MenuGuard {
+        HMENU h = nullptr;
+        explicit MenuGuard(HMENU menu) : h(menu) {}
+        ~MenuGuard() {
+            if (h) {
+                DestroyMenu(h);
+            }
+        }
+        MenuGuard(const MenuGuard&) = delete;
+        MenuGuard& operator=(const MenuGuard&) = delete;
+    } menuGuard(menu);
+
+    if (FAILED(contextMenu->QueryContextMenu(menu, 0, 1, 0x7FFF,
+                                             CMF_NORMAL | CMF_EXPLORE))) {
+        return;
+    }
+
+    g_activeContextMenu3 = nullptr;
+    g_activeContextMenu2 = nullptr;
+    if (FAILED(contextMenu->QueryInterface(IID_IContextMenu3,
+                                           (void**)&g_activeContextMenu3))) {
+        contextMenu->QueryInterface(IID_IContextMenu2,
+                                    (void**)&g_activeContextMenu2);
+    }
+
+    // A never-shown 0x0 owner cannot become foreground; park a 1x1
+    // window at the click so TrackPopupMenuEx dismisses correctly.
+    SetWindowPos(g_menuOwnerWnd, HWND_TOPMOST, screenPt.x, screenPt.y, 1, 1,
+                 SWP_SHOWWINDOW);
+    SetForegroundWindow(g_menuOwnerWnd);
+    UINT cmd = TrackPopupMenuEx(menu,
+                                TPM_RETURNCMD | TPM_RIGHTBUTTON |
+                                    TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+                                screenPt.x, screenPt.y, g_menuOwnerWnd,
+                                nullptr);
+    PostMessageW(g_menuOwnerWnd, WM_NULL, 0, 0);
+
+    if (g_activeContextMenu3) {
+        g_activeContextMenu3->Release();
+        g_activeContextMenu3 = nullptr;
+    }
+    if (g_activeContextMenu2) {
+        g_activeContextMenu2->Release();
+        g_activeContextMenu2 = nullptr;
+    }
+
+    if (cmd) {
+        // Dismiss the hover chain before the shell verb runs so
+        // Explorer windows are not covered by stale grids.
+        CloseChain();
+        CMINVOKECOMMANDINFOEX info{};
+        info.cbSize = sizeof(info);
+        info.fMask = CMIC_MASK_UNICODE;
+        info.hwnd = g_menuOwnerWnd;
+        info.lpVerb = (LPCSTR)(INT_PTR)(cmd - 1);
+        info.lpVerbW = (LPCWSTR)(INT_PTR)(cmd - 1);
+        info.nShow = SW_SHOWNORMAL;
+        contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
+    }
+
+    ShowWindow(g_menuOwnerWnd, SW_HIDE);
 }
 
 // Launch on the UI thread via SEE_MASK_ASYNCOK so the shell does the work on
@@ -4606,8 +4629,20 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
         return false;
     }
 
-    // Replace an existing host for this HWND if we are re-injecting.
+    // Leave a seated host alone on retry; only rebuild when the taskbar root
+    // was replaced (Explorer rebuild) or the host grid was detached.
     if (auto* existing = FindTaskbarHost(taskbarWnd)) {
+        bool stillLive = false;
+        try {
+            stillLive = existing->trackedRootGrid == rootGrid &&
+                        existing->hostGrid && existing->hostGrid.Parent();
+        } catch (...) {
+            stillLive = false;
+        }
+        if (stillLive) {
+            return true;
+        }
+
         RemoveHostGrid(existing);
         auto& hosts = TaskbarHosts();
         hosts.erase(std::remove_if(hosts.begin(), hosts.end(),
@@ -4667,7 +4702,19 @@ bool InjectHostGridsOnTaskbarThread() {
             return true;
         }
 
-        RemoveAllHostGrids();
+        // Drop hosts for taskbar HWNDs that no longer exist (unplugged monitors)
+        // without tearing down every seated host on each retry.
+        if (g_taskbarHosts) {
+            auto& hosts = *g_taskbarHosts;
+            for (auto it = hosts.begin(); it != hosts.end();) {
+                if (*it && !IsWindow((*it)->hwnd)) {
+                    RemoveHostGrid(it->get());
+                    it = hosts.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
 
         struct EnumState {
             int found = 0;
@@ -5032,6 +5079,27 @@ void Wh_ModUninit() {
     }
     if (!threadWnd) {
         threadWnd = FindCurrentProcessTaskbarWnd();
+    }
+
+    // ShowItemContextMenu runs a modal TrackPopupMenuEx loop on the UI thread.
+    // Teardown via RunFromWindowThread would destroy windows and let Windhawk
+    // unload the DLL while that frame is still live — EndMenu/CANCELMODE first
+    // and wait for g_menuActive to clear (same pattern as taskbar-folder-menus).
+    if (threadWnd && g_menuActive) {
+        for (int i = 0; g_menuActive && i < 100; i++) {
+            RunFromWindowThread(
+                threadWnd,
+                [](void*) {
+                    if (g_menuActive && !EndMenu() && g_menuOwnerWnd) {
+                        SendMessageW(g_menuOwnerWnd, WM_CANCELMODE, 0, 0);
+                    }
+                },
+                nullptr);
+            Sleep(20);
+        }
+        if (g_menuActive) {
+            Wh_Log(L"Uninit: shell context menu still active after wait");
+        }
     }
 
     if (threadWnd) {
