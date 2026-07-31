@@ -648,7 +648,8 @@ static void SolveFrame(const GhostAnimData* d, float t,
 static void FinalizeRealWindow(GhostAnimData* data) {
     if (!IsWindow(data->hRealWnd)) return;
     if (data->isRising) {
-        SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+        BOOL uncloak = FALSE;
+        DwmSetWindowAttribute(data->hRealWnd, DWMWA_CLOAK, &uncloak, sizeof(uncloak));
         if (data->animSetLayered) {
             SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE,
                 GetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
@@ -1405,37 +1406,38 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Signal the creator thread so the hook can return immediately — the
-    // animation starts with the cursor-based icon position from StartGenieAnim.
-    // UIA will refine the cache for the *next* minimize.
-    if (data->hReady) SetEvent(data->hReady);
-
-    // Background UIA scan: cache the taskbar icon for this process so that
-    // future minimizes hit the correct icon + button width from the start.
-    int iconX, iconY;
-    int iconW = 0;
-    if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &iconW)) {
-        data->iconButtonWidth = iconW;
-        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-        DWORD pid = 0;
-        GetWindowThreadProcessId(data->hRealWnd, &pid);
-        HMONITOR hMon = MonitorFromWindow(data->hRealWnd, MONITOR_DEFAULTTONEAREST);
-        std::wstring procName;
-        {
-            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-            if (hProc) {
-                WCHAR path[MAX_PATH];
-                DWORD len = MAX_PATH;
-                if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
-                    WCHAR* name = wcsrchr(path, L'\\');
-                    if (name) procName = name + 1;
+    // Fire off a background thread to cache taskbar icon info via UIA for next time.
+    // The current animation uses the fast cursor-based position from StartGenieAnim.
+    struct UiaCacheData { HWND hWnd; };
+    UiaCacheData* uiaData = new UiaCacheData{ data->hRealWnd };
+    HANDLE hUiaThread = CreateThread(NULL, 0, [](LPVOID p) -> DWORD {
+        UiaCacheData* d = (UiaCacheData*)p;
+        int iconX, iconY, iconW = 0;
+        if (GetTaskbarIconCenter(d->hWnd, &iconX, &iconY, &iconW)) {
+            std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+            DWORD pid = 0;
+            GetWindowThreadProcessId(d->hWnd, &pid);
+            HMONITOR hMon = MonitorFromWindow(d->hWnd, MONITOR_DEFAULTTONEAREST);
+            std::wstring procName;
+            {
+                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                if (hProc) {
+                    WCHAR path[MAX_PATH];
+                    DWORD len = MAX_PATH;
+                    if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
+                        WCHAR* name = wcsrchr(path, L'\\');
+                        if (name) procName = name + 1;
+                    }
+                    CloseHandle(hProc);
                 }
-                CloseHandle(hProc);
             }
+            std::wstring key = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+            g_ProcessIconCache[key] = { iconX, iconY, iconW };
         }
-        std::wstring key = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
-        g_ProcessIconCache[key] = { iconX, iconY, iconW };
-    }
+        delete d;
+        return 0;
+    }, uiaData, 0, NULL);
+    if (hUiaThread) CloseHandle(hUiaThread);
 
     bool useGpu = EnsureGpuDevice();
     HWND hGhost = NULL;
@@ -1490,7 +1492,8 @@ void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle, BOOL animSe
 
     if (w <= 0 || h <= 0) {
         if (rising && animSetLayered) {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak, sizeof(uncloak));
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
                 GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
@@ -1601,7 +1604,8 @@ void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle, BOOL animSe
     HANDLE hThread = CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
     if (!hThread) {
         if (rising && data->animSetLayered) {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak, sizeof(uncloak));
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
                 GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
         }
@@ -1633,9 +1637,13 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 SetDwmTransitions(hWnd, FALSE);
                 LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-                SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
-                BOOL res = ShowWindow_Original(hWnd, nCmdShow);
+                // Cloak the window so it's invisible during the ghost animation
+                // but taskbar previews still show real content (alpha 0 would
+                // make the preview black).
+                BOOL cloak = TRUE;
+                DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
                 StartGenieAnim(hWnd, TRUE, exStyle, TRUE, origTransitionsDisabled);
+                BOOL res = ShowWindow_Original(hWnd, nCmdShow);
                 return res;
             }
         }
@@ -1671,9 +1679,10 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetDwmTransitions(hWnd, FALSE);
             LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-            SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
-            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            BOOL cloak = TRUE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
             StartGenieAnim(hWnd, TRUE, exStyle, TRUE, origTransitionsDisabled);
+            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
             return res;
         }
     }
