@@ -16,7 +16,7 @@
 
 Adds a blob shape behind active taskbar buttons.
 
-![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-blob-shape/demo.gif)
+![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo.gif)
 
 Based on **Taskbar Elastic WinUI Pill** and the unreleased **Taskbar Elastic
 Border** by **Lockframe**.
@@ -83,6 +83,9 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 #include <winrt/base.h>
 #include <algorithm>
 #include <atomic>
+#include <cwctype>
+#include <string>
+#include <string_view>
 #include <mutex>
 #include <vector>
 #include <optional>
@@ -107,9 +110,10 @@ struct Settings {
 
 std::mutex g_settingsMutex;
 
-// One entry per taskbar button that received a blob shape. The blob lives
-// inside the button's IconPanel, so the XAML tree keeps it positioned; the
-// entry only caches lookups and last-applied parameters.
+// One entry per taskbar button that received a blob shape. The blob is
+// hosted in the taskbar's RootGrid and glued to its button with a
+// composition expression; the entry caches lookups, event tokens, and
+// last-applied parameters.
 struct BlobEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> button;
     winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Path> blobShape;
@@ -125,11 +129,13 @@ struct BlobEntry {
     bool bound = false;
     float boundAdjX = -1e9f, boundYBase = -1e9f;
 
-    // Last applied geometry, so state changes (hover, press) don't rebuild.
+    // Last applied geometry and fill colors, so state changes (hover,
+    // press) don't rebuild anything.
     double geoW = -1.0, geoH = -1.0, geoRt = -1.0, geoRb = -1.0;
+    std::vector<winrt::Windows::UI::Color> lastColors;
 };
 std::mutex g_blobEntriesMutex;
-std::vector<std::shared_ptr<BlobEntry>>* g_blobEntries = new std::vector<std::shared_ptr<BlobEntry>>();
+std::vector<std::shared_ptr<BlobEntry>> g_blobEntries;
 std::atomic<bool> g_unloading{false};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
@@ -144,6 +150,9 @@ std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring_view hexView
     if (hex[0] == L'#') hex.erase(0, 1);
     if (hex.length() == 6) hex = L"FF" + hex;
     if (hex.length() != 8) return std::nullopt;
+    for (wchar_t ch : hex) {
+        if (!iswxdigit(ch)) return std::nullopt;
+    }
     try {
         uint32_t val = std::stoul(hex, nullptr, 16);
         return winrt::Windows::UI::Color{
@@ -480,11 +489,11 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
         // blob elements live in the RootGrid, so they must be removed
         // explicitly. This runs on every lookup — the list is small since
         // Unloaded drops entries eagerly.
-        for (auto it = g_blobEntries->begin(); it != g_blobEntries->end(); ) {
+        for (auto it = g_blobEntries.begin(); it != g_blobEntries.end(); ) {
             auto btn = (*it)->button.get();
             if (!btn) {
                 if (auto blob = (*it)->blobShape.get()) orphans.push_back(blob);
-                it = g_blobEntries->erase(it);
+                it = g_blobEntries.erase(it);
                 continue;
             }
             if (btn == button) result = *it;
@@ -493,7 +502,7 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
         if (!result) {
             result = std::make_shared<BlobEntry>();
             result->button = winrt::make_weak(button);
-            g_blobEntries->push_back(result);
+            g_blobEntries.push_back(result);
         }
     }
 
@@ -653,10 +662,10 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 try { btn.Unloaded(e->unloadToken); } catch (...) {}
             }
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-            g_blobEntries->erase(
-                std::remove_if(g_blobEntries->begin(), g_blobEntries->end(),
+            g_blobEntries.erase(
+                std::remove_if(g_blobEntries.begin(), g_blobEntries.end(),
                     [&](auto& x) { return x == e; }),
-                g_blobEntries->end());
+                g_blobEntries.end());
         });
     }
 
@@ -747,16 +756,25 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         });
     }
 
-    // Fill color (cheap no-op when unchanged).
+    // Fill color — compared against the last applied color list so gradient
+    // configurations don't rebuild a brush (and its stops) on every
+    // hover/press state change.
     std::vector<winrt::Windows::UI::Color> newColors = GetBlobShapeColors(localSettings);
-    auto existingSolidBrush = blobShape.Fill().try_as<winrt::Windows::UI::Xaml::Media::SolidColorBrush>();
-    bool sameColor = false;
-    if (existingSolidBrush && newColors.size() == 1) {
-        auto c = existingSolidBrush.Color();
-        auto n = newColors[0];
-        sameColor = (c.A == n.A && c.R == n.R && c.G == n.G && c.B == n.B);
+    bool sameColor = blobShape.Fill() && newColors.size() == entry->lastColors.size();
+    if (sameColor) {
+        for (size_t i = 0; i < newColors.size(); i++) {
+            auto& a = newColors[i];
+            auto& b = entry->lastColors[i];
+            if (a.A != b.A || a.R != b.R || a.G != b.G || a.B != b.B) {
+                sameColor = false;
+                break;
+            }
+        }
     }
-    if (!sameColor) blobShape.Fill(CreateBrush(newColors));
+    if (!sameColor) {
+        blobShape.Fill(CreateBrush(newColors));
+        entry->lastColors = std::move(newColors);
+    }
 
     // Geometry and expression binding, once the anchor has a real size.
     double bW = anchor.ActualWidth();
@@ -839,6 +857,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     if (!elem) return;
 
     auto dispatcher = elem.Dispatcher();
+    if (!dispatcher) return;
     auto weakElem = winrt::make_weak(elem);
 
     dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakElem]() {
@@ -850,12 +869,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             auto button = weakElem.get();
             if (!button) return;
 
-            auto iconPanel = FindChildByName(button, L"IconPanel");
-            auto group = iconPanel ? GetVisualStateGroup(iconPanel, L"RunningIndicatorStates") : nullptr;
-            auto currentState = group ? group.CurrentState() : nullptr;
-            bool isActive = (currentState && currentState.Name() == L"ActiveRunningIndicator");
-
-            EnsureBlobOnButton(button, isActive, localSettings);
+            EnsureBlobOnButton(button, IsButtonActive(button), localSettings);
         } catch (...) {
             Wh_Log(L"Exception in UpdateVisualStates hook");
         }
@@ -927,8 +941,8 @@ void Wh_ModBeforeUninit() {
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-        localEntries = *g_blobEntries;
-        g_blobEntries->clear();
+        localEntries = g_blobEntries;
+        g_blobEntries.clear();
     }
     if (localEntries.empty()) return;
 
@@ -964,7 +978,6 @@ void Wh_ModBeforeUninit() {
                     auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
                     if (bg) {
                         try { ElementCompositionPreview::GetElementVisual(bg).IsVisible(true); } catch (...) {}
-                        bg.Opacity(1.0);
                     }
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
@@ -989,13 +1002,10 @@ void Wh_ModBeforeUninit() {
     if (pending->load() > 0 && eventLifetime.get()) {
         WaitForSingleObject(eventLifetime.get(), 2000);
     }
-
-    Sleep(50); // Let layout settle
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Blob Shape Mod");
-    delete g_blobEntries;
 }
 
 void Wh_ModSettingsChanged() {
@@ -1003,7 +1013,7 @@ void Wh_ModSettingsChanged() {
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-        localEntries = *g_blobEntries;
+        localEntries = g_blobEntries;
     }
     for (auto& entry : localEntries) {
         auto blobShape = entry->blobShape.get();
