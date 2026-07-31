@@ -1035,6 +1035,7 @@ void Wh_ModBeforeUninit() {
 
     for (auto& entry : localEntries) {
         auto blobShape = entry->blobShape.get();
+        auto btn = entry->button.get();
 
         auto cleanup = [entry, blobShape]() {
             try {
@@ -1059,7 +1060,14 @@ void Wh_ModBeforeUninit() {
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
         };
 
-        auto dispatcher = blobShape ? blobShape.Dispatcher() : nullptr;
+        // Entries can exist WITHOUT a blob: overflow flyout buttons have no
+        // Taskbar.TaskbarFrame ancestor, so the RootGrid lookup fails for
+        // them permanently — but their Loaded/Unloaded handlers are already
+        // attached. Resolve the cleanup dispatcher from the button as a
+        // fallback so those handlers are revoked too; left subscribed, they
+        // point into this DLL and crash Explorer when they fire after unload.
+        auto dispatcher = blobShape ? blobShape.Dispatcher()
+                                    : (btn ? btn.Dispatcher() : nullptr);
         if (dispatcher) {
             if (dispatcher.HasThreadAccess()) {
                 cleanup();
@@ -1093,7 +1101,9 @@ void Wh_ModSettingsChanged() {
     }
     for (auto& entry : localEntries) {
         auto blobShape = entry->blobShape.get();
-        auto dispatcher = blobShape ? blobShape.Dispatcher() : nullptr;
+        auto btn = entry->button.get();
+        auto dispatcher = blobShape ? blobShape.Dispatcher()
+                                    : (btn ? btn.Dispatcher() : nullptr);
         if (!dispatcher) continue;
         std::weak_ptr<BlobEntry> weakEntry = entry;
         dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [weakEntry]() {
