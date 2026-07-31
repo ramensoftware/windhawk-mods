@@ -23,7 +23,7 @@
 # Click on Empty Explorer
 
 Configure what happens when you double click, triple click, middle click, double middle click,
-or modifier+click (Ctrl/Alt/Shift+Click) on empty space in File Explorer. Supports 14 different
+or modifier+click (Ctrl/Alt/Shift+Click) on empty space in File Explorer. Supports 16 different
 actions.
 
 ## How it works
@@ -65,7 +65,9 @@ no file or folder is located) and performs the action you've configured.
 - **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
-- **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for VS Code (`Code`), Terminal (`Terminal`), Cursor (`Cursor`), Git Bash (`gitbash`), or any program that registered a context menu entry.
+- **Open in VS Code** — Invoke "Open with Code" from the context menu; uses browser-based menu (works in virtual folders)
+- **Open in Terminal** — Invoke "Open in Terminal" from the context menu
+- **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for Cursor, Git Bash, PowerShell, or any program that registered an entry.
 - **None** — Do nothing
 
 ## Custom Hotkey
@@ -146,6 +148,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - doubleClickCustomHotkey: ""
@@ -168,6 +172,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - tripleClickCustomHotkey: ""
@@ -190,6 +196,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - middleClickCustomHotkey: ""
@@ -212,6 +220,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - doubleMiddleClickCustomHotkey: ""
@@ -234,6 +244,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - ctrlClickCustomHotkey: ""
@@ -256,6 +268,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - altClickCustomHotkey: ""
@@ -278,6 +292,8 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
     - openWithContextMenu: Open Context Menu Item
     - none: None
 - shiftClickCustomHotkey: ""
@@ -981,7 +997,17 @@ public:
         }
     }
 
-    // ---- Context-menu action (via browser — works for virtual folders too) ----
+    // ---- External program launchers (via browser — works for virtual folders too) ----
+
+    void OpenInVSCode() {
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Code"))
+            Wh_Log(L"OpenInVSCode: no matching context menu entry found");
+    }
+
+    void OpenInTerminal() {
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Terminal"))
+            Wh_Log(L"OpenInTerminal: no matching context menu entry found");
+    }
 
     void OpenWithContextMenu() {
         std::wstring match;
@@ -1016,6 +1042,8 @@ public:
         else if (wcscmp(action, L"newFolder") == 0)   NewFolder();
         else if (wcscmp(action, L"copyPath") == 0)    CopyPath();
         else if (wcscmp(action, L"paste") == 0)       Paste();
+        else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode();
+        else if (wcscmp(action, L"openInTerminal") == 0) OpenInTerminal();
         else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu();
         // "none" or unknown — do nothing
     }
