@@ -16,7 +16,7 @@
 
 Adds a blob shape behind active taskbar buttons.
 
-![Taskbar Blob Shape](https://i.imgur.com/REPLACE-ME.png)
+![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-blob-shape/demo.gif)
 
 Based on **Taskbar Elastic WinUI Pill** and the unreleased **Taskbar Elastic
 Border** by **Lockframe**.
