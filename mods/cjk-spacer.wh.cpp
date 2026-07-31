@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              cjk-spacer
 // @name            CJK Spacer
-// @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.18
+// @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and may conflict with other XAML Diagnostics mods
+// @version         0.1.19
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -25,10 +25,12 @@ Adds a normal ASCII space at a direct boundary between a CJK character and a
 letter or digit in UI text hosted by `explorer.exe`.
 
 On Windows 11, the primary Explorer and desktop context menus are modern XAML
-menus. The `modernUiText` setting is disabled by default because XAML
-Diagnostics permits only one consumer per connection; enable it if you want
-those menus and pointer tooltips processed. `classicMenus` still covers the
-Win32 menu opened through "Show more options".
+menus. The `modernUiText` setting is disabled by default because each named
+XAML Diagnostics connection permits only one consumer, and tools such as
+Taskbar Styler or File Explorer Styler may already use or block those
+connections. Enable it explicitly if you want those menus and pointer
+tooltips processed. `classicMenus` still covers the Win32 menu opened through
+"Show more options".
 
 Examples:
 
@@ -78,7 +80,7 @@ keyboard shortcut text are also preserved.
   path is disabled by default; enable `modernUiText` to opt in.
 
 The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
-hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
+hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. Connection attempts are scheduled outside the Windows loader
@@ -125,7 +127,7 @@ the first match; the idempotent transformation does not compound spaces.
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: false
   $name: Windows 11 context menus and tooltips
-  $description: Process text elements in Explorer XAML context menus and pointer tooltips (disabled by default; enable for the primary Windows 11 menu). Uses exclusive XAML Diagnostics connections and can conflict with Windows 11 Taskbar Styler, Windows 11 File Explorer Styler, or other diagnostics-based tools.
+  $description: Process text elements in Explorer XAML context menus and pointer tooltips (disabled by default; enable for the primary Windows 11 menu). Each named XAML Diagnostics connection has one consumer, so this can conflict with Windows 11 Taskbar Styler, Windows 11 File Explorer Styler, or other diagnostics-based tools.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -433,9 +435,6 @@ std::wstring AddCjkSpacing(std::wstring_view text,
 using InsertMenuW_t = decltype(&InsertMenuW);
 using AppendMenuW_t = decltype(&AppendMenuW);
 using ModifyMenuW_t = decltype(&ModifyMenuW);
-using InsertMenuA_t = decltype(&InsertMenuA);
-using AppendMenuA_t = decltype(&AppendMenuA);
-using ModifyMenuA_t = decltype(&ModifyMenuA);
 using InsertMenuItemW_t = decltype(&InsertMenuItemW);
 using SetMenuItemInfoW_t = decltype(&SetMenuItemInfoW);
 using TrackPopupMenu_t = decltype(&TrackPopupMenu);
@@ -444,9 +443,6 @@ using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
 InsertMenuW_t g_originalInsertMenuW;
 AppendMenuW_t g_originalAppendMenuW;
 ModifyMenuW_t g_originalModifyMenuW;
-InsertMenuA_t g_originalInsertMenuA;
-AppendMenuA_t g_originalAppendMenuA;
-ModifyMenuA_t g_originalModifyMenuA;
 InsertMenuItemW_t g_originalInsertMenuItemW;
 SetMenuItemInfoW_t g_originalSetMenuItemInfoW;
 TrackPopupMenu_t g_originalTrackPopupMenu;
@@ -478,66 +474,6 @@ int FindMenuItemIndexByText(
 
 bool IsStringMenuFlags(UINT flags) {
     return !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR));
-}
-
-bool ConvertAnsiMenuTextToWide(LPCSTR text, std::wstring* wide) {
-    if (!text || !wide) {
-        return false;
-    }
-
-    const int length = MultiByteToWideChar(
-        CP_ACP, 0, text, -1, nullptr, 0);
-    if (length <= 0) {
-        return false;
-    }
-
-    wide->resize(static_cast<size_t>(length));
-    if (MultiByteToWideChar(
-            CP_ACP, 0, text, -1, wide->data(), length) != length) {
-        wide->clear();
-        return false;
-    }
-
-    wide->resize(static_cast<size_t>(length - 1));
-    return true;
-}
-
-bool ConvertWideMenuTextToAnsi(const std::wstring& wide,
-                               std::string* ansi) {
-    if (!ansi) {
-        return false;
-    }
-
-    const int length = WideCharToMultiByte(
-        CP_ACP, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (length <= 0) {
-        return false;
-    }
-
-    ansi->resize(static_cast<size_t>(length));
-    if (WideCharToMultiByte(
-            CP_ACP, 0, wide.c_str(), -1, ansi->data(), length,
-            nullptr, nullptr) != length) {
-        ansi->clear();
-        return false;
-    }
-
-    ansi->resize(static_cast<size_t>(length - 1));
-    return true;
-}
-
-bool PrepareAnsiMenuText(LPCSTR text,
-                         std::wstring* original,
-                         std::wstring* spaced,
-                         std::string* spacedAnsi) {
-    if (!ConvertAnsiMenuTextToWide(text, original) ||
-        !ContainsCjkCodePoint(*original)) {
-        return false;
-    }
-
-    *spaced = AddCjkSpacing(*original);
-    return *spaced != *original &&
-           ConvertWideMenuTextToAnsi(*spaced, spacedAnsi);
 }
 
 int FindMenuItemIndex(HMENU menu, UINT item, bool byPosition) {
@@ -666,110 +602,6 @@ BOOL WINAPI ModifyMenuWHook(HMENU menu,
     }
 
     return g_originalModifyMenuW(menu, position, flags, itemId, newItem);
-}
-
-BOOL WINAPI InsertMenuAHook(HMENU menu,
-                            UINT position,
-                            UINT flags,
-                            UINT_PTR itemId,
-                            LPCSTR newItem) {
-    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
-        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
-        std::wstring original;
-        std::wstring spaced;
-        std::string spacedAnsi;
-        if (PrepareAnsiMenuText(
-                newItem, &original, &spaced, &spacedAnsi)) {
-            Wh_Log(L"Applied CJK spacing (classic/InsertMenuA)");
-            const BOOL result = g_originalInsertMenuA(
-                menu, position, flags, itemId, spacedAnsi.c_str());
-            if (result) {
-                int index;
-                if (flags & MF_BYPOSITION) {
-                    index = FindMenuItemIndex(menu, position, true);
-                    if (index < 0) {
-                        index = GetMenuItemCount(menu) - 1;
-                    }
-                } else if (flags & MF_POPUP) {
-                    index = FindMenuItemIndexByText(menu, spaced);
-                } else {
-                    index = FindMenuItemIndex(
-                        menu, static_cast<UINT>(itemId), false);
-                }
-                RememberRewrittenMenuItem(
-                    menu,
-                    index >= 0 ? static_cast<UINT>(index)
-                               : kUnknownMenuItemIndex,
-                    std::move(original), std::move(spaced));
-            }
-            return result;
-        }
-    }
-
-    return g_originalInsertMenuA(menu, position, flags, itemId, newItem);
-}
-
-BOOL WINAPI AppendMenuAHook(HMENU menu,
-                            UINT flags,
-                            UINT_PTR itemId,
-                            LPCSTR newItem) {
-    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
-        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
-        std::wstring original;
-        std::wstring spaced;
-        std::string spacedAnsi;
-        if (PrepareAnsiMenuText(
-                newItem, &original, &spaced, &spacedAnsi)) {
-            Wh_Log(L"Applied CJK spacing (classic/AppendMenuA)");
-            const BOOL result = g_originalAppendMenuA(
-                menu, flags, itemId, spacedAnsi.c_str());
-            if (result) {
-                const int index = GetMenuItemCount(menu) - 1;
-                if (index >= 0) {
-                    RememberRewrittenMenuItem(
-                        menu, static_cast<UINT>(index),
-                        std::move(original), std::move(spaced));
-                }
-            }
-            return result;
-        }
-    }
-
-    return g_originalAppendMenuA(menu, flags, itemId, newItem);
-}
-
-BOOL WINAPI ModifyMenuAHook(HMENU menu,
-                            UINT position,
-                            UINT flags,
-                            UINT_PTR itemId,
-                            LPCSTR newItem) {
-    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
-        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
-        IsStringMenuFlags(flags)) {
-        std::wstring original;
-        std::wstring spaced;
-        std::string spacedAnsi;
-        if (PrepareAnsiMenuText(
-                newItem, &original, &spaced, &spacedAnsi)) {
-            Wh_Log(L"Applied CJK spacing (classic/ModifyMenuA)");
-            const int index = FindMenuItemIndex(
-                menu, position, (flags & MF_BYPOSITION) != 0);
-            const BOOL result = g_originalModifyMenuA(
-                menu, position, flags, itemId, spacedAnsi.c_str());
-            if (result) {
-                RememberRewrittenMenuItem(
-                    menu,
-                    index >= 0 ? static_cast<UINT>(index)
-                               : kUnknownMenuItemIndex,
-                    std::move(original), std::move(spaced));
-            }
-            return result;
-        }
-    }
-
-    return g_originalModifyMenuA(menu, position, flags, itemId, newItem);
 }
 
 bool MenuItemInfoContainsString(const MENUITEMINFOW* itemInfo) {
@@ -1549,7 +1381,7 @@ public:
             return true;
         } catch (const winrt::hresult_error& error) {
             Wh_Log(L"Couldn't update modern XAML source: 0x%08X",
-                   error.code());
+                   static_cast<HRESULT>(error.code()));
             return false;
         }
     }
@@ -1570,7 +1402,7 @@ public:
             }
         } catch (const winrt::hresult_error& error) {
             Wh_Log(L"Couldn't restore modern XAML source: 0x%08X",
-                   error.code());
+                   static_cast<HRESULT>(error.code()));
         }
 
         m_modified = false;
@@ -1935,7 +1767,6 @@ private:
 };
 
 std::mutex g_visualTreeWatchersMutex;
-std::mutex g_modernUiLifecycleMutex;
 [[clang::no_destroy]]
 std::optional<std::vector<winrt::com_ptr<VisualTreeWatcher>>>
         g_visualTreeWatchers{std::in_place};
@@ -2302,8 +2133,6 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
 }
 
 void RequestModernXamlDiagnosticsInitialization() {
-    std::lock_guard<std::mutex> lifecycleGuard(
-        g_modernUiLifecycleMutex);
     const uint64_t generation =
         g_modernUiGeneration.load(std::memory_order_acquire);
     if (!IsCurrentModernUiGeneration(generation)) {
@@ -2319,6 +2148,8 @@ void RequestModernXamlDiagnosticsInitialization() {
         return;
     }
 
+    // Do not hold a mutex across these calls. The request can originate from
+    // LoadLibraryExW, whose caller may still own the Windows loader lock.
     // The worker isn't joined during unload, so keep the mod image loaded
     // until the worker exits through FreeLibraryAndExitThread.
     HMODULE module = AcquireCurrentModuleReference();
@@ -2425,6 +2256,16 @@ bool IsTextualWindowClassName(LPCWSTR className) {
             ~static_cast<ULONG_PTR>(0xFFFF)) != 0;
 }
 
+bool IsModernXamlHostClassName(LPCWSTR className) {
+    return className &&
+           (_wcsicmp(
+                className,
+                L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 ||
+            _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+            _wcsicmp(
+                className, L"XamlExplorerHostIslandWindow_WASDK") == 0);
+}
+
 bool IsModernXamlHostWindow(HWND window,
                             HWND parent,
                             LPCWSTR className) {
@@ -2442,8 +2283,7 @@ bool IsModernXamlHostWindow(HWND window,
                _wcsicmp(parentClassName, L"Shell_TrayWnd") == 0;
     }
 
-    return _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
-           _wcsicmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0;
+    return IsModernXamlHostClassName(className);
 }
 
 void OnModernXamlHostWindowCreated(HWND window,
@@ -2612,21 +2452,34 @@ bool RunFromWindowThread(HWND window,
 }
 
 HWND FindWindowForThread(DWORD threadId) {
-    HWND result = nullptr;
+    struct FindWindowParameter {
+        HWND first = nullptr;
+        HWND xamlHost = nullptr;
+    } parameter;
+
     EnumThreadWindows(
         threadId,
         [](HWND window, LPARAM parameter) -> BOOL {
-            auto* result = reinterpret_cast<HWND*>(parameter);
-            *result = window;
-            return FALSE;
+            auto* state = reinterpret_cast<FindWindowParameter*>(parameter);
+            if (!state->first) {
+                state->first = window;
+            }
+
+            wchar_t className[128];
+            if (GetClassNameW(
+                    window, className, ARRAYSIZE(className)) > 0 &&
+                IsModernXamlHostClassName(className)) {
+                state->xamlHost = window;
+                return FALSE;
+            }
+
+            return TRUE;
         },
-        reinterpret_cast<LPARAM>(&result));
-    return result;
+        reinterpret_cast<LPARAM>(&parameter));
+    return parameter.xamlHost ? parameter.xamlHost : parameter.first;
 }
 
 void InitializeModernUi() {
-    std::lock_guard<std::mutex> lifecycleGuard(
-        g_modernUiLifecycleMutex);
     g_stoppingModernUi.store(true, std::memory_order_release);
     g_modernUiGeneration.fetch_add(1, std::memory_order_acq_rel);
     g_windowsUiXamlDiagnosticsConnected.store(
@@ -2684,6 +2537,9 @@ void UninitializeModernUi() {
             continue;
         }
 
+        // Prefer an Explorer/taskbar XAML host window. If the host was
+        // replaced, the helper still falls back to another window on the same
+        // UI thread so cleanup can run on the owning thread.
         const HWND window = FindWindowForThread(threadId);
         if (!window ||
             !IsRegisteredThreadAlive(threadId, creationTime) ||
@@ -2875,15 +2731,6 @@ BOOL Wh_ModInit() {
             ModifyMenuW, ModifyMenuWHook, &g_originalModifyMenuW,
             L"ModifyMenuW");
         installedAnyHook |= InstallHook(
-            InsertMenuA, InsertMenuAHook, &g_originalInsertMenuA,
-            L"InsertMenuA");
-        installedAnyHook |= InstallHook(
-            AppendMenuA, AppendMenuAHook, &g_originalAppendMenuA,
-            L"AppendMenuA");
-        installedAnyHook |= InstallHook(
-            ModifyMenuA, ModifyMenuAHook, &g_originalModifyMenuA,
-            L"ModifyMenuA");
-        installedAnyHook |= InstallHook(
             InsertMenuItemW, InsertMenuItemWHook,
             &g_originalInsertMenuItemW, L"InsertMenuItemW");
         installedAnyHook |= InstallHook(
@@ -2978,7 +2825,6 @@ void Wh_ModUninit() {
         FreeLibrary(g_loadedUxThemeModule);
         g_loadedUxThemeModule = nullptr;
     }
-    ClearUxThemeFunctionPointers();
     Wh_Log(L"Uninitialized");
 }
 
