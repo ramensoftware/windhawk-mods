@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.18
+// @version         1.19
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -320,7 +320,9 @@ using namespace winrt::Windows::UI::Xaml::Media;
 struct FolderEntry {
     std::wstring name;
     std::wstring path;
+    std::wstring resolvedPath;  // ResolveFolderPath(path), computed once in LoadFolders
     std::wstring icon;
+    bool likelyRemote = false;  // IsLikelyRemotePath(resolvedPath), set in LoadFolders
 };
 
 enum class SortMode { Name, Modified };
@@ -362,6 +364,19 @@ std::atomic<bool> g_unloading{false};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Small helpers
+
+// Returns this mod's DLL HINSTANCE. GetModuleHandle(nullptr) would return
+// explorer.exe, which is wrong for RegisterClass/CreateWindowEx/UnregisterClass.
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&GetCurrentModuleHandle, &hInst);
+    return hInst;
+}
+
+std::wstring ResolveFolderPath(const std::wstring& raw);
+bool IsLikelyRemotePath(const std::wstring& p);
 
 std::wstring Trim(std::wstring s) {
     size_t b = s.find_first_not_of(L" \t\r\n");
@@ -425,6 +440,10 @@ void LoadFolders(std::vector<FolderEntry>* out) {
         FolderEntry entry;
         entry.name = Trim(std::wstring(rawName.get()));
         entry.path = ExpandEnv(path);
+        // Resolve shell: targets here (Windhawk callback thread), not on hover.
+        std::wstring resolved = ResolveFolderPath(entry.path);
+        entry.resolvedPath = resolved.empty() ? entry.path : resolved;
+        entry.likelyRemote = IsLikelyRemotePath(entry.resolvedPath);
         entry.icon = Trim(std::wstring(rawIcon.get()));
         if (entry.name.empty()) {
             entry.name = entry.path;
@@ -3382,7 +3401,7 @@ bool EnsurePopupClasses() {
         return classState == ClassState::Ok;
     }
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
+    HINSTANCE instance = GetCurrentModuleHandle();
     WNDCLASSEXW popupClass{};
     popupClass.cbSize = sizeof(popupClass);
     popupClass.lpfnWndProc = PopupWndProc;
@@ -3437,7 +3456,7 @@ HWND EnsureMenuOwnerWindow() {
     // EnsureLevelWindow).
     g_menuOwnerWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW, kMenuOwnerClassName, L"", WS_POPUP, 0, 0, 0, 0,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        nullptr, nullptr, GetCurrentModuleHandle(), nullptr);
     if (!g_menuOwnerWnd) {
         Wh_Log(L"Failed to create menu owner window (error %u)", GetLastError());
     }
@@ -3464,7 +3483,7 @@ HWND EnsureLevelWindow(int depth) {
     HWND hWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
         kPopupClassName, L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+        GetCurrentModuleHandle(), nullptr);
     if (!hWnd) {
         Wh_Log(L"Failed to create the hover grid window (error %u)",
                GetLastError());
@@ -3968,9 +3987,12 @@ UIElement MakeButtonContent(const FolderEntry& entry,
     }
 
     // No icon configured: folder shell icon on the scan worker. Never call
-    // ResolveFolderPath / GetShellIconForPath here (UI thread).
-    if (!entry.path.empty()) {
-        RequestButtonIcon(entry.path, extractSize, folderIndex, iconGeneration,
+    // ResolveFolderPath / GetShellIconForPath here (UI thread). Path was
+    // resolved and remote-checked once in LoadFolders.
+    if (!entry.path.empty() && !entry.likelyRemote) {
+        const std::wstring& iconPath =
+            !entry.resolvedPath.empty() ? entry.resolvedPath : entry.path;
+        RequestButtonIcon(iconPath, extractSize, folderIndex, iconGeneration,
                           taskbarWnd, /*resourceSpec=*/false);
     }
     return MakeFolderEmojiFallback(iconExtent);
@@ -4237,8 +4259,8 @@ std::wstring FolderPathForButton(int folderIndex) {
     if (folderIndex < 0 || folderIndex >= (int)g_settings.folders.size()) {
         return L"";
     }
-    std::wstring path = ResolveFolderPath(g_settings.folders[folderIndex].path);
-    return path.empty() ? g_settings.folders[folderIndex].path : path;
+    const FolderEntry& entry = g_settings.folders[folderIndex];
+    return !entry.resolvedPath.empty() ? entry.resolvedPath : entry.path;
 }
 
 std::wstring FolderNameForButton(int folderIndex) {
@@ -5023,7 +5045,7 @@ void Wh_ModUninit() {
 
     // The window procedures live in this DLL, so the classes must not outlive
     // it.
-    HINSTANCE instance = GetModuleHandleW(nullptr);
+    HINSTANCE instance = GetCurrentModuleHandle();
     UnregisterClassW(kPopupClassName, instance);
     UnregisterClassW(kMenuOwnerClassName, instance);
 
