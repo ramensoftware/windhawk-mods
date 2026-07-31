@@ -49,7 +49,8 @@ capture, flash-free cloak restore, safe unload, first-frame sync). The fixes in
 v3.1.1 are his as well (from v1.5 of his engine): the translucent-window capture
 fix that stops acrylic / Mica windows going grey, the window-only capture that
 keeps the taskbar out of the animation, the smoother mask / mesh rendering, the
-frame pacer, and the tile-count setting. The demo GIF above is also his, from his
+frame pacing (since reshaped into a high-resolution 2x-refresh timer in v3.1.2),
+and the tile-count setting. The modern-genie demo GIF above is also his, from his
 own [MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
 repo. Huge thanks for building this, sharing the recording, and generously handing
 it all over - this mod wouldn't look nearly this good without him. The **Classic**
@@ -94,9 +95,10 @@ style is the mod's original renderer.
 - **Real genie warp.** The window is rendered as a Direct2D mesh whose vertices
   follow the macOS lamp curve, so the whole frame necks down and funnels into the
   taskbar icon instead of just shrinking.
-- **Actually smooth.** Progress is driven by real elapsed time and every rendered
-  frame is gated on the DWM compose cycle (`DwmFlush`), so each frame you render is
-  exactly one frame you see - perfectly aligned with vsync at any duration you set.
+- **Actually smooth.** Progress is driven by real elapsed time, and frames are
+  paced at twice the display's refresh rate (via a high-resolution timer), so the
+  compositor always has a fresh frame ready at each vsync. No system animation
+  competes with it, so it stays smooth at any duration you set.
 - **Smoothstep easing** instead of a linear ramp, so it eases in and out.
 - **Accurate targeting.** The mod locates the app's actual taskbar button via UI
   Automation and aims the genie at it (with a per-process fallback cache), instead
@@ -240,6 +242,13 @@ Check out the documentation
 #define PW_RENDERFULLCONTENT 2
 #endif
 
+// High-resolution waitable timer flag (Win10 1803+). The OS rejects it at
+// CreateWaitableTimerExW time if the old timer resolution is in use, in which
+// case the pacer falls back to the ordinary timer silently.
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
 // Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
 #define PI 3.14159265f
 // Mesh tile-count bounds for the modern engine (Potassiumuncher's v1.5 update:
@@ -363,7 +372,9 @@ void MacGenieLoadSettings() {
     g_unhideEnabled.store(Wh_GetIntSetting(L"unhide_taskbar") != 0, std::memory_order_relaxed);
 
     PCWSTR engine = Wh_GetStringSetting(L"engine");
-    g_classicEngine.store(engine && wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
+    // Wh_GetStringSetting never returns NULL (it returns L"" on error / unset),
+    // so only the string comparison matters.
+    g_classicEngine.store(wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
     Wh_FreeStringSetting(engine);
 
     int tiles = Wh_GetIntSetting(L"tile_count");
@@ -376,7 +387,7 @@ void MacGenieLoadSettings() {
     std::vector<std::wstring> excluded;
     for (int i = 0;; i++) {
         PCWSTR prog = Wh_GetStringSetting(L"excluded_programs[%d]", i);
-        bool has = prog && *prog;
+        bool has = *prog;   // L"" on unset, so *prog alone signals presence
         if (has) {
             std::wstring s = prog;
             std::transform(s.begin(), s.end(), s.begin(), ::towlower);
@@ -740,16 +751,18 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
 //
 // MINE's loop and lifecycle - g_workerCount, g_unloading early-out, the
 // first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
-// renderer as the per-frame draw call. Rendering is uncapped like HIS's original
-// busy for(;;), so DWM always composites the freshest frame at each vsync.
+// renderer as the per-frame draw call. Frames are paced by a high-resolution
+// waitable timer at 2x the display's refresh rate (never a busy loop), so DWM
+// always has a fresh frame to composite at each vsync.
 // -------------------------------------------------------------------------
 DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
 
-    // Matches the standalone custom-animations-genie mod's render thread so the
-    // animation is equally smooth: TIME_CRITICAL preempts other work for the
-    // duration of the (~450ms) animation, keeping the mesh render fed at full speed.
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    // Matches the in-repo standalone genie mod (genie-minimize-animation.wh.cpp):
+    // HIGHEST, not TIME_CRITICAL. A TIME_CRITICAL thread that never yields would
+    // preempt the host app's UI thread for the whole animation on slow or 2-core
+    // machines; the pacer below keeps the frame rate up without that.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     // Full virtual-screen canvas: HIS's genie mesh is written in screen-space
     // coordinates (it can spill outside the window rect), so the ghost and its
@@ -875,13 +888,21 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     BOOL firstFrame = TRUE;
 
-    // Render continuously, exactly like the standalone custom-animations-genie
-    // mod this engine was ported from: no ~120fps pacer and no per-frame
-    // DwmFlush. Gating every frame behind a timer AND the DWM compose tick
-    // serializes to render_time + vsync per frame, which halves the delivered
-    // frame rate as soon as the mesh render takes longer than one refresh
-    // interval - visibly choppier than the uncapped standalone loop, where DWM
-    // always composites the freshest frame at each vsync.
+    // Frame pacing, 2x the display's refresh rate (or 240 fps if we can't read
+    // it): the pacer is a rate LIMITER, not a vsync gate. Dropping the old
+    // per-frame DwmFlush removed the render_time + vsync serialization that cut
+    // delivered frames in half on fast displays; this timer caps the loop below
+    // a busy spin while still handing DWM a fresh frame at every compose tick.
+    double frameIntervalMs = 1000.0 / 240.0;   // fallback
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+
     if (d2dOk) {
         for (;;) {
             QueryPerformanceCounter(&qpcNow);
@@ -992,14 +1013,14 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             }
 
             if (outlineGeo) {
-                ID2D1Layer* layer = nullptr;
-                rt->CreateLayer(&layer);
                 D2D1_LAYER_PARAMETERS layerParams = D2D1::LayerParameters();
                 layerParams.geometricMask = outlineGeo;
                 // Per-primitive AA on the outline mask (Potassiumuncher's v1.5):
                 // smooth silhouette edges without per-tile seam artifacts.
                 layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
-                rt->PushLayer(&layerParams, layer);
+                // nullptr layer: D2D manages its own layer pool, avoiding a fresh
+                // ID2D1Layer create/release on every frame.
+                rt->PushLayer(&layerParams, nullptr);
 
                 for (int y = 0; y < yTiles; y++) {
                     for (int x = 0; x < xTiles; x++) {
@@ -1041,7 +1062,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     }
                 }
                 rt->PopLayer();
-                if (layer) layer->Release();
             }
             rt->EndDraw();
 
@@ -1073,16 +1093,25 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             // auto-hide path, the cloak-hide) back until this moment - otherwise
             // the window would vanish a few frames before the genie appears.
             // One DwmFlush here guarantees it is composed on screen before the
-            // handoff; every subsequent frame renders uncapped like the
-            // standalone mod.
+            // handoff; every subsequent frame is capped only by the pacer below.
             if (firstFrame && !degenerate) {
                 DwmFlush();
                 firstFrame = FALSE;
                 if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
             }
+
+            // Rate-limit to ~2x refresh so we never busy-spin. Relative deadline;
+            // capped wait keeps the g_unloading check responsive.
+            if (hFrameTimer) {
+                LARGE_INTEGER due;
+                due.QuadPart = -(LONGLONG)(frameIntervalMs * 10000.0);   // 100ns units
+                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                WaitForSingleObject(hFrameTimer, 100);
+            }
         }
     }
 
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
     if (cachedOutlineGeo) { cachedOutlineGeo->Release(); cachedOutlineGeo = nullptr; }
 
     // -------------------- COMMON TEARDOWN --------------------
@@ -1130,9 +1159,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     if (data->deferredMinimize) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
-        if (data->requestedUnhide && unhideMs > animMs &&
-            !g_unloading.load(std::memory_order_relaxed)) {
-            Sleep(unhideMs - animMs);
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
         }
 
         // Perform the delayed minimize with transitions still disabled (instant, no
@@ -1284,10 +1320,23 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
     float* yb = new float[H + 1];
 
-    // Time-based progress synced to the DWM compose cycle via DwmFlush (vsync).
+    // Time-based progress; frames paced at 2x refresh below (no per-frame
+    // DwmFlush, same as the modern engine, so the classic warp hits the same
+    // half-rate cliff only if its per-frame work ever exceeds the interval).
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
+
+    // Frame pacing, 2x the display's refresh rate (fallback 240 fps).
+    double frameIntervalMs = 1000.0 / 240.0;
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
 
     BOOL firstFrame = TRUE;
     for (;;) {
@@ -1378,14 +1427,26 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         if (lastFrame) break;
         if (g_unloading.load(std::memory_order_relaxed)) break;
 
-        DwmFlush();   // block until the next compose cycle (vsync sync point)
-
+        // First frame is on screen; release the minimize hook it was holding.
+        // One DwmFlush here matches the modern engine's handoff sync; subsequent
+        // frames are paced by the timer below instead of a per-frame DwmFlush.
         if (firstFrame) {
+            DwmFlush();
             firstFrame = FALSE;
-            // First frame is on screen; release the minimize hook it was holding.
             if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
         }
+
+        // Rate-limit to ~2x refresh so we never busy-spin; capped wait keeps the
+        // g_unloading check responsive.
+        if (hFrameTimer) {
+            LARGE_INTEGER due;
+            due.QuadPart = -(LONGLONG)(frameIntervalMs * 10000.0);   // 100ns units
+            SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+            WaitForSingleObject(hFrameTimer, 100);
+        }
     }
+
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
 
     // -------------------- COMMON TEARDOWN (identical to the modern engine) -----
     if (data->isRising) {
@@ -1429,9 +1490,16 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     if (data->deferredMinimize) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
-        if (data->requestedUnhide && unhideMs > animMs &&
-            !g_unloading.load(std::memory_order_relaxed)) {
-            Sleep(unhideMs - animMs);
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
         }
         if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
             SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
@@ -1473,6 +1541,22 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
                        BOOL cloakHidden = FALSE, BOOL deferredMinimize = FALSE,
                        BOOL requestedUnhide = FALSE, HWND hNextApp = NULL) {
+    // Bound the snapshot cache: windows closed while minimized (the common
+    // WM_DESTROY + PostQuitMessage path never reaches DefWindowProcW, where the
+    // usual cleanup lives) would otherwise leave their full DIB behind until
+    // unload. Cheap sweep at the single animation entry point.
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        for (auto it = g_SnapshotCache.begin(); it != g_SnapshotCache.end();) {
+            if (!IsWindow(it->first)) {
+                DeleteObject(it->second.hBmp);
+                it = g_SnapshotCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     // "Excluded programs" gate - single choke point for every animation path
     // (all six minimize/restore hooks AND the launch thread funnel through here).
     // Bail exactly like the other early-outs so hook-side state is restored: a
