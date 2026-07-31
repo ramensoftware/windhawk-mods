@@ -62,8 +62,8 @@ outward with concave (outside) corner radii, ending in a flat top edge:
   $name: Blob Shape Settings
 - Colors:
   - BgOpacity: '1.0, 1.0'
-    $name: Background opacity (Light, Dark)
-    $description: Multiplier for the background fill opacity (e.g. 0.8, 0.5). Set to 1.0 to keep original alpha.
+    $name: Blob opacity (Light, Dark)
+    $description: Multiplier for the blob shape's fill opacity (e.g. 0.8, 0.5). Set to 1.0 to keep the color's own alpha.
   - CustomColor: ""
     $name: Custom blob shape color
     $description: Hex color code. Supports multi-color gradients (e.g. '#FF0000, #00FF00') and light|dark separation (e.g. 'light1, light2 | dark1, dark2'). Leave empty to use the system accent color.
@@ -477,19 +477,6 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
     return nullptr;
 }
 
-// Reads a button's current running indicator state.
-bool IsButtonActive(winrt::Windows::UI::Xaml::FrameworkElement const& btn) {
-    if (!btn) return false;
-    try {
-        auto iconPanel = FindChildByName(btn, L"IconPanel");
-        auto grp = iconPanel ? GetVisualStateGroup(iconPanel, L"RunningIndicatorStates") : nullptr;
-        auto st = grp ? grp.CurrentState() : nullptr;
-        return st && st.Name() == L"ActiveRunningIndicator";
-    } catch (...) {
-        return false;
-    }
-}
-
 // Removes an element from its parent panel, if it has one.
 void RemoveFromParentPanel(winrt::Windows::UI::Xaml::UIElement const& element) {
     try {
@@ -533,7 +520,23 @@ void InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes:
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
-void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings);
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings);
+
+// The single entry point for every trigger (hook, SizeChanged, Loaded, stale
+// Unloaded, theme change, settings change): resolves the button's IconPanel
+// once, reads the running indicator state from it, and applies the blob —
+// instead of each path doing its own recursive tree walks.
+void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const Settings& localSettings) {
+    auto iconPanel = FindChildByName(button, L"IconPanel");
+    if (!iconPanel) return;
+    bool isActive = false;
+    try {
+        auto grp = GetVisualStateGroup(iconPanel, L"RunningIndicatorStates");
+        auto st = grp ? grp.CurrentState() : nullptr;
+        isActive = st && st.Name() == L"ActiveRunningIndicator";
+    } catch (...) {}
+    EnsureBlobOnButton(button, iconPanel, isActive, localSettings);
+}
 
 std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
     std::vector<winrt::Windows::UI::Xaml::Shapes::Path> orphans;
@@ -565,6 +568,9 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
     for (auto& blob : orphans) {
         if (auto dispatcher = blob.Dispatcher()) {
             dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [blob]() {
+                try {
+                    ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
+                } catch (...) {}
                 RemoveFromParentPanel(blob);
             });
         }
@@ -646,10 +652,7 @@ bool BindBlobExpression(
 // so the flare tips render fully — and glued to its button with a one-time
 // composition expression. Activation is purely an opacity toggle on the
 // button's own blob.
-void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool isActive, const Settings& localSettings) {
-    auto iconPanel = FindChildByName(button, L"IconPanel");
-    if (!iconPanel) return;
-
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings) {
     auto bg = FindChildByName(iconPanel, L"BackgroundElement");
     FrameworkElement anchor = bg ? bg : iconPanel;
 
@@ -712,7 +715,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 Settings localSettings;
                 { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
                 try {
-                    EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                    RefreshBlob(btn, localSettings);
                 } catch (...) {}
                 return;
             }
@@ -761,7 +764,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             Settings localSettings;
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try {
-                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                RefreshBlob(btn, localSettings);
             } catch (...) {}
         });
     }
@@ -787,6 +790,9 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         blobShape.Stretch(winrt::Windows::UI::Xaml::Media::Stretch::None);
         blobShape.HorizontalAlignment(HorizontalAlignment::Left);
         blobShape.VerticalAlignment(VerticalAlignment::Top);
+        // The negative right/bottom margins cancel the Path's contribution
+        // to the grid's desired size, so the blob never affects taskbar
+        // layout; positioning is done entirely via the Translation facade.
         blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
         blobShape.Opacity(0.0);
 
@@ -811,7 +817,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             Settings localSettings;
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try {
-                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                RefreshBlob(btn, localSettings);
             } catch (...) {}
         });
     } else {
@@ -845,7 +851,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             Settings localSettings;
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try {
-                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                RefreshBlob(btn, localSettings);
             } catch (...) {}
         });
     }
@@ -955,7 +961,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             auto button = weakElem.get();
             if (!button) return;
 
-            EnsureBlobOnButton(button, IsButtonActive(button), localSettings);
+            RefreshBlob(button, localSettings);
         } catch (...) {
             Wh_Log(L"Exception in UpdateVisualStates hook");
         }
@@ -1008,8 +1014,9 @@ BOOL Wh_ModInit() {
         if (!HookTaskbarViewDllSymbols(m)) return FALSE;
     } else {
         HMODULE kb = GetModuleHandle(L"kernelbase.dll");
-        auto pLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW");
-        if (!WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original)) {
+        auto pLoadLibraryExW = kb ? (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW") : nullptr;
+        if (!pLoadLibraryExW ||
+            !WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original)) {
             Wh_Log(L"Failed to hook LoadLibraryExW");
             return FALSE;
         }
@@ -1084,7 +1091,9 @@ void Wh_ModBeforeUninit() {
     }
 
     if (pending->load() > 0 && eventLifetime.get()) {
-        WaitForSingleObject(eventLifetime.get(), 2000);
+        if (WaitForSingleObject(eventLifetime.get(), 2000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Timed out waiting for blob shape cleanup");
+        }
     }
 }
 
@@ -1106,7 +1115,11 @@ void Wh_ModSettingsChanged() {
                                     : (btn ? btn.Dispatcher() : nullptr);
         if (!dispatcher) continue;
         std::weak_ptr<BlobEntry> weakEntry = entry;
-        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [weakEntry]() {
+        // High, matching the hook and the uninit cleanup: CoreDispatcher is
+        // priority-ordered, so a Low item posted here could still be queued
+        // when the High-priority uninit barrier completes — and would then
+        // run in an unloaded DLL.
+        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakEntry]() {
             if (g_unloading) return;
             auto e = weakEntry.lock();
             if (!e) return;
@@ -1115,7 +1128,7 @@ void Wh_ModSettingsChanged() {
             Settings localSettings;
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try {
-                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                RefreshBlob(btn, localSettings);
             } catch (...) {}
         });
     }
