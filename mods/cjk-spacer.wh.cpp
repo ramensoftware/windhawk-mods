@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.14
+// @version         0.1.15
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
