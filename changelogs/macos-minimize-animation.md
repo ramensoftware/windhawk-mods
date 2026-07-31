@@ -1,3 +1,19 @@
+## 3.1.2 ([Jul 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4c2a9225de5b346b3565df37d526fafd608d9bb9/mods/macos-minimize-animation.wh.cpp))
+
+The modern genie's render loop paced every frame behind a ~120fps `Sleep()`-based timer AND a per-frame `DwmFlush()`. That makes each frame cost render time plus one vsync, so once the mesh draw takes longer than a single refresh interval the delivered frame rate drops to roughly half the monitor's. The animation then looks visibly choppier than the standalone custom-animations-genie mod this engine was ported from.
+
+v3.1.2 fixes the serialization without turning the loop into a busy spin:
+
+- Dropped the per-frame `DwmFlush()`. A single flush stays on the first non-degenerate frame, so the minimize/restore handoff still waits for the ghost to be composed before the real window is released.
+- Replaced the old `Sleep()` pacer with a high-resolution waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`) pacing frames at 2x the display's refresh rate (derived from `DwmGetCompositionTimingInfo`, 240 fps fallback). It's a rate limiter, not a vsync gate, so it caps CPU cost without re-introducing the render+vsync serialization.
+- Thread stays at `THREAD_PRIORITY_HIGHEST`, matching the in-repo genie-minimize-animation mod.
+
+Also in this version:
+
+- The classic engine gets the same pacing (it still had a per-frame `DwmFlush()`), so both styles behave consistently.
+- Unload safety: the auto-hide deferred-minimize sleep is now chunked (20 ms) and aborts on `g_unloading`, so `Wh_ModBeforeUninit`'s 3 s drain can't time out while a worker is in a single up-to-5 s `Sleep()`.
+- Readme: the Animation style section shows a demo GIF for each engine (Modern and Classic), and the "Actually smooth" feature bullet no longer claims per-frame `DwmFlush()` gating.
+
 ## 3.1.1 ([Jul 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c022aaa6684072a8feb8ccb7d6d97ae9c293c7c2/mods/macos-minimize-animation.wh.cpp))
 
 - **Translucent windows no longer go grey**: the capture was force-flattening `PrintWindow` output to opaque and re-premultiplying already-premultiplied pixels. It now passes premultiplied pixels through and keeps fully-transparent regions transparent, so acrylic / Mica windows keep their see-through areas during the genie.

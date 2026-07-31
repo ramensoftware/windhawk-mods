@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-31T10:27:31.000Z</updated>
+    <updated>2026-07-31T20:42:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Charging Sound 1.5]]></title>
+        <id>https://windhawk.net/mods/charging-sound#78fb5dc5fd24bfe4201b4587944badc87f6efc92</id>
+        <link href="https://windhawk.net/mods/charging-sound"/>
+        <updated>2026-07-31T20:42:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chargingsound">Charging Sound</h1>
+<p>Plays a custom <code>.wav</code> sound whenever you connect your laptop to a charger (AC
+power) or unplug it. By default it plays the Windows Notify Messaging sound.</p>
+<p>Please note that this mod only works on devices with a battery (e.g. laptops).</p>]]></content>
+        <author>
+            <name>khonloi</name>
+            <uri>https://github.com/khonloi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.2]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#4c2a9225de5b346b3565df37d526fafd608d9bb9</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-07-31T20:42:41.000Z</updated>
+        <content type="html"><![CDATA[<p>The modern genie's render loop paced every frame behind a ~120fps <code>Sleep()</code>-based timer AND a per-frame <code>DwmFlush()</code>. That makes each frame cost render time plus one vsync, so once the mesh draw takes longer than a single refresh interval the delivered frame rate drops to roughly half the monitor's. The animation then looks visibly choppier than the standalone custom-animations-genie mod this engine was ported from.</p>
+<p>v3.1.2 fixes the serialization without turning the loop into a busy spin:</p>
+<ul>
+<li>Dropped the per-frame <code>DwmFlush()</code>. A single flush stays on the first non-degenerate frame, so the minimize/restore handoff still waits for the ghost to be composed before the real window is released.</li>
+<li>Replaced the old <code>Sleep()</code> pacer with a high-resolution waitable timer (<code>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION</code>) pacing frames at 2x the display's refresh rate (derived from <code>DwmGetCompositionTimingInfo</code>, 240 fps fallback). It's a rate limiter, not a vsync gate, so it caps CPU cost without re-introducing the render+vsync serialization.</li>
+<li>Thread stays at <code>THREAD_PRIORITY_HIGHEST</code>, matching the in-repo genie-minimize-animation mod.</li>
+</ul>
+<p>Also in this version:</p>
+<ul>
+<li>The classic engine gets the same pacing (it still had a per-frame <code>DwmFlush()</code>), so both styles behave consistently.</li>
+<li>Unload safety: the auto-hide deferred-minimize sleep is now chunked (20 ms) and aborts on <code>g_unloading</code>, so <code>Wh_ModBeforeUninit</code>'s 3 s drain can't time out while a worker is in a single up-to-5 s <code>Sleep()</code>.</li>
+<li>Readme: the Animation style section shows a demo GIF for each engine (Modern and Classic), and the "Actually smooth" feature bullet no longer claims per-frame <code>DwmFlush()</code> gating.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 4.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#d8ebc926f811e8fc405315aceb71d3806135479b</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-07-31T20:42:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Restored the Windows 7 Network Sharing Center Control Panel page (along with the classic map)</li>
+<li>Enhanced the Privacy Mode (now network names are masked in the Control Panel too)</li>
+<li>Made the Ethernet detection more reliable </li>
+<li>Enhanced icons rendering based on DPI scaling</li>
+<li>Enhanced the interface of the flyout</li>
+<li>Optimized the mod's loading and performance</li>
+<li>Added the translations for Polish, Dutch, and Romanian</li>
+<li>Enhanced the context menu options: “Status” opens the native Wi‑Fi connection status dialog, while “Properties” opens the native Wireless Network Properties dialog for saved Wi‑Fi profiles when available, with safe fallbacks for unsupported cases</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Command Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-command-bar#9dc2bcf409eb82f0361d261ca6353d1ad0d60923</id>
@@ -679,51 +737,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>ciizerr</name>
             <uri>https://github.com/ciizerr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-elastic-pill#221665bfde3750e80059e9757f7b85f13be5f18d</id>
-        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
-        <updated>2026-07-23T17:59:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed stretch animations being barely noticeable due to anti-pixelated-pill efforts</li>
-<li>Updated default settings to ensure pill is rounded and not rectangular</li>
-</ul>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Elastic WinUI Pill 2.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-elastic-pill#9f9f096a896bdd73f8af47bb284efb01b29e2e50</id>
-        <link href="https://windhawk.net/mods/taskbar-elastic-pill"/>
-        <updated>2026-07-22T19:34:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added elastic intensity setting</li>
-<li>Added squish multiplier setting</li>
-<li>Added fade duration multiplier setting</li>
-<li>Added hover/pressed interactions</li>
-<li>Added dedicated opacity setting</li>
-</ul>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-popups-disable"/>
-        <updated>2026-07-22T18:01:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoppopups">Disable Virtual Desktop Popups</h1>
-<p><img src="https://i.imgur.com/uena3MS.png" alt="Screenshot of Desktop 1 popup with the popup crossed out" /></p>
-<p>This simple mod disables the popups saying "Desktop N" that appear when the current virtual desktop is changed on Windows 11 build 226xx.2050+ and 23493+.</p>
-<p>Tested on Windows 11 22H2 22621.4317 x64 and 24H2 26100.6899 ARM64.</p>]]></content>
-        <author>
-            <name>Amrsatrio</name>
-            <uri>https://github.com/Amrsatrio</uri>
         </author>
     </entry>
 </feed>

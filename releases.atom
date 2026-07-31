@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-31T10:27:31.000Z</updated>
+    <updated>2026-07-31T20:42:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Charging Sound 1.5]]></title>
+        <id>https://windhawk.net/mods/charging-sound#78fb5dc5fd24bfe4201b4587944badc87f6efc92</id>
+        <link href="https://windhawk.net/mods/charging-sound"/>
+        <updated>2026-07-31T20:42:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chargingsound">Charging Sound</h1>
+<p>Plays a custom <code>.wav</code> sound whenever you connect your laptop to a charger (AC
+power) or unplug it. By default it plays the Windows Notify Messaging sound.</p>
+<p>Please note that this mod only works on devices with a battery (e.g. laptops).</p>]]></content>
+        <author>
+            <name>khonloi</name>
+            <uri>https://github.com/khonloi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Command Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-command-bar#9dc2bcf409eb82f0361d261ca6353d1ad0d60923</id>
@@ -1127,56 +1141,6 @@ The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always On Top Windows 1.1]]></title>
-        <id>https://windhawk.net/mods/always-on-top#c0198738db007d4c83236e726efb078bd8ab0e76</id>
-        <link href="https://windhawk.net/mods/always-on-top"/>
-        <updated>2026-07-13T18:50:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alwaysontopwindows">Always On Top Windows</h1>
-<p><img src="https://raw.githubusercontent.com/AhmedAwad7/Always-On-Top-Windows-Windhawk-Mod-/main/Screenrecord/gif.gif" alt="Screenrecord" /></p>
-<h2 id="english">English</h2>
-<p>Press <strong><code>Ctrl+Alt+T</code></strong> to pin/unpin the active window on top of all other windows.</p>
-<p>This mod helps you multitask by keeping important windows always visible.</p>
-<p><strong>Features:</strong></p>
-<ul>
-<li>🔊 Sound notifications to indicate pin/unpin actions.</li>
-<li>⚡ Event-driven hotkey using <code>RegisterHotKey</code> (no continuous polling).</li>
-<li>🧹 Lightweight: runs as a tool in a dedicated <code>windhawk.exe</code> process.</li>
-</ul>
-<p><strong>Requirements:</strong></p>
-<ul>
-<li>Windhawk (latest version recommended).</li>
-<li>Windows 7 → Works efficiently</li>
-<li>Windows 8 → Works efficiently</li>
-<li>Windows 8.1 → Works efficiently</li>
-<li>Windows 10/11 → Not tested yet (if it works well for you, please let me know in Issues on GitHub)</li>
-</ul>
-<p><strong>Contributing:</strong></p>
-<h2 id="wewelcomecontributorsfeelfreetoopenissuesorpullrequestsongithub">We welcome contributors! Feel free to open Issues or Pull Requests on GitHub.</h2>
-<h2 id="">العربية</h2>
-<p>اضغط <strong><code>Ctrl+Alt+T</code></strong> لتثبيت/إلغاء تثبيت النافذة النشطة فوق جميع النوافذ الأخرى.</p>
-<p>هذا المود يساعدك في تعدد المهام عن طريق تثبيت النوافذ المهمة لتظل مرئية دائماً.</p>
-<p><strong>المميزات:</strong></p>
-<ul>
-<li>🔊 إشعارات صوتية لتوضيح التثبيت\إلغاء التثبيت.</li>
-<li>⚡ اختصار يعتمد على الأحداث (<code>RegisterHotKey</code>) بدون استقصاء مستمر.</li>
-<li>🧹 خفيف الوزن: يعمل كأداة في عملية مخصصة لـ <code>windhawk.exe</code>.</li>
-</ul>
-<p><strong>متطلبات النظام:</strong></p>
-<ul>
-<li>Windhawk (يفضل الإصدار الأحدث).</li>
-<li>ويندوز 7 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 8 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 8.1 --&gt; يعمل بكفاءة</li>
-<li>ويندوز 10\11 --&gt; لم أجربه (إذا كان يعمل بكفاءة معك فأخبرني في Issues على Github)</li>
-</ul>
-<p><strong>المساهمة:</strong>
-نرحب بالمساهمين! يمكنكم فتح Issues أو Pull Requests على GitHub.</p>]]></content>
-        <author>
-            <name>AhmedAwad7</name>
-            <uri>https://github.com/AhmedAwad7</uri>
         </author>
     </entry>
 </feed>

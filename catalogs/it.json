@@ -1233,6 +1233,35 @@
         "version": "1.0.0"
       }
     },
+    "charging-sound": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785530569000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785530569000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "khonloi",
+        "compilerOptions": "-lwinmm -luuid -lshell32",
+        "description": "Plays a custom sound when the laptop is plugged in or unplugged",
+        "github": "https://github.com/khonloi",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Charging Sound",
+        "version": "1.5"
+      }
+    },
     "chinese-ime-fixed-mode": {
       "details": {
         "defaultSorting": 790,
@@ -7730,7 +7759,7 @@
           284
         ],
         "ratingUsers": 364,
-        "updated": 1784102727000,
+        "updated": 1785530561000,
         "users": 21205
       },
       "metadata": {
@@ -7743,7 +7772,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.1"
+        "version": "3.1.2"
       }
     },
     "magic-mouse": {
@@ -15166,7 +15195,7 @@
           3
         ],
         "ratingUsers": 8,
-        "updated": 1784834750000,
+        "updated": 1785530524000,
         "users": 314
       },
       "metadata": {
@@ -15175,14 +15204,14 @@
         ],
         "author": "babamohammed",
         "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi",
-        "description": "This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations",
+        "description": "This mod recreates the Windows 7 network flyout for Windows 10 and 11 including the Network Sharing Center Control Panel page",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe",
           "control.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "3.4.0"
+        "version": "4.0.0"
       }
     },
     "win7-style-uac-dim": {

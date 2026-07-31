@@ -1,3 +1,15 @@
+## 4.0.0 ([Jul 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d8ebc926f811e8fc405315aceb71d3806135479b/mods/win7-network-flyout-recreation.wh.cpp))
+
+- Restored the Windows 7 Network Sharing Center Control Panel page (along with the classic map)
+- Enhanced the Privacy Mode (now network names are masked in the Control Panel too)
+- Made the Ethernet detection more reliable 
+- Enhanced icons rendering based on DPI scaling
+- Enhanced the interface of the flyout
+- Optimized the mod's loading and performance
+- Added the translations for Polish, Dutch, and Romanian
+- Enhanced the context menu options: “Status” opens the native Wi‑Fi connection status dialog, while “Properties” opens the native Wireless Network Properties dialog for saved Wi‑Fi profiles when available, with safe fallbacks for unsupported cases
+- Updated the README
+
 ## 3.4.0 ([Jul 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1bf38435c2609b83742e4484f3f571466a7826ed/mods/win7-network-flyout-recreation.wh.cpp))
 
 - Added network location icons (Home/Public/Work based on the type of the network) to make it more similar to the original Windows 7 flyout
