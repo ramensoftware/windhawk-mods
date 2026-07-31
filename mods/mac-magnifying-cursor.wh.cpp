@@ -2,7 +2,7 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.3
+// @version      1.4.4
 // @github       https://github.com/alivca
 // @author       Jaali
 // @include      windhawk.exe
@@ -21,9 +21,9 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 - maxScalePercent: 400
   $name: Maximum size (%)
   $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
-- shakeThreshold: 3500
+- shakeThreshold: 2500
   $name: Shake sensitivity threshold
-  $description: "Total mouse movement distance required to trigger the effect (recommended: 3500)."
+  $description: "Total mouse movement distance required to trigger the effect (recommended: 2000-3000)."
 - lerpSpeedUpPercent: 40
   $name: Enlarge speed (%)
   $description: "How fast the cursor expands (recommended: 20-40)."
@@ -91,7 +91,7 @@ struct Settings {
     float minScale       = 1.0f;
     float lerpSpeedUp    = 0.40f;
     float lerpSpeedDown  = 0.15f;
-    float shakeThreshold = 3500.0f;
+    float shakeThreshold = 2500.0f;
     int   shakeWindowMs  = 500;
 } g_settings;
 
@@ -280,9 +280,33 @@ void UpdateFrame() {
                         HBITMAP hbmMem = g_gdi.pCreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
                         if (hbmMem && pBits) {
                             HBITMAP hOldBm = static_cast<HBITMAP>(g_gdi.pSelectObject(hdcMem, hbmMem));
-                            ZeroMemory(pBits, static_cast<size_t>(scaledW) * scaledH * 4);
+                            
+                            DWORD* pPixels = static_cast<DWORD*>(pBits);
+                            size_t pixelCount = static_cast<size_t>(scaledW) * scaledH;
+                            
+                            for (size_t i = 0; i < pixelCount; ++i) {
+                                pPixels[i] = 0x00000001;
+                            }
 
                             DrawIconEx(hdcMem, 0, 0, g_state.hSavedCursor, scaledW, scaledH, 0, NULL, DI_NORMAL);
+
+                            bool hasAlpha = false;
+                            for (size_t i = 0; i < pixelCount; ++i) {
+                                if ((pPixels[i] & 0xFF000000) != 0) {
+                                    hasAlpha = true;
+                                    break;
+                                }
+                            }
+
+                            if (!hasAlpha) {
+                                for (size_t i = 0; i < pixelCount; ++i) {
+                                    if (pPixels[i] == 0x00000001) {
+                                        pPixels[i] = 0x00000000;
+                                    } else {
+                                        pPixels[i] |= 0xFF000000;
+                                    }
+                                }
+                            }
 
                             POINT ptZero = { 0, 0 };
                             SIZE sizeWin = { scaledW, scaledH };
@@ -389,7 +413,7 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
     return 0;
 }
 
-BOOL WhTool_ModInit() {
+BOOL Wh_ModInit() {
     LoadSettings();
 
     SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
@@ -399,32 +423,19 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 
-void WhTool_ModSettingsChanged() {
+void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
-void WhTool_ModUninit() {
+void Wh_ModUninit() {
     g_state.running = false;
     if (g_state.hwndOverlay) {
         PostMessage(g_state.hwndOverlay, WM_CLOSE, 0, 0);
     }
     if (g_state.hThread) {
-        WaitForSingleObject(g_state.hThread, INFINITE);
+        WaitForSingleObject(g_state.hThread, 2000);
         CloseHandle(g_state.hThread);
         g_state.hThread = NULL;
     }
     RestoreAllSystemCursors();
-}
-
-// === Обязательные точки входа Windhawk ===
-BOOL Wh_ModInit() {
-    return WhTool_ModInit();
-}
-
-void Wh_ModSettingsChanged() {
-    WhTool_ModSettingsChanged();
-}
-
-void Wh_ModUninit() {
-    WhTool_ModUninit();
 }
