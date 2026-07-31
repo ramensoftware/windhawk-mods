@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.17
+// @version         0.1.18
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -86,6 +86,10 @@ path; a single-flight worker retains requests that arrive while it is running,
 tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
 and retries only the connection that was lost. The worker pins the mod image
 until `FreeLibraryAndExitThread`, so it cannot execute unloaded mod code.
+In addition to the XAML DLL load hook, creation of the Explorer/taskbar XAML
+host windows is used as an independent initialization trigger, so a module
+loaded through a static import, delay-load helper, or lower-level loader path
+still gets a connection attempt after an Explorer restart.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, enabling this path can show its confirmation dialog.
 Each reload switches to a new modern-UI generation, so detached workers and
@@ -102,6 +106,9 @@ threads and restores them when the source leaves the visual tree or the mod
 unloads. The classic path updates
 strings stored in active `HMENU` objects, so menu text read through
 accessibility APIs also contains the inserted spaces while the popup is open.
+Other menu-cleanup mods that match items by their displayed text, such as
+Remove Context Menu Items, may therefore need rules that account for the
+temporary spaces while the popup is open.
 Rewritten strings are recorded and restored when the popup closes. If multiple
 items have identical rewritten text, text-based fallback restoration can select
 the first match; the idempotent transformation does not compound spaces.
@@ -426,6 +433,9 @@ std::wstring AddCjkSpacing(std::wstring_view text,
 using InsertMenuW_t = decltype(&InsertMenuW);
 using AppendMenuW_t = decltype(&AppendMenuW);
 using ModifyMenuW_t = decltype(&ModifyMenuW);
+using InsertMenuA_t = decltype(&InsertMenuA);
+using AppendMenuA_t = decltype(&AppendMenuA);
+using ModifyMenuA_t = decltype(&ModifyMenuA);
 using InsertMenuItemW_t = decltype(&InsertMenuItemW);
 using SetMenuItemInfoW_t = decltype(&SetMenuItemInfoW);
 using TrackPopupMenu_t = decltype(&TrackPopupMenu);
@@ -434,6 +444,9 @@ using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
 InsertMenuW_t g_originalInsertMenuW;
 AppendMenuW_t g_originalAppendMenuW;
 ModifyMenuW_t g_originalModifyMenuW;
+InsertMenuA_t g_originalInsertMenuA;
+AppendMenuA_t g_originalAppendMenuA;
+ModifyMenuA_t g_originalModifyMenuA;
 InsertMenuItemW_t g_originalInsertMenuItemW;
 SetMenuItemInfoW_t g_originalSetMenuItemInfoW;
 TrackPopupMenu_t g_originalTrackPopupMenu;
@@ -465,6 +478,66 @@ int FindMenuItemIndexByText(
 
 bool IsStringMenuFlags(UINT flags) {
     return !(flags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR));
+}
+
+bool ConvertAnsiMenuTextToWide(LPCSTR text, std::wstring* wide) {
+    if (!text || !wide) {
+        return false;
+    }
+
+    const int length = MultiByteToWideChar(
+        CP_ACP, 0, text, -1, nullptr, 0);
+    if (length <= 0) {
+        return false;
+    }
+
+    wide->resize(static_cast<size_t>(length));
+    if (MultiByteToWideChar(
+            CP_ACP, 0, text, -1, wide->data(), length) != length) {
+        wide->clear();
+        return false;
+    }
+
+    wide->resize(static_cast<size_t>(length - 1));
+    return true;
+}
+
+bool ConvertWideMenuTextToAnsi(const std::wstring& wide,
+                               std::string* ansi) {
+    if (!ansi) {
+        return false;
+    }
+
+    const int length = WideCharToMultiByte(
+        CP_ACP, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (length <= 0) {
+        return false;
+    }
+
+    ansi->resize(static_cast<size_t>(length));
+    if (WideCharToMultiByte(
+            CP_ACP, 0, wide.c_str(), -1, ansi->data(), length,
+            nullptr, nullptr) != length) {
+        ansi->clear();
+        return false;
+    }
+
+    ansi->resize(static_cast<size_t>(length - 1));
+    return true;
+}
+
+bool PrepareAnsiMenuText(LPCSTR text,
+                         std::wstring* original,
+                         std::wstring* spaced,
+                         std::string* spacedAnsi) {
+    if (!ConvertAnsiMenuTextToWide(text, original) ||
+        !ContainsCjkCodePoint(*original)) {
+        return false;
+    }
+
+    *spaced = AddCjkSpacing(*original);
+    return *spaced != *original &&
+           ConvertWideMenuTextToAnsi(*spaced, spacedAnsi);
 }
 
 int FindMenuItemIndex(HMENU menu, UINT item, bool byPosition) {
@@ -593,6 +666,110 @@ BOOL WINAPI ModifyMenuWHook(HMENU menu,
     }
 
     return g_originalModifyMenuW(menu, position, flags, itemId, newItem);
+}
+
+BOOL WINAPI InsertMenuAHook(HMENU menu,
+                            UINT position,
+                            UINT flags,
+                            UINT_PTR itemId,
+                            LPCSTR newItem) {
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+        IsStringMenuFlags(flags)) {
+        std::wstring original;
+        std::wstring spaced;
+        std::string spacedAnsi;
+        if (PrepareAnsiMenuText(
+                newItem, &original, &spaced, &spacedAnsi)) {
+            Wh_Log(L"Applied CJK spacing (classic/InsertMenuA)");
+            const BOOL result = g_originalInsertMenuA(
+                menu, position, flags, itemId, spacedAnsi.c_str());
+            if (result) {
+                int index;
+                if (flags & MF_BYPOSITION) {
+                    index = FindMenuItemIndex(menu, position, true);
+                    if (index < 0) {
+                        index = GetMenuItemCount(menu) - 1;
+                    }
+                } else if (flags & MF_POPUP) {
+                    index = FindMenuItemIndexByText(menu, spaced);
+                } else {
+                    index = FindMenuItemIndex(
+                        menu, static_cast<UINT>(itemId), false);
+                }
+                RememberRewrittenMenuItem(
+                    menu,
+                    index >= 0 ? static_cast<UINT>(index)
+                               : kUnknownMenuItemIndex,
+                    std::move(original), std::move(spaced));
+            }
+            return result;
+        }
+    }
+
+    return g_originalInsertMenuA(menu, position, flags, itemId, newItem);
+}
+
+BOOL WINAPI AppendMenuAHook(HMENU menu,
+                            UINT flags,
+                            UINT_PTR itemId,
+                            LPCSTR newItem) {
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+        IsStringMenuFlags(flags)) {
+        std::wstring original;
+        std::wstring spaced;
+        std::string spacedAnsi;
+        if (PrepareAnsiMenuText(
+                newItem, &original, &spaced, &spacedAnsi)) {
+            Wh_Log(L"Applied CJK spacing (classic/AppendMenuA)");
+            const BOOL result = g_originalAppendMenuA(
+                menu, flags, itemId, spacedAnsi.c_str());
+            if (result) {
+                const int index = GetMenuItemCount(menu) - 1;
+                if (index >= 0) {
+                    RememberRewrittenMenuItem(
+                        menu, static_cast<UINT>(index),
+                        std::move(original), std::move(spaced));
+                }
+            }
+            return result;
+        }
+    }
+
+    return g_originalAppendMenuA(menu, flags, itemId, newItem);
+}
+
+BOOL WINAPI ModifyMenuAHook(HMENU menu,
+                            UINT position,
+                            UINT flags,
+                            UINT_PTR itemId,
+                            LPCSTR newItem) {
+    if (!g_restoringClassicMenuText && g_classicPopupMenuDepth > 0 &&
+        g_classicMenus.load(std::memory_order_relaxed) && newItem &&
+        IsStringMenuFlags(flags)) {
+        std::wstring original;
+        std::wstring spaced;
+        std::string spacedAnsi;
+        if (PrepareAnsiMenuText(
+                newItem, &original, &spaced, &spacedAnsi)) {
+            Wh_Log(L"Applied CJK spacing (classic/ModifyMenuA)");
+            const int index = FindMenuItemIndex(
+                menu, position, (flags & MF_BYPOSITION) != 0);
+            const BOOL result = g_originalModifyMenuA(
+                menu, position, flags, itemId, spacedAnsi.c_str());
+            if (result) {
+                RememberRewrittenMenuItem(
+                    menu,
+                    index >= 0 ? static_cast<UINT>(index)
+                               : kUnknownMenuItemIndex,
+                    std::move(original), std::move(spaced));
+            }
+            return result;
+        }
+    }
+
+    return g_originalModifyMenuA(menu, position, flags, itemId, newItem);
 }
 
 bool MenuItemInfoContainsString(const MENUITEMINFOW* itemInfo) {
@@ -936,6 +1113,17 @@ std::unordered_map<HTHEME, HWND> g_classicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
 
+void ClearUxThemeFunctionPointers() {
+    g_getWindowTheme = nullptr;
+    g_originalOpenThemeData = nullptr;
+    g_originalOpenThemeDataEx = nullptr;
+    g_originalOpenThemeDataForDpi = nullptr;
+    g_originalCloseThemeData = nullptr;
+    g_originalGetThemeTextExtent = nullptr;
+    g_originalDrawThemeText = nullptr;
+    g_originalDrawThemeTextEx = nullptr;
+}
+
 bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
     if (!classList) {
         return false;
@@ -1006,6 +1194,14 @@ void UntrackClassicTooltipTheme(HTHEME theme) {
         g_classicTooltipThemeCount.load(
             std::memory_order_relaxed) == 0) {
         return;
+    }
+
+    {
+        std::shared_lock<std::shared_mutex> guard(
+            g_classicTooltipThemesMutex);
+        if (!g_classicTooltipThemes.contains(theme)) {
+            return;
+        }
     }
 
     std::lock_guard<std::shared_mutex> guard(
@@ -2223,6 +2419,148 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
     return module;
 }
 
+bool IsTextualWindowClassName(LPCWSTR className) {
+    return className &&
+           (reinterpret_cast<ULONG_PTR>(className) &
+            ~static_cast<ULONG_PTR>(0xFFFF)) != 0;
+}
+
+bool IsModernXamlHostWindow(HWND window,
+                            HWND parent,
+                            LPCWSTR className) {
+    if (!window || !IsTextualWindowClassName(className)) {
+        return false;
+    }
+
+    if (_wcsicmp(
+            className,
+            L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
+        wchar_t parentClassName[64];
+        return parent &&
+               GetClassNameW(
+                   parent, parentClassName, ARRAYSIZE(parentClassName)) > 0 &&
+               _wcsicmp(parentClassName, L"Shell_TrayWnd") == 0;
+    }
+
+    return _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+           _wcsicmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0;
+}
+
+void OnModernXamlHostWindowCreated(HWND window,
+                                   HWND parent,
+                                   LPCWSTR className,
+                                   LPCWSTR source) {
+    if (!IsModernXamlHostWindow(window, parent, className)) {
+        return;
+    }
+
+    Wh_Log(L"Modern XAML initialization requested by %s (%s)",
+           source, className);
+    // Window creation is an independent trigger from LoadLibraryExW. It also
+    // covers XAML modules mapped through static imports, delay-load helpers,
+    // or lower-level loader calls that don't pass through our loader hook.
+    RequestModernXamlDiagnosticsInitialization();
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t g_originalCreateWindowExW;
+
+HWND WINAPI CreateWindowExWHook(DWORD exStyle,
+                                LPCWSTR className,
+                                LPCWSTR windowName,
+                                DWORD style,
+                                int x,
+                                int y,
+                                int width,
+                                int height,
+                                HWND parent,
+                                HMENU menu,
+                                HINSTANCE instance,
+                                PVOID parameter) {
+    HWND window = g_originalCreateWindowExW(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter);
+    OnModernXamlHostWindowCreated(
+        window, parent, className, L"CreateWindowExW");
+    return window;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band);
+CreateWindowInBand_t g_originalCreateWindowInBand;
+
+HWND WINAPI CreateWindowInBandHook(DWORD exStyle,
+                                    LPCWSTR className,
+                                    LPCWSTR windowName,
+                                    DWORD style,
+                                    int x,
+                                    int y,
+                                    int width,
+                                    int height,
+                                    HWND parent,
+                                    HMENU menu,
+                                    HINSTANCE instance,
+                                    PVOID parameter,
+                                    DWORD band) {
+    HWND window = g_originalCreateWindowInBand(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter, band);
+    OnModernXamlHostWindowCreated(
+        window, parent, className, L"CreateWindowInBand");
+    return window;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(
+    DWORD exStyle,
+    LPCWSTR className,
+    LPCWSTR windowName,
+    DWORD style,
+    int x,
+    int y,
+    int width,
+    int height,
+    HWND parent,
+    HMENU menu,
+    HINSTANCE instance,
+    PVOID parameter,
+    DWORD band,
+    DWORD typeFlags);
+CreateWindowInBandEx_t g_originalCreateWindowInBandEx;
+
+HWND WINAPI CreateWindowInBandExHook(DWORD exStyle,
+                                      LPCWSTR className,
+                                      LPCWSTR windowName,
+                                      DWORD style,
+                                      int x,
+                                      int y,
+                                      int width,
+                                      int height,
+                                      HWND parent,
+                                      HMENU menu,
+                                      HINSTANCE instance,
+                                      PVOID parameter,
+                                      DWORD band,
+                                      DWORD typeFlags) {
+    HWND window = g_originalCreateWindowInBandEx(
+        exStyle, className, windowName, style, x, y, width, height,
+        parent, menu, instance, parameter, band, typeFlags);
+    OnModernXamlHostWindowCreated(
+        window, parent, className, L"CreateWindowInBandEx");
+    return window;
+}
+
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
 bool RunFromWindowThread(HWND window,
@@ -2317,7 +2655,7 @@ void InitializeModernUi() {
 }
 
 void UninitializeModernUi() {
-    g_stoppingModernUi.store(true, std::memory_order_relaxed);
+    g_stoppingModernUi.store(true, std::memory_order_release);
 
     std::vector<winrt::com_ptr<VisualTreeWatcher>> watchers;
     {
@@ -2481,6 +2819,7 @@ bool HookClassicTooltipThemeDrawing() {
     if (!hooked && g_loadedUxThemeModule) {
         FreeLibrary(g_loadedUxThemeModule);
         g_loadedUxThemeModule = nullptr;
+        ClearUxThemeFunctionPointers();
     }
     return hooked;
 }
@@ -2536,6 +2875,15 @@ BOOL Wh_ModInit() {
             ModifyMenuW, ModifyMenuWHook, &g_originalModifyMenuW,
             L"ModifyMenuW");
         installedAnyHook |= InstallHook(
+            InsertMenuA, InsertMenuAHook, &g_originalInsertMenuA,
+            L"InsertMenuA");
+        installedAnyHook |= InstallHook(
+            AppendMenuA, AppendMenuAHook, &g_originalAppendMenuA,
+            L"AppendMenuA");
+        installedAnyHook |= InstallHook(
+            ModifyMenuA, ModifyMenuAHook, &g_originalModifyMenuA,
+            L"ModifyMenuA");
+        installedAnyHook |= InstallHook(
             InsertMenuItemW, InsertMenuItemWHook,
             &g_originalInsertMenuItemW, L"InsertMenuItemW");
         installedAnyHook |= InstallHook(
@@ -2555,6 +2903,33 @@ BOOL Wh_ModInit() {
 
     if (modernUiTextEnabled) {
         InitializeModernUi();
+        installedAnyHook |= InstallHook(
+            CreateWindowExW, CreateWindowExWHook,
+            &g_originalCreateWindowExW, L"CreateWindowExW");
+
+        HMODULE user32Module = GetModuleHandleW(L"user32.dll");
+        if (user32Module) {
+            const auto createWindowInBand =
+                reinterpret_cast<CreateWindowInBand_t>(
+                    GetProcAddress(user32Module, "CreateWindowInBand"));
+            if (createWindowInBand) {
+                installedAnyHook |= InstallHook(
+                    createWindowInBand, CreateWindowInBandHook,
+                    &g_originalCreateWindowInBand,
+                    L"CreateWindowInBand");
+            }
+
+            const auto createWindowInBandEx =
+                reinterpret_cast<CreateWindowInBandEx_t>(
+                    GetProcAddress(user32Module, "CreateWindowInBandEx"));
+            if (createWindowInBandEx) {
+                installedAnyHook |= InstallHook(
+                    createWindowInBandEx, CreateWindowInBandExHook,
+                    &g_originalCreateWindowInBandEx,
+                    L"CreateWindowInBandEx");
+            }
+        }
+
         HMODULE kernelBaseModule =
             GetModuleHandleW(L"kernelbase.dll");
         const auto loadLibraryExW =
@@ -2603,6 +2978,7 @@ void Wh_ModUninit() {
         FreeLibrary(g_loadedUxThemeModule);
         g_loadedUxThemeModule = nullptr;
     }
+    ClearUxThemeFunctionPointers();
     Wh_Log(L"Uninitialized");
 }
 
