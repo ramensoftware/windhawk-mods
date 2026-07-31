@@ -32,8 +32,9 @@ The blob shape is a rounded rectangle whose top extends upward and flares
 outward with concave (outside) corner radii, ending in a flat top edge:
 
 - **Width / Height**: the main area of the blob shape ('auto' matches the
-  button's background element). The blob shape is anchored so this area is
-  centered on it.
+  button's background element). Horizontally the shape is centered on the
+  button; vertically its flat top edge is anchored to the top of the
+  taskbar, with the body hanging downward.
 - **Top corner radius**: the radius of the concave top flares. The flares
   are circular quarter arcs, so this also sets how far the blob shape
   extends upward and outward. Total size is
@@ -48,10 +49,10 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 - BlobShape:
   - Dimensions: 'auto, auto'
     $name: Custom blob shape dimensions (Width, Height)
-    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32').
+    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs down from the top of the taskbar.
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
-    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Leave empty to disable.
+    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Leave empty to disable.
   - BottomRadius: '4.0'
     $name: Bottom corner radius
     $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
@@ -73,7 +74,6 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 #include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -121,12 +121,15 @@ struct BlobEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> anchor;
     winrt::event_token sizeToken{};
     winrt::event_token unloadToken{};
+    winrt::event_token loadedToken{};
     winrt::event_token themeToken{};
     bool unloadAttached = false;
+    bool loadedAttached = false;
 
     // Whether the blob's Translation is glued to its button's offset chain,
-    // and the adjustment constant it was bound with. The blob stays hidden
-    // until the binding succeeds.
+    // plus the X adjustment and taskbar-top Y anchor it was bound with
+    // (compared to detect when a settings change requires a rebind). The
+    // blob stays hidden until the binding succeeds.
     bool bound = false;
     float boundAdjX = -1e9f, boundYBase = -1e9f;
 
@@ -140,7 +143,6 @@ std::vector<std::shared_ptr<BlobEntry>> g_blobEntries;
 std::atomic<bool> g_unloading{false};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-HMODULE g_taskbarViewModule = nullptr;
 
 std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring_view hexView) {
     if (hexView.empty()) return std::nullopt;
@@ -187,8 +189,8 @@ double ParseDouble(PCWSTR str, double defaultVal, double minVal = 0.0) {
     if (!str || !str[0]) return defaultVal;
     try {
         double val = std::stod(str);
-        if (std::isnan(val) || val < minVal) return defaultVal;
-        return val;
+        if (std::isnan(val)) return defaultVal;
+        return std::max(val, minVal);
     } catch (...) {
         return defaultVal;
     }
@@ -365,7 +367,7 @@ winrt::Windows::UI::Xaml::Media::Brush CreateBrush(const std::vector<winrt::Wind
     for (size_t i = 0; i < colors.size(); i++) {
         winrt::Windows::UI::Xaml::Media::GradientStop stop;
         stop.Color(colors[i]);
-        stop.Offset(colors.size() > 1 ? static_cast<double>(i) / (colors.size() - 1) : 0.0);
+        stop.Offset(static_cast<double>(i) / (colors.size() - 1));
         stops.Append(stop);
     }
     return brush;
@@ -436,7 +438,6 @@ using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 using namespace winrt::Windows::UI::Xaml::Hosting;
-using namespace winrt::Windows::UI::Composition;
 
 // Resolves the XAML element from the native TaskListButton pointer the same
 // way the mods this derives from do (taskbar-elastic-pill, taskbar-labels):
@@ -489,6 +490,46 @@ bool IsButtonActive(winrt::Windows::UI::Xaml::FrameworkElement const& btn) {
     }
 }
 
+// Removes an element from its parent panel, if it has one.
+void RemoveFromParentPanel(winrt::Windows::UI::Xaml::UIElement const& element) {
+    try {
+        if (auto parent = VisualTreeHelper::GetParent(element)) {
+            if (auto panel = parent.try_as<Panel>()) {
+                uint32_t index;
+                if (panel.Children().IndexOf(element, index)) {
+                    panel.Children().RemoveAt(index);
+                }
+            }
+        }
+    } catch (...) {}
+}
+
+// Hands rendering of the native indicator visuals back to XAML.
+void RestoreNativeVisuals(winrt::Windows::UI::Xaml::FrameworkElement const& btn) {
+    try {
+        auto iconPanel = FindChildByName(btn, L"IconPanel");
+        if (!iconPanel) return;
+        if (auto bg = FindChildByName(iconPanel, L"BackgroundElement")) {
+            ElementCompositionPreview::GetElementVisual(bg).IsVisible(true);
+        }
+        if (auto indicator = FindChildByName(iconPanel, L"RunningIndicator")) {
+            ElementCompositionPreview::GetElementVisual(indicator).IsVisible(true);
+        }
+    } catch (...) {}
+}
+
+// Inserts the blob below the task list in z-order so it renders behind the
+// buttons, like the native indicator.
+void InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes::Path const& blobShape) {
+    auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
+    uint32_t index = 0;
+    if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
+        grid.Children().InsertAt(index, blobShape);
+    } else {
+        grid.Children().Append(blobShape);
+    }
+}
+
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
@@ -524,16 +565,7 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
     for (auto& blob : orphans) {
         if (auto dispatcher = blob.Dispatcher()) {
             dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [blob]() {
-                try {
-                    if (auto parent = VisualTreeHelper::GetParent(blob)) {
-                        if (auto panel = parent.try_as<Panel>()) {
-                            uint32_t index;
-                            if (panel.Children().IndexOf(blob, index)) {
-                                panel.Children().RemoveAt(index);
-                            }
-                        }
-                    }
-                } catch (...) {}
+                RemoveFromParentPanel(blob);
             });
         }
     }
@@ -561,11 +593,11 @@ Grid GetTaskbarRootGrid(winrt::Windows::UI::Xaml::FrameworkElement const& button
 // Glues the blob's Translation to its button's visual offset chain with a
 // composition ExpressionAnimation. Only the X axis is dynamic:
 //   Translation.X = sum(chain Offset.X up to RootGrid) + adjX - self.Offset.X
-//   Translation.Y = yBase - self.Offset.Y   (constant, from the LAYOUT position)
+//   Translation.Y = yBase - self.Offset.Y   (constant: taskbar top + margins)
 // X tracking keeps the blob glued through reordering and reflow slides, while
-// the layout-based Y pins the blob at its final vertical position instantly —
-// entrance animations ("Animation Effects") that slide new buttons upward
-// animate the visuals' Offset.Y, which this expression deliberately ignores.
+// the flat top edge stays anchored to the top of the taskbar — Y never
+// follows the button, so entrance animations ("Animation Effects") and
+// mid-transition layout can't displace or freeze the shape vertically.
 // Bound once per blob and never retargeted. Returns false while the chain
 // can't be resolved (button not fully in the tree yet).
 bool BindBlobExpression(
@@ -648,10 +680,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
 
     // Button removal (window moved to another monitor, app closed, container
     // recycled) is a LIFECYCLE event, not a state change — UpdateVisualStates
-    // never fires a final "inactive" for it. On Unloaded, tear the blob down
-    // completely: stop its expression (which holds references to the whole
-    // visual chain), unparent it, restore the native indicator, and drop the
-    // entry. The create path rebuilds everything if the container is reused.
+    // never fires a final "inactive" for it. On a genuine Unloaded, tear the
+    // blob down completely: stop its expression (which holds references to
+    // the whole visual chain), unparent it, restore the native indicator,
+    // and drop the entry. The create path rebuilds everything if the
+    // container is used again later.
     if (!entry->unloadAttached) {
         entry->unloadAttached = true;
         std::weak_ptr<BlobEntry> weakEntry = entry;
@@ -659,40 +692,77 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             if (g_unloading) return;
             auto e = weakEntry.lock();
             if (!e) return;
+            auto btn = e->button.get();
+
+            // XAML delivers Unloaded asynchronously: a container that was
+            // detached and immediately re-attached (recycling, cross-monitor
+            // moves, pinned->running item swaps) receives a STALE Unloaded
+            // while it is already live again — possibly right after the hook
+            // built its blob. Tearing down on a stale event destroys a valid
+            // blob with no event left to rebuild it. If the button is still
+            // loaded, re-resolve and rebind against the settled tree instead
+            // of tearing down.
+            bool stillLoaded = false;
+            if (btn) {
+                try { stillLoaded = btn.IsLoaded(); } catch (...) {}
+            }
+            if (stillLoaded) {
+                e->bound = false;
+                e->grid = nullptr; // may sit under a different taskbar now
+                Settings localSettings;
+                { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+                try {
+                    EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+                } catch (...) {}
+                return;
+            }
+
             if (auto blob = e->blobShape.get()) {
                 try { blob.ActualThemeChanged(e->themeToken); } catch (...) {}
                 try {
                     ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
                 } catch (...) {}
-                try {
-                    if (auto parent = VisualTreeHelper::GetParent(blob)) {
-                        if (auto panel = parent.try_as<winrt::Windows::UI::Xaml::Controls::Panel>()) {
-                            uint32_t index;
-                            if (panel.Children().IndexOf(blob, index)) {
-                                panel.Children().RemoveAt(index);
-                            }
-                        }
-                    }
-                } catch (...) {}
+                RemoveFromParentPanel(blob);
             }
-            if (auto btn = e->button.get()) {
-                try {
-                    auto iconPanel = FindChildByName(btn, L"IconPanel");
-                    auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
-                    if (bg) ElementCompositionPreview::GetElementVisual(bg).IsVisible(true);
-                    auto indicator = iconPanel ? FindChildByName(iconPanel, L"RunningIndicator") : nullptr;
-                    if (indicator) ElementCompositionPreview::GetElementVisual(indicator).IsVisible(true);
-                } catch (...) {}
+            if (btn) {
+                RestoreNativeVisuals(btn);
                 if (auto anchor = e->anchor.get()) {
                     try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
                 }
                 try { btn.Unloaded(e->unloadToken); } catch (...) {}
+                if (e->loadedAttached) {
+                    try { btn.Loaded(e->loadedToken); } catch (...) {}
+                }
             }
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
             g_blobEntries.erase(
                 std::remove_if(g_blobEntries.begin(), g_blobEntries.end(),
                     [&](auto& x) { return x == e; }),
                 g_blobEntries.end());
+        });
+    }
+
+    // Loaded fires after a (re)attached button has been measured and
+    // arranged — the moment to drop the grid cache and rebind the X chain:
+    // after a cross-taskbar reattach the cached weak ref can still resolve
+    // to the OLD (alive) grid, which would make the chain walk fail
+    // silently.
+    if (!entry->loadedAttached) {
+        entry->loadedAttached = true;
+        std::weak_ptr<BlobEntry> weakLoadedEntry = entry;
+        entry->loadedToken = button.Loaded([weakLoadedEntry](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto e = weakLoadedEntry.lock();
+            if (!e) return;
+            auto btn = e->button.get();
+            if (!btn) return;
+            e->bound = false;
+            e->grid = nullptr;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try {
+                EnsureBlobOnButton(btn, IsButtonActive(btn), localSettings);
+            } catch (...) {}
         });
     }
 
@@ -720,15 +790,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
         blobShape.Opacity(0.0);
 
-        // Below the task list in z-order so the shapes render behind the
-        // buttons, like the native indicator.
-        auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
-        uint32_t index = 0;
-        if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
-            grid.Children().InsertAt(index, blobShape);
-        } else {
-            grid.Children().Append(blobShape);
-        }
+        InsertBlobBelowRepeater(grid, blobShape);
         ElementCompositionPreview::SetIsTranslationEnabled(blobShape, true);
 
         entry->blobShape = winrt::make_weak(blobShape);
@@ -759,19 +821,8 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         auto parent = VisualTreeHelper::GetParent(blobShape);
         auto parentGrid = parent ? parent.try_as<Grid>() : nullptr;
         if (parentGrid != grid) {
-            if (parentGrid) {
-                uint32_t oldIndex;
-                if (parentGrid.Children().IndexOf(blobShape, oldIndex)) {
-                    parentGrid.Children().RemoveAt(oldIndex);
-                }
-            }
-            auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
-            uint32_t index = 0;
-            if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
-                grid.Children().InsertAt(index, blobShape);
-            } else {
-                grid.Children().Append(blobShape);
-            }
+            RemoveFromParentPanel(blobShape);
+            InsertBlobBelowRepeater(grid, blobShape);
             entry->bound = false;
         }
     }
@@ -840,42 +891,34 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             entry->geoRt = Rt; entry->geoRb = Rb;
         }
 
-        // Adjustment relative to the button's top-left corner: the anchor's
-        // offset within the button (rounded, so intra-button render
-        // transforms can't jitter it), centering for custom dimensions,
-        // custom margins, and the flare tip offset.
+        // X adjustment relative to the button's left edge: the anchor's
+        // horizontal offset within the button (rounded, so intra-button
+        // render transforms can't jitter it), centering for a custom width,
+        // and the flare tip offset.
         float adjX = (float)(-Rt);
-        float adjY = (float)(-Rt);
-        if (localSettings.CustomWidth >= 0.0)  adjX += (float)((bW - W) / 2.0);
-        if (localSettings.CustomHeight >= 0.0) adjY += (float)((bH - H) / 2.0);
-        if (localSettings.HasCustomMargin) {
-            adjX += (float)(localSettings.CustomMargin.Left - localSettings.CustomMargin.Right);
-            adjY += (float)(localSettings.CustomMargin.Top - localSettings.CustomMargin.Bottom);
-        }
+        if (localSettings.CustomWidth >= 0.0) adjX += (float)((bW - W) / 2.0);
         if (anchor != button) {
             try {
                 auto intra = anchor.TransformToVisual(button).TransformPoint({0, 0});
                 adjX += std::round(intra.X);
-                adjY += std::round(intra.Y);
             } catch (...) {}
         }
 
-        // The Y coordinate comes from the LAYOUT position — TransformToVisual
-        // reflects layout, not composition animations — so entrance slides
-        // never displace the blob vertically. It only changes with taskbar
-        // size/DPI changes, which re-run this via SizeChanged and rebind.
-        bool haveYBase = false;
+        // The Y coordinate is a structural constant: the flat top edge is
+        // anchored to the top of the taskbar (the RootGrid origin), not to
+        // the button — no element position is ever sampled for Y, so no
+        // transition can displace or freeze the shape vertically. Margins
+        // shift it from that anchor; the body hangs downward by Height.
         float yBase = 0.0f;
-        try {
-            auto layoutPos = button.TransformToVisual(grid).TransformPoint({0, 0});
-            yBase = std::round(layoutPos.Y + adjY);
-            haveYBase = true;
-        } catch (...) {}
+        if (localSettings.HasCustomMargin) {
+            adjX += (float)(localSettings.CustomMargin.Left - localSettings.CustomMargin.Right);
+            yBase += (float)(localSettings.CustomMargin.Top - localSettings.CustomMargin.Bottom);
+        }
+        yBase = std::round(yBase);
 
-        if (haveYBase &&
-            (!entry->bound ||
-             std::abs(entry->boundAdjX - adjX) > 0.5f ||
-             std::abs(entry->boundYBase - yBase) > 0.5f)) {
+        if (!entry->bound ||
+            std::abs(entry->boundAdjX - adjX) > 0.5f ||
+            std::abs(entry->boundYBase - yBase) > 0.5f) {
             if (BindBlobExpression(blobShape, grid, button, adjX, yBase)) {
                 entry->bound = true;
                 entry->boundAdjX = adjX;
@@ -949,7 +992,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module && !g_taskbarViewDllLoaded &&
         GetTaskbarViewModuleHandle() == module && !g_taskbarViewDllLoaded.exchange(true)) {
-        g_taskbarViewModule = module;
         Wh_Log(L"Taskbar View DLL loaded: %s", lpLibFileName);
         if (HookTaskbarViewDllSymbols(module)) Wh_ApplyHookOperations();
     }
@@ -963,7 +1005,6 @@ BOOL Wh_ModInit() {
     HMODULE m = GetTaskbarViewModuleHandle();
     if (m) {
         g_taskbarViewDllLoaded = true;
-        g_taskbarViewModule = m;
         if (!HookTaskbarViewDllSymbols(m)) return FALSE;
     } else {
         HMODULE kb = GetModuleHandle(L"kernelbase.dll");
@@ -1004,29 +1045,16 @@ void Wh_ModBeforeUninit() {
                     try { blobShape.ActualThemeChanged(entry->themeToken); } catch (...) {}
                     auto vis = ElementCompositionPreview::GetElementVisual(blobShape);
                     vis.Properties().StopAnimation(L"Translation");
-                    if (auto parent = VisualTreeHelper::GetParent(blobShape)) {
-                        if (auto panel = parent.try_as<winrt::Windows::UI::Xaml::Controls::Panel>()) {
-                            uint32_t index;
-                            if (panel.Children().IndexOf(blobShape, index)) {
-                                panel.Children().RemoveAt(index);
-                            }
-                        }
-                    }
+                    RemoveFromParentPanel(blobShape);
                 }
-                // Restore the native background indicator on this button.
                 if (auto btn = entry->button.get()) {
                     if (entry->unloadAttached) {
                         try { btn.Unloaded(entry->unloadToken); } catch (...) {}
                     }
-                    auto iconPanel = FindChildByName(btn, L"IconPanel");
-                    auto bg = iconPanel ? FindChildByName(iconPanel, L"BackgroundElement") : nullptr;
-                    if (bg) {
-                        try { ElementCompositionPreview::GetElementVisual(bg).IsVisible(true); } catch (...) {}
+                    if (entry->loadedAttached) {
+                        try { btn.Loaded(entry->loadedToken); } catch (...) {}
                     }
-                    auto indicator = iconPanel ? FindChildByName(iconPanel, L"RunningIndicator") : nullptr;
-                    if (indicator) {
-                        try { ElementCompositionPreview::GetElementVisual(indicator).IsVisible(true); } catch (...) {}
-                    }
+                    RestoreNativeVisuals(btn);
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
         };
