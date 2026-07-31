@@ -4,6 +4,7 @@
 // @description     Replaces Steam's tray icon with an included icon or a custom .ico file
 // @version         1.2.0
 // @author          RafaMrPotato
+// @github          Rafamrpotato
 // @include         steam.exe
 // @compilerOptions -lshell32 -luser32
 // ==/WindhawkMod==
