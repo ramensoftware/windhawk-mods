@@ -42,7 +42,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
 - **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian or auto-detect
-- **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
+- **DPI aware**: Opens at the correct DPI on high-DPI and mixed-DPI setups. If the flyout is moved to another monitor while it is open, close and reopen it to recalculate the DPI.
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
 - **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
@@ -307,12 +307,13 @@ void ApplyNativeControlsTheme();
 
 void FreeSystemIcons();
 void LoadSystemIcons();
+static int GetNetworkCountSafe();
 
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
     WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
     
-    BOOL showWifiList = (g_NetworkCount > 0);
+    BOOL showWifiList = (GetNetworkCountSafe() > 0);
     int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
     int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
     
@@ -358,6 +359,13 @@ static HANDLE g_hConnectThread = NULL;
 // this and the connect thread run code in the mod's own image, so leaving
 // either alive when Windhawk unloads the DLL crashes the process on return.
 static HANDLE g_hReapThread = NULL;
+
+// Track per-load class registrations so the first RegisterClassW of a load is
+// required to succeed (a leftover class from a previous load bails out of that
+// feature rather than creating windows on a stale class), while later calls
+// in the same load skip re-registering.
+static bool g_pwdClassRegistered = false;
+static bool g_flyoutClassRegistered = false;
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -2403,6 +2411,26 @@ static void CaptureNetworkState(NetworkStateSnapshot* snapshot) {
     LeaveCriticalSection(&g_Ctx.csLock);
 }
 
+static int GetNetworkCountSafe() {
+    int count = 0;
+    EnterCriticalSection(&g_Ctx.csLock);
+    count = g_NetworkCount;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return count;
+}
+
+static BOOL GetSelectedRowConnState(ConnectionState* outState) {
+    BOOL valid = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
+        if (outState)
+            *outState = g_NetworkList[g_SelectedRowIndex].connState;
+        valid = TRUE;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return valid;
+}
+
 
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
@@ -3325,7 +3353,7 @@ BOOL IsInternetConnected() {
 //  3) Fall back to the NetworkList registry profile name, then to a safe
 //     public-first scan of connected NLM networks.
 // -------------------------------------------------------
-static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name);
+static BOOL IsVirtualOrNonEthernetAdapter(const IP_ADAPTER_ADDRESSES* adapter);
 static void SafeSysFreeString(BSTR bstr);
 static BOOL IsZeroGuidValue(const GUID* guid);
 
@@ -3379,7 +3407,7 @@ static BOOL AdapterIgnoreTable_IsIgnored(const AdapterIgnoreTable* table, const 
             }
         }
         if (haveParsedGuid && IsEqualGUID(parsedAdapterGuid, *adapterGuid)) {
-            return IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName);
+            return IsVirtualOrNonEthernetAdapter(pCurr);
         }
     }
     return FALSE;
@@ -3545,6 +3573,22 @@ static BOOL TryGetCategoryByAdapterProfileGuid(INetworkListManager* pNLM,
                 found = TRUE;
                 Wh_Log(L"Network category exact GUID join (%s): %d",
                        reason ? reason : L"unknown", *outCategory);
+            } else {
+                // Keep the lookup exact even if the registry profile key is not
+                // readable or has not been created yet. Falling through to the
+                // profile-name registry scan here can pick a stale same-named
+                // Public profile (common names such as "Network"/"Network 2"),
+                // which is what made Home/Private and Domain/Work networks keep
+                // the Public bench icon. The INetwork object is already matched
+                // to the active adapter, so its category is the safer fallback.
+                NLM_NETWORK_CATEGORY category;
+                if (SUCCEEDED(pNet->GetCategory(&category)) &&
+                    IsValidNetworkCategoryValue((int)category)) {
+                    *outCategory = (int)category;
+                    found = TRUE;
+                    Wh_Log(L"Network category exact adapter NLM fallback (%s): %d",
+                           reason ? reason : L"unknown", *outCategory);
+                }
             }
         }
         pNet->Release();
@@ -3891,6 +3935,29 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
 // DirectUI draws the active-network icon itself. Decode the PNG at the exact
 // size it requests, using CreateIconFromBase64PNG's HighQualityBicubic (mode
 // 7) path, instead of passing it the 35rp flyout icon and letting it upscale.
+static void PublishNetworkLocationCategory(int category, BOOL allowClear) {
+    if (!IsValidNetworkCategoryValue(category) && !allowClear)
+        return;
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    int oldCategory = g_CurrentNetworkCategory;
+    g_CurrentNetworkCategory = IsValidNetworkCategoryValue(category) ? category : -1;
+
+    // DirectUI keeps asking LoadImageW for the active-network icon after our
+    // message-only refresh. If the first render used the Public fallback while
+    // the background category probe was still running, drop the size/category
+    // cache when the authoritative Home/Public/Work category changes so the
+    // next LoadImageW call cannot reuse the stale bench icon.
+    if (oldCategory != g_CurrentNetworkCategory && g_hIconNetLocDUI) {
+        DestroyIcon(g_hIconNetLocDUI);
+        g_hIconNetLocDUI = NULL;
+        g_iconNetLocDUIW = 0;
+        g_iconNetLocDUIH = 0;
+        g_iconNetLocDUICategory = -1;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
 static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
     NetworkStateSnapshot state;
     CaptureNetworkState(&state);
@@ -4233,6 +4300,12 @@ void PositionWindowNearTray(HWND hwnd) {
 #ifndef IF_TYPE_ETHERNET_CSMACD
 #define IF_TYPE_ETHERNET_CSMACD 6
 #endif
+#ifndef IF_TYPE_FASTETHER
+#define IF_TYPE_FASTETHER 62
+#endif
+#ifndef IF_TYPE_GIGABITETHERNET
+#define IF_TYPE_GIGABITETHERNET 117
+#endif
 #ifndef NLM_ENUM_NETWORK_CONNECTED
 #define NLM_ENUM_NETWORK_CONNECTED ((NLM_ENUM_NETWORK)1)
 #endif
@@ -4518,16 +4591,77 @@ static BOOL ContainsKeywordCI(LPCWSTR str, LPCWSTR keyword) {
     return FALSE;
 }
 
-static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR /*name*/) {
-    if (!desc) return FALSE;
+static BOOL IsEthernetIfType(ULONG ifType) {
+    return ifType == IF_TYPE_ETHERNET_CSMACD ||
+           ifType == IF_TYPE_FASTETHER ||
+           ifType == IF_TYPE_GIGABITETHERNET;
+}
+
+static BOOL IsVirtualOrNonEthernetAdapter(const IP_ADAPTER_ADDRESSES* adapter) {
+    if (!adapter) return FALSE;
+
+    if (!IsEthernetIfType(adapter->IfType))
+        return TRUE;
+
+    // Prefer language-independent interface metadata. Adapter descriptions and
+    // friendly names can come from localized driver INFs, so generic English
+    // words such as "virtual", "wireless" or "miniport" are not reliable as
+    // the primary classifier. GetIfEntry2 exposes the NDIS media/access type
+    // and whether Windows considers the interface a filter rather than the
+    // underlying network adapter.
+    MIB_IF_ROW2 row = {};
+    row.InterfaceLuid = adapter->Luid;
+    DWORD rowResult = GetIfEntry2(&row);
+    if (rowResult != NO_ERROR && adapter->IfIndex) {
+        ZeroMemory(&row, sizeof(row));
+        row.InterfaceIndex = adapter->IfIndex;
+        rowResult = GetIfEntry2(&row);
+    }
+
+    if (rowResult == NO_ERROR) {
+        if (!IsEthernetIfType(row.Type))
+            return TRUE;
+
+        // NET_IF_ACCESS_BROADCAST == 2. Ethernet is a broadcast medium;
+        // loopback, point-to-point and tunnel-style interfaces are not.
+        if ((int)row.AccessType != 2)
+            return TRUE;
+
+        // NdisMedium802_3 == 0. Anything else is not classic Ethernet.
+        if ((int)row.MediaType != 0)
+            return TRUE;
+
+        // Exclude clearly wireless physical media using stable NDIS enum
+        // values: WirelessLan=1, WirelessWan=8, Native802_11=9, Bluetooth=10.
+        int physicalMedium = (int)row.PhysicalMediumType;
+        if (physicalMedium == 1 || physicalMedium == 8 ||
+            physicalMedium == 9 || physicalMedium == 10)
+            return TRUE;
+
+        // Do not require HardwareInterface here. Some real adapters/drivers do
+        // not report it consistently, and rejecting them makes Ethernet appear
+        // disconnected, which in turn leaves the location icon on the Public
+        // fallback. Filter interfaces, however, are not the underlying network
+        // adapter and should not drive the Ethernet state.
+        if (row.InterfaceAndOperStatusFlags.FilterInterface)
+            return TRUE;
+    }
+
+    // Last-resort fallback for well-known invariant driver/protocol names.
+    // Avoid localized generic English words here; the GetIfEntry2 checks above
+    // are the primary language-independent filter.
+    const WCHAR* desc = adapter->Description;
+    const WCHAR* name = adapter->FriendlyName;
     const WCHAR* ignoreKeywords[] = {
-        L"vmware", L"virtualbox", L"virtual", L"hyper-v", L"vethernet",
-        L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth", L"wireguard",
-        L"tailscale", L"openvpn", L"warp", L"pseudo", L"miniport", L"wi-fi direct",
-        L"wireless", L"wlan", L"wi-fi", L"802.11"
+        L"vmware", L"virtualbox", L"hyper-v", L"vethernet",
+        L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth",
+        L"wireguard", L"tailscale", L"openvpn", L"warp",
+        L"wi-fi direct", L"802.11"
     };
     for (size_t i = 0; i < ARRAYSIZE(ignoreKeywords); i++) {
-        if (ContainsKeywordCI(desc, ignoreKeywords[i])) return TRUE;
+        if (ContainsKeywordCI(desc, ignoreKeywords[i]) ||
+            ContainsKeywordCI(name, ignoreKeywords[i]))
+            return TRUE;
     }
     return FALSE;
 }
@@ -4576,7 +4710,7 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr,
         }
         if (res == NO_ERROR && pAddresses) {
             for (PIP_ADAPTER_ADDRESSES pCurr = pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
-                if ((pCurr->IfType == IF_TYPE_ETHERNET_CSMACD || pCurr->IfType == 117 || pCurr->IfType == 62) &&
+                if (IsEthernetIfType(pCurr->IfType) &&
                     pCurr->OperStatus == IfOperStatusUp &&
                     pCurr->FirstUnicastAddress != NULL) {
                     
@@ -4602,7 +4736,7 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr,
                     }
                     LeaveCriticalSection(&g_Ctx.csLock);
                     if (isWifiGuid) continue;
-                    if (IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName))
+                    if (IsVirtualOrNonEthernetAdapter(pCurr))
                         continue;
 
                     foundPhysicalEthernet = TRUE;
@@ -4704,7 +4838,7 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr,
 void UpdateFlyoutWindowSize(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     
-    BOOL showWifiList = (g_NetworkCount > 0);
+    BOOL showWifiList = (GetNetworkCountSafe() > 0);
     int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
     int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
     
@@ -4780,17 +4914,13 @@ void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOv
                          (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
     if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
         int category = DetectNetworkLocationCategory(pNLMOverride, useOnlyOverride);
-        EnterCriticalSection(&g_Ctx.csLock);
-        g_CurrentNetworkCategory = category;
-        LeaveCriticalSection(&g_Ctx.csLock);
+        PublishNetworkLocationCategory(category, TRUE);
     } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
         // Don't wipe the reliable fallback just because the connection is
         // momentarily settling (e.g. during a reconnect). While the flyout is
         // merely hidden, g_CurrentNetworkCategory is left untouched below so
         // the first paint after reopening doesn't flash the generic icon.
-        EnterCriticalSection(&g_Ctx.csLock);
-        g_CurrentNetworkCategory = -1;
-        LeaveCriticalSection(&g_Ctx.csLock);
+        PublishNetworkLocationCategory(-1, TRUE);
     }
     
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
@@ -5030,9 +5160,9 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 return (INT_PTR)hBrushHideLight;
             }
         }
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
@@ -5074,9 +5204,9 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam; HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
@@ -5161,14 +5291,19 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
     wc.lpszClassName = L"Win7NetPwdClass";
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
-    // Registered against the mod's own HINSTANCE (see HINST_THISCOMPONENT),
-    // so a leftover registration from a previous load can never collide with
-    // this one - no need to pre-emptively UnregisterClassW, which would
-    // otherwise fail (and thus be a no-op) whenever a window of the class
-    // still exists, letting CreateWindowExW below create a window on a
-    // stale class with a dangling WndProc.
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        Wh_Log(L"PromptNetworkPassword: RegisterClassW failed (%lu)", GetLastError());
+    // First RegisterClassW of a load is required to succeed (a leftover class
+    // from a previous load bails out rather than creating a window on a stale
+    // class with a dangling WndProc), while later calls in the same load can
+    // skip re-registering.
+    if (!g_pwdClassRegistered) {
+        if (RegisterClassW(&wc)) {
+            g_pwdClassRegistered = true;
+        } else {
+            Wh_Log(L"PromptNetworkPassword: RegisterClassW failed (%lu)", GetLastError());
+            g_inPasswordPrompt = FALSE;
+            return FALSE;
+        }
+    }
     
     PasswordDlgData data = { passwordBuffer, bufferSize, FALSE };
     RECT rcWork;
@@ -5450,7 +5585,7 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
 // off the flyout's UI thread. See the call site in AskForPasswordAndConnect.
 static unsigned __stdcall ReapConnectThreadHandleProc(void* p) {
     HANDLE h = (HANDLE)p;
-    WaitForSingleObject(h, 5000);
+    WaitForSingleObject(h, INFINITE);
     CloseHandle(h);
     return 0;
 }
@@ -5702,15 +5837,25 @@ void DisconnectFromNetwork(int index) {
 
 void CheckConnectionTimeouts() {
     if (!g_Ctx.hWlanClient) return;
+
+    BOOL doRefresh = FALSE;
+    BOOL doTimeoutMsg = FALSE;
+    BOOL doInvalidate = FALSE;
+
+    EnterCriticalSection(&g_Ctx.csLock);
     if (g_PendingConnectIndex < 0 || g_PendingConnectIndex >= g_NetworkCount) {
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
     WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-    if (item->operationStartTime == 0) return;
+    if (item->operationStartTime == 0) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        return;
+    }
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -5719,6 +5864,7 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
     if (item->connState == CONN_STATE_ERROR) {
@@ -5729,7 +5875,9 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
-        if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        doInvalidate = TRUE;
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (doInvalidate && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             InvalidateRect(g_hWndFlyout, NULL, TRUE);
             UpdateLayoutGeometry();
         }
@@ -5746,11 +5894,13 @@ void CheckConnectionTimeouts() {
                 KillTimer(g_hWndFlyout, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
             }
-            if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-                RefreshNetworkData();
-                InvalidateRect(g_hWndFlyout, NULL, TRUE);
-                UpdateLayoutGeometry();
-            }
+            doRefresh = TRUE;
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (doRefresh && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+            RefreshNetworkData();
+            InvalidateRect(g_hWndFlyout, NULL, TRUE);
+            UpdateLayoutGeometry();
         }
         return;
     }
@@ -5764,12 +5914,14 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
-        if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-            MessageBoxW(g_hWndFlyout, LOC(STR_CONNECTION_TIMEOUT_MSG), 
-                       LOC(STR_TIMEOUT_ERROR), MB_OK | MB_ICONWARNING);
-            InvalidateRect(g_hWndFlyout, NULL, TRUE);
-            UpdateLayoutGeometry();
-        }
+        doTimeoutMsg = TRUE;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (doTimeoutMsg && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        MessageBoxW(g_hWndFlyout, LOC(STR_CONNECTION_TIMEOUT_MSG), 
+                   LOC(STR_TIMEOUT_ERROR), MB_OK | MB_ICONWARNING);
+        InvalidateRect(g_hWndFlyout, NULL, TRUE);
+        UpdateLayoutGeometry();
     }
 }
 
@@ -6275,6 +6427,47 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     }
 }
 
+static BOOL BringProfileDialogToForeground() {
+    if (!g_hProfileDialogThread)
+        return FALSE;
+
+    DWORD tid = GetThreadId(g_hProfileDialogThread);
+    if (!tid)
+        return FALSE;
+
+    struct EnumData {
+        HWND hwnd;
+    } data = {};
+
+    EnumThreadWindows(tid, [](HWND h, LPARAM lp) -> BOOL {
+        EnumData* data = reinterpret_cast<EnumData*>(lp);
+        if (!IsWindowVisible(h))
+            return TRUE;
+
+        data->hwnd = h;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&data));
+
+    if (!data.hwnd)
+        return FALSE;
+
+    if (IsIconic(data.hwnd))
+        ShowWindow(data.hwnd, SW_RESTORE);
+    else
+        ShowWindow(data.hwnd, SW_SHOWNORMAL);
+
+    BringWindowToTop(data.hwnd);
+    SetForegroundWindow(data.hwnd);
+
+    FLASHWINFO flashInfo = { sizeof(flashInfo) };
+    flashInfo.hwnd = data.hwnd;
+    flashInfo.dwFlags = FLASHW_CAPTION | FLASHW_TRAY;
+    flashInfo.uCount = 3;
+    FlashWindowEx(&flashInfo);
+
+    return TRUE;
+}
+
 static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID lpParam) {
     std::unique_ptr<WlanProfileDialogContext> context(
         static_cast<WlanProfileDialogContext*>(lpParam));
@@ -6476,7 +6669,12 @@ case IDM_PROPERTIES:
         } else {
             // A profile-properties dialog is already open. Do not fall through
             // to adapter properties, because that would show a different UI for
-            // the same "Properties" command.
+            // the same "Properties" command. Bring/flash the existing dialog so
+            // the command gives visible feedback instead of appearing to do
+            // nothing.
+            if (!BringProfileDialogToForeground()) {
+                Wh_Log(L"Properties dialog already open, but no visible dialog window was found");
+            }
             launched = TRUE;
         }
     }
@@ -6550,8 +6748,9 @@ static RECT GetFooterRect() {
 }
 
 void EnsureRowVisible(int index) {
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || index < 0 || index >= g_NetworkCount) return;
+    int networkCount = GetNetworkCountSafe();
+    BOOL showWifiList = (networkCount > 0);
+    if (!showWifiList || index < 0 || index >= networkCount) return;
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int totalHeight = GetTotalListHeight();
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
@@ -6828,7 +7027,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_VSCROLL: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (!showWifiList) break;
         int totalHeight = GetTotalListHeight();
         int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -6851,7 +7050,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_MOUSEWHEEL: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (!showWifiList) break;
         int totalHeight = GetTotalListHeight();
         int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -7352,9 +7551,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg);
@@ -7409,9 +7608,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
         HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg);
@@ -7456,7 +7655,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         int  wasHov     = g_HoveredRowIndex;
         BOOL wasConnectHover = g_IsHoveringConnectButton;
         
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         
         g_IsHoveringLink    = PtInRect(&rcF, pt) != 0;
         g_IsHoveringRefresh = showWifiList && PtInRect(&g_rcRefreshButton, pt) != 0;
@@ -7500,7 +7699,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         
         if (showWifiList && PtInRect(&g_rcRefreshButton,pt)) {
             Wh_Log(L"Manual refresh requested");
@@ -7571,7 +7770,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     }
     case WM_RBUTTONDOWN: {
         int rx = LOWORD(lParam), ry = HIWORD(lParam);
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (showWifiList && g_bListExpanded && ry >= LIST_Y_START && ry < LIST_Y_END) {
             int ci = HitTestRows(rx,ry);
             if (ci != -1) {
@@ -7791,14 +7990,19 @@ void ToggleFlyoutWindow() {
             wc.lpszClassName = L"Win7NetworkFlyoutSafe";
             wc.hCursor       = LoadCursor(NULL,IDC_ARROW);
             wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
-            // Own HINSTANCE (see HINST_THISCOMPONENT) means a leftover
-            // registration from a previous load/unload cycle can't collide
-            // with this one, so the pre-emptive UnregisterClassW - which
-            // silently failed (and did nothing) while a window of the class
-            // was still alive, letting CreateWindowExW below reuse the
-            // stale class with a dangling WndProc - is no longer needed.
-            if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-                Wh_Log(L"ToggleFlyoutWindow: RegisterClassW failed (%lu)", GetLastError());
+            // First RegisterClassW of a load is required to succeed (a leftover
+            // class from a previous load bails out rather than creating a window
+            // on a stale class with a dangling WndProc), while later calls in
+            // the same load can skip re-registering.
+            if (!g_flyoutClassRegistered) {
+                if (RegisterClassW(&wc)) {
+                    g_flyoutClassRegistered = true;
+                } else {
+                    Wh_Log(L"ToggleFlyoutWindow: RegisterClassW failed (%lu)", GetLastError());
+                    LeaveCriticalSection(&g_Ctx.csLock);
+                    return;
+                }
+            }
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
             DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; 
@@ -8016,6 +8220,18 @@ void SafeCleanup() {
         WaitForSingleObject(g_hReapThread, INFINITE);
         CloseHandle(g_hReapThread);
         g_hReapThread = NULL;
+    }
+    if (g_hProfileDialogThread) {
+        DWORD tid = GetThreadId(g_hProfileDialogThread);
+        if (tid) {
+            EnumThreadWindows(tid, [](HWND h, LPARAM) -> BOOL {
+                PostMessageW(h, WM_CLOSE, 0, 0);
+                return TRUE;
+            }, 0);
+        }
+        WaitForSingleObject(g_hProfileDialogThread, INFINITE);
+        CloseHandle(g_hProfileDialogThread);
+        g_hProfileDialogThread = NULL;
     }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient, NULL); g_Ctx.hWlanClient = NULL; }
     ShutdownGdiPlusRendering();
@@ -9404,78 +9620,29 @@ static bool g_ncOwnsWlanHandleInNonExplorerHost = false;
 // against an unexpected std::bad_alloc or similar from the helper functions
 // it calls into (LoadUifile, RefreshWifiData, etc.), not a substitute for
 // checking those return codes, which are still checked individually below.
+static LONG volatile g_ncRefreshInFlight = 0;
+static HANDLE g_ncRefreshThread = NULL;   // joined in Wh_ModUninit
+static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID);
+
 static void PrimeNetworkCategoryForNetCenterHost() {
     if (g_ncCategoryPrimeAttempted || g_IsExplorerHost)
         return;
     g_ncCategoryPrimeAttempted = true;
 
-    // COINIT_APARTMENTTHREADED matches how the flyout side uses COM
-    // (CoCreateInstance for NLM, no free-threaded marshaling needed).
-    // S_OK: we initialized a fresh apartment on this thread - must pair
-    //   with CoUninitialize() later, on this same thread.
-    // S_FALSE: COM was already initialized on this thread with a
-    //   compatible model - our call added a refcount, so it still needs
-    //   a matching CoUninitialize() to release it.
-    // RPC_E_CHANGED_MODE: an incompatible apartment already exists here;
-    //   we didn't change anything and must NOT call CoUninitialize().
-    // Anything else: leave COM alone; NLM calls will simply keep failing
-    //   gracefully, same as before this fix.
-    HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (hrCo == S_OK || hrCo == S_FALSE) {
-        g_ncComInitializedByUs = true;
-    } else if (hrCo == RPC_E_CHANGED_MODE) {
-        Wh_Log(L"[NetMap] COM already initialized with a different concurrency "
-               L"model on this thread; continuing without re-initializing it");
+    if (InterlockedCompareExchange(&g_ncRefreshInFlight, 1, 0) != 0)
+        return;
+
+    if (g_ncRefreshThread) {
+        CloseHandle(g_ncRefreshThread);
+        g_ncRefreshThread = NULL;
+    }
+    g_ncRefreshThread = CreateThread(NULL, 0, NcNetworkDataRefreshWorker, NULL, 0, NULL);
+    if (!g_ncRefreshThread) {
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        Wh_Log(L"[NetMap] CreateThread failed for initial priming pass");
     } else {
-        Wh_Log(L"[NetMap] CoInitializeEx failed (hr=0x%08X); NLM-based detection "
-               L"and online/offline state may stay on their fallback values", hrCo);
+        Wh_Log(L"[NetMap] Kicked off background network data priming thread in non-explorer host");
     }
-
-    if (!g_Ctx.hWlanClient) {
-        DWORD dwMaxClient = 2, dwCurVer = 0;
-        HANDLE hClient = NULL;
-        DWORD wlanResult = WlanOpenHandle(dwMaxClient, NULL, &dwCurVer, &hClient);
-        if (wlanResult == ERROR_SUCCESS && hClient) {
-            EnterCriticalSection(&g_Ctx.csLock);
-            if (!g_Ctx.hWlanClient) {
-                g_Ctx.hWlanClient = hClient;
-                g_ncOwnsWlanHandleInNonExplorerHost = true;
-            } else {
-                WlanCloseHandle(hClient, NULL);
-                hClient = nullptr;
-            }
-            LeaveCriticalSection(&g_Ctx.csLock);
-        } else {
-            Wh_Log(L"[NetMap] WlanOpenHandle failed in non-explorer host (error=%lu); "
-                   L"Wi-Fi name/category detection will be skipped, Ethernet/registry paths still tried",
-                   wlanResult);
-        }
-    }
-
-    // Keep the NLM interface private to this STA. Publishing it in g_pNLM
-    // would make Wh_ModUninit release an unmarshalled COM object from another
-    // thread in control.exe. ComPtr already frees this on scope exit in
-    // every non-explorer-host return path (including the early-return at
-    // the top of this function on a later call), so it never leaks - the
-    // earlier concern was specifically about a raw g_pNLM being populated
-    // by this path and never released; useOnlyOverride=true below prevents
-    // that from happening at all.
-    ComPtr<INetworkListManager> nlm;
-    HRESULT hrNlm = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                                      IID_INetworkListManager, (void**)nlm.put());
-    if (FAILED(hrNlm)) {
-        // Don't infer "use the shared instance" from a null pointer here -
-        // that's exactly the cross-apartment use / use-after-free that this
-        // isolated instance exists to avoid (HotkeyThreadProc can Release()
-        // g_pNLM concurrently). Skip NLM-backed detection for this pass and
-        // let it fall back to the existing Public/offline default.
-        Wh_Log(L"[NetMap] CoCreateInstance(NetworkListManager) failed (hr=0x%08X); "
-               L"skipping NLM-backed detection for this priming pass", hrNlm);
-    }
-    RefreshNetworkData(/*forceDetection=*/TRUE, nlm.get(), /*useOnlyOverride=*/true);
-    Wh_Log(L"[NetMap] One-time priming in non-explorer host finished "
-           L"(category=%d, online=%d)",
-           g_CurrentNetworkCategory, (int)IsInternetConnected());
 }
 
 // Refreshes the shared Wi-Fi/Ethernet/category state from whichever process
@@ -9489,8 +9656,6 @@ static void PrimeNetworkCategoryForNetCenterHost() {
 // Guards against overlapping worker runs (Patch() can trigger a refresh
 // request again - immediate + the 350 ms delayed pass - before a previous
 // one finishes).
-static LONG volatile g_ncRefreshInFlight = 0;
-
 static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
     // Thread pool threads have no COM apartment by default, but the
     // CoCreateInstance() below needs one. Balance whatever we do here at
@@ -9555,18 +9720,20 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
     // lock-free COM/WLAN work, locked publish of g_Ethernet*
     UpdateEthernetStatus(localNlm.get(), /*useOnlyOverride=*/true);
 
-    // Category only if still unknown. Failures are non-fatal: the icon
-    // then falls back to the colored Public icon, never the gray one.
+    // Re-evaluate the category on every worker pass, not only while it is
+    // unknown. The first DirectUI render can legitimately use the Public bench
+    // fallback before this background worker completes; if that Public value is
+    // treated as final, Home/Private and Domain/Work profiles never get a
+    // chance to replace it with the house/buildings icon.
     NetworkStateSnapshot state;
     CaptureNetworkState(&state);
     BOOL isAnyConnected = state.ethernetConnected ||
         (state.networkCount > 0 && state.networks[0].connState == CONN_STATE_CONNECTED);
-    if (isAnyConnected && g_Settings.useNetworkLocationIcons &&
-        !IsValidNetworkCategoryValue(state.currentNetworkCategory)) {
+    if (isAnyConnected && g_Settings.useNetworkLocationIcons) {
         int category = DetectNetworkLocationCategory(localNlm.get(), /*useOnlyOverride=*/true);
-        EnterCriticalSection(&g_Ctx.csLock);
-        g_CurrentNetworkCategory = category;
-        LeaveCriticalSection(&g_Ctx.csLock);
+        PublishNetworkLocationCategory(category, FALSE);
+    } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
+        PublishNetworkLocationCategory(-1, TRUE);
     }
 
     if (comInitializedHere)
@@ -9596,7 +9763,6 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
 // result. The actual WLAN/COM work runs on a worker thread - see
 // NcNetworkDataRefreshWorker() - instead of blocking whatever Explorer UI
 // thread happens to be rendering the page or handling a connectivity event.
-static HANDLE g_ncRefreshThread = NULL;   // joined in Wh_ModUninit
 
 static void EnsureNetCenterNetworkDataFresh() {
     if (g_ncSkipRefreshOnThisPass)
@@ -10010,6 +10176,18 @@ void Wh_ModUninit() {
             Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
         }
     }
-    UnregisterClassW(L"Win7NetworkFlyoutSafe", HINST_THISCOMPONENT);
-    UnregisterClassW(L"Win7NetPwdClass", HINST_THISCOMPONENT);
+    if (g_flyoutClassRegistered) {
+        if (UnregisterClassW(L"Win7NetworkFlyoutSafe", HINST_THISCOMPONENT)) {
+            g_flyoutClassRegistered = false;
+        } else {
+            Wh_Log(L"UnregisterClassW(Win7NetworkFlyoutSafe) failed (%lu)", GetLastError());
+        }
+    }
+    if (g_pwdClassRegistered) {
+        if (UnregisterClassW(L"Win7NetPwdClass", HINST_THISCOMPONENT)) {
+            g_pwdClassRegistered = false;
+        } else {
+            Wh_Log(L"UnregisterClassW(Win7NetPwdClass) failed (%lu)", GetLastError());
+        }
+    }
 }
