@@ -47,16 +47,16 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 // ==WindhawkModSettings==
 /*
 - BlobShape:
-  - Dimensions: 'auto, auto'
+  - Dimensions: 'auto, 36'
     $name: Custom blob shape dimensions (Width, Height)
     $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs down from the top of the taskbar.
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
     $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Leave empty to disable.
-  - BottomRadius: '4.0'
+  - BottomRadius: '4'
     $name: Bottom corner radius
     $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
-  - TopRadius: '6.0'
+  - TopRadius: '8'
     $name: Top corner radius
     $description: The radius of the concave top flare corners. The blob shape extends upward and sideways by this amount. Set to 0 to disable the flare.
   $name: Blob Shape Settings
@@ -94,7 +94,7 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 
 struct Settings {
     double BottomRadius = 4.0;
-    double TopRadius = 6.0;
+    double TopRadius = 8.0;
 
     double CustomWidth = -1.0;
     double CustomHeight = -1.0;
@@ -303,7 +303,7 @@ void LoadSettings() {
     g_settings.BottomRadius = ParseDouble(radiusStr.get(), 4.0);
 
     WindhawkUtils::StringSetting topRadiusStr(Wh_GetStringSetting(L"BlobShape.TopRadius"));
-    g_settings.TopRadius = ParseDouble(topRadiusStr.get(), 6.0);
+    g_settings.TopRadius = ParseDouble(topRadiusStr.get(), 8.0);
 
     WindhawkUtils::StringSetting customCStr(Wh_GetStringSetting(L"Colors.CustomColor"));
     ParseGradientColorPair(customCStr.get(), g_settings.ParsedLightColor, g_settings.ParsedDarkColor);
