@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips
-// @version         0.1.12
+// @version         0.1.13
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -61,14 +61,14 @@ keyboard shortcut text are also preserved.
   source-element level. Only plain local string values in the `Text` source of
   XAML menu items and `ToolTip.Content` are changed; bindings, styles,
   presenter `TextBlock` values, ordinary XAML text, and taskbar thumbnail
-  previews are untouched. Popup visibility is maintained from accessibility
-  show/hide/destroy events, and each source is restored only when its owning
-  popup closes. This path is disabled by default; enable `modernUiText` to opt
-  in.
+  previews are untouched. A source is changed when XAML Diagnostics reports
+  that it was added and restored when it is removed or the mod unloads. This
+  path is disabled by default; enable `modernUiText` to opt in.
 
 The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
-so another diagnostics-based customization tool can prevent this path from
+so another diagnostics-based customization tool, including Windows 11 Taskbar
+Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing.
 
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
@@ -78,7 +78,8 @@ flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
 The mod doesn't edit system files, registry values, or file names. A file name
 shown in a classic menu can nevertheless be displayed with inserted spaces.
 The modern path temporarily changes target source values on their XAML UI
-threads and restores them with their owning popup. The classic path updates
+threads and restores them when the source leaves the visual tree or the mod
+unloads. The classic path updates
 strings stored in active `HMENU` objects, so menu text read through
 accessibility APIs also contains the inserted spaces while the popup is open.
 Rewritten strings are recorded and restored when the popup closes.
@@ -95,7 +96,7 @@ Rewritten strings are recorded and restored when the popup closes.
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
 - modernUiText: false
   $name: Windows 11 context menus and tooltips
-  $description: Process text elements in Explorer XAML context menus and pointer tooltips.
+  $description: Process text elements in Explorer XAML context menus and pointer tooltips. Uses exclusive XAML Diagnostics connections and can conflict with Windows 11 Taskbar Styler, Windows 11 File Explorer Styler, or other diagnostics-based tools.
 - characterMode: unicode
   $name: Non-CJK character set
   $description: Choose which letters and digits form a spacing boundary with CJK.
@@ -1191,126 +1192,6 @@ namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace mux = winrt::Microsoft::UI::Xaml;
 
-struct VisibleModernPopup {
-    DWORD threadId;
-    uint64_t sequence;
-};
-
-std::mutex g_visibleModernPopupsMutex;
-std::unordered_map<HWND, VisibleModernPopup> g_visibleModernPopups;
-uint64_t g_nextModernPopupSequence;
-HWINEVENTHOOK g_modernPopupWinEventHook;
-
-bool IsModernPopupClassName(LPCWSTR className) {
-    return className &&
-           (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
-            _wcsicmp(className,
-                     L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0);
-}
-
-bool IsModernPopupWindow(HWND window) {
-    wchar_t className[128];
-    return window &&
-           GetClassNameW(window, className, ARRAYSIZE(className)) > 0 &&
-           IsModernPopupClassName(className);
-}
-
-bool TrackVisibleModernPopup(HWND window, bool requireVisible) {
-    if (!window ||
-        (requireVisible && !IsWindowVisible(window)) ||
-        !IsModernPopupWindow(window)) {
-        return false;
-    }
-
-    DWORD processId;
-    const DWORD threadId =
-        GetWindowThreadProcessId(window, &processId);
-    if (!threadId || processId != GetCurrentProcessId()) {
-        return false;
-    }
-
-    std::lock_guard<std::mutex> guard(g_visibleModernPopupsMutex);
-    g_visibleModernPopups[window] = {
-        threadId, ++g_nextModernPopupSequence};
-    return true;
-}
-
-bool IsTrackedModernPopup(HWND window, DWORD threadId) {
-    std::lock_guard<std::mutex> guard(g_visibleModernPopupsMutex);
-    const auto iterator = g_visibleModernPopups.find(window);
-    return iterator != g_visibleModernPopups.end() &&
-           iterator->second.threadId == threadId &&
-           IsWindow(window) && IsModernPopupWindow(window);
-}
-
-struct FindVisibleModernPopupData {
-    HWND window;
-};
-
-BOOL CALLBACK FindVisibleModernPopupForThread(HWND window, LPARAM parameter) {
-    auto* data =
-        reinterpret_cast<FindVisibleModernPopupData*>(parameter);
-    if (IsWindowVisible(window) && IsModernPopupWindow(window)) {
-        data->window = window;
-        TrackVisibleModernPopup(window, true);
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-HWND GetMostRecentModernPopupForThread(DWORD threadId) {
-    HWND result = nullptr;
-    uint64_t latestSequence = 0;
-    {
-        std::lock_guard<std::mutex> guard(
-            g_visibleModernPopupsMutex);
-        for (auto iterator = g_visibleModernPopups.begin();
-             iterator != g_visibleModernPopups.end();) {
-            if (!IsWindow(iterator->first) ||
-                !IsModernPopupWindow(iterator->first)) {
-                iterator = g_visibleModernPopups.erase(iterator);
-                continue;
-            }
-
-            if (iterator->second.threadId == threadId &&
-                iterator->second.sequence > latestSequence) {
-                result = iterator->first;
-                latestSequence = iterator->second.sequence;
-            }
-
-            ++iterator;
-        }
-    }
-
-    if (result) {
-        return result;
-    }
-
-    // Covers a popup that was already visible when the mod was enabled.
-    FindVisibleModernPopupData data{};
-    EnumThreadWindows(
-        threadId, FindVisibleModernPopupForThread,
-        reinterpret_cast<LPARAM>(&data));
-    return data.window;
-}
-
-BOOL CALLBACK DiscoverVisibleModernPopup(HWND window, LPARAM) {
-    DWORD processId;
-    GetWindowThreadProcessId(window, &processId);
-    if (processId == GetCurrentProcessId() &&
-        IsWindowVisible(window)) {
-        TrackVisibleModernPopup(window, true);
-    }
-
-    return TRUE;
-}
-
-void ClearVisibleModernPopups() {
-    std::lock_guard<std::mutex> guard(g_visibleModernPopupsMutex);
-    g_visibleModernPopups.clear();
-}
-
 template <typename Element, typename DependencyProperty>
 bool ReadLocalStringValue(const Element& element,
                           DependencyProperty property,
@@ -1371,9 +1252,8 @@ struct TooltipContentAccess {
 class ModernTextStateBase {
 public:
     virtual ~ModernTextStateBase() = default;
-    virtual void Apply(HWND popupWindow) = 0;
-    virtual void Restore(bool clearOwnership) = 0;
-    virtual HWND PopupWindow() const = 0;
+    virtual void Apply() = 0;
+    virtual void Restore() = 0;
 };
 
 template <typename Element, typename SourceAccess>
@@ -1382,23 +1262,12 @@ public:
     explicit ModernTextState(const Element& element)
         : m_element(winrt::make_weak(element)) {}
 
-    void Apply(HWND popupWindow) override {
-        const DWORD threadId = GetCurrentThreadId();
-        if (!g_modernUiText.load(std::memory_order_relaxed) ||
-            !popupWindow ||
-            !IsTrackedModernPopup(popupWindow, threadId)) {
+    void Apply() override {
+        if (!g_modernUiText.load(std::memory_order_relaxed)) {
             return;
         }
 
         try {
-            if (m_popupWindow && m_popupWindow != popupWindow) {
-                if (IsTrackedModernPopup(m_popupWindow, threadId)) {
-                    return;
-                }
-                Restore(true);
-            }
-            m_popupWindow = popupWindow;
-
             auto element = m_element.get();
             if (!element) {
                 return;
@@ -1414,8 +1283,8 @@ public:
                     return;
                 }
 
-                // The application updated the source while the popup was
-                // visible. Preserve that update and use it as the new source.
+                // The application updated the source while it was tracked.
+                // Preserve that update and use it as the new source.
                 m_modified = false;
                 m_originalText.clear();
                 m_spacedText.clear();
@@ -1442,11 +1311,8 @@ public:
         }
     }
 
-    void Restore(bool clearOwnership) override {
+    void Restore() override {
         if (!m_modified) {
-            if (clearOwnership) {
-                m_popupWindow = nullptr;
-            }
             return;
         }
 
@@ -1465,20 +1331,12 @@ public:
         }
 
         m_modified = false;
-        if (clearOwnership) {
-            m_popupWindow = nullptr;
-        }
         m_originalText.clear();
         m_spacedText.clear();
     }
 
-    HWND PopupWindow() const override {
-        return m_popupWindow;
-    }
-
 private:
     winrt::weak_ref<Element> m_element;
-    HWND m_popupWindow = nullptr;
     bool m_modified = false;
     std::wstring m_originalText;
     std::wstring m_spacedText;
@@ -1516,27 +1374,73 @@ using ModernTextStateMap =
                        std::shared_ptr<ModernTextStateBase>,
                        ModernElementKeyHash>;
 
-using ModernElementKeySet =
-    std::unordered_set<ModernElementKey, ModernElementKeyHash>;
-
 struct ModernThreadState {
     ModernTextStateMap states;
-    // Newly observed sources wait for the next popup SHOW. Ownership is kept
-    // across HIDE so another popup can't claim a cached source.
-    ModernElementKeySet pending;
-    std::unordered_map<HWND, ModernElementKeySet> ownedByPopup;
 };
 
 thread_local std::optional<ModernThreadState>
     g_modernTextStatesForThread{std::in_place};
 
 std::mutex g_modernTextStateThreadsMutex;
-std::unordered_set<DWORD> g_modernTextStateThreads;
+std::unordered_map<DWORD, uint64_t> g_modernTextStateThreads;
+
+bool GetThreadCreationTime(HANDLE thread, uint64_t* creationTime) {
+    FILETIME creation;
+    FILETIME exit;
+    FILETIME kernel;
+    FILETIME user;
+    if (!GetThreadTimes(thread, &creation, &exit, &kernel, &user)) {
+        return false;
+    }
+
+    ULARGE_INTEGER value;
+    value.LowPart = creation.dwLowDateTime;
+    value.HighPart = creation.dwHighDateTime;
+    *creationTime = value.QuadPart;
+    return true;
+}
+
+bool IsRegisteredThreadAlive(DWORD threadId, uint64_t creationTime) {
+    HANDLE thread = OpenThread(
+        SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION,
+        FALSE, threadId);
+    if (!thread) {
+        return false;
+    }
+
+    uint64_t currentCreationTime;
+    const bool alive =
+        WaitForSingleObject(thread, 0) == WAIT_TIMEOUT &&
+        GetThreadCreationTime(thread, &currentCreationTime) &&
+        currentCreationTime == creationTime;
+    CloseHandle(thread);
+    return alive;
+}
+
+void PruneModernTextStateThreadsLocked() {
+    for (auto iterator = g_modernTextStateThreads.begin();
+         iterator != g_modernTextStateThreads.end();) {
+        if (!IsRegisteredThreadAlive(iterator->first,
+                                     iterator->second)) {
+            iterator = g_modernTextStateThreads.erase(iterator);
+        } else {
+            ++iterator;
+        }
+    }
+}
 
 void RegisterModernTextStateThread() {
+    uint64_t creationTime;
+    if (!GetThreadCreationTime(GetCurrentThread(),
+                               &creationTime)) {
+        Wh_Log(L"Couldn't read the current thread creation time");
+        return;
+    }
+
     std::lock_guard<std::mutex> guard(
         g_modernTextStateThreadsMutex);
-    g_modernTextStateThreads.insert(GetCurrentThreadId());
+    PruneModernTextStateThreadsLocked();
+    g_modernTextStateThreads[GetCurrentThreadId()] = creationTime;
 }
 
 void UnregisterModernTextStateThread() {
@@ -1545,96 +1449,14 @@ void UnregisterModernTextStateThread() {
     g_modernTextStateThreads.erase(GetCurrentThreadId());
 }
 
-void ApplyModernTextStatesForPopup(HWND popupWindow) {
-    if (!g_modernTextStatesForThread) {
-        return;
-    }
-
-    auto& threadState = *g_modernTextStatesForThread;
-    if (auto ownerIterator =
-            threadState.ownedByPopup.find(popupWindow);
-        ownerIterator != threadState.ownedByPopup.end()) {
-        for (auto iterator = ownerIterator->second.begin();
-             iterator != ownerIterator->second.end();) {
-            const auto stateIterator =
-                threadState.states.find(*iterator);
-            if (stateIterator == threadState.states.end()) {
-                iterator = ownerIterator->second.erase(iterator);
-                continue;
-            }
-
-            stateIterator->second->Apply(popupWindow);
-            ++iterator;
-        }
-    }
-
-    ModernElementKeySet pending;
-    pending.swap(threadState.pending);
-    if (!pending.empty()) {
-        auto& owned = threadState.ownedByPopup[popupWindow];
-        for (const auto& key : pending) {
-            const auto iterator = threadState.states.find(key);
-            if (iterator == threadState.states.end()) {
-                continue;
-            }
-
-            iterator->second->Apply(popupWindow);
-            owned.insert(key);
-        }
-    }
-}
-
-void RestoreModernTextStatesForPopup(HWND popupWindow,
-                                     bool clearOwnership) {
-    if (!g_modernTextStatesForThread) {
-        return;
-    }
-
-    auto& threadState = *g_modernTextStatesForThread;
-    const auto ownerIterator =
-        threadState.ownedByPopup.find(popupWindow);
-    if (ownerIterator == threadState.ownedByPopup.end()) {
-        return;
-    }
-
-    for (const auto& key : ownerIterator->second) {
-        const auto stateIterator = threadState.states.find(key);
-        if (stateIterator == threadState.states.end()) {
-            continue;
-        }
-
-        stateIterator->second->Restore(clearOwnership);
-        if (clearOwnership) {
-            threadState.pending.insert(key);
-        }
-    }
-
-    if (clearOwnership) {
-        threadState.ownedByPopup.erase(ownerIterator);
-    }
-}
-
 void RemoveModernTextState(ModernThreadState& threadState,
                            const ModernElementKey& key) {
-    threadState.pending.erase(key);
     const auto stateIterator = threadState.states.find(key);
     if (stateIterator == threadState.states.end()) {
         return;
     }
 
-    if (const HWND popupWindow =
-            stateIterator->second->PopupWindow()) {
-        if (auto ownerIterator =
-                threadState.ownedByPopup.find(popupWindow);
-            ownerIterator != threadState.ownedByPopup.end()) {
-            ownerIterator->second.erase(key);
-            if (ownerIterator->second.empty()) {
-                threadState.ownedByPopup.erase(ownerIterator);
-            }
-        }
-    }
-
-    stateIterator->second->Restore(true);
+    stateIterator->second->Restore();
     threadState.states.erase(stateIterator);
 }
 
@@ -1645,7 +1467,7 @@ void CleanupModernTextStatesForCurrentThread() {
 
     for (const auto& [key, state] :
          g_modernTextStatesForThread->states) {
-        state->Restore(true);
+        state->Restore();
     }
     g_modernTextStatesForThread.reset();
     UnregisterModernTextStateThread();
@@ -1671,6 +1493,13 @@ public:
                 if (FAILED(result)) {
                     Wh_Log(L"AdviseVisualTreeChange failed: 0x%08X",
                            result);
+                } else {
+                    watcher->m_advised.store(
+                        true, std::memory_order_release);
+                    if (watcher->m_unadviseRequested.load(
+                            std::memory_order_acquire)) {
+                        watcher->UnadviseVisualTreeChange();
+                    }
                 }
                 watcher->Release();
                 return 0;
@@ -1685,6 +1514,13 @@ public:
     }
 
     void UnadviseVisualTreeChange() {
+        m_unadviseRequested.store(true,
+                                  std::memory_order_release);
+        if (!m_advised.exchange(false,
+                                std::memory_order_acq_rel)) {
+            return;
+        }
+
         const HRESULT result =
             m_xamlDiagnostics.as<IVisualTreeService3>()
                 ->UnadviseVisualTreeChange(this);
@@ -1725,15 +1561,7 @@ private:
             RegisterModernTextStateThread();
         }
         threadState.states.emplace(key, state);
-
-        const HWND popupWindow =
-            GetMostRecentModernPopupForThread(GetCurrentThreadId());
-        if (popupWindow) {
-            state->Apply(popupWindow);
-            threadState.ownedByPopup[popupWindow].insert(key);
-        } else {
-            threadState.pending.insert(key);
-        }
+        state->Apply();
         return true;
     }
 
@@ -1818,6 +1646,8 @@ private:
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
+    std::atomic_bool m_advised{false};
+    std::atomic_bool m_unadviseRequested{false};
 };
 
 std::mutex g_visualTreeWatchersMutex;
@@ -1825,6 +1655,21 @@ std::mutex g_visualTreeWatchersMutex;
     std::optional<std::vector<winrt::com_ptr<VisualTreeWatcher>>>
         g_visualTreeWatchers{std::in_place};
 std::atomic_bool g_stoppingModernUi{false};
+std::atomic_uint64_t g_visualTreeWatcherGeneration;
+
+bool RemoveVisualTreeWatcher(VisualTreeWatcher* watcher) {
+    std::lock_guard<std::mutex> guard(g_visualTreeWatchersMutex);
+    if (!g_visualTreeWatchers) {
+        return false;
+    }
+
+    const size_t previousSize = g_visualTreeWatchers->size();
+    std::erase_if(*g_visualTreeWatchers,
+                  [watcher](const auto& candidate) {
+                      return candidate.get() == watcher;
+                  });
+    return g_visualTreeWatchers->size() != previousSize;
+}
 
 HMODULE GetCurrentModuleHandle() {
     HMODULE module;
@@ -1845,6 +1690,13 @@ class WindhawkTap
                                winrt::non_agile> {
 public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
+        if (m_watcher) {
+            if (RemoveVisualTreeWatcher(m_watcher.get())) {
+                m_watcher->UnadviseVisualTreeChange();
+            }
+            m_watcher = nullptr;
+        }
+
         m_site.copy_from(site);
         if (!site) {
             return S_OK;
@@ -1855,20 +1707,22 @@ public:
             FreeLibrary(module);
         }
 
-        if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
-            return S_OK;
-        }
-
-        auto watcher =
-            winrt::make_self<VisualTreeWatcher>(m_site);
         {
             std::lock_guard<std::mutex> guard(
                 g_visualTreeWatchersMutex);
-            if (g_visualTreeWatchers) {
-                g_visualTreeWatchers->push_back(watcher);
+            if (g_stoppingModernUi.load(
+                    std::memory_order_relaxed) ||
+                !g_visualTreeWatchers) {
+                return S_OK;
             }
+
+            auto watcher =
+                winrt::make_self<VisualTreeWatcher>(m_site);
+            g_visualTreeWatchers->push_back(watcher);
+            g_visualTreeWatcherGeneration.fetch_add(
+                1, std::memory_order_release);
+            m_watcher = std::move(watcher);
         }
-        m_watcher = std::move(watcher);
         return S_OK;
     } catch (...) {
         const HRESULT result = winrt::to_hresult();
@@ -1951,13 +1805,8 @@ using InitializeXamlDiagnosticsEx_t =
     decltype(&InitializeXamlDiagnosticsEx);
 
 std::mutex g_xamlDiagnosticsInitializationMutex;
-std::mutex g_xamlDiagnosticsWorkerMutex;
 bool g_windowsUiXamlDiagnosticsConnected;
 bool g_microsoftUiXamlDiagnosticsConnected;
-HANDLE g_xamlDiagnosticsWakeEvent;
-HANDLE g_xamlDiagnosticsWorkerThread;
-std::atomic_bool g_stopXamlDiagnosticsWorker{false};
-std::atomic_uint64_t g_nextXamlDiagnosticsAttemptTick{0};
 
 HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
                               LPCWSTR connectionPrefix) {
@@ -1984,6 +1833,10 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
 
     HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
     for (int index = 1; index <= 10000; ++index) {
+        if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        }
+
         wchar_t connectionName[256];
         _snwprintf_s(connectionName, _TRUNCATE, L"%s%d",
                      connectionPrefix, index);
@@ -2005,17 +1858,32 @@ void EnsureModernXamlDiagnostics() {
 
     std::lock_guard<std::mutex> guard(
         g_xamlDiagnosticsInitializationMutex);
+    if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
+        return;
+    }
 
     if (!g_windowsUiXamlDiagnosticsConnected) {
         if (HMODULE module =
                 GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
+            const uint64_t watcherGeneration =
+                g_visualTreeWatcherGeneration.load(
+                    std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"VisualDiagConnection");
-            if (SUCCEEDED(result)) {
+            if (SUCCEEDED(result) &&
+                g_visualTreeWatcherGeneration.load(
+                    std::memory_order_acquire) >
+                    watcherGeneration) {
                 g_windowsUiXamlDiagnosticsConnected = true;
                 Wh_Log(L"Connected to Windows.UI.Xaml diagnostics");
+            } else if (SUCCEEDED(result)) {
+                Wh_Log(L"Windows.UI.Xaml diagnostics returned success "
+                       L"without creating a watcher; another diagnostics "
+                       L"tool probably blocked the connection");
             } else if (result !=
-                       HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+                           HRESULT_FROM_WIN32(ERROR_NOT_FOUND) &&
+                       result !=
+                           HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
                 Wh_Log(L"Windows.UI.Xaml diagnostics failed: "
                        L"0x%08X", result);
             }
@@ -2025,13 +1893,25 @@ void EnsureModernXamlDiagnostics() {
     if (!g_microsoftUiXamlDiagnosticsConnected) {
         if (HMODULE module = GetModuleHandleW(
                 L"Microsoft.Internal.FrameworkUdk.dll")) {
+            const uint64_t watcherGeneration =
+                g_visualTreeWatcherGeneration.load(
+                    std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"WinUIVisualDiagConnection");
-            if (SUCCEEDED(result)) {
+            if (SUCCEEDED(result) &&
+                g_visualTreeWatcherGeneration.load(
+                    std::memory_order_acquire) >
+                    watcherGeneration) {
                 g_microsoftUiXamlDiagnosticsConnected = true;
                 Wh_Log(L"Connected to Microsoft.UI.Xaml diagnostics");
+            } else if (SUCCEEDED(result)) {
+                Wh_Log(L"Microsoft.UI.Xaml diagnostics returned success "
+                       L"without creating a watcher; another diagnostics "
+                       L"tool probably blocked the connection");
             } else if (result !=
-                       HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+                           HRESULT_FROM_WIN32(ERROR_NOT_FOUND) &&
+                       result !=
+                           HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
                 Wh_Log(L"Microsoft.UI.Xaml diagnostics failed: "
                        L"0x%08X", result);
             }
@@ -2039,149 +1919,37 @@ void EnsureModernXamlDiagnostics() {
     }
 }
 
-DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
-    const HANDLE wakeEvent = static_cast<HANDLE>(parameter);
-    const HRESULT initializeResult =
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    while (WaitForSingleObject(wakeEvent, INFINITE) ==
-           WAIT_OBJECT_0) {
-        if (g_stopXamlDiagnosticsWorker.load(
-                std::memory_order_relaxed)) {
-            break;
-        }
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t g_originalLoadLibraryExW;
+thread_local bool g_loadingXamlDiagnostics;
+
+bool IsXamlDiagnosticsTriggerModule(LPCWSTR path) {
+    if (!path) {
+        return false;
+    }
+
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    fileName = fileName ? fileName + 1 : path;
+    return _wcsicmp(fileName, L"Windows.UI.Xaml.dll") == 0 ||
+           _wcsicmp(fileName,
+                    L"Microsoft.Internal.FrameworkUdk.dll") == 0 ||
+           _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0;
+}
+
+HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
+                                  HANDLE file,
+                                  DWORD flags) {
+    HMODULE module =
+        g_originalLoadLibraryExW(fileName, file, flags);
+    if (module &&
+        !g_loadingXamlDiagnostics &&
+        g_modernUiText.load(std::memory_order_relaxed) &&
+        IsXamlDiagnosticsTriggerModule(fileName)) {
+        g_loadingXamlDiagnostics = true;
         EnsureModernXamlDiagnostics();
+        g_loadingXamlDiagnostics = false;
     }
-
-    if (SUCCEEDED(initializeResult)) {
-        CoUninitialize();
-    }
-    return 0;
-}
-
-bool StartXamlDiagnosticsWorker() {
-    g_stopXamlDiagnosticsWorker.store(
-        false, std::memory_order_relaxed);
-    const HANDLE wakeEvent =
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!wakeEvent) {
-        return false;
-    }
-
-    const HANDLE workerThread = CreateThread(
-        nullptr, 0, XamlDiagnosticsWorkerProc, wakeEvent, 0, nullptr);
-    if (!workerThread) {
-        CloseHandle(wakeEvent);
-        return false;
-    }
-
-    {
-        std::lock_guard<std::mutex> guard(
-            g_xamlDiagnosticsWorkerMutex);
-        g_xamlDiagnosticsWakeEvent = wakeEvent;
-        g_xamlDiagnosticsWorkerThread = workerThread;
-    }
-    return true;
-}
-
-void RequestXamlDiagnosticsInitialization() {
-    std::lock_guard<std::mutex> guard(
-        g_xamlDiagnosticsWorkerMutex);
-    if (!g_xamlDiagnosticsWakeEvent ||
-        g_stoppingModernUi.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    const uint64_t now = GetTickCount64();
-    uint64_t next =
-        g_nextXamlDiagnosticsAttemptTick.load(
-            std::memory_order_relaxed);
-    if (now < next ||
-        !g_nextXamlDiagnosticsAttemptTick.compare_exchange_strong(
-            next, now + 10000, std::memory_order_relaxed)) {
-        return;
-    }
-
-    SetEvent(g_xamlDiagnosticsWakeEvent);
-}
-
-void StopXamlDiagnosticsWorker() {
-    HANDLE workerThread;
-    HANDLE wakeEvent;
-    {
-        std::lock_guard<std::mutex> guard(
-            g_xamlDiagnosticsWorkerMutex);
-        workerThread = g_xamlDiagnosticsWorkerThread;
-        wakeEvent = g_xamlDiagnosticsWakeEvent;
-        if (!workerThread) {
-            return;
-        }
-
-        g_xamlDiagnosticsWorkerThread = nullptr;
-        g_xamlDiagnosticsWakeEvent = nullptr;
-        g_stopXamlDiagnosticsWorker.store(
-            true, std::memory_order_relaxed);
-        SetEvent(wakeEvent);
-    }
-
-    WaitForSingleObject(workerThread, INFINITE);
-    CloseHandle(workerThread);
-    CloseHandle(wakeEvent);
-}
-
-void CALLBACK ModernPopupWinEventProc(
-    HWINEVENTHOOK,
-    DWORD event,
-    HWND window,
-    LONG objectId,
-    LONG childId,
-    DWORD,
-    DWORD) {
-    if (!window || objectId != OBJID_WINDOW ||
-        childId != CHILDID_SELF ||
-        !g_modernUiText.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    if (event == EVENT_OBJECT_DESTROY) {
-        {
-            std::lock_guard<std::mutex> guard(
-                g_visibleModernPopupsMutex);
-            g_visibleModernPopups.erase(window);
-        }
-        // The in-context callback still runs on the popup's UI thread even
-        // after the HWND is no longer valid.
-        RestoreModernTextStatesForPopup(window, true);
-        return;
-    }
-
-    DWORD processId;
-    const DWORD threadId =
-        GetWindowThreadProcessId(window, &processId);
-    if (!threadId || processId != GetCurrentProcessId() ||
-        GetCurrentThreadId() != threadId) {
-        return;
-    }
-
-    if (event == EVENT_OBJECT_SHOW) {
-        if (!TrackVisibleModernPopup(window, false)) {
-            return;
-        }
-
-        RequestXamlDiagnosticsInitialization();
-        ApplyModernTextStatesForPopup(window);
-    } else if (event == EVENT_OBJECT_HIDE) {
-        bool wasTracked;
-        {
-            std::lock_guard<std::mutex> guard(
-                g_visibleModernPopupsMutex);
-            wasTracked =
-                g_visibleModernPopups.erase(window) != 0;
-        }
-
-        if (wasTracked) {
-            RestoreModernTextStatesForPopup(window, false);
-        }
-    }
+    return module;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -2228,12 +1996,10 @@ bool RunFromWindowThread(HWND window,
     }
 
     RunParameter run{procedure, parameter};
-    DWORD_PTR messageResult;
-    const LRESULT sent = SendMessageTimeoutW(
-        window, message, 0, reinterpret_cast<LPARAM>(&run),
-        SMTO_ABORTIFHUNG, 5000, &messageResult);
+    SendMessageW(window, message, 0,
+                 reinterpret_cast<LPARAM>(&run));
     UnhookWindowsHookEx(hook);
-    return sent != 0;
+    return true;
 }
 
 HWND FindWindowForThread(DWORD threadId) {
@@ -2254,38 +2020,19 @@ HWND FindWindowForThread(DWORD threadId) {
     return result;
 }
 
-bool InitializeModernUi() {
+void InitializeModernUi() {
     g_stoppingModernUi.store(false, std::memory_order_relaxed);
-    g_nextXamlDiagnosticsAttemptTick.store(
-        0, std::memory_order_relaxed);
-
-    if (!StartXamlDiagnosticsWorker()) {
-        Wh_Log(L"Couldn't start the XAML diagnostics worker");
-        return false;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_visualTreeWatchersMutex);
+        if (!g_visualTreeWatchers) {
+            g_visualTreeWatchers.emplace();
+        }
     }
-
-    g_modernPopupWinEventHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
-        GetCurrentModuleHandle(), ModernPopupWinEventProc,
-        GetCurrentProcessId(), 0, WINEVENT_INCONTEXT);
-    if (!g_modernPopupWinEventHook) {
-        Wh_Log(L"Couldn't install the modern popup event hook");
-        StopXamlDiagnosticsWorker();
-        return false;
-    }
-
-    EnumWindows(DiscoverVisibleModernPopup, 0);
-    return true;
 }
 
 void UninitializeModernUi() {
     g_stoppingModernUi.store(true, std::memory_order_relaxed);
-
-    if (g_modernPopupWinEventHook) {
-        UnhookWinEvent(g_modernPopupWinEventHook);
-        g_modernPopupWinEventHook = nullptr;
-    }
-    StopXamlDiagnosticsWorker();
 
     std::vector<winrt::com_ptr<VisualTreeWatcher>> watchers;
     {
@@ -2300,18 +2047,23 @@ void UninitializeModernUi() {
         watcher->UnadviseVisualTreeChange();
     }
 
-    std::vector<DWORD> stateThreads;
+    std::vector<std::pair<DWORD, uint64_t>> stateThreads;
     {
         std::lock_guard<std::mutex> guard(
             g_modernTextStateThreadsMutex);
-        stateThreads.assign(
-            g_modernTextStateThreads.begin(),
-            g_modernTextStateThreads.end());
+        PruneModernTextStateThreadsLocked();
+        stateThreads.assign(g_modernTextStateThreads.begin(),
+                            g_modernTextStateThreads.end());
     }
 
-    for (DWORD threadId : stateThreads) {
+    for (const auto& [threadId, creationTime] : stateThreads) {
+        if (!IsRegisteredThreadAlive(threadId, creationTime)) {
+            continue;
+        }
+
         const HWND window = FindWindowForThread(threadId);
         if (!window ||
+            !IsRegisteredThreadAlive(threadId, creationTime) ||
             !RunFromWindowThread(
                 window,
                 [](PVOID) {
@@ -2325,7 +2077,6 @@ void UninitializeModernUi() {
         }
     }
 
-    ClearVisibleModernPopups();
 }
 
 template <typename Function>
@@ -2515,7 +2266,10 @@ BOOL Wh_ModInit() {
     }
 
     if (modernUiTextEnabled) {
-        installedAnyHook |= InitializeModernUi();
+        InitializeModernUi();
+        installedAnyHook |= InstallHook(
+            LoadLibraryExW, LoadLibraryExWHook,
+            &g_originalLoadLibraryExW, L"LoadLibraryExW");
     }
 
     Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
@@ -2532,7 +2286,7 @@ void Wh_ModAfterInit() {
     }
 
     if (g_modernUiText.load(std::memory_order_relaxed)) {
-        RequestXamlDiagnosticsInitialization();
+        EnsureModernXamlDiagnostics();
     }
 }
 
