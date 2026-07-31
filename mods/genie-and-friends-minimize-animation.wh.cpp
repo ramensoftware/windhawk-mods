@@ -173,6 +173,7 @@ resolved, Windows 11 support) was assisted by Claude.
 #include <string.h>
 #include <atomic>
 #include <unordered_map>
+#include <list>
 #include <mutex>
 #include <string>
 #include <ole2.h>
@@ -220,12 +221,18 @@ struct GhostAnimData {
     BOOL isRising;
     int mode;
     int durationMs;
-    LONG_PTR originalExStyle;
+    LONG_PTR cleanupExStyle;
     HANDLE hReady;
 };
 
+static std::atomic<int> g_animCount{0};
+static HANDLE g_allAnimsDone = NULL;
+static std::atomic<bool> g_cancelAnims{false};
+
 std::unordered_map<HWND, HBITMAP> g_SnapshotCache;
+std::list<HWND> g_SnapshotLRU;
 std::mutex g_CacheMutex;
+const size_t kMaxSnapshots = 4;
 
 std::atomic<bool> g_enabled{true};
 std::atomic<int>  g_mode{MODE_GENIE};
@@ -637,11 +644,10 @@ static void SolveFrame(const GhostAnimData* d, float t,
 }
 
 static void FinalizeRealWindow(GhostAnimData* data) {
+    if (!IsWindow(data->hRealWnd)) return;
     if (data->isRising) {
         SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
-        if (!(data->originalExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
-        }
+        SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->cleanupExStyle);
     }
     SetDwmTransitions(data->hRealWnd, TRUE);
 }
@@ -667,6 +673,7 @@ static void RunCpuAnim(GhostAnimData* data, HWND hGhost,
 
     BOOL firstFrame = TRUE;
     for (;;) {
+        if (g_cancelAnims.load(std::memory_order_relaxed)) break;
         QueryPerformanceCounter(&qpcNow);
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
         BOOL lastFrame = (elapsedMs >= totalMs);
@@ -701,6 +708,13 @@ static void RunCpuAnim(GhostAnimData* data, HWND hGhost,
 
         if (lastFrame) break;
         DwmFlush();
+        {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
 
     FinalizeRealWindow(data);
@@ -839,6 +853,7 @@ static bool RunGpuAnim(GhostAnimData* data, HWND hGhost,
 
     BOOL firstFrame = TRUE;
     for (;;) {
+        if (g_cancelAnims.load(std::memory_order_relaxed)) break;
         QueryPerformanceCounter(&qpcNow);
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
         BOOL lastFrame = (elapsedMs >= totalMs);
@@ -870,6 +885,13 @@ static bool RunGpuAnim(GhostAnimData* data, HWND hGhost,
 
         if (lastFrame) break;
         DwmFlush();
+        {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
 
     FinalizeRealWindow(data);
@@ -1016,6 +1038,7 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
 
     BOOL firstFrame = TRUE;
     for (;;) {
+        if (g_cancelAnims.load(std::memory_order_relaxed)) break;
         QueryPerformanceCounter(&qpcNow);
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
         BOOL lastFrame = (elapsedMs >= totalMs);
@@ -1089,6 +1112,13 @@ static bool RunGpuGenieAnim(GhostAnimData* data, HWND hGhost,
 
         if (lastFrame) break;
         DwmFlush();
+        {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
 
     FinalizeRealWindow(data);
@@ -1326,97 +1356,7 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     }
     if (coInit) CoUninitialize();
 
-    // --- Fallback: ToolbarWindow32 / TB_GETBUTTON (Win10) ---
-    if (!found) {
-        for (int pass = 0; pass < 2 && !found; pass++) {
-            HWND hTaskbar = FindWindowW(pass == 0 ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd", NULL);
-            if (!hTaskbar) continue;
-            RECT tbRect;
-            GetWindowRect(hTaskbar, &tbRect);
-            if (MonitorFromRect(&tbRect, MONITOR_DEFAULTTONULL) != hMon) continue;
-
-            HWND hToolbar = NULL;
-            HWND hRebar = FindWindowEx(hTaskbar, NULL, L"ReBarWindow32", NULL);
-            if (hRebar) {
-                HWND hMSTask = FindWindowEx(hRebar, NULL, L"MSTaskSwWClass", NULL);
-                if (hMSTask)
-                    hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
-            }
-            if (!hToolbar) {
-                HWND hWorkerW = FindWindowEx(hTaskbar, NULL, L"WorkerW", NULL);
-                if (hWorkerW) {
-                    HWND hReBarW = FindWindowEx(hWorkerW, NULL, L"ReBarWindow32", NULL);
-                    if (hReBarW) {
-                        HWND hMSTask = FindWindowEx(hReBarW, NULL, L"MSTaskSwWClass", NULL);
-                        if (hMSTask)
-                            hToolbar = FindWindowEx(hMSTask, NULL, L"ToolbarWindow32", NULL);
-                    }
-                }
-            }
-            if (!hToolbar)
-                hToolbar = FindWindowEx(hTaskbar, NULL, L"ToolbarWindow32", NULL);
-
-            if (hToolbar) {
-                struct { HWND hWnd; int x; int y; int w; } tbCache[64];
-                int tbCount = 0;
-                int btnCount = (int)SendMessage(hToolbar, TB_BUTTONCOUNT, 0, 0);
-                for (int i = 0; i < btnCount && tbCount < 64; i++) {
-                    TBBUTTON btn;
-                    ZeroMemory(&btn, sizeof(btn));
-                    if (SendMessage(hToolbar, TB_GETBUTTON, i, (LPARAM)&btn)) {
-                        RECT r;
-                        if (SendMessage(hToolbar, TB_GETRECT, btn.idCommand, (LPARAM)&r)) {
-                            MapWindowPoints(hToolbar, NULL, (POINT*)&r, 2);
-                            tbCache[tbCount].hWnd = (HWND)btn.dwData;
-                            tbCache[tbCount].x = (r.left + r.right) / 2;
-                            tbCache[tbCount].y = r.top; // top edge of the button
-                            tbCache[tbCount].w = r.right - r.left;
-                            tbCount++;
-                        }
-                    }
-                }
-                auto tryMatch = [&](HWND h) -> bool {
-                    for (int i = 0; i < tbCount; i++)
-                        if (tbCache[i].hWnd == h) {
-                            targetX = tbCache[i].x;
-                            targetY = tbCache[i].y;
-                            targetW = tbCache[i].w;
-                            return true;
-                        }
-                    return false;
-                };
-                if (tryMatch(hWnd)) found = true;
-                else for (HWND hCur = GetWindow(hWnd, GW_OWNER); hCur && !found; hCur = GetWindow(hCur, GW_OWNER))
-                    found = tryMatch(hCur);
-                if (!found) { HWND hRoot = GetAncestor(hWnd, GA_ROOT); if (hRoot != hWnd) found = tryMatch(hRoot); }
-                if (!found) {
-                    DWORD targetPid;
-                    GetWindowThreadProcessId(hWnd, &targetPid);
-                    if (targetPid) {
-                        int bestIdx = -1, bestDist = INT_MAX;
-                        RECT wr; GetWindowRect(hWnd, &wr);
-                        int cx = (wr.left + wr.right) / 2;
-                        for (int i = 0; i < tbCount; i++) {
-                            DWORD pid;
-                            GetWindowThreadProcessId(tbCache[i].hWnd, &pid);
-                            if (pid == targetPid) {
-                                int d = abs(tbCache[i].x - cx);
-                                if (d < bestDist) { bestDist = d; bestIdx = i; }
-                            }
-                        }
-                        if (bestIdx >= 0) {
-                            targetX = tbCache[bestIdx].x;
-                            targetY = tbCache[bestIdx].y;
-                            targetW = tbCache[bestIdx].w;
-                            found   = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // --- Fallback: process-level cache if UIA + toolbar both failed ---
+    // --- Fallback: process-level cache if UIA failed ---
     if (!found) {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
         auto it = g_ProcessIconCache.find(processKey);
@@ -1460,15 +1400,36 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GetMonitorInfoW(hMon, &mi);
     float taskbarY = (float)mi.rcWork.bottom;
 
-    // Lock the animation target to the taskbar icon centre (X) and the top
-    // edge of the icon (Y).  When the icon cannot be found, the caller's
-    // monitor-centre default (from StartGenieAnim) is kept for X, and
-    // rcWork.bottom is used for Y.
+    // Signal the creator thread so the hook can return immediately — the
+    // animation starts with the cursor-based icon position from StartGenieAnim.
+    // UIA will refine the cache for the *next* minimize.
+    if (data->hReady) SetEvent(data->hReady);
+
+    // Background UIA scan: cache the taskbar icon for this process so that
+    // future minimizes hit the correct icon + button width from the start.
     int iconX, iconY;
-    data->iconButtonWidth = 0;
-    if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &data->iconButtonWidth)) {
-        data->targetDockX = iconX;
-        taskbarY = (float)iconY;
+    int iconW = 0;
+    if (GetTaskbarIconCenter(data->hRealWnd, &iconX, &iconY, &iconW)) {
+        data->iconButtonWidth = iconW;
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(data->hRealWnd, &pid);
+        HMONITOR hMon = MonitorFromWindow(data->hRealWnd, MONITOR_DEFAULTTONEAREST);
+        std::wstring procName;
+        {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR path[MAX_PATH];
+                DWORD len = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
+                    WCHAR* name = wcsrchr(path, L'\\');
+                    if (name) procName = name + 1;
+                }
+                CloseHandle(hProc);
+            }
+        }
+        std::wstring key = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+        g_ProcessIconCache[key] = { iconX, iconY, iconW };
     }
 
     bool useGpu = EnsureGpuDevice();
@@ -1482,20 +1443,15 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             screenX, screenY, screenWidth, screenHeight, NULL, NULL, NULL, NULL);
 
         if (hGhost) {
-            SetClassLongPtr(hGhost, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(NULL_BRUSH));
-        }
-
-        DisableGhostShadow(hGhost);
-
-        bool ran = false;
-        if (hGhost) {
-            ran = (data->mode == MODE_GENIE)
+            DisableGhostShadow(hGhost);
+            bool ran = (data->mode == MODE_GENIE)
                     ? RunGpuGenieAnim(data, hGhost, screenX, screenY, screenWidth, screenHeight, taskbarY)
                     : RunGpuAnim(data, hGhost, screenX, screenY, screenWidth, screenHeight, taskbarY);
-        }
-        if (!ran) {
-            useGpu = false;
-            if (hGhost) { DestroyWindow(hGhost); hGhost = NULL; }
+            if (!ran) {
+                DestroyWindow(hGhost);
+                hGhost = NULL;
+                useGpu = false;
+            }
         }
     }
 
@@ -1506,11 +1462,8 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
             data->targetRect.left, data->targetRect.top, data->width, data->height,
             NULL, NULL, NULL, NULL);
 
-        if (hGhost) {
-            SetClassLongPtr(hGhost, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(NULL_BRUSH));
-        }
-
-        DisableGhostShadow(hGhost);
+        if (hGhost)
+            DisableGhostShadow(hGhost);
 
         RunCpuAnim(data, hGhost, screenWidth, screenHeight, taskbarY);
     }
@@ -1519,16 +1472,24 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     DeleteObject(data->hBitmap);
     if (data->hReady) CloseHandle(data->hReady);
     delete data;
+    if (g_animCount.fetch_sub(1, std::memory_order_relaxed) == 1)
+        SetEvent(g_allAnimsDone);
     return 0;
 }
 
-void StartGenieAnim(HWND hWnd, BOOL rising) {
+void StartGenieAnim(HWND hWnd, BOOL rising, LONG_PTR cleanupExStyle) {
     RECT rect;
     GetWindowRect(hWnd, &rect);
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
 
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0) {
+        if (rising) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, cleanupExStyle);
+        }
+        return;
+    }
 
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi;
@@ -1556,7 +1517,7 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
     data->targetDockX = defaultDockX;
     data->mode = g_mode.load(std::memory_order_relaxed);
     data->durationMs = g_durations[data->mode].load(std::memory_order_relaxed);
-    data->originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    data->cleanupExStyle = cleanupExStyle;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -1576,6 +1537,7 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
 
                 DeleteObject(g_SnapshotCache[hWnd]);
                 g_SnapshotCache.erase(hWnd);
+                g_SnapshotLRU.remove(hWnd);
                 fromCache = TRUE;
             }
         }
@@ -1603,8 +1565,16 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_SnapshotCache.count(hWnd)) {
             DeleteObject(g_SnapshotCache[hWnd]);
+            g_SnapshotLRU.remove(hWnd);
+        }
+        while (g_SnapshotCache.size() >= kMaxSnapshots) {
+            HWND oldHwnd = g_SnapshotLRU.front();
+            g_SnapshotLRU.pop_front();
+            DeleteObject(g_SnapshotCache[oldHwnd]);
+            g_SnapshotCache.erase(oldHwnd);
         }
         g_SnapshotCache[hWnd] = CreateCompatibleBitmap(hScreenDC, w, h);
+        g_SnapshotLRU.push_back(hWnd);
         HDC hCacheDC = CreateCompatibleDC(hScreenDC);
         HBITMAP hOldCacheBmp = (HBITMAP)SelectObject(hCacheDC, g_SnapshotCache[hWnd]);
         BitBlt(hCacheDC, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY);
@@ -1618,11 +1588,19 @@ void StartGenieAnim(HWND hWnd, BOOL rising) {
 
     HANDLE hReady = CreateEventW(NULL, TRUE, FALSE, NULL);
     data->hReady = hReady;
+    g_animCount.fetch_add(1, std::memory_order_relaxed);
+    ResetEvent(g_allAnimsDone);
     HANDLE hThread = CreateThread(NULL, 0, GhostAnimationThread, data, 0, NULL);
     if (!hThread) {
+        if (rising) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, cleanupExStyle);
+        }
         if (hReady) CloseHandle(hReady);
         DeleteObject(data->hBitmap);
         delete data;
+        if (g_animCount.fetch_sub(1, std::memory_order_relaxed) == 1)
+            SetEvent(g_allAnimsDone);
         return;
     }
     CloseHandle(hThread);
@@ -1633,7 +1611,8 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (g_enabled.load(std::memory_order_relaxed)) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
             SetDwmTransitions(hWnd, FALSE);
-            StartGenieAnim(hWnd, FALSE);
+            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+            StartGenieAnim(hWnd, FALSE, exStyle);
             return ShowWindow_Original(hWnd, nCmdShow);
         }
         else if (nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWNORMAL) {
@@ -1643,7 +1622,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
                 BOOL res = ShowWindow_Original(hWnd, nCmdShow);
-                StartGenieAnim(hWnd, TRUE);
+                StartGenieAnim(hWnd, TRUE, exStyle);
                 return res;
             }
         }
@@ -1658,6 +1637,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             if (g_SnapshotCache.count(hWnd)) {
                 DeleteObject(g_SnapshotCache[hWnd]);
                 g_SnapshotCache.erase(hWnd);
+                g_SnapshotLRU.remove(hWnd);
             }
         }
     }
@@ -1666,7 +1646,8 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
         UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
             SetDwmTransitions(hWnd, FALSE);
-            StartGenieAnim(hWnd, FALSE);
+            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+            StartGenieAnim(hWnd, FALSE, exStyle);
             return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
         }
         else if (cmd == SC_RESTORE && IsIconic(hWnd)) {
@@ -1675,7 +1656,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
             SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
             LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
-            StartGenieAnim(hWnd, TRUE);
+            StartGenieAnim(hWnd, TRUE, exStyle);
             return res;
         }
     }
@@ -1686,11 +1667,7 @@ BOOL Wh_ModInit() {
     LoadSettings();
     Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
     Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
-    // Eagerly initialize GPU resources so the first animation doesn't have to
-    // wait for D3D device creation and shader compilation.
-    if (EnsureGpuDevice()) {
-        EnsureGenieGpuResources();
-    }
+    g_allAnimsDone = CreateEventW(NULL, TRUE, TRUE, NULL);
     return TRUE;
 }
 
@@ -1699,12 +1676,18 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    // Signal cancellation and wait for in-flight animation threads to finish.
+    g_cancelAnims.store(true, std::memory_order_relaxed);
+    if (g_animCount.load(std::memory_order_relaxed) > 0)
+        WaitForSingleObject(g_allAnimsDone, 3000);
+
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         for (auto& pair : g_SnapshotCache) {
             DeleteObject(pair.second);
         }
         g_SnapshotCache.clear();
+        g_SnapshotLRU.clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_TbCacheMutex);
@@ -1713,4 +1696,5 @@ void Wh_ModUninit() {
     }
     ReleaseGenieGpuResources();
     ReleaseGpuDevice();
+    if (g_allAnimsDone) CloseHandle(g_allAnimsDone);
 }
