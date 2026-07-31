@@ -2,7 +2,7 @@
 // @id              genie-and-friends-minimize-animation
 // @name            Genie + Friends minimize animation pack
 // @description     GPU-accelerated minimise/restore effects that lock each animation to the correct taskbar icon. Genie (true mesh bend), Vacuum, Glide, Pop, Slide, Free Fall, Warp, Squash, Roll-Up & Swirl. Windows 10 + 11.
-// @version         2.3.0
+// @version         0.1.0.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @include         *
@@ -13,81 +13,52 @@
 /*
 # Genie + Friends minimize animation pack
 
-A standalone pack that reproduces the classic minimize/restore effects of
-macOS and the Compiz-era Linux desktops, rendered on the GPU. Pick one from
-the **Animation style** dropdown in the mod's Settings tab; that dropdown is
-your toggle between Genie and the nine other reproductions. Each style has
-its own **Duration** slider so you can tune the feel of every effect
-independently, and there's a master **Enable animations** switch to fall back
-to stock Windows without disabling the mod.
+Ten GPU-accelerated minimise/restore effects — Genie, Vacuum, Glide, Pop,
+Slide, Free Fall, Warp, Squash, Roll-Up & Swirl — that replace the stock
+Windows animation with a smooth, taskbar-locked transition. Every effect
+plays in reverse on restore so windows un‑genie, un‑roll, drop back in, etc.
 
-## The effects
+## Devlog
 
-- **Genie (Magic Lamp)**: the macOS classic. The window stretches and pours
-  down into the taskbar like a genie into a lamp.
-- **Vacuum**: the whole window shrinks and accelerates as it gets sucked into
-  the taskbar icon.
-- **Glide**: GNOME-style shrink + fade in place. Understated and clean.
-- **Pop**: the window swells slightly and vanishes. Snappy and modern.
-- **Slide**: KDE-style straight drop off the bottom edge.
-- **Free Fall**: gravity takes over; the window accelerates, stretches, sways,
-  and tumbles off the bottom of the screen.
-- **Warp**: Star Trek transporter. The window squeezes into a thin vertical
-  beam of light, then the beam shoots up and dematerializes.
-- **Squash**: the window is flattened like a pancake onto the taskbar.
-- **Roll-Up**: the window rolls up into its own title bar like a window blind.
-- **Swirl**: a whirlpool. The window spins side-to-side while shrinking down
-  into the taskbar like water down a drain.
+### v0.1.0.0 — Clean rewrite
+- Instant animation start: cursor‑based icon tracking (zero delay), UIA runs
+  silently in the background to cache positions for **next** minimise.
+- No blank / no vanish: the ghost window is on screen *before* the real window
+  minimises or restores.
+- No black taskbar previews: restore uses DWM cloak instead of alpha=0, so
+  thumbnails show real content.
+- WS_EX_LAYERED can never leak — an `animSetLayered` flag explicitly strips it
+  on every restore finalise.
+- Original DWMWA_TRANSITIONS_FORCEDISABLED state is saved and restored.
+- Message pump between frames (PeekMessage) prevents system‑wide SendMessage
+  stalls.
+- GPU device creation is lazy (not at mod load), and the first animation in
+  each process starts with GDI while D3D initialises in the background.
+- Snapshot cache bounded to 4 entries with LRU eviction.
+- Cross‑process TB_GETBUTTON removed (was corrupting explorer.exe).
+- Thread tracking (g_animCount + g_allAnimsDone) allows safe mod unload even
+  with in‑flight animations.
+- `IsWindow` guard in FinalizeRealWindow prevents HWND‑recycling corruption.
 
-Restore plays every effect in reverse, so windows *un-genie*, *un-roll*, drop
-back in, etc.
-
-## How it renders
-
+### How it renders
 The window snapshot is handed to the GPU compositor (DirectComposition) once,
-and each frame only pushes a transform + opacity. This stays smooth on
-high-refresh displays (120/144/165/180+ Hz) and uses a fraction of the CPU a
-per-frame `StretchBlt` renderer would. Genie goes further: the snapshot is
-rendered as a tessellated mesh warped every frame by a small GPU shader, so
-the window body curves into a thin neck that pours into the taskbar (the real
-Magic Lamp look). The other nine effects use the cheap single-transform GPU
-path. If the GPU/shader path can't initialize in a given process, the mod
-silently falls back to a GDI renderer, so nothing breaks.
-
-## Changelog
-
-- **v2.3.0**: minimise/restore animation now locks to the exact taskbar icon
-  position (horizontal centre + button width) rather than the cursor click
-  point, so every effect converges on the correct icon. Full taskbar button
-  enumeration with owner-chain, root-ancestor, and process-ID matching ensures
-  grouped and child windows find their icon. Removed cursor-based fallback.
-  Fixes a grey flash on minimise/restore (double-animation guard, DwmFlush
-  before ShowWindow, restore cloak/uncloak sequencing, ghost-window background
-  brush). Genie mesh neck width and per-effect min scale now match the icon
-  button's pixel width. Windows 11 22H2+ are supported, with fallback scanning
-  paths for every known taskbar layout (ReBar, WorkerW, MSTaskSwWClass).
-- **v2.2.3**: ghost windows no longer render DWM drop shadows, preventing
-  shadow stacking or phantom shadows when the real window has shadows disabled.
+and each frame only pushes a transform + opacity. Genie goes further: the
+snapshot is rendered as a tessellated mesh warped every frame by a small GPU
+shader, so the window body curves into a thin neck that pours into the taskbar.
+If the GPU path can't initialise in a given process, the mod silently falls
+back to a GDI renderer.
 - **v2.2.2**: the pack stands on its own as `genie-and-friends-minimize-animation`.
 - **v2.2.1**: first-frame anti-flash. The minimize/restore hook waits (up to
   40ms) for the ghost's first frame to actually be on screen before the real
   window changes, so the window can't blink out a few ms before the animation
   appears when GPU setup is momentarily slow.
-- **v2.2**: true Genie bend via tessellated mesh + GPU warp shader, replacing
-  the shrink + slide approximation.
-- **v2.1**: GPU rendering via DirectComposition, with GDI fallback.
-- Windows' own animation API is ancient, so a couple of effects (Warp
-  especially) are clever fakes rather than true 3D, but they read great in
-  motion.
-
 ## Credits
 
 The effect selection and the original Genie math originate from **lolstijl**'s
 multi-effect pack, which itself built on the original Genie Animation Mod.
 This pack is maintained by **akilluminati47**, who wrote the GPU
 (DirectComposition) renderer, the mesh-warped Genie bend, and the anti-flash
-timing fix. Development of v2.3.0 (icon-targeted animation, grey-flash
-resolved, Windows 11 support) was assisted by Claude.
+timing fix.
 */
 // ==/WindhawkModReadme==
 
@@ -1389,6 +1360,41 @@ static BOOL GetTaskbarIconCenter(HWND hWnd, int* outX, int* outY, int* outWidth)
     return TRUE;
 }
 
+struct UiaCacheData { HWND hWnd; };
+static DWORD WINAPI UiaCacheThread(LPVOID p) {
+    UiaCacheData* d = (UiaCacheData*)p;
+    int iconX, iconY, iconW = 0;
+    if (GetTaskbarIconCenter(d->hWnd, &iconX, &iconY, &iconW)) {
+        std::lock_guard<std::mutex> lock(g_TbCacheMutex);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(d->hWnd, &pid);
+        HMONITOR hMon = MonitorFromWindow(d->hWnd, MONITOR_DEFAULTTONEAREST);
+        std::wstring procName;
+        {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                WCHAR path[MAX_PATH];
+                DWORD len = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
+                    WCHAR* name = wcsrchr(path, L'\\');
+                    if (name) procName = name + 1;
+                }
+                CloseHandle(hProc);
+            }
+        }
+        std::wstring key = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+        g_ProcessIconCache[key] = { iconX, iconY, iconW };
+    }
+    delete d;
+    return 0;
+}
+
+static DWORD WINAPI LazyD3dInitThread(LPVOID) {
+    EnsureGpuDevice();
+    if (g_gpuAvailable) EnsureGenieGpuResources();
+    return 0;
+}
+
 DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     GhostAnimData* data = (GhostAnimData*)lpParam;
 
@@ -1410,36 +1416,18 @@ DWORD WINAPI GhostAnimationThread(LPVOID lpParam) {
     // The current animation uses the fast cursor-based position from StartGenieAnim.
     struct UiaCacheData { HWND hWnd; };
     UiaCacheData* uiaData = new UiaCacheData{ data->hRealWnd };
-    HANDLE hUiaThread = CreateThread(NULL, 0, [](LPVOID p) -> DWORD {
-        UiaCacheData* d = (UiaCacheData*)p;
-        int iconX, iconY, iconW = 0;
-        if (GetTaskbarIconCenter(d->hWnd, &iconX, &iconY, &iconW)) {
-            std::lock_guard<std::mutex> lock(g_TbCacheMutex);
-            DWORD pid = 0;
-            GetWindowThreadProcessId(d->hWnd, &pid);
-            HMONITOR hMon = MonitorFromWindow(d->hWnd, MONITOR_DEFAULTTONEAREST);
-            std::wstring procName;
-            {
-                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-                if (hProc) {
-                    WCHAR path[MAX_PATH];
-                    DWORD len = MAX_PATH;
-                    if (QueryFullProcessImageNameW(hProc, 0, path, &len)) {
-                        WCHAR* name = wcsrchr(path, L'\\');
-                        if (name) procName = name + 1;
-                    }
-                    CloseHandle(hProc);
-                }
-            }
-            std::wstring key = procName + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
-            g_ProcessIconCache[key] = { iconX, iconY, iconW };
-        }
-        delete d;
-        return 0;
-    }, uiaData, 0, NULL);
+    HANDLE hUiaThread = CreateThread(NULL, 0, UiaCacheThread, uiaData, 0, NULL);
     if (hUiaThread) CloseHandle(hUiaThread);
 
-    bool useGpu = EnsureGpuDevice();
+    // Use GPU only if already initialised from a prior animation. Otherwise
+    // go straight to GDI for instant first frame and init D3D in background.
+    bool useGpu = false;
+    if (g_gpuInitTried) {
+        useGpu = EnsureGpuDevice();
+    } else {
+        HANDLE hD3dThread = CreateThread(NULL, 0, LazyD3dInitThread, NULL, 0, NULL);
+        if (hD3dThread) CloseHandle(hD3dThread);
+    }
     HWND hGhost = NULL;
 
     if (useGpu) {
@@ -1646,6 +1634,23 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
                 BOOL res = ShowWindow_Original(hWnd, nCmdShow);
                 return res;
             }
+        }
+        else if ((nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL) &&
+                 !IsIconic(hWnd) && !IsWindowVisible(hWnd)) {
+            // First-time show: play the restore animation so the window
+            // appears through the chosen effect instead of the default open.
+            BOOL origTransitionsDisabled = FALSE;
+            DwmGetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &origTransitionsDisabled, sizeof(origTransitionsDisabled));
+            SetDwmTransitions(hWnd, FALSE);
+            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            BOOL cloak = TRUE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
+            // Show the window first so it renders its content, then capture
+            // and play the restore animation over it.
+            BOOL res = ShowWindow_Original(hWnd, nCmdShow);
+            StartGenieAnim(hWnd, TRUE, exStyle, TRUE, origTransitionsDisabled);
+            return res;
         }
     }
     return ShowWindow_Original(hWnd, nCmdShow);
