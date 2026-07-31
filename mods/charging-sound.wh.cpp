@@ -2,7 +2,7 @@
 // @id              charging-sound
 // @name            Charging Sound
 // @description     Plays a custom sound when the laptop is plugged in or unplugged
-// @version         1.2
+// @version         1.3
 // @author          khonloi
 // @github          https://github.com/khonloi
 // @license         MIT
@@ -25,7 +25,7 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 /*
 - soundPath: "Notification.IM"
   $name: Plugged-in Sound File Path
-  $description: "The absolute path to a .wav file or a system sound alias (e.g., Notification.IM) to play when plugged in."
+  $description: "The absolute path to a .wav file or a system sound alias (e.g., Notification.IM) to play when plugged in. Leave empty to disable."
 - unpluggedSoundPath: ""
   $name: Unplugged Sound File Path
   $description: "The absolute path to a .wav file or a system sound alias to play when unplugged. Leave empty to disable."
@@ -35,8 +35,10 @@ Please note that this mod only works on devices with a battery (e.g. laptops).
 
 #include <mmsystem.h>
 #include <windows.h>
+#include <winnt.h>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #include <windhawk_utils.h>
 
@@ -44,31 +46,21 @@ struct {
     std::wstring soundPath;
     std::wstring unpluggedSoundPath;
     std::mutex mtx;
-} settings;
+} g_settings;
 
-HWND g_hwnd = NULL;
 HANDLE g_hThread = NULL;
 DWORD g_threadId = 0;
 HANDLE g_readyEvent = NULL;
 
-bool EndsWithWav(const std::wstring& path) {
-    if (path.length() >= 4) {
-        std::wstring ext = path.substr(path.length() - 4);
-        return _wcsicmp(ext.c_str(), L".wav") == 0;
-    }
-    return false;
-}
+// -1 = unknown, so the first notification only establishes the baseline.
+int g_lastPowerCondition = -1;
 
 void PlaySoundPath(const std::wstring& path) {
     if (path.empty()) {
         return;
     }
 
-    bool isFilePath = EndsWithWav(path);
-    DWORD flags =
-        SND_ASYNC | SND_NODEFAULT | (isFilePath ? SND_FILENAME : SND_ALIAS);
-
-    if (!PlaySoundW(path.c_str(), nullptr, flags)) {
+    if (!PlaySoundW(path.c_str(), nullptr, SND_ASYNC | SND_NODEFAULT)) {
         Wh_Log(L"PlaySoundW failed for: %s", path.c_str());
     }
 }
@@ -81,28 +73,39 @@ LRESULT CALLBACK PowerWindowProc(HWND hwnd,
         if (wParam == PBT_POWERSETTINGCHANGE) {
             POWERBROADCAST_SETTING* pbs = (POWERBROADCAST_SETTING*)lParam;
             if (pbs->PowerSetting == GUID_ACDC_POWER_SOURCE &&
-                pbs->DataLength == sizeof(int)) {
-                int currentACStatus = *(int*)pbs->Data;
+                pbs->DataLength == sizeof(DWORD)) {
+                DWORD currentACStatus;
+                memcpy(&currentACStatus, pbs->Data, sizeof(DWORD));
+
+                int previous =
+                    std::exchange(g_lastPowerCondition, (int)currentACStatus);
+                if (previous == (int)currentACStatus || previous == -1) {
+                    return TRUE;
+                }
 
                 Wh_Log(
-                    L"Power status change detected. Current ACLineStatus: %d",
+                    L"Power status change detected. Current Power Condition: "
+                    L"%u",
                     currentACStatus);
 
-                if (currentACStatus == 0) {  // Plugged in (AC)
+                if (currentACStatus == PoAc) {  // Plugged in (AC)
                     std::wstring currentSoundPath;
                     {
-                        std::lock_guard<std::mutex> lock(settings.mtx);
-                        currentSoundPath = settings.soundPath;
+                        std::lock_guard<std::mutex> lock(g_settings.mtx);
+                        currentSoundPath = g_settings.soundPath;
                     }
 
                     Wh_Log(L"Laptop plugged in. Playing sound: %s",
                            currentSoundPath.c_str());
                     PlaySoundPath(currentSoundPath);
-                } else if (currentACStatus == 1) {  // Unplugged (DC)
+                } else if (currentACStatus == PoDc ||
+                           currentACStatus ==
+                               PoHot) {  // Unplugged (DC or UPS backup)
                     std::wstring currentUnpluggedSoundPath;
                     {
-                        std::lock_guard<std::mutex> lock(settings.mtx);
-                        currentUnpluggedSoundPath = settings.unpluggedSoundPath;
+                        std::lock_guard<std::mutex> lock(g_settings.mtx);
+                        currentUnpluggedSoundPath =
+                            g_settings.unpluggedSoundPath;
                     }
 
                     Wh_Log(L"Laptop unplugged. Playing sound: %s",
@@ -136,15 +139,15 @@ DWORD WINAPI PowerNotifyThread(LPVOID lpParam) {
         return 1;
     }
 
-    g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"WindhawkChargingSound",
-                             WS_OVERLAPPED, 0, 0, 0, 0, NULL, NULL,
-                             wc.hInstance, NULL);
+    HWND hwnd =
+        CreateWindowExW(0, wc.lpszClassName, L"WindhawkChargingSound", 0, 0, 0,
+                        0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
 
-    if (g_hwnd) {
+    if (hwnd) {
         Wh_Log(L"Hidden window created successfully.");
 
         HPOWERNOTIFY hPowerNotify = RegisterPowerSettingNotification(
-            g_hwnd, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
+            hwnd, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
 
         if (!hPowerNotify) {
             Wh_Log(L"RegisterPowerSettingNotification failed with error: %u",
@@ -160,8 +163,7 @@ DWORD WINAPI PowerNotifyThread(LPVOID lpParam) {
             UnregisterPowerSettingNotification(hPowerNotify);
         }
 
-        DestroyWindow(g_hwnd);
-        g_hwnd = NULL;
+        DestroyWindow(hwnd);
     } else {
         Wh_Log(L"CreateWindowExW failed with error: %u", GetLastError());
     }
@@ -175,10 +177,9 @@ void LoadSettings() {
     auto soundPath = WindhawkUtils::StringSetting::make(L"soundPath");
     auto unpluggedSoundPath =
         WindhawkUtils::StringSetting::make(L"unpluggedSoundPath");
-    std::lock_guard<std::mutex> lock(settings.mtx);
-    settings.soundPath = *soundPath ? soundPath.get() : L"Notification.IM";
-    settings.unpluggedSoundPath =
-        *unpluggedSoundPath ? unpluggedSoundPath.get() : L"";
+    std::lock_guard<std::mutex> lock(g_settings.mtx);
+    g_settings.soundPath = soundPath.get();
+    g_settings.unpluggedSoundPath = unpluggedSoundPath.get();
 }
 
 bool WhTool_ModInit() {
@@ -216,7 +217,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_hThread);
         g_hThread = NULL;
         g_threadId = 0;
-        g_hwnd = NULL;
     }
 
     if (g_readyEvent) {
@@ -230,6 +230,7 @@ void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
+// clang-format off
 // ============================================================================
 // Tool Mod Boilerplate
 // ============================================================================
@@ -247,15 +248,18 @@ BOOL Wh_ModInit() {
         sessionId == 0) {
         return FALSE;
     }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
+
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -264,6 +268,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -279,6 +284,7 @@ BOOL Wh_ModInit() {
     if (isExcluded) {
         return FALSE;
     }
+
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
@@ -291,6 +297,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
@@ -318,6 +325,7 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
+
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
@@ -326,11 +334,13 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
+
     WCHAR
     commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -339,6 +349,7 @@ void Wh_ModAfterInit() {
             return;
         }
     }
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -347,6 +358,7 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
+
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
@@ -354,6 +366,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
+
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
@@ -365,6 +378,7 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
@@ -385,3 +399,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on
