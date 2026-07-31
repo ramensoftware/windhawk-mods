@@ -70,8 +70,10 @@ hosted by Explorer. XAML Diagnostics allows one consumer per XAML connection,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. Connection attempts are scheduled outside the Windows loader
-path so XAML modules that load later are handled without doing COM activation
-under the loader lock.
+path; a single-flight worker retains requests that arrive while it is running,
+tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
+and retries only the connection that was lost. The worker pins the mod image
+until `FreeLibraryAndExitThread`, so it cannot execute unloaded mod code.
 
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
 flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
@@ -1039,7 +1041,7 @@ HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
 }
 
 HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
-    if (g_classicTooltipThemeCount.load(std::memory_order_relaxed) != 0) {
+    if (IsTrackedClassicTooltipTheme(theme)) {
         UntrackClassicTooltipTheme(theme);
     }
     return g_originalCloseThemeData(theme);
@@ -1462,6 +1464,20 @@ void CleanupModernTextStatesForCurrentThread() {
     UnregisterModernTextStateThread();
 }
 
+HMODULE AcquireCurrentModuleReference();
+void RequestModernXamlDiagnosticsInitialization();
+
+enum class XamlDiagnosticsFlavor {
+    None,
+    Windows,
+    Microsoft,
+};
+
+extern std::atomic_bool g_windowsUiXamlDiagnosticsConnected;
+extern std::atomic_bool g_microsoftUiXamlDiagnosticsConnected;
+extern std::atomic_bool g_stoppingModernUi;
+extern thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics;
+
 class VisualTreeWatcher
     : public winrt::implements<VisualTreeWatcher,
                                IVisualTreeServiceCallback2,
@@ -1469,6 +1485,11 @@ class VisualTreeWatcher
 public:
     explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
         : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
+        m_moduleReference = AcquireCurrentModuleReference();
+        if (!m_moduleReference) {
+            winrt::throw_hresult(HRESULT_FROM_WIN32(GetLastError()));
+        }
+
         AddRef();
         HANDLE thread = CreateThread(
             nullptr, 0,
@@ -1490,15 +1511,20 @@ public:
                         watcher->UnadviseVisualTreeChange();
                     }
                 }
+                HMODULE module = watcher->m_moduleReference;
                 watcher->Release();
-                return 0;
+                FreeLibraryAndExitThread(module, 0);
             },
             this, 0, nullptr);
         if (thread) {
             CloseHandle(thread);
         } else {
+            const DWORD error = GetLastError();
             Release();
+            FreeLibrary(m_moduleReference);
+            m_moduleReference = nullptr;
             Wh_Log(L"Couldn't create XAML watcher thread");
+            winrt::throw_hresult(HRESULT_FROM_WIN32(error));
         }
     }
 
@@ -1567,7 +1593,8 @@ private:
         auto& states = threadState.states;
 
         if (mutationType == Add &&
-            g_modernUiText.load(std::memory_order_relaxed)) {
+            g_modernUiText.load(std::memory_order_relaxed) &&
+            !g_stoppingModernUi.load(std::memory_order_relaxed)) {
             const std::wstring_view type(
                 element.Type ? element.Type : L"");
             const bool isMenuSource = IsModernMenuSourceType(type);
@@ -1635,6 +1662,7 @@ private:
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
+    HMODULE m_moduleReference = nullptr;
     std::atomic_bool m_advised{false};
     std::atomic_bool m_unadviseRequested{false};
 };
@@ -1701,7 +1729,29 @@ public:
 
         m_site.copy_from(site);
         if (!site) {
+            const XamlDiagnosticsFlavor disconnectedFlavor =
+                m_flavor;
+            m_flavor = XamlDiagnosticsFlavor::None;
+            if (disconnectedFlavor ==
+                XamlDiagnosticsFlavor::Windows) {
+                g_windowsUiXamlDiagnosticsConnected.store(
+                    false, std::memory_order_release);
+            } else if (disconnectedFlavor ==
+                       XamlDiagnosticsFlavor::Microsoft) {
+                g_microsoftUiXamlDiagnosticsConnected.store(
+                    false, std::memory_order_release);
+            }
+            if (disconnectedFlavor != XamlDiagnosticsFlavor::None &&
+                !g_stoppingModernUi.load(
+                    std::memory_order_relaxed)) {
+                RequestModernXamlDiagnosticsInitialization();
+            }
             return S_OK;
+        }
+
+        if (g_connectingXamlDiagnostics !=
+            XamlDiagnosticsFlavor::None) {
+            m_flavor = g_connectingXamlDiagnostics;
         }
 
         // Balance the reference added when XAML Diagnostics loads this module.
@@ -1741,6 +1791,7 @@ public:
 private:
     winrt::com_ptr<IUnknown> m_site;
     winrt::com_ptr<VisualTreeWatcher> m_watcher;
+    XamlDiagnosticsFlavor m_flavor = XamlDiagnosticsFlavor::None;
 };
 
 template <typename Class>
@@ -1807,13 +1858,17 @@ using InitializeXamlDiagnosticsEx_t =
     decltype(&InitializeXamlDiagnosticsEx);
 
 std::mutex g_xamlDiagnosticsInitializationMutex;
-bool g_windowsUiXamlDiagnosticsConnected;
-bool g_microsoftUiXamlDiagnosticsConnected;
+std::atomic_bool g_windowsUiXamlDiagnosticsConnected{false};
+std::atomic_bool g_microsoftUiXamlDiagnosticsConnected{false};
 std::atomic_bool g_xamlDiagnosticsWorkerRunning{false};
+std::atomic_bool g_xamlDiagnosticsRequestPending{false};
 thread_local bool g_loadingXamlDiagnostics;
+thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics =
+    XamlDiagnosticsFlavor::None;
 
 HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
-                              LPCWSTR connectionPrefix) {
+                              LPCWSTR connectionPrefix,
+                              XamlDiagnosticsFlavor flavor) {
     const auto initialize =
         reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
             GetProcAddress(xamlModule,
@@ -1844,9 +1899,13 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
         wchar_t connectionName[256];
         _snwprintf_s(connectionName, _TRUNCATE, L"%s%d",
                      connectionPrefix, index);
+        const XamlDiagnosticsFlavor previousFlavor =
+            g_connectingXamlDiagnostics;
+        g_connectingXamlDiagnostics = flavor;
         result = initialize(
             connectionName, GetCurrentProcessId(), L"",
             modulePath, CLSID_CjkSpacerTap, nullptr);
+        g_connectingXamlDiagnostics = previousFlavor;
         if (result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
             break;
         }
@@ -1879,19 +1938,22 @@ void EnsureModernXamlDiagnostics() {
         return;
     }
 
-    if (!g_windowsUiXamlDiagnosticsConnected) {
+    if (!g_windowsUiXamlDiagnosticsConnected.load(
+            std::memory_order_acquire)) {
         if (HMODULE module =
                 GetModuleHandleW(L"Windows.UI.Xaml.dll")) {
             const uint64_t watcherGeneration =
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
-                module, L"VisualDiagConnection");
+                module, L"VisualDiagConnection",
+                XamlDiagnosticsFlavor::Windows);
             if (SUCCEEDED(result) &&
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire) >
                     watcherGeneration) {
-                g_windowsUiXamlDiagnosticsConnected = true;
+                g_windowsUiXamlDiagnosticsConnected.store(
+                    true, std::memory_order_release);
                 Wh_Log(L"Connected to Windows.UI.Xaml diagnostics");
             } else if (SUCCEEDED(result)) {
                 Wh_Log(L"Windows.UI.Xaml diagnostics returned success "
@@ -1907,19 +1969,22 @@ void EnsureModernXamlDiagnostics() {
         }
     }
 
-    if (!g_microsoftUiXamlDiagnosticsConnected) {
+    if (!g_microsoftUiXamlDiagnosticsConnected.load(
+            std::memory_order_acquire)) {
         if (HMODULE module = GetModuleHandleW(
                 L"Microsoft.Internal.FrameworkUdk.dll")) {
             const uint64_t watcherGeneration =
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
-                module, L"WinUIVisualDiagConnection");
+                module, L"WinUIVisualDiagConnection",
+                XamlDiagnosticsFlavor::Microsoft);
             if (SUCCEEDED(result) &&
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire) >
                     watcherGeneration) {
-                g_microsoftUiXamlDiagnosticsConnected = true;
+                g_microsoftUiXamlDiagnosticsConnected.store(
+                    true, std::memory_order_release);
                 Wh_Log(L"Connected to Microsoft.UI.Xaml diagnostics");
             } else if (SUCCEEDED(result)) {
                 Wh_Log(L"Microsoft.UI.Xaml diagnostics returned success "
@@ -1940,6 +2005,9 @@ void RequestModernXamlDiagnosticsInitialization() {
     if (g_stoppingModernUi.load(std::memory_order_relaxed)) {
         return;
     }
+
+    g_xamlDiagnosticsRequestPending.store(
+        true, std::memory_order_release);
 
     bool expected = false;
     if (!g_xamlDiagnosticsWorkerRunning.compare_exchange_strong(
@@ -1963,13 +2031,24 @@ void RequestModernXamlDiagnosticsInitialization() {
             HMODULE module = static_cast<HMODULE>(parameter);
             const HRESULT initializeResult =
                 CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            EnsureModernXamlDiagnostics();
+            while (!g_stoppingModernUi.load(
+                       std::memory_order_relaxed) &&
+                   g_xamlDiagnosticsRequestPending.exchange(
+                       false, std::memory_order_acq_rel)) {
+                EnsureModernXamlDiagnostics();
+            }
             if (SUCCEEDED(initializeResult)) {
                 CoUninitialize();
             }
 
             g_xamlDiagnosticsWorkerRunning.store(
                 false, std::memory_order_release);
+            if (g_xamlDiagnosticsRequestPending.load(
+                    std::memory_order_acquire) &&
+                !g_stoppingModernUi.load(
+                    std::memory_order_relaxed)) {
+                RequestModernXamlDiagnosticsInitialization();
+            }
             FreeLibraryAndExitThread(module, 0);
         },
         module, 0, nullptr);
@@ -2296,7 +2375,7 @@ BOOL Wh_ModInit() {
 
     if (!classicMenusEnabled && !classicTooltipsEnabled &&
         !modernUiTextEnabled) {
-        Wh_Log(L"CJK Spacer has no enabled UI targets");
+        Wh_Log(L"No enabled UI targets");
         return FALSE;
     }
 
@@ -2350,7 +2429,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    Wh_Log(L"CJK Spacer initialized (classicMenus=%d, "
+    Wh_Log(L"Initialized (classicMenus=%d, "
            L"classicTooltips=%d, modern=%d, unicode=%d)",
            g_classicMenus.load(), g_classicTooltips.load(),
            g_modernUiText.load(),
@@ -2378,7 +2457,7 @@ void Wh_ModUninit() {
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         UninitializeModernUi();
     }
-    Wh_Log(L"CJK Spacer uninitialized");
+    Wh_Log(L"Uninitialized");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
