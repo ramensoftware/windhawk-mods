@@ -3713,9 +3713,24 @@ static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* out
 // hotkey thread; a caller-supplied instance is used exclusively instead,
 // without ever reading, creating, or publishing g_pNLM, so the DirectUI/
 // Control-Panel thread never touches the hotkey thread's NLM instance.
-static int DetectNetworkLocationCategory(INetworkListManager* pNLMOverride = nullptr) {
+//
+// useOnlyOverride: distinguishes "no override was requested" (false, the
+// legacy g_pNLM-sharing path) from "an isolated instance was requested but
+// the caller's CoCreateInstance failed, so pNLMOverride is null" (true). A
+// null pNLMOverride alone can't carry that distinction - falling back to
+// g_pNLM in the failure case is exactly the cross-apartment use / use-after-
+// free the override exists to prevent (g_pNLM can be Release()d by
+// HotkeyThreadProc concurrently). When useOnlyOverride is true and
+// pNLMOverride is null, skip detection entirely rather than silently
+// reaching for g_pNLM.
+static int DetectNetworkLocationCategory(INetworkListManager* pNLMOverride = nullptr,
+                                          bool useOnlyOverride = false) {
+    if (useOnlyOverride && !pNLMOverride) {
+        Wh_Log(L"DetectNetworkLocationCategory: isolated NLM instance unavailable, skipping");
+        return -1;
+    }
     INetworkListManager* pNLM = pNLMOverride ? pNLMOverride : g_pNLM;
-    if (!pNLM && !pNLMOverride) {
+    if (!pNLM && !pNLMOverride && !useOnlyOverride) {
         CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
                          IID_INetworkListManager, (void**)&pNLM);
         if (pNLM && !g_pNLM) g_pNLM = pNLM;
@@ -4509,7 +4524,8 @@ static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR /*name*/) {
 // that instance is used exclusively and g_pNLM is never read, created, or
 // published from this call, avoiding the cross-apartment sharing / use-after-
 // free race with HotkeyThreadProc's exit-time Release() of g_pNLM.
-void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr) {
+void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr,
+                           bool useOnlyOverride = false) {
     // Staged locally and published to the g_Ethernet* globals in a single
     // locked block at the end of this function. Previously these globals
     // were written directly, with no lock at all, while
@@ -4610,13 +4626,17 @@ void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr) {
 
     // 2. Query COM INetworkListManager to get the exact friendly network name (e.g. "Rete 2")
     INetworkListManager* pNLM = pNLMOverride;
-    if (!pNLM) {
+    if (!pNLM && !useOnlyOverride) {
         if (!g_pNLM) {
             CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
                              IID_INetworkListManager, (void**)&g_pNLM);
         }
         pNLM = g_pNLM;
     }
+    // else: caller asked for an isolated instance and CoCreateInstance
+    // failed on their side - pNLM stays null and we skip the NLM-backed
+    // name lookup below instead of silently falling back to the shared
+    // g_pNLM (which another thread can Release() concurrently).
 
     if (pNLM) {
         IEnumNetworks* pEnum = NULL;
@@ -4713,7 +4733,8 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
     }
 }
 
-void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOverride = nullptr) {
+void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOverride = nullptr,
+                         bool useOnlyOverride = false) {
     if (g_Ctx.hWlanClient) {
         RefreshWifiData(g_Ctx.hWlanClient);
     } else {
@@ -4721,7 +4742,7 @@ void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOv
         g_NetworkCount = 0;
         LeaveCriticalSection(&g_Ctx.csLock);
     }
-    UpdateEthernetStatus(pNLMOverride);
+    UpdateEthernetStatus(pNLMOverride, useOnlyOverride);
     
     // Detect network location category (Home / Public / Work).
     // Skip the COM query entirely when the feature is disabled, and also
@@ -4742,7 +4763,7 @@ void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOv
     BOOL flyoutVisible = forceDetection ||
                          (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
     if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
-        int category = DetectNetworkLocationCategory(pNLMOverride);
+        int category = DetectNetworkLocationCategory(pNLMOverride, useOnlyOverride);
         EnterCriticalSection(&g_Ctx.csLock);
         g_CurrentNetworkCategory = category;
         LeaveCriticalSection(&g_Ctx.csLock);
@@ -7809,7 +7830,13 @@ void SafeCleanup() {
     RemoveTrayInterception();
     if (g_Ctx.dwHotkeyThreadId) PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_QUIT, 0, 0);
     if (g_Ctx.hHotkeyThread) {
-        WaitForSingleObject(g_Ctx.hHotkeyThread, 3000);
+        // Bounded waits here are unsafe: if the thread is still running
+        // inside the mod image when Wh_ModUninit returns, Windhawk unmaps
+        // the DLL out from under it and it executes unmapped code. Nothing
+        // in HotkeyThreadProc can block forever (PromptNetworkPassword
+        // re-posts WM_QUIT, and the WLAN/NLM calls are bounded), so wait
+        // for real completion instead of falling through on a timeout.
+        WaitForSingleObject(g_Ctx.hHotkeyThread, INFINITE);
         CloseHandle(g_Ctx.hHotkeyThread);
         g_Ctx.hHotkeyThread = NULL; g_Ctx.dwHotkeyThreadId = 0;
     }
@@ -7838,8 +7865,12 @@ void SafeCleanup() {
         g_hProfileDialogThread = NULL;
     }
     if (g_hConnectThread) {
+        // AsyncConnectThreadProc can wait up to 10s on g_hConnectMutex before
+        // doing anything, so any join timeout shorter than that (previously
+        // 5s) is a guaranteed fall-through, not a rare race. Wait for real
+        // completion instead: the thread is bounded, just not by 5s.
         Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
-        DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
+        DWORD waitResult = WaitForSingleObject(g_hConnectThread, INFINITE);
         Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
         CloseHandle(g_hConnectThread);
         g_hConnectThread = NULL;
@@ -7849,7 +7880,7 @@ void SafeCleanup() {
     if (g_hReapThread) {
         // Same reasoning as the connect thread above: this also runs code
         // in the mod's image, so it must finish before Wh_ModUninit returns.
-        WaitForSingleObject(g_hReapThread, 5000);
+        WaitForSingleObject(g_hReapThread, INFINITE);
         CloseHandle(g_hReapThread);
         g_hReapThread = NULL;
     }
@@ -8891,9 +8922,21 @@ static void TeardownNetCenterHost() {
 
     for (const auto& item : registryCopy) {
         if (item.msgWindow && IsWindow(item.msgWindow)) {
+            // A single timed-out attempt is the only thing standing between
+            // a busy/hung page thread and a dangling WndProc pointing into
+            // the unmapped mod image (plus a UnregisterClass that will keep
+            // failing forever afterward). Retry a few times before giving
+            // up, since the page thread may simply be transiently busy.
             DWORD_PTR dwResult = 0;
-            SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
-                                SMTO_ABORTIFHUNG, 5000, &dwResult);
+            LRESULT sent = 0;
+            for (int attempt = 0; attempt < 3 && IsWindow(item.msgWindow); attempt++) {
+                sent = SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
+                                            SMTO_ABORTIFHUNG, 5000, &dwResult);
+                if (sent != 0) break;
+            }
+            if (sent == 0 && IsWindow(item.msgWindow)) {
+                Wh_Log(L"[NetMap] NC teardown message timed out after retries; window still alive");
+            }
         } else {
             if (item.hostWindow && IsWindow(item.hostWindow)) {
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(item.hostWindow, NcHostSubclassProc);
@@ -9209,11 +9252,25 @@ static void PrimeNetworkCategoryForNetCenterHost() {
 
     // Keep the NLM interface private to this STA. Publishing it in g_pNLM
     // would make Wh_ModUninit release an unmarshalled COM object from another
-    // thread in control.exe.
+    // thread in control.exe. ComPtr already frees this on scope exit in
+    // every non-explorer-host return path (including the early-return at
+    // the top of this function on a later call), so it never leaks - the
+    // earlier concern was specifically about a raw g_pNLM being populated
+    // by this path and never released; useOnlyOverride=true below prevents
+    // that from happening at all.
     ComPtr<INetworkListManager> nlm;
-    CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                     IID_INetworkListManager, (void**)nlm.put());
-    RefreshNetworkData(/*forceDetection=*/TRUE, nlm.get());
+    HRESULT hrNlm = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                      IID_INetworkListManager, (void**)nlm.put());
+    if (FAILED(hrNlm)) {
+        // Don't infer "use the shared instance" from a null pointer here -
+        // that's exactly the cross-apartment use / use-after-free that this
+        // isolated instance exists to avoid (HotkeyThreadProc can Release()
+        // g_pNLM concurrently). Skip NLM-backed detection for this pass and
+        // let it fall back to the existing Public/offline default.
+        Wh_Log(L"[NetMap] CoCreateInstance(NetworkListManager) failed (hr=0x%08X); "
+               L"skipping NLM-backed detection for this priming pass", hrNlm);
+    }
+    RefreshNetworkData(/*forceDetection=*/TRUE, nlm.get(), /*useOnlyOverride=*/true);
     Wh_Log(L"[NetMap] One-time priming in non-explorer host finished "
            L"(category=%d, online=%d)",
            g_CurrentNetworkCategory, (int)IsInternetConnected());
@@ -9279,10 +9336,22 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
     // use-after-free during unload, on top of using/publishing an interface 
     // pointer created in the wrong apartment.
     ComPtr<INetworkListManager> localNlm;
-    CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                      IID_INetworkListManager, (void**)localNlm.put());
+    HRESULT hrNlm = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                      IID_INetworkListManager, (void**)localNlm.put());
+    if (FAILED(hrNlm)) {
+        // A null localNlm must NOT be treated as "no override requested" by
+        // the callees below - that would silently fall back to the shared
+        // g_pNLM, which is exactly the cross-apartment use / use-after-free
+        // this local instance exists to avoid (HotkeyThreadProc releases
+        // g_pNLM unconditionally on exit and this worker can be mid-call on
+        // it). useOnlyOverride=true below makes the callees skip NLM-backed
+        // work entirely instead of guessing.
+        Wh_Log(L"[NetMap] CoCreateInstance(NetworkListManager) failed (hr=0x%08X) "
+               L"on refresh worker thread; NLM-backed detection skipped this pass", hrNlm);
+    }
 
-    UpdateEthernetStatus(localNlm.get());  // lock-free COM/WLAN work, locked publish of g_Ethernet*
+    // lock-free COM/WLAN work, locked publish of g_Ethernet*
+    UpdateEthernetStatus(localNlm.get(), /*useOnlyOverride=*/true);
 
     // Category only if still unknown. Failures are non-fatal: the icon
     // then falls back to the colored Public icon, never the gray one.
@@ -9292,7 +9361,7 @@ static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
         (state.networkCount > 0 && state.networks[0].connState == CONN_STATE_CONNECTED);
     if (isAnyConnected && g_Settings.useNetworkLocationIcons &&
         !IsValidNetworkCategoryValue(state.currentNetworkCategory)) {
-        int category = DetectNetworkLocationCategory(localNlm.get());
+        int category = DetectNetworkLocationCategory(localNlm.get(), /*useOnlyOverride=*/true);
         EnterCriticalSection(&g_Ctx.csLock);
         g_CurrentNetworkCategory = category;
         LeaveCriticalSection(&g_Ctx.csLock);
@@ -9599,6 +9668,18 @@ BOOL Wh_ModInit() {
     // startup, and risks creating g_pNLM in the wrong apartment.
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
+        // Per the Windhawk mod lifetime contract, returning FALSE here means
+        // Wh_ModUninit is never called - so everything installed above
+        // (tray subclass, GDI+, icons, fonts, DarkContextMenu) must be
+        // undone right here, or it stays live in explorer.exe pointing into
+        // a mod image that's about to be unmapped. The tray interception
+        // and Network Center page don't actually depend on the hotkey
+        // thread, so this path should be rare, but must still be safe.
+        RemoveTrayInterception();
+        ShutdownGdiPlusRendering();
+        FreeSystemIcons();
+        FreeGlobalFonts();
+        DarkContextMenu::Uninit();
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -9653,7 +9734,13 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (Win7NetworkCenterLinks::g_ncRefreshThread) {
-        WaitForSingleObject(Win7NetworkCenterLinks::g_ncRefreshThread, 5000);
+        // Was bounded to 5s; NcNetworkDataRefreshWorker's worst case
+        // (WlanEnumInterfaces + WlanGetNetworkBssList per network +
+        // GetAdaptersAddresses + 2x CoCreateInstance) can exceed that on a
+        // laptop with many visible SSIDs. A timed-out fall-through here
+        // means Windhawk unmaps the DLL while this thread is still running
+        // inside it, so wait for real completion instead.
+        WaitForSingleObject(Win7NetworkCenterLinks::g_ncRefreshThread, INFINITE);
         CloseHandle(Win7NetworkCenterLinks::g_ncRefreshThread);
         Win7NetworkCenterLinks::g_ncRefreshThread = NULL;
     }
@@ -9676,8 +9763,17 @@ void Wh_ModUninit() {
             g_Ctx.hWlanClient = NULL;
         }
         if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
-            UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandle(NULL));
-            Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+            // UnregisterClass fails while any window of the class still
+            // exists (TeardownNetCenterHost's SendMessageTimeout above can
+            // return without actually destroying it if the page thread is
+            // busy/hung). Only clear the flag on real success so the state
+            // stays truthful - otherwise a later RegisterClassW on the next
+            // load will fail against a class we think is gone.
+            if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandleW(NULL))) {
+                Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+            } else {
+                Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
+            }
         }
         ShutdownGdiPlusRendering();
         FreeSystemIcons();
@@ -9690,8 +9786,11 @@ void Wh_ModUninit() {
     DeleteCriticalSection(&g_Ctx.csLock);
     DarkContextMenu::Uninit();
     if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
-        UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandle(NULL));
-        Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+        if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, GetModuleHandleW(NULL))) {
+            Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+        } else {
+            Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
+        }
     }
     UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
     UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
