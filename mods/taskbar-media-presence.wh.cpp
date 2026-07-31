@@ -2,7 +2,7 @@
 // @id              taskbar-media-presence
 // @name            Taskbar Media Presence
 // @description     Taskbar music controls with adaptive album art, per-app volume, safe multi-monitor placement, and Discord Rich Presence.
-// @version         1.0.24
+// @version         1.0.26
 // @author          MrBoxik
 // @github          https://github.com/MrBoxik
 // @homepage        https://github.com/MrBoxik/Taskbar-Media-Presence
@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Media Presence 1.0.24
+# Taskbar Media Presence 1.0.26
 
 A compact Windows 11 taskbar player for any application that publishes a Windows media session.
 
@@ -1604,6 +1604,8 @@ static HANDLE g_asyncTaskStopEvent = nullptr;
 static std::atomic<DWORD> g_asyncTaskThreadId{0};
 static bool g_acceptAsyncTasks = true;
 
+static void ResetAsyncProducerStateForWorkerRestart();
+
 template <typename TAsyncOperation>
 static auto WaitForWinrtOperation(
     TAsyncOperation const& operation,
@@ -1713,9 +1715,32 @@ static void CloseAsyncTaskWorkerHandlesLocked() {
 
 static bool StartAsyncTaskWorker() {
     std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+
+    // StopAsyncTaskWorker waits on a snapshot of g_asyncTaskThread without
+    // holding this mutex. While producers are paused, don't reap that handle or
+    // create a replacement: closing a handle while another thread is waiting
+    // on it is undefined, and closing the replacement after the old wait
+    // completes would terminate the wrong worker lifecycle.
+    if (!g_acceptAsyncTasks ||
+        g_unloading.load(std::memory_order_acquire)) {
+        return false;
+    }
+
     if (g_asyncTaskThread) {
-        if (WaitForSingleObject(g_asyncTaskThread, 0) == WAIT_TIMEOUT) {
-            return true;
+        DWORD threadState = WaitForSingleObject(g_asyncTaskThread, 0);
+        if (threadState == WAIT_TIMEOUT) {
+            // A stop-signalled worker is committed to exiting. Never accept
+            // new work into it; a later QueueAsyncTask call will reap it and
+            // create a fresh worker after the thread has actually stopped.
+            bool stopRequested = g_asyncTaskStopEvent &&
+                WaitForSingleObject(g_asyncTaskStopEvent, 0) ==
+                    WAIT_OBJECT_0;
+            return !stopRequested;
+        }
+        if (threadState != WAIT_OBJECT_0) {
+            Wh_Log(L"Background worker state check failed (%u)",
+                   GetLastError());
+            return false;
         }
         CloseAsyncTaskWorkerHandlesLocked();
     }
@@ -1763,9 +1788,26 @@ static void PauseAsyncTasks(bool discardPending = false) {
 }
 
 static void ResumeAsyncTasks() {
-    if (g_unloading || !StartAsyncTaskWorker()) return;
+    if (g_unloading) return;
+
+    // Mark the producer side resumed first. If the previous worker is still
+    // finishing after a bounded stop timeout, StartAsyncTaskWorker refuses to
+    // reuse its signalled stop event. The next producer call then reaps the
+    // exited handle and starts a fresh worker instead of queueing work that the
+    // dying worker would silently discard.
+    {
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        g_acceptAsyncTasks = true;
+    }
+
+    if (!StartAsyncTaskWorker()) {
+        Wh_Log(
+            L"Background worker is still stopping; the next task will retry "
+            L"worker startup");
+        return;
+    }
+
     std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
-    g_acceptAsyncTasks = true;
     if (!g_asyncTaskQueue.empty() && g_asyncTaskAvailableEvent) {
         SetEvent(g_asyncTaskAvailableEvent);
     }
@@ -2617,6 +2659,7 @@ static void LogOutstandingCleanupRisk(PCWSTR reason);
 static HANDLE g_discordPresenceThread = nullptr;
 static HANDLE g_discordPresenceStopEvent = nullptr;
 static HANDLE g_discordPresenceUpdateEvent = nullptr;
+static std::mutex g_discordPresenceLifecycleMtx;
 static std::atomic<uint64_t> g_discordNonce{1};
 
 struct DiscordIpcHeader {
@@ -3043,9 +3086,15 @@ static void SignalDiscordPresenceUpdate() {
     SignalWorkerEventHandle(g_discordPresenceUpdateEvent);
 }
 
-static bool ReapStoppedDiscordPresenceThread() {
+static bool ReapStoppedDiscordPresenceThreadLocked() {
     if (!g_discordPresenceThread) return true;
-    if (WaitForSingleObject(g_discordPresenceThread, 0) != WAIT_OBJECT_0) {
+
+    DWORD threadState =
+        WaitForSingleObject(g_discordPresenceThread, 0);
+    if (threadState == WAIT_TIMEOUT) return false;
+    if (threadState != WAIT_OBJECT_0) {
+        Wh_Log(L"Discord presence: worker state check failed (%u)",
+               GetLastError());
         return false;
     }
 
@@ -3056,8 +3105,13 @@ static bool ReapStoppedDiscordPresenceThread() {
     return true;
 }
 
-static void StartDiscordPresenceThread() {
-    if (!ReapStoppedDiscordPresenceThread()) {
+static void StartDiscordPresenceThreadLocked() {
+    if (g_unloading.load(std::memory_order_acquire) ||
+        g_applyingSettings.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!ReapStoppedDiscordPresenceThreadLocked()) {
         Wh_Log(L"Discord presence: previous worker is still stopping");
         return;
     }
@@ -3090,7 +3144,16 @@ static void StartDiscordPresenceThread() {
     }
 }
 
+static void StartDiscordPresenceThread() {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_discordPresenceLifecycleMtx);
+    StartDiscordPresenceThreadLocked();
+}
+
 static bool StopDiscordPresenceThread(bool shutdownCleanup = false) {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_discordPresenceLifecycleMtx);
+
     SignalWorkerEventHandle(g_discordPresenceStopEvent);
     if (g_discordPresenceThread) {
         constexpr DWORD timeoutMs = 3000;
@@ -3109,7 +3172,44 @@ static bool StopDiscordPresenceThread(bool shutdownCleanup = false) {
             return false;
         }
     }
-    return ReapStoppedDiscordPresenceThread();
+    return ReapStoppedDiscordPresenceThreadLocked();
+}
+
+static void EnsureDiscordPresenceThreadRunning() {
+    if (g_unloading.load(std::memory_order_acquire) ||
+        g_applyingSettings.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_discordPresenceLifecycleMtx);
+    if (g_unloading.load(std::memory_order_acquire) ||
+        g_applyingSettings.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (g_discordPresenceThread) {
+        DWORD threadState =
+            WaitForSingleObject(g_discordPresenceThread, 0);
+        if (threadState == WAIT_TIMEOUT) return;
+        if (threadState != WAIT_OBJECT_0) {
+            Wh_Log(L"Discord presence: worker state check failed (%u)",
+                   GetLastError());
+            return;
+        }
+        if (!ReapStoppedDiscordPresenceThreadLocked()) return;
+    }
+
+    if (Cfg()->discordPresenceEnabled) {
+        StartDiscordPresenceThreadLocked();
+    }
+}
+
+static bool IsDiscordPresenceThreadRunning() {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_discordPresenceLifecycleMtx);
+    if (!g_discordPresenceThread) return false;
+    return WaitForSingleObject(g_discordPresenceThread, 0) == WAIT_TIMEOUT;
 }
 
 enum class RepeatMode {
@@ -3177,6 +3277,7 @@ static HANDLE g_mediaThread    = nullptr;
 static std::atomic<DWORD> g_mediaThreadId{0};
 static HANDLE g_mediaStopEvent = nullptr;
 static HANDLE g_mediaRefreshEvent = nullptr;
+static std::mutex g_mediaThreadLifecycleMtx;
 
 static SRWLOCK g_mediaEventCallbackLock = SRWLOCK_INIT;
 static CONDITION_VARIABLE g_mediaEventCallbackChanged =
@@ -4674,6 +4775,40 @@ static bool IsProcessIdAlive(DWORD processId) {
     return alive;
 }
 
+static bool CachedMediaProcessIdentityMatches(
+    DWORD processId,
+    const std::wstring& cachedProcessPath,
+    const std::wstring& appUserModelId) {
+    if (!processId || g_unloading.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    HANDLE process = OpenProcess(
+        PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+        FALSE, processId);
+    if (!process) return false;
+
+    bool alive = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    std::wstring currentPath;
+    std::wstring currentAumid;
+    if (alive) {
+        currentPath = QueryProcessImagePath(process);
+        currentAumid = ProcessApplicationUserModelId(process);
+    }
+    CloseHandle(process);
+    if (!alive) return false;
+
+    if (!cachedProcessPath.empty() && !currentPath.empty() &&
+        _wcsicmp(cachedProcessPath.c_str(), currentPath.c_str()) == 0) {
+        return true;
+    }
+    if (!appUserModelId.empty() &&
+        SamePackagedAppIdentity(appUserModelId, currentAumid)) {
+        return true;
+    }
+    return false;
+}
+
 static MediaProcessIdentity ResolveMediaProcessIdentity(
     const std::wstring& appUserModelId) {
     MediaProcessIdentity identity;
@@ -4938,7 +5073,8 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
              processId]() {
                 if (g_unloading) return;
 
-                if (IsProcessIdAlive(processId) &&
+                if (CachedMediaProcessIdentityMatches(
+                        processId, processPath, appUserModelId) &&
                     ActivateMediaProcessWindow(processId)) {
                     return;
                 }
@@ -6594,10 +6730,9 @@ static void FetchMediaPropertiesAsync() {
                 oldProcessIdentityAttemptTick;
             ULONGLONG nowTick = GetTickCount64();
             bool processIdentityStale =
-                !IsProcessIdAlive(oldProcessId) &&
-                (oldAumid != aumid ||
-                 !oldProcessIdentityAttemptTick ||
-                 nowTick - oldProcessIdentityAttemptTick >= 10000);
+                !oldProcessIdentityAttemptTick ||
+                nowTick - oldProcessIdentityAttemptTick >= 10000 ||
+                !IsProcessIdAlive(oldProcessId);
             if (oldAumid != aumid || processIdentityStale) {
                 processIdentity = ResolveMediaProcessIdentity(aumid);
                 processIdentityAttemptTick = nowTick;
@@ -7496,8 +7631,41 @@ static DWORD WINAPI MediaThreadProc(void*) noexcept {
     return result;
 }
 
-static void StartMediaThread() {
-    if (g_mediaThread) return;
+static bool ReapStoppedMediaThreadLocked() {
+    if (!g_mediaThread) return true;
+
+    DWORD threadState = WaitForSingleObject(g_mediaThread, 0);
+    if (threadState == WAIT_TIMEOUT) return false;
+    if (threadState != WAIT_OBJECT_0) {
+        Wh_Log(L"Media thread state check failed (%u)", GetLastError());
+        return false;
+    }
+
+    CloseHandle(g_mediaThread);
+    g_mediaThread = nullptr;
+    CloseWorkerEventHandle(g_mediaStopEvent);
+    CloseWorkerEventHandle(g_mediaRefreshEvent);
+    return true;
+}
+
+static bool StartMediaThread() {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_mediaThreadLifecycleMtx);
+
+    if (g_unloading.load(std::memory_order_acquire)) return false;
+
+    if (g_mediaThread) {
+        DWORD threadState = WaitForSingleObject(g_mediaThread, 0);
+        if (threadState == WAIT_TIMEOUT) {
+            HANDLE stopEvent =
+                SnapshotWorkerEventHandle(g_mediaStopEvent);
+            bool stopRequested = stopEvent &&
+                WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0;
+            return !stopRequested;
+        }
+        if (!ReapStoppedMediaThreadLocked()) return false;
+    }
+
     bool stopEventCreated =
         CreateWorkerEventHandle(g_mediaStopEvent, true, false);
     bool refreshEventCreated =
@@ -7505,15 +7673,20 @@ static void StartMediaThread() {
     if (!stopEventCreated || !refreshEventCreated) {
         CloseWorkerEventHandle(g_mediaStopEvent);
         CloseWorkerEventHandle(g_mediaRefreshEvent);
-        return;
+        return false;
     }
-    g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
+    g_mediaThread =
+        CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
     if (!g_mediaThread) {
         CloseWorkerEventHandle(g_mediaStopEvent);
         CloseWorkerEventHandle(g_mediaRefreshEvent);
+        return false;
     }
+    return true;
 }
 static bool StopMediaThread(bool shutdownCleanup = false) {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_mediaThreadLifecycleMtx);
     SignalWorkerEventHandle(g_mediaStopEvent);
     DWORD mediaThreadId =
         g_mediaThreadId.load(std::memory_order_acquire);
@@ -7564,6 +7737,7 @@ static HANDLE g_timerThread    = nullptr;
 static std::atomic<DWORD> g_timerThreadId{0};
 static HANDLE g_timerStopEvent = nullptr;
 static HANDLE g_timerUpdateEvent = nullptr;
+static std::mutex g_timerThreadLifecycleMtx;
 
 [[clang::no_destroy]] static winrt::Windows::UI::Xaml::DispatcherTimer g_scrollDispatcherTimer{nullptr};
 static winrt::event_token                        g_scrollDispatcherTimerToken{};
@@ -8262,6 +8436,12 @@ static DWORD TimerThreadMain() {
         if (wait == WAIT_OBJECT_0 + stopIndex || g_unloading) break;
         if (g_applyingSettings) continue;
 
+        // Reap workers that finished just after a bounded settings-change
+        // deadline. This turns a transient stop delay into a one-cycle pause,
+        // not a permanently stale widget.
+        StartMediaThread();
+        EnsureDiscordPresenceThreadRunning();
+
         ULONGLONG nowTick = GetTickCount64();
 
         HWND selectedTaskbar = g_taskbarWnd.load();
@@ -8506,8 +8686,41 @@ static DWORD WINAPI TimerThreadProc(void*) noexcept {
     return result;
 }
 
-static void StartTimerThread() {
-    if (g_timerThread) return;
+static bool ReapStoppedTimerThreadLocked() {
+    if (!g_timerThread) return true;
+
+    DWORD threadState = WaitForSingleObject(g_timerThread, 0);
+    if (threadState == WAIT_TIMEOUT) return false;
+    if (threadState != WAIT_OBJECT_0) {
+        Wh_Log(L"Timer thread state check failed (%u)", GetLastError());
+        return false;
+    }
+
+    CloseHandle(g_timerThread);
+    g_timerThread = nullptr;
+    CloseWorkerEventHandle(g_timerStopEvent);
+    CloseWorkerEventHandle(g_timerUpdateEvent);
+    return true;
+}
+
+static bool StartTimerThread() {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_timerThreadLifecycleMtx);
+
+    if (g_unloading.load(std::memory_order_acquire)) return false;
+
+    if (g_timerThread) {
+        DWORD threadState = WaitForSingleObject(g_timerThread, 0);
+        if (threadState == WAIT_TIMEOUT) {
+            HANDLE stopEvent =
+                SnapshotWorkerEventHandle(g_timerStopEvent);
+            bool stopRequested = stopEvent &&
+                WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0;
+            return !stopRequested;
+        }
+        if (!ReapStoppedTimerThreadLocked()) return false;
+    }
+
     bool stopEventCreated =
         CreateWorkerEventHandle(g_timerStopEvent, true, false);
     bool updateEventCreated =
@@ -8515,20 +8728,24 @@ static void StartTimerThread() {
     if (!stopEventCreated || !updateEventCreated) {
         CloseWorkerEventHandle(g_timerStopEvent);
         CloseWorkerEventHandle(g_timerUpdateEvent);
-        return;
+        return false;
     }
 
-    g_timerThread    = CreateThread(nullptr, 0, TimerThreadProc, nullptr, 0, nullptr);
+    g_timerThread =
+        CreateThread(nullptr, 0, TimerThreadProc, nullptr, 0, nullptr);
     if (!g_timerThread) {
         CloseWorkerEventHandle(g_timerStopEvent);
         CloseWorkerEventHandle(g_timerUpdateEvent);
-        return;
+        return false;
     }
 
     StartDiscordPresenceThread();
+    return true;
 }
 static bool StopTimerThread(bool shutdownCleanup = false,
                             bool cleanupScrollTimer = true) {
+    std::lock_guard<std::mutex> lifecycleLock(
+        g_timerThreadLifecycleMtx);
     bool discordStopped = StopDiscordPresenceThread(shutdownCleanup);
     SignalWorkerEventHandle(g_timerStopEvent);
     DWORD timerThreadId =
@@ -9793,16 +10010,25 @@ static bool g_quickRebuildWorkerRunning = false;
 static bool g_quickRebuildNeedsMonitorMove = false;
 
 static bool AcquireSettingsApplyGateForFullApply() {
-    while (!g_unloading) {
+    const ULONGLONG deadline = GetTickCount64() + 10000;
+    while (!g_unloading.load(std::memory_order_acquire)) {
         bool expected = false;
         if (g_applyingSettings.compare_exchange_weak(
                 expected, true, std::memory_order_acq_rel)) {
             return true;
         }
 
+        if (GetTickCount64() >= deadline) {
+            Wh_Log(
+                L"Wh_ModSettingsChanged: timed out waiting for an earlier "
+                L"settings rebuild to finish; leaving the current settings "
+                L"active so Explorer remains responsive");
+            return false;
+        }
+
         // A quick rebuild can be synchronously dispatching to this very UI
         // thread. Pump sent messages while waiting so the owner can finish and
-        // release the gate instead of timing out or deadlocking.
+        // release the gate instead of deadlocking.
         MsgWaitForMultipleObjectsEx(
             0, nullptr, 25, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
         MSG message{};
@@ -14933,7 +15159,7 @@ static bool HookTaskbarDllSymbols() {
         h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-static void ResetAsyncProducerStateAfterWorkerStop() {
+static void ResetAsyncProducerStateForWorkerRestart() {
     g_mediaPropertiesFetchActive.store(false, std::memory_order_release);
     g_mediaPropertiesFetchPending.store(false, std::memory_order_release);
     g_playbackInfoFetchActive.store(false, std::memory_order_release);
@@ -15009,8 +15235,7 @@ static bool HasOutstandingExecutableCallbacks() {
     ReleaseSRWLockExclusive(&g_windowDispatchActivityLock);
     if (dispatchActive) return true;
 
-    if ((g_discordPresenceThread &&
-         WaitForSingleObject(g_discordPresenceThread, 0) == WAIT_TIMEOUT) ||
+    if (IsDiscordPresenceThreadRunning() ||
         (g_mediaThread &&
          WaitForSingleObject(g_mediaThread, 0) == WAIT_TIMEOUT) ||
         (g_timerThread &&
@@ -15187,15 +15412,11 @@ static void ModUninitImpl() {
             L"deadline; continuing after bounded cleanup");
     }
     PauseAsyncTasks(true);
+    // Producers are paused, so clear every coalescing flag before waiting for
+    // the current worker. A late reaper must not perform this reset after a new
+    // user action has already populated the producer queues.
+    ResetAsyncProducerStateForWorkerRestart();
     CancelAsyncTaskWorkerCall();
-    {
-        std::lock_guard<std::mutex> lock(g_pendingMediaCommandsMtx);
-        g_pendingMediaCommands.clear();
-    }
-    {
-        std::lock_guard<std::mutex> lock(g_pendingVolumeAdjustMtx);
-        g_pendingVolumeAdjustSteps = 0;
-    }
     g_hookInjectionInProgress = false;
     g_taskbarRestartNotBeforeTick = 0;
 
@@ -15203,9 +15424,6 @@ static void ModUninitImpl() {
         true, taskbarStartHooksDrained);
     bool mediaThreadStopped = StopMediaThread(true);
     bool asyncTasksStopped = StopAsyncTaskWorker(6000);
-    if (asyncTasksStopped) {
-        ResetAsyncProducerStateAfterWorkerStop();
-    }
     if (!asyncTasksStopped) {
         Wh_Log(
             L"Wh_ModUninit: serialized background worker exceeded the "
@@ -15391,6 +15609,39 @@ void Wh_ModUninit() noexcept {
     }
 }
 
+static void RestoreWorkersAfterSettingsApply() noexcept {
+    g_applyingSettings.store(false, std::memory_order_release);
+    if (g_unloading.load(std::memory_order_acquire)) return;
+
+    try {
+        ResumeAsyncTasks();
+        StartMediaThread();
+        StartTimerThread();
+        EnsureDiscordPresenceThreadRunning();
+        SignalWorkerEventHandle(g_timerUpdateEvent);
+        RequestMediaSessionRefresh();
+    } catch (...) {
+        Wh_Log(
+            L"Wh_ModSettingsChanged: worker recovery failed; "
+            L"the timer will retry available services");
+        try {
+            SignalWorkerEventHandle(g_timerUpdateEvent);
+        } catch (...) {}
+    }
+}
+
+static void ScheduleSettingsRecoveryRebuild() noexcept {
+    g_taskbarXamlCallbacksSuppressed.store(
+        true, std::memory_order_release);
+    try {
+        ScheduleTaskbarRebuildRetry(1000);
+        SignalWorkerEventHandle(g_timerUpdateEvent);
+    } catch (...) {
+        Wh_Log(
+            L"Wh_ModSettingsChanged: couldn't schedule the recovery rebuild");
+    }
+}
+
 static void ModSettingsChangedImpl() {
     if (!g_isShellExplorerProcess) return;
 
@@ -15406,26 +15657,38 @@ static void ModSettingsChangedImpl() {
     } gateRelease;
 
     PauseAsyncTasks(true);
+    // Reset queued-task producer flags while no producer can enqueue. If the
+    // old worker misses its deadline and is reaped later, that reaper must not
+    // erase state belonging to a newer user action.
+    ResetAsyncProducerStateForWorkerRestart();
     CancelAsyncTaskWorkerCall();
     if (!DestroyVolumePopup()) {
         Wh_Log(
             L"Wh_ModSettingsChanged: volume popup cleanup was deferred");
     }
-    bool scrollTimerStopped = StopTimerThread();
-    bool mediaThreadStopped = StopMediaThread();
+
+    // The long-lived media and timer workers read immutable settings snapshots
+    // and don't need to be torn down for every settings save. Keeping them
+    // alive avoids a transient COM delay leaving stop-signalled handles behind.
+    // Only the settings-dependent Discord worker and XAML scroll timer restart.
+    bool discordStopped = StopDiscordPresenceThread();
+    bool scrollTimerStopped = StopScrollTimer();
     bool asyncTasksStopped = StopAsyncTaskWorker(6000);
-    if (asyncTasksStopped) {
-        ResetAsyncProducerStateAfterWorkerStop();
-    }
-    if (!mediaThreadStopped) {
+    if (!discordStopped) {
         Wh_Log(
-            L"Wh_ModSettingsChanged: media worker cleanup exceeded the "
-            L"settings-change deadline; continuing without hanging Explorer");
+            L"Wh_ModSettingsChanged: Discord worker is still stopping; "
+            L"the timer worker will reap and restart it");
+    }
+    if (!scrollTimerStopped) {
+        Wh_Log(
+            L"Wh_ModSettingsChanged: scroll timer cleanup was delayed; "
+            L"the rebuild will retry cleanup");
     }
     if (!asyncTasksStopped) {
         Wh_Log(
             L"Wh_ModSettingsChanged: background tasks exceeded the "
-            L"settings-change deadline; continuing without hanging Explorer");
+            L"settings-change deadline; producer startup will retry after "
+            L"the old worker exits");
     }
 
     // Values selected from the compact context menu are persistent overrides
@@ -15441,18 +15704,24 @@ static void ModSettingsChangedImpl() {
     Wh_SetStringValue(L"quickPreferredMediaApp", L"");
 
     LoadSettings();
-    bool rebuilt = scrollTimerStopped && ApplyQuickMonitorRebuild();
+
+    // Always attempt the rebuild. StopTimerThread used to combine Discord,
+    // timer-thread and scroll-timer results into one flag, so an unrelated
+    // teardown delay could suppress ApplyQuickMonitorRebuild entirely.
+    bool rebuilt = ApplyQuickMonitorRebuild();
     if (!rebuilt) {
         Wh_Log(
-            L"Wh_ModSettingsChanged: lifecycle-safe taskbar rebuild was deferred");
+            L"Wh_ModSettingsChanged: immediate taskbar rebuild was deferred; "
+            L"a timer-thread retry was scheduled");
+        ScheduleTaskbarRebuildRetry(500);
+        SignalWorkerEventHandle(g_timerUpdateEvent);
     }
 
-    ResumeAsyncTasks();
-    g_applyingSettings.store(false, std::memory_order_release);
+    // Restore producer acceptance and all settings-dependent workers through
+    // one routine which is also used by the exception path below. This keeps a
+    // failed settings rebuild from leaving the mod permanently paused.
     gateRelease.active = false;
-    StartMediaThread();
-    StartTimerThread();
-    RequestMediaSessionRefresh();
+    RestoreWorkersAfterSettingsApply();
 }
 
 void Wh_ModSettingsChanged() noexcept {
@@ -15461,19 +15730,11 @@ void Wh_ModSettingsChanged() noexcept {
     } catch (const winrt::hresult_error& error) {
         Wh_Log(L"Wh_ModSettingsChanged: unhandled WinRT failure 0x%08X",
                static_cast<uint32_t>(error.code()));
-        g_applyingSettings.store(false, std::memory_order_release);
-        g_taskbarXamlCallbacksSuppressed.store(
-            true, std::memory_order_release);
-        g_taskbarRestartNotBeforeTick.store(
-            std::numeric_limits<ULONGLONG>::max(),
-            std::memory_order_release);
+        ScheduleSettingsRecoveryRebuild();
+        RestoreWorkersAfterSettingsApply();
     } catch (...) {
         Wh_Log(L"Wh_ModSettingsChanged: unhandled settings-change exception");
-        g_applyingSettings.store(false, std::memory_order_release);
-        g_taskbarXamlCallbacksSuppressed.store(
-            true, std::memory_order_release);
-        g_taskbarRestartNotBeforeTick.store(
-            std::numeric_limits<ULONGLONG>::max(),
-            std::memory_order_release);
+        ScheduleSettingsRecoveryRebuild();
+        RestoreWorkersAfterSettingsApply();
     }
 }
