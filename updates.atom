@@ -2,12 +2,104 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-30T22:29:13.000Z</updated>
+    <updated>2026-07-31T10:16:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
+        <link href="https://windhawk.net/mods/start-menu-open-real-file-location"/>
+        <updated>2026-07-31T10:16:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startmenuopenrealfilelocation">Start Menu Open Real File Location</h1>
+<p>Changes <code>Open file location</code> for traditional desktop programs in the Start menu and Windows Search. Instead of opening the Start Menu Programs directory and selecting the program's <code>.lnk</code> file, Explorer opens the shortcut target's directory and selects the target.</p>
+<p>The mod reads only the target stored in the shortcut. It doesn't search for a moved target or display link-resolution dialogs.</p>
+<h2 id="currentlimitationsandtodos">Current Limitations and TODOs</h2>
+<ul>
+<li>Packaged Microsoft Store apps don't normally have a conventional shortcut target and are left unchanged for now.</li>
+<li>If the target can't be read, Windows retains its original behavior and opens the shortcut's location.</li>
+<li>The direct shortcut target is selected. For wrapper shortcuts, this can be a launcher, script host, or another intermediate executable.</li>
+<li>There is currently no program blacklist, so shortcuts that point to common wrappers or launchers will be resolved there.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[XP Time/Date CPL Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/xp-timedate-cpl-fix#5675ab74ce41c2b7ce7a431c5ba629f506716d51</id>
+        <link href="https://windhawk.net/mods/xp-timedate-cpl-fix"/>
+        <updated>2026-07-31T10:16:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="xptimedatecplfix">XP Time/Date CPL Fix</h1>
+<p>The clock in Windows XP's timedate.cpl is bugged and will look different depending
+on the screen resolution you use. This mod will make it always look how it does on
+640x480 (likely what the Windows 95 developers were testing on when they developed
+timedate.cpl).</p>
+<p><strong>Before (2560x1440)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/xp-timedate-cpl-fix/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/xp-timedate-cpl-fix/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/aero-flip3d-recreation#82101c2b63b3998596dd42430bafc1c99e32752a</id>
+        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
+        <updated>2026-07-31T10:16:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="aeroflip3drecreation">Aero Flip 3D Recreation</h1>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d.png" alt="Screenshot" /></p>
+<h2 id="aboutthemod">About the mod</h2>
+<p>This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.</p>
+<p>It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.</p>
+<p>This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.</p>
+<p>The mod has been tested on Windows 10 1809.</p>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| <code>Win+Tab</code> | Opens Aero Flip 3D |
+| <code>Ctrl+Alt+F12</code> | Opens or closes Aero Flip 3D manually. Use this as a fallback. |</p>
+<h3 id="whileaeroflip3disopen">While Aero Flip 3D is open</h3>
+<ul>
+<li>Navigate: <code>Tab</code> / <code>Shift+Tab</code>, arrow keys, or mouse wheel</li>
+<li>Select: <code>Enter</code> or <code>Space</code></li>
+<li>Close: <code>Esc</code></li>
+<li>Emergency exit: <code>Ctrl+Shift+Esc</code> opens Task Manager</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.</li>
+<li>Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default.</li>
+<li>Number of visible windows: how many cards are shown in the deck at once. Defaults to auto-detecting a value from your PC's RAM/CPU, but can be overridden.</li>
+</ul>
+<p>By default, the mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.</p>
+<h2 id="performance">Performance</h2>
+<p>Live DWM thumbnails are used only during animations.</p>
+<p>More thumbnail strips are used to make the edges smoother while keeping the original pseudo-3D window shape.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 version 1809 or later (64-bit)</li>
+<li>DWM enabled (default on Windows)</li>
+<li>2 GB RAM or more (2-4 GB machines get a reduced-effects mode automatically)</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Aero Flip 3D appears on the main monitor, where all available windows are displayed in the 3D switcher interface.</li>
+<li>The native Alt+Tab window switcher is not modified and continues to work normally.</li>
+<li>While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.</li>
+<li>To restore the original Windows Task View behavior, simply disable or uninstall the mod.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar audio device switcher 1.5.0]]></title>
         <id>https://windhawk.net/mods/taskbar-audio-device-switcher#ca9e7ad4464eaf177d708b5646e0a22b264c879b</id>
@@ -589,84 +681,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Energy Saver Power Plan Link 1.0.0]]></title>
-        <id>https://windhawk.net/mods/energy-saver-power-plan-link#18615a32f83d3bcde2a32bd7ef648021b8100cc5</id>
-        <link href="https://windhawk.net/mods/energy-saver-power-plan-link"/>
-        <updated>2026-07-22T09:34:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="energysaverpowerplanlink">Energy Saver Power Plan Link</h1>
-<p>When Windows Energy Saver is enabled:</p>
-<ul>
-<li>Saves the currently active power plan.</li>
-<li>Switches to the standard Power Saver plan.</li>
-</ul>
-<p>When Energy Saver is disabled:</p>
-<ul>
-<li>Restores the saved plan only if Power Saver is still active.</li>
-<li>If the user manually selected another plan, that selection is preserved.</li>
-</ul>
-<p>Disabling the mod also restores the previous plan when appropriate.</p>
-<blockquote>
-  <p>On some Modern Standby systems, the classic Power Saver plan might not be
-  available. In that case, Windows can't switch to that plan and the mod leaves
-  the current plan unchanged.</p>
-</blockquote>]]></content>
-        <author>
-            <name>Yusseter</name>
-            <uri>https://github.com/Yusseter</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 1.8.0]]></title>
-        <id>https://windhawk.net/mods/win7-action-center-recreation#4c3838df0a95bb15de69714e65eb2f6fc8d0a4ba</id>
-        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
-        <updated>2026-07-21T23:57:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the new Auto/Light/Dark theme setting with live updates</li>
-<li>Adjusted the flyout size to match Windows 7/8.1 original</li>
-<li>Made the window appearance cleaner</li>
-<li>Added the Battery warning notification (if it is below 20%)</li>
-<li>Added the pending Windows Update reboot notification</li>
-<li>Added the BitLocker encryption status notification</li>
-<li>Added Portuguese and German languages</li>
-<li>Added automatic language detection</li>
-<li>Added targeted MSDT diagnostics (network, security, Windows Update, battery) for relevant problem types, falling back to the generic troubleshooter when unavailable</li>
-<li>Added partial multi-monitor support</li>
-<li>Various stability improvements</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win32-ui-modernizer#c3138536027c3d55ba5efa387085c42d856f7394</id>
-        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
-        <updated>2026-07-21T19:30:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod getting stuck on unloading</li>
-<li>Fixed the glyphs blocking the File Explorer thread while animating</li>
-<li>Made the glyphs use direct composition when inside File Explorer</li>
-<li>Fixed black background behind glyphs</li>
-<li>Styled the Registry Editor separator</li>
-<li>Styled the old address bar's overflow chevron</li>
-<li>Enhanced text rendering</li>
-<li>Added a new Fade animation option for the navigation panel pill</li>
-<li>The buttons and combo boxes styles are now closer to the winui ones</li>
-<li>Changed the focus border option into a drop down and fixed the style not being applied</li>
-<li>Added styles for missing controls</li>
-<li>Corrected non dpi aware styles</li>
-<li>Fixed the "Optimize Drives" window not being painted dark</li>
-<li>Fixed leaks</li>
-<li>Removed dead code</li>
-<li>Hardened glyphs detection</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

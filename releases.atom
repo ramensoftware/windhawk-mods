@@ -2,12 +2,104 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-30T22:29:13.000Z</updated>
+    <updated>2026-07-31T10:16:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
+        <link href="https://windhawk.net/mods/start-menu-open-real-file-location"/>
+        <updated>2026-07-31T10:16:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startmenuopenrealfilelocation">Start Menu Open Real File Location</h1>
+<p>Changes <code>Open file location</code> for traditional desktop programs in the Start menu and Windows Search. Instead of opening the Start Menu Programs directory and selecting the program's <code>.lnk</code> file, Explorer opens the shortcut target's directory and selects the target.</p>
+<p>The mod reads only the target stored in the shortcut. It doesn't search for a moved target or display link-resolution dialogs.</p>
+<h2 id="currentlimitationsandtodos">Current Limitations and TODOs</h2>
+<ul>
+<li>Packaged Microsoft Store apps don't normally have a conventional shortcut target and are left unchanged for now.</li>
+<li>If the target can't be read, Windows retains its original behavior and opens the shortcut's location.</li>
+<li>The direct shortcut target is selected. For wrapper shortcuts, this can be a launcher, script host, or another intermediate executable.</li>
+<li>There is currently no program blacklist, so shortcuts that point to common wrappers or launchers will be resolved there.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[XP Time/Date CPL Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/xp-timedate-cpl-fix#5675ab74ce41c2b7ce7a431c5ba629f506716d51</id>
+        <link href="https://windhawk.net/mods/xp-timedate-cpl-fix"/>
+        <updated>2026-07-31T10:16:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="xptimedatecplfix">XP Time/Date CPL Fix</h1>
+<p>The clock in Windows XP's timedate.cpl is bugged and will look different depending
+on the screen resolution you use. This mod will make it always look how it does on
+640x480 (likely what the Windows 95 developers were testing on when they developed
+timedate.cpl).</p>
+<p><strong>Before (2560x1440)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/xp-timedate-cpl-fix/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/xp-timedate-cpl-fix/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/aero-flip3d-recreation#82101c2b63b3998596dd42430bafc1c99e32752a</id>
+        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
+        <updated>2026-07-31T10:16:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="aeroflip3drecreation">Aero Flip 3D Recreation</h1>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d.png" alt="Screenshot" /></p>
+<h2 id="aboutthemod">About the mod</h2>
+<p>This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.</p>
+<p>It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.</p>
+<p>This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.</p>
+<p>The mod has been tested on Windows 10 1809.</p>
+<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
+<p>| Shortcut | Action |
+| --- | --- |
+| <code>Win+Tab</code> | Opens Aero Flip 3D |
+| <code>Ctrl+Alt+F12</code> | Opens or closes Aero Flip 3D manually. Use this as a fallback. |</p>
+<h3 id="whileaeroflip3disopen">While Aero Flip 3D is open</h3>
+<ul>
+<li>Navigate: <code>Tab</code> / <code>Shift+Tab</code>, arrow keys, or mouse wheel</li>
+<li>Select: <code>Enter</code> or <code>Space</code></li>
+<li>Close: <code>Esc</code></li>
+<li>Emergency exit: <code>Ctrl+Shift+Esc</code> opens Task Manager</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li>Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.</li>
+<li>Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default.</li>
+<li>Number of visible windows: how many cards are shown in the deck at once. Defaults to auto-detecting a value from your PC's RAM/CPU, but can be overridden.</li>
+</ul>
+<p>By default, the mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.</p>
+<h2 id="performance">Performance</h2>
+<p>Live DWM thumbnails are used only during animations.</p>
+<p>More thumbnail strips are used to make the edges smoother while keeping the original pseudo-3D window shape.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 version 1809 or later (64-bit)</li>
+<li>DWM enabled (default on Windows)</li>
+<li>2 GB RAM or more (2-4 GB machines get a reduced-effects mode automatically)</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Aero Flip 3D appears on the main monitor, where all available windows are displayed in the 3D switcher interface.</li>
+<li>The native Alt+Tab window switcher is not modified and continues to work normally.</li>
+<li>While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.</li>
+<li>To restore the original Windows Task View behavior, simply disable or uninstall the mod.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar audio device switcher 1.5.0]]></title>
         <id>https://windhawk.net/mods/taskbar-audio-device-switcher#ca9e7ad4464eaf177d708b5646e0a22b264c879b</id>
@@ -1032,149 +1124,6 @@ and controlled sound-playback threads.</p>]]></content>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lid Close Sleep Delay 1.1]]></title>
-        <id>https://windhawk.net/mods/lid-sleep-delay#9e43fb1dc75e18d58ee1081b0e0d461b4d43d869</id>
-        <link href="https://windhawk.net/mods/lid-sleep-delay"/>
-        <updated>2026-07-12T18:16:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lidclosesleepdelay">Lid Close Sleep Delay</h1>
-<p>Ever wished your laptop wouldn't immediately go to sleep the moment you close the lid? This mod adds a customizable delay before suspending your system, giving you a grace period to grab your laptop, move to another room, or simply change your mind without interrupting your workflow or breaking active network connections.</p>
-<p>Designed with stability in mind, it operates securely as a <strong>dedicated-process tool mod</strong>. This means it runs isolated in its own Windhawk process rather than injecting code into <code>explorer.exe</code> or other critical system components, guaranteeing a zero-crash impact on your desktop shell.</p>
-<h2 id="compatibilityfeatures">💻 Compatibility &amp; Features</h2>
-<ul>
-<li><strong>Smart Detection:</strong> Dynamically recognizes whether your system is a laptop, convertible, or tablet with a physical lid switch. On desktops, it safely detects the absence of a lid and disables itself to consume zero resources.</li>
-<li><strong>Universal Support:</strong> Works seamlessly across x86 (32-bit), x86-64 (64-bit), and ARM64 architectures.</li>
-<li><strong>OS Versions:</strong> Compatible with Windows 7, 8, 8.1, 10, and 11.</li>
-</ul>
-<h2 id="howitworks">⚙️ How it Works</h2>
-<ol>
-<li>When you close the lid, the mod kicks in, keeping your system awake while a countdown begins.</li>
-<li>If you reopen the lid before the timer runs out, the sleep action is seamlessly aborted, and you can resume work instantly.</li>
-<li>If the timer expires while the lid is still closed, it gently puts your system to sleep.</li>
-</ol>
-<h2 id="importantprerequisites">⚠️ Important Prerequisites</h2>
-<p>For this mod to take control of the sleep delay, you must first disable the default Windows instant-sleep behavior:</p>
-<ol>
-<li>Open <strong>Control Panel</strong> → <strong>Power Options</strong> → <strong>Choose what closing the lid does</strong> (on the left panel).</li>
-<li>Change the setting for <strong>"When I close the lid"</strong> to <strong>"Do nothing"</strong> for both <em>On battery</em> and <em>Plugged in</em>.</li>
-<li>Click <strong>Save changes</strong>.</li>
-</ol>
-<blockquote>
-  <p><strong>Note:</strong> Because this relies on your native Windows power settings, uninstalling or disabling this mod will <em>not</em> automatically restore the original instant-sleep behavior. You will need to manually revert the setting back to <strong>"Sleep"</strong> in your Power Options if you decide to stop using the mod.</p>
-</blockquote>
-<h2 id="configurationoptions">⏱️ Configuration Options</h2>
-<p>You can configure the exact delay duration directly in the mod settings. Changes apply instantly on save.</p>
-<p>| Delay Option | Description |
-|---|---|
-| <strong>30sec</strong> | 30 seconds |
-| <strong>1min</strong> | 1 minute (default) |
-| <strong>5min</strong> | 5 minutes |
-| <strong>10min</strong> | 10 minutes |</p>]]></content>
-        <author>
-            <name>Ansh Raj</name>
-            <uri>https://github.com/remixansh</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Dock Animation Plus 2.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-dock-animation-plus#15cf861e5bcf2c5d437b20b6c6b1505a8ffc3988</id>
-        <link href="https://windhawk.net/mods/taskbar-dock-animation-plus"/>
-        <updated>2026-07-12T05:10:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbardockanimationplus">Taskbar Dock Animation Plus</h1>
-<p>This mod adds a macOS-like taskbar animation.
-It is an updated fork of the original "Taskbar Dock Animation" mod, extending compatibility to all taskbar positions.</p>
-<p><strong>Requires Windows 11 or newer to function.</strong></p>
-<hr />
-<h3 id="keyadditionsinthisfork">🌟 Key Additions in this Fork</h3>
-<ul>
-<li><strong>Universal Layout Support</strong>: Native compatibility for Left, Right, and Top taskbar configurations.</li>
-<li><strong>Adaptive Animations</strong>: Dynamically aligns scaling directions, spacing shifts, and bounce offsets to the current taskbar orientation.</li>
-<li><strong>On-the-Fly Refreshing</strong>: Updates properties in real time when moving the taskbar, requiring no system restarts.</li>
-</ul>
-<hr />
-<h3 id="knownissueslimitations">⚠️ Known Issues &amp; Limitations</h3>
-<ul>
-<li>Icons are sometimes clipped by the taskbar.</li>
-<li>Upscaled icons may appear slightly blurry.</li>
-</ul>
-<p>"Taskbar height and icon size" Users: If you are using this mod to create a minimalistic taskbar, please keep the Max Scale at or below 130% to avoid clipping issues. This recommendation applies to other scaling mods as well.
-Dell / Alienware Users: If you encounter specific issues on these devices, please reach out to me directly or open an issue so we can investigate together.
-StartAllBack Compatibility: This mod does not and will not support StartAllBack. Supporting it would require a complete rewrite of the codebase, which is currently out of scope.
-Feedback: Feel free to suggest new animation ideas or curves in the mod topic or via direct message!</p>
-<p>You can experiment with the <strong>radius</strong> value to achieve the best result for your setup until proper fixes for the issues above are found.</p>
-<hr />
-<h3 id="credits">💖 Credits</h3>
-<p>This mod is a fork of the original <a href="https://windhawk.net/mods/taskbar-dock-animation">Taskbar Dock Animation</a> mod created by <a href="https://github.com/Ph0en1x-dev">@Ph0en1x-dev</a>. All original logic and visual concepts belong to the original author.</p>
-<hr />
-<h2 id="preview">🖼️ Preview</h2>
-<p><img src="https://raw.githubusercontent.com/Ph0en1x-dev/Hlam/refs/heads/main/Screen-recording-2025-11-06-155028.gif" alt="Taskbar Dock Animation Preview" /></p>]]></content>
-        <author>
-            <name>incconutwo</name>
-            <uri>https://github.com/incconutwo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Audio Visualizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-audio-visualizer#529a6018c34b778035bfe79a96650579439c0ca2</id>
-        <link href="https://windhawk.net/mods/desktop-audio-visualizer"/>
-        <updated>2026-07-11T18:07:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizer100">Desktop Audio Visualizer 1.0.0</h1>
-<p>A real-time audio spectrum visualizer that displays on your Windows desktop. Captures system audio output and renders animated frequency bars directly on the desktop background.</p>
-<p><img src="https://i.imgur.com/N2QScsV.gif" alt="video" /></p>
-<h2 id="features">Features</h2>
-<h3 id="visualstyles">Visual Styles</h3>
-<ul>
-<li><strong>6 Bar Shapes</strong>:</li>
-<li><strong>Stereo</strong> — classic frequency spectrum bars</li>
-<li><strong>Mountain</strong> — center-peak, bars taper toward the edges</li>
-<li><strong>Mirror</strong> — bars grow from edges toward center</li>
-<li><strong>Wave</strong> — bars modulated by a sine wave over time</li>
-<li><strong>Breathe</strong> — slow breathing pulse synchronized with audio</li>
-<li><strong>Dots</strong> — bar columns made of stacked shapes</li>
-<li><strong>7 Color Modes</strong>:</li>
-<li><strong>Solid</strong> — single flat color</li>
-<li><strong>Static gradient</strong> — fixed color gradient across bars</li>
-<li><strong>Reactive gradient</strong> — gradient shifts toward second color with audio level</li>
-<li><strong>Windows accent color</strong> — automatically matches your Windows accent color, updates instantly on change</li>
-<li><strong>Album art</strong> — flat dominant color extracted from the currently playing track's cover art</li>
-<li><strong>Dynamic album</strong> — gradient from primary to secondary album art color; shifts with bar position and audio level</li>
-<li><strong>Acrylic</strong> — fixed RGB color with amplitude-driven alpha (nearly transparent at silence, semi-opaque at full volume)</li>
-<li><strong>2 Orientations</strong>: Horizontal (bars grow vertically) or Vertical (bars grow horizontally)</li>
-<li><strong>Vertical Anchor</strong>: Control bar growth direction — Bottom, Top, or Middle</li>
-</ul>
-<h3 id="customization">Customization</h3>
-<ul>
-<li><strong>Bar Configuration</strong>: Count (1-1000), thickness, gap, max size, idle size, per-corner radius (<code>"10"</code> or <code>"10 10 0 0"</code>)</li>
-<li><strong>Position Control</strong>: Freely position on any monitor with horizontal/vertical percentage coordinates</li>
-<li><strong>Background Effects</strong>:</li>
-<li>Optional background panel with padding, per-corner radius and border</li>
-<li>Wallpaper blur effect behind the background</li>
-<li>Custom ARGB hex colors for background and border</li>
-</ul>
-<h3 id="audioprocessing">Audio Processing</h3>
-<ul>
-<li><strong>WASAPI Loopback Capture</strong>: Captures all system audio output in real time</li>
-<li><strong>Real-time FFT</strong>: 7-band frequency spectrum with Hann windowing</li>
-<li><strong>6 EQ Presets</strong>: Balanced, Bass, Rock, Pop, Jazz, Electronic</li>
-<li><strong>Adjustable Sensitivity</strong>: 0–300 range</li>
-</ul>
-<h3 id="performance">Performance</h3>
-<ul>
-<li><strong>Adjustable Frame Rate</strong>: Set any FPS value for maximum smoothness or power-saving rendering</li>
-<li><strong>Fullscreen Pause</strong>: Detects both exclusive fullscreen (DX9/11) and borderless fullscreen windows; pauses automatically and resumes when the app closes</li>
-<li><strong>Silence Detection</strong>: Reduces refresh rate after a configurable idle period to save CPU/GPU</li>
-</ul>
-<hr />
-<h3 id="credits">Credits</h3>
-<ul>
-<li><strong><a href="https://github.com/Salyts">Salyts</a></strong> — Author of Desktop Audio Visualizer</li>
-<li>Borrowed the audio visualizer code from <strong><a href="https://github.com/GR0UD">GR0UD</a></strong>.</li>
-</ul>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>
