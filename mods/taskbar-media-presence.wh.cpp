@@ -2,7 +2,7 @@
 // @id              taskbar-media-presence
 // @name            Taskbar Media Presence
 // @description     Taskbar music controls with adaptive album art, per-app volume, safe multi-monitor placement, and Discord Rich Presence.
-// @version         1.0.22
+// @version         1.0.23
 // @author          MrBoxik
 // @github          https://github.com/MrBoxik
 // @homepage        https://github.com/MrBoxik/Taskbar-Media-Presence
@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Media Presence 1.0.22
+# Taskbar Media Presence 1.0.23
 
 A compact Windows 11 taskbar player for any application that publishes a Windows media session.
 
@@ -727,6 +727,7 @@ SOFTWARE.
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <deque>
 #include <set>
 #include <algorithm>
 #include <cmath>
@@ -1595,9 +1596,15 @@ static std::atomic<uint64_t> g_taskbarRestartGeneration{0};
 static std::atomic<unsigned> g_taskbarStartInProgress{0};
 static std::atomic<unsigned> g_taskbarOriginalsInProgress{0};
 static bool              g_isShellExplorerProcess = false;
-static std::mutex        g_asyncThreadsMtx;
-static std::vector<HANDLE> g_asyncThreadHandles;
-static bool              g_acceptAsyncTasks = true;
+static std::mutex g_asyncTasksMtx;
+static std::deque<std::function<void()>> g_asyncTaskQueue;
+static HANDLE g_asyncTaskThread = nullptr;
+static HANDLE g_asyncTaskAvailableEvent = nullptr;
+static HANDLE g_asyncTaskStopEvent = nullptr;
+static HANDLE g_asyncTaskIdleEvent = nullptr;
+static std::atomic<DWORD> g_asyncTaskThreadId{0};
+static bool g_asyncTaskRunning = false;
+static bool g_acceptAsyncTasks = true;
 
 template <typename TAsyncOperation>
 static auto WaitForWinrtOperation(
@@ -1639,69 +1646,155 @@ static auto WaitForWinrtOperation(
     }
 }
 
-struct AsyncTaskContext {
-    std::function<void()> task;
-};
-
-static DWORD WINAPI AsyncTaskThreadProc(void* parameter) {
-    std::unique_ptr<AsyncTaskContext> context(
-        static_cast<AsyncTaskContext*>(parameter));
-    try {
-        context->task();
-    } catch (...) {
-        Wh_Log(L"Background task: unhandled exception");
+static void UpdateAsyncTaskIdleEventLocked() {
+    if (!g_asyncTaskIdleEvent) return;
+    if (!g_asyncTaskRunning && g_asyncTaskQueue.empty()) {
+        SetEvent(g_asyncTaskIdleEvent);
+    } else {
+        ResetEvent(g_asyncTaskIdleEvent);
     }
+}
+
+static DWORD WINAPI AsyncTaskThreadProc(void*) noexcept {
+    g_asyncTaskThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    HRESULT apartmentResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool callCancellationEnabled =
+        SUCCEEDED(CoEnableCallCancellation(nullptr));
+
+    while (true) {
+        std::function<void()> task;
+        {
+            std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+            if (!g_asyncTaskQueue.empty()) {
+                task = std::move(g_asyncTaskQueue.front());
+                g_asyncTaskQueue.pop_front();
+                g_asyncTaskRunning = true;
+                UpdateAsyncTaskIdleEventLocked();
+                if (g_asyncTaskQueue.empty() && g_asyncTaskAvailableEvent) {
+                    ResetEvent(g_asyncTaskAvailableEvent);
+                }
+            }
+        }
+
+        if (task) {
+            try {
+                task();
+            } catch (...) {
+                Wh_Log(L"Background task: unhandled exception");
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+                g_asyncTaskRunning = false;
+                UpdateAsyncTaskIdleEventLocked();
+                if (!g_asyncTaskQueue.empty() && g_asyncTaskAvailableEvent) {
+                    SetEvent(g_asyncTaskAvailableEvent);
+                }
+            }
+            continue;
+        }
+
+        HANDLE handles[] = {g_asyncTaskStopEvent, g_asyncTaskAvailableEvent};
+        DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        if (result == WAIT_OBJECT_0) break;
+        if (result != WAIT_OBJECT_0 + 1) break;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        g_asyncTaskQueue.clear();
+        g_asyncTaskRunning = false;
+        UpdateAsyncTaskIdleEventLocked();
+    }
+    if (callCancellationEnabled) CoDisableCallCancellation(nullptr);
+    if (SUCCEEDED(apartmentResult)) CoUninitialize();
+    g_asyncTaskThreadId.store(0, std::memory_order_release);
     return 0;
 }
 
-static void ReapCompletedAsyncTasksLocked() {
-    for (auto iterator = g_asyncThreadHandles.begin();
-         iterator != g_asyncThreadHandles.end();) {
-        if (WaitForSingleObject(*iterator, 0) == WAIT_OBJECT_0) {
-            CloseHandle(*iterator);
-            iterator = g_asyncThreadHandles.erase(iterator);
-        } else {
-            ++iterator;
-        }
+static void CloseAsyncTaskWorkerHandlesLocked() {
+    if (g_asyncTaskThread) {
+        CloseHandle(g_asyncTaskThread);
+        g_asyncTaskThread = nullptr;
     }
+    if (g_asyncTaskAvailableEvent) {
+        CloseHandle(g_asyncTaskAvailableEvent);
+        g_asyncTaskAvailableEvent = nullptr;
+    }
+    if (g_asyncTaskStopEvent) {
+        CloseHandle(g_asyncTaskStopEvent);
+        g_asyncTaskStopEvent = nullptr;
+    }
+    if (g_asyncTaskIdleEvent) {
+        CloseHandle(g_asyncTaskIdleEvent);
+        g_asyncTaskIdleEvent = nullptr;
+    }
+    g_asyncTaskThreadId.store(0, std::memory_order_release);
+    g_asyncTaskRunning = false;
+    g_asyncTaskQueue.clear();
+}
+
+static bool StartAsyncTaskWorker() {
+    std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+    if (g_asyncTaskThread) {
+        if (WaitForSingleObject(g_asyncTaskThread, 0) == WAIT_TIMEOUT) {
+            return true;
+        }
+        CloseAsyncTaskWorkerHandlesLocked();
+    }
+
+    g_asyncTaskAvailableEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_asyncTaskStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_asyncTaskIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!g_asyncTaskAvailableEvent || !g_asyncTaskStopEvent ||
+        !g_asyncTaskIdleEvent) {
+        CloseAsyncTaskWorkerHandlesLocked();
+        return false;
+    }
+
+    g_asyncTaskThread =
+        CreateThread(nullptr, 0, AsyncTaskThreadProc, nullptr, 0, nullptr);
+    if (!g_asyncTaskThread) {
+        CloseAsyncTaskWorkerHandlesLocked();
+        return false;
+    }
+    return true;
 }
 
 static bool QueueAsyncTask(std::function<void()> task) {
     if (!task || g_unloading) return false;
+    if (!StartAsyncTaskWorker()) return false;
 
-    std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-    if (!g_acceptAsyncTasks || g_unloading) return false;
-    ReapCompletedAsyncTasksLocked();
-
+    std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+    if (!g_acceptAsyncTasks || g_unloading || !g_asyncTaskThread) {
+        return false;
+    }
     try {
-        // Allocate the handle slot before starting code that must remain
-        // tracked for DLL-unload safety.
-        g_asyncThreadHandles.reserve(g_asyncThreadHandles.size() + 1);
-        auto context = std::make_unique<AsyncTaskContext>();
-        context->task = std::move(task);
-        AsyncTaskContext* threadContext = context.release();
-        HANDLE thread = CreateThread(nullptr, 0, AsyncTaskThreadProc,
-                                     threadContext, 0, nullptr);
-        if (!thread) {
-            delete threadContext;
-            return false;
-        }
-        g_asyncThreadHandles.push_back(thread);
-        return true;
+        g_asyncTaskQueue.push_back(std::move(task));
     } catch (...) {
         return false;
     }
+    UpdateAsyncTaskIdleEventLocked();
+    SetEvent(g_asyncTaskAvailableEvent);
+    return true;
 }
 
-static void PauseAsyncTasks() {
-    std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
+static void PauseAsyncTasks(bool discardPending = false) {
+    std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
     g_acceptAsyncTasks = false;
+    if (discardPending) {
+        g_asyncTaskQueue.clear();
+        if (g_asyncTaskAvailableEvent) ResetEvent(g_asyncTaskAvailableEvent);
+    }
+    UpdateAsyncTaskIdleEventLocked();
 }
 
 static void ResumeAsyncTasks() {
-    std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-    ReapCompletedAsyncTasksLocked();
+    if (g_unloading || !StartAsyncTaskWorker()) return;
+    std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
     g_acceptAsyncTasks = true;
+    if (!g_asyncTaskQueue.empty() && g_asyncTaskAvailableEvent) {
+        SetEvent(g_asyncTaskAvailableEvent);
+    }
 }
 
 static bool WaitForThreadExit(HANDLE thread, DWORD timeoutMs = INFINITE) {
@@ -1740,58 +1833,42 @@ static bool WaitForThreadExit(HANDLE thread, DWORD timeoutMs = INFINITE) {
     }
 }
 
-static bool WaitForAsyncTasks(DWORD timeoutMs) {
-    std::vector<HANDLE> handles;
-    {
-        std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-        ReapCompletedAsyncTasksLocked();
-        handles.swap(g_asyncThreadHandles);
+static void CancelAsyncTaskWorkerCall() {
+    DWORD threadId =
+        g_asyncTaskThreadId.load(std::memory_order_acquire);
+    if (threadId) {
+        CoCancelCall(threadId, 0);
     }
-    if (handles.empty()) return true;
+}
 
-    ULONGLONG deadline = timeoutMs == INFINITE
-        ? 0
-        : GetTickCount64() + timeoutMs;
-    bool allStopped = true;
-    for (HANDLE thread : handles) {
-        while (true) {
-            DWORD remaining = INFINITE;
-            if (timeoutMs != INFINITE) {
-                ULONGLONG now = GetTickCount64();
-                remaining = now < deadline
-                    ? static_cast<DWORD>(deadline - now)
-                    : 0;
-            }
-            DWORD result = MsgWaitForMultipleObjects(
-                1, &thread, FALSE, remaining, QS_SENDMESSAGE);
-            if (result == WAIT_OBJECT_0) break;
-            if (result == WAIT_OBJECT_0 + 1) {
-                MSG message;
-                while (PeekMessageW(&message, nullptr, 0, 0,
-                                    PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                    TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-                if (timeoutMs != INFINITE && GetTickCount64() >= deadline) {
-                    if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
-                        break;
-                    }
-                    allStopped = false;
-                    break;
-                }
-                continue;
-            }
-            allStopped = false;
-            break;
-        }
-        if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(thread);
-        } else {
-            std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-            g_asyncThreadHandles.push_back(thread);
-        }
+static bool WaitForAsyncTasks(DWORD timeoutMs) {
+    HANDLE idleEvent = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        UpdateAsyncTaskIdleEventLocked();
+        idleEvent = g_asyncTaskIdleEvent;
     }
-    return allStopped;
+    return !idleEvent || WaitForThreadExit(idleEvent, timeoutMs);
+}
+
+static bool StopAsyncTaskWorker(DWORD timeoutMs = 3000) {
+    HANDLE thread = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        g_acceptAsyncTasks = false;
+        g_asyncTaskQueue.clear();
+        UpdateAsyncTaskIdleEventLocked();
+        thread = g_asyncTaskThread;
+        if (g_asyncTaskStopEvent) SetEvent(g_asyncTaskStopEvent);
+        if (g_asyncTaskAvailableEvent) SetEvent(g_asyncTaskAvailableEvent);
+    }
+    CancelAsyncTaskWorkerCall();
+    bool stopped = !thread || WaitForThreadExit(thread, timeoutMs);
+    if (stopped) {
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        CloseAsyncTaskWorkerHandlesLocked();
+    }
+    return stopped;
 }
 
 static const CLSID XIID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -3027,23 +3104,16 @@ static bool StopDiscordPresenceThread(bool shutdownCleanup = false) {
         bool stopped =
             WaitForThreadExit(g_discordPresenceThread, timeoutMs);
         if (!stopped) {
-            if (!shutdownCleanup) {
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Discord presence: worker exceeded the unload deadline; "
+                    L"retaining the module if it remains active");
+            } else {
                 Wh_Log(
                     L"Discord presence: worker didn't stop within the "
                     L"settings-change deadline");
-                return false;
             }
-
-            Wh_Log(
-                L"Discord presence: worker exceeded the unload deadline; "
-                L"waiting for it before DLL unload");
-            stopped = WaitForThreadExit(
-                g_discordPresenceThread, INFINITE);
-            if (!stopped) {
-                Wh_Log(
-                    L"Discord presence: mandatory unload join failed");
-                return false;
-            }
+            return false;
         }
     }
     return ReapStoppedDiscordPresenceThread();
@@ -3111,6 +3181,7 @@ static void RecordMediaEventUnsubscribeFailure(PCWSTR source) noexcept {
 }
 
 static HANDLE g_mediaThread    = nullptr;
+static std::atomic<DWORD> g_mediaThreadId{0};
 static HANDLE g_mediaStopEvent = nullptr;
 static HANDLE g_mediaRefreshEvent = nullptr;
 
@@ -4968,12 +5039,45 @@ static void ApplyVolumePopupDpiLayout(HWND window, UINT dpi) {
     if (window) InvalidateRect(window, nullptr, TRUE);
 }
 
-static void ReportOutstandingCallbackRisk(PCWSTR reason) {
-    // Windhawk owns the module lifetime. Permanently pinning this DLL would make
-    // disable/re-enable and updates ineffective until Explorer restarts.
+static std::atomic<bool> g_moduleSafetyPinned{false};
+static HMODULE g_moduleSafetyPinHandle = nullptr;
+
+static void RetainModuleForSafety(PCWSTR reason) {
+    bool expected = false;
+    if (!g_moduleSafetyPinned.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    HMODULE module = nullptr;
+    if (GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(&RetainModuleForSafety),
+            &module) && module) {
+        g_moduleSafetyPinHandle = module;
+        Wh_Log(
+            L"Lifecycle safety: cleanup left %ls; retaining the module until "
+            L"Explorer restarts instead of hanging or unloading live code",
+            reason ? reason : L"an outstanding callback");
+        return;
+    }
+
+    g_moduleSafetyPinned.store(false, std::memory_order_release);
     Wh_Log(
-        L"Lifecycle safety: cleanup left %s; the module will not be pinned",
+        L"Lifecycle safety: cleanup left %ls and the emergency module "
+        L"retention failed",
         reason ? reason : L"an outstanding callback");
+}
+
+static void ReportOutstandingCallbackRisk(PCWSTR reason) {
+    if (g_unloading.load(std::memory_order_acquire)) {
+        RetainModuleForSafety(reason);
+    } else {
+        Wh_Log(
+            L"Lifecycle safety: cleanup left %ls; the module will be retained "
+            L"if the condition is still present during unload",
+            reason ? reason : L"an outstanding callback");
+    }
 }
 
 static std::wstring CurrentMediaAppUserModelId() {
@@ -7132,14 +7236,20 @@ static DWORD MediaThreadMain() {
         Wh_Log(L"MediaThreadProc: failed to initialize COM apartment");
         return 0;
     }
+    bool callCancellationEnabled =
+        SUCCEEDED(CoEnableCallCancellation(nullptr));
 
     struct MediaApartmentCleanup {
         bool active;
+        bool callCancellationEnabled;
         ~MediaApartmentCleanup() noexcept {
+            if (callCancellationEnabled) {
+                CoDisableCallCancellation(nullptr);
+            }
             if (!active) return;
             try { winrt::uninit_apartment(); } catch (...) {}
         }
-    } apartmentCleanup{apartmentInitialized};
+    } apartmentCleanup{apartmentInitialized, callCancellationEnabled};
 
     struct MediaThreadStateCleanup {
         ~MediaThreadStateCleanup() noexcept {
@@ -7317,15 +7427,18 @@ static DWORD MediaThreadMain() {
 }
 
 static DWORD WINAPI MediaThreadProc(void*) noexcept {
+    g_mediaThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    DWORD result = 0;
     try {
-        return MediaThreadMain();
+        result = MediaThreadMain();
     } catch (const winrt::hresult_error& error) {
         Wh_Log(L"MediaThreadProc: unhandled WinRT failure 0x%08X",
                static_cast<uint32_t>(error.code()));
     } catch (...) {
         Wh_Log(L"MediaThreadProc: unhandled worker exception");
     }
-    return 0;
+    g_mediaThreadId.store(0, std::memory_order_release);
+    return result;
 }
 
 static void StartMediaThread() {
@@ -7347,23 +7460,25 @@ static void StartMediaThread() {
 }
 static bool StopMediaThread(bool shutdownCleanup = false) {
     SignalWorkerEventHandle(g_mediaStopEvent);
+    DWORD mediaThreadId =
+        g_mediaThreadId.load(std::memory_order_acquire);
+    if (mediaThreadId) CoCancelCall(mediaThreadId, 0);
+
     bool threadStopped = true;
     constexpr DWORD timeoutMs = 5000;
     if (g_mediaThread) {
         threadStopped = WaitForThreadExit(g_mediaThread, timeoutMs);
-        if (!threadStopped && shutdownCleanup) {
-            Wh_Log(
-                L"Media thread exceeded the unload deadline; waiting for it "
-                L"before DLL unload");
-            threadStopped = WaitForThreadExit(
-                g_mediaThread, INFINITE);
-        } else if (!threadStopped) {
-            Wh_Log(
-                L"Media thread didn't stop within the "
-                L"settings-change deadline");
-        }
-
-        if (threadStopped) {
+        if (!threadStopped) {
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Media thread exceeded the unload deadline; retaining "
+                    L"the module if it remains active");
+            } else {
+                Wh_Log(
+                    L"Media thread didn't stop within the "
+                    L"settings-change deadline");
+            }
+        } else {
             CloseHandle(g_mediaThread);
             g_mediaThread = nullptr;
         }
@@ -7371,15 +7486,10 @@ static bool StopMediaThread(bool shutdownCleanup = false) {
 
     bool callbacksIdle = threadStopped &&
         WaitForMediaEventCallbacksIdle(timeoutMs);
-    if (!callbacksIdle && threadStopped && shutdownCleanup) {
-        Wh_Log(
-            L"Media callbacks exceeded the unload deadline; waiting for "
-            L"them before DLL unload");
-        callbacksIdle = WaitForMediaEventCallbacksIdle(INFINITE);
-    } else if (!callbacksIdle) {
+    if (!callbacksIdle) {
         if (shutdownCleanup) {
             Wh_Log(
-                L"Media callbacks couldn't be joined for DLL unload");
+                L"Media callbacks didn't drain before the unload deadline");
         } else {
             Wh_Log(
                 L"Media callbacks didn't drain within the "
@@ -7395,6 +7505,7 @@ static bool StopMediaThread(bool shutdownCleanup = false) {
 }
 
 static HANDLE g_timerThread    = nullptr;
+static std::atomic<DWORD> g_timerThreadId{0};
 static HANDLE g_timerStopEvent = nullptr;
 static HANDLE g_timerUpdateEvent = nullptr;
 
@@ -8018,6 +8129,8 @@ static DWORD TimerThreadMain() {
     HANDLE updateEvent = SnapshotWorkerEventHandle(g_timerUpdateEvent);
     if (!stopEvent || !updateEvent) return 0;
     HRESULT timerApartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool callCancellationEnabled =
+        SUCCEEDED(CoEnableCallCancellation(nullptr));
 
     HKEY hKey = nullptr;
     HANDLE hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -8025,6 +8138,7 @@ static DWORD TimerThreadMain() {
         HKEY& key;
         HANDLE& event;
         HRESULT apartmentResult;
+        bool callCancellationEnabled;
         ~TimerResourceCleanup() noexcept {
             if (key) {
                 RegCloseKey(key);
@@ -8034,9 +8148,13 @@ static DWORD TimerThreadMain() {
                 CloseHandle(event);
                 event = nullptr;
             }
+            if (callCancellationEnabled) {
+                CoDisableCallCancellation(nullptr);
+            }
             if (SUCCEEDED(apartmentResult)) CoUninitialize();
         }
-    } timerResourceCleanup{hKey, hEvent, timerApartment};
+    } timerResourceCleanup{
+        hKey, hEvent, timerApartment, callCancellationEnabled};
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_NOTIFY, &hKey) == ERROR_SUCCESS) {
         RegNotifyChangeKeyValue(hKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, hEvent, TRUE);
     }
@@ -8318,15 +8436,18 @@ static DWORD TimerThreadMain() {
 }
 
 static DWORD WINAPI TimerThreadProc(void*) noexcept {
+    g_timerThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    DWORD result = 0;
     try {
-        return TimerThreadMain();
+        result = TimerThreadMain();
     } catch (const winrt::hresult_error& error) {
         Wh_Log(L"Timer worker failed: 0x%08X",
                static_cast<uint32_t>(error.code()));
     } catch (...) {
         Wh_Log(L"Timer worker failed with an unexpected exception");
     }
-    return 0;
+    g_timerThreadId.store(0, std::memory_order_release);
+    return result;
 }
 
 static void StartTimerThread() {
@@ -8354,23 +8475,25 @@ static bool StopTimerThread(bool shutdownCleanup = false,
                             bool cleanupScrollTimer = true) {
     bool discordStopped = StopDiscordPresenceThread(shutdownCleanup);
     SignalWorkerEventHandle(g_timerStopEvent);
+    DWORD timerThreadId =
+        g_timerThreadId.load(std::memory_order_acquire);
+    if (timerThreadId) CoCancelCall(timerThreadId, 0);
+
     bool timerStopped = true;
     constexpr DWORD timeoutMs = 5000;
     if (g_timerThread) {
         timerStopped = WaitForThreadExit(g_timerThread, timeoutMs);
-        if (!timerStopped && shutdownCleanup) {
-            Wh_Log(
-                L"Timer thread exceeded the unload deadline; waiting for it "
-                L"before DLL unload");
-            timerStopped = WaitForThreadExit(
-                g_timerThread, INFINITE);
-        } else if (!timerStopped) {
-            Wh_Log(
-                L"Timer thread didn't stop within the "
-                L"settings-change deadline");
-        }
-
-        if (timerStopped) {
+        if (!timerStopped) {
+            if (shutdownCleanup) {
+                Wh_Log(
+                    L"Timer thread exceeded the unload deadline; retaining "
+                    L"the module if it remains active");
+            } else {
+                Wh_Log(
+                    L"Timer thread didn't stop within the "
+                    L"settings-change deadline");
+            }
+        } else {
             CloseHandle(g_timerThread);
             g_timerThread = nullptr;
         }
@@ -8384,7 +8507,6 @@ static bool StopTimerThread(bool shutdownCleanup = false,
         : false;
     return discordStopped && timerStopped && scrollTimerStopped;
 }
-
 static void RefreshThemeColorsForGrid(
     Grid const& playerGrid,
     std::shared_ptr<PlayerVisualState> const& visualState) {
@@ -14807,11 +14929,10 @@ static bool HasOutstandingExecutableCallbacks() {
         return true;
     }
     {
-        std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-        for (HANDLE thread : g_asyncThreadHandles) {
-            if (thread && WaitForSingleObject(thread, 0) == WAIT_TIMEOUT) {
-                return true;
-            }
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
+        if (g_asyncTaskThread &&
+            WaitForSingleObject(g_asyncTaskThread, 0) == WAIT_TIMEOUT) {
+            return true;
         }
     }
     return false;
@@ -14838,7 +14959,8 @@ static BOOL ModInitImpl() {
         g_primaryVisualState = std::make_shared<PlayerVisualState>();
     }
 
-    if (g_mediaEventUnsubscribeFailed.load(std::memory_order_acquire) ||
+    if (g_moduleSafetyPinned.load(std::memory_order_acquire) ||
+        g_mediaEventUnsubscribeFailed.load(std::memory_order_acquire) ||
         g_scrollDispatcherTimerRegistered.load() ||
         g_scrollDispatcherTimerOwnerWindow.load() ||
         g_scrollDispatcherTimerOwnerThreadId.load() ||
@@ -14903,9 +15025,10 @@ static BOOL ModInitImpl() {
     }
     g_activeContextMenuOperation.clear(std::memory_order_release);
     {
-        std::lock_guard<std::mutex> lock(g_asyncThreadsMtx);
-        ReapCompletedAsyncTasksLocked();
+        std::lock_guard<std::mutex> lock(g_asyncTasksMtx);
         g_acceptAsyncTasks = true;
+        g_asyncTaskQueue.clear();
+        g_asyncTaskRunning = false;
     }
     {
         std::lock_guard<std::mutex> lock(g_quickRebuildMtx);
@@ -15003,22 +15126,10 @@ static void ModUninitImpl() {
     if (!taskbarStartHooksDrained) {
         Wh_Log(
             L"Wh_ModUninit: TrayUI::StartTaskbar exceeded the unload "
-            L"deadline; waiting before DLL unload");
-        while (g_taskbarStartInProgress.load(
-                   std::memory_order_acquire)) {
-            MsgWaitForMultipleObjectsEx(
-                0, nullptr, 10, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
-            MSG message{};
-            while (PeekMessageW(
-                &message, nullptr, 0, 0,
-                PM_REMOVE | PM_QS_SENDMESSAGE)) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
-        }
-        taskbarStartHooksDrained = true;
+            L"deadline; retaining the module if the hook remains active");
     }
-    PauseAsyncTasks();
+    PauseAsyncTasks(true);
+    CancelAsyncTaskWorkerCall();
     {
         std::lock_guard<std::mutex> lock(g_pendingMediaCommandsMtx);
         g_pendingMediaCommands.clear();
@@ -15033,12 +15144,13 @@ static void ModUninitImpl() {
     bool scrollTimerStopped = StopTimerThread(
         true, taskbarStartHooksDrained);
     bool mediaThreadStopped = StopMediaThread(true);
-    bool asyncTasksStopped = WaitForAsyncTasks(5000);
+    bool asyncTasksDrained = WaitForAsyncTasks(5000);
+    bool asyncWorkerStopped = StopAsyncTaskWorker(3000);
+    bool asyncTasksStopped = asyncTasksDrained && asyncWorkerStopped;
     if (!asyncTasksStopped) {
         Wh_Log(
-            L"Wh_ModUninit: background tasks exceeded the unload "
-            L"deadline; waiting before DLL unload");
-        asyncTasksStopped = WaitForAsyncTasks(INFINITE);
+            L"Wh_ModUninit: serialized background worker exceeded the "
+            L"unload deadline; retaining the module if it remains active");
     }
     // Existing quick workers were allowed to finish before the final XAML
     // callback drain. This catches a timer registered just before unloading.
@@ -15106,23 +15218,19 @@ static void ModUninitImpl() {
         WaitForFailedWindowDispatchHooksRemoved(3000);
     if (!hooksUnregistered) {
         Wh_Log(
-            L"Wh_ModUninit: waiting for window-dispatch hooks before "
-            L"DLL unload");
-        hooksUnregistered =
-            WaitForFailedWindowDispatchHooksRemoved(INFINITE);
+            L"Wh_ModUninit: window-dispatch hooks remain after the "
+            L"deadline; retaining the module");
     }
 
     // A callback that entered just before the final unhook can still be
-    // on-stack. The first deadline diagnoses an abnormal delay; the mandatory
-    // second phase prevents executable mod code from surviving DLL unload.
+    // on-stack. A bounded drain avoids hanging Explorer; the emergency module
+    // retention below prevents live code from being unmapped on timeout.
     bool dispatchActivityIdle =
         WaitForWindowDispatchActivityIdle(3000);
     if (!dispatchActivityIdle) {
         Wh_Log(
-            L"Wh_ModUninit: waiting for window-dispatch callbacks before "
-            L"DLL unload");
-        dispatchActivityIdle =
-            WaitForWindowDispatchActivityIdle(INFINITE);
+            L"Wh_ModUninit: window-dispatch callbacks remain after the "
+            L"deadline; retaining the module");
     }
 
     bool requestsDrained = false;
@@ -15137,8 +15245,11 @@ static void ModUninitImpl() {
         !mediaThreadStopped ||
         !asyncTasksStopped ||
         !dispatchActivityIdle ||
+        !contextMenuClosed ||
         !popupDestroyed ||
         !popupClassUnregistered ||
+        !playerCleanupDispatched ||
+        !playerCleanup.confirmed ||
         !hooksUnregistered ||
         !requestsDrained ||
         HasOutstandingExecutableCallbacks();
@@ -15147,11 +15258,7 @@ static void ModUninitImpl() {
             L"an executable callback, worker, timer, or window procedure remains");
     }
 
-    bool ordinaryCleanupIncomplete =
-        !contextMenuClosed ||
-        !transparencyRestored ||
-        !playerCleanupDispatched ||
-        !playerCleanup.confirmed;
+    bool ordinaryCleanupIncomplete = !transparencyRestored;
     if (ordinaryCleanupIncomplete && !executableCallbacksOutstanding) {
         Wh_Log(
             L"Wh_ModUninit: non-callback UI cleanup was incomplete; "
@@ -15211,6 +15318,7 @@ static void ModSettingsChangedImpl() {
     } gateRelease;
 
     PauseAsyncTasks();
+    CancelAsyncTaskWorkerCall();
     if (!DestroyVolumePopup()) {
         Wh_Log(
             L"Wh_ModSettingsChanged: volume popup cleanup was deferred");
