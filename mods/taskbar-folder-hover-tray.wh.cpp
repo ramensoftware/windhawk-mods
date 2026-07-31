@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.16
+// @version         1.17
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -71,16 +71,15 @@ Two consequences worth knowing:
 - The buttons cannot be drag-reordered like real taskbar items.
 - They do not collapse into the overflow button when the taskbar gets full.
 
-## Related mod: Taskbar Folder Menus
+## If you already use Taskbar Folder Menus
 
 [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp)
-(`taskbar-folder-menus` by sb4ssman) is another Windows 11 explorer.exe mod for
-browsing folders from the taskbar. Both support configurable folder/shortcut
-buttons, `shell:` targets and environment-variable expansion, subfolders that
-expand on hover (cascade), shell context menus on items, and browsing folder
-contents without minimizing windows.
-
-They differ in placement and UI:
+(`taskbar-folder-menus` by sb4ssman) is a solid alternative for browsing folders
+from the taskbar. Both support configurable folder/shortcut buttons, `shell:`
+targets and environment-variable expansion, subfolders that expand on hover,
+shell context menus on items, and browsing folder contents without minimizing
+windows. Pick based on placement and UI — you typically want one or the other,
+not both.
 
 | | Taskbar Folder Hover Tray (this) | Taskbar Folder Menus |
 |---|---|---|
@@ -89,9 +88,8 @@ They differ in placement and UI:
 | UI | Custom-drawn **icon grid** popup | **Native Shell** cascading menus |
 | Buttons | Sized from live taskbar app buttons; emoji/custom icons optional | Compact tray buttons with emoji labels and extensive tray grid layout options |
 
-Prefer **Taskbar Folder Menus** if you want tray-side buttons and native Shell
-menus. Prefer **this mod** if you want a hover-opened icon grid seated in the
-app icon strip.
+Choose **Taskbar Folder Menus** for tray-side buttons and native Shell menus.
+Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 ## Known Conflicts
 
@@ -1527,8 +1525,14 @@ struct FolderData {
     std::vector<GridItem> items;
     bool ready = false;
     ULONGLONG scannedAtTick = 0;
+    // LRU bookkeeping for FolderCache eviction (separate from scan freshness).
+    ULONGLONG lastUsedTick = 0;
     int scannedIconSize = 0;
 };
+
+// Bound folder-path → FolderData entries. PrefetchSubfolders can enqueue many
+// paths; without a cap the map grows without bound across a session.
+constexpr size_t kMaxCachedFolders = 32;
 
 struct ScanRequest {
     std::wstring path;
@@ -1547,6 +1551,42 @@ std::unordered_map<std::wstring, std::shared_ptr<FolderData>>& FolderCache() {
         g_folderCache.emplace();
     }
     return *g_folderCache;
+}
+
+// How many GridItems (with bitmaps) to retain per cached folder. Layout already
+// trims to what fits on screen; the cache must not keep more than can ever be
+// shown (+ a small margin). maxItems > 0 follows the setting; maxItems:0 uses a
+// hard ceiling from columns × ~16 rows (columns setting max is 24).
+int MaxCachedItemsPerFolder() {
+    if (g_settings.maxItems > 0) {
+        return g_settings.maxItems;
+    }
+    int cols = g_settings.columns > 0 ? g_settings.columns : 12;
+    return std::clamp(cols * 16, 60, 192);
+}
+
+// Caller must hold g_cacheMutex. Drops least-recently-used entries until size
+// fits kMaxCachedFolders. Never erases keepKey (the entry just inserted/used).
+// Erasing only releases the cache's shared_ptr; open PopupLevels that copied
+// items (and their shared_ptr icons) keep working.
+void EvictFolderCacheIfNeeded(const std::wstring& keepKey) {
+    auto& cache = FolderCache();
+    while (cache.size() > kMaxCachedFolders) {
+        auto oldest = cache.end();
+        for (auto it = cache.begin(); it != cache.end(); ++it) {
+            if (it->first == keepKey) {
+                continue;
+            }
+            if (oldest == cache.end() ||
+                it->second->lastUsedTick < oldest->second->lastUsedTick) {
+                oldest = it;
+            }
+        }
+        if (oldest == cache.end()) {
+            break;
+        }
+        cache.erase(oldest);
+    }
 }
 
 std::mutex g_scanMutex;
@@ -1767,9 +1807,10 @@ void ScanFolderInto(const std::wstring& path,
                                         b.displayName.c_str()) < 0;
               });
 
-    if (g_settings.maxItems > 0 &&
-        (int)out->items.size() > g_settings.maxItems) {
-        out->items.resize(g_settings.maxItems);
+    // Trim before icon extraction so we never allocate bitmaps we will discard.
+    const int cacheCap = MaxCachedItemsPerFolder();
+    if ((int)out->items.size() > cacheCap) {
+        out->items.resize(cacheCap);
     }
 
     for (auto& item : out->items) {
@@ -1845,6 +1886,7 @@ void ScanThreadMain() {
         ScanFolderInto(request.path, request.iconPixelSize, fresh.get());
         fresh->ready = true;
         fresh->scannedAtTick = GetTickCount64();
+        fresh->lastUsedTick = fresh->scannedAtTick;
 
         if (g_unloading ||
             g_scanThreadStop.load(std::memory_order_relaxed)) {
@@ -1853,7 +1895,9 @@ void ScanThreadMain() {
 
         {
             std::lock_guard<std::mutex> lock(g_cacheMutex);
-            FolderCache()[CacheKey(request.path)] = fresh;
+            const std::wstring key = CacheKey(request.path);
+            FolderCache()[key] = fresh;
+            EvictFolderCacheIfNeeded(key);
         }
 
         Wh_Log(L"Scanned %s: %d items", request.path.c_str(),
@@ -1895,7 +1939,11 @@ std::shared_ptr<FolderData> GetFolderData(const std::wstring& path) {
     }
     std::lock_guard<std::mutex> lock(g_cacheMutex);
     auto found = FolderCache().find(CacheKey(path));
-    return found == FolderCache().end() ? nullptr : found->second;
+    if (found == FolderCache().end()) {
+        return nullptr;
+    }
+    found->second->lastUsedTick = GetTickCount64();
+    return found->second;
 }
 
 // Returns the cached contents, queueing a scan when the entry is missing,
