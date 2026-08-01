@@ -2,7 +2,7 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.5
+// @version      1.4.6
 // @github       https://github.com/alivca
 // @author       Jaali
 // @include      windhawk.exe
@@ -23,7 +23,7 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
   $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
 - shakeThreshold: 3500
   $name: Shake sensitivity threshold
-  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 3000-4000)."
+  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 3500)."
 - lerpSpeedUpPercent: 40
   $name: Enlarge speed (%)
   $description: "How fast the cursor expands (recommended: 20-40)."
@@ -39,48 +39,23 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 #include <deque>
 #include <vector>
 #include <cmath>
+#include <atomic>
 #include <windhawk_api.h>
 
 #ifndef OCR_NORMAL
 #define OCR_NORMAL 32512
-#endif
-#ifndef OCR_IBEAM
 #define OCR_IBEAM 32513
-#endif
-#ifndef OCR_WAIT
 #define OCR_WAIT 32514
-#endif
-#ifndef OCR_CROSS
 #define OCR_CROSS 32515
-#endif
-#ifndef OCR_UP
 #define OCR_UP 32516
-#endif
-#ifndef OCR_SIZENWSE
 #define OCR_SIZENWSE 32642
-#endif
-#ifndef OCR_SIZENESW
 #define OCR_SIZENESW 32643
-#endif
-#ifndef OCR_SIZEWE
 #define OCR_SIZEWE 32644
-#endif
-#ifndef OCR_SIZENS
 #define OCR_SIZENS 32645
-#endif
-#ifndef OCR_SIZEALL
 #define OCR_SIZEALL 32646
-#endif
-#ifndef OCR_NO
 #define OCR_NO 32648
-#endif
-#ifndef OCR_HAND
 #define OCR_HAND 32649
-#endif
-#ifndef OCR_APPSTARTING
 #define OCR_APPSTARTING 32650
-#endif
-#ifndef OCR_HELP
 #define OCR_HELP 32651
 #endif
 
@@ -92,28 +67,27 @@ const DWORD g_cursorIds[] = {
 const size_t kCursorCount = sizeof(g_cursorIds) / sizeof(g_cursorIds[0]);
 
 struct Settings {
-    float maxScale       = 4.0f;
-    float minScale       = 1.0f;
-    float lerpSpeedUp    = 0.40f;
-    float lerpSpeedDown  = 0.15f;
-    float shakeThreshold = 800.0f;
-    int   shakeWindowMs  = 500;
+    std::atomic<float> maxScale{4.0f};
+    std::atomic<float> lerpSpeedUp{0.40f};
+    std::atomic<float> lerpSpeedDown{0.15f};
+    std::atomic<float> shakeThreshold{800.0f};
+    std::atomic<int>   shakeWindowMs{500};
 } g_settings;
 
 void LoadSettings() {
     int maxScalePct = Wh_GetIntSetting(L"maxScalePercent");
-    if (maxScalePct < 100) maxScalePct = 400;
+    if (maxScalePct < 100) maxScalePct = 100;
     if (maxScalePct > 1000) maxScalePct = 1000;
-    g_settings.maxScale = maxScalePct / 100.0f;
+    g_settings.maxScale.store(maxScalePct / 100.0f);
 
     int thresh = Wh_GetIntSetting(L"shakeThreshold");
-    g_settings.shakeThreshold = (thresh > 0) ? static_cast<float>(thresh) : 800.0f;
+    g_settings.shakeThreshold.store((thresh > 0) ? static_cast<float>(thresh) : 800.0f);
 
     int speedUp = Wh_GetIntSetting(L"lerpSpeedUpPercent");
-    g_settings.lerpSpeedUp = (speedUp > 0 && speedUp <= 100) ? (speedUp / 100.0f) : 0.40f;
+    g_settings.lerpSpeedUp.store((speedUp > 0 && speedUp <= 100) ? (speedUp / 100.0f) : 0.40f);
 
     int speedDown = Wh_GetIntSetting(L"lerpSpeedDownPercent");
-    g_settings.lerpSpeedDown = (speedDown > 0 && speedDown <= 100) ? (speedDown / 100.0f) : 0.15f;
+    g_settings.lerpSpeedDown.store((speedDown > 0 && speedDown <= 100) ? (speedDown / 100.0f) : 0.15f);
 }
 
 struct PointTime {
@@ -125,6 +99,7 @@ struct ModState {
     HWND hwndOverlay = NULL;
     HANDLE hThread = NULL;
     DWORD dwThreadId = 0;
+    HANDLE hThreadReadyEvent = NULL;
     std::deque<PointTime> history;
     float currentScale = 1.0f;
     float targetScale = 1.0f;
@@ -188,7 +163,11 @@ void UpdateFrame() {
 
     g_state.history.push_back({ pt, now });
 
-    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<ULONGLONG>(g_settings.shakeWindowMs))) {
+    float shakeThreshold = g_settings.shakeThreshold.load();
+    float maxScale = g_settings.maxScale.load();
+    int shakeWindowMs = g_settings.shakeWindowMs.load();
+
+    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<ULONGLONG>(shakeWindowMs))) {
         g_state.history.pop_front();
     }
 
@@ -200,14 +179,14 @@ void UpdateFrame() {
         float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
 
         float shakeRatio = totalPath / (netDisp + 1.0f);
-        if (totalPath > g_settings.shakeThreshold && shakeRatio > 1.2f) {
-            g_state.targetScale = g_settings.maxScale;
-        } else if (totalPath < g_settings.shakeThreshold * 0.4f || shakeRatio <= 1.1f) {
-            g_state.targetScale = g_settings.minScale;
+        if (totalPath > shakeThreshold && shakeRatio > 1.2f) {
+            g_state.targetScale = maxScale;
+        } else if (totalPath < shakeThreshold * 0.4f || shakeRatio <= 1.1f) {
+            g_state.targetScale = 1.0f;
         }
     }
 
-    float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp : g_settings.lerpSpeedDown;
+    float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp.load() : g_settings.lerpSpeedDown.load();
     g_state.currentScale += (g_state.targetScale - g_state.currentScale) * lerpSpeed;
 
     if (g_state.currentScale > 1.02f) {
@@ -304,10 +283,11 @@ void UpdateFrame() {
                 if (ii.hbmMask) DeleteObject(ii.hbmMask);
                 if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-                SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-                g_state.isVisible = true;
+                if (!g_state.isVisible) {
+                    SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    g_state.isVisible = true;
+                }
             }
         }
     } else {
@@ -315,7 +295,9 @@ void UpdateFrame() {
             ShowWindow(g_state.hwndOverlay, SW_HIDE);
             g_state.isVisible = false;
         }
-        RestoreAllSystemCursors();
+        if (g_state.cursorHidden) {
+            RestoreAllSystemCursors();
+        }
     }
 }
 
@@ -333,6 +315,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             RestoreAllSystemCursors();
             return TRUE;
         case WM_DESTROY:
+            g_state.hwndOverlay = NULL;
             KillTimer(hwnd, 1);
             RestoreAllSystemCursors();
             PostQuitMessage(0);
@@ -351,30 +334,36 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
     }
 
     const wchar_t* kClassName = L"WindhawkShakeCursorExclusiveOverlay";
+    HINSTANCE hInstance = GetModuleHandle(NULL);
 
     WNDCLASSEX wc = { sizeof(WNDCLASSEX) };
     wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = GetModuleHandle(NULL);
+    wc.hInstance = hInstance;
     wc.lpszClassName = kClassName;
 
     if (!RegisterClassEx(&wc)) {
-        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            return 0;
-        }
+        if (g_state.hThreadReadyEvent) SetEvent(g_state.hThreadReadyEvent);
+        return 0;
     }
 
     g_state.hwndOverlay = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kClassName, L"", WS_POPUP,
         0, 0, 1, 1,
-        NULL, NULL, GetModuleHandle(NULL), NULL
+        NULL, NULL, hInstance, NULL
     );
 
     if (!g_state.hwndOverlay) {
+        UnregisterClass(kClassName, hInstance);
+        if (g_state.hThreadReadyEvent) SetEvent(g_state.hThreadReadyEvent);
         return 0;
     }
 
     SetTimer(g_state.hwndOverlay, 1, 16, NULL);
+
+    if (g_state.hThreadReadyEvent) {
+        SetEvent(g_state.hThreadReadyEvent);
+    }
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -389,31 +378,165 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
         g_state.hwndOverlay = NULL;
     }
 
+    UnregisterClass(kClassName, hInstance);
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
+
+    g_state.hThreadReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_state.hThreadReadyEvent) return FALSE;
 
     g_state.hThread = CreateThread(NULL, 0, CursorMonitorThread, NULL, 0, &g_state.dwThreadId);
-    return g_state.hThread != NULL;
+    if (!g_state.hThread) {
+        CloseHandle(g_state.hThreadReadyEvent);
+        g_state.hThreadReadyEvent = NULL;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
+    if (g_state.hThreadReadyEvent) {
+        WaitForSingleObject(g_state.hThreadReadyEvent, INFINITE);
+    }
+
     if (g_state.hwndOverlay) {
         PostMessage(g_state.hwndOverlay, WM_CLOSE, 0, 0);
-    } else if (g_state.dwThreadId != 0) {
-        PostThreadMessage(g_state.dwThreadId, WM_QUIT, 0, 0);
     }
 
     if (g_state.hThread) {
-        WaitForSingleObject(g_state.hThread, 2000);
+        WaitForSingleObject(g_state.hThread, INFINITE);
         CloseHandle(g_state.hThread);
         g_state.hThread = NULL;
     }
+
+    if (g_state.hThreadReadyEvent) {
+        CloseHandle(g_state.hThreadReadyEvent);
+        g_state.hThreadReadyEvent = NULL;
+    }
+
     RestoreAllSystemCursors();
+}
+
+// ============================================================================
+// Windhawk Tool Mod Launcher Boilerplate
+// ============================================================================
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) return FALSE;
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) return FALSE;
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (g_toolModProcessMutex) CloseHandle(g_toolModProcessMutex);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) return FALSE;
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) return;
+
+    WCHAR currentProcessPath[MAX_PATH];
+    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) return;
+
+    WCHAR commandLine[MAX_PATH * 2];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
+    if (!kernelModule) return;
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+        BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+
+    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) return;
+
+    STARTUPINFO si = { sizeof(si) };
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi = { 0 };
+
+    if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) return;
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) return;
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
