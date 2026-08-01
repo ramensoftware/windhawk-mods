@@ -683,7 +683,6 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
     WindhawkUtils::SetFunctionHook(DrawThemeBackground, HookedDrawThemeBackground, &DrawThemeBackground_orig);
-    EnumWindows(RefreshExplorerCallback, 0);
 
     return TRUE;
 }
@@ -698,6 +697,11 @@ void Wh_ModUninit() {
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
     }
+}
+
+
+void Wh_ModAfterInit() {
+    EnumWindows(RefreshExplorerCallback, 0);
 }
 
 
