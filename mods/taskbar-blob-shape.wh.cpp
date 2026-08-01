@@ -52,7 +52,7 @@ outward with concave (outside) corner radii, ending in a flat top edge:
     $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs down from the top of the taskbar.
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
-    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Leave empty to disable.
+    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Accepts 1, 2 (horizontal, vertical), or 4 values. Leave empty to disable.
   - BottomRadius: '4'
     $name: Bottom corner radius
     $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
@@ -125,6 +125,11 @@ struct BlobEntry {
     winrt::event_token themeToken{};
     bool unloadAttached = false;
     bool loadedAttached = false;
+
+    // Whether WE hid the native indicator visuals for this button, so the
+    // restore paths only touch what the mod actually changed (and never
+    // override a Visibility the shell might set itself).
+    bool nativeHidden = false;
 
     // Whether the blob's Translation is glued to its button's offset chain,
     // plus the X adjustment and taskbar-top Y anchor it was bound with
@@ -224,11 +229,11 @@ void ParseThickness(PCWSTR str, winrt::Windows::UI::Xaml::Thickness& outThicknes
         // XAML convention: "horizontal,vertical"
         outL = outR = vals[0];
         outT = outB = vals[1];
-    } else if (vals.size() >= 4) {
+    } else if (vals.size() == 4) {
         outL = vals[0]; outT = vals[1]; outR = vals[2]; outB = vals[3];
-    } else if (vals.size() > 0) {
-        outL = outT = outR = outB = vals[0];
     }
+    // Any other count (e.g. 3 values) is invalid and yields zeros rather
+    // than silently discarding part of the input.
 
     outThickness = winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(outL, outT, outR, outB);
 }
@@ -506,15 +511,21 @@ void RestoreNativeVisuals(winrt::Windows::UI::Xaml::FrameworkElement const& btn)
 }
 
 // Inserts the blob below the task list in z-order so it renders behind the
-// buttons, like the native indicator.
-void InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes::Path const& blobShape) {
-    auto repeater = FindChildByName(grid, L"TaskbarFrameRepeater");
-    uint32_t index = 0;
-    if (repeater && grid.Children().IndexOf(repeater.try_as<winrt::Windows::UI::Xaml::UIElement>(), index)) {
-        grid.Children().InsertAt(index, blobShape);
-    } else {
-        grid.Children().Append(blobShape);
+// buttons, like the native indicator. The repeater is resolved by scanning
+// DIRECT children only — that's the assumption the index insertion depends
+// on. Returns false (fail safe) rather than appending: an appended blob
+// would render on top of the buttons, covering the icons.
+bool InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes::Path const& blobShape) {
+    auto children = grid.Children();
+    uint32_t count = children.Size();
+    for (uint32_t i = 0; i < count; i++) {
+        auto child = children.GetAt(i).try_as<FrameworkElement>();
+        if (child && child.Name() == L"TaskbarFrameRepeater") {
+            children.InsertAt(i, blobShape);
+            return true;
+        }
     }
+    return false;
 }
 
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
@@ -543,6 +554,7 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
     std::shared_ptr<BlobEntry> result;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        if (g_unloading) return nullptr; // callers bail on null
 
         // Prune entries whose button died without an Unloaded (rare). Their
         // blob elements live in the RootGrid, so they must be removed
@@ -656,6 +668,9 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     auto bg = FindChildByName(iconPanel, L"BackgroundElement");
     FrameworkElement anchor = bg ? bg : iconPanel;
 
+    auto entry = FindOrCreateEntry(button);
+    if (!entry) return; // unloading; the uninit cleanup handles restoration
+
     // Suppression of the native background is decided at the END, from the
     // same condition that shows the blob, so no failure path can leave an
     // active button with neither indicator. The hand-off visual's IsVisible
@@ -664,9 +679,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // BackgroundElement, which outrank local values in XAML's precedence.
     // The RunningIndicator line is part of the button and renders above the
     // blob (which sits below the repeater in z-order), so it is suppressed
-    // together with the background while the blob is shown.
+    // together with the background while the blob is shown. Tracked per
+    // entry, so only state WE changed is ever touched or restored.
     auto runningIndicator = FindChildByName(iconPanel, L"RunningIndicator");
     auto setNativeHidden = [&](bool hidden) {
+        if (entry->nativeHidden == hidden) return;
         if (bg) {
             try {
                 ElementCompositionPreview::GetElementVisual(bg).IsVisible(!hidden);
@@ -677,9 +694,8 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 ElementCompositionPreview::GetElementVisual(runningIndicator).IsVisible(!hidden);
             } catch (...) {}
         }
+        entry->nativeHidden = hidden;
     };
-
-    auto entry = FindOrCreateEntry(button);
 
     // Button removal (window moved to another monitor, app closed, container
     // recycled) is a LIFECYCLE event, not a state change — UpdateVisualStates
@@ -728,7 +744,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 RemoveFromParentPanel(blob);
             }
             if (btn) {
-                RestoreNativeVisuals(btn);
+                if (e->nativeHidden) RestoreNativeVisuals(btn);
                 if (auto anchor = e->anchor.get()) {
                     try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
                 }
@@ -774,8 +790,9 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         grid = GetTaskbarRootGrid(button);
         if (!grid) {
             // Not rooted under a TaskbarFrame — e.g. buttons in the overflow
-            // flyout live in a separate XAML island. Leave the native
-            // indicator fully in charge there.
+            // flyout live in a separate XAML island. Hide any existing blob
+            // and leave the native indicator fully in charge there.
+            if (auto blob = entry->blobShape.get()) blob.Opacity(0.0);
             setNativeHidden(false);
             return;
         }
@@ -796,10 +813,20 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
         blobShape.Opacity(0.0);
 
-        InsertBlobBelowRepeater(grid, blobShape);
+        if (!InsertBlobBelowRepeater(grid, blobShape)) {
+            Wh_Log(L"TaskbarFrameRepeater not found as a direct RootGrid child");
+            setNativeHidden(false); // no blob will be shown
+            return; // retried on the next event
+        }
         ElementCompositionPreview::SetIsTranslationEnabled(blobShape, true);
 
-        entry->blobShape = winrt::make_weak(blobShape);
+        {
+            // Written on the UI thread, resolved on the Windhawk thread
+            // (uninit, settings change): keep the cross-thread access to
+            // this weak ref defined by writing it under the entries mutex.
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            entry->blobShape = winrt::make_weak(blobShape);
+        }
         entry->bound = false;
         entry->boundAdjX = -1e9f;
         entry->boundYBase = -1e9f;
@@ -828,8 +855,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         auto parentGrid = parent ? parent.try_as<Grid>() : nullptr;
         if (parentGrid != grid) {
             RemoveFromParentPanel(blobShape);
-            InsertBlobBelowRepeater(grid, blobShape);
             entry->bound = false;
+            if (!InsertBlobBelowRepeater(grid, blobShape)) {
+                setNativeHidden(false); // no blob will be shown
+                return; // unparented renders nothing; retried on the next event
+            }
         }
     }
 
@@ -1027,11 +1057,16 @@ BOOL Wh_ModInit() {
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L"Uninitializing Taskbar Blob Shape Mod (Before)");
-    g_unloading = true;
 
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
     {
+        // The flag is set under the entries mutex, and FindOrCreateEntry
+        // checks it under the same lock: a callback that raced past an
+        // earlier g_unloading check can no longer create an entry AFTER this
+        // snapshot — such an entry would attach handlers that cleanup()
+        // never revokes, firing into an unloaded DLL.
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        g_unloading = true;
         localEntries = g_blobEntries;
         g_blobEntries.clear();
     }
@@ -1041,8 +1076,15 @@ void Wh_ModBeforeUninit() {
     auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size());
 
     for (auto& entry : localEntries) {
-        auto blobShape = entry->blobShape.get();
-        auto btn = entry->button.get();
+        winrt::Windows::UI::Xaml::Shapes::Path blobShape{nullptr};
+        winrt::Windows::UI::Xaml::FrameworkElement btn{nullptr};
+        {
+            // blobShape is written on the UI thread; resolve these weak refs
+            // under the entries mutex to keep the cross-thread read defined.
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            blobShape = entry->blobShape.get();
+            btn = entry->button.get();
+        }
 
         auto cleanup = [entry, blobShape]() {
             try {
@@ -1062,7 +1104,7 @@ void Wh_ModBeforeUninit() {
                     if (entry->loadedAttached) {
                         try { btn.Loaded(entry->loadedToken); } catch (...) {}
                     }
-                    RestoreNativeVisuals(btn);
+                    if (entry->nativeHidden) RestoreNativeVisuals(btn);
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
         };
@@ -1109,8 +1151,14 @@ void Wh_ModSettingsChanged() {
         localEntries = g_blobEntries;
     }
     for (auto& entry : localEntries) {
-        auto blobShape = entry->blobShape.get();
-        auto btn = entry->button.get();
+        winrt::Windows::UI::Xaml::Shapes::Path blobShape{nullptr};
+        winrt::Windows::UI::Xaml::FrameworkElement btn{nullptr};
+        {
+            // Same cross-thread rule as the uninit path.
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            blobShape = entry->blobShape.get();
+            btn = entry->button.get();
+        }
         auto dispatcher = blobShape ? blobShape.Dispatcher()
                                     : (btn ? btn.Dispatcher() : nullptr);
         if (!dispatcher) continue;
