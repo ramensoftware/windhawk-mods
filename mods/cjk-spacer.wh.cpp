@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods
-// @version         0.1.22
+// @version         0.1.23
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -30,7 +30,10 @@ XAML Diagnostics connection permits only one consumer, and tools such as
 Taskbar Styler or File Explorer Styler may already use or block those
 connections. Enable it explicitly if you want those menus and pointer
 tooltips processed. `classicMenus` still covers the Win32 menu opened through
-"Show more options".
+"Show more options". The modern path is intentionally retained as an opt-in,
+best-effort implementation because it covers the primary Windows 11 menu; the
+connection conflict is left visible to the user rather than silently dropping
+that coverage.
 
 Examples:
 
@@ -78,8 +81,9 @@ excluded.
 - Windows 11 XAML context menus and pointer tooltips are handled at the XAML
   source-element level. Only plain local string values in the `Text` source of
   XAML menu items and `ToolTip.Content` are changed; bindings, styles,
-  presenter `TextBlock` values, ordinary XAML text, and taskbar thumbnail
-  previews are untouched. A source is changed when XAML Diagnostics reports
+  presenter `TextBlock` values and ordinary XAML text are untouched. Taskbar
+  thumbnail preview content is normally not a plain local string and therefore
+  is not changed. A source is changed when XAML Diagnostics reports
   that it was added and restored when it is removed or the mod unloads. This
   path is disabled by default; enable `modernUiText` to opt in.
 
@@ -118,9 +122,16 @@ accessibility APIs also contains the inserted spaces while the popup is open.
 Other menu-cleanup mods that match items by their displayed text, such as
 Remove Context Menu Items, may therefore need rules that account for the
 temporary spaces while the popup is open.
+Text Replace targets the same classic menu APIs but performs literal
+substitutions, so it cannot express this CJK/non-CJK boundary rule; when both
+mods are enabled, their hook order can affect which temporary text each sees.
 Rewritten strings are recorded and restored when the popup closes. If multiple
 items have identical rewritten text, text-based fallback restoration can select
 the first match; the idempotent transformation does not compound spaces.
+If a displayed popup item is changed dynamically, Windows may not remeasure it;
+the added spaces can clip on uncommon paths. Tooltip measurement and drawing
+also need compatible DC targets to keep sizing consistent; disable
+`classicTooltips` if a specific control clips after spacing.
 */
 // ==/WindhawkModReadme==
 
@@ -128,7 +139,7 @@ the first match; the idempotent transformation does not compound spaces.
 /*
 - classicMenus: true
   $name: Classic context menus
-  $description: Process classic Win32 popup-menu text.
+  $description: Process classic Win32 popup-menu text; temporary live-menu changes can affect other text-matching menu mods while the popup is open.
 - classicTooltips: true
   $name: Classic Win32 tooltips
   $description: Process text in legacy tooltips such as notification-area icon tooltips.
@@ -308,6 +319,9 @@ bool IsUnicodeLetterOrDigit(uint32_t codePoint) {
         return false;
     }
 
+    // GetStringTypeW classifies UTF-16 code units. Supplementary-plane
+    // letters represented by surrogate pairs therefore aren't reliably
+    // reported as Unicode letters/digits and remain Other in unicode mode.
     wchar_t utf16[2];
     int length;
 
@@ -804,12 +818,16 @@ BOOL WINAPI InsertMenuItemWHook(HMENU menu,
             const BOOL result = g_originalInsertMenuItemW(
                 menu, item, byPosition, &copy);
             if (result) {
-                const int index = FindMenuItemIndex(
-                    menu,
-                    byPosition || !(itemInfo->fMask & MIIM_ID)
-                        ? item
-                        : itemInfo->wID,
-                    byPosition != FALSE);
+                // Without MIIM_ID, item identifies the insertion anchor, not
+                // the new item. Leave the index unknown so restoration uses
+                // the spaced text fallback instead of recording the anchor.
+                const int index =
+                    !byPosition && !(itemInfo->fMask & MIIM_ID)
+                        ? -1
+                        : FindMenuItemIndex(
+                              menu,
+                              byPosition ? item : itemInfo->wID,
+                              byPosition != FALSE);
                 const int insertedIndex =
                     index >= 0
                         ? index
@@ -1155,7 +1173,7 @@ void CloseDiscoveredClassicTooltipThemes() {
     }
 
     for (HTHEME theme : g_discoveredClassicTooltipThemes) {
-        g_originalCloseThemeData(theme);
+        CloseThemeData(theme);
     }
     g_discoveredClassicTooltipThemes.clear();
 }
@@ -1194,8 +1212,11 @@ HTHEME WINAPI OpenThemeDataForDpiHook(HWND window,
 }
 
 HRESULT WINAPI CloseThemeDataHook(HTHEME theme) {
-    UntrackClassicTooltipTheme(theme);
-    return g_originalCloseThemeData(theme);
+    const HRESULT result = g_originalCloseThemeData(theme);
+    if (SUCCEEDED(result)) {
+        UntrackClassicTooltipTheme(theme);
+    }
+    return result;
 }
 
 bool IsClassicTooltipTextPart(int partId) {
@@ -2121,17 +2142,7 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
         return;
     }
 
-    struct LoadingGuard {
-        explicit LoadingGuard(bool& flag) : flag(flag) {
-            flag = true;
-        }
-
-        ~LoadingGuard() {
-            flag = false;
-        }
-
-        bool& flag;
-    } loadingGuard(g_loadingXamlDiagnostics);
+    ScopedBoolValue loadingGuard(g_loadingXamlDiagnostics, true);
 
     std::lock_guard<std::mutex> guard(
         g_xamlDiagnosticsInitializationMutex);
