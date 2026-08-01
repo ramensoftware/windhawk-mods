@@ -3660,6 +3660,11 @@ static void FetchMediaPropertiesAsync() {
                                 g_artDelayPending = false;
                             }
                         }
+
+                        if (!suspectMatch && isBrowserSession &&
+                            thumbStreamSize == 0 && prevArtSize > 0) {
+                            suspectMatch = true;
+                        }
                     }
                     if (suspectMatch) {
                         thumbBytes.clear();
@@ -3916,6 +3921,9 @@ static void AttachToSession(GlobalSystemMediaTransportControlsSession session) {
             std::lock_guard<std::mutex> lk(g_mediaMtx);
             g_media.appIconKey   = L"";
             g_media.appIconBytes.clear();
+            g_media.thumbnailBytes.clear();
+            g_media.thumbnailHash = 0;
+            g_media.thumbnailStreamSize = 0;
             g_lastTitleArtistKey.clear();
             g_suspectArtSize  = 0;
             g_suspectArtHash  = 0;
@@ -9959,7 +9967,7 @@ static void ApplySettings() {
     }
 }
 static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCount = 0) {
-    static constexpr int kMaxRetries = 50; // 50 * 100ms = 5s max
+    static constexpr int kMaxRetries = 50;
     auto retry = [&]() {
         if (retryCount >= kMaxRetries) {
             Wh_Log(L"ApplySettingsWithRetry: giving up after %d retries, SystemTray.SystemTrayFrame not found", kMaxRetries);
