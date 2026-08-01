@@ -8,8 +8,10 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lgdi32 -lshell32 -lshcore -ldwmapi
-// @license         MIT
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
 
 // ==WindhawkModReadme==
 /*
@@ -48,6 +50,26 @@ retained while the taskbar is hidden. If a taskbar starts hidden before its
 dock can be measured, a centered startup band remains available at the monitor
 edge until the first reliable dock snapshot is captured.
 
+## Related work and attribution
+
+The auto-hide implementation adapts prior Windhawk work by m417z on
+[overlap and maximized-window policy](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-auto-hide-when-maximized.wh.cpp),
+[screen-edge activation areas](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-auto-hide-custom-activation-area.wh.cpp),
+[native animation timing](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-auto-hide-speed.wh.cpp),
+and [native taskbar state coordination](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-auto-hide-keyboard-only.wh.cpp),
+plus Cirn09's
+[notification recovery](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-autohide-better.wh.cpp)
+and Bo0ii's
+[hide/show timing and animation](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-autohide-instant-show.wh.cpp).
+
+This integration is intentional. The referenced mods evaluate the native
+taskbar window or apply independent policy at the same hide, show, and reveal
+paths, while this mod must coordinate those decisions around its measured dock
+islands. Running the policies separately would make empty parts of the
+full-width taskbar window participate in overlap or reveal decisions and would
+make shared hooks order-dependent. Windows remains responsible for moving and
+rendering the taskbar.
+
 ## Notes
 - Designed for a centered or floating taskbar. With a normal full-width
   taskbar, the input region spans the full bar and has no visible effect.
@@ -78,6 +100,14 @@ edge until the first reliable dock snapshot is captured.
 - Mouse-edge reveal stays suppressed for a foreground borderless fullscreen
   window. Normal maximized applications still reveal the taskbar, and the
   Windows key keeps its native behavior.
+
+## Changelog
+
+### 1.0.0
+
+- Initial public release with dock-island click-through, dock-aware native
+  auto-hide, multi-monitor and mixed-DPI handling, notification recovery, and
+  fullscreen-aware edge reveal.
 */
 // ==/WindhawkModReadme==
 
@@ -241,7 +271,6 @@ edge until the first reliable dock snapshot is captured.
 #include <commctrl.h>
 #include <windhawk_utils.h>
 #include <dwmapi.h>
-#include <propvarutil.h>
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <shobjidl.h>
@@ -277,7 +306,7 @@ constexpr DWORD kWindowPolicyFallbackMs = 1000;
 constexpr ULONGLONG kNotificationBurstQuietMs = 5000;
 constexpr ULONGLONG kRegionWatchdogMs = 1000;
 constexpr ULONGLONG kLogThrottleMs = 5000;
-constexpr int kMaxAutomationNodes = 64;
+constexpr int kMaxAutomationNodes = 256;
 constexpr int kMaxExcludedPrograms = 128;
 constexpr size_t kMaxRegions = 8;
 constexpr UINT_PTR kTaskbarSubclassId = 0x54444354;  // "TDCT"
@@ -288,11 +317,13 @@ constexpr WPARAM kTaskbarCommandBindNative = 4;
 constexpr WPARAM kTaskbarCommandDockPointer = 5;
 constexpr UINT kTrayPrivateSettingMessage = WM_USER + 0x1CA;
 constexpr WPARAM kTrayPrivateSettingAutoHideSet = 4;
-constexpr UINT kTaskbandNotificationMessage = 0xC029;
-constexpr WPARAM kTaskbandNotificationActivate = 0x8006;
+constexpr WPARAM kTaskbandNotificationActivate =
+    HSHELL_HIGHBIT | HSHELL_REDRAW;
 constexpr UINT_PTR kTrayUITimerHide = 2;
 constexpr UINT_PTR kTrayUITimerUnhide = 3;
 constexpr UINT_PTR kDockExitHideTimer = 0x54444348;  // "TDCH"
+constexpr LRESULT kTaskbarRemoveSucceeded = 1;
+constexpr size_t kMaxVtableSearchSlots = 64;
 constexpr int kTrayUnhideRequestDefault = 0;
 constexpr int kViewReasonPointerOverChanged = 7;
 constexpr int kViewReasonScreenEdgeEntered = 8;
@@ -347,6 +378,7 @@ struct DesiredState {
     bool hidden = false;
     bool syncPending = false;
     bool nativeBindingPending = false;
+    bool nativeAutoHideAvailable = true;
     bool shrinkPending = false;
     bool structureRefreshPending = false;
     bool dockPointerInside = false;
@@ -369,6 +401,7 @@ struct HorizontalSpan {
 };
 
 std::mutex g_stateMutex;
+std::mutex g_nativeHookMutex;
 Settings g_settings{};
 std::unordered_map<HWND, DesiredState> g_desired;
 std::unordered_map<HWND, void*> g_viewCoordinators;
@@ -376,23 +409,28 @@ std::unordered_map<void*, HWND> g_nativeTaskbarObjects;
 
 UINT g_taskbarControlMsg = 0;
 UINT g_installSubclassMsg = 0;
+UINT g_taskbandNotificationMessage = 0;
 HANDLE g_workerThread = nullptr;
 HANDLE g_stopEvent = nullptr;
 HANDLE g_refreshEvent = nullptr;
 HANDLE g_workerReadyEvent = nullptr;
 HANDLE g_installHookIdleEvent = nullptr;
+HANDLE g_subclassIdleEvent = nullptr;
 DWORD g_workerThreadId = 0;
 std::atomic<bool> g_workerStartupSucceeded{false};
 std::atomic<bool> g_initialized{false};
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_windowsAutoHideEnabled{false};
+std::atomic<bool> g_nativeAutoHideHooksInstalled{false};
 std::atomic<bool> g_taskbarViewHooksInstalled{false};
+std::atomic<bool> g_taskbarViewHookAttempted{false};
 std::atomic<bool> g_geometryDirty{true};
 std::atomic<bool> g_policyDirty{true};
 std::atomic<uint64_t> g_settingsRevision{0};
 std::atomic<uint64_t> g_topologyRevision{0};
 std::atomic<ULONGLONG> g_lastErrorLogTick{0};
 std::atomic<unsigned int> g_installHookCallbacks{0};
+std::atomic<unsigned int> g_subclassCallbacks{0};
 HWINEVENTHOOK g_geometryLifecycleWinEventHook = nullptr;
 HWINEVENTHOOK g_geometryLocationWinEventHook = nullptr;
 HWINEVENTHOOK g_foregroundWinEventHook = nullptr;
@@ -440,7 +478,15 @@ ViewCoordinatorUpdateExpanded_t
 using SetTimer_t = decltype(&SetTimer);
 SetTimer_t g_setTimerOriginal = nullptr;
 thread_local bool g_revealUpdateActive = false;
-thread_local unsigned int g_regionMutationDepth = 0;
+
+static bool NativeAutoHideDispatchEnabled() {
+    return g_initialized.load(std::memory_order_acquire) &&
+           !g_unloading.load(std::memory_order_acquire) &&
+           g_nativeAutoHideHooksInstalled.load(
+               std::memory_order_acquire) &&
+           g_taskbarViewHooksInstalled.load(
+               std::memory_order_acquire);
+}
 
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                             UINT uMsg,
@@ -449,6 +495,19 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                             UINT_PTR uIdSubclass,
                                             DWORD_PTR dwRefData);
 static void SignalRefresh(bool geometry, bool policy);
+static void HandleDockExitHideTimer(HWND hWnd);
+
+static constexpr bool PolicyRefreshDue(ULONGLONG now,
+                                       ULONGLONG earliestRefresh,
+                                       ULONGLONG fallbackRefresh,
+                                       bool dirty) {
+    return now >= fallbackRefresh || (dirty && now >= earliestRefresh);
+}
+
+static constexpr ULONGLONG NextPolicyRefreshTick(ULONGLONG now,
+                                                  ULONGLONG interval) {
+    return now + interval;
+}
 
 static bool RectValid(const RECT& rect) {
     return rect.right > rect.left && rect.bottom > rect.top;
@@ -597,20 +656,6 @@ class ScopedPhysicalCoordinates {
     bool valid_ = true;
 };
 
-class RegionMutationGuard {
-   public:
-    RegionMutationGuard() {
-        ++g_regionMutationDepth;
-    }
-
-    ~RegionMutationGuard() {
-        --g_regionMutationDepth;
-    }
-
-    RegionMutationGuard(const RegionMutationGuard&) = delete;
-    RegionMutationGuard& operator=(const RegionMutationGuard&) = delete;
-};
-
 static bool QueryTaskbarPhysicalVisibility(HWND hWnd,
                                            RECT& windowRect,
                                            bool& shown) {
@@ -682,24 +727,24 @@ static void LogFailureThrottled(PCWSTR operation, ULONG code) {
 }
 
 static AutoHideMode ReadAutoHideMode() {
-    PCWSTR value = Wh_GetStringSetting(L"autoHideMode");
+    auto value =
+        WindhawkUtils::StringSetting::make(L"autoHideMode");
     AutoHideMode result = AutoHideMode::Overlap;
-    if (value && wcscmp(value, L"maximized") == 0) {
+    if (wcscmp(value.get(), L"maximized") == 0) {
         result = AutoHideMode::Maximized;
-    } else if (value && wcscmp(value, L"always") == 0) {
+    } else if (wcscmp(value.get(), L"always") == 0) {
         result = AutoHideMode::Always;
     }
-    Wh_FreeStringSetting(value);
     return result;
 }
 
 static AnimationStyle ReadAnimationStyle() {
-    PCWSTR value = Wh_GetStringSetting(L"animation");
+    auto value =
+        WindhawkUtils::StringSetting::make(L"animation");
     const AnimationStyle result =
-        value && wcscmp(value, L"none") == 0
+        wcscmp(value.get(), L"none") == 0
             ? AnimationStyle::None
             : AnimationStyle::Native;
-    Wh_FreeStringSetting(value);
     return result;
 }
 
@@ -722,13 +767,12 @@ static Settings ReadSettings() {
         Wh_GetIntSetting(L"foregroundOnly") != 0;
     settings.excludedPrograms.reserve(8);
     for (int i = 0; i < kMaxExcludedPrograms; i++) {
-        PCWSTR value =
-            Wh_GetStringSetting(L"excludedPrograms[%d]", i);
-        const bool empty = !value || !*value;
+        auto value = WindhawkUtils::StringSetting::make(
+            L"excludedPrograms[%d]", i);
+        const bool empty = !*value.get();
         if (!empty) {
-            settings.excludedPrograms.emplace_back(value);
+            settings.excludedPrograms.emplace_back(value.get());
         }
-        Wh_FreeStringSetting(value);
         if (empty) {
             break;
         }
@@ -824,7 +868,6 @@ static bool ClearWindowRegion(HWND hWnd) {
         return true;
     }
 
-    const RegionMutationGuard mutationGuard;
     if (!SetWindowRgn(hWnd, nullptr, TRUE)) {
         LogFailureThrottled(L"SetWindowRgn(clear)", GetLastError());
         return false;
@@ -868,7 +911,6 @@ static void ApplyDesiredRegion(HWND hWnd,
         return;
     }
 
-    const RegionMutationGuard mutationGuard;
     if (SetWindowRgn(hWnd, desired.get(), TRUE)) {
         // SetWindowRgn owns the region only after a successful call.
         desired.release();
@@ -899,12 +941,33 @@ static bool HasSubclassMarker(HWND hWnd) {
     return GetPropW(hWnd, kSubclassMarkerName) == GetSubclassMarkerValue();
 }
 
+class SubclassCallbackGuard {
+   public:
+    SubclassCallbackGuard() {
+        if (g_subclassCallbacks.fetch_add(1, std::memory_order_acq_rel) == 0 &&
+            g_subclassIdleEvent) {
+            ResetEvent(g_subclassIdleEvent);
+        }
+    }
+
+    ~SubclassCallbackGuard() {
+        if (g_subclassCallbacks.fetch_sub(1, std::memory_order_acq_rel) == 1 &&
+            g_subclassIdleEvent) {
+            SetEvent(g_subclassIdleEvent);
+        }
+    }
+
+    SubclassCallbackGuard(const SubclassCallbackGuard&) = delete;
+    SubclassCallbackGuard& operator=(const SubclassCallbackGuard&) = delete;
+};
+
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                             UINT uMsg,
                                             WPARAM wParam,
                                             LPARAM lParam,
                                             UINT_PTR uIdSubclass,
                                             DWORD_PTR) {
+    const SubclassCallbackGuard callbackGuard;
     const bool displayChanged = uMsg == WM_DISPLAYCHANGE;
     const bool dpiChanged = uMsg == WM_DPICHANGED;
     if (displayChanged) {
@@ -932,10 +995,6 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
 
     if (uMsg == g_taskbarControlMsg) {
         if (wParam == kTaskbarCommandRemove) {
-            if (!ClearWindowRegion(hWnd)) {
-                return 0;
-            }
-
             if (!RemoveWindowSubclass(hWnd, TaskbarSubclassProc,
                                       uIdSubclass)) {
                 LogFailureThrottled(L"RemoveWindowSubclass", GetLastError());
@@ -943,8 +1002,11 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
             }
 
             RemovePropW(hWnd, kSubclassMarkerName);
+            // Detaching executable callback state takes priority over restoring
+            // the visual region. Region cleanup is best-effort after detach.
+            ClearWindowRegion(hWnd);
             EraseTrackedWindow(hWnd);
-            return 0;
+            return kTaskbarRemoveSucceeded;
         }
 
         if (wParam == kTaskbarCommandSync) {
@@ -968,6 +1030,11 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
 
         // Native-binding and policy commands continue to the taskbar WndProc
         // hooks, where the exact TrayUI or CSecondaryTray object is available.
+    }
+
+    if (uMsg == WM_TIMER && wParam == kDockExitHideTimer) {
+        HandleDockExitHideTimer(hWnd);
+        return 0;
     }
 
     if (uMsg == WM_NCDESTROY) {
@@ -1127,10 +1194,15 @@ static bool TryInstallTaskbarSubclass(HWND hWnd) {
 }
 
 static void RequestNativeTaskbarBinding(HWND hWnd) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto it = g_desired.find(hWnd);
         if (it == g_desired.end() ||
+            !it->second.nativeAutoHideAvailable ||
             it->second.nativeBindingPending) {
             return;
         }
@@ -1170,9 +1242,15 @@ static std::vector<HWND> SnapshotSubclassedWindows() {
 
 static void PruneStaleTrackedWindows() {
     for (HWND hWnd : SnapshotSubclassedWindows()) {
-        if (!IsWindow(hWnd) || !HasSubclassMarker(hWnd)) {
+        if (!IsWindow(hWnd)) {
             EraseTrackedWindow(hWnd);
         }
+    }
+}
+
+static void WaitForSubclassCallbacks() {
+    while (g_subclassCallbacks.load(std::memory_order_acquire) != 0) {
+        WaitForSingleObject(g_subclassIdleEvent, INFINITE);
     }
 }
 
@@ -1181,12 +1259,13 @@ static void RemoveAllTaskbarSubclasses() {
         PruneStaleTrackedWindows();
         std::vector<HWND> windows = SnapshotSubclassedWindows();
         if (windows.empty()) {
+            WaitForSubclassCallbacks();
             return;
         }
 
         bool removedAny = false;
         for (HWND hWnd : windows) {
-            if (!IsWindow(hWnd) || !HasSubclassMarker(hWnd)) {
+            if (!IsWindow(hWnd)) {
                 EraseTrackedWindow(hWnd);
                 removedAny = true;
                 continue;
@@ -1203,14 +1282,17 @@ static void RemoveAllTaskbarSubclasses() {
                     error = ERROR_TIMEOUT;
                 }
                 LogFailureThrottled(L"SendMessageTimeoutW(remove)", error);
-            }
-
-            if (!HasSubclassMarker(hWnd)) {
+            } else if (result == kTaskbarRemoveSucceeded) {
+                // The owner thread positively confirmed callback detachment.
+                // RemovePropW is repeated here in case the first call failed.
+                RemovePropW(hWnd, kSubclassMarkerName);
                 removedAny = true;
             }
         }
 
         if (!removedAny) {
+            // A hung owner thread leaves no safe bounded detach path. Keep the
+            // module loaded instead of returning with a live subclass pointer.
             Sleep(50);
         }
     }
@@ -1958,6 +2040,12 @@ static HWND ResolveTaskbarForEvent(HWND eventWindow) {
     return nullptr;
 }
 
+static void WakeWorker() {
+    if (g_refreshEvent) {
+        SetEvent(g_refreshEvent);
+    }
+}
+
 static void SignalRefresh(bool geometry, bool policy) {
     if (geometry) {
         g_geometryDirty.store(true, std::memory_order_release);
@@ -1965,9 +2053,7 @@ static void SignalRefresh(bool geometry, bool policy) {
     if (policy) {
         g_policyDirty.store(true, std::memory_order_release);
     }
-    if (g_refreshEvent) {
-        SetEvent(g_refreshEvent);
-    }
+    WakeWorker();
 }
 
 static void MarkStructureRefresh(HWND hWnd) {
@@ -1992,11 +2078,6 @@ static void CALLBACK GeometryWinEventProc(HWINEVENTHOOK,
     const bool rootWindowEvent =
         objectId == OBJID_WINDOW && childId == CHILDID_SELF &&
         hWnd && GetAncestor(hWnd, GA_ROOT) == hWnd;
-    if (g_regionMutationDepth && rootWindowEvent &&
-        IsTaskbarWindow(hWnd)) {
-        return;
-    }
-
     if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         if (rootWindowEvent && IsTaskbarWindow(hWnd)) {
             RECT rect{};
@@ -2099,9 +2180,12 @@ static bool NeedsShownGeometryWork() {
 }
 
 static bool AutoHideAppliesLocked(HWND hWnd) {
-    return g_initialized.load(std::memory_order_acquire) &&
+    const auto state = g_desired.find(hWnd);
+    return NativeAutoHideDispatchEnabled() &&
            g_windowsAutoHideEnabled.load(std::memory_order_acquire) &&
            g_taskbarViewHooksInstalled.load(std::memory_order_acquire) &&
+           (state == g_desired.end() ||
+            state->second.nativeAutoHideAvailable) &&
            (!g_settings.primaryMonitorOnly ||
             IsPrimaryTaskbarWindow(hWnd));
 }
@@ -2147,17 +2231,18 @@ static bool IsWindowExcluded(
         HANDLE process = OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
         if (process) {
-            std::wstring path(32768, L'\0');
-            DWORD length = static_cast<DWORD>(path.size());
+            thread_local std::vector<WCHAR> pathBuffer(32768);
+            DWORD length = static_cast<DWORD>(pathBuffer.size());
             if (QueryFullProcessImageNameW(
-                    process, 0, path.data(), &length) &&
+                    process, 0, pathBuffer.data(), &length) &&
                 length) {
-                path.resize(length);
+                const std::wstring_view path(
+                    pathBuffer.data(), length);
                 const size_t separator = path.find_last_of(L"\\/");
                 const std::wstring_view fileName =
                     separator == std::wstring::npos
-                        ? std::wstring_view(path)
-                        : std::wstring_view(path).substr(separator + 1);
+                        ? path
+                        : path.substr(separator + 1);
                 if (MatchesExcludedIdentifier(
                         path, excludedPrograms) ||
                     MatchesExcludedIdentifier(
@@ -2679,6 +2764,12 @@ static bool CursorInActivationArea(HWND hWnd) {
 }
 
 static bool ScreenEdgeRevealAllowed(HWND hWnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        if (!AutoHideAppliesLocked(hWnd)) {
+            return true;
+        }
+    }
     return !ForegroundWindowSuppressesEdgeReveal(hWnd) &&
            CursorInActivationArea(hWnd);
 }
@@ -2760,9 +2851,15 @@ static UINT_PTR WINAPI SetTimerHook(HWND hWnd,
                                     UINT_PTR timerId,
                                     UINT interval,
                                     TIMERPROC timerProc) {
-    if (IsTaskbarWindow(hWnd) &&
-        (timerId == kTrayUITimerHide ||
-         timerId == kTrayUITimerUnhide)) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        return g_setTimerOriginal(hWnd, timerId, interval, timerProc);
+    }
+    if (timerId != kTrayUITimerHide &&
+        timerId != kTrayUITimerUnhide) {
+        return g_setTimerOriginal(hWnd, timerId, interval, timerProc);
+    }
+
+    if (IsTaskbarWindow(hWnd)) {
         if (timerId == kTrayUITimerUnhide &&
             !ScreenEdgeRevealAllowed(hWnd)) {
             return timerId;
@@ -2778,11 +2875,8 @@ static UINT_PTR WINAPI SetTimerHook(HWND hWnd,
     return g_setTimerOriginal(hWnd, timerId, interval, timerProc);
 }
 
-static VOID CALLBACK DockExitHideTimerProc(HWND hWnd,
-                                          UINT,
-                                          UINT_PTR timerId,
-                                          DWORD) {
-    KillTimer(hWnd, timerId);
+static void HandleDockExitHideTimer(HWND hWnd) {
+    KillTimer(hWnd, kDockExitHideTimer);
     if (StopRequested()) {
         return;
     }
@@ -2824,26 +2918,93 @@ static void ScheduleDockExitHide(HWND hWnd) {
     const SetTimer_t setTimer =
         g_setTimerOriginal ? g_setTimerOriginal : SetTimer;
     if (!setTimer(hWnd, kDockExitHideTimer, USER_TIMER_MINIMUM,
-                  DockExitHideTimerProc)) {
+                  nullptr)) {
         LogFailureThrottled(
             L"SetTimer(dock pointer exit)", GetLastError());
     }
 }
 
-static void* QueryViaVtable(void* object, void* vtable) {
-    void* pointer = object;
-    while (*reinterpret_cast<void**>(pointer) != vtable) {
-        pointer = reinterpret_cast<void**>(pointer) + 1;
+static bool IsReadablePointerSlot(const void* address) {
+    MEMORY_BASIC_INFORMATION memory{};
+    if (!address || !VirtualQuery(address, &memory, sizeof(memory)) ||
+        memory.State != MEM_COMMIT ||
+        (memory.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
+        return false;
     }
-    return pointer;
+
+    const DWORD baseProtection = memory.Protect & 0xFF;
+    if (baseProtection != PAGE_READONLY &&
+        baseProtection != PAGE_READWRITE &&
+        baseProtection != PAGE_WRITECOPY &&
+        baseProtection != PAGE_EXECUTE_READ &&
+        baseProtection != PAGE_EXECUTE_READWRITE &&
+        baseProtection != PAGE_EXECUTE_WRITECOPY) {
+        return false;
+    }
+
+    const uintptr_t slot = reinterpret_cast<uintptr_t>(address);
+    const uintptr_t regionEnd =
+        reinterpret_cast<uintptr_t>(memory.BaseAddress) + memory.RegionSize;
+    return slot <= regionEnd && regionEnd - slot >= sizeof(void*);
+}
+
+static void* QueryViaVtable(void* object, void* vtable) {
+    if (!object || !vtable) {
+        return nullptr;
+    }
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(object);
+    for (size_t i = 0; i < kMaxVtableSearchSlots; i++) {
+        auto* slot = reinterpret_cast<void**>(base + i * sizeof(void*));
+        if (!IsReadablePointerSlot(slot)) {
+            break;
+        }
+        if (*slot == vtable) {
+            return slot;
+        }
+    }
+    return nullptr;
 }
 
 static void* QueryViaVtableBackwards(void* object, void* vtable) {
-    void* pointer = object;
-    while (*reinterpret_cast<void**>(pointer) != vtable) {
-        pointer = reinterpret_cast<void**>(pointer) - 1;
+    if (!object || !vtable) {
+        return nullptr;
     }
-    return pointer;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(object);
+    for (size_t i = 0; i < kMaxVtableSearchSlots; i++) {
+        const uintptr_t offset = i * sizeof(void*);
+        if (offset > base) {
+            break;
+        }
+        auto* slot = reinterpret_cast<void**>(base - offset);
+        if (!IsReadablePointerSlot(slot)) {
+            break;
+        }
+        if (*slot == vtable) {
+            return slot;
+        }
+    }
+    return nullptr;
+}
+
+static void MarkNativeTaskbarUnavailable(HWND hWnd, PCWSTR reason) {
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        auto state = g_desired.find(hWnd);
+        if (state != g_desired.end()) {
+            changed = state->second.nativeAutoHideAvailable;
+            state->second.nativeBindingPending = false;
+            state->second.nativeAutoHideAvailable = false;
+            state->second.pendingTransition = 0;
+            state->second.transitionDueTick = 0;
+        }
+    }
+    if (changed) {
+        Wh_Log(L"%s; leaving this taskbar under native auto-hide", reason);
+    }
+    WakeWorker();
 }
 
 static void RememberNativeTaskbarState(void* object,
@@ -2854,6 +3015,11 @@ static void RememberNativeTaskbarState(void* object,
     bool geometryReset = false;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
+        std::erase_if(g_nativeTaskbarObjects,
+                      [object, hWnd](const auto& item) {
+                          return item.first != object &&
+                                 item.second == hWnd;
+                      });
         g_nativeTaskbarObjects[object] = hWnd;
         auto it = g_desired.find(hWnd);
         if (it != g_desired.end()) {
@@ -2885,6 +3051,12 @@ static void RememberNativeTaskbarState(void* object,
 static void RememberPrimaryNativeState(void* pThis, HWND hWnd) {
     void* inspectable = QueryViaVtableBackwards(
         pThis, g_trayUIVtableInspectable);
+    if (!inspectable) {
+        LogFailureThrottled(L"TrayUI IInspectable lookup", ERROR_NOT_FOUND);
+        MarkNativeTaskbarUnavailable(
+            hWnd, L"TrayUI IInspectable lookup failed");
+        return;
+    }
     RememberNativeTaskbarState(
         inspectable, hWnd,
         g_trayUIGetStuckMonitorOriginal(pThis));
@@ -2893,6 +3065,12 @@ static void RememberPrimaryNativeState(void* pThis, HWND hWnd) {
 static void RememberSecondaryNativeState(void* pThis, HWND hWnd) {
     void* secondaryTray =
         QueryViaVtable(pThis, g_secondaryTrayVtable);
+    if (!secondaryTray) {
+        LogFailureThrottled(L"CSecondaryTray lookup", ERROR_NOT_FOUND);
+        MarkNativeTaskbarUnavailable(
+            hWnd, L"CSecondaryTray lookup failed");
+        return;
+    }
     RememberNativeTaskbarState(
         pThis, hWnd,
         g_secondaryTrayGetMonitorOriginal(secondaryTray));
@@ -2936,10 +3114,19 @@ static void ProcessPrimaryPolicyCommand(void* pThis, HWND hWnd) {
     if (show) {
         void* componentHost =
             QueryViaVtable(pThis, g_trayUIVtableComponentHost);
+        if (!componentHost) {
+            LogFailureThrottled(
+                L"TrayUI ITrayComponentHost lookup", ERROR_NOT_FOUND);
+            MarkNativeTaskbarUnavailable(
+                hWnd, L"TrayUI ITrayComponentHost lookup failed");
+            return;
+        }
         g_trayUIUnhideOriginal(
             componentHost, 0, kTrayUnhideRequestDefault);
         RestoreTaskbarRevealZOrder(hWnd);
     } else {
+        // Intentionally enter SetTimerHook so the configured hide delay is
+        // applied to this native policy transition.
         SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
     }
     UpdateViewCoordinator(hWnd);
@@ -2955,12 +3142,18 @@ static void ProcessSecondaryPolicyCommand(void* pThis, HWND hWnd) {
             pThis, 0, kTrayUnhideRequestDefault);
         RestoreTaskbarRevealZOrder(hWnd);
     } else {
+        // Intentionally enter SetTimerHook so the configured hide delay is
+        // applied to this native policy transition.
         SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
     }
     UpdateViewCoordinator(hWnd);
 }
 
 static void WINAPI TrayUIHideHook(void* pThis) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        g_trayUIHideOriginal(pThis);
+        return;
+    }
     HWND hWnd = nullptr;
     if (ShouldKeepShownForObject(pThis, hWnd)) {
         KillTimer(hWnd, kTrayUITimerHide);
@@ -2973,6 +3166,9 @@ static void WINAPI TrayUIUnhideHook(void* pThis,
                                     int flags,
                                     int request) {
     g_trayUIUnhideOriginal(pThis, flags, request);
+    if (!NativeAutoHideDispatchEnabled()) {
+        return;
+    }
     HWND hWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
     bool unused = false;
     if (hWnd && GetPolicyCommand(hWnd, unused)) {
@@ -2982,6 +3178,10 @@ static void WINAPI TrayUIUnhideHook(void* pThis,
 }
 
 static void WINAPI SecondaryTrayAutoHideHook(void* pThis, bool value) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        g_secondaryTrayAutoHideOriginal(pThis, value);
+        return;
+    }
     HWND hWnd = nullptr;
     if (ShouldKeepShownForObject(pThis, hWnd)) {
         KillTimer(hWnd, kTrayUITimerHide);
@@ -2994,6 +3194,9 @@ static void WINAPI SecondaryTrayUnhideHook(void* pThis,
                                            int flags,
                                            int request) {
     g_secondaryTrayUnhideOriginal(pThis, flags, request);
+    if (!NativeAutoHideDispatchEnabled()) {
+        return;
+    }
     HWND hWnd = TaskbarForNativeObject(pThis);
     bool unused = false;
     if (hWnd && GetPolicyCommand(hWnd, unused)) {
@@ -3077,6 +3280,11 @@ static void WINAPI TrayUISlideWindowHook(void* pThis,
                                          HMONITOR monitor,
                                          bool show,
                                          bool animate) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        g_trayUISlideWindowOriginal(
+            pThis, hWnd, rect, monitor, show, animate);
+        return;
+    }
     bool nativeAnimation = animate;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -3132,6 +3340,10 @@ static LRESULT WINAPI TrayUIWndProcHook(void* pThis,
                                         WPARAM wParam,
                                         LPARAM lParam,
                                         bool* handled) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        return g_trayUIWndProcOriginal(
+            pThis, hWnd, message, wParam, lParam, handled);
+    }
     const bool policyCommand =
         message == g_taskbarControlMsg &&
         wParam == kTaskbarCommandPolicy;
@@ -3155,10 +3367,10 @@ static LRESULT WINAPI TrayUIWndProcHook(void* pThis,
             static_cast<BOOL>(lParam) != FALSE,
             std::memory_order_release);
         SignalRefresh(false, true);
-    } else if (message == kTaskbandNotificationMessage &&
+    } else if (message == g_taskbandNotificationMessage &&
                wParam == kTaskbandNotificationActivate) {
         RecordTaskbarNotification(hWnd);
-        SignalRefresh(false, true);
+        WakeWorker();
     } else if (dockPointerCommand) {
         ProcessDockPointerCommand(hWnd, lParam != 0);
         return 0;
@@ -3180,6 +3392,10 @@ static LRESULT WINAPI SecondaryTrayWndProcHook(void* pThis,
                                                UINT message,
                                                WPARAM wParam,
                                                LPARAM lParam) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        return g_secondaryTrayWndProcOriginal(
+            pThis, hWnd, message, wParam, lParam);
+    }
     const bool policyCommand =
         message == g_taskbarControlMsg &&
         wParam == kTaskbarCommandPolicy;
@@ -3197,10 +3413,10 @@ static LRESULT WINAPI SecondaryTrayWndProcHook(void* pThis,
         return 0;
     }
 
-    if (message == kTaskbandNotificationMessage &&
+    if (message == g_taskbandNotificationMessage &&
         wParam == kTaskbandNotificationActivate) {
         RecordTaskbarNotification(hWnd);
-        SignalRefresh(false, true);
+        WakeWorker();
     } else if (dockPointerCommand) {
         ProcessDockPointerCommand(hWnd, lParam != 0);
         return 0;
@@ -3220,6 +3436,10 @@ static LRESULT WINAPI SecondaryTrayWndProcHook(void* pThis,
 static bool WINAPI ViewCoordinatorShouldExpandHook(void* pThis,
                                                    HWND hWnd,
                                                    bool expanded) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        return g_viewCoordinatorShouldExpandOriginal(
+            pThis, hWnd, expanded);
+    }
     switch (RememberViewCoordinator(hWnd, pThis)) {
         case ExpansionOverride::Show:
             return true;
@@ -3235,6 +3455,10 @@ static void WINAPI ViewCoordinatorUpdateExpandedHook(
     void* pThis,
     HWND hWnd,
     int reason) {
+    if (!NativeAutoHideDispatchEnabled()) {
+        g_viewCoordinatorUpdateExpandedOriginal(pThis, hWnd, reason);
+        return;
+    }
     const bool revealRequest =
         reason == kViewReasonScreenEdgeEntered;
     if (revealRequest && !ScreenEdgeRevealAllowed(hWnd)) {
@@ -3257,13 +3481,63 @@ static HMODULE GetTaskbarViewModuleHandle() {
 }
 
 static bool HookTaskbarViewDllSymbols(HMODULE module) {
-    if (!module || g_taskbarViewHooksInstalled.load(
-                       std::memory_order_acquire)) {
-        return module != nullptr;
+    std::lock_guard<std::mutex> hookLock(g_nativeHookMutex);
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if (!module) {
+        return false;
+    }
+    if (g_taskbarViewHooksInstalled.load(std::memory_order_acquire)) {
+        return true;
+    }
+    if (g_taskbarViewHookAttempted.exchange(
+            true, std::memory_order_acq_rel)) {
+        return false;
     }
 
+    struct ViewCoordinatorSymbols {
+        ViewCoordinatorShouldExpand_t shouldExpand = nullptr;
+        ViewCoordinatorPointerChanged_t pointerChanged = nullptr;
+        ViewCoordinatorUpdateExpanded_t updateExpanded = nullptr;
+    } resolved;
+
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK viewCoordinatorHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK resolveHooks[] = {
+        {
+            {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
+            &resolved.shouldExpand,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged(unsigned __int64,bool,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            &resolved.pointerChanged,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))"},
+            &resolved.updateExpanded,
+            nullptr,
+            true,
+        },
+    };
+    if (!WindhawkUtils::HookSymbols(
+            module, resolveHooks, ARRAYSIZE(resolveHooks)) ||
+        !resolved.shouldExpand || !resolved.pointerChanged ||
+        !resolved.updateExpanded) {
+        Wh_Log(L"Taskbar view symbols were unavailable; "
+               L"Windows auto-hide remains native");
+        return false;
+    }
+
+    g_viewCoordinatorShouldExpandOriginal = resolved.shouldExpand;
+    g_viewCoordinatorPointerChangedOriginal = resolved.pointerChanged;
+    g_viewCoordinatorUpdateExpandedOriginal = resolved.updateExpanded;
+
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK installHooks[] = {
         {
             {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
             &g_viewCoordinatorShouldExpandOriginal,
@@ -3281,7 +3555,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
     };
 
     bool installed = WindhawkUtils::HookSymbols(
-        module, viewCoordinatorHooks, ARRAYSIZE(viewCoordinatorHooks));
+        module, installHooks, ARRAYSIZE(installHooks));
     if (installed && g_initialized.load(std::memory_order_acquire)) {
         installed = Wh_ApplyHookOperations() != FALSE;
     }
@@ -3295,75 +3569,138 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
     return installed;
 }
 
-static bool HookTaskbarSymbols() {
-    g_taskbarModule = LoadLibraryExW(
-        L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+enum class NativeAutoHideHookResult {
+    Installed,
+    Unavailable,
+    Failed,
+};
+
+#define NATIVE_TASKBAR_SYMBOLS(X)                                      \
+    X(void*, trayUIVtableInspectable, g_trayUIVtableInspectable,       \
+      L"TrayUI IInspectable vftable",                                 \
+      LR"(const TrayUI::`vftable'{for `IInspectable'})", nullptr)      \
+    X(void*, trayUIVtableComponentHost, g_trayUIVtableComponentHost,   \
+      L"TrayUI ITrayComponentHost vftable",                           \
+      LR"(const TrayUI::`vftable'{for `ITrayComponentHost'})",         \
+      nullptr)                                                         \
+    X(void*, secondaryTrayVtable, g_secondaryTrayVtable,               \
+      L"CSecondaryTray ISecondaryTray vftable",                       \
+      LR"(const CSecondaryTray::`vftable'{for `ISecondaryTray'})",     \
+      nullptr)                                                         \
+    X(TrayUIGetStuckMonitor_t, trayUIGetStuckMonitor,                  \
+      g_trayUIGetStuckMonitorOriginal, L"TrayUI::GetStuckMonitor",    \
+      LR"(public: virtual struct HMONITOR__ * __cdecl TrayUI::GetStuckMonitor(void))", \
+      nullptr)                                                         \
+    X(SecondaryTrayGetMonitor_t, secondaryTrayGetMonitor,              \
+      g_secondaryTrayGetMonitorOriginal,                               \
+      L"CSecondaryTray::GetMonitor",                                  \
+      LR"(public: virtual struct HMONITOR__ * __cdecl CSecondaryTray::GetMonitor(void))", \
+      nullptr)                                                         \
+    X(TrayUIHide_t, trayUIHide, g_trayUIHideOriginal,                  \
+      L"TrayUI::_Hide",                                               \
+      LR"(public: void __cdecl TrayUI::_Hide(void))", TrayUIHideHook)  \
+    X(TrayUIUnhide_t, trayUIUnhide, g_trayUIUnhideOriginal,            \
+      L"TrayUI::Unhide",                                              \
+      LR"(public: virtual void __cdecl TrayUI::Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))", \
+      TrayUIUnhideHook)                                                \
+    X(SecondaryTrayAutoHide_t, secondaryTrayAutoHide,                  \
+      g_secondaryTrayAutoHideOriginal, L"CSecondaryTray::_AutoHide",  \
+      LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))",     \
+      SecondaryTrayAutoHideHook)                                      \
+    X(SecondaryTrayUnhide_t, secondaryTrayUnhide,                      \
+      g_secondaryTrayUnhideOriginal, L"CSecondaryTray::_Unhide",      \
+      LR"(private: void __cdecl CSecondaryTray::_Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))", \
+      SecondaryTrayUnhideHook)                                        \
+    X(TrayUISlideWindow_t, trayUISlideWindow,                          \
+      g_trayUISlideWindowOriginal, L"TrayUI::SlideWindow",            \
+      LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))", \
+      TrayUISlideWindowHook)                                          \
+    X(TrayUIWndProc_t, trayUIWndProc, g_trayUIWndProcOriginal,         \
+      L"TrayUI::WndProc",                                             \
+      LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))", \
+      TrayUIWndProcHook)                                               \
+    X(SecondaryTrayWndProc_t, secondaryTrayWndProc,                    \
+      g_secondaryTrayWndProcOriginal, L"CSecondaryTray::v_WndProc",   \
+      LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))", \
+      SecondaryTrayWndProcHook)
+
+struct NativeTaskbarSymbols {
+#define DECLARE_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+    type field = nullptr;
+    NATIVE_TASKBAR_SYMBOLS(DECLARE_NATIVE_TASKBAR_SYMBOL)
+#undef DECLARE_NATIVE_TASKBAR_SYMBOL
+};
+
+static bool NativeAutoHideSymbolsResolved(
+    const NativeTaskbarSymbols& symbols) {
+    bool complete = true;
+#define CHECK_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+    complete = complete && symbols.field != nullptr;
+    NATIVE_TASKBAR_SYMBOLS(CHECK_NATIVE_TASKBAR_SYMBOL)
+#undef CHECK_NATIVE_TASKBAR_SYMBOL
+    return complete;
+}
+
+static NativeAutoHideHookResult HookTaskbarSymbols() {
+    g_taskbarModule = GetModuleHandleW(L"taskbar.dll");
+    if (!g_taskbarModule) {
+        // Keep the fallback reference for the lifetime of the mod. Windhawk's
+        // hooks can still target taskbar.dll until engine teardown.
+        g_taskbarModule = LoadLibraryExW(
+            L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     if (!g_taskbarModule) {
         Wh_Log(L"Couldn't load taskbar.dll (error %lu)",
                GetLastError());
-        return false;
+        return NativeAutoHideHookResult::Unavailable;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {
-            {LR"(const TrayUI::`vftable'{for `IInspectable'})"},
-            &g_trayUIVtableInspectable,
-        },
-        {
-            {LR"(const TrayUI::`vftable'{for `ITrayComponentHost'})"},
-            &g_trayUIVtableComponentHost,
-        },
-        {
-            {LR"(const CSecondaryTray::`vftable'{for `ISecondaryTray'})"},
-            &g_secondaryTrayVtable,
-        },
-        {
-            {LR"(public: virtual struct HMONITOR__ * __cdecl TrayUI::GetStuckMonitor(void))"},
-            &g_trayUIGetStuckMonitorOriginal,
-        },
-        {
-            {LR"(public: virtual struct HMONITOR__ * __cdecl CSecondaryTray::GetMonitor(void))"},
-            &g_secondaryTrayGetMonitorOriginal,
-        },
-        {
-            {LR"(public: void __cdecl TrayUI::_Hide(void))"},
-            &g_trayUIHideOriginal,
-            TrayUIHideHook,
-        },
-        {
-            {LR"(public: virtual void __cdecl TrayUI::Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
-            &g_trayUIUnhideOriginal,
-            TrayUIUnhideHook,
-        },
-        {
-            {LR"(private: void __cdecl CSecondaryTray::_AutoHide(bool))"},
-            &g_secondaryTrayAutoHideOriginal,
-            SecondaryTrayAutoHideHook,
-        },
-        {
-            {LR"(private: void __cdecl CSecondaryTray::_Unhide(enum TrayCommon::TrayUnhideFlags,enum TrayCommon::UnhideRequest))"},
-            &g_secondaryTrayUnhideOriginal,
-            SecondaryTrayUnhideHook,
-        },
-        {
-            {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
-            &g_trayUISlideWindowOriginal,
-            TrayUISlideWindowHook,
-        },
-        {
-            {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
-            &g_trayUIWndProcOriginal,
-            TrayUIWndProcHook,
-        },
-        {
-            {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
-            &g_secondaryTrayWndProcOriginal,
-            SecondaryTrayWndProcHook,
-        },
+    NativeTaskbarSymbols resolved;
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK resolveHooks[] = {
+#define RESOLVE_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+        {{symbol}, &resolved.field, nullptr, true},
+        NATIVE_TASKBAR_SYMBOLS(RESOLVE_NATIVE_TASKBAR_SYMBOL)
+#undef RESOLVE_NATIVE_TASKBAR_SYMBOL
     };
-    return WindhawkUtils::HookSymbols(
-        g_taskbarModule, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+    if (!WindhawkUtils::HookSymbols(
+            g_taskbarModule, resolveHooks, ARRAYSIZE(resolveHooks))) {
+        Wh_Log(L"Couldn't inspect native auto-hide symbols; "
+               L"click-through remains active");
+        return NativeAutoHideHookResult::Unavailable;
+    }
+    if (!NativeAutoHideSymbolsResolved(resolved)) {
+#define LOG_MISSING_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+        if (!resolved.field) {                                                \
+            Wh_Log(L"Native auto-hide symbol unavailable: %s", label);       \
+        }
+        NATIVE_TASKBAR_SYMBOLS(LOG_MISSING_NATIVE_TASKBAR_SYMBOL)
+#undef LOG_MISSING_NATIVE_TASKBAR_SYMBOL
+        Wh_Log(L"Click-through remains active with Windows native auto-hide");
+        return NativeAutoHideHookResult::Unavailable;
+    }
+
+#define PUBLISH_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+    target = resolved.field;
+    NATIVE_TASKBAR_SYMBOLS(PUBLISH_NATIVE_TASKBAR_SYMBOL)
+#undef PUBLISH_NATIVE_TASKBAR_SYMBOL
+
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK installHooks[] = {
+#define INSTALL_NATIVE_TASKBAR_SYMBOL(type, field, target, label, symbol, hook) \
+        {{symbol}, &target, hook},
+        NATIVE_TASKBAR_SYMBOLS(INSTALL_NATIVE_TASKBAR_SYMBOL)
+#undef INSTALL_NATIVE_TASKBAR_SYMBOL
+    };
+    if (!WindhawkUtils::HookSymbols(
+            g_taskbarModule, installHooks, ARRAYSIZE(installHooks))) {
+        Wh_Log(L"Native auto-hide hook registration failed");
+        return NativeAutoHideHookResult::Failed;
+    }
+    return NativeAutoHideHookResult::Installed;
 }
+
+#undef NATIVE_TASKBAR_SYMBOLS
 
 static void SignalWorkerReady(bool succeeded) {
     g_workerStartupSucceeded.store(
@@ -3530,6 +3867,7 @@ static DWORD WINAPI WorkerProc(LPVOID) {
     ULONGLONG geometryDue = now;
     ULONGLONG nextFallbackScan = now;
     ULONGLONG nextGateRead = now;
+    ULONGLONG nextPolicyRefresh = now;
     ULONGLONG nextWindowPolicy = now;
     const ULONGLONG taskbarViewHookFastDeadline =
         now + kTaskbarViewHookFastWindowMs;
@@ -3547,18 +3885,28 @@ static DWORD WINAPI WorkerProc(LPVOID) {
             settings = GetSettingsSnapshot();
             settingsRevision = settings.revision;
             geometryDue = now;
+            nextPolicyRefresh = now;
             nextWindowPolicy = now;
         }
 
         if (now >= nextGateRead) {
-            const bool enabled = ReadWindowsAutoHideEnabled();
+            const bool nativeHooksInstalled =
+                g_nativeAutoHideHooksInstalled.load(
+                    std::memory_order_acquire);
+            const bool enabled =
+                nativeHooksInstalled && ReadWindowsAutoHideEnabled();
             if (g_windowsAutoHideEnabled.exchange(
                     enabled, std::memory_order_acq_rel) != enabled) {
                 g_policyDirty.store(true, std::memory_order_release);
+                nextPolicyRefresh = now;
             }
             if (!taskbarViewHookDiscoveryFinished &&
+                g_initialized.load(std::memory_order_acquire) &&
                 now >= nextTaskbarViewHookProbe) {
-                if (g_taskbarViewHooksInstalled.load(
+                if (!nativeHooksInstalled ||
+                    g_taskbarViewHooksInstalled.load(
+                        std::memory_order_acquire) ||
+                    g_taskbarViewHookAttempted.load(
                         std::memory_order_acquire)) {
                     taskbarViewHookDiscoveryFinished = true;
                 } else if (HMODULE viewModule =
@@ -3637,24 +3985,31 @@ static DWORD WINAPI WorkerProc(LPVOID) {
             }
         }
 
-        if (g_policyDirty.exchange(
-                false, std::memory_order_acq_rel) ||
-            now >= nextWindowPolicy) {
-            if (g_windowsAutoHideEnabled.load(
-                    std::memory_order_acquire) &&
-                g_taskbarViewHooksInstalled.load(
-                    std::memory_order_acquire)) {
-                EvaluateWindowPolicy(settings);
+        const bool policyDirty =
+            g_policyDirty.load(std::memory_order_acquire);
+        if (PolicyRefreshDue(now, nextPolicyRefresh,
+                             nextWindowPolicy, policyDirty)) {
+            const bool refreshRequested =
+                g_policyDirty.exchange(false, std::memory_order_acq_rel);
+            if (refreshRequested || now >= nextWindowPolicy) {
+                if (NativeAutoHideDispatchEnabled() &&
+                    g_windowsAutoHideEnabled.load(
+                        std::memory_order_acquire)) {
+                    EvaluateWindowPolicy(settings);
+                }
+                now = GetTickCount64();
+                nextPolicyRefresh = NextPolicyRefreshTick(
+                    now, kAutoHidePolicyIntervalMs);
+                nextWindowPolicy = NextPolicyRefreshTick(
+                    now, kWindowPolicyFallbackMs);
             }
-            nextWindowPolicy = now + kWindowPolicyFallbackMs;
         }
         UpdatePolicyTransitions(settings);
 
         now = GetTickCount64();
         const bool autoHideActive =
+            NativeAutoHideDispatchEnabled() &&
             g_windowsAutoHideEnabled.load(
-                std::memory_order_acquire) &&
-            g_taskbarViewHooksInstalled.load(
                 std::memory_order_acquire);
         ULONGLONG deadline =
             autoHideActive ? now + kAutoHidePolicyIntervalMs
@@ -3665,6 +4020,9 @@ static DWORD WINAPI WorkerProc(LPVOID) {
         deadline = std::min(deadline, nextFallbackScan);
         deadline = std::min(deadline, nextGateRead);
         deadline = std::min(deadline, nextWindowPolicy);
+        if (g_policyDirty.load(std::memory_order_acquire)) {
+            deadline = std::min(deadline, nextPolicyRefresh);
+        }
         const DWORD timeout =
             deadline <= now
                 ? 0
@@ -3733,6 +4091,10 @@ static void CloseRuntimeHandles() {
         CloseHandle(g_installHookIdleEvent);
         g_installHookIdleEvent = nullptr;
     }
+    if (g_subclassIdleEvent) {
+        CloseHandle(g_subclassIdleEvent);
+        g_subclassIdleEvent = nullptr;
+    }
     if (g_workerReadyEvent) {
         CloseHandle(g_workerReadyEvent);
         g_workerReadyEvent = nullptr;
@@ -3751,7 +4113,7 @@ static void CloseRuntimeHandles() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init v2.3.8");
+    Wh_Log(L"Init v%s", WH_MOD_VERSION);
 
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (taskbar) {
@@ -3779,12 +4141,18 @@ BOOL Wh_ModInit() {
     g_initialized.store(false, std::memory_order_release);
     g_unloading.store(false, std::memory_order_release);
     g_windowsAutoHideEnabled.store(false, std::memory_order_release);
+    g_nativeAutoHideHooksInstalled.store(false,
+                                         std::memory_order_release);
     g_taskbarViewHooksInstalled.store(false,
                                       std::memory_order_release);
+    g_taskbarViewHookAttempted.store(false,
+                                     std::memory_order_release);
     g_geometryDirty.store(true, std::memory_order_release);
     g_policyDirty.store(true, std::memory_order_release);
     g_topologyRevision.store(0, std::memory_order_release);
     g_lastErrorLogTick.store(0, std::memory_order_release);
+    g_installHookCallbacks.store(0, std::memory_order_release);
+    g_subclassCallbacks.store(0, std::memory_order_release);
     g_workerStartupSucceeded.store(false,
                                    std::memory_order_release);
 
@@ -3792,10 +4160,15 @@ BOOL Wh_ModInit() {
         L"WindhawkTaskbarDockClickThrough_Control_" WH_MOD_ID);
     g_installSubclassMsg = RegisterWindowMessageW(
         L"WindhawkTaskbarDockClickThrough_Install_" WH_MOD_ID);
+    g_taskbandNotificationMessage = RegisterWindowMessageW(L"SHELLHOOK");
     if (!g_taskbarControlMsg || !g_installSubclassMsg) {
         Wh_Log(L"RegisterWindowMessageW failed (error %lu)",
                GetLastError());
         return FALSE;
+    }
+    if (!g_taskbandNotificationMessage) {
+        Wh_Log(L"SHELLHOOK message registration failed; "
+               L"click-through remains active with Windows native auto-hide");
     }
 
     {
@@ -3811,24 +4184,12 @@ BOOL Wh_ModInit() {
     g_workerReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_installHookIdleEvent =
         CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    g_subclassIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     if (!g_stopEvent || !g_refreshEvent || !g_workerReadyEvent ||
-        !g_installHookIdleEvent) {
+        !g_installHookIdleEvent || !g_subclassIdleEvent) {
         Wh_Log(L"CreateEventW failed (error %lu)", GetLastError());
         CloseRuntimeHandles();
         return FALSE;
-    }
-
-    if (!HookTaskbarSymbols() ||
-        !WindhawkUtils::SetFunctionHook(
-            SetTimer, SetTimerHook, &g_setTimerOriginal)) {
-        Wh_Log(L"Required native taskbar hooks were unavailable");
-        CloseRuntimeHandles();
-        return FALSE;
-    }
-    if (HMODULE viewModule = GetTaskbarViewModuleHandle()) {
-        HookTaskbarViewDllSymbols(viewModule);
-    } else {
-        Wh_Log(L"Taskbar view module isn't loaded yet");
     }
 
     g_workerThread = CreateThread(
@@ -3850,6 +4211,29 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (g_taskbandNotificationMessage) {
+        const NativeAutoHideHookResult hookResult = HookTaskbarSymbols();
+        if (hookResult == NativeAutoHideHookResult::Failed ||
+            (hookResult == NativeAutoHideHookResult::Installed &&
+             !WindhawkUtils::SetFunctionHook(
+                 SetTimer, SetTimerHook, &g_setTimerOriginal))) {
+            Wh_Log(L"Native auto-hide hook registration failed");
+            RequestWorkerStop();
+            WaitForSingleObject(g_workerThread, INFINITE);
+            CloseRuntimeHandles();
+            return FALSE;
+        }
+        if (hookResult == NativeAutoHideHookResult::Installed) {
+            g_nativeAutoHideHooksInstalled.store(
+                true, std::memory_order_release);
+            if (HMODULE viewModule = GetTaskbarViewModuleHandle()) {
+                HookTaskbarViewDllSymbols(viewModule);
+            } else {
+                Wh_Log(L"Taskbar view module isn't loaded yet");
+            }
+        }
+    }
+
     return TRUE;
 }
 
@@ -3862,13 +4246,17 @@ void Wh_ModBeforeUninit() {
     g_initialized.store(false, std::memory_order_release);
     g_unloading.store(true, std::memory_order_release);
     g_windowsAutoHideEnabled.store(false, std::memory_order_release);
+    RequestWorkerStop();
+    {
+        // Wh_ApplyHookOperations can't run after this callback returns.
+        std::lock_guard<std::mutex> hookLock(g_nativeHookMutex);
+    }
     std::vector<HWND> taskbars;
     if (EnumTaskbars(taskbars)) {
         for (HWND hWnd : taskbars) {
             KillTimer(hWnd, kDockExitHideTimer);
         }
     }
-    RequestWorkerStop();
 }
 
 void Wh_ModUninit() {
