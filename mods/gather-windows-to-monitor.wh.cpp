@@ -473,15 +473,22 @@ void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
 bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
     if (!IsWindow(hwnd)) return false;
     bool wasMaximized = IsZoomed(hwnd);
-    if (wasMaximized) {
-        ShowWindowAsync(hwnd, SW_RESTORE);
-    }
-    if (IsIconic(hwnd) && g_settings.restoreMinimized) {
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-    }
+    bool wasMinimized = IsIconic(hwnd);
 
     RECT rect{};
-    if (!GetWindowRect(hwnd, &rect)) return false;
+    if (wasMaximized || wasMinimized) {
+        WINDOWPLACEMENT placement{ sizeof(placement) };
+        if (!GetWindowPlacement(hwnd, &placement)) return false;
+        rect = placement.rcNormalPosition;
+    } else if (!GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+
+    if (wasMaximized) {
+        ShowWindowAsync(hwnd, SW_RESTORE);
+    } else if (wasMinimized && g_settings.restoreMinimized) {
+        ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+    }
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
     int workWidth = workArea.right - workArea.left;
@@ -525,7 +532,7 @@ bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
         flags |= SWP_NOSIZE;
     }
     bool moved = SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
-    if (wasMaximized) {
+    if (moved && wasMaximized) {
         ShowWindowAsync(hwnd, SW_MAXIMIZE);
     }
     return moved;
