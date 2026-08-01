@@ -224,20 +224,33 @@ function postComment({ github, owner, repo, prNumber, body }) {
 }
 
 /**
+ * Adds a reaction to a comment. A reaction is a best-effort acknowledgement, so
+ * a comment that was deleted in the meantime is logged and ignored instead of
+ * failing the command it acknowledges.
+ *
  * @param {object} params
  * @param {Github} params.github
+ * @param {Core} params.core
  * @param {string} params.owner
  * @param {string} params.repo
  * @param {number} params.commentId
  * @param {ReactionContent} params.content
  */
-function react({ github, owner, repo, commentId, content }) {
-  return github.rest.reactions.createForIssueComment({
-    owner,
-    repo,
-    comment_id: commentId,
-    content,
-  });
+async function react({ github, core, owner, repo, commentId, content }) {
+  try {
+    await github.rest.reactions.createForIssueComment({
+      owner,
+      repo,
+      comment_id: commentId,
+      content,
+    });
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status !== 404) {
+      throw error;
+    }
+
+    core.info(`Skipped the ${content} reaction, comment ${commentId} is gone`);
+  }
 }
 
 /**
@@ -706,7 +719,7 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
       }),
       label: WAITING_FOR_AUTHOR,
     });
-    await react({ github, owner, repo, commentId: comment.id, content: 'eyes' });
+    await react({ github, core, owner, repo, commentId: comment.id, content: 'eyes' });
     return;
   }
 
@@ -714,7 +727,7 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
 
   if (!isAuthorized) {
     core.info(`Ignoring ${command} from ${commenterLogin}`);
-    await react({ github, owner, repo, commentId: comment.id, content: '-1' });
+    await react({ github, core, owner, repo, commentId: comment.id, content: '-1' });
     return;
   }
 
@@ -733,7 +746,7 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
 
   if (refusalReason) {
     core.info(`Refused ${command}: ${refusalReason}`);
-    await react({ github, owner, repo, commentId: comment.id, content: 'confused' });
+    await react({ github, core, owner, repo, commentId: comment.id, content: 'confused' });
     await postComment({
       github,
       owner,
@@ -744,7 +757,7 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
     return;
   }
 
-  await react({ github, owner, repo, commentId: comment.id, content: 'eyes' });
+  await react({ github, core, owner, repo, commentId: comment.id, content: 'eyes' });
 }
 
 module.exports = {
