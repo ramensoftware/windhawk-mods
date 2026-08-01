@@ -29,6 +29,8 @@ The optional "Restore Classic Task Links" setting restores localized, classic ta
 
 ## Notes
 The mod has been tested on Windows 10 1809.
+
+**⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the same `ControlPanel\NameSpace` paths and hook the same registry APIs in explorer.exe, so enabling both at the same time produces duplicated entries and two overlapping virtual-registry layers. Enable only one of the two mods.
 ## Credits
 This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
 
@@ -124,15 +126,13 @@ struct Settings {
     std::atomic<bool> restoreWin7CategoryBlueLinks;
 } g_settings;
 
-// Registry hooks are on Explorer's hot path. Keep routine diagnostics compiled
-// out so normal use does not spend time formatting/logging every registry call.
-// Direct Wh_Log calls are retained only for errors, conflicts, and lifecycle events.
-#define LOG_IF_ENABLED(...) ((void)0)
+// Wh_Log is already a cheap no-op check (if (g_logsOn)) when logging is off,
+// so there is nothing to gain by compiling diagnostics out entirely — doing so
+// only prevented getting a log out of this mod when a user reports a problem.
 
 // Windows version info
 typedef LONG (WINAPI *RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
 static DWORD g_winBuild = 0;
-static wchar_t g_winVersionStr[64] = {};
 
 void DetectWindowsVersion() {
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
@@ -142,29 +142,6 @@ void DetectWindowsVersion() {
             RTL_OSVERSIONINFOW osvi = { sizeof(osvi) };
             if (pRtlGetVersion(&osvi) == 0) {
                 g_winBuild = osvi.dwBuildNumber;
-                const wchar_t* name = L"Unknown";
-                if (osvi.dwMajorVersion == 10) {
-                    if (osvi.dwBuildNumber >= 26100)      name = L"Win11 24H2+";
-                    else if (osvi.dwBuildNumber >= 22621)  name = L"Win11 23H2";
-                    else if (osvi.dwBuildNumber >= 22000)  name = L"Win11 21H2/22H2";
-                    else if (osvi.dwBuildNumber >= 19045)  name = L"Win10 22H2";
-                    else if (osvi.dwBuildNumber >= 19044)  name = L"Win10 21H2";
-                    else if (osvi.dwBuildNumber >= 19043)  name = L"Win10 21H1";
-                    else if (osvi.dwBuildNumber >= 19042)  name = L"Win10 20H2";
-                    else if (osvi.dwBuildNumber >= 19041)  name = L"Win10 2004";
-                    else if (osvi.dwBuildNumber >= 18363)  name = L"Win10 1909";
-                    else if (osvi.dwBuildNumber >= 18362)  name = L"Win10 1903";
-                    else if (osvi.dwBuildNumber >= 17763)  name = L"Win10 1809";
-                    else if (osvi.dwBuildNumber >= 17134)  name = L"Win10 1803";
-                    else if (osvi.dwBuildNumber >= 16299)  name = L"Win10 1709";
-                    else if (osvi.dwBuildNumber >= 15063)  name = L"Win10 1703";
-                    else if (osvi.dwBuildNumber >= 14393)  name = L"Win10 1607";
-                    else if (osvi.dwBuildNumber >= 10586)  name = L"Win10 1511";
-                    else if (osvi.dwBuildNumber >= 10240)  name = L"Win10 RTM";
-                }
-                _snwprintf_s(g_winVersionStr, _countof(g_winVersionStr), _TRUNCATE,
-                    L"%s (Build %u.%u.%u)", name,
-                    osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
             }
         }
     }
@@ -186,7 +163,6 @@ std::wstring g_classicTaskLinksFilePath;
 // Forward declarations (defined further below; KeyTracker::Track needs them)
 std::wstring ToLower(const std::wstring& str);
 bool ContainsRelevantKeywordInsensitive(const std::wstring& path);
-bool ContainsRelevantKeyword(const std::wstring& lowerPath);
 
 // Tracks the "virtual path" behind every HKEY the mod cares about (both real
 // keys opened through the hooked Reg* APIs, and fully synthetic/fake keys we
@@ -207,6 +183,21 @@ public:
     bool IsFake(HKEY hKey) const {
         std::lock_guard<std::mutex> lock(mutex_);
         return fakeOwners_.count(hKey) != 0;
+    }
+
+    // Combines IsFake + GetPath under a single lock acquisition, for callers
+    // (like RegOpenKeyExWHook) that would otherwise take the mutex twice in a
+    // row for the same key on every call.
+    bool IsFakeAndGetPath(HKEY hKey, std::wstring& outPath) const {
+        if (std::wstring special = SpecialRootPath(hKey); !special.empty()) {
+            outPath = special;
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(mutex_);
+        bool isFake = fakeOwners_.count(hKey) != 0;
+        auto it = paths_.find(hKey);
+        outPath = it != paths_.end() ? it->second : std::wstring();
+        return isFake;
     }
 
     void Track(HKEY hKey, const std::wstring& path) {
@@ -294,6 +285,28 @@ std::wstring g_suppressedGuidLower;
 std::wstring g_windowsToGoGuidLower;
 std::wstring g_infraredGuidLower;
 
+// Pre-computed path suffixes (built once in InitDisplayNames instead of being
+// concatenated from "clsid\\" / "controlpanel\\namespace\\" + guid on every
+// ClassifyPath call, which runs on Explorer's registry hot path).
+std::wstring g_personalizationClsidSuffix;
+std::wstring g_personalizationDefaultIconSuffix;
+std::wstring g_personalizationShellSuffix;
+std::wstring g_personalizationShellOpenSuffix;
+std::wstring g_personalizationOpenCommandSuffix;
+std::wstring g_personalizationNsSuffix;
+
+std::wstring g_realPersonalizationClsidSuffix;
+std::wstring g_displayClsidSuffix;
+
+std::wstring g_suppressedClsidSuffix,  g_suppressedNsSuffix;
+std::wstring g_windowsToGoClsidSuffix, g_windowsToGoNsSuffix;
+std::wstring g_infraredClsidSuffix,    g_infraredNsSuffix;
+
+std::wstring g_notificationIconsClsidSuffix;
+std::wstring g_networkConnectionsClsidSuffix;
+std::wstring g_printersAndFaxesClsidSuffix;
+std::wstring g_homeGroupClsidSuffix;
+
 static const std::wstring kPersonalizationGuid     = L"{580722ff-16a7-44c1-bf74-7e1acd00f4f9}";
 static const std::wstring kNotificationIconsGuid   = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
 static const std::wstring kNetworkConnectionsGuid  = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
@@ -371,11 +384,6 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
         return false;
     };
     return contains(kClsid) || contains(kControlPanel);
-}
-
-bool ContainsRelevantKeyword(const std::wstring& lowerPath) {
-    return lowerPath.find(L"clsid") != std::wstring::npos ||
-           lowerPath.find(L"controlpanel") != std::wstring::npos;
 }
 
 // Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is normally
@@ -501,7 +509,7 @@ bool EnsureClassicTaskLinksFile() {
     <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
     <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
     <sh:task id="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"><sh:name>{SOUNDS}</sh:name><sh:keywords>sound;audio;effects</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,2</sh:command></sh:task>
-    <sh:task id="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"><sh:name>{SCREENSAVER}</sh:name><sh:keywords>screen saver;screensaver</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL desk.cpl,,1</sh:command></sh:task>
+    <sh:task id="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"><sh:name>{SCREENSAVER}</sh:name><sh:keywords>screen saver;screensaver</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL desk.cpl,,@screensaver</sh:command></sh:task>
     <category id="1">
        <sh:task idref="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"/>
        <sh:task idref="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"/>
@@ -558,7 +566,7 @@ bool EnsureClassicTaskLinksFile() {
     if (g_settings.restoreWin7CategoryBlueLinks.load()) {
         replaceAll("{CATEGORY_BLUE_LINKS_BLOCK}",
             "  <!-- System and Security (Category 5) -->\n"
-            "  <application id=\"{A453CFBA-AE7B-4B9E-AA41-B6A7FAE9C3E5}\">\n"
+            "  <application id=\"{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}\">\n"
             "    <sh:task id=\"{D4F4F001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{REVIEWSTATUS}</sh:name><sh:command>rundll32.exe shell32.dll,Control_RunDLL wscui.cpl</sh:command></sh:task>\n"
             "    <sh:task id=\"{D4F4F002-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{BACKUPCOMPUTER}</sh:name><sh:command>sdclt.exe</sh:command></sh:task>\n"
             "    <sh:task id=\"{D4F4F003-0D35-4CB6-A21F-BC1661200003}\"><sh:name>{FINDFIXPROBLEMS}</sh:name><sh:controlpanel name=\"Microsoft.Troubleshooting\"/></sh:task>\n"
@@ -580,7 +588,7 @@ bool EnsureClassicTaskLinksFile() {
             "    </category>\n"
             "  </application>\n"
             "  <!-- User Accounts (Category 9) -->\n"
-            "  <application id=\"{60632754-C523-4B62-B45C-4172DA0126C0}\">\n"
+            "  <application id=\"{60632754-C523-4B62-B45C-4172DA012619}\">\n"
             "    <sh:task id=\"{D4F4F201-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{CHANGEACCTPICTURE}</sh:name><sh:controlpanel name=\"Microsoft.UserAccounts\"/></sh:task>\n"
             "    <sh:task id=\"{D4F4F202-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{ADDREMOVEACCOUNTS}</sh:name><sh:command>netplwiz.exe</sh:command></sh:task>\n"
             "    <sh:task id=\"{D4F4F203-0D35-4CB6-A21F-BC1661200003}\"><sh:name>{SETPARENTALCONTROLS}</sh:name><sh:command>rundll32.exe shell32.dll,Control_RunDLL %SystemRoot%\\System32\\parentalcontrols.cpl</sh:command></sh:task>\n"
@@ -591,16 +599,22 @@ bool EnsureClassicTaskLinksFile() {
             "    </category>\n"
             "  </application>\n"
             "  <!-- Clock, Language, and Region (Category 6) -->\n"
-            "  <application id=\"{E2B7C8E1-3F1A-4B6D-9C4E-5A8F2D7B3E60}\">\n"
+            "  <!-- No single real CLSID covers this whole category; the two tasks -->\n"
+            "  <!-- below are attached to their actual owning applets instead. -->\n"
+            "  <application id=\"{E2E7934B-DCE5-43C4-9576-7FE4F75E7480}\">\n"
             "    <sh:task id=\"{D4F4F301-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{CHANGEDATETIME}</sh:name><sh:controlpanel name=\"Microsoft.DateAndTime\"/></sh:task>\n"
-            "    <sh:task id=\"{D4F4F302-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{CHANGEINPUTMETHOD}</sh:name><sh:controlpanel name=\"Microsoft.RegionAndLanguage\" page=\"Input\"/></sh:task>\n"
             "    <category id=\"6\">\n"
             "       <sh:task idref=\"{D4F4F301-0D35-4CB6-A21F-BC1661200001}\"/>\n"
+            "    </category>\n"
+            "  </application>\n"
+            "  <application id=\"{62D8ED13-C9D0-4CE8-A914-47DD628FB1B0}\">\n"
+            "    <sh:task id=\"{D4F4F302-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{CHANGEINPUTMETHOD}</sh:name><sh:controlpanel name=\"Microsoft.RegionAndLanguage\" page=\"Input\"/></sh:task>\n"
+            "    <category id=\"6\">\n"
             "       <sh:task idref=\"{D4F4F302-0D35-4CB6-A21F-BC1661200002}\"/>\n"
             "    </category>\n"
             "  </application>\n"
             "  <!-- Ease of Access (Category 7) -->\n"
-            "  <application id=\"{D555E8C2-3A1B-4D6F-8E9A-2C7B4F3D8A15}\">\n"
+            "  <application id=\"{D555645E-D4F8-4C29-A827-D93C859C4F2A}\">\n"
             "    <sh:task id=\"{D4F4F401-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{LETWINDOWSSUGGEST}</sh:name><sh:controlpanel name=\"Microsoft.EaseOfAccessCenter\"/></sh:task>\n"
             "    <category id=\"7\">\n"
             "       <sh:task idref=\"{D4F4F401-0D35-4CB6-A21F-BC1661200001}\"/>\n"
@@ -679,10 +693,10 @@ bool EnsureClassicTaskLinksFile() {
         return false;
     }
     const bool ok = true;
-    LOG_IF_ENABLED("[TaskLinks] XML atomically replaced: %s (size=%zu)",
+    Wh_Log(L"XML atomically replaced: %s (size=%zu)",
         targetPath.c_str(), taskList.size());
-    LOG_IF_ENABLED("[TaskLinks] Locale selected: %s", texts->locale);
-    LOG_IF_ENABLED("[TaskLinks] BlueLinks=%d CatAppearance=%d",
+    Wh_Log(L"Locale selected: %s", texts->locale);
+    Wh_Log(L"BlueLinks=%d CatAppearance=%d",
         g_settings.restoreWin7CategoryBlueLinks.load(), g_settings.enableCategoryAppearanceLinks.load());
     return ok;
 }
@@ -714,7 +728,7 @@ void InitDisplayNames() {
     } else {
         g_personalizationName = L"Personalization";
     }
-    LOG_IF_ENABLED("[Init] Personalization display name: %s", g_personalizationName.c_str());
+    Wh_Log(L"Personalization display name: %s", g_personalizationName.c_str());
     
     // Pre-compute lowercase GUIDs
     g_personalizationGuidLower    = ToLower(kPersonalizationGuid);
@@ -727,6 +741,30 @@ void InitDisplayNames() {
     g_suppressedGuidLower         = ToLower(kSuppressedGuid);
     g_windowsToGoGuidLower         = ToLower(kWindowsToGoGuid);
     g_infraredGuidLower            = ToLower(kInfraredGuid);
+
+    // Pre-compute path suffixes once so the registry hooks don't concatenate
+    // "clsid\\" + guid (and friends) on every call.
+    g_personalizationClsidSuffix       = L"clsid\\" + g_personalizationGuidLower;
+    g_personalizationDefaultIconSuffix = g_personalizationClsidSuffix + L"\\defaulticon";
+    g_personalizationShellSuffix       = g_personalizationClsidSuffix + L"\\shell";
+    g_personalizationShellOpenSuffix   = g_personalizationShellSuffix + L"\\open";
+    g_personalizationOpenCommandSuffix = g_personalizationShellOpenSuffix + L"\\command";
+    g_personalizationNsSuffix          = L"controlpanel\\namespace\\" + g_personalizationGuidLower;
+
+    g_realPersonalizationClsidSuffix = L"clsid\\" + g_realPersonalizationGuidLower;
+    g_displayClsidSuffix             = L"clsid\\" + g_displayGuidLower;
+
+    g_suppressedClsidSuffix  = L"clsid\\" + g_suppressedGuidLower;
+    g_suppressedNsSuffix     = L"controlpanel\\namespace\\" + g_suppressedGuidLower;
+    g_windowsToGoClsidSuffix = L"clsid\\" + g_windowsToGoGuidLower;
+    g_windowsToGoNsSuffix    = L"controlpanel\\namespace\\" + g_windowsToGoGuidLower;
+    g_infraredClsidSuffix    = L"clsid\\" + g_infraredGuidLower;
+    g_infraredNsSuffix       = L"controlpanel\\namespace\\" + g_infraredGuidLower;
+
+    g_notificationIconsClsidSuffix  = L"clsid\\" + g_notificationIconsGuidLower;
+    g_networkConnectionsClsidSuffix = L"clsid\\" + g_networkConnectionsGuidLower;
+    g_printersAndFaxesClsidSuffix   = L"clsid\\" + g_printersAndFaxesGuidLower;
+    g_homeGroupClsidSuffix          = L"clsid\\" + g_homeGroupGuidLower;
 }
 
 // GetTrackedPath/TrackKey/UntrackKey/CreateFakeHandle/FreeFakeHandle now live
@@ -770,15 +808,13 @@ bool IsSuppressedNamespaceEntry(LPCWSTR name) {
     return name && IsSuppressedGuid(ToLower(name));
 }
 
-ClassifyResult ClassifyFullVirtual(const std::wstring& lower,
-                                   const std::wstring& guidLower,
-                                   ItemKind kind) {
-    if (EndsWith(lower, L"clsid\\" + guidLower))                             return { VNode::ClsidRoot,     kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\defaulticon"))          return { VNode::DefaultIcon,   kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell"))                return { VNode::Shell,          kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open"))          return { VNode::ShellOpen,      kind, 0 };
-    if (EndsWith(lower, L"clsid\\" + guidLower + L"\\shell\\open\\command")) return { VNode::OpenCommand,    kind, 0 };
-    if (EndsWith(lower, L"controlpanel\\namespace\\" + guidLower))           return { VNode::NameSpaceEntry, kind, 0 };
+ClassifyResult ClassifyPersonalizationVirtual(const std::wstring& lower) {
+    if (EndsWith(lower, g_personalizationClsidSuffix))       return { VNode::ClsidRoot,     ItemKind::Personalization, 0 };
+    if (EndsWith(lower, g_personalizationDefaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::Personalization, 0 };
+    if (EndsWith(lower, g_personalizationShellSuffix))       return { VNode::Shell,          ItemKind::Personalization, 0 };
+    if (EndsWith(lower, g_personalizationShellOpenSuffix))   return { VNode::ShellOpen,      ItemKind::Personalization, 0 };
+    if (EndsWith(lower, g_personalizationOpenCommandSuffix)) return { VNode::OpenCommand,    ItemKind::Personalization, 0 };
+    if (EndsWith(lower, g_personalizationNsSuffix))          return { VNode::NameSpaceEntry, ItemKind::Personalization, 0 };
     return { VNode::None, ItemKind::None, 0 };
 }
 
@@ -790,35 +826,39 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
 
     std::wstring lower = ToLower(path);
 
-    for (const std::wstring* guid : { &g_suppressedGuidLower, &g_windowsToGoGuidLower, &g_infraredGuidLower }) {
-        if ((EndsWith(lower, L"clsid\\" + *guid) ||
-             EndsWith(lower, L"controlpanel\\namespace\\" + *guid)) && IsSuppressedGuid(*guid))
+    struct { const std::wstring* guidLower; const std::wstring* clsidSuffix; const std::wstring* nsSuffix; } suppressibleGuids[] = {
+        { &g_suppressedGuidLower,  &g_suppressedClsidSuffix,  &g_suppressedNsSuffix  },
+        { &g_windowsToGoGuidLower, &g_windowsToGoClsidSuffix, &g_windowsToGoNsSuffix },
+        { &g_infraredGuidLower,    &g_infraredClsidSuffix,    &g_infraredNsSuffix    },
+    };
+    for (auto& item : suppressibleGuids) {
+        if ((EndsWith(lower, *item.clsidSuffix) || EndsWith(lower, *item.nsSuffix)) &&
+            IsSuppressedGuid(*item.guidLower))
             return { VNode::Suppressed, ItemKind::Suppressed, 0 };
     }
 
     if (g_settings.enablePersonalization.load()) {
-        auto cr = ClassifyFullVirtual(lower, g_personalizationGuidLower, ItemKind::Personalization);
+        auto cr = ClassifyPersonalizationVirtual(lower);
         if (cr.node != VNode::None) return cr;
     }
 
     if (g_settings.enableCategoryAppearanceLinks.load()) {
-        if (EndsWith(lower, L"clsid\\" + g_realPersonalizationGuidLower) ||
-            EndsWith(lower, L"clsid\\" + g_displayGuidLower)) {
+        if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
+            EndsWith(lower, g_displayClsidSuffix)) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
         }
     }
 
-    struct { std::atomic<bool>* enabled; const std::wstring* guidLower; DWORD cat; } categoryItems[] = {
-        { &g_settings.enableNotificationIcons,  &g_notificationIconsGuidLower,  0 }, // Keep it outside category view; search still exposes its tasks
-        { &g_settings.enableNetworkConnections, &g_networkConnectionsGuidLower, kCategoryNetwork    },
-        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesGuidLower,   kCategoryHardware   },
-        { &g_settings.enableHomeGroup,          &g_homeGroupGuidLower,          kCategoryNetwork    },
-        { &g_settings.enableCategoryAppearanceLinks, &g_displayGuidLower,       kCategoryAppearance },
+    struct { std::atomic<bool>* enabled; const std::wstring* clsidSuffix; DWORD cat; bool isHomeGroup; } categoryItems[] = {
+        { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                false }, // Keep it outside category view; search still exposes its tasks
+        { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,  false },
+        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware, false },
+        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,  true  },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
-        if (item.guidLower == &g_homeGroupGuidLower && !g_homeGroupClsidAvailable.load()) continue;
-        if (EndsWith(lower, L"clsid\\" + *item.guidLower))
+        if (item.isHomeGroup && !g_homeGroupClsidAvailable.load()) continue;
+        if (EndsWith(lower, *item.clsidSuffix))
             return { VNode::ClsidRootCategoryOnly, ItemKind::CategoryOnly, item.cat };
     }
 
@@ -870,14 +910,15 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     if (cr.node == VNode::None) return false;
 
     if (cr.kind == ItemKind::Suppressed) {
-        LOG_IF_ENABLED("[Suppress] Blocked CLSID query: %s", path.c_str());
+        Wh_Log(L"Blocked CLSID query: %s", path.c_str());
         outStatus = ERROR_FILE_NOT_FOUND;
         return true;
     }
 
     if (cr.kind == ItemKind::RealCplTaskUrl) {
-        LOG_IF_ENABLED("[RealCplTaskUrl] Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
-        if (valueName == L"System.Software.TasksFileUrl" && EnsureClassicTaskLinksFile()) {
+        Wh_Log(L"Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
+        if (valueName == L"System.Software.TasksFileUrl" &&
+            g_settings.restoreClassicTaskLinks.load() && EnsureClassicTaskLinksFile()) {
             if (lpType) *lpType = REG_SZ;
             outStatus = ProvideStringValue(lpData, lpcbData, GetClassicTaskLinksFilePath());
             return true;
@@ -891,7 +932,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     }
 
     if (cr.kind == ItemKind::CategoryOnly) {
-        LOG_IF_ENABLED("[CategoryOnly] Providing value for: %s (value=%s, cat=%lu)", path.c_str(), valueName.c_str(), cr.category);
+        Wh_Log(L"Providing value for: %s (value=%s, cat=%lu)", path.c_str(), valueName.c_str(), cr.category);
         if (valueName == L"System.ControlPanel.Category") {
             if (lpType) *lpType = REG_DWORD;
             outStatus = ProvideDwordValue(lpData, lpcbData, cr.category);
@@ -914,7 +955,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     }
 
     if (cr.kind == ItemKind::Personalization) {
-        LOG_IF_ENABLED("[Personalization] Providing value for: %s (value=%s, node=%d)", path.c_str(), valueName.c_str(), (int)cr.node);
+        Wh_Log(L"Providing value for: %s (value=%s, node=%d)", path.c_str(), valueName.c_str(), (int)cr.node);
         if (cr.node == VNode::NameSpaceEntry) {
             if (valueName.empty()) {
                 if (lpType) *lpType = REG_SZ;
@@ -1005,8 +1046,8 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
     // exceptions unwinding through them; a stray std::bad_alloc etc. must not
     // escape into foreign code, so fall back to the real API on any failure.
     try {
-        if (g_keyTracker.IsFake(hKey)) {
-            std::wstring fullPath = g_keyTracker.GetPath(hKey);
+        std::wstring fullPath;
+        if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
             if (lpSubKey && *lpSubKey) {
                 if (!fullPath.empty()) fullPath += L"\\";
                 fullPath += lpSubKey;
@@ -1014,7 +1055,7 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
             if (IsTargetKey(fullPath)) {
                 HKEY fake = g_keyTracker.CreateFake(fullPath);
                 if (!fake) return ERROR_OUTOFMEMORY;
-                LOG_IF_ENABLED("[RegOpen] Fake handle (child): %s", fullPath.c_str());
+                Wh_Log(L"Fake handle (child): %s", fullPath.c_str());
                 if (phkResult) *phkResult = fake;
                 return ERROR_SUCCESS;
             }
@@ -1026,7 +1067,7 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
             std::wstring fullPath = basePath;
             if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
             if (IsSuppressedNamespaceKey(ToLower(fullPath))) {
-                LOG_IF_ENABLED("[RegOpen] Suppressed key: %s", fullPath.c_str());
+                Wh_Log(L"Suppressed key: %s", fullPath.c_str());
                 return ERROR_FILE_NOT_FOUND;
             }
         }
@@ -1044,14 +1085,14 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
             if (IsTargetKey(fullPath)) {
                 HKEY fake = g_keyTracker.CreateFake(fullPath);
                 if (!fake) return ERROR_OUTOFMEMORY;
-                LOG_IF_ENABLED("[RegOpen] Fake handle (not found): %s", fullPath.c_str());
+                Wh_Log(L"Fake handle (not found): %s", fullPath.c_str());
                 *phkResult = fake;
                 return ERROR_SUCCESS;
             }
         }
         return status;
     } catch (...) {
-        LOG_IF_ENABLED("[RegOpen] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
     }
 }
@@ -1068,7 +1109,7 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
         g_keyTracker.Untrack(hKey);
         return status;
     } catch (...) {
-        LOG_IF_ENABLED("[RegClose] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegCloseKeyOriginal(hKey);
     }
 }
@@ -1089,7 +1130,7 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpRe
 
         return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     } catch (...) {
-        LOG_IF_ENABLED("[RegQueryValue] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     }
 }
@@ -1110,7 +1151,7 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
         }
         return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     } catch (...) {
-        LOG_IF_ENABLED("[RegGetValue] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     }
 }
@@ -1190,7 +1231,7 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
             ++realIndex;
         }
     } catch (...) {
-        LOG_IF_ENABLED("[RegEnumKeyEx] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName,
                                      lpReserved, lpClass, lpcchClass, lpftLastWriteTime);
     }
@@ -1243,11 +1284,21 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
             ++realIndex;
         }
     } catch (...) {
-        LOG_IF_ENABLED("[RegEnumKey] Exception caught, falling back to real API");
+        Wh_Log(L"Exception caught, falling back to real API");
         return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
     }
 }
 
+// Review note: this hook rewrites any explorer.exe launch whose parameters
+// start with "shell:::", which is also the pattern used by other mods that
+// inject into the same process (e.g. settings-to-control-panel). In testing
+// on this system the hook works correctly for this mod's own \pageWallpaper
+// and \pageColorization links. Rather than removing it, the mitigation is
+// operational: this mod and any other mod relying on the same shell::: /
+// explorer.exe pattern are tested one at a time, never enabled together, and
+// if one causes a launch to misbehave the other is used instead. The hook
+// itself is already wrapped in try/catch below, falling back to the
+// original ShellExecuteExW call on any exception.
 using ShellExecuteExW_t = BOOL(WINAPI*)(LPSHELLEXECUTEINFOW);
 ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 
@@ -1292,7 +1343,7 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
                         sei.lpFile = newFile.c_str();
                         sei.lpParameters = newParams.empty() ? nullptr : newParams.c_str();
                         
-                        LOG_IF_ENABLED("[ShellExec] Redirected: %s %s -> %s %s",
+                        Wh_Log(L"Redirected: %s %s -> %s %s",
                             psei->lpFile, psei->lpParameters ? psei->lpParameters : L"",
                             newFile.c_str(), newParams.empty() ? L"" : newParams.c_str());
                         
@@ -1309,7 +1360,7 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
     }
     return ShellExecuteExWOriginal(psei);
   } catch (...) {
-      LOG_IF_ENABLED("[ShellExec] Exception caught, falling back to real API");
+      Wh_Log(L"Exception caught, falling back to real API");
       return ShellExecuteExWOriginal(psei);
   }
 }
@@ -1386,12 +1437,12 @@ void ValidateSortHookOffsets() {
     // 1809 x64 shell32 layout. Do not resolve/install the hook elsewhere.
     if (g_winBuild == 17763) {
         g_sortHookSafe = true;
-        LOG_IF_ENABLED("[SortHook] Enabled for verified Win10 x64 build 17763");
+        Wh_Log(L"Enabled for verified Win10 x64 build 17763");
     } else {
-        LOG_IF_ENABLED("[SortHook] Disabled: shell32 layout is unverified on build %u", g_winBuild);
+        Wh_Log(L"Disabled: shell32 layout is unverified on build %u", g_winBuild);
     }
 #else
-    LOG_IF_ENABLED("[SortHook] Disabled: x86 layout is unverified");
+    Wh_Log(L"Disabled: x86 layout is unverified");
 #endif
 }
 
@@ -1447,7 +1498,7 @@ void Wh_ModSettingsChanged() {
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    LOG_IF_ENABLED("[Settings] Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Company=%d ToGo=%d Infrared=%d TaskLinks=%d BlueLinks=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Company=%d ToGo=%d Infrared=%d TaskLinks=%d BlueLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
@@ -1474,7 +1525,7 @@ BOOL Wh_ModInit() {
 
     DetectWindowsVersion();
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
-    LOG_IF_ENABLED("[HomeGroup] Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
+    Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
     ValidateSortHookOffsets();
 
@@ -1482,9 +1533,9 @@ BOOL Wh_ModInit() {
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
 
-    LOG_IF_ENABLED("=== Windows 7 Legacy Applet Restorer Init ===");
-    LOG_IF_ENABLED("[Version] %s", g_winVersionStr);
-    LOG_IF_ENABLED("[Settings] Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Suppress=%d TaskLinks=%d BlueLinks=%d",
+    Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
+    Wh_Log(L"Windows build: %u", g_winBuild);
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Suppress=%d TaskLinks=%d BlueLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
         g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
@@ -1506,19 +1557,19 @@ BOOL Wh_ModInit() {
 
     InitDisplayNames();
 
-    if (!Wh_SetFunctionHook(pRegOpenKeyExW,    (void*)RegOpenKeyExWHook,    (void**)&RegOpenKeyExWOriginal))    { Wh_Log(L"Failed to hook RegOpenKeyExW");    return FALSE; }
-    if (!Wh_SetFunctionHook(pRegCloseKey,      (void*)RegCloseKeyHook,      (void**)&RegCloseKeyOriginal))      { Wh_Log(L"Failed to hook RegCloseKey");      return FALSE; }
-    if (!Wh_SetFunctionHook(pRegQueryValueExW, (void*)RegQueryValueExWHook, (void**)&RegQueryValueExWOriginal)) { Wh_Log(L"Failed to hook RegQueryValueExW"); return FALSE; }
-    if (!Wh_SetFunctionHook(pRegGetValueW,     (void*)RegGetValueWHook,     (void**)&RegGetValueWOriginal))     { Wh_Log(L"Failed to hook RegGetValueW");     return FALSE; }
-    if (!Wh_SetFunctionHook(pRegEnumKeyExW,    (void*)RegEnumKeyExWHook,    (void**)&RegEnumKeyExWOriginal))    { Wh_Log(L"Failed to hook RegEnumKeyExW");    return FALSE; }
-    if (!Wh_SetFunctionHook(pRegEnumKeyW,      (void*)RegEnumKeyWHook,      (void**)&RegEnumKeyWOriginal))      { Wh_Log(L"Failed to hook RegEnumKeyW");      return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegOpenKeyExW_t)pRegOpenKeyExW,       RegOpenKeyExWHook,    &RegOpenKeyExWOriginal))    { Wh_Log(L"Failed to hook RegOpenKeyExW");    return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegCloseKey_t)pRegCloseKey,           RegCloseKeyHook,      &RegCloseKeyOriginal))      { Wh_Log(L"Failed to hook RegCloseKey");      return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegQueryValueExW_t)pRegQueryValueExW, RegQueryValueExWHook, &RegQueryValueExWOriginal)) { Wh_Log(L"Failed to hook RegQueryValueExW"); return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegGetValueW_t)pRegGetValueW,         RegGetValueWHook,     &RegGetValueWOriginal))     { Wh_Log(L"Failed to hook RegGetValueW");     return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegEnumKeyExW_t)pRegEnumKeyExW,       RegEnumKeyExWHook,    &RegEnumKeyExWOriginal))    { Wh_Log(L"Failed to hook RegEnumKeyExW");    return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook((RegEnumKeyW_t)pRegEnumKeyW,           RegEnumKeyWHook,      &RegEnumKeyWOriginal))      { Wh_Log(L"Failed to hook RegEnumKeyW");      return FALSE; }
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
     if (hShell32) {
         void* pShellExecuteExW = (void*)GetProcAddress(hShell32, "ShellExecuteExW");
         if (pShellExecuteExW) {
-            if (!Wh_SetFunctionHook(pShellExecuteExW, (void*)ShellExecuteExWHook, (void**)&ShellExecuteExWOriginal)) {
+            if (!WindhawkUtils::SetFunctionHook((ShellExecuteExW_t)pShellExecuteExW, ShellExecuteExWHook, &ShellExecuteExWOriginal)) {
                 Wh_Log(L"Failed to hook ShellExecuteExW");
             }
         }
@@ -1542,14 +1593,14 @@ BOOL Wh_ModInit() {
         if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
             Wh_Log(L"Failed to hook CControlPanelAppletList::s_SortAppletsInCategory");
         } else {
-            LOG_IF_ENABLED("[Hooks] CControlPanelAppletList::s_SortAppletsInCategory hooked OK");
+            Wh_Log(L"CControlPanelAppletList::s_SortAppletsInCategory hooked OK");
         }
         }
 
     }
 
-    LOG_IF_ENABLED("[Hooks] All hooks set successfully");
-    LOG_IF_ENABLED("[Hooks] Shell32 symbol hook: %s", hShell32 ? L"loaded" : L"FAILED");
+    Wh_Log(L"All hooks set successfully");
+    Wh_Log(L"Shell32 symbol hook: %s", hShell32 ? L"loaded" : L"FAILED");
     return TRUE;
   } catch (...) {
       Wh_Log(L"Exception during mod initialization, aborting load");
@@ -1562,7 +1613,7 @@ static void CleanupTempFiles() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     if (!g_classicTaskLinksFilePath.empty()) {
         DeleteFileW(g_classicTaskLinksFilePath.c_str());
-        LOG_IF_ENABLED("[Cleanup] Deleted task links file: %s", g_classicTaskLinksFilePath.c_str());
+        Wh_Log(L"Deleted task links file: %s", g_classicTaskLinksFilePath.c_str());
     }
 }
 
