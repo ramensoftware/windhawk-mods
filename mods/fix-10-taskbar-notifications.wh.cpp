@@ -50,9 +50,9 @@ There is no `NULL` check in that loop, so it is likely that the iterator was nev
 
 using NotificationsAdded_t = HRESULT (*)(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length);
 
-NotificationsAdded_t NotificationsAdded_orig;
+static NotificationsAdded_t NotificationsAdded_orig;
 
-HRESULT NotificationsAdded_hook(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length) {
+static HRESULT NotificationsAdded_hook(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length) {
     Wh_Log(L"Suppressing %u notification(s)", length);
 
     return S_OK;
@@ -62,7 +62,7 @@ static bool patch_applied { false };
 
 static uint8_t *target;
 
-BOOL Wh_ModInit(void) {
+extern BOOL Wh_ModInit(void) {
     Wh_Log(L"Initializing explorer function hook");
 
     HMODULE explorer { GetModuleHandleW(NULL) };
@@ -93,7 +93,7 @@ BOOL Wh_ModInit(void) {
     return TRUE;
 }
 
-void Wh_ModBeforeUninit(void) {
+extern void Wh_ModBeforeUninit(void) {
     if (!patch_applied) {
         Wh_Log(L"UNINIT: Hook was not applied, skipping revert");
         return;
