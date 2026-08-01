@@ -83,6 +83,7 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 #include <winrt/base.h>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cwctype>
 #include <string>
 #include <string_view>
@@ -128,8 +129,14 @@ struct BlobEntry {
 
     // Whether WE hid the native indicator visuals for this button, so the
     // restore paths only touch what the mod actually changed (and never
-    // override a Visibility the shell might set itself).
-    bool nativeHidden = false;
+    // override a Visibility the shell might set itself). The two elements
+    // are tracked separately because they restore differently: the
+    // RunningIndicator comes back immediately on deactivation, while the
+    // BackgroundElement comes back on a short delay (see ScheduleBgRestore)
+    // so it isn't revealed mid-storyboard as a white flash.
+    bool bgHidden = false;
+    bool indicatorHidden = false;
+    winrt::Windows::UI::Xaml::DispatcherTimer restoreTimer{nullptr};
 
     // Whether the blob's Translation is glued to its button's offset chain,
     // plus the X adjustment and taskbar-top Y anchor it was bound with
@@ -549,6 +556,36 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
     EnsureBlobOnButton(button, iconPanel, isActive, localSettings);
 }
 
+// Restores the BackgroundElement's visual a beat AFTER deactivation instead
+// of immediately: at the deactivation moment the shell's press-release and
+// state-transition storyboards are still animating it (often through their
+// brightest keyframes, with the pointer still over the button), so revealing
+// it in the same frame the blob hides flashes the native highlight. One-shot,
+// never re-arms itself, and canceled if the button re-activates first —
+// rapid task switching never lets the highlight through.
+void ScheduleBgRestore(std::shared_ptr<BlobEntry> const& entry) {
+    if (!entry->restoreTimer) {
+        auto timer = winrt::Windows::UI::Xaml::DispatcherTimer();
+        timer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(400)));
+        std::weak_ptr<BlobEntry> weakEntry = entry;
+        timer.Tick([weakEntry](auto const&, auto const&) {
+            auto e = weakEntry.lock();
+            if (!e) return;
+            if (e->restoreTimer) e->restoreTimer.Stop(); // one-shot
+            if (g_unloading || !e->bgHidden) return;
+            // The anchor tracks the most recently hidden BackgroundElement.
+            if (auto anchor = e->anchor.get()) {
+                try {
+                    ElementCompositionPreview::GetElementVisual(anchor).IsVisible(true);
+                } catch (...) {}
+            }
+            e->bgHidden = false;
+        });
+        entry->restoreTimer = timer;
+    }
+    entry->restoreTimer.Start();
+}
+
 std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
     std::vector<winrt::Windows::UI::Xaml::Shapes::Path> orphans;
     std::shared_ptr<BlobEntry> result;
@@ -683,18 +720,36 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // entry, so only state WE changed is ever touched or restored.
     auto runningIndicator = FindChildByName(iconPanel, L"RunningIndicator");
     auto setNativeHidden = [&](bool hidden) {
-        if (entry->nativeHidden == hidden) return;
-        if (bg) {
-            try {
-                ElementCompositionPreview::GetElementVisual(bg).IsVisible(!hidden);
-            } catch (...) {}
+        if (hidden) {
+            // Cancel any pending delayed restore: re-activation while it's
+            // in flight must keep the background suppressed.
+            if (entry->restoreTimer) {
+                try { entry->restoreTimer.Stop(); } catch (...) {}
+            }
+            if (bg && !entry->bgHidden) {
+                try {
+                    ElementCompositionPreview::GetElementVisual(bg).IsVisible(false);
+                    entry->bgHidden = true;
+                } catch (...) {}
+            }
+            if (runningIndicator && !entry->indicatorHidden) {
+                try {
+                    ElementCompositionPreview::GetElementVisual(runningIndicator).IsVisible(false);
+                    entry->indicatorHidden = true;
+                } catch (...) {}
+            }
+        } else {
+            // The running dash must reflect state immediately; the
+            // background follows on a delay so the deactivation storyboards
+            // finish out of sight (no white highlight flash).
+            if (runningIndicator && entry->indicatorHidden) {
+                try {
+                    ElementCompositionPreview::GetElementVisual(runningIndicator).IsVisible(true);
+                    entry->indicatorHidden = false;
+                } catch (...) {}
+            }
+            if (entry->bgHidden) ScheduleBgRestore(entry);
         }
-        if (runningIndicator) {
-            try {
-                ElementCompositionPreview::GetElementVisual(runningIndicator).IsVisible(!hidden);
-            } catch (...) {}
-        }
-        entry->nativeHidden = hidden;
     };
 
     // Button removal (window moved to another monitor, app closed, container
@@ -744,7 +799,10 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 RemoveFromParentPanel(blob);
             }
             if (btn) {
-                if (e->nativeHidden) RestoreNativeVisuals(btn);
+                if (e->restoreTimer) {
+                    try { e->restoreTimer.Stop(); } catch (...) {}
+                }
+                if (e->bgHidden || e->indicatorHidden) RestoreNativeVisuals(btn);
                 if (auto anchor = e->anchor.get()) {
                     try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
                 }
@@ -1104,7 +1162,10 @@ void Wh_ModBeforeUninit() {
                     if (entry->loadedAttached) {
                         try { btn.Loaded(entry->loadedToken); } catch (...) {}
                     }
-                    if (entry->nativeHidden) RestoreNativeVisuals(btn);
+                    if (entry->restoreTimer) {
+                        try { entry->restoreTimer.Stop(); } catch (...) {}
+                    }
+                    if (entry->bgHidden || entry->indicatorHidden) RestoreNativeVisuals(btn);
                 }
             } catch (...) { Wh_Log(L"Exception during blob shape cleanup"); }
         };
