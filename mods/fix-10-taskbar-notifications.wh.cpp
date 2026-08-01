@@ -68,6 +68,7 @@ extern BOOL Wh_ModInit(void) {
     HMODULE explorer { GetModuleHandleW(NULL) };
     if (!explorer) {
         Wh_Log(L"Failed to get explorer base address");
+        
         return FALSE;
     }
 
@@ -87,8 +88,11 @@ extern BOOL Wh_ModInit(void) {
 
     if (WindhawkUtils::SetFunctionHook(target, (uint8_t *) NotificationsAdded_hook, (uint8_t **) &NotificationsAdded_orig))
         patch_applied = true;
-    else
+    else {
         Wh_Log(L"Error occurred during hooking");
+        
+        return FALSE;
+    }
 
     return TRUE;
 }
