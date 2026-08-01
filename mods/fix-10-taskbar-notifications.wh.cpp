@@ -5,14 +5,14 @@
 // @version         0.1
 // @author          ilovethisgame
 // @github          https://github.com/bozohi
-// @include         %ProgramData%\Windhawk\Engine\ModsWritable\LegacyStore\explorer.exe
-// @architecture    amd64
+// @include         explorer.exe
+// @architecture    x86-64
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-This mod patches the Explorer shell provided by the Win10 taskbar mod at runtime.
+This mod hooks the function responsible for crashing the Explorer shell provided by the Win10 taskbar mod at runtime.
 
 But it is not confirmed if notifications arrive to the Notification Center.
 Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)
@@ -27,7 +27,7 @@ When a notification is rendered, it invokes from explorer a method called
 NotificationDataSink::NotificationsAdded(
     NotificationDataSink *this,
     int32_t _arg2,
-    struct NOC_REFINED_NOTIFICATION const **iterator,
+    struct NOC_REFINED_NOTIFICATION *const *iterator,
     uint32_t length
 );
 ```
@@ -45,16 +45,25 @@ There is no `NULL` check in that loop, so it is likely that the iterator was nev
 // ==/WindhawkModReadme==
 
 #include<cstdint>
+#include<windhawk_api.h>
+#include<windhawk_utils.h>
+
+using NotificationsAdded_t = HRESULT (*)(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length);
+
+NotificationsAdded_t NotificationsAdded_orig;
+
+HRESULT NotificationsAdded_hook(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length) {
+    Wh_Log(L"Suppressing %u notification(s)", length);
+
+    return S_OK;
+}
 
 static bool patch_applied { false };
-static uint8_t patch_bytes[] { 0xC3, 0x90, 0x90, 0x90, 0x90 }; // ret + 4 nop
-static constexpr size_t patch_size { sizeof patch_bytes };
 
-static uint8_t orig_bytes[patch_size] { 0 };
 static uint8_t *target;
 
 BOOL Wh_ModInit(void) {
-    Wh_Log(L"Initializing explorer patch");
+    Wh_Log(L"Initializing explorer function hook");
 
     HMODULE explorer { GetModuleHandleW(NULL) };
     if (!explorer) {
@@ -62,69 +71,36 @@ BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
+    auto dos_header = (PIMAGE_DOS_HEADER) explorer;
+    auto nt_headers = (PIMAGE_NT_HEADERS64) ((uint8_t *) explorer + dos_header->e_lfanew);
+
+    if (nt_headers->FileHeader.TimeDateStamp != 0x7AC6EEC3 ||
+        nt_headers->OptionalHeader.SizeOfImage != 0x442000)
+    {
+        Wh_Log(L"Unexpected explorer build, not hooking");
+
+        return FALSE;
+    }
+
     target = (uint8_t *) explorer + 0x14DC40;
-    Wh_Log(L"Target address: 0x%llx", target);
+    Wh_Log(L"NotificationsAdded address: 0x%llx", target);
 
-    if (!memcmp((LPVOID) target, (LPVOID) patch_bytes, patch_size)) {
-        Wh_Log(L"Explorer was already patched, quitting");
-        return TRUE;
-    }
-
-    DWORD old_protect {};
-    if (!VirtualProtect((LPVOID) target, patch_size, PAGE_EXECUTE_READWRITE, &old_protect)) {
-        Wh_Log(L"FAILED TO CHANGE MEMORY PROTECTION: %d", GetLastError());
-        return FALSE;
-    }
-
-    memcpy_s((void *) orig_bytes, patch_size, (const void *) target, patch_size);
-
-    bool failed { false };
-    if (!memcpy_s((void *) target, patch_size, patch_bytes, patch_size)) {
-        Wh_Log(L"Patch applied successfully");
-    } else {
-        Wh_Log(L"FAILED TO APPLY PATCH");
-        failed = true;
-    }
-
-    DWORD temp = 0;
-    VirtualProtect((void *) target, patch_size, old_protect, &temp);
-
-    if (failed) {
-        return FALSE;
-    }
-
-    patch_applied = true;
-
-    FlushInstructionCache(GetCurrentProcess(), (void *) target, patch_size);
+    if (WindhawkUtils::SetFunctionHook(target, (uint8_t *) NotificationsAdded_hook, (uint8_t **) &NotificationsAdded_orig))
+        patch_applied = true;
+    else
+        Wh_Log(L"Error occurred during hooking");
 
     return TRUE;
 }
 
-void Wh_ModUninit(void) {
+void Wh_ModBeforeUninit(void) {
     if (!patch_applied) {
-        Wh_Log(L"UNINIT: Patch was not applied, skipping revert");
+        Wh_Log(L"UNINIT: Hook was not applied, skipping revert");
         return;
     }
 
-    if (orig_bytes[0] == 0x00) {
-        Wh_Log(L"UNINIT: Original bytes did not get copied correctly, aborting revert");
-        return;
-    }
-
-    DWORD old_protect {};
-    if (!VirtualProtect((LPVOID) target, patch_size, PAGE_EXECUTE_READWRITE, &old_protect)) {
-        Wh_Log(L"UNINIT: FAILED TO CHANGE MEMORY PROTECTION: %d", GetLastError());
-        return;
-    }
-
-    if (!memcpy_s((void *) target, patch_size, orig_bytes, patch_size)) {
-        Wh_Log(L"UNINIT: Original bytes rewritten successfully");
-    } else {
-        Wh_Log(L"UNINIT: FAILED TO REVERT PATCH");
-    }
-
-    DWORD temp = 0;
-    VirtualProtect((void *) target, patch_size, old_protect, &temp);
-
-    FlushInstructionCache(GetCurrentProcess(), (void *) target, patch_size);
+    if (Wh_RemoveFunctionHook(target))
+        Wh_Log(L"UNINIT: Hook unapplied successfully");
+    else
+        Wh_Log(L"UNINIT: Error occurred during unhooking");
 }
