@@ -2,14 +2,14 @@
 // @id              windows-11-calendar-weather
 // @name            Windows 11 Calendar Weather
 // @description     Replace the Notification Center notification list with a compact Open-Meteo weather forecast card above the calendar
-// @version         1.0.0
+// @version         1.0.1
 // @author          FranciscoMurias
 // @github          https://github.com/FranciscoMurias
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lpowrprof -lshell32 -ladvapi32 -luserenv -luuid
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -ladvapi32 -luuid
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -47,7 +47,7 @@ calendar and focus-session controls unchanged.
 ## Setup
 
 1. Compile and enable the mod in Windhawk.
-2. Set **Location name** and/or **Latitude** / **Longitude**.
+2. Set **Location name** and/or **Latitude** / **Longitude** (defaults are empty).
 3. Open the taskbar clock. The weather card appears above the calendar.
 
 Coordinates are preferred in Manual mode. Auto-detect uses the Windows
@@ -59,6 +59,12 @@ location is unavailable.
 - Weather is cached in memory and refreshed on a timer (default every 60 minutes).
 - Opening the clock flyout reuses the cache unless it is older than the refresh interval.
 - Offline failures keep the last successful forecast when available.
+
+## Privacy
+
+Forecast requests are sent to [Open-Meteo](https://open-meteo.com/) with the
+configured (or auto-detected) latitude and longitude. No API key is used. Location
+is not sent to any other service by this mod.
 */
 // ==/WindhawkModReadme==
 
@@ -71,13 +77,13 @@ location is unavailable.
     $options:
       - manual: Manual
       - auto: Auto-detect
-  - locationName: Warsaw
+  - locationName: ""
     $name: Location name
     $description: Used in Manual mode (and as fallback label). Also used to geocode when coordinates are empty.
-  - latitude: "52.2297"
+  - latitude: ""
     $name: Latitude
     $description: Manual mode decimal latitude (string)
-  - longitude: "21.0122"
+  - longitude: ""
     $name: Longitude
     $description: Manual mode decimal longitude (string)
   - temperatureUnit: celsius
@@ -140,25 +146,21 @@ location is unavailable.
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #undef GetCurrentTime
 
-#include <commctrl.h>
 #include <combaseapi.h>
-#include <exdisp.h>
 #include <ocidl.h>
 #include <roapi.h>
 #include <shellapi.h>
-#include <shldisp.h>
-#include <shlguid.h>
-#include <shobjidl.h>
 #include <sddl.h>
-#include <userenv.h>
 #include <windows.h>
 #include <winstring.h>
 
@@ -452,12 +454,12 @@ Target g_target = Target::ShellExperienceHost;
 // start Win32 apps. The flyout asks explorer.exe (also injected by this mod)
 // to ShellExecute the path via WM_COPYDATA and/or a shared mapping.
 //
-// V2 names: previous Local\ objects lacked an AppContainer ACL, so SEH could
-// not open them and launch fell through to false-positive ShellExecute calls.
+// V5: same proven launch path as V2 (sync ShellExecute on WM_COPYDATA, path
+// from payload). Named-object ACL must allow AppContainer opens.
 constexpr wchar_t kCalLaunchMappingName[] =
-    L"Local\\WindhawkCalWeatherLaunchPathV2";
+    L"Local\\WindhawkCalWeatherLaunchPathV5";
 constexpr wchar_t kCalLaunchEventName[] =
-    L"Local\\WindhawkCalWeatherLaunchEventV2";
+    L"Local\\WindhawkCalWeatherLaunchEventV5";
 constexpr wchar_t kCalLaunchWindowClass[] = L"WindhawkCalWeatherLaunchWnd";
 constexpr wchar_t kCalLaunchWindowTitle[] = L"WindhawkCalWeatherLaunch";
 constexpr DWORD kCalLaunchMappingBytes = 4096;
@@ -485,10 +487,10 @@ std::atomic<uint64_t> g_uiGeneration{1};
 
 struct ModSettings {
     bool autoLocation = false;
-    std::wstring locationName = L"Warsaw";
-    double latitude = 52.2297;
-    double longitude = 21.0122;
-    bool coordinatesValid = true;
+    std::wstring locationName;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    bool coordinatesValid = false;
     std::wstring temperatureUnit = L"celsius";
     int refreshMinutes = 60;
     int hourlyCount = 6;
@@ -589,38 +591,24 @@ bool ParseHexColorRgb(PCWSTR text, uint8_t& r, uint8_t& g, uint8_t& b) {
     return true;
 }
 
-// Sectioned keys (weather.*/daylight.*/calendar.*) are authoritative.
-// String helpers may fall back to pre-section flat names when the nested
-// value is empty (first run after regroup / missing default).
-string_setting_unique_ptr GetStringSettingPref(PCWSTR primary, PCWSTR legacy) {
-    string_setting_unique_ptr value(Wh_GetStringSetting(primary));
-    if (value && value.get()[0]) {
-        return value;
-    }
-    if (legacy && *legacy) {
-        return string_setting_unique_ptr(Wh_GetStringSetting(legacy));
-    }
-    return value;
-}
-
 void LoadSettings() {
     ModSettings s;
 
     string_setting_unique_ptr locationMode(
-        GetStringSettingPref(L"weather.locationMode", L"locationMode"));
+        Wh_GetStringSetting(L"weather.locationMode"));
     s.autoLocation =
         locationMode && _wcsicmp(locationMode.get(), L"auto") == 0;
 
     string_setting_unique_ptr locationName(
-        GetStringSettingPref(L"weather.locationName", L"locationName"));
+        Wh_GetStringSetting(L"weather.locationName"));
     if (locationName && locationName.get()[0]) {
         s.locationName = locationName.get();
     }
 
     string_setting_unique_ptr latitudeText(
-        GetStringSettingPref(L"weather.latitude", L"latitude"));
+        Wh_GetStringSetting(L"weather.latitude"));
     string_setting_unique_ptr longitudeText(
-        GetStringSettingPref(L"weather.longitude", L"longitude"));
+        Wh_GetStringSetting(L"weather.longitude"));
     bool latOk = false;
     bool lonOk = false;
     s.latitude = ParseCoordinate(latitudeText ? latitudeText.get() : L"", latOk);
@@ -631,15 +619,13 @@ void LoadSettings() {
                          s.longitude <= 180.0;
 
     string_setting_unique_ptr unit(
-        GetStringSettingPref(L"weather.temperatureUnit", L"temperatureUnit"));
+        Wh_GetStringSetting(L"weather.temperatureUnit"));
     if (unit && _wcsicmp(unit.get(), L"fahrenheit") == 0) {
         s.temperatureUnit = L"fahrenheit";
     } else {
         s.temperatureUnit = L"celsius";
     }
 
-    // Booleans/ints: nested keys only. Falling back to legacy when nested ==
-    // schema default made toggles impossible to turn off (old flat values won).
     s.refreshMinutes =
         ClampInt(Wh_GetIntSetting(L"weather.refreshMinutes"), 15, 360);
     s.hourlyCount = ClampInt(Wh_GetIntSetting(L"weather.hourlyCount"), 3, 8);
@@ -649,8 +635,8 @@ void LoadSettings() {
     s.showCalendarDaylight =
         Wh_GetIntSetting(L"daylight.showCalendarDaylight") != 0;
 
-    string_setting_unique_ptr daylightLeft(GetStringSettingPref(
-        L"daylight.daylightHoursLeft", L"daylightHoursLeft"));
+    string_setting_unique_ptr daylightLeft(
+        Wh_GetStringSetting(L"daylight.daylightHoursLeft"));
     if (daylightLeft &&
         (_wcsicmp(daylightLeft.get(), L"rightOf") == 0 ||
          _wcsicmp(daylightLeft.get(), L"below") == 0 ||
@@ -662,8 +648,8 @@ void LoadSettings() {
 
     s.showCalendarAppButton =
         Wh_GetIntSetting(L"calendar.showCalendarAppButton") != 0;
-    string_setting_unique_ptr calendarAppPath(GetStringSettingPref(
-        L"calendar.calendarAppPath", L"calendarAppPath"));
+    string_setting_unique_ptr calendarAppPath(
+        Wh_GetStringSetting(L"calendar.calendarAppPath"));
     if (calendarAppPath && calendarAppPath.get()[0]) {
         s.calendarAppPath = calendarAppPath.get();
         // Trim surrounding quotes from pasted paths.
@@ -678,9 +664,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"calendar.roundedDayMarkers") != 0;
 
     {
-        string_setting_unique_ptr highlightColor(GetStringSettingPref(
-            L"calendar.calendarDayHighlightColor",
-            L"calendarDayHighlightColor"));
+        string_setting_unique_ptr highlightColor(
+            Wh_GetStringSetting(L"calendar.calendarDayHighlightColor"));
         uint8_t r = 0x77, g = 0x77, b = 0x77;
         if (highlightColor &&
             ParseHexColorRgb(highlightColor.get(), r, g, b)) {
@@ -917,7 +902,7 @@ struct MountedDaylightInstance {
     MountedDaylightInstance& operator=(MountedDaylightInstance&&) = default;
 };
 
-std::vector<MountedDaylightInstance> g_daylightMounted;
+[[clang::no_destroy]] std::vector<MountedDaylightInstance> g_daylightMounted;
 
 struct MountedCalendarLaunchInstance {
     InstanceHandle sectionHandle = 0;
@@ -957,9 +942,10 @@ struct MountedCalendarLaunchInstance {
         default;
 };
 
-std::vector<MountedCalendarLaunchInstance> g_calendarLaunchMounted;
+[[clang::no_destroy]] std::vector<MountedCalendarLaunchInstance>
+    g_calendarLaunchMounted;
 std::recursive_mutex g_mountMutex;
-std::vector<MountedWeatherInstance> g_mounted;
+[[clang::no_destroy]] std::vector<MountedWeatherInstance> g_mounted;
 
 // Match CalendarCenterGrid / Win11 flyout card radius.
 constexpr double kWeatherCardCornerRadius = 8.0;
@@ -1025,6 +1011,17 @@ void ApplyCompositionRoundedClip(wux::UIElement const& element, float radius) {
 // Resolve a Grid dependency property via a throwaway Style Setter (same approach
 // as Notification Center Styler; needed when the DP isn't in Windhawk headers).
 wux::DependencyProperty ResolveGridProperty(PCWSTR propertyName) {
+    static std::mutex cacheMutex;
+    static std::unordered_map<std::wstring, wux::DependencyProperty> cache;
+    {
+        std::lock_guard lock(cacheMutex);
+        auto it = cache.find(propertyName);
+        if (it != cache.end()) {
+            return it->second;
+        }
+    }
+
+    wux::DependencyProperty resolved{nullptr};
     try {
         std::wstring xaml =
             L"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
@@ -1038,12 +1035,16 @@ wux::DependencyProperty ResolveGridProperty(PCWSTR propertyName) {
             xaml += L"' Value='0'/></Style>";
         }
         auto style = wux::Markup::XamlReader::Load(xaml).as<wux::Style>();
-        return style.Setters().GetAt(0).as<wux::Setter>().Property();
+        resolved = style.Setters().GetAt(0).as<wux::Setter>().Property();
     } catch (...) {
         Wh_Log(L"ResolveGridProperty(%s) failed %08X", propertyName,
                winrt::to_hresult());
     }
-    return nullptr;
+    if (resolved) {
+        std::lock_guard lock(cacheMutex);
+        cache.emplace(propertyName, resolved);
+    }
+    return resolved;
 }
 
 wuxc::Grid FindNamedGridNearby(wux::FrameworkElement const& from,
@@ -2558,14 +2559,6 @@ std::optional<ForecastData> ParseForecastJson(std::wstring const& body,
     }
 }
 
-std::wstring MakeLocationKey(ModSettings const& s) {
-    wchar_t buffer[256];
-    swprintf_s(buffer, L"%s|%s|%.5f|%.5f|%s", s.autoLocation ? L"auto" : L"manual",
-               s.locationName.c_str(), s.latitude, s.longitude,
-               s.temperatureUnit.c_str());
-    return buffer;
-}
-
 std::optional<ResolvedLocation> TryWindowsGeolocation() {
     try {
         auto access =
@@ -2811,21 +2804,7 @@ bool IsForecastCacheStale(ForecastData const& forecast, int refreshMinutes) {
     if (age < std::chrono::minutes(0)) {
         return true;
     }
-    if (age >= std::chrono::minutes(refreshMinutes)) {
-        return true;
-    }
-
-    // Hourly strip is baked at fetch time — a local hour/day change means the
-    // card is wrong even inside the refresh window (sleep across midnight).
-    if (forecast.fetchedLocalHour < 0) {
-        return true;
-    }
-    SYSTEMTIME localNow{};
-    GetLocalTime(&localNow);
-    return localNow.wYear != forecast.fetchedLocalYear ||
-           localNow.wMonth != forecast.fetchedLocalMonth ||
-           localNow.wDay != forecast.fetchedLocalDay ||
-           localNow.wHour != forecast.fetchedLocalHour;
+    return age >= std::chrono::minutes(refreshMinutes);
 }
 
 void ClearStuckFetchLock() {
@@ -3000,6 +2979,9 @@ void EnsureDaylightTickTimer() {
     if (g_shuttingDown.load()) {
         return;
     }
+    if (!GetSettingsCopy().showCalendarDaylight) {
+        return;
+    }
 
     // Now-marker + "hours left" while the flyout stays open.
     constexpr DWORD kPeriodMs = 5U * 60U * 1000U;
@@ -3103,11 +3085,6 @@ void StopRefreshTimer() {
         CloseThreadpoolTimer(daylight);
         Wh_Log(L"Daylight tick timer stopped");
     }
-}
-
-void StopRefreshTimerLocked() {
-    // Name is historical — must not wait while uniquely holding g_timerMutex.
-    StopRefreshTimer();
 }
 
 #ifndef DEVICE_NOTIFY_CALLBACK
@@ -4000,10 +3977,24 @@ struct CalendarDayShapePatch {
         dayItemChangingRevoker{};
 };
 
-std::vector<CalendarDayShapePatch> g_calendarDayShapePatches;
+[[clang::no_destroy]] std::vector<CalendarDayShapePatch>
+    g_calendarDayShapePatches;
 
 wux::DependencyProperty ResolveCalendarViewProperty(PCWSTR propertyName,
                                                     bool brushProperty) {
+    static std::mutex cacheMutex;
+    static std::unordered_map<std::wstring, wux::DependencyProperty> cache;
+    const std::wstring key =
+        std::wstring(propertyName) + (brushProperty ? L"#b" : L"#v");
+    {
+        std::lock_guard lock(cacheMutex);
+        auto it = cache.find(key);
+        if (it != cache.end()) {
+            return it->second;
+        }
+    }
+
+    wux::DependencyProperty resolved{nullptr};
     try {
         std::wstring xaml =
             L"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
@@ -4018,12 +4009,16 @@ wux::DependencyProperty ResolveCalendarViewProperty(PCWSTR propertyName,
             xaml += L"' Value='0'/></Style>";
         }
         auto style = wux::Markup::XamlReader::Load(xaml).as<wux::Style>();
-        return style.Setters().GetAt(0).as<wux::Setter>().Property();
+        resolved = style.Setters().GetAt(0).as<wux::Setter>().Property();
     } catch (...) {
         Wh_Log(L"ResolveCalendarViewProperty(%s) failed %08X", propertyName,
                winrt::to_hresult());
     }
-    return nullptr;
+    if (resolved) {
+        std::lock_guard lock(cacheMutex);
+        cache.emplace(key, resolved);
+    }
+    return resolved;
 }
 
 wuxc::CalendarView FindCalendarViewInSubtree(wux::DependencyObject const& root,
@@ -4660,414 +4655,6 @@ std::wstring ParentDirectory(std::wstring const& path) {
     return path.substr(0, pos);
 }
 
-bool LaunchViaCreateProcess(std::wstring const& path,
-                            std::wstring const& directory) {
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-
-    std::wstring cmd = L"\"";
-    cmd += path;
-    cmd += L"\"";
-    std::vector<wchar_t> mutableCmd(cmd.begin(), cmd.end());
-    mutableCmd.push_back(L'\0');
-
-    // BREAKAWAY helps when ShellExperienceHost is in a job that blocks children.
-    if (!CreateProcessW(path.c_str(), mutableCmd.data(), nullptr, nullptr,
-                        FALSE, CREATE_BREAKAWAY_FROM_JOB, nullptr,
-                        directory.empty() ? nullptr : directory.c_str(), &si,
-                        &pi)) {
-        if (!CreateProcessW(path.c_str(), mutableCmd.data(), nullptr, nullptr,
-                            FALSE, 0, nullptr,
-                            directory.empty() ? nullptr : directory.c_str(),
-                            &si, &pi)) {
-            Wh_Log(L"CreateProcessW failed (%lu) for %s", GetLastError(),
-                   path.c_str());
-            return false;
-        }
-    }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    Wh_Log(L"CreateProcessW succeeded for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaShellExecute(std::wstring const& path,
-                           std::wstring const& directory) {
-    SHELLEXECUTEINFOW sei{};
-    sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_DDEWAIT;
-    sei.lpVerb = L"open";
-    sei.lpFile = path.c_str();
-    sei.lpDirectory = directory.empty() ? nullptr : directory.c_str();
-    sei.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&sei)) {
-        Wh_Log(L"ShellExecuteExW failed (%lu) for %s", GetLastError(),
-               path.c_str());
-        return false;
-    }
-    Wh_Log(L"ShellExecuteExW succeeded for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaRundll32(std::wstring const& path) {
-    // Brokers out of many AppContainer hosts via url.dll.
-    std::wstring params = L"url.dll,FileProtocolHandler ";
-    params += path;
-    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
-        nullptr, L"open", L"rundll32.exe", params.c_str(), nullptr,
-        SW_SHOWNORMAL));
-    if (result <= 32) {
-        Wh_Log(L"rundll32 FileProtocolHandler failed (%lld) for %s",
-               static_cast<long long>(result), path.c_str());
-        return false;
-    }
-    Wh_Log(L"rundll32 FileProtocolHandler requested for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaShellExecuteCmdStart(std::wstring const& path,
-                                   std::wstring const& directory) {
-    std::wstring params = L"/c start \"\" ";
-    if (!directory.empty()) {
-        params += L"/D \"";
-        params += directory;
-        params += L"\" ";
-    }
-    params += L"\"";
-    params += path;
-    params += L"\"";
-
-    SHELLEXECUTEINFOW sei{};
-    sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_DDEWAIT;
-    sei.lpVerb = L"open";
-    sei.lpFile = L"cmd.exe";
-    sei.lpParameters = params.c_str();
-    sei.nShow = SW_HIDE;
-    if (!ShellExecuteExW(&sei)) {
-        Wh_Log(L"ShellExecute cmd start failed (%lu) for %s", GetLastError(),
-               path.c_str());
-        return false;
-    }
-    Wh_Log(L"ShellExecute cmd start requested for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaExplorer(std::wstring const& path) {
-    // explorer.exe runs outside ShellExperienceHost's package restrictions and
-    // will open/launch the target on behalf of the user.
-    std::wstring params = L"\"";
-    params += path;
-    params += L"\"";
-    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
-        nullptr, L"open", L"explorer.exe", params.c_str(), nullptr,
-        SW_SHOWNORMAL));
-    if (result <= 32) {
-        Wh_Log(L"explorer.exe launch failed (%lld) for %s",
-               static_cast<long long>(result), path.c_str());
-        return false;
-    }
-    Wh_Log(L"explorer.exe launch requested for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaExplorerToken(std::wstring const& path,
-                            std::wstring const& directory) {
-    // ShellExperienceHost is packaged/job-restricted. Duplicate the desktop
-    // shell (explorer) token and create the process with that identity so the
-    // app starts in the normal user session.
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!tray) {
-        tray = FindWindowW(L"Shell_SecondaryTrayWnd", nullptr);
-    }
-    if (!tray) {
-        Wh_Log(L"Explorer token launch: tray window not found");
-        return false;
-    }
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(tray, &pid);
-    if (!pid) {
-        return false;
-    }
-
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
-    }
-    if (!process) {
-        Wh_Log(L"Explorer token launch: OpenProcess failed (%lu)",
-               GetLastError());
-        return false;
-    }
-
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(process, TOKEN_DUPLICATE | TOKEN_QUERY, &token)) {
-        Wh_Log(L"Explorer token launch: OpenProcessToken failed (%lu)",
-               GetLastError());
-        CloseHandle(process);
-        return false;
-    }
-    CloseHandle(process);
-
-    HANDLE primary = nullptr;
-    if (!DuplicateTokenEx(token, MAXIMUM_ALLOWED, nullptr, SecurityIdentification,
-                          TokenPrimary, &primary)) {
-        Wh_Log(L"Explorer token launch: DuplicateTokenEx failed (%lu)",
-               GetLastError());
-        CloseHandle(token);
-        return false;
-    }
-    CloseHandle(token);
-
-    LPVOID environment = nullptr;
-    if (!CreateEnvironmentBlock(&environment, primary, FALSE)) {
-        Wh_Log(L"Explorer token launch: CreateEnvironmentBlock failed (%lu)",
-               GetLastError());
-        environment = nullptr;
-    }
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_SHOWNORMAL;
-    si.lpDesktop = const_cast<wchar_t*>(L"winsta0\\default");
-
-    PROCESS_INFORMATION pi{};
-    std::wstring cmd = L"\"";
-    cmd += path;
-    cmd += L"\"";
-    std::vector<wchar_t> mutableCmd(cmd.begin(), cmd.end());
-    mutableCmd.push_back(L'\0');
-
-    const DWORD flags =
-        NORMAL_PRIORITY_CLASS |
-        (environment ? CREATE_UNICODE_ENVIRONMENT : 0);
-
-    BOOL ok = CreateProcessWithTokenW(
-        primary, 0, path.c_str(), mutableCmd.data(), flags, environment,
-        directory.empty() ? nullptr : directory.c_str(), &si, &pi);
-    if (!ok) {
-        const DWORD withTokenErr = GetLastError();
-        // Fallback: ask cmd (same token) to start the app — more reliable when
-        // direct CreateProcessWithToken is blocked for the target binary.
-        wchar_t sysDir[MAX_PATH]{};
-        GetSystemDirectoryW(sysDir, MAX_PATH);
-        std::wstring cmdExe = sysDir;
-        cmdExe += L"\\cmd.exe";
-        std::wstring startCmd = L"/c start \"\" ";
-        if (!directory.empty()) {
-            startCmd += L"/D \"";
-            startCmd += directory;
-            startCmd += L"\" ";
-        }
-        startCmd += L"\"";
-        startCmd += path;
-        startCmd += L"\"";
-        std::wstring full = L"\"";
-        full += cmdExe;
-        full += L"\" ";
-        full += startCmd;
-        std::vector<wchar_t> mutableStart(full.begin(), full.end());
-        mutableStart.push_back(L'\0');
-        PROCESS_INFORMATION piCmd{};
-        ok = CreateProcessWithTokenW(
-            primary, 0, cmdExe.c_str(), mutableStart.data(),
-            flags | CREATE_NO_WINDOW, environment, nullptr, &si, &piCmd);
-        if (ok) {
-            CloseHandle(piCmd.hThread);
-            CloseHandle(piCmd.hProcess);
-            if (environment) {
-                DestroyEnvironmentBlock(environment);
-            }
-            CloseHandle(primary);
-            Wh_Log(L"Explorer token cmd-start succeeded for %s", path.c_str());
-            return true;
-        }
-        const DWORD cmdErr = GetLastError();
-        ok = CreateProcessAsUserW(
-            primary, path.c_str(), mutableCmd.data(), nullptr, nullptr, FALSE,
-            flags, environment,
-            directory.empty() ? nullptr : directory.c_str(), &si, &pi);
-        if (!ok) {
-            Wh_Log(L"Explorer token launch failed (WithToken=%lu cmd=%lu "
-                   L"AsUser=%lu)",
-                   withTokenErr, cmdErr, GetLastError());
-        }
-    }
-
-    if (environment) {
-        DestroyEnvironmentBlock(environment);
-    }
-    CloseHandle(primary);
-    if (!ok) {
-        return false;
-    }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    Wh_Log(L"Explorer token launch succeeded for %s", path.c_str());
-    return true;
-}
-
-bool LaunchViaDesktopShell(std::wstring const& path,
-                           std::wstring const& directory) {
-    // Run ShellExecute through the desktop shell view (explorer.exe). This is
-    // the reliable broker out of ShellExperienceHost's AppContainer.
-    try {
-        winrt::com_ptr<IShellWindows> shellWindows;
-        HRESULT hr =
-            CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
-                             IID_PPV_ARGS(shellWindows.put()));
-        if (FAILED(hr) || !shellWindows) {
-            Wh_Log(L"Desktop shell: ShellWindows failed %08X", hr);
-            return false;
-        }
-
-        VARIANT empty{};
-        VariantInit(&empty);
-        long hwnd = 0;
-        winrt::com_ptr<IDispatch> disp;
-        hr = shellWindows->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd,
-                                        SWFO_NEEDDISPATCH, disp.put());
-        if (FAILED(hr) || !disp) {
-            Wh_Log(L"Desktop shell: FindWindowSW failed %08X", hr);
-            return false;
-        }
-
-        auto sp = disp.try_as<IServiceProvider>();
-        if (!sp) {
-            Wh_Log(L"Desktop shell: IServiceProvider missing");
-            return false;
-        }
-
-        winrt::com_ptr<IShellBrowser> browser;
-        hr = sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(browser.put()));
-        if (FAILED(hr) || !browser) {
-            Wh_Log(L"Desktop shell: TopLevelBrowser failed %08X", hr);
-            return false;
-        }
-
-        winrt::com_ptr<IShellView> view;
-        hr = browser->QueryActiveShellView(view.put());
-        if (FAILED(hr) || !view) {
-            Wh_Log(L"Desktop shell: ShellView failed %08X", hr);
-            return false;
-        }
-
-        winrt::com_ptr<IDispatch> folderViewDisp;
-        hr = view->GetItemObject(SVGIO_BACKGROUND,
-                                 IID_PPV_ARGS(folderViewDisp.put()));
-        if (FAILED(hr) || !folderViewDisp) {
-            Wh_Log(L"Desktop shell: background view failed %08X", hr);
-            return false;
-        }
-
-        auto folderView = folderViewDisp.try_as<IShellFolderViewDual>();
-        if (!folderView) {
-            Wh_Log(L"Desktop shell: IShellFolderViewDual missing");
-            return false;
-        }
-
-        winrt::com_ptr<IDispatch> appDisp;
-        hr = folderView->get_Application(appDisp.put());
-        if (FAILED(hr) || !appDisp) {
-            Wh_Log(L"Desktop shell: Application failed %08X", hr);
-            return false;
-        }
-
-        auto shell = appDisp.try_as<IShellDispatch2>();
-        if (!shell) {
-            Wh_Log(L"Desktop shell: IShellDispatch2 missing");
-            return false;
-        }
-
-        // ShellExecute(BSTR File, Args, Dir, Operation, Show)
-        BSTR file = SysAllocString(path.c_str());
-        VARIANT vArgs{};
-        VARIANT vDir{};
-        VARIANT vOp{};
-        VARIANT vShow{};
-        VariantInit(&vArgs);
-        VariantInit(&vDir);
-        VariantInit(&vOp);
-        VariantInit(&vShow);
-        vArgs.vt = VT_BSTR;
-        vArgs.bstrVal = SysAllocString(L"");
-        vDir.vt = VT_BSTR;
-        vDir.bstrVal = SysAllocString(directory.c_str());
-        vOp.vt = VT_BSTR;
-        vOp.bstrVal = SysAllocString(L"open");
-        vShow.vt = VT_I4;
-        vShow.lVal = SW_SHOWNORMAL;
-
-        hr = shell->ShellExecute(file, vArgs, vDir, vOp, vShow);
-
-        if (file) {
-            SysFreeString(file);
-        }
-        VariantClear(&vArgs);
-        VariantClear(&vDir);
-        VariantClear(&vOp);
-        VariantClear(&vShow);
-
-        if (FAILED(hr)) {
-            Wh_Log(L"Desktop shell: ShellExecute failed %08X", hr);
-            return false;
-        }
-        Wh_Log(L"Desktop shell: ShellExecute succeeded for %s", path.c_str());
-        return true;
-    } catch (...) {
-        Wh_Log(L"Desktop shell: exception %08X", winrt::to_hresult());
-        return false;
-    }
-}
-
-bool LaunchViaCmdStart(std::wstring const& path,
-                       std::wstring const& directory) {
-    wchar_t sysDir[MAX_PATH]{};
-    if (!GetSystemDirectoryW(sysDir, MAX_PATH)) {
-        return false;
-    }
-    std::wstring cmdExe = sysDir;
-    cmdExe += L"\\cmd.exe";
-
-    std::wstring args = L"/c start \"\" ";
-    if (!directory.empty()) {
-        args += L"/D \"";
-        args += directory;
-        args += L"\" ";
-    }
-    args += L"\"";
-    args += path;
-    args += L"\"";
-
-    std::wstring commandLine = L"\"";
-    commandLine += cmdExe;
-    commandLine += L"\" ";
-    commandLine += args;
-    std::vector<wchar_t> mutableCmd(commandLine.begin(), commandLine.end());
-    mutableCmd.push_back(L'\0');
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-    const DWORD flags = CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW;
-    if (!CreateProcessW(cmdExe.c_str(), mutableCmd.data(), nullptr, nullptr,
-                        FALSE, flags, nullptr, nullptr, &si, &pi) &&
-        !CreateProcessW(cmdExe.c_str(), mutableCmd.data(), nullptr, nullptr,
-                        FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"cmd.exe start failed (%lu) for %s", GetLastError(),
-               path.c_str());
-        return false;
-    }
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    Wh_Log(L"cmd.exe start requested for %s", path.c_str());
-    return true;
-}
-
 bool LaunchViaUriBroker(std::wstring const& uriText) {
     try {
         wf::Uri uri(uriText);
@@ -5095,8 +4682,8 @@ bool LaunchViaUriBroker(std::wstring const& uriText) {
 std::wstring ResolveCalendarAppPath() {
     std::wstring path;
     try {
-        string_setting_unique_ptr raw(GetStringSettingPref(
-            L"calendar.calendarAppPath", L"calendarAppPath"));
+        string_setting_unique_ptr raw(
+            Wh_GetStringSetting(L"calendar.calendarAppPath"));
         if (raw && raw.get()[0]) {
             path = TrimCalendarAppPath(raw.get());
         }
@@ -5157,6 +4744,7 @@ LRESULT CALLBACK CalendarLaunchWndProc(HWND hwnd,
             path.assign(text, len);
         }
         path = TrimCalendarAppPath(path);
+        // Synchronous on the broker thread — this is the path that worked.
         ExplorerBrokerLaunchPath(path);
         return TRUE;
     }
@@ -5200,6 +4788,8 @@ bool MakeAppContainerAllowSa(SECURITY_ATTRIBUTES& sa, PSECURITY_DESCRIPTOR& sd) 
     sa.bInheritHandle = FALSE;
     sd = nullptr;
     // WD = Everyone, AC = ALL APPLICATION PACKAGES (AppContainer).
+    // Required for SEH to open the named mapping/event fallback; WM_COPYDATA
+    // is preferred and does not use these objects.
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"D:(A;;GA;;;WD)(A;;GA;;;AC)", SDDL_REVISION_1, &sd, nullptr) ||
         !sd) {
@@ -5211,17 +4801,18 @@ bool MakeAppContainerAllowSa(SECURITY_ATTRIBUTES& sa, PSECURITY_DESCRIPTOR& sd) 
 }
 
 DWORD WINAPI CalendarLaunchBrokerThread(LPVOID) {
+    HMODULE processModule = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = CalendarLaunchWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = processModule;
     wc.lpszClassName = kCalLaunchWindowClass;
     RegisterClassExW(&wc);
 
     // Hidden top-level window (not HWND_MESSAGE) so FindWindow works from SEH.
     g_calLaunchHwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW, kCalLaunchWindowClass, kCalLaunchWindowTitle, WS_POPUP,
-        0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
+        0, 0, 0, 0, nullptr, nullptr, processModule, nullptr);
     if (!g_calLaunchHwnd) {
         Wh_Log(L"Calendar launch broker window failed (%lu)", GetLastError());
     } else {
@@ -5257,7 +4848,7 @@ DWORD WINAPI CalendarLaunchBrokerThread(LPVOID) {
         DestroyWindow(g_calLaunchHwnd);
         g_calLaunchHwnd = nullptr;
     }
-    UnregisterClassW(kCalLaunchWindowClass, GetModuleHandleW(nullptr));
+    UnregisterClassW(kCalLaunchWindowClass, processModule);
     return 0;
 }
 
@@ -5288,8 +4879,7 @@ bool StartCalendarLaunchBroker() {
         Wh_Log(L"Calendar launch mapping already existed (ok)");
     }
 
-    g_calLaunchEvent =
-        CreateEventW(saPtr, FALSE, FALSE, kCalLaunchEventName);
+    g_calLaunchEvent = CreateEventW(saPtr, FALSE, FALSE, kCalLaunchEventName);
     if (!g_calLaunchEvent) {
         Wh_Log(L"CreateEvent for calendar launch failed (%lu)", GetLastError());
         CloseHandle(g_calLaunchMapping);
@@ -5331,9 +4921,9 @@ void StopCalendarLaunchBroker() {
         PostMessageW(g_calLaunchHwnd, WM_CLOSE, 0, 0);
     }
     if (g_calLaunchThread) {
-        // Never block uninit for long — ShellExecute can stall this thread.
-        if (WaitForSingleObject(g_calLaunchThread, 400) != WAIT_OBJECT_0) {
-            Wh_Log(L"Calendar launch broker thread still running — skipping wait");
+        const DWORD waited = WaitForSingleObject(g_calLaunchThread, 3000);
+        if (waited != WAIT_OBJECT_0) {
+            Wh_Log(L"Calendar launch broker thread wait result %lu", waited);
         }
         CloseHandle(g_calLaunchThread);
         g_calLaunchThread = nullptr;
@@ -5429,58 +5019,6 @@ bool RequestLaunchViaExplorerBroker(std::wstring const& path) {
     return RequestLaunchViaExplorerMapping(path);
 }
 
-bool LaunchViaTempCmdFile(std::wstring const& path,
-                          std::wstring const& directory) {
-    wchar_t tempDir[MAX_PATH]{};
-    if (!GetTempPathW(MAX_PATH, tempDir)) {
-        return false;
-    }
-    std::wstring cmdPath = tempDir;
-    cmdPath += L"wh-calweather-launch.cmd";
-
-    std::wstring body = L"@echo off\r\nstart \"\" ";
-    if (!directory.empty()) {
-        body += L"/D \"";
-        body += directory;
-        body += L"\" ";
-    }
-    body += L"\"";
-    body += path;
-    body += L"\"\r\n";
-
-    HANDLE file = CreateFileW(cmdPath.c_str(), GENERIC_WRITE, 0, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"Temp cmd create failed (%lu)", GetLastError());
-        return false;
-    }
-    // cmd.exe reads ANSI/system ACP for .cmd — write UTF-16 LE with BOM via
-    // WideChar only for ASCII-safe paths; fall back to UTF-8 bytes of path.
-    std::string narrow;
-    narrow.reserve(body.size());
-    for (wchar_t ch : body) {
-        narrow.push_back(ch < 128 ? static_cast<char>(ch) : '?');
-    }
-    DWORD written = 0;
-    const BOOL ok = WriteFile(file, narrow.data(),
-                              static_cast<DWORD>(narrow.size()), &written,
-                              nullptr);
-    CloseHandle(file);
-    if (!ok) {
-        return false;
-    }
-
-    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
-        nullptr, L"open", cmdPath.c_str(), nullptr, nullptr, SW_HIDE));
-    if (result <= 32) {
-        Wh_Log(L"Temp cmd ShellExecute failed (%lld)",
-               static_cast<long long>(result));
-        return false;
-    }
-    Wh_Log(L"Temp cmd launch requested");
-    return true;
-}
-
 void LaunchCalendarAppWithPath(std::wstring path) {
     if (g_shuttingDown.load() || path.empty()) {
         return;
@@ -5490,34 +5028,17 @@ void LaunchCalendarAppWithPath(std::wstring path) {
     AllowSetForegroundWindow(ASFW_ANY);
 
     if (LooksLikeLaunchUri(path)) {
-        LaunchViaUriBroker(path);
+        if (!LaunchViaUriBroker(path)) {
+            Wh_Log(L"URI launch failed for %s", path.c_str());
+        }
         return;
     }
 
-    const std::wstring directory = ParentDirectory(path);
-
-    // Trusted out-of-sandbox brokers first. In-process ShellExecute/CreateProcess
-    // from ShellExperienceHost often return success without actually starting a
-    // visible Win32 app — do not let those short-circuit the real brokers.
-    if (RequestLaunchViaExplorerBroker(path)) {
-        return;
+    if (!RequestLaunchViaExplorerBroker(path)) {
+        Wh_Log(L"Explorer broker launch failed for %s — ensure the mod is "
+               L"loaded in explorer.exe",
+               path.c_str());
     }
-    if (LaunchViaDesktopShell(path, directory) ||
-        LaunchViaExplorerToken(path, directory) || LaunchViaExplorer(path)) {
-        return;
-    }
-
-    Wh_Log(L"Primary brokers failed — trying in-process fallbacks for %s",
-           path.c_str());
-    if (LaunchViaTempCmdFile(path, directory) ||
-        LaunchViaShellExecuteCmdStart(path, directory) ||
-        LaunchViaRundll32(path) || LaunchViaCmdStart(path, directory) ||
-        LaunchViaShellExecute(path, directory) ||
-        LaunchViaCreateProcess(path, directory)) {
-        Wh_Log(L"In-process fallback reported success (may still be sandboxed)");
-        return;
-    }
-    Wh_Log(L"All calendar app launch methods failed for %s", path.c_str());
 }
 
 std::atomic<ULONGLONG> g_lastCalendarLaunchTick{0};
@@ -5543,8 +5064,6 @@ void RequestCalendarAppLaunch() {
     Wh_Log(L"Calendar launch requested: %s", path.c_str());
     LaunchCalendarAppWithPath(path);
 }
-
-void LaunchCalendarApp() { RequestCalendarAppLaunch(); }
 
 wuxc::Viewbox MakeCalendarAppIcon(double size, wuxm::Brush const& brush) {
     // Simple calendar page outline — reads cleanly at ~12px control size.
@@ -6299,11 +5818,6 @@ void UnwrapCalendarLaunchHost(wuxc::Grid const& section) {
     } catch (...) {
         Wh_Log(L"UnwrapCalendarLaunchHost error %08X", winrt::to_hresult());
     }
-}
-
-// Back-compat name used by older call sites / mental model.
-void RepairLegacyCalendarLaunchHost(wuxc::Grid const& section) {
-    UnwrapCalendarLaunchHost(section);
 }
 
 void ClearExpandLaunchTransform(wuxc::Button const& expand) {
@@ -8873,20 +8387,26 @@ bool RunOnMountDispatcher(ws::DispatcherQueue const& dispatcherQueue,
         return true;
     }
 
+    // No dispatcher and not on the UI thread — do not touch XAML off-thread.
+    if (!dispatcherQueue && !coreDispatcher) {
+        Wh_Log(L"Dispatcher unmount skipped — no dispatcher available");
+        return false;
+    }
+
     HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!done) {
-        fn();
+        Wh_Log(L"Dispatcher unmount skipped — CreateEvent failed");
         return false;
     }
 
     struct State {
         std::function<void()> fn;
-        HANDLE done = nullptr;
+        std::shared_ptr<void> doneHolder;
         std::atomic<bool> ran{false};
     };
     auto state = std::make_shared<State>();
     state->fn = fn;
-    state->done = done;
+    state->doneHolder = std::shared_ptr<void>(done, &::CloseHandle);
 
     auto invoke = [state]() {
         if (state->ran.exchange(true)) {
@@ -8898,7 +8418,9 @@ bool RunOnMountDispatcher(ws::DispatcherQueue const& dispatcherQueue,
             }
         } catch (...) {
         }
-        SetEvent(state->done);
+        if (auto holder = state->doneHolder) {
+            SetEvent(static_cast<HANDLE>(holder.get()));
+        }
     };
 
     bool queued = false;
@@ -8922,17 +8444,21 @@ bool RunOnMountDispatcher(ws::DispatcherQueue const& dispatcherQueue,
         }
     }
 
-    if (queued) {
-        // Keep uninit snappy — 2s waits stacked across mounts felt "stuck".
-        const DWORD wait = WaitForSingleObject(done, 750);
-        if (wait != WAIT_OBJECT_0 && !state->ran.load()) {
-            Wh_Log(L"Dispatcher unmount timed out — trying inline");
-            invoke();
-        }
-    } else {
-        invoke();
+    if (!queued) {
+        state->doneHolder.reset();
+        Wh_Log(L"Dispatcher unmount skipped — enqueue failed");
+        return false;
     }
-    CloseHandle(done);
+
+    // Keep uninit snappy — never fall back to off-thread XAML after timeout.
+    // Retain a local ref so CloseHandle cannot race WaitForSingleObject.
+    auto waitHolder = state->doneHolder;
+    const DWORD wait = WaitForSingleObject(done, 750);
+    state->doneHolder.reset();
+    waitHolder.reset();
+    if (wait != WAIT_OBJECT_0 && !state->ran.load()) {
+        Wh_Log(L"Dispatcher unmount timed out — abandoning (not off-thread)");
+    }
     return state->ran.load();
 }
 
@@ -9711,6 +9237,8 @@ BOOL Wh_ModInit() {
     }
 
     // explorer.exe only brokers calendar-app launches out of the flyout host.
+    // Always start the broker — gating on settings left FindWindow failing
+    // when explorer loaded before the path was visible to this process.
     if (g_target == Target::Explorer) {
         return StartCalendarLaunchBroker() ? TRUE : FALSE;
     }
