@@ -365,13 +365,11 @@ static void LoadSettings() {
     g_percentageLabelFont            = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabelFont");
     g_percentageLabelSize            = Wh_GetIntSetting(L"customRendering.percentageLabelSize");
 
-    PCWSTR percentageLabelMode = Wh_GetStringSetting(L"customRendering.percentageLabel");
+    WindhawkUtils::StringSetting percentageLabelMode = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabel");
     
     if (wcscmp(percentageLabelMode, L"usedSpace") == 0) g_percentageLabel = 1;
     else if (wcscmp(percentageLabelMode, L"freeSpace") == 0) g_percentageLabel = 2;
     else g_percentageLabel = 0;
-
-    Wh_FreeStringSetting(percentageLabelMode);
 
     if (g_heightFactor > 100) g_heightFactor = 100;
     else if (g_heightFactor < 0) g_heightFactor = 0;
@@ -492,8 +490,6 @@ static void DrawPercentageLabel(
     COLORREF oldColor = SetTextColor(hdc, color);
     int oldBkMode = SetBkMode(hdc, TRANSPARENT);
     
-    SelectObject(hdc, font);
-    SetTextColor(hdc, color);
     DrawTextW(hdc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
     SetBkMode(hdc, oldBkMode);
