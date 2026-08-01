@@ -19,9 +19,9 @@
 /*
 # Windows Animations
 
-Welcome to **Windows Animations**, the ultimate lightweight window transition suite for your desktop. Built from the ground up to deliver breathtaking, cinematic window animations without sacrificing a single frame of system performance. 
+Welcome to **Windows Animations**, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. 
 
-By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and absolute minimal to zero latency execution.
+By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and seamless execution.
 
 ## ✨ Key Features
 
@@ -51,7 +51,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
   * **After:**
     
     ![Alt Tab Switch After](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif)
-* **🛡️ Rock-Solid Stability:** Features flawless lifecycle management for System Tray apps (like Discord, Steam, etc.)—guaranteeing zero ghosting and no stuck transparent windows.
+* **🛡️ Rock-Solid Stability:** Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency.
 
 ## ⚙️ Customization & Settings
 
@@ -449,9 +449,12 @@ std::wstring GetProcessNameCached(HWND hWnd) {
     return procNameLower;
 }
 void EnsureWinEventThreadStarted() {
+    if (g_unloading.load(std::memory_order_relaxed)) return;
     if (!g_switchAnimation.load(std::memory_order_relaxed)) return;
     bool expected = false;
     if (g_winEventThreadStarted.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        if (g_unloading.load(std::memory_order_relaxed)) return;
         g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
     }
 }
@@ -464,9 +467,6 @@ static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     if (ContainsClass(cls, kAlwaysExcludedClasses) || (!forSwitch && ContainsClass(cls, kGdiExcludedClasses))) return false;
     RECT r{};
     bool isMain = GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
-    if (isMain && !forSwitch) {
-        EnsureWinEventThreadStarted();
-    }
     return isMain;
 }
 static bool UseSafeClose(HWND hWnd) { return ContainsClass(GetClassNameStr(hWnd), kSafeCloseClasses); }
@@ -1728,16 +1728,22 @@ void StopSwitchThreads() {
         g_hAltTabThread = NULL;
     }
     
-    if (g_hWinEventThread) {
-        DWORD tid = GetThreadId(g_hWinEventThread);
+    HANDLE hWinEvent = NULL;
+    {
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        hWinEvent = g_hWinEventThread;
+        g_hWinEventThread = NULL;
+    }
+    
+    if (hWinEvent) {
+        DWORD tid = GetThreadId(hWinEvent);
         if (tid) {
             while (!PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
-                if (WaitForSingleObject(g_hWinEventThread, 10) != WAIT_TIMEOUT) break;
+                if (WaitForSingleObject(hWinEvent, 10) != WAIT_TIMEOUT) break;
             }
         }
-        WaitForSingleObject(g_hWinEventThread, 2000);
-        CloseHandle(g_hWinEventThread);
-        g_hWinEventThread = NULL;
+        WaitForSingleObject(hWinEvent, 2000);
+        CloseHandle(hWinEvent);
         g_winEventThreadStarted.store(false, std::memory_order_relaxed);
     }
 }
