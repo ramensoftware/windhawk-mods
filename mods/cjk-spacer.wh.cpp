@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods
-// @version         0.1.24
+// @version         0.1.25
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -94,22 +94,19 @@ hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. Connection attempts are scheduled outside the Windows loader
-path; a single-flight worker retains requests that arrive while it is running,
-tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
-and retries only the connection that was lost. The worker pins the mod image
-until `FreeLibraryAndExitThread`, so it cannot execute unloaded mod code.
-In addition to the XAML DLL load hook, creation of the Explorer/taskbar XAML
-host windows is used as an independent initialization trigger, so a module
-loaded through a static import, delay-load helper, or lower-level loader path
-still gets a connection attempt after an Explorer restart.
-If a connection attempt is denied or otherwise fails, host-window creation does
-not retry it repeatedly; a newly loaded XAML module or an established
-connection being disconnected provides the next retry opportunity.
+  path; a single-flight worker retains requests that arrive while it is running,
+  tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
+  and retries only the connection that was lost. The worker pins the mod image
+  until `FreeLibraryAndExitThread`, so it cannot execute unloaded mod code.
+  `Wh_ModAfterInit` covers XAML modules that are already loaded, while the
+  `LoadLibraryExW` hook covers modules loaded later, including the
+  `CoreMessagingXP.dll` static-import path used by
+  `Microsoft.Internal.FrameworkUdk.dll`.
+  If a connection attempt is denied or otherwise fails, a newly loaded XAML
+  module or an established connection being disconnected provides the next
+  retry opportunity.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, enabling this path can show its confirmation dialog.
-Each reload switches to a new modern-UI generation, so detached workers and
-watcher callbacks from an older load cannot reuse its connection state.
-
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
 flyouts hosted by `StartMenuExperienceHost.exe`, `SearchHost.exe`, or
 `ShellExperienceHost.exe` are outside its scope.
@@ -490,12 +487,14 @@ constexpr UINT kUnknownMenuItemIndex = static_cast<UINT>(-1);
 
 std::mutex g_rewrittenMenuItemsMutex;
 std::vector<RewrittenMenuItem> g_rewrittenMenuItems;
+std::atomic_uint g_rewrittenMenuItemCount{0};
 thread_local unsigned int g_classicPopupMenuDepth = 0;
 thread_local HMENU g_classicPopupRootMenu = nullptr;
 thread_local bool g_restoringClassicMenuText = false;
 
 std::shared_mutex g_createdClassicPopupMenusMutex;
 std::unordered_set<HMENU> g_createdClassicPopupMenus;
+std::atomic_uint g_createdClassicPopupMenuCount{0};
 
 constexpr unsigned int kMaxMenuDepth = 16;
 
@@ -582,12 +581,31 @@ HMENU WINAPI CreatePopupMenuHook() {
     if (menu) {
         std::lock_guard<std::shared_mutex> guard(
             g_createdClassicPopupMenusMutex);
+        constexpr size_t kCreatedPopupCleanupThreshold = 256;
+        if (g_createdClassicPopupMenus.size() >=
+            kCreatedPopupCleanupThreshold) {
+            std::erase_if(g_createdClassicPopupMenus,
+                          [](HMENU candidate) {
+                              return !IsMenu(candidate);
+                          });
+        }
         g_createdClassicPopupMenus.insert(menu);
+        g_createdClassicPopupMenuCount.store(
+            static_cast<unsigned int>(
+                g_createdClassicPopupMenus.size()),
+            std::memory_order_relaxed);
     }
     return menu;
 }
 
 BOOL WINAPI DestroyMenuHook(HMENU menu) {
+    if (g_rewrittenMenuItemCount.load(
+            std::memory_order_relaxed) == 0 &&
+        g_createdClassicPopupMenuCount.load(
+            std::memory_order_relaxed) == 0) {
+        return g_originalDestroyMenu(menu);
+    }
+
     std::unordered_set<HMENU> menuTree;
     CollectMenuTreeHandles(menu, &menuTree);
 
@@ -605,6 +623,9 @@ BOOL WINAPI DestroyMenuHook(HMENU menu) {
                 ++iterator;
             }
         }
+        g_rewrittenMenuItemCount.store(
+            static_cast<unsigned int>(g_rewrittenMenuItems.size()),
+            std::memory_order_relaxed);
     }
 
     {
@@ -613,6 +634,10 @@ BOOL WINAPI DestroyMenuHook(HMENU menu) {
         for (HMENU handle : menuTree) {
             g_createdClassicPopupMenus.erase(handle);
         }
+        g_createdClassicPopupMenuCount.store(
+            static_cast<unsigned int>(
+                g_createdClassicPopupMenus.size()),
+            std::memory_order_relaxed);
     }
 
     const BOOL result = g_originalDestroyMenu(menu);
@@ -623,6 +648,10 @@ BOOL WINAPI DestroyMenuHook(HMENU menu) {
             for (auto& item : removedItems) {
                 g_rewrittenMenuItems.push_back(std::move(item));
             }
+            g_rewrittenMenuItemCount.store(
+                static_cast<unsigned int>(
+                    g_rewrittenMenuItems.size()),
+                std::memory_order_relaxed);
         }
 
         {
@@ -633,6 +662,10 @@ BOOL WINAPI DestroyMenuHook(HMENU menu) {
                     g_createdClassicPopupMenus.insert(handle);
                 }
             }
+            g_createdClassicPopupMenuCount.store(
+                static_cast<unsigned int>(
+                    g_createdClassicPopupMenus.size()),
+                std::memory_order_relaxed);
         }
     }
 
@@ -655,6 +688,8 @@ void ClearCreatedClassicPopupMenus() {
     std::lock_guard<std::shared_mutex> guard(
         g_createdClassicPopupMenusMutex);
     g_createdClassicPopupMenus.clear();
+    g_createdClassicPopupMenuCount.store(0,
+                                         std::memory_order_relaxed);
 }
 
 bool IsStringMenuFlags(UINT flags) {
@@ -877,6 +912,9 @@ void RememberRewrittenMenuItem(HMENU menu,
     g_rewrittenMenuItems.push_back(
         {g_classicPopupRootMenu, menu, index, std::move(original),
          std::move(spaced)});
+    g_rewrittenMenuItemCount.store(
+        static_cast<unsigned int>(g_rewrittenMenuItems.size()),
+        std::memory_order_relaxed);
 }
 
 void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
@@ -897,6 +935,9 @@ void RestoreRewrittenMenuItems(HMENU rootMenu = nullptr) {
                 }
             }
         }
+        g_rewrittenMenuItemCount.store(
+            static_cast<unsigned int>(g_rewrittenMenuItems.size()),
+            std::memory_order_relaxed);
     }
 
     ScopedBoolValue restoringGuard(g_restoringClassicMenuText, true);
@@ -1126,7 +1167,6 @@ GetWindowTheme_t g_getWindowTheme;
 GetThemeTextExtent_t g_originalGetThemeTextExtent;
 DrawThemeText_t g_originalDrawThemeText;
 DrawThemeTextEx_t g_originalDrawThemeTextEx;
-HMODULE g_loadedUxThemeModule;
 std::shared_mutex g_classicTooltipThemesMutex;
 struct ClassicTooltipTheme {
     unsigned int references = 0;
@@ -1140,17 +1180,6 @@ std::unordered_map<HTHEME, ClassicTooltipTheme> g_classicTooltipThemes;
 std::vector<HTHEME> g_discoveredClassicTooltipThemes;
 std::atomic_uint g_classicTooltipThemeCount{0};
 thread_local bool g_rewritingClassicTooltipText = false;
-
-void ClearUxThemeFunctionPointers() {
-    g_getWindowTheme = nullptr;
-    g_originalOpenThemeData = nullptr;
-    g_originalOpenThemeDataEx = nullptr;
-    g_originalOpenThemeDataForDpi = nullptr;
-    g_originalCloseThemeData = nullptr;
-    g_originalGetThemeTextExtent = nullptr;
-    g_originalDrawThemeText = nullptr;
-    g_originalDrawThemeTextEx = nullptr;
-}
 
 bool IsClassicTooltipThemeClassList(LPCWSTR classList) {
     if (!classList) {
@@ -1224,13 +1253,20 @@ bool UntrackClassicTooltipTheme(HTHEME theme) {
         return false;
     }
 
+    {
+        std::shared_lock<std::shared_mutex> guard(
+            g_classicTooltipThemesMutex);
+        if (!g_classicTooltipThemes.contains(theme)) {
+            return false;
+        }
+    }
+
     std::lock_guard<std::shared_mutex> guard(
         g_classicTooltipThemesMutex);
     const auto iterator = g_classicTooltipThemes.find(theme);
     if (iterator == g_classicTooltipThemes.end()) {
         return false;
     }
-
     if (--iterator->second.references == 0) {
         g_classicTooltipThemes.erase(iterator);
         g_classicTooltipThemeCount.store(
@@ -1301,11 +1337,8 @@ void DiscoverExistingClassicTooltipThemes() {
 }
 
 void CloseDiscoveredClassicTooltipThemes() {
-    if (!g_originalCloseThemeData) {
-        g_discoveredClassicTooltipThemes.clear();
-        return;
-    }
-
+    // Windhawk removes hooks before Wh_ModUninit. Use the linked import here,
+    // not the trampoline that was valid while the hooks were active.
     for (HTHEME theme : g_discoveredClassicTooltipThemes) {
         CloseThemeData(theme);
     }
@@ -1677,6 +1710,7 @@ struct ModernThreadState {
 thread_local std::optional<ModernThreadState>
     g_modernTextStatesForThread{std::in_place};
 
+extern std::atomic_bool g_stoppingModernUi;
 std::mutex g_modernTextStateThreadsMutex;
 std::unordered_map<DWORD, uint64_t> g_modernTextStateThreads;
 
@@ -1725,18 +1759,25 @@ void PruneModernTextStateThreadsLocked() {
     }
 }
 
-void RegisterModernTextStateThread() {
+bool RegisterModernTextStateThread() {
     uint64_t creationTime;
     if (!GetThreadCreationTime(GetCurrentThread(),
                                &creationTime)) {
         Wh_Log(L"Couldn't read the current thread creation time");
-        return;
+        return false;
     }
 
     std::lock_guard<std::mutex> guard(
         g_modernTextStateThreadsMutex);
+    // Pair the thread ID with its creation time. A dead UI thread's ID can be
+    // recycled by a new thread that also owns windows; without this fingerprint
+    // unload could dispatch cleanup into that unrelated thread.
+    if (g_stoppingModernUi.load(std::memory_order_acquire)) {
+        return false;
+    }
     PruneModernTextStateThreadsLocked();
     g_modernTextStateThreads[GetCurrentThreadId()] = creationTime;
+    return true;
 }
 
 void UnregisterModernTextStateThread() {
@@ -1747,13 +1788,12 @@ void UnregisterModernTextStateThread() {
 
 void RemoveModernTextState(ModernThreadState& threadState,
                            const ModernElementKey& key) {
-    const auto stateIterator = threadState.states.find(key);
-    if (stateIterator == threadState.states.end()) {
+    auto node = threadState.states.extract(key);
+    if (node.empty()) {
         return;
     }
 
-    stateIterator->second->Restore();
-    threadState.states.erase(stateIterator);
+    node.mapped()->Restore();
 }
 
 void CleanupModernTextStatesForCurrentThread() {
@@ -1761,12 +1801,13 @@ void CleanupModernTextStatesForCurrentThread() {
         return;
     }
 
-    for (const auto& [key, state] :
-         g_modernTextStatesForThread->states) {
-        state->Restore();
-    }
+    ModernTextStateMap states;
+    states.swap(g_modernTextStatesForThread->states);
     g_modernTextStatesForThread.reset();
     UnregisterModernTextStateThread();
+    for (const auto& [key, state] : states) {
+        state->Restore();
+    }
 }
 
 HMODULE AcquireCurrentModuleReference();
@@ -1783,22 +1824,15 @@ extern std::atomic_bool g_windowsUiXamlDiagnosticsConnected;
 extern std::atomic_bool g_microsoftUiXamlDiagnosticsConnected;
 extern std::atomic_bool g_windowsUiXamlDiagnosticsAttempted;
 extern std::atomic_bool g_microsoftUiXamlDiagnosticsAttempted;
-extern std::atomic_bool g_stoppingModernUi;
-extern std::atomic_uint64_t g_modernUiGeneration;
 extern thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics;
-extern thread_local uint64_t g_connectingXamlDiagnosticsGeneration;
-
-bool IsCurrentModernUiGeneration(uint64_t generation);
 
 class VisualTreeWatcher
     : public winrt::implements<VisualTreeWatcher,
                                IVisualTreeServiceCallback2,
                                winrt::non_agile> {
 public:
-    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site,
-                               uint64_t generation)
-        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()),
-          m_generation(generation) {
+    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
+        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
         m_moduleReference = AcquireCurrentModuleReference();
         if (!m_moduleReference) {
             winrt::throw_hresult(HRESULT_FROM_WIN32(GetLastError()));
@@ -1842,7 +1876,7 @@ public:
         }
     }
 
-    void UnadviseVisualTreeChange() {
+    void UnadviseVisualTreeChange() noexcept {
         m_unadviseRequested.store(true,
                                   std::memory_order_release);
         if (!m_advised.exchange(false,
@@ -1850,9 +1884,13 @@ public:
             return;
         }
 
-        const HRESULT result =
-            m_xamlDiagnostics.as<IVisualTreeService3>()
-                ->UnadviseVisualTreeChange(this);
+        HRESULT result;
+        try {
+            result = m_xamlDiagnostics.as<IVisualTreeService3>()
+                         ->UnadviseVisualTreeChange(this);
+        } catch (...) {
+            result = winrt::to_hresult();
+        }
         if (FAILED(result)) {
             Wh_Log(L"UnadviseVisualTreeChange failed: 0x%08X",
                    result);
@@ -1888,11 +1926,16 @@ private:
             std::make_unique<ModernTextState<Element, SourceAccess>>(
                 element);
         if (!state->Apply()) {
+            if (threadState.states.empty()) {
+                UnregisterModernTextStateThread();
+            }
             return false;
         }
 
-        if (threadState.states.empty()) {
-            RegisterModernTextStateThread();
+        if (threadState.states.empty() &&
+            !RegisterModernTextStateThread()) {
+            state->Restore();
+            return false;
         }
         threadState.states.emplace(key, std::move(state));
         return true;
@@ -1902,7 +1945,7 @@ private:
         ParentChildRelation,
         VisualElement element,
         VisualMutationType mutationType) override try {
-        if (!IsCurrentModernUiGeneration(m_generation)) {
+        if (g_stoppingModernUi.load(std::memory_order_acquire)) {
             return S_OK;
         }
 
@@ -1985,7 +2028,6 @@ private:
 
     winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
     HMODULE m_moduleReference = nullptr;
-    uint64_t m_generation;
     std::atomic_bool m_advised{false};
     std::atomic_bool m_unadviseRequested{false};
 };
@@ -1996,13 +2038,6 @@ std::optional<std::vector<winrt::com_ptr<VisualTreeWatcher>>>
         g_visualTreeWatchers{std::in_place};
 std::atomic_bool g_stoppingModernUi{false};
 std::atomic_uint64_t g_visualTreeWatcherGeneration;
-std::atomic_uint64_t g_modernUiGeneration{0};
-
-bool IsCurrentModernUiGeneration(uint64_t generation) {
-    return generation ==
-               g_modernUiGeneration.load(std::memory_order_acquire) &&
-           !g_stoppingModernUi.load(std::memory_order_acquire);
-}
 
 bool RemoveVisualTreeWatcher(VisualTreeWatcher* watcher) {
     std::lock_guard<std::mutex> guard(g_visualTreeWatchersMutex);
@@ -2059,12 +2094,6 @@ public:
 
         m_site.copy_from(site);
         if (!site) {
-            if (m_generation !=
-                g_modernUiGeneration.load(std::memory_order_acquire)) {
-                m_flavor = XamlDiagnosticsFlavor::None;
-                return S_OK;
-            }
-
             const XamlDiagnosticsFlavor disconnectedFlavor =
                 m_flavor;
             m_flavor = XamlDiagnosticsFlavor::None;
@@ -2086,11 +2115,6 @@ public:
             return S_OK;
         }
 
-        m_generation =
-            g_connectingXamlDiagnosticsGeneration != 0
-                ? g_connectingXamlDiagnosticsGeneration
-                : g_modernUiGeneration.load(
-                      std::memory_order_acquire);
         if (g_connectingXamlDiagnostics !=
             XamlDiagnosticsFlavor::None) {
             m_flavor = g_connectingXamlDiagnostics;
@@ -2104,14 +2128,13 @@ public:
         {
             std::lock_guard<std::mutex> guard(
                 g_visualTreeWatchersMutex);
-            if (!IsCurrentModernUiGeneration(m_generation) ||
+            if (g_stoppingModernUi.load(std::memory_order_acquire) ||
                 !g_visualTreeWatchers) {
                 return S_OK;
             }
 
             auto watcher =
-                winrt::make_self<VisualTreeWatcher>(
-                    m_site, m_generation);
+                winrt::make_self<VisualTreeWatcher>(m_site);
             g_visualTreeWatchers->push_back(watcher);
             g_visualTreeWatcherGeneration.fetch_add(
                 1, std::memory_order_release);
@@ -2134,7 +2157,6 @@ private:
     winrt::com_ptr<IUnknown> m_site;
     winrt::com_ptr<VisualTreeWatcher> m_watcher;
     XamlDiagnosticsFlavor m_flavor = XamlDiagnosticsFlavor::None;
-    uint64_t m_generation = 0;
 };
 
 template <typename Class>
@@ -2210,17 +2232,10 @@ std::atomic_bool g_xamlDiagnosticsRequestPending{false};
 thread_local bool g_loadingXamlDiagnostics;
 thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics =
     XamlDiagnosticsFlavor::None;
-thread_local uint64_t g_connectingXamlDiagnosticsGeneration = 0;
-
-struct ModernDiagnosticsWorkerContext {
-    HMODULE module;
-    uint64_t generation;
-};
 
 HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
                               LPCWSTR connectionPrefix,
-                              XamlDiagnosticsFlavor flavor,
-                              uint64_t generation) {
+                              XamlDiagnosticsFlavor flavor) {
     const auto initialize =
         reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
             GetProcAddress(xamlModule,
@@ -2244,7 +2259,7 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
 
     HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
     for (int index = 1; index <= 10000; ++index) {
-        if (!IsCurrentModernUiGeneration(generation)) {
+        if (g_stoppingModernUi.load(std::memory_order_acquire)) {
             return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         }
 
@@ -2253,15 +2268,11 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
                      connectionPrefix, index);
         const XamlDiagnosticsFlavor previousFlavor =
             g_connectingXamlDiagnostics;
-        const uint64_t previousGeneration =
-            g_connectingXamlDiagnosticsGeneration;
         g_connectingXamlDiagnostics = flavor;
-        g_connectingXamlDiagnosticsGeneration = generation;
         result = initialize(
             connectionName, GetCurrentProcessId(), L"",
             modulePath, CLSID_CjkSpacerTap, nullptr);
         g_connectingXamlDiagnostics = previousFlavor;
-        g_connectingXamlDiagnosticsGeneration = previousGeneration;
         if (result != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
             break;
         }
@@ -2270,8 +2281,8 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
     return result;
 }
 
-void EnsureModernXamlDiagnostics(uint64_t generation) {
-    if (!IsCurrentModernUiGeneration(generation) ||
+void EnsureModernXamlDiagnostics() {
+    if (g_stoppingModernUi.load(std::memory_order_acquire) ||
         g_loadingXamlDiagnostics) {
         return;
     }
@@ -2280,7 +2291,7 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
 
     std::lock_guard<std::mutex> guard(
         g_xamlDiagnosticsInitializationMutex);
-    if (!IsCurrentModernUiGeneration(generation)) {
+    if (g_stoppingModernUi.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -2297,9 +2308,9 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"VisualDiagConnection",
-                XamlDiagnosticsFlavor::Windows, generation);
+                XamlDiagnosticsFlavor::Windows);
             if (SUCCEEDED(result) &&
-                IsCurrentModernUiGeneration(generation) &&
+                !g_stoppingModernUi.load(std::memory_order_acquire) &&
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire) >
                     watcherGeneration) {
@@ -2333,9 +2344,9 @@ void EnsureModernXamlDiagnostics(uint64_t generation) {
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"WinUIVisualDiagConnection",
-                XamlDiagnosticsFlavor::Microsoft, generation);
+                XamlDiagnosticsFlavor::Microsoft);
             if (SUCCEEDED(result) &&
-                IsCurrentModernUiGeneration(generation) &&
+                !g_stoppingModernUi.load(std::memory_order_acquire) &&
                 g_visualTreeWatcherGeneration.load(
                     std::memory_order_acquire) >
                     watcherGeneration) {
@@ -2372,15 +2383,12 @@ bool NeedsXamlDiagnosticsConnection() {
 
 void RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor retryFlavor) {
-    const uint64_t generation =
-        g_modernUiGeneration.load(std::memory_order_acquire);
-    if (!IsCurrentModernUiGeneration(generation)) {
+    if (g_stoppingModernUi.load(std::memory_order_acquire)) {
         return;
     }
 
     // A new XAML module load or a previously established connection being
-    // torn down is an explicit retry opportunity. Window creation alone must
-    // not keep retrying a connection another diagnostics tool denied.
+    // torn down is an explicit retry opportunity.
     if (retryFlavor == XamlDiagnosticsFlavor::Windows) {
         g_windowsUiXamlDiagnosticsAttempted.store(
             false, std::memory_order_release);
@@ -2389,9 +2397,9 @@ void RequestModernXamlDiagnosticsInitialization(
             false, std::memory_order_release);
     }
 
-    // Host-window creation can be noisy. Once all currently loaded XAML
-    // diagnostics connections are established, avoid creating another worker
-    // until SetSite(nullptr) explicitly marks one as disconnected.
+    // Once all currently loaded XAML diagnostics connections are established,
+    // avoid creating another worker until SetSite(nullptr) explicitly marks
+    // one as disconnected.
     if (!NeedsXamlDiagnosticsConnection()) {
         return;
     }
@@ -2411,44 +2419,30 @@ void RequestModernXamlDiagnosticsInitialization(
     // until the worker exits through FreeLibraryAndExitThread.
     HMODULE module = AcquireCurrentModuleReference();
     if (!module) {
-        if (IsCurrentModernUiGeneration(generation)) {
+        if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
             g_xamlDiagnosticsWorkerRunning.store(
                 false, std::memory_order_release);
+            Wh_Log(L"Couldn't retain the mod for XAML diagnostics");
         }
-        Wh_Log(L"Couldn't retain the mod for XAML diagnostics");
         return;
     }
 
-    auto context = std::unique_ptr<ModernDiagnosticsWorkerContext>(
-        new (std::nothrow) ModernDiagnosticsWorkerContext{
-            module, generation});
-    if (!context) {
-        g_xamlDiagnosticsWorkerRunning.store(
-            false, std::memory_order_release);
-        FreeLibrary(module);
-        Wh_Log(L"Couldn't allocate the XAML diagnostics context");
-        return;
-    }
     HANDLE thread = CreateThread(
         nullptr, 0,
         [](LPVOID parameter) -> DWORD {
-            auto context = std::unique_ptr<ModernDiagnosticsWorkerContext>(
-                static_cast<ModernDiagnosticsWorkerContext*>(parameter));
-            const HMODULE module = context->module;
-            const uint64_t generation = context->generation;
-            context.reset();
+            const HMODULE module = static_cast<HMODULE>(parameter);
             const HRESULT initializeResult =
                 CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            while (IsCurrentModernUiGeneration(generation) &&
+            while (!g_stoppingModernUi.load(std::memory_order_acquire) &&
                    g_xamlDiagnosticsRequestPending.exchange(
                        false, std::memory_order_acq_rel)) {
-                EnsureModernXamlDiagnostics(generation);
+                EnsureModernXamlDiagnostics();
             }
             if (SUCCEEDED(initializeResult)) {
                 CoUninitialize();
             }
 
-            if (IsCurrentModernUiGeneration(generation)) {
+            if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
                 g_xamlDiagnosticsWorkerRunning.store(
                     false, std::memory_order_release);
                 if (g_xamlDiagnosticsRequestPending.load(
@@ -2458,21 +2452,19 @@ void RequestModernXamlDiagnosticsInitialization(
             }
             FreeLibraryAndExitThread(module, 0);
         },
-        context.get(), 0, nullptr);
+        module, 0, nullptr);
     if (!thread) {
         const DWORD error = GetLastError();
-        context.reset();
-        if (IsCurrentModernUiGeneration(generation)) {
+        if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
             g_xamlDiagnosticsWorkerRunning.store(
                 false, std::memory_order_release);
+            Wh_Log(L"Couldn't create the XAML diagnostics thread: %u",
+                   error);
         }
         FreeLibrary(module);
-        Wh_Log(L"Couldn't create the XAML diagnostics thread: %u",
-               error);
         return;
     }
 
-    context.release();
     CloseHandle(thread);
 }
 
@@ -2545,12 +2537,6 @@ HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
     return module;
 }
 
-bool IsTextualWindowClassName(LPCWSTR className) {
-    return className &&
-           (reinterpret_cast<ULONG_PTR>(className) &
-            ~static_cast<ULONG_PTR>(0xFFFF)) != 0;
-}
-
 bool IsModernXamlHostClassName(LPCWSTR className) {
     return className &&
            (_wcsicmp(
@@ -2559,142 +2545,6 @@ bool IsModernXamlHostClassName(LPCWSTR className) {
             _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
             _wcsicmp(
                 className, L"XamlExplorerHostIslandWindow_WASDK") == 0);
-}
-
-bool IsModernXamlHostWindow(HWND window,
-                            HWND parent,
-                            LPCWSTR className) {
-    if (!window || !IsTextualWindowClassName(className)) {
-        return false;
-    }
-
-    if (_wcsicmp(
-            className,
-            L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
-        wchar_t parentClassName[64];
-        return parent &&
-               GetClassNameW(
-                   parent, parentClassName, ARRAYSIZE(parentClassName)) > 0 &&
-               _wcsicmp(parentClassName, L"Shell_TrayWnd") == 0;
-    }
-
-    return IsModernXamlHostClassName(className);
-}
-
-void OnModernXamlHostWindowCreated(HWND window,
-                                   HWND parent,
-                                   LPCWSTR className,
-                                   LPCWSTR source) {
-    if (!g_modernUiText.load(std::memory_order_relaxed) ||
-        !IsModernXamlHostWindow(window, parent, className)) {
-        return;
-    }
-
-    Wh_Log(L"Modern XAML initialization requested by %s (%s)",
-           source, className);
-    // Window creation is an independent trigger from LoadLibraryExW. It also
-    // covers XAML modules mapped through static imports, delay-load helpers,
-    // or lower-level loader calls that don't pass through our loader hook.
-    RequestModernXamlDiagnosticsInitialization();
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t g_originalCreateWindowExW;
-
-HWND WINAPI CreateWindowExWHook(DWORD exStyle,
-                                LPCWSTR className,
-                                LPCWSTR windowName,
-                                DWORD style,
-                                int x,
-                                int y,
-                                int width,
-                                int height,
-                                HWND parent,
-                                HMENU menu,
-                                HINSTANCE instance,
-                                PVOID parameter) {
-    HWND window = g_originalCreateWindowExW(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter);
-    OnModernXamlHostWindowCreated(
-        window, parent, className, L"CreateWindowExW");
-    return window;
-}
-
-using CreateWindowInBand_t = HWND(WINAPI*)(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band);
-CreateWindowInBand_t g_originalCreateWindowInBand;
-
-HWND WINAPI CreateWindowInBandHook(DWORD exStyle,
-                                    LPCWSTR className,
-                                    LPCWSTR windowName,
-                                    DWORD style,
-                                    int x,
-                                    int y,
-                                    int width,
-                                    int height,
-                                    HWND parent,
-                                    HMENU menu,
-                                    HINSTANCE instance,
-                                    PVOID parameter,
-                                    DWORD band) {
-    HWND window = g_originalCreateWindowInBand(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter, band);
-    OnModernXamlHostWindowCreated(
-        window, parent, className, L"CreateWindowInBand");
-    return window;
-}
-
-using CreateWindowInBandEx_t = HWND(WINAPI*)(
-    DWORD exStyle,
-    LPCWSTR className,
-    LPCWSTR windowName,
-    DWORD style,
-    int x,
-    int y,
-    int width,
-    int height,
-    HWND parent,
-    HMENU menu,
-    HINSTANCE instance,
-    PVOID parameter,
-    DWORD band,
-    DWORD typeFlags);
-CreateWindowInBandEx_t g_originalCreateWindowInBandEx;
-
-HWND WINAPI CreateWindowInBandExHook(DWORD exStyle,
-                                      LPCWSTR className,
-                                      LPCWSTR windowName,
-                                      DWORD style,
-                                      int x,
-                                      int y,
-                                      int width,
-                                      int height,
-                                      HWND parent,
-                                      HMENU menu,
-                                      HINSTANCE instance,
-                                      PVOID parameter,
-                                      DWORD band,
-                                      DWORD typeFlags) {
-    HWND window = g_originalCreateWindowInBandEx(
-        exStyle, className, windowName, style, x, y, width, height,
-        parent, menu, instance, parameter, band, typeFlags);
-    OnModernXamlHostWindowCreated(
-        window, parent, className, L"CreateWindowInBandEx");
-    return window;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -2777,7 +2627,6 @@ HWND FindWindowForThread(DWORD threadId) {
 
 void InitializeModernUi() {
     g_stoppingModernUi.store(true, std::memory_order_release);
-    g_modernUiGeneration.fetch_add(1, std::memory_order_acq_rel);
     g_windowsUiXamlDiagnosticsConnected.store(
         false, std::memory_order_release);
     g_microsoftUiXamlDiagnosticsConnected.store(
@@ -2871,113 +2720,97 @@ bool InstallHook(Function target,
     return true;
 }
 
+bool HookClassicMenus() {
+    return InstallHook(
+               CreatePopupMenu, CreatePopupMenuHook,
+               &g_originalCreatePopupMenu, L"CreatePopupMenu") &&
+           InstallHook(
+               DestroyMenu, DestroyMenuHook,
+               &g_originalDestroyMenu, L"DestroyMenu") &&
+           InstallHook(
+               InsertMenuW, InsertMenuWHook,
+               &g_originalInsertMenuW, L"InsertMenuW") &&
+           InstallHook(
+               AppendMenuW, AppendMenuWHook,
+               &g_originalAppendMenuW, L"AppendMenuW") &&
+           InstallHook(
+               ModifyMenuW, ModifyMenuWHook,
+               &g_originalModifyMenuW, L"ModifyMenuW") &&
+           InstallHook(
+               InsertMenuItemW, InsertMenuItemWHook,
+               &g_originalInsertMenuItemW, L"InsertMenuItemW") &&
+           InstallHook(
+               SetMenuItemInfoW, SetMenuItemInfoWHook,
+               &g_originalSetMenuItemInfoW, L"SetMenuItemInfoW") &&
+           InstallHook(
+               TrackPopupMenu, TrackPopupMenuHook,
+               &g_originalTrackPopupMenu, L"TrackPopupMenu") &&
+           InstallHook(
+               TrackPopupMenuEx, TrackPopupMenuExHook,
+               &g_originalTrackPopupMenuEx, L"TrackPopupMenuEx");
+}
+
 bool HookClassicTooltipThemeDrawing() {
     HMODULE themeModule = GetModuleHandleW(L"uxtheme.dll");
     if (!themeModule) {
-        themeModule = LoadLibraryExW(
-            L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (themeModule) {
-            g_loadedUxThemeModule = themeModule;
-        }
-    }
-    if (!themeModule) {
-        Wh_Log(L"Couldn't load uxtheme.dll");
+        Wh_Log(L"Couldn't find linked uxtheme.dll");
         return false;
     }
 
-    bool hooked = false;
-
     g_getWindowTheme = reinterpret_cast<GetWindowTheme_t>(
         GetProcAddress(themeModule, "GetWindowTheme"));
-    if (!g_getWindowTheme) {
-        Wh_Log(L"Couldn't find GetWindowTheme");
-    }
-
     const auto openThemeData =
         reinterpret_cast<OpenThemeData_t>(
             GetProcAddress(themeModule, "OpenThemeData"));
-    if (openThemeData) {
-        hooked |= InstallHook(
-            openThemeData, OpenThemeDataHook,
-            &g_originalOpenThemeData, L"OpenThemeData");
-    } else {
-        Wh_Log(L"Couldn't find OpenThemeData");
-    }
-
     const auto openThemeDataEx =
         reinterpret_cast<OpenThemeDataEx_t>(
             GetProcAddress(themeModule, "OpenThemeDataEx"));
-    if (openThemeDataEx) {
-        hooked |= InstallHook(
-            openThemeDataEx, OpenThemeDataExHook,
-            &g_originalOpenThemeDataEx, L"OpenThemeDataEx");
-    } else {
-        Wh_Log(L"Couldn't find OpenThemeDataEx");
-    }
-
     const auto openThemeDataForDpi =
         reinterpret_cast<OpenThemeDataForDpi_t>(
             GetProcAddress(themeModule, "OpenThemeDataForDpi"));
-    if (openThemeDataForDpi) {
-        hooked |= InstallHook(
-            openThemeDataForDpi, OpenThemeDataForDpiHook,
-            &g_originalOpenThemeDataForDpi,
-            L"OpenThemeDataForDpi");
-    } else {
-        Wh_Log(L"Couldn't find OpenThemeDataForDpi");
-    }
-
     const auto closeThemeData =
         reinterpret_cast<CloseThemeData_t>(
             GetProcAddress(themeModule, "CloseThemeData"));
-    if (closeThemeData) {
-        hooked |= InstallHook(
-            closeThemeData, CloseThemeDataHook,
-            &g_originalCloseThemeData, L"CloseThemeData");
-    } else {
-        Wh_Log(L"Couldn't find CloseThemeData");
-    }
-
     const auto getThemeTextExtent =
         reinterpret_cast<GetThemeTextExtent_t>(
             GetProcAddress(themeModule, "GetThemeTextExtent"));
-    if (getThemeTextExtent) {
-        hooked |= InstallHook(
-            getThemeTextExtent, GetThemeTextExtentHook,
-            &g_originalGetThemeTextExtent,
-            L"GetThemeTextExtent");
-    } else {
-        Wh_Log(L"Couldn't find GetThemeTextExtent");
-    }
-
     const auto drawThemeText =
         reinterpret_cast<DrawThemeText_t>(
             GetProcAddress(themeModule, "DrawThemeText"));
-    if (drawThemeText) {
-        hooked |= InstallHook(
-            drawThemeText, DrawThemeTextHook,
-            &g_originalDrawThemeText, L"DrawThemeText");
-    } else {
-        Wh_Log(L"Couldn't find DrawThemeText");
-    }
-
     const auto drawThemeTextEx =
         reinterpret_cast<DrawThemeTextEx_t>(
             GetProcAddress(themeModule, "DrawThemeTextEx"));
-    if (drawThemeTextEx) {
-        hooked |= InstallHook(
-            drawThemeTextEx, DrawThemeTextExHook,
-            &g_originalDrawThemeTextEx, L"DrawThemeTextEx");
-    } else {
-        Wh_Log(L"Couldn't find DrawThemeTextEx");
+
+    if (!g_getWindowTheme || !openThemeData || !openThemeDataEx ||
+        !openThemeDataForDpi || !closeThemeData ||
+        !getThemeTextExtent || !drawThemeText || !drawThemeTextEx) {
+        Wh_Log(L"Couldn't resolve all required uxtheme functions");
+        return false;
     }
 
-    if (!hooked && g_loadedUxThemeModule) {
-        FreeLibrary(g_loadedUxThemeModule);
-        g_loadedUxThemeModule = nullptr;
-        ClearUxThemeFunctionPointers();
-    }
-    return hooked;
+    return InstallHook(
+               openThemeData, OpenThemeDataHook,
+               &g_originalOpenThemeData, L"OpenThemeData") &&
+           InstallHook(
+               openThemeDataEx, OpenThemeDataExHook,
+               &g_originalOpenThemeDataEx, L"OpenThemeDataEx") &&
+           InstallHook(
+               openThemeDataForDpi, OpenThemeDataForDpiHook,
+               &g_originalOpenThemeDataForDpi,
+               L"OpenThemeDataForDpi") &&
+           InstallHook(
+               closeThemeData, CloseThemeDataHook,
+               &g_originalCloseThemeData, L"CloseThemeData") &&
+           InstallHook(
+               getThemeTextExtent, GetThemeTextExtentHook,
+               &g_originalGetThemeTextExtent,
+               L"GetThemeTextExtent") &&
+           InstallHook(
+               drawThemeText, DrawThemeTextHook,
+               &g_originalDrawThemeText, L"DrawThemeText") &&
+           InstallHook(
+               drawThemeTextEx, DrawThemeTextExHook,
+               &g_originalDrawThemeTextEx, L"DrawThemeTextEx");
 }
 
 bool ReadUnicodeLettersAndDigitsSetting() {
@@ -3018,71 +2851,16 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    bool installedAnyHook = false;
-
-    if (classicMenusEnabled) {
-        installedAnyHook |= InstallHook(
-            CreatePopupMenu, CreatePopupMenuHook,
-            &g_originalCreatePopupMenu, L"CreatePopupMenu");
-        installedAnyHook |= InstallHook(
-            DestroyMenu, DestroyMenuHook,
-            &g_originalDestroyMenu, L"DestroyMenu");
-        installedAnyHook |= InstallHook(
-            InsertMenuW, InsertMenuWHook, &g_originalInsertMenuW,
-            L"InsertMenuW");
-        installedAnyHook |= InstallHook(
-            AppendMenuW, AppendMenuWHook, &g_originalAppendMenuW,
-            L"AppendMenuW");
-        installedAnyHook |= InstallHook(
-            ModifyMenuW, ModifyMenuWHook, &g_originalModifyMenuW,
-            L"ModifyMenuW");
-        installedAnyHook |= InstallHook(
-            InsertMenuItemW, InsertMenuItemWHook,
-            &g_originalInsertMenuItemW, L"InsertMenuItemW");
-        installedAnyHook |= InstallHook(
-            SetMenuItemInfoW, SetMenuItemInfoWHook,
-            &g_originalSetMenuItemInfoW, L"SetMenuItemInfoW");
-        installedAnyHook |= InstallHook(
-            TrackPopupMenu, TrackPopupMenuHook,
-            &g_originalTrackPopupMenu, L"TrackPopupMenu");
-        installedAnyHook |= InstallHook(
-            TrackPopupMenuEx, TrackPopupMenuExHook,
-            &g_originalTrackPopupMenuEx, L"TrackPopupMenuEx");
+    if (classicMenusEnabled && !HookClassicMenus()) {
+        return FALSE;
     }
 
-    if (classicTooltipsEnabled) {
-        installedAnyHook |= HookClassicTooltipThemeDrawing();
+    if (classicTooltipsEnabled &&
+        !HookClassicTooltipThemeDrawing()) {
+        return FALSE;
     }
 
     if (modernUiTextEnabled) {
-        InitializeModernUi();
-        installedAnyHook |= InstallHook(
-            CreateWindowExW, CreateWindowExWHook,
-            &g_originalCreateWindowExW, L"CreateWindowExW");
-
-        HMODULE user32Module = GetModuleHandleW(L"user32.dll");
-        if (user32Module) {
-            const auto createWindowInBand =
-                reinterpret_cast<CreateWindowInBand_t>(
-                    GetProcAddress(user32Module, "CreateWindowInBand"));
-            if (createWindowInBand) {
-                installedAnyHook |= InstallHook(
-                    createWindowInBand, CreateWindowInBandHook,
-                    &g_originalCreateWindowInBand,
-                    L"CreateWindowInBand");
-            }
-
-            const auto createWindowInBandEx =
-                reinterpret_cast<CreateWindowInBandEx_t>(
-                    GetProcAddress(user32Module, "CreateWindowInBandEx"));
-            if (createWindowInBandEx) {
-                installedAnyHook |= InstallHook(
-                    createWindowInBandEx, CreateWindowInBandExHook,
-                    &g_originalCreateWindowInBandEx,
-                    L"CreateWindowInBandEx");
-            }
-        }
-
         HMODULE kernelBaseModule =
             GetModuleHandleW(L"kernelbase.dll");
         const auto loadLibraryExW =
@@ -3092,13 +2870,17 @@ BOOL Wh_ModInit() {
                                      "LoadLibraryExW"))
                 : nullptr;
         if (loadLibraryExW) {
-            installedAnyHook |= InstallHook(
-                loadLibraryExW, LoadLibraryExWHook,
-                &g_originalLoadLibraryExW,
-                L"kernelbase!LoadLibraryExW");
+            if (!InstallHook(
+                    loadLibraryExW, LoadLibraryExWHook,
+                    &g_originalLoadLibraryExW,
+                    L"kernelbase!LoadLibraryExW")) {
+                return FALSE;
+            }
         } else {
             Wh_Log(L"Couldn't find kernelbase!LoadLibraryExW");
+            return FALSE;
         }
+        InitializeModernUi();
     }
 
     Wh_Log(L"Initialized (classicMenus=%d, "
@@ -3106,9 +2888,7 @@ BOOL Wh_ModInit() {
            g_classicMenus.load(), g_classicTooltips.load(),
            g_modernUiText.load(),
            g_unicodeLettersAndDigits.load());
-    // The modern path can still initialize against XAML modules that are
-    // already loaded even if the late-load notification hook is unavailable.
-    return installedAnyHook || modernUiTextEnabled ? TRUE : FALSE;
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
@@ -3121,6 +2901,14 @@ void Wh_ModAfterInit() {
     }
 }
 
+void Wh_ModBeforeUninit() {
+    if (g_modernUiText.load(std::memory_order_relaxed)) {
+        // Stop new COM callbacks before Windhawk begins removing function
+        // hooks. UninitializeModernUi performs the owning-thread restoration.
+        g_stoppingModernUi.store(true, std::memory_order_release);
+    }
+}
+
 void Wh_ModUninit() {
     RestoreRewrittenMenuItems();
     ClearCreatedClassicPopupMenus();
@@ -3128,10 +2916,6 @@ void Wh_ModUninit() {
     ClearTrackedClassicTooltipThemes();
     if (g_modernUiText.load(std::memory_order_relaxed)) {
         UninitializeModernUi();
-    }
-    if (g_loadedUxThemeModule) {
-        FreeLibrary(g_loadedUxThemeModule);
-        g_loadedUxThemeModule = nullptr;
     }
     Wh_Log(L"Uninitialized");
 }
