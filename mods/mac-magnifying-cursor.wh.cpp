@@ -22,9 +22,9 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 - maxScalePercent: 400
   $name: Maximum size (%)
   $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
-- shakeThreshold: 800
+- shakeThreshold: 2500
   $name: Shake sensitivity threshold
-  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 600-1200)."
+  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 2500-3500)."
 - lerpSpeedUpPercent: 40
   $name: Enlarge speed (%)
   $description: "How fast the cursor expands (recommended: 20-40)."
