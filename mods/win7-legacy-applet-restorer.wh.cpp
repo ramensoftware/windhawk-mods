@@ -21,8 +21,10 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Printers and Faxes
 * HomeGroup (legacy, partially functional)
 
-Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 — "Company Settings Sync" ({98F2AB62-0E29-4E4C-8EE7-B542E66740B1}), Windows To Go, Infrared and Work Folders — when the corresponding settings are enabled.
+Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync",, Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
+## Screenshot of the Restored Applets
+
 ## Screenshot (for the HomeGroup and Network Connections applets)
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
@@ -30,9 +32,9 @@ The optional "Restore Classic Task Links" setting restores localized, classic ta
 ## Notes
 The mod has been tested on Windows 10 1809.
 
-**⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the same `ControlPanel\NameSpace` paths and hook the same registry APIs in explorer.exe, so enabling both at the same time produces duplicated entries and two overlapping virtual-registry layers. Enable only one of the two mods.
+**⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.
 
-The mod does not commit to restoring task links that open the Settings app instead of the classic Control Panel UI, because restoring such links would defeat the mod's purpose.
+The mod does not commit to restoring task links that open the Settings app instead of the classic Control Panel UI, because restoring such links would defeat the mod's purpose (contributing to the Control Panel restoration).
 
 ## Credits
 This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
