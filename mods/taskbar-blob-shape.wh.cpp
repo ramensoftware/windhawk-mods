@@ -53,12 +53,12 @@ outward with concave (outside) corner radii, ending in a flat top edge:
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
     $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Accepts 1, 2 (horizontal, vertical), or 4 values. Leave empty to disable.
-  - BottomRadius: '4'
-    $name: Bottom corner radius
-    $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
   - TopRadius: '8'
     $name: Top corner radius
     $description: The radius of the concave top flare corners. The blob shape extends upward and sideways by this amount. Set to 0 to disable the flare.
+  - BottomRadius: '4'
+    $name: Bottom corner radius
+    $description: The radius of the convex bottom corners of the blob shape (e.g., 4.0).
   $name: Blob Shape Settings
 - Colors:
   - BgOpacity: '1.0, 1.0'
@@ -120,6 +120,15 @@ struct BlobEntry {
     winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Path> blobShape;
     winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
     winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> anchor;
+
+    // Cached per-button element lookups, re-resolved when expired or
+    // detached, so hover/press events don't re-walk the subtree. bgElement
+    // is also the dedicated "element whose visual we hid" — decoupled from
+    // anchor (the sizing element), so a re-templated BackgroundElement can
+    // never leave the old one invisible after the delayed restore.
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> iconPanel;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> bgElement;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> indicatorElement;
     winrt::event_token sizeToken{};
     winrt::event_token unloadToken{};
     winrt::event_token loadedToken{};
@@ -151,7 +160,18 @@ struct BlobEntry {
     std::vector<winrt::Windows::UI::Color> lastColors;
 };
 std::mutex g_blobEntriesMutex;
-std::vector<std::shared_ptr<BlobEntry>> g_blobEntries;
+// BlobEntry holds a DispatcherTimer — a thread-affine XAML object — so this
+// container must never reach the CRT's global destructors: Wh_ModUninit does
+// not run when explorer.exe itself terminates, and destroying the vector on
+// the shutdown thread would release the timers off the UI thread after XAML
+// teardown. [[clang::no_destroy]] suppresses the destructor; the explicit
+// reset() in Wh_ModBeforeUninit remains the release path for mod unload.
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<BlobEntry>>>
+    g_blobEntries{std::in_place};
+// Taskbar grids whose pre-existing buttons were already swept (see
+// SweepExistingButtons). Weak refs only, so plain-global destruction at
+// process shutdown is safe. Guarded by g_blobEntriesMutex.
+std::vector<winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid>> g_sweptGrids;
 std::atomic<bool> g_unloading{false};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
@@ -538,22 +558,34 @@ bool InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes:
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
-void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings);
+struct BlobEntry;
+std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button);
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, std::shared_ptr<BlobEntry> const& entry, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings);
 
 // The single entry point for every trigger (hook, SizeChanged, Loaded, stale
-// Unloaded, theme change, settings change): resolves the button's IconPanel
-// once, reads the running indicator state from it, and applies the blob —
-// instead of each path doing its own recursive tree walks.
+// Unloaded, theme change, settings change, sibling sweep): resolves the
+// entry and its cached IconPanel, reads the running indicator state, and
+// applies the blob. The recursive tree walk only runs when the cached
+// element has expired or been detached.
 void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const Settings& localSettings) {
-    auto iconPanel = FindChildByName(button, L"IconPanel");
+    auto entry = FindOrCreateEntry(button);
+    if (!entry) return; // unloading
+
+    auto iconPanel = entry->iconPanel.get();
+    if (!iconPanel || !VisualTreeHelper::GetParent(iconPanel)) {
+        iconPanel = FindChildByName(button, L"IconPanel");
+        entry->iconPanel = iconPanel ? winrt::make_weak(iconPanel)
+                                     : winrt::weak_ref<FrameworkElement>{};
+    }
     if (!iconPanel) return;
+
     bool isActive = false;
     try {
         auto grp = GetVisualStateGroup(iconPanel, L"RunningIndicatorStates");
         auto st = grp ? grp.CurrentState() : nullptr;
         isActive = st && st.Name() == L"ActiveRunningIndicator";
     } catch (...) {}
-    EnsureBlobOnButton(button, iconPanel, isActive, localSettings);
+    EnsureBlobOnButton(button, entry, iconPanel, isActive, localSettings);
 }
 
 // Restores the BackgroundElement's visual a beat AFTER deactivation instead
@@ -568,40 +600,91 @@ void ScheduleBgRestore(std::shared_ptr<BlobEntry> const& entry) {
         auto timer = winrt::Windows::UI::Xaml::DispatcherTimer();
         timer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(100)));
         std::weak_ptr<BlobEntry> weakEntry = entry;
-        timer.Tick([weakEntry](auto const&, auto const&) {
+        timer.Tick([weakEntry](winrt::Windows::Foundation::IInspectable const& sender, auto const&) {
+            // Self-stopping via the sender: the timer must go quiet even if
+            // its entry is already gone — a started DispatcherTimer is kept
+            // alive by the dispatcher, and a tick after mod unload would
+            // land in an unloaded DLL.
+            if (auto t = sender.try_as<winrt::Windows::UI::Xaml::DispatcherTimer>()) {
+                try { t.Stop(); } catch (...) {}
+            }
             auto e = weakEntry.lock();
-            if (!e) return;
-            if (e->restoreTimer) e->restoreTimer.Stop(); // one-shot
-            if (g_unloading || !e->bgHidden) return;
-            // The anchor tracks the most recently hidden BackgroundElement.
-            if (auto anchor = e->anchor.get()) {
+            if (!e || g_unloading || !e->bgHidden) return;
+            // bgElement is the element whose visual was actually hidden.
+            if (auto bgEl = e->bgElement.get()) {
                 try {
-                    ElementCompositionPreview::GetElementVisual(anchor).IsVisible(true);
+                    ElementCompositionPreview::GetElementVisual(bgEl).IsVisible(true);
                 } catch (...) {}
             }
             e->bgHidden = false;
         });
         entry->restoreTimer = timer;
     }
-    entry->restoreTimer.Start();
+    // Start() on a running timer restarts its countdown; repeated
+    // inactive-state events (hover, press) must not push the restore back,
+    // so the delay stays fixed from the deactivation that armed it.
+    if (!entry->restoreTimer.IsEnabled()) entry->restoreTimer.Start();
+}
+
+// One-time per taskbar grid: applies blobs to the buttons that already
+// existed when this taskbar was first seen. Buttons only get a blob when an
+// event fires for them, so after a mid-session enable the active button
+// would stay bare until it next changes state — instead, the first event
+// from ANY button on a taskbar sweeps its realized siblings (the repeater's
+// visual children). Marked BEFORE sweeping, so the re-entrant RefreshBlob
+// calls can't recurse.
+void SweepExistingButtons(Grid const& grid, const Settings& localSettings) {
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        for (auto it = g_sweptGrids.begin(); it != g_sweptGrids.end(); ) {
+            auto g = it->get();
+            if (!g) { it = g_sweptGrids.erase(it); continue; }
+            if (g == grid) return; // already swept
+            ++it;
+        }
+        g_sweptGrids.push_back(winrt::make_weak(grid));
+    }
+
+    try {
+        FrameworkElement repeater = nullptr;
+        auto children = grid.Children();
+        for (uint32_t i = 0; i < children.Size(); i++) {
+            auto child = children.GetAt(i).try_as<FrameworkElement>();
+            if (child && child.Name() == L"TaskbarFrameRepeater") {
+                repeater = child;
+                break;
+            }
+        }
+        if (!repeater) return;
+
+        int count = VisualTreeHelper::GetChildrenCount(repeater);
+        for (int i = 0; i < count; i++) {
+            auto child = VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
+            if (child && winrt::get_class_name(child) == L"Taskbar.TaskListButton") {
+                try { RefreshBlob(child, localSettings); } catch (...) {}
+            }
+        }
+    } catch (...) {}
 }
 
 std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
-    std::vector<winrt::Windows::UI::Xaml::Shapes::Path> orphans;
+    std::vector<std::shared_ptr<BlobEntry>> orphans;
     std::shared_ptr<BlobEntry> result;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-        if (g_unloading) return nullptr; // callers bail on null
+        if (g_unloading || !g_blobEntries) return nullptr; // callers bail on null
 
         // Prune entries whose button died without an Unloaded (rare). Their
         // blob elements live in the RootGrid, so they must be removed
-        // explicitly. This runs on every lookup — the list is small since
+        // explicitly — and an armed restore timer must be stopped, since a
+        // started DispatcherTimer is kept alive by its dispatcher, not by
+        // the entry. This runs on every lookup — the list is small since
         // Unloaded drops entries eagerly.
-        for (auto it = g_blobEntries.begin(); it != g_blobEntries.end(); ) {
+        for (auto it = g_blobEntries->begin(); it != g_blobEntries->end(); ) {
             auto btn = (*it)->button.get();
             if (!btn) {
-                if (auto blob = (*it)->blobShape.get()) orphans.push_back(blob);
-                it = g_blobEntries.erase(it);
+                orphans.push_back(*it);
+                it = g_blobEntries->erase(it);
                 continue;
             }
             if (btn == button) result = *it;
@@ -610,18 +693,31 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
         if (!result) {
             result = std::make_shared<BlobEntry>();
             result->button = winrt::make_weak(button);
-            g_blobEntries.push_back(result);
+            g_blobEntries->push_back(result);
         }
     }
 
-    for (auto& blob : orphans) {
-        if (auto dispatcher = blob.Dispatcher()) {
-            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [blob]() {
+    for (auto& orphan : orphans) {
+        auto blob = orphan->blobShape.get();
+        auto dispatcher = blob ? blob.Dispatcher() : nullptr;
+        if (dispatcher) {
+            // Stop the timer on its own UI thread, then remove the blob.
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [orphan, blob]() {
+                if (orphan->restoreTimer) {
+                    try { orphan->restoreTimer.Stop(); } catch (...) {}
+                    orphan->restoreTimer = nullptr;
+                }
                 try {
                     ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
                 } catch (...) {}
                 RemoveFromParentPanel(blob);
             });
+        } else if (orphan->restoreTimer) {
+            // No dispatcher handle (island likely gone): best-effort inline
+            // stop. The tick also self-stops via its sender, so a failed
+            // cross-thread Stop() still goes quiet on the next tick.
+            try { orphan->restoreTimer.Stop(); } catch (...) {}
+            orphan->restoreTimer = nullptr;
         }
     }
     return result;
@@ -701,12 +797,14 @@ bool BindBlobExpression(
 // so the flare tips render fully — and glued to its button with a one-time
 // composition expression. Activation is purely an opacity toggle on the
 // button's own blob.
-void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings) {
-    auto bg = FindChildByName(iconPanel, L"BackgroundElement");
+void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, std::shared_ptr<BlobEntry> const& entry, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings) {
+    auto bg = entry->bgElement.get();
+    if (!bg || !VisualTreeHelper::GetParent(bg)) {
+        bg = FindChildByName(iconPanel, L"BackgroundElement");
+        entry->bgElement = bg ? winrt::make_weak(bg)
+                              : winrt::weak_ref<FrameworkElement>{};
+    }
     FrameworkElement anchor = bg ? bg : iconPanel;
-
-    auto entry = FindOrCreateEntry(button);
-    if (!entry) return; // unloading; the uninit cleanup handles restoration
 
     // Suppression of the native background is decided at the END, from the
     // same condition that shows the blob, so no failure path can leave an
@@ -718,7 +816,12 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // blob (which sits below the repeater in z-order), so it is suppressed
     // together with the background while the blob is shown. Tracked per
     // entry, so only state WE changed is ever touched or restored.
-    auto runningIndicator = FindChildByName(iconPanel, L"RunningIndicator");
+    auto runningIndicator = entry->indicatorElement.get();
+    if (!runningIndicator || !VisualTreeHelper::GetParent(runningIndicator)) {
+        runningIndicator = FindChildByName(iconPanel, L"RunningIndicator");
+        entry->indicatorElement = runningIndicator ? winrt::make_weak(runningIndicator)
+                                                   : winrt::weak_ref<FrameworkElement>{};
+    }
     auto setNativeHidden = [&](bool hidden) {
         if (hidden) {
             // Cancel any pending delayed restore: re-activation while it's
@@ -798,10 +901,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 } catch (...) {}
                 RemoveFromParentPanel(blob);
             }
+            if (e->restoreTimer) {
+                try { e->restoreTimer.Stop(); } catch (...) {}
+                e->restoreTimer = nullptr;
+            }
             if (btn) {
-                if (e->restoreTimer) {
-                    try { e->restoreTimer.Stop(); } catch (...) {}
-                }
                 if (e->bgHidden || e->indicatorHidden) RestoreNativeVisuals(btn);
                 if (auto anchor = e->anchor.get()) {
                     try { anchor.SizeChanged(e->sizeToken); } catch (...) {}
@@ -812,10 +916,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                 }
             }
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-            g_blobEntries.erase(
-                std::remove_if(g_blobEntries.begin(), g_blobEntries.end(),
+            if (!g_blobEntries) return; // reset by Wh_ModBeforeUninit
+            g_blobEntries->erase(
+                std::remove_if(g_blobEntries->begin(), g_blobEntries->end(),
                     [&](auto& x) { return x == e; }),
-                g_blobEntries.end());
+                g_blobEntries->end());
         });
     }
 
@@ -855,6 +960,8 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             return;
         }
         entry->grid = winrt::make_weak(grid);
+        // First contact with this taskbar: bring its pre-existing buttons up.
+        SweepExistingButtons(grid, localSettings);
     }
 
     auto blobShape = entry->blobShape.get();
@@ -1027,6 +1134,17 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     bool show = isActive && entry->bound;
     blobShape.Opacity(show ? 1.0 : 0.0);
     setNativeHidden(show);
+
+    // Idle blobs don't evaluate: one live expression per button would keep
+    // ~20 per-frame evaluations running on the render thread for shapes at
+    // Opacity(0). Stop on deactivation; the bound flag already drives the
+    // cheap rebind on the next activation.
+    if (!isActive && entry->bound) {
+        try {
+            ElementCompositionPreview::GetElementVisual(blobShape).Properties().StopAnimation(L"Translation");
+        } catch (...) {}
+        entry->bound = false;
+    }
 }
 
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
@@ -1125,8 +1243,12 @@ void Wh_ModBeforeUninit() {
         // never revokes, firing into an unloaded DLL.
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
         g_unloading = true;
-        localEntries = g_blobEntries;
-        g_blobEntries.clear();
+        if (g_blobEntries) {
+            localEntries = std::move(*g_blobEntries);
+        }
+        // reset() rather than clear(): the container of thread-affine
+        // timers must never survive to the CRT's global destructors.
+        g_blobEntries.reset();
     }
     if (localEntries.empty()) return;
 
@@ -1155,15 +1277,20 @@ void Wh_ModBeforeUninit() {
                     vis.Properties().StopAnimation(L"Translation");
                     RemoveFromParentPanel(blobShape);
                 }
+                // Stop AND release the timer here, on the UI thread: the
+                // entry's last shared_ptr may be released on the Windhawk
+                // thread, and it must not carry a strong XAML reference
+                // across threads when that happens.
+                if (entry->restoreTimer) {
+                    try { entry->restoreTimer.Stop(); } catch (...) {}
+                    entry->restoreTimer = nullptr;
+                }
                 if (auto btn = entry->button.get()) {
                     if (entry->unloadAttached) {
                         try { btn.Unloaded(entry->unloadToken); } catch (...) {}
                     }
                     if (entry->loadedAttached) {
                         try { btn.Loaded(entry->loadedToken); } catch (...) {}
-                    }
-                    if (entry->restoreTimer) {
-                        try { entry->restoreTimer.Stop(); } catch (...) {}
                     }
                     if (entry->bgHidden || entry->indicatorHidden) RestoreNativeVisuals(btn);
                 }
@@ -1189,6 +1316,13 @@ void Wh_ModBeforeUninit() {
                 });
             }
         } else {
+            // No dispatcher at all (island gone): best-effort inline stop so
+            // the entry drops its timer reference before ~BlobEntry runs on
+            // this thread.
+            if (entry->restoreTimer) {
+                try { entry->restoreTimer.Stop(); } catch (...) {}
+                entry->restoreTimer = nullptr;
+            }
             if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
         }
     }
@@ -1209,7 +1343,7 @@ void Wh_ModSettingsChanged() {
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-        localEntries = g_blobEntries;
+        if (g_blobEntries) localEntries = *g_blobEntries;
     }
     for (auto& entry : localEntries) {
         winrt::Windows::UI::Xaml::Shapes::Path blobShape{nullptr};
