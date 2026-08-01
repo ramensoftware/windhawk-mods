@@ -2,7 +2,7 @@
 // @id           mac-magnifying-cursor
 // @name         macOS magnifying cursor
 // @description  Recreates the macOS "Shake to Find" feature by enlarging the cursor when rapidly moved.
-// @version      1.4.6
+// @version      1.4.7
 // @github       https://github.com/alivca
 // @author       Jaali
 // @include      windhawk.exe
@@ -12,6 +12,7 @@
 // ==WindhawkModReadme==
 /*
 Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.
+
 ![Preview](https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif)
 */
 // ==/WindhawkModReadme==
@@ -21,9 +22,9 @@ Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporar
 - maxScalePercent: 400
   $name: Maximum size (%)
   $description: "How much the cursor enlarges (e.g. 400 = 4x scale)."
-- shakeThreshold: 3500
+- shakeThreshold: 800
   $name: Shake sensitivity threshold
-  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 3500)."
+  $description: "Total mouse movement distance required to trigger (lower = more sensitive, recommended: 600-1200)."
 - lerpSpeedUpPercent: 40
   $name: Enlarge speed (%)
   $description: "How fast the cursor expands (recommended: 20-40)."
@@ -95,6 +96,11 @@ struct PointTime {
     ULONGLONG time;
 };
 
+struct SystemCursorBackup {
+    DWORD id;
+    HCURSOR hOriginalCopy;
+};
+
 struct ModState {
     HWND hwndOverlay = NULL;
     HANDLE hThread = NULL;
@@ -105,8 +111,14 @@ struct ModState {
     float targetScale = 1.0f;
     bool cursorHidden = false;
     bool isVisible = false;
-    HCURSOR hSavedCursor = NULL;
+    std::vector<SystemCursorBackup> sysCursorBackups;
+    UINT currentTimerInterval = 40;
 } g_state;
+
+LONG WINAPI RestoreCursorsOnCrash(EXCEPTION_POINTERS*) {
+    SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 HCURSOR CreateBlankCursor() {
     int w = GetSystemMetrics(SM_CXCURSOR);
@@ -120,21 +132,39 @@ HCURSOR CreateBlankCursor() {
     return CreateCursor(GetModuleHandle(NULL), 0, 0, w, h, andMask.data(), xorMask.data());
 }
 
-void HideAllSystemCursors() {
-    if (!g_state.cursorHidden) {
-        HCURSOR hBlank = CreateBlankCursor();
-        if (hBlank) {
-            for (size_t i = 0; i < kCursorCount; ++i) {
-                HCURSOR hCopy = CopyIcon(hBlank);
-                if (hCopy) {
-                    if (!SetSystemCursor(hCopy, g_cursorIds[i])) {
-                        DestroyIcon(hCopy);
-                    }
+void BackupAndHideAllSystemCursors() {
+    if (g_state.cursorHidden) return;
+
+    for (auto& item : g_state.sysCursorBackups) {
+        if (item.hOriginalCopy) DestroyIcon(item.hOriginalCopy);
+    }
+    g_state.sysCursorBackups.clear();
+
+    // 1. Сохраняем копии оригинальных иконок всех системных курсоров
+    for (size_t i = 0; i < kCursorCount; ++i) {
+        DWORD id = g_cursorIds[i];
+        HCURSOR hSys = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(id), IMAGE_CURSOR, 0, 0, LR_SHARED);
+        if (hSys) {
+            HCURSOR hCopy = CopyIcon(hSys);
+            if (hCopy) {
+                g_state.sysCursorBackups.push_back({ id, hCopy });
+            }
+        }
+    }
+
+    // 2. Скрываем все системные курсоры
+    HCURSOR hBlank = CreateBlankCursor();
+    if (hBlank) {
+        for (size_t i = 0; i < kCursorCount; ++i) {
+            HCURSOR hCopy = CopyIcon(hBlank);
+            if (hCopy) {
+                if (!SetSystemCursor(hCopy, g_cursorIds[i])) {
+                    DestroyIcon(hCopy);
                 }
             }
-            DestroyCursor(hBlank);
-            g_state.cursorHidden = true;
         }
+        DestroyCursor(hBlank);
+        g_state.cursorHidden = true;
     }
 }
 
@@ -143,9 +173,55 @@ void RestoreAllSystemCursors() {
         SystemParametersInfoW(SPI_SETCURSORS, 0, NULL, 0);
         g_state.cursorHidden = false;
     }
-    if (g_state.hSavedCursor) {
-        DestroyIcon(g_state.hSavedCursor);
-        g_state.hSavedCursor = NULL;
+    for (auto& item : g_state.sysCursorBackups) {
+        if (item.hOriginalCopy) DestroyIcon(item.hOriginalCopy);
+    }
+    g_state.sysCursorBackups.clear();
+}
+
+HCURSOR GetActiveDrawableCursor(HCURSOR hActiveSys) {
+    if (!hActiveSys) return NULL;
+
+    // Сравниваем хэндл активного курсора со стандартными ID системных курсоров
+    for (const auto& item : g_state.sysCursorBackups) {
+        HCURSOR hCurrentSysHandle = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(item.id), IMAGE_CURSOR, 0, 0, LR_SHARED);
+        if (hActiveSys == hCurrentSysHandle) {
+            return item.hOriginalCopy;
+        }
+    }
+
+    // Если у приложения кастомная иконка курсора — берем напрямую
+    return hActiveSys;
+}
+
+bool IsFullscreenOrGameActive() {
+    static ULONGLONG lastCheck = 0;
+    static bool cachedResult = false;
+    ULONGLONG now = GetTickCount64();
+
+    if (now - lastCheck < 500) {
+        return cachedResult;
+    }
+    lastCheck = now;
+
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SHQueryUserNotificationState(&state) == S_OK) {
+        if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+            state == QUNS_BUSY ||
+            state == QUNS_PRESENTATION_MODE) {
+            cachedResult = true;
+            return true;
+        }
+    }
+
+    cachedResult = false;
+    return false;
+}
+
+void SetMonitorTimerInterval(UINT intervalMs) {
+    if (g_state.currentTimerInterval != intervalMs && g_state.hwndOverlay) {
+        SetTimer(g_state.hwndOverlay, 1, intervalMs, NULL);
+        g_state.currentTimerInterval = intervalMs;
     }
 }
 
@@ -158,135 +234,139 @@ float GetDistance(POINT a, POINT b) {
 void UpdateFrame() {
     ULONGLONG now = GetTickCount64();
 
-    POINT pt;
-    GetCursorPos(&pt);
+    POINT pt{};
+    if (!GetCursorPos(&pt) || IsFullscreenOrGameActive()) {
+        g_state.history.clear();
+        g_state.targetScale = 1.0f;
+    } else {
+        g_state.history.push_back({ pt, now });
 
-    g_state.history.push_back({ pt, now });
+        float shakeThreshold = g_settings.shakeThreshold.load();
+        float maxScale = g_settings.maxScale.load();
+        int shakeWindowMs = g_settings.shakeWindowMs.load();
 
-    float shakeThreshold = g_settings.shakeThreshold.load();
-    float maxScale = g_settings.maxScale.load();
-    int shakeWindowMs = g_settings.shakeWindowMs.load();
-
-    while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<ULONGLONG>(shakeWindowMs))) {
-        g_state.history.pop_front();
-    }
-
-    float totalPath = 0.0f;
-    if (g_state.history.size() >= 2) {
-        for (size_t i = 1; i < g_state.history.size(); ++i) {
-            totalPath += GetDistance(g_state.history[i - 1].pt, g_state.history[i].pt);
+        while (!g_state.history.empty() && (now - g_state.history.front().time > static_cast<ULONGLONG>(shakeWindowMs))) {
+            g_state.history.pop_front();
         }
-        float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
 
-        float shakeRatio = totalPath / (netDisp + 1.0f);
-        if (totalPath > shakeThreshold && shakeRatio > 1.2f) {
-            g_state.targetScale = maxScale;
-        } else if (totalPath < shakeThreshold * 0.4f || shakeRatio <= 1.1f) {
-            g_state.targetScale = 1.0f;
+        float totalPath = 0.0f;
+        if (g_state.history.size() >= 2) {
+            for (size_t i = 1; i < g_state.history.size(); ++i) {
+                totalPath += GetDistance(g_state.history[i - 1].pt, g_state.history[i].pt);
+            }
+            float netDisp = GetDistance(g_state.history.front().pt, g_state.history.back().pt);
+
+            float shakeRatio = totalPath / (netDisp + 1.0f);
+            if (totalPath > shakeThreshold && shakeRatio > 1.2f) {
+                g_state.targetScale = maxScale;
+            } else if (totalPath < shakeThreshold * 0.4f || shakeRatio <= 1.1f) {
+                g_state.targetScale = 1.0f;
+            }
         }
     }
 
     float lerpSpeed = (g_state.targetScale > g_state.currentScale) ? g_settings.lerpSpeedUp.load() : g_settings.lerpSpeedDown.load();
     g_state.currentScale += (g_state.targetScale - g_state.currentScale) * lerpSpeed;
 
+    if (g_state.currentScale > 1.001f || g_state.targetScale > 1.001f) {
+        SetMonitorTimerInterval(16);
+    } else {
+        SetMonitorTimerInterval(40);
+    }
+
     if (g_state.currentScale > 1.02f) {
-        if (!g_state.cursorHidden) {
-            CURSORINFO ci = { sizeof(CURSORINFO) };
-            if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) && ci.hCursor) {
-                if (g_state.hSavedCursor) DestroyIcon(g_state.hSavedCursor);
-                g_state.hSavedCursor = CopyIcon(ci.hCursor);
-                if (g_state.hSavedCursor) {
-                    HideAllSystemCursors();
-                }
-            }
-        }
+        BackupAndHideAllSystemCursors();
 
-        if (g_state.hSavedCursor) {
-            ICONINFO ii = { 0 };
-            if (GetIconInfo(g_state.hSavedCursor, &ii)) {
-                BITMAP bm = { 0 };
-                GetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
+        CURSORINFO ci = { sizeof(CURSORINFO) };
+        if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING) && ci.hCursor) {
+            HCURSOR hCursorToDraw = GetActiveDrawableCursor(ci.hCursor);
+            if (hCursorToDraw) {
+                ICONINFO ii = { 0 };
+                if (GetIconInfo(hCursorToDraw, &ii)) {
+                    BITMAP bm = { 0 };
+                    GetObjectW(ii.hbmMask, sizeof(BITMAP), &bm);
 
-                int baseWidth = bm.bmWidth;
-                int baseHeight = ii.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
-                if (baseWidth <= 0) baseWidth = 32;
-                if (baseHeight <= 0) baseHeight = 32;
+                    int baseWidth = bm.bmWidth;
+                    int baseHeight = ii.hbmColor ? bm.bmHeight : (bm.bmHeight / 2);
+                    if (baseWidth <= 0) baseWidth = 32;
+                    if (baseHeight <= 0) baseHeight = 32;
 
-                int scaledW = static_cast<int>(baseWidth * g_state.currentScale);
-                int scaledH = static_cast<int>(baseHeight * g_state.currentScale);
+                    int scaledW = static_cast<int>(baseWidth * g_state.currentScale);
+                    int scaledH = static_cast<int>(baseHeight * g_state.currentScale);
 
-                int hotspotX = static_cast<int>(ii.xHotspot * g_state.currentScale);
-                int hotspotY = static_cast<int>(ii.yHotspot * g_state.currentScale);
+                    int hotspotX = static_cast<int>(ii.xHotspot * g_state.currentScale);
+                    int hotspotY = static_cast<int>(ii.yHotspot * g_state.currentScale);
 
-                int winX = pt.x - hotspotX;
-                int winY = pt.y - hotspotY;
+                    int winX = pt.x - hotspotX;
+                    int winY = pt.y - hotspotY;
 
-                HDC hdcScreen = GetDC(NULL);
-                if (hdcScreen) {
-                    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-                    if (hdcMem) {
-                        BITMAPINFO bmi = { 0 };
-                        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                        bmi.bmiHeader.biWidth = scaledW;
-                        bmi.bmiHeader.biHeight = -scaledH;
-                        bmi.bmiHeader.biPlanes = 1;
-                        bmi.bmiHeader.biBitCount = 32;
-                        bmi.bmiHeader.biCompression = BI_RGB;
+                    HDC hdcScreen = GetDC(NULL);
+                    if (hdcScreen) {
+                        HDC hdcMem = CreateCompatibleDC(hdcScreen);
+                        if (hdcMem) {
+                            BITMAPINFO bmi = { 0 };
+                            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                            bmi.bmiHeader.biWidth = scaledW;
+                            bmi.bmiHeader.biHeight = -scaledH;
+                            bmi.bmiHeader.biPlanes = 1;
+                            bmi.bmiHeader.biBitCount = 32;
+                            bmi.bmiHeader.biCompression = BI_RGB;
 
-                        void* pBits = nullptr;
-                        HBITMAP hbmMem = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-                        if (hbmMem && pBits) {
-                            HBITMAP hOldBm = static_cast<HBITMAP>(SelectObject(hdcMem, hbmMem));
+                            void* pBits = nullptr;
+                            HBITMAP hbmMem = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+                            if (hbmMem && pBits) {
+                                HBITMAP hOldBm = static_cast<HBITMAP>(SelectObject(hdcMem, hbmMem));
 
-                            DWORD* pPixels = static_cast<DWORD*>(pBits);
-                            size_t pixelCount = static_cast<size_t>(scaledW) * scaledH;
+                                DWORD* pPixels = static_cast<DWORD*>(pBits);
+                                size_t pixelCount = static_cast<size_t>(scaledW) * scaledH;
 
-                            for (size_t i = 0; i < pixelCount; ++i) {
-                                pPixels[i] = 0x00000001;
-                            }
-
-                            DrawIconEx(hdcMem, 0, 0, g_state.hSavedCursor, scaledW, scaledH, 0, NULL, DI_NORMAL);
-
-                            bool hasAlpha = false;
-                            for (size_t i = 0; i < pixelCount; ++i) {
-                                if ((pPixels[i] & 0xFF000000) != 0) {
-                                    hasAlpha = true;
-                                    break;
-                                }
-                            }
-
-                            if (!hasAlpha) {
                                 for (size_t i = 0; i < pixelCount; ++i) {
-                                    if (pPixels[i] == 0x00000001) {
-                                        pPixels[i] = 0x00000000;
-                                    } else {
-                                        pPixels[i] |= 0xFF000000;
+                                    pPixels[i] = 0x00000001;
+                                }
+
+                                DrawIconEx(hdcMem, 0, 0, hCursorToDraw, scaledW, scaledH, 0, NULL, DI_NORMAL);
+
+                                bool hasAlpha = false;
+                                for (size_t i = 0; i < pixelCount; ++i) {
+                                    if ((pPixels[i] & 0xFF000000) != 0) {
+                                        hasAlpha = true;
+                                        break;
                                     }
                                 }
+
+                                if (!hasAlpha) {
+                                    for (size_t i = 0; i < pixelCount; ++i) {
+                                        if (pPixels[i] == 0x00000001) {
+                                            pPixels[i] = 0x00000000;
+                                        } else {
+                                            pPixels[i] |= 0xFF000000;
+                                        }
+                                    }
+                                }
+
+                                POINT ptZero = { 0, 0 };
+                                SIZE sizeWin = { scaledW, scaledH };
+                                POINT ptWin = { winX, winY };
+                                BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+                                UpdateLayeredWindow(g_state.hwndOverlay, hdcScreen, &ptWin, &sizeWin, hdcMem, &ptZero, 0, &blend, ULW_ALPHA);
+
+                                SelectObject(hdcMem, hOldBm);
+                                DeleteObject(hbmMem);
                             }
-
-                            POINT ptZero = { 0, 0 };
-                            SIZE sizeWin = { scaledW, scaledH };
-                            POINT ptWin = { winX, winY };
-                            BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-
-                            UpdateLayeredWindow(g_state.hwndOverlay, hdcScreen, &ptWin, &sizeWin, hdcMem, &ptZero, 0, &blend, ULW_ALPHA);
-
-                            SelectObject(hdcMem, hOldBm);
-                            DeleteObject(hbmMem);
+                            DeleteDC(hdcMem);
                         }
-                        DeleteDC(hdcMem);
+                        ReleaseDC(NULL, hdcScreen);
                     }
-                    ReleaseDC(NULL, hdcScreen);
-                }
 
-                if (ii.hbmMask) DeleteObject(ii.hbmMask);
-                if (ii.hbmColor) DeleteObject(ii.hbmColor);
+                    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+                    if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-                if (!g_state.isVisible) {
-                    SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                    g_state.isVisible = true;
+                    if (!g_state.isVisible) {
+                        SetWindowPos(g_state.hwndOverlay, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                        g_state.isVisible = true;
+                    }
                 }
             }
         }
@@ -359,7 +439,7 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
         return 0;
     }
 
-    SetTimer(g_state.hwndOverlay, 1, 16, NULL);
+    SetTimer(g_state.hwndOverlay, 1, g_state.currentTimerInterval, NULL);
 
     if (g_state.hThreadReadyEvent) {
         SetEvent(g_state.hThreadReadyEvent);
@@ -383,6 +463,7 @@ DWORD WINAPI CursorMonitorThread(LPVOID lpParam) {
 }
 
 BOOL WhTool_ModInit() {
+    SetUnhandledExceptionFilter(RestoreCursorsOnCrash);
     LoadSettings();
 
     g_state.hThreadReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -438,7 +519,8 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
@@ -447,7 +529,10 @@ BOOL Wh_ModInit() {
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) return FALSE;
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
 
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
@@ -470,73 +555,116 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isExcluded) return FALSE;
+    if (isExcluded) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-            if (g_toolModProcessMutex) CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod process already exists");
+            CloseHandle(g_toolModProcessMutex);
             ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
+            Wh_Log(L"WhTool_ModInit failed");
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+
         return TRUE;
     }
 
-    if (isToolModProcess) return FALSE;
+    if (isToolModProcess) {
+        return FALSE;
+    }
 
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
 
     WCHAR currentProcessPath[MAX_PATH];
-    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) return;
+    DWORD length = GetModuleFileName(nullptr, currentProcessPath,
+                                     ARRAYSIZE(currentProcessPath));
+    if (length == 0 || length == ARRAYSIZE(currentProcessPath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return;
+    }
 
     WCHAR commandLine[MAX_PATH * 2];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+              WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
-    if (!kernelModule) return;
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+    }
+    if (!kernelModule) {
+        Wh_Log(L"GetModuleHandle failed");
+        return;
+    }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hNewToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"GetProcAddress failed");
+        return;
+    }
 
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) return;
-
-    STARTUPINFO si = { sizeof(si) };
+    STARTUPINFO si = {sizeof(si)};
     si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi = { 0 };
-
+    PROCESS_INFORMATION pi = {0};
     if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
+                                nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                nullptr, nullptr, &si, &pi, nullptr)) {
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
+    } else {
+        Wh_Log(L"CreateProcessInternalW failed");
     }
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
