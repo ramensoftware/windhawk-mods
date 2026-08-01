@@ -24,8 +24,9 @@ This mod restores classic Control Panel applets and classic task links in Catego
 Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync",, Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
 ## Screenshot of the Restored Applets
+![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/RestoredApplets.png)
 
-## Screenshot (for the HomeGroup and Network Connections applets)
+## Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
