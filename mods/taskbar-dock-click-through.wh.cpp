@@ -382,14 +382,12 @@ struct DesiredState {
     bool shrinkPending = false;
     bool structureRefreshPending = false;
     bool dockPointerInside = false;
-    bool dockPointerCollapse = false;
     bool policyMatch = false;
     bool keepShown = false;
     bool policyInitialized = false;
     int pendingTransition = 0;  // 1=show, 2=hide.
     ULONGLONG transitionDueTick = 0;
     ULONGLONG shrinkDueTick = 0;
-    ULONGLONG dockExitDueTick = 0;
     ULONGLONG notificationBurstStartTick = 0;
     ULONGLONG notificationLastTick = 0;
     ULONGLONG lastPostTick = 0;
@@ -494,6 +492,7 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                             LPARAM lParam,
                                             UINT_PTR uIdSubclass,
                                             DWORD_PTR dwRefData);
+static void WakeWorker();
 static void SignalRefresh(bool geometry, bool policy);
 static void HandleDockExitHideTimer(HWND hWnd);
 
@@ -526,6 +525,26 @@ static bool RectContains(const RECT& outer, const RECT& inner) {
 static bool RectIntersects(const RECT& left, const RECT& right) {
     return left.left < right.right && right.left < left.right &&
            left.top < right.bottom && right.top < left.bottom;
+}
+
+static bool PointInShownDockArea(const DesiredState& state,
+                                 POINT point) {
+    if (!state.hasGeometry || !RectValid(state.shownRect)) {
+        return false;
+    }
+    for (const RECT& local : state.dockRects) {
+        const RECT screen{
+            state.shownRect.left + local.left,
+            state.shownRect.top + local.top,
+            state.shownRect.left + local.right,
+            state.shownRect.top + local.bottom,
+        };
+        if (point.x >= screen.left && point.x < screen.right &&
+            point.y >= screen.top && point.y < screen.bottom) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static constexpr bool IsFullscreenWindowShapeForReveal(
@@ -970,6 +989,11 @@ static LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
     const SubclassCallbackGuard callbackGuard;
     const bool displayChanged = uMsg == WM_DISPLAYCHANGE;
     const bool dpiChanged = uMsg == WM_DPICHANGED;
+    if (uMsg == WM_MOUSELEAVE) {
+        // This is only a low-cost wake hint. The worker re-reads the cursor
+        // and remains the source of truth for the measured dock boundary.
+        WakeWorker();
+    }
     if (displayChanged) {
         g_topologyRevision.fetch_add(1, std::memory_order_acq_rel);
         HMONITOR monitor = nullptr;
@@ -2548,10 +2572,8 @@ static void UpdatePolicyTransitions(const Settings& settings) {
                 forceShown != state.keepShown) {
                 state.policyInitialized = true;
                 state.keepShown = forceShown;
-                state.dockPointerCollapse = false;
                 if (!forceShown) {
                     state.dockPointerInside = false;
-                    state.dockExitDueTick = 0;
                 }
                 state.pendingTransition = forceShown ? 1 : 2;
                 state.transitionDueTick =
@@ -2608,7 +2630,6 @@ static HWND TaskbarForNativeObject(void* object) {
 enum class ExpansionOverride {
     Native,
     Show,
-    Hide,
 };
 
 static ExpansionOverride RememberViewCoordinator(
@@ -2626,9 +2647,6 @@ static ExpansionOverride RememberViewCoordinator(
     }
     if (state->second.keepShown || g_revealUpdateActive) {
         return ExpansionOverride::Show;
-    }
-    if (state->second.dockPointerCollapse) {
-        return ExpansionOverride::Hide;
     }
     return ExpansionOverride::Native;
 }
@@ -2668,10 +2686,6 @@ static bool NotifyDockPointerState(HWND hWnd, bool inside) {
     }
     g_viewCoordinatorPointerChangedOriginal(
         coordinator, hWnd, inside, 0);
-    if (!inside && g_viewCoordinatorUpdateExpandedOriginal) {
-        g_viewCoordinatorUpdateExpandedOriginal(
-            coordinator, hWnd, kViewReasonPointerOverChanged);
-    }
     return true;
 }
 
@@ -2781,7 +2795,6 @@ static void UpdateDockPointerTransitions() {
         return;
     }
 
-    const ULONGLONG now = GetTickCount64();
     std::vector<std::pair<HWND, bool>> changes;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -2791,46 +2804,16 @@ static void UpdateDockPointerTransitions() {
                 state.hasGeometry && RectValid(state.shownRect);
             if (!track) {
                 state.dockPointerInside = false;
-                state.dockPointerCollapse = false;
-                state.dockExitDueTick = 0;
                 continue;
             }
 
             const bool inHorizontalPlane =
                 cursor.y >= state.shownRect.top &&
                 cursor.y < state.shownRect.bottom;
-            bool inside = false;
-            if (inHorizontalPlane) {
-                for (const RECT& local : state.dockRects) {
-                    const LONG left =
-                        state.shownRect.left + local.left;
-                    const LONG right =
-                        state.shownRect.left + local.right;
-                    if (cursor.x >= left && cursor.x < right) {
-                        inside = true;
-                        break;
-                    }
-                }
-            }
-            if (!inside && inHorizontalPlane &&
-                !state.keepShown) {
-                if (state.dockPointerInside) {
-                    state.dockExitDueTick =
-                        now + g_settings.hideDelayMs;
-                }
-                if (state.dockExitDueTick &&
-                    now >= state.dockExitDueTick) {
-                    state.dockPointerCollapse = true;
-                    changes.emplace_back(hWnd, false);
-                    state.dockExitDueTick = 0;
-                }
-            } else {
-                state.dockExitDueTick = 0;
-                state.dockPointerCollapse = false;
-            }
-            if (inside && !state.keepShown &&
-                !state.dockPointerInside) {
-                changes.emplace_back(hWnd, true);
+            const bool inside = PointInShownDockArea(state, cursor);
+            if (inHorizontalPlane && !state.keepShown &&
+                inside != state.dockPointerInside) {
+                changes.emplace_back(hWnd, inside);
             }
             state.dockPointerInside = inside;
         }
@@ -2875,32 +2858,65 @@ static UINT_PTR WINAPI SetTimerHook(HWND hWnd,
     return g_setTimerOriginal(hWnd, timerId, interval, timerProc);
 }
 
+static void ArmDockMouseLeaveWake(HWND hWnd) {
+    TRACKMOUSEEVENT tracking{
+        sizeof(tracking), TME_LEAVE, hWnd, HOVER_DEFAULT};
+    if (!TrackMouseEvent(&tracking)) {
+        LogFailureThrottled(
+            L"TrackMouseEvent(dock leave wake)", GetLastError());
+    }
+}
+
 static void HandleDockExitHideTimer(HWND hWnd) {
     KillTimer(hWnd, kDockExitHideTimer);
     if (StopRequested()) {
         return;
     }
 
+    const ScopedPhysicalCoordinates coordinates;
+    POINT cursor{};
+    if (!coordinates || !GetCursorPos(&cursor)) {
+        return;
+    }
+
     void* taskbarObject = nullptr;
+    bool reentered = false;
     const bool primary = IsPrimaryTaskbarWindow(hWnd);
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto state = g_desired.find(hWnd);
         if (state == g_desired.end() ||
-            !AutoHideAppliesLocked(hWnd) ||
-            state->second.keepShown ||
-            !state->second.dockPointerCollapse) {
+            !AutoHideAppliesLocked(hWnd) || state->second.keepShown ||
+            state->second.hidden) {
             return;
         }
-        auto object = std::find_if(
-            g_nativeTaskbarObjects.begin(),
-            g_nativeTaskbarObjects.end(),
-            [hWnd](const auto& item) {
-                return item.second == hWnd;
-            });
-        if (object != g_nativeTaskbarObjects.end()) {
-            taskbarObject = object->first;
+        if (PointInShownDockArea(state->second, cursor)) {
+            if (!state->second.dockPointerInside) {
+                state->second.dockPointerInside = true;
+                reentered = true;
+            } else {
+                return;
+            }
+        } else if (state->second.dockPointerInside) {
+            return;
         }
+        if (!reentered) {
+            auto object = std::find_if(
+                g_nativeTaskbarObjects.begin(),
+                g_nativeTaskbarObjects.end(),
+                [hWnd](const auto& item) {
+                    return item.second == hWnd;
+                });
+            if (object != g_nativeTaskbarObjects.end()) {
+                taskbarObject = object->first;
+            }
+        }
+    }
+
+    if (reentered) {
+        NotifyDockPointerState(hWnd, true);
+        ArmDockMouseLeaveWake(hWnd);
+        return;
     }
 
     if (!taskbarObject) {
@@ -2910,17 +2926,6 @@ static void HandleDockExitHideTimer(HWND hWnd) {
         g_trayUIHideOriginal(taskbarObject);
     } else {
         g_secondaryTrayAutoHideOriginal(taskbarObject, true);
-    }
-}
-
-static void ScheduleDockExitHide(HWND hWnd) {
-    KillTimer(hWnd, kDockExitHideTimer);
-    const SetTimer_t setTimer =
-        g_setTimerOriginal ? g_setTimerOriginal : SetTimer;
-    if (!setTimer(hWnd, kDockExitHideTimer, USER_TIMER_MINIMUM,
-                  nullptr)) {
-        LogFailureThrottled(
-            L"SetTimer(dock pointer exit)", GetLastError());
     }
 }
 
@@ -3091,6 +3096,18 @@ static void RestoreTaskbarRevealZOrder(HWND hWnd) {
     }
 }
 
+static void ScheduleDockExitHide(HWND hWnd) {
+    const Settings settings = GetSettingsSnapshot();
+    const SetTimer_t setTimer =
+        g_setTimerOriginal ? g_setTimerOriginal : SetTimer;
+    KillTimer(hWnd, kDockExitHideTimer);
+    if (!setTimer(hWnd, kDockExitHideTimer, settings.hideDelayMs,
+                  nullptr)) {
+        LogFailureThrottled(
+            L"SetTimer(dock pointer exit)", GetLastError());
+    }
+}
+
 static void ProcessDockPointerCommand(HWND hWnd, bool inside) {
     bool show = false;
     if (!GetPolicyCommand(hWnd, show)) {
@@ -3100,6 +3117,7 @@ static void ProcessDockPointerCommand(HWND hWnd, bool inside) {
         NotifyDockPointerState(hWnd, inside);
         if (inside) {
             KillTimer(hWnd, kDockExitHideTimer);
+            ArmDockMouseLeaveWake(hWnd);
         } else {
             ScheduleDockExitHide(hWnd);
         }
@@ -3443,8 +3461,6 @@ static bool WINAPI ViewCoordinatorShouldExpandHook(void* pThis,
     switch (RememberViewCoordinator(hWnd, pThis)) {
         case ExpansionOverride::Show:
             return true;
-        case ExpansionOverride::Hide:
-            return false;
         case ExpansionOverride::Native:
             break;
     }
@@ -3732,6 +3748,40 @@ static ULONGLONG EarliestShrinkDeadline() {
     return result;
 }
 
+static bool DockPointerPollingNeeded() {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    for (const auto& [hWnd, state] : g_desired) {
+        if (AutoHideAppliesLocked(hWnd) && !state.hidden &&
+            !state.keepShown && state.hasGeometry &&
+            RectValid(state.shownRect)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static ULONGLONG EarliestAutoHideStateDeadline(
+    const Settings& settings,
+    ULONGLONG now) {
+    ULONGLONG result = UINT64_MAX;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    for (const auto& [hWnd, state] : g_desired) {
+        if (!AutoHideAppliesLocked(hWnd)) {
+            continue;
+        }
+        if (state.pendingTransition) {
+            result = std::min(result, state.transitionDueTick);
+        }
+        if (NotificationHoldActive(settings, state, now)) {
+            result = std::min(
+                result,
+                state.notificationBurstStartTick +
+                    settings.notificationHoldMs);
+        }
+    }
+    return result;
+}
+
 static DWORD WINAPI WorkerProc(LPVOID) {
     if (!SetThreadDpiAwarenessContext(
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
@@ -3925,7 +3975,9 @@ static DWORD WINAPI WorkerProc(LPVOID) {
         }
 
         CheckTaskbarVisibilityTransitions();
-        UpdateDockPointerTransitions();
+        if (DockPointerPollingNeeded()) {
+            UpdateDockPointerTransitions();
+        }
 
         if (g_geometryDirty.exchange(
                 false, std::memory_order_acq_rel)) {
@@ -3934,7 +3986,13 @@ static DWORD WINAPI WorkerProc(LPVOID) {
                 now + kGeometryDebounceMs);
         }
         if (now >= nextFallbackScan) {
-            geometryDue = now;
+            if (!geometryDue) {
+                geometryDue = now;
+            }
+            // A deferred geometry attempt has its own short retry deadline.
+            // Advance the fallback deadline now so it can't remain overdue
+            // and force a zero-timeout worker loop while the pointer is busy.
+            nextFallbackScan = now + settings.fallbackScanMs;
         }
 
         if (geometryDue && now >= geometryDue) {
@@ -4007,13 +4065,16 @@ static DWORD WINAPI WorkerProc(LPVOID) {
         UpdatePolicyTransitions(settings);
 
         now = GetTickCount64();
-        const bool autoHideActive =
-            NativeAutoHideDispatchEnabled() &&
-            g_windowsAutoHideEnabled.load(
-                std::memory_order_acquire);
-        ULONGLONG deadline =
-            autoHideActive ? now + kAutoHidePolicyIntervalMs
-                           : nextGateRead;
+        ULONGLONG deadline = nextGateRead;
+        if (DockPointerPollingNeeded()) {
+            deadline = std::min(
+                deadline, now + kAutoHidePolicyIntervalMs);
+        }
+        const ULONGLONG autoHideStateDeadline =
+            EarliestAutoHideStateDeadline(settings, now);
+        if (autoHideStateDeadline != UINT64_MAX) {
+            deadline = std::min(deadline, autoHideStateDeadline);
+        }
         if (geometryDue) {
             deadline = std::min(deadline, geometryDue);
         }
