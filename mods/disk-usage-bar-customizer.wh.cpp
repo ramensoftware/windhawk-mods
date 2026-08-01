@@ -3,7 +3,7 @@
 // @name            Disk Usage Bar Customizer
 // @name:ro         Personalizator bară de utilizare discuri
 // @description     Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border, rounded corners and more.
-// @description:ro  Personalizează orice ține legătură de bara de utilizare a discurilor din secțiunea Acest PC din Explorer, inclusiv culori în funcție de temă, înălțime, bordură, colțuri rotunjite și mai multe.
+// @description:ro  Personalizează orice ține de bara de utilizare a discurilor din secțiunea Acest PC din Explorer, inclusiv culori în funcție de temă, înălțime, bordură, colțuri rotunjite și mai multe.
 // @version         1.1.0
 // @author          Valer100
 // @github          https://github.com/Valer100
@@ -63,8 +63,8 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 ### Custom warning threshold
 ![Custom warning threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png)
 
-### Custom indeterminate threshold
-![Show remaining space as progress instead of used space](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/intermediate_progress_style.png)
+### Custom intermediate threshold
+![Custom intermediate threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/intermediate_progress_style.png)
 
 ### Show remaining space as progress instead of used space
 ![Show remaining space as progress instead of used space](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png)
@@ -116,7 +116,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 
   - darkModeVSRendering: true
     $name: Render using dark mode parts when using visual styles
-    $name:ro: Randează folosind părți întunecate atunci când se folosec stiluri vizuale
+    $name:ro: Randează folosind părți întunecate atunci când se folosesc stiluri vizuale
     $description: >-
       Render the usage bar using the dark mode parts from the "DarkMode_CopyEngine::Progress" class when dark mode is enabled. You must have Windows 11 build 26200.6899 or higher installed and the "Render using visual styles" option enabled for this to work.
     $description:ro: >-
@@ -246,7 +246,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   $description: >-
     These options will be ignored when the "Render using visual styles" option is enabled.
   $description:ro: >-
-    Aceste opțiuni vor ignorate atunci când opțiunea "Randează folosind stiluri vizuale" este activată.
+    Aceste opțiuni vor fi ignorate atunci când opțiunea "Randează folosind stiluri vizuale" este activată.
 */
 // ==/WindhawkModSettings==
 
@@ -289,6 +289,7 @@ static INT      g_cornerRadiusFactor             = 0;
 static BOOL     g_roundProgressRightCorners      = TRUE;
 static INT      g_percentageLabel                = 0;
 static INT      g_percentageLabelSize            = 70;
+static WindhawkUtils::StringSetting  g_percentageLabelFont;
 
 // Light mode colors
 static COLORREF g_barColorLight                  = 0x00E6E6E6;
@@ -296,7 +297,7 @@ static COLORREF g_barBorderColorLight            = 0x00BCBCBC;
 static COLORREF g_progressColorNormalLight       = 0x00CB7000;
 static COLORREF g_progressColorIntermediateLight = 0x00005D9D;
 static COLORREF g_progressColorFullLight         = 0x001C2BC4;
-static COLORREF g_percentagelabelColorLight      = 0x00000000;
+static COLORREF g_percentageLabelColorLight      = 0x00000000;
 
 // Dark mode colors
 static COLORREF g_barColorDark                   = 0x00383838;
@@ -316,15 +317,13 @@ HMODULE g_shell32 = nullptr;
 
 
 static COLORREF LoadColorSetting(PCWSTR colorName, COLORREF fallback) {
-    PCWSTR originalHexString = Wh_GetStringSetting(colorName);
+    WindhawkUtils::StringSetting originalHexString = WindhawkUtils::StringSetting::make(colorName);
     PCWSTR hexString = originalHexString;
 
     if (hexString[0] == L'#') hexString++;
 
-    if (wcslen(hexString) != 6) {
-        Wh_FreeStringSetting(originalHexString);
+    if (wcslen(hexString) != 6)
         return fallback;
-    }
 
     auto h = [](wchar_t c) -> int {
         if (c >= L'0' && c <= L'9') return c - L'0';
@@ -340,12 +339,9 @@ static COLORREF LoadColorSetting(PCWSTR colorName, COLORREF fallback) {
     int h4 = h(hexString[4]);
     int h5 = h(hexString[5]);
 
-    if (h0 < 0 || h1 < 0 || h2 < 0 || h3 < 0 || h4 < 0 || h5 < 0) {
-        Wh_FreeStringSetting(originalHexString);
+    if (h0 < 0 || h1 < 0 || h2 < 0 || h3 < 0 || h4 < 0 || h5 < 0)
         return fallback;
-    }
 
-    Wh_FreeStringSetting(originalHexString);
     return RGB((h0 << 4) | h1, (h2 << 4) | h3, (h4 << 4) | h5);
 }
 
@@ -366,6 +362,7 @@ static void LoadSettings() {
     g_heightFactor                   = Wh_GetIntSetting(L"customRendering.heightFactor");
     g_cornerRadiusFactor             = Wh_GetIntSetting(L"customRendering.cornerRadiusFactor");
     g_roundProgressRightCorners      = Wh_GetIntSetting(L"customRendering.roundProgressRightCorners");
+    g_percentageLabelFont            = WindhawkUtils::StringSetting::make(L"customRendering.percentageLabelFont");
     g_percentageLabelSize            = Wh_GetIntSetting(L"customRendering.percentageLabelSize");
 
     PCWSTR percentageLabelMode = Wh_GetStringSetting(L"customRendering.percentageLabel");
@@ -391,7 +388,7 @@ static void LoadSettings() {
     g_progressColorNormalLight       = LoadColorSetting(L"customRendering.lightModeColors.progressColorNormal",       0x00CB7000);
     g_progressColorIntermediateLight = LoadColorSetting(L"customRendering.lightModeColors.progressColorIntermediate", 0x00005D9D);
     g_progressColorFullLight         = LoadColorSetting(L"customRendering.lightModeColors.progressColorFull",         0x001C2BC4);
-    g_percentagelabelColorLight      = LoadColorSetting(L"customRendering.lightModeColors.percentageLabelColor",      0x00000000);
+    g_percentageLabelColorLight      = LoadColorSetting(L"customRendering.lightModeColors.percentageLabelColor",      0x00000000);
 
     // Dark mode colors
     g_barColorDark                   = LoadColorSetting(L"customRendering.darkModeColors.barColor",                   0x00383838);
@@ -491,10 +488,17 @@ static void DrawPercentageLabel(
     WCHAR text[16];
     swprintf(text, 16, L"%d%%", percentage);
 
+    HGDIOBJ oldFont = SelectObject(hdc, font);
+    COLORREF oldColor = SetTextColor(hdc, color);
+    int oldBkMode = SetBkMode(hdc, TRANSPARENT);
+    
     SelectObject(hdc, font);
     SetTextColor(hdc, color);
     DrawTextW(hdc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
+    SetBkMode(hdc, oldBkMode);
+    SetTextColor(hdc, oldColor);
+    SelectObject(hdc, oldFont);
     DeleteObject(font);
 }
 
@@ -598,19 +602,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
                     if (radius > 0) radius--;
                 }
 
-                if (radius * 2 <= clipRect.right - clipRect.left && radius * 2 <= clipRect.right - clipRect.left)
+                if (radius * 2 <= clipRect.right - clipRect.left)
                     FillRoundedRect(hdc, clipRect, radius, color, TRUE, g_roundProgressRightCorners);
 
                 if (g_percentageLabel) {
-                    LPCWSTR percentageLabelFont = Wh_GetStringSetting(L"customRendering.percentageLabelFont");
-
                     DrawPercentageLabel(
-                        hdc, fullBarRect, percentageLabelFont, percentageLabelFontHeight, 
+                        hdc, fullBarRect, g_percentageLabelFont, percentageLabelFontHeight, 
                         (g_percentageLabel == 1) ? usedPercentage : (100 - usedPercentage),
-                        (darkMode) ? g_percentageLabelColorDark : g_percentagelabelColorLight
+                        (darkMode) ? g_percentageLabelColorDark : g_percentageLabelColorLight
                     );
-
-                    Wh_FreeStringSetting(percentageLabelFont);
                 }
             }
             
@@ -619,6 +619,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
         else if (iPartId == PP_TRANSPARENTBAR) {
             g_barWidth  = clipRect.right - clipRect.left;
+            if (g_barWidth < 1) g_barWidth = 1;
  
             if (g_renderUsingVisualStyles)
                 DrawThemeBackground_orig(hTheme, hdc, PP_TRANSPARENTBAR, PBS_NORMAL, &clipRect, 0);
@@ -667,7 +668,9 @@ static BOOL CALLBACK RefreshExplorerCallback(HWND hwnd, LPARAM lParam) {
 
 BOOL Wh_ModInit() {
     GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+
+    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != 0)  // Status.Ok
+        return FALSE;
 
     g_shell32 = GetModuleHandle(L"shell32.dll");
     g_uxtheme = GetModuleHandle(L"uxtheme.dll");
