@@ -14,7 +14,6 @@
 // context.payload is loosely typed, matching the action, so each handler
 // narrows it to the event it handles.
 /** @typedef {import('@octokit/webhooks-types').PullRequestEvent} PullRequestEvent */
-/** @typedef {import('@octokit/webhooks-types').PullRequestReviewSubmittedEvent} PullRequestReviewSubmittedEvent */
 /** @typedef {import('@octokit/webhooks-types').IssueCommentCreatedEvent | import('@octokit/webhooks-types').IssueCommentEditedEvent} IssueCommentEvent */
 /** @typedef {import('@octokit/webhooks-types').AuthorAssociation} AuthorAssociation */
 
@@ -36,11 +35,6 @@ const FLOW_LABELS = [
 const WIKI_URL =
   'https://github.com/ramensoftware/windhawk/wiki/Mod-submission-review-process';
 
-// The flow covers pull requests against the main branch. The pull_request_target
-// workflow filters on it, but pull_request_review has no branch filter, so that
-// one is checked here.
-const BASE_BRANCH = 'main';
-
 const AI_REVIEW_COMMAND = '/ai-review';
 const READY_FOR_REVIEWER_COMMAND = '/ready-for-reviewer';
 
@@ -49,16 +43,11 @@ const READY_FOR_REVIEWER_COMMAND = '/ready-for-reviewer';
 // /ready-for-reviewer checks against the current head commit.
 const AI_REVIEW_MARKER_PATTERN = /<!--\s*ai-review\s+sha=([0-9a-f]{40})\s*-->/g;
 
-// A reviewer who leaves feedback as an ordinary comment instead of as a formal
-// review can include this marker to hand the pull request back to the author.
-// Not global, so that the pattern doesn't carry state between test() calls.
-const HUMAN_REVIEW_MARKER_PATTERN = /<!--\s*human-review\s*-->/;
-
-// Comments and reviews from these association levels are trusted to drive the
-// flow. The association comes from the event payload, which avoids an extra API
-// call and an extra app permission, and is only an approximation of write
-// access: an organization member, or a collaborator invited with read or triage
-// access, is included as well.
+// Comments from these association levels are trusted to drive the flow. The
+// association comes from the event payload, which avoids an extra API call and
+// an extra app permission, and is only an approximation of write access: an
+// organization member, or a collaborator invited with read or triage access, is
+// included as well.
 /** @type {AuthorAssociation[]} */
 const PRIVILEGED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -422,67 +411,6 @@ async function handlePullRequestEvent({ github, context, core }) {
 }
 
 /**
- * Handles pull_request_review. A human reviewer requesting changes hands the
- * pull request back to the author.
- *
- * @param {object} params
- * @param {Github} params.github
- * @param {Context} params.context
- * @param {Core} params.core
- */
-async function handleReviewEvent({ github, context, core }) {
-  const payload = /** @type {PullRequestReviewSubmittedEvent} */ (context.payload);
-  const review = payload.review;
-
-  if (!isFlowEnabled(payload.pull_request.number)) {
-    core.info(`The flow is not enabled for pull request #${payload.pull_request.number}`);
-    return;
-  }
-
-  if (payload.pull_request.base.ref !== BASE_BRANCH) {
-    core.info(`Ignoring a review on a pull request against ${payload.pull_request.base.ref}`);
-    return;
-  }
-
-  // A closed pull request is out of the flow, and its labels are removed. A
-  // review can still be submitted on one.
-  if (payload.pull_request.state !== 'open') {
-    core.info(`Ignoring a review on closed pull request #${payload.pull_request.number}`);
-    return;
-  }
-
-  if (review.state !== 'changes_requested') {
-    core.info(`Ignoring a review in the ${review.state} state`);
-    return;
-  }
-
-  if (review.user.type === 'Bot') {
-    core.info('Ignoring a review by a bot');
-    return;
-  }
-
-  // Anyone can submit a review on a pull request, so only a trusted reviewer
-  // takes it out of the queue.
-  if (!PRIVILEGED_ASSOCIATIONS.includes(review.author_association)) {
-    core.info(`Ignoring a review by ${review.user.login} (${review.author_association})`);
-    return;
-  }
-
-  const { owner, repo } = context.repo;
-  const prNumber = payload.pull_request.number;
-
-  await setFlowLabel({
-    github,
-    core,
-    owner,
-    repo,
-    prNumber,
-    currentFlowLabels: await getCurrentFlowLabels({ github, owner, repo, prNumber }),
-    label: WAITING_FOR_AUTHOR,
-  });
-}
-
-/**
  * @param {object} params
  * @param {Github} params.github
  * @param {Core} params.core
@@ -600,8 +528,7 @@ async function runReadyForReviewer({
 
 /**
  * Handles issue_comment. Runs the flow commands on behalf of the pull request
- * author and of any trusted commenter, ignores everyone else, and handles a
- * review left as an ordinary comment by a trusted reviewer.
+ * author and of any trusted commenter, and ignores everyone else.
  *
  * @param {object} params
  * @param {Github} params.github
@@ -669,21 +596,18 @@ async function handleComment({ github, context, core, botLogin }) {
  */
 async function runComment({ github, core, owner, repo, payload, comment, issue, botLogin }) {
   const commenterLogin = comment.user.login;
-  const isPrivileged = PRIVILEGED_ASSOCIATIONS.includes(comment.author_association);
 
   const command = parseCommand(comment.body);
-  const isReviewComment =
-    !command && isPrivileged && HUMAN_REVIEW_MARKER_PATTERN.test(comment.body);
 
-  if (!command && !isReviewComment) {
+  if (!command) {
     core.info('The comment is not a flow command');
     return;
   }
 
-  // An edit acts only on an instruction that the comment didn't carry before,
-  // which is what makes it possible to add one to a comment after posting it.
-  // An instruction that was already there was acted on when the comment was
-  // posted, and reworking the prose around it doesn't ask for it again.
+  // An edit acts only on a command that the comment didn't carry before, which
+  // is what makes it possible to add one to a comment after posting it. A
+  // command that was already there was acted on when the comment was posted, and
+  // reworking the prose around it doesn't ask for it again.
   if (payload.action === 'edited') {
     const previousBody = payload.changes.body?.from;
 
@@ -692,38 +616,15 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
       return;
     }
 
-    const wasAlreadyThere = command
-      ? parseCommand(previousBody) === command
-      : HUMAN_REVIEW_MARKER_PATTERN.test(previousBody);
-
-    if (wasAlreadyThere) {
+    if (parseCommand(previousBody) === command) {
       core.info(`Ignoring an edit to comment ${comment.id}, which was already acted on`);
       return;
     }
   }
 
-  // Anything left without a command is a review comment, per the check above.
-  if (!command) {
-    core.info(`Handling a review comment by ${commenterLogin}`);
-    await setFlowLabel({
-      github,
-      core,
-      owner,
-      repo,
-      prNumber: issue.number,
-      currentFlowLabels: await getCurrentFlowLabels({
-        github,
-        owner,
-        repo,
-        prNumber: issue.number,
-      }),
-      label: WAITING_FOR_AUTHOR,
-    });
-    await react({ github, core, owner, repo, commentId: comment.id, content: 'eyes' });
-    return;
-  }
-
-  const isAuthorized = isPrivileged || commenterLogin === issue.user.login;
+  const isAuthorized =
+    PRIVILEGED_ASSOCIATIONS.includes(comment.author_association) ||
+    commenterLogin === issue.user.login;
 
   if (!isAuthorized) {
     core.info(`Ignoring ${command} from ${commenterLogin}`);
@@ -762,6 +663,5 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
 
 module.exports = {
   handlePullRequestEvent,
-  handleReviewEvent,
   handleComment,
 };

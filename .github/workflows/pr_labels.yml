@@ -10,9 +10,6 @@ on:
       - closed
     branches:
       - main
-  pull_request_review:
-    types:
-      - submitted
 
 # Everything is done with the windhawk-reviewer app token, so the workflow token
 # only needs to check out the base branch. Nothing from the pull request itself
@@ -51,8 +48,4 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const flow = require('${{ github.workspace }}/.github/pr_flow.cjs');
-            if (context.eventName === 'pull_request_review') {
-              await flow.handleReviewEvent({ github, context, core });
-            } else {
-              await flow.handlePullRequestEvent({ github, context, core });
-            }
+            await flow.handlePullRequestEvent({ github, context, core });

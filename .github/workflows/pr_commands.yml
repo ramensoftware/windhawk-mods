@@ -21,8 +21,7 @@ jobs:
       github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       (contains(github.event.comment.body, '/ai-review') ||
-       contains(github.event.comment.body, '/ready-for-reviewer') ||
-       contains(github.event.comment.body, 'human-review'))
+       contains(github.event.comment.body, '/ready-for-reviewer'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
