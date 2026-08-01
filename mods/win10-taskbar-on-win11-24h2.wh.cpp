@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Win10 taskbar on Win11 24H2 or 25H2
 // @description     Installs Windows 10 taskbar on Windows 11 version 24H2, 25H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1.7
+// @version         0.1.8
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
