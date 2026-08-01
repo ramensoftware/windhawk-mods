@@ -46,11 +46,8 @@ There is no `NULL` check in that loop, so it is likely that the iterator was nev
 
 #include<cstdint>
 #include<windhawk_api.h>
-#include<windhawk_utils.h>
 
 using NotificationsAdded_t = HRESULT (*)(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length);
-
-static NotificationsAdded_t NotificationsAdded_orig;
 
 static HRESULT NotificationsAdded_hook(void *pthis, uint32_t arg2, void* const* iterator, uint32_t length) {
     Wh_Log(L"Suppressing %u notification(s)", length);
@@ -58,9 +55,7 @@ static HRESULT NotificationsAdded_hook(void *pthis, uint32_t arg2, void* const* 
     return S_OK;
 }
 
-static bool patch_applied { false };
-
-static uint8_t *target;
+static uint8_t *fn_ptr;
 
 extern BOOL Wh_ModInit(void) {
     Wh_Log(L"Initializing explorer function hook");
@@ -83,28 +78,14 @@ extern BOOL Wh_ModInit(void) {
         return FALSE;
     }
 
-    target = (uint8_t *) explorer + 0x14DC40;
-    Wh_Log(L"NotificationsAdded address: 0x%llx", target);
+    fn_ptr = (uint8_t *) explorer + 0x14DC40;
+    Wh_Log(L"NotificationsAdded address: 0x%p", fn_ptr);
 
-    if (WindhawkUtils::SetFunctionHook(target, (uint8_t *) NotificationsAdded_hook, (uint8_t **) &NotificationsAdded_orig))
-        patch_applied = true;
-    else {
+    if (!Wh_SetFunctionHook(fn_ptr, (void *) NotificationsAdded_hook, nullptr)) {
         Wh_Log(L"Error occurred during hooking");
         
         return FALSE;
     }
 
     return TRUE;
-}
-
-extern void Wh_ModBeforeUninit(void) {
-    if (!patch_applied) {
-        Wh_Log(L"UNINIT: Hook was not applied, skipping revert");
-        return;
-    }
-
-    if (Wh_RemoveFunctionHook(target))
-        Wh_Log(L"UNINIT: Hook unapplied successfully");
-    else
-        Wh_Log(L"UNINIT: Error occurred during unhooking");
 }
