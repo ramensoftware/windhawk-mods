@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-07-31T20:42:49.000Z</updated>
+    <updated>2026-08-01T17:35:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
+        <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
+        <link href="https://windhawk.net/mods/fix-10-taskbar-notifications"/>
+        <updated>2026-08-01T17:35:18.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod hooks the function responsible for crashing the Explorer shell provided by the Win10 taskbar mod at runtime.</p>
+<p>But it is not confirmed if notifications arrive to the Notification Center.
+Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)</p>
+<p><strong>!Important! You MUST install, follow the instructions and run at least 2 times the <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar mod.</a></strong>
+<strong>If you don't follow these instructions carefully, the mod will not apply correctly.</strong></p>
+<h1 id="technicaldetails">Technical details</h1>
+<p>When a notification is rendered, it invokes from explorer a method called </p>
+<pre><code class="cpp language-cpp">NotificationDataSink::NotificationsAdded(
+    NotificationDataSink *this,
+    int32_t _arg2,
+    struct NOC_REFINED_NOTIFICATION *const *iterator,
+    uint32_t length
+);
+</code></pre>
+<p>.</p>
+<p><strong>Given I haven't experienced any destabilization from explorer thus far, I claim that this has something to do with the Notification Center.</strong></p>
+<p>I won't go too deep into details of the function, but the crash is observed as a <code>NULL</code> pointer exception when it tries to access <code>*(iterator + 0x88)</code> for the first time, which is probably where the actual elements are.</p>
+<p>Normally, it would use that pointer to add 0x150 in a do-while loop until the notification thing elements are exhausted, but instead it's just <code>NULL</code>.
+I haven't given a look at the iterator memory to see if it's more than just the first element that's <code>NULL</code>, or more or all of them are such.</p>
+<p>There is no <code>NULL</code> check in that loop, so it is likely that the iterator was never supposed to have <code>NULL</code> elements in the first place.</p>]]></content>
+        <author>
+            <name>ilovethisgame</name>
+            <uri>https://github.com/bozohi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Charging Sound 1.5]]></title>
         <id>https://windhawk.net/mods/charging-sound#78fb5dc5fd24bfe4201b4587944badc87f6efc92</id>
@@ -693,50 +723,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[VLC Discord Rich Presence 1.2.0]]></title>
-        <id>https://windhawk.net/mods/vlc-discord-rpc#166d4f15809125b61e7e9f556c4d3b14ae78a52c</id>
-        <link href="https://windhawk.net/mods/vlc-discord-rpc"/>
-        <updated>2026-07-23T18:13:00.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="added">✨ Added</h2>
-<ul>
-<li>Added a <strong>multi-engine metadata scraper</strong> for more accurate movie and TV information.</li>
-<li>Added <strong>TVMaze support</strong> for TV shows, providing faster lookups and improving metadata accuracy.</li>
-<li>Added richer metadata, including:</li>
-<li>Official title</li>
-<li>Release year</li>
-<li>⭐ Rating</li>
-<li>Genres</li>
-<li>Runtime</li>
-<li>High-quality poster artwork</li>
-<li>Added a <strong>30-day local metadata cache</strong> to speed up repeat lookups and reduce unnecessary network requests.</li>
-<li>Reorganized mod settings into clear categories for easier navigation.</li>
-</ul>
-<h2 id="improved">🚀 Improved</h2>
-<ul>
-<li>Improved metadata lookup speed with faster loading times.</li>
-<li>Improved title matching for files containing scene names, quality tags, release groups, and other unnecessary text.</li>
-<li>Improved overall metadata accuracy for both movies and TV shows.</li>
-<li>Improved reliability when fetching metadata and artwork.</li>
-<li>Automatically removes expired cached metadata to keep the local cache clean and up to date.</li>
-<li>Improved compatibility with existing settings so previous configurations continue to work after updating.</li>
-<li>Improved overall stability when enabling, disabling, or reloading the mod.</li>
-</ul>
-<h2 id="fixed">🛠️ Fixed</h2>
-<ul>
-<li>Fixed incorrect posters being displayed for movies that are part of a collection (box sets). The correct movie poster is now shown.</li>
-<li>Fixed metadata matching issues caused by noisy or poorly formatted filenames.</li>
-<li>Fixed cases where title cleaning could accidentally remove parts of valid movie or TV show names.</li>
-<li>Fixed duplicate metadata notifications in some situations.</li>
-</ul>
-<blockquote>
-  <p><strong>Note:</strong> This is the <strong>final release supporting Windhawk v1.x.x</strong>.</p>
-</blockquote>]]></content>
-        <author>
-            <name>ciizerr</name>
-            <uri>https://github.com/ciizerr</uri>
         </author>
     </entry>
 </feed>

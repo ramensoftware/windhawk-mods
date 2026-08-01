@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-07-31T20:42:49.000Z</updated>
+    <updated>2026-08-01T17:35:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
+        <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
+        <link href="https://windhawk.net/mods/fix-10-taskbar-notifications"/>
+        <updated>2026-08-01T17:35:18.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod hooks the function responsible for crashing the Explorer shell provided by the Win10 taskbar mod at runtime.</p>
+<p>But it is not confirmed if notifications arrive to the Notification Center.
+Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)</p>
+<p><strong>!Important! You MUST install, follow the instructions and run at least 2 times the <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar mod.</a></strong>
+<strong>If you don't follow these instructions carefully, the mod will not apply correctly.</strong></p>
+<h1 id="technicaldetails">Technical details</h1>
+<p>When a notification is rendered, it invokes from explorer a method called </p>
+<pre><code class="cpp language-cpp">NotificationDataSink::NotificationsAdded(
+    NotificationDataSink *this,
+    int32_t _arg2,
+    struct NOC_REFINED_NOTIFICATION *const *iterator,
+    uint32_t length
+);
+</code></pre>
+<p>.</p>
+<p><strong>Given I haven't experienced any destabilization from explorer thus far, I claim that this has something to do with the Notification Center.</strong></p>
+<p>I won't go too deep into details of the function, but the crash is observed as a <code>NULL</code> pointer exception when it tries to access <code>*(iterator + 0x88)</code> for the first time, which is probably where the actual elements are.</p>
+<p>Normally, it would use that pointer to add 0x150 in a do-while loop until the notification thing elements are exhausted, but instead it's just <code>NULL</code>.
+I haven't given a look at the iterator memory to see if it's more than just the first element that's <code>NULL</code>, or more or all of them are such.</p>
+<p>There is no <code>NULL</code> check in that loop, so it is likely that the iterator was never supposed to have <code>NULL</code> elements in the first place.</p>]]></content>
+        <author>
+            <name>ilovethisgame</name>
+            <uri>https://github.com/bozohi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Charging Sound 1.5]]></title>
         <id>https://windhawk.net/mods/charging-sound#78fb5dc5fd24bfe4201b4587944badc87f6efc92</id>
@@ -1089,58 +1119,6 @@ If you are using this mod together with Classic Explorer toolbar (Open Shell), e
         <author>
             <name>gauthumj</name>
             <uri>https://github.com/gauthumj</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 1.5.0]]></title>
-        <id>https://windhawk.net/mods/win7-action-center-recreation#16034bdcfe218948d5917d77a0d8823e8e460b19</id>
-        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
-        <updated>2026-07-14T12:04:47.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781actioncenterrecreation">Windows 7/8.1 Action Center Recreation</h1>
-<p>This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout for modern Windows versions.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>Windows 7 theme</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png" alt="Image" /></p>
-<p>Windows 8.1 theme</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81act.png" alt="Image" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>No File Replacement</strong>: The mod's objective is to be stable and user-friendly and does not require the user to replace system files.</li>
-<li><strong>Real-time Security Status</strong>: The tray icon shows your system's security state at a glance. Green means everything is fine, yellow means warnings, red means critical issues.</li>
-<li><strong>Interactive Flyout</strong>: Click the tray icon to open a flyout that displays all security issues. Click any issue to open the relevant settings or troubleshooting page.</li>
-<li><strong>Rounded Corners</strong>: Rounded corners are supported for a more similar look to the original Windows 7 flyout.</li>
-<li><strong>Classic Theme support</strong>: Disable the "Rounded Corners" theme to make the flyout use a classic theme.</li>
-<li><strong>Balloon Notifications</strong>: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.</li>
-<li><strong>SmartScreen Check</strong>: Monitors Windows Defender SmartScreen status and reports if it is disabled.</li>
-<li><strong>Privacy Mode</strong>: The user can enable this mod to hide the eventual problems shown by the flyout.</li>
-<li><strong>Maintenance Checks</strong>: Automatically checks Backup status, Windows Error Reporting status, and Disk health. The disk health check is <strong>best-effort</strong>: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside <code>explorer.exe</code>, some drives may not answer — in that case the check is simply skipped and never reports a false problem.</li>
-<li><strong>ESC to Close</strong>: Press Escape to quickly close the flyout window.</li>
-<li><strong>Multiple Languages Support</strong>: English, Italian, Spanish, French, Russian are currently supported.</li>
-<li><strong>Security and Maintenance CPL Links</strong>: The mod restores the classic side-by-side <strong>Troubleshooting</strong> and <strong>Recovery</strong> entries on the Control Panel <em>Security and Maintenance</em> hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. </li>
-</ul>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>These are the hotkeys that can be configured in the mod.
-| Hotkey | Action |
-|--------|--------|
-| <code>Ctrl+N</code> | Simulate a notification |
-| <code>Ctrl+Shift+N</code> | Clear notifications |</p>
-<h2 id="howitworks">How It Works</h2>
-<p>The mod monitors the system's security settings including Firewall, Antivirus, Windows Update, UAC, Windows Defender and other settings. When an issue is detected, the tray icon changes color and the flyout shows the problem with a clickable link to fix it.
-The mod has been tested on Windows 10 21H2 and Windows 11 23H2.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod runs inside Explorer and works on Windows 10 and 11.</li>
-<li>If the icon doesn't appear, try restarting Explorer or the mod.</li>
-<li>The Control Panel hub links activate when you open <em>Security and Maintenance</em> (<code>control /name Microsoft.ActionCenter</code>). No system files are modified on disk.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme</li>
-<li>₮ዙℭ♔†WØLF† - Testing on Windows 11 23H2</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

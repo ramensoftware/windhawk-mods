@@ -5878,6 +5878,37 @@
         "version": "1.0"
       }
     },
+    "fix-10-taskbar-notifications": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785605718000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785605718000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ilovethisgame",
+        "description": "Stops notifications from crashing explorer",
+        "github": "https://github.com/bozohi",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Fix 11's notifications crash in Win10 taskbar under Win11 24H2+",
+        "version": "0.1"
+      }
+    },
     "fix-basic-caption-text": {
       "details": {
         "defaultSorting": 14904,
