@@ -7,8 +7,9 @@
 // @github          https://github.com/FranciscoMurias
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
+// @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lpowrprof
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lpowrprof -lshell32 -ladvapi32 -luserenv -luuid
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -37,6 +38,7 @@ calendar and focus-session controls unchanged.
 - Configurable location, units, refresh interval, and card height
 - Optional calendar daylight bar (sunrise–sunset) above the month grid
 - Optional remaining daylight time (beside, below, or instead of the total)
+- Optional calendar-app button (left of expand/collapse) with a custom launch path
 - Works with `ShellExperienceHost.exe` and newer `ShellHost.exe` (24H2+)
 - Compatible alongside **Windows 11 Notification Center Styler** (avoids copying
   that mod's theme engine; uses a uniquely named injected root)
@@ -62,51 +64,69 @@ location is unavailable.
 
 // ==WindhawkModSettings==
 /*
-- locationMode: manual
-  $name: Location mode
-  $description: Auto uses Windows location (may prompt once). Manual uses the name/coordinates below.
-  $options:
-  - manual: Manual
-  - auto: Auto-detect
-- locationName: Warsaw
-  $name: Location name
-  $description: Used in Manual mode (and as fallback label). Also used to geocode when coordinates are empty.
-- latitude: "52.2297"
-  $name: Latitude
-  $description: Manual mode decimal latitude (string)
-- longitude: "21.0122"
-  $name: Longitude
-  $description: Manual mode decimal longitude (string)
-- temperatureUnit: celsius
-  $name: Temperature unit
-  $options:
-  - celsius: Celsius
-  - fahrenheit: Fahrenheit
-- refreshMinutes: 60
-  $name: Refresh interval (minutes)
-  $description: How often to fetch fresh weather from Open-Meteo (default 60 = once per hour). Also refreshes when the flyout opens if the cache is older than this.
-- hourlyCount: 6
-  $name: Hourly columns
-  $description: Between 3 and 8
-- dailyCount: 5
-  $name: Daily rows
-  $description: Between 3 and 7
-- cardHeight: 390
-  $name: Weather card max height
-  $description: Caps the weather card height. The card sizes to its content and sits just above the calendar.
-- showLocation: true
-  $name: Show location name
-- showCalendarDaylight: false
-  $name: Show calendar daylight hours
-  $description: Insert a sunrise–sunset daylight bar between the clock/date and the month calendar
-- daylightHoursLeft: off
-  $name: Daylight hours left
-  $description: Show remaining daylight next to the total sunlight duration (requires calendar daylight hours)
-  $options:
-  - off: Off
-  - rightOf: To the right of total
-  - below: Below total
-  - insteadOf: Instead of total
+- weather:
+  - locationMode: manual
+    $name: Location mode
+    $description: Auto uses Windows location (may prompt once). Manual uses the name/coordinates below.
+    $options:
+      - manual: Manual
+      - auto: Auto-detect
+  - locationName: Warsaw
+    $name: Location name
+    $description: Used in Manual mode (and as fallback label). Also used to geocode when coordinates are empty.
+  - latitude: "52.2297"
+    $name: Latitude
+    $description: Manual mode decimal latitude (string)
+  - longitude: "21.0122"
+    $name: Longitude
+    $description: Manual mode decimal longitude (string)
+  - temperatureUnit: celsius
+    $name: Temperature unit
+    $options:
+      - celsius: Celsius
+      - fahrenheit: Fahrenheit
+  - refreshMinutes: 60
+    $name: Refresh interval (minutes)
+    $description: How often to fetch fresh weather from Open-Meteo (default 60 = once per hour). Also refreshes when the flyout opens if the cache is older than this.
+  - hourlyCount: 6
+    $name: Hourly columns
+    $description: Between 3 and 8
+  - dailyCount: 5
+    $name: Daily rows
+    $description: Between 3 and 7
+  - cardHeight: 390
+    $name: Weather card max height
+    $description: Caps the weather card height. The card sizes to its content and sits just above the calendar.
+  - showLocation: true
+    $name: Show location name
+  $name: Weather
+- daylight:
+  - showCalendarDaylight: false
+    $name: Show calendar daylight hours
+    $description: Insert a sunrise–sunset daylight bar between the clock/date and the month calendar
+  - daylightHoursLeft: off
+    $name: Daylight hours left
+    $description: Show remaining daylight next to the total sunlight duration (requires calendar daylight hours)
+    $options:
+      - off: Off
+      - rightOf: To the right of total
+      - below: Below total
+      - insteadOf: Instead of total
+  $name: Daylight meter
+- calendar:
+  - showCalendarAppButton: false
+    $name: Show calendar app button
+    $description: Place a small calendar button to the left of the expand/collapse control
+  - calendarAppPath: ""
+    $name: Calendar app path
+    $description: "Full path to an executable, or a URI (for example outlookcal: or ms-calendar:). Required when the button is shown."
+  - roundedDayMarkers: true
+    $name: Rounded day markers
+    $description: Use rounded rectangles for today and selected days instead of circles
+  - calendarDayHighlightColor: "#777777"
+    $name: Calendar day highlight
+    $description: "Hex color for today and selected day markers (for example #777777 or #FF777777). System opacity is preserved. Used when rounded day markers are enabled."
+  $name: Calendar tweaks
 */
 // ==/WindhawkModSettings==
 
@@ -123,14 +143,22 @@ location is unavailable.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #undef GetCurrentTime
 
 #include <commctrl.h>
 #include <combaseapi.h>
+#include <exdisp.h>
 #include <ocidl.h>
 #include <roapi.h>
+#include <shellapi.h>
+#include <shldisp.h>
+#include <shlguid.h>
+#include <shobjidl.h>
+#include <sddl.h>
+#include <userenv.h>
 #include <windows.h>
 #include <winstring.h>
 
@@ -148,7 +176,9 @@ location is unavailable.
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
@@ -396,6 +426,16 @@ void RefreshDaylightOnFlyoutShown();
 void RegisterVisibilityRefresh(wux::UIElement const& element, int64_t& cookie);
 bool MountDaylightIntoCalendarSection(InstanceHandle handle,
                                       wuxc::Grid const& section);
+bool MountCalendarLaunchButton(InstanceHandle handle, wuxc::Grid const& section);
+void ScheduleCalendarLaunchMountRetry(InstanceHandle handle,
+                                      wuxc::Grid const& section,
+                                      int attempt);
+void ApplyOrRestoreAllCalendarLaunch();
+void UnmountCalendarLaunchInstance(struct MountedCalendarLaunchInstance& instance);
+void ApplyCalendarDayShapeForSection(wuxc::Grid const& section,
+                                     int attempt = 0);
+void ApplyAllCalendarDayShapes();
+void RestoreAllCalendarDayShapes();
 
 ////////////////////////////////////////////////////////////////////////////////
 // Target process
@@ -403,9 +443,36 @@ bool MountDaylightIntoCalendarSection(InstanceHandle handle,
 enum class Target {
     ShellExperienceHost,
     ShellHost,
+    Explorer,
 };
 
 Target g_target = Target::ShellExperienceHost;
+
+// Explorer-side broker: ShellExperienceHost (AppContainer) cannot reliably
+// start Win32 apps. The flyout asks explorer.exe (also injected by this mod)
+// to ShellExecute the path via WM_COPYDATA and/or a shared mapping.
+//
+// V2 names: previous Local\ objects lacked an AppContainer ACL, so SEH could
+// not open them and launch fell through to false-positive ShellExecute calls.
+constexpr wchar_t kCalLaunchMappingName[] =
+    L"Local\\WindhawkCalWeatherLaunchPathV2";
+constexpr wchar_t kCalLaunchEventName[] =
+    L"Local\\WindhawkCalWeatherLaunchEventV2";
+constexpr wchar_t kCalLaunchWindowClass[] = L"WindhawkCalWeatherLaunchWnd";
+constexpr wchar_t kCalLaunchWindowTitle[] = L"WindhawkCalWeatherLaunch";
+constexpr DWORD kCalLaunchMappingBytes = 4096;
+constexpr UINT kCalLaunchCopyDataId = 0xC7A1;  // arbitrary non-zero token
+
+HANDLE g_calLaunchMapping = nullptr;
+HANDLE g_calLaunchEvent = nullptr;
+HANDLE g_calLaunchStopEvent = nullptr;
+HANDLE g_calLaunchThread = nullptr;
+HWND g_calLaunchHwnd = nullptr;
+
+void StopCalendarLaunchBroker();
+bool StartCalendarLaunchBroker();
+bool RequestLaunchViaExplorerBroker(std::wstring const& path);
+void ExplorerBrokerLaunchPath(std::wstring const& path);
 
 std::atomic<bool> g_initialized{false};
 thread_local bool g_initializedForThread = false;
@@ -431,6 +498,13 @@ struct ModSettings {
     bool showCalendarDaylight = false;
     // off | rightOf | below | insteadOf
     std::wstring daylightHoursLeft = L"off";
+    bool showCalendarAppButton = false;
+    std::wstring calendarAppPath;
+    bool roundedDayMarkers = true;
+    // RGB only — alpha is taken from the calendar's existing day chrome.
+    uint8_t calendarDayHighlightR = 0x77;
+    uint8_t calendarDayHighlightG = 0x77;
+    uint8_t calendarDayHighlightB = 0x77;
 };
 
 ModSettings g_settings;
@@ -454,20 +528,99 @@ int ClampInt(int value, int minValue, int maxValue) {
     return (std::max)(minValue, (std::min)(value, maxValue));
 }
 
+bool ParseHexColorRgb(PCWSTR text, uint8_t& r, uint8_t& g, uint8_t& b) {
+    if (!text) {
+        return false;
+    }
+    while (*text == L' ' || *text == L'\t') {
+        ++text;
+    }
+    if (*text == L'#') {
+        ++text;
+    }
+    auto hexVal = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') {
+            return c - L'0';
+        }
+        if (c >= L'a' && c <= L'f') {
+            return c - L'a' + 10;
+        }
+        if (c >= L'A' && c <= L'F') {
+            return c - L'A' + 10;
+        }
+        return -1;
+    };
+
+    wchar_t buf[9]{};
+    size_t n = 0;
+    while (text[n] && n < 8) {
+        if (hexVal(text[n]) < 0) {
+            break;
+        }
+        buf[n] = text[n];
+        ++n;
+    }
+    if (n != 3 && n != 6 && n != 8) {
+        return false;
+    }
+
+    auto pair = [&](wchar_t hi, wchar_t lo) -> uint8_t {
+        return static_cast<uint8_t>((hexVal(hi) << 4) | hexVal(lo));
+    };
+
+    if (n == 3) {
+        // #RGB
+        r = pair(buf[0], buf[0]);
+        g = pair(buf[1], buf[1]);
+        b = pair(buf[2], buf[2]);
+        return true;
+    }
+    if (n == 6) {
+        // #RRGGBB
+        r = pair(buf[0], buf[1]);
+        g = pair(buf[2], buf[3]);
+        b = pair(buf[4], buf[5]);
+        return true;
+    }
+    // #AARRGGBB — ignore alpha; opacity comes from system chrome.
+    r = pair(buf[2], buf[3]);
+    g = pair(buf[4], buf[5]);
+    b = pair(buf[6], buf[7]);
+    return true;
+}
+
+// Sectioned keys (weather.*/daylight.*/calendar.*) are authoritative.
+// String helpers may fall back to pre-section flat names when the nested
+// value is empty (first run after regroup / missing default).
+string_setting_unique_ptr GetStringSettingPref(PCWSTR primary, PCWSTR legacy) {
+    string_setting_unique_ptr value(Wh_GetStringSetting(primary));
+    if (value && value.get()[0]) {
+        return value;
+    }
+    if (legacy && *legacy) {
+        return string_setting_unique_ptr(Wh_GetStringSetting(legacy));
+    }
+    return value;
+}
+
 void LoadSettings() {
     ModSettings s;
 
-    string_setting_unique_ptr locationMode(Wh_GetStringSetting(L"locationMode"));
+    string_setting_unique_ptr locationMode(
+        GetStringSettingPref(L"weather.locationMode", L"locationMode"));
     s.autoLocation =
         locationMode && _wcsicmp(locationMode.get(), L"auto") == 0;
 
-    string_setting_unique_ptr locationName(Wh_GetStringSetting(L"locationName"));
+    string_setting_unique_ptr locationName(
+        GetStringSettingPref(L"weather.locationName", L"locationName"));
     if (locationName && locationName.get()[0]) {
         s.locationName = locationName.get();
     }
 
-    string_setting_unique_ptr latitudeText(Wh_GetStringSetting(L"latitude"));
-    string_setting_unique_ptr longitudeText(Wh_GetStringSetting(L"longitude"));
+    string_setting_unique_ptr latitudeText(
+        GetStringSettingPref(L"weather.latitude", L"latitude"));
+    string_setting_unique_ptr longitudeText(
+        GetStringSettingPref(L"weather.longitude", L"longitude"));
     bool latOk = false;
     bool lonOk = false;
     s.latitude = ParseCoordinate(latitudeText ? latitudeText.get() : L"", latOk);
@@ -477,22 +630,27 @@ void LoadSettings() {
                          s.latitude <= 90.0 && s.longitude >= -180.0 &&
                          s.longitude <= 180.0;
 
-    string_setting_unique_ptr unit(Wh_GetStringSetting(L"temperatureUnit"));
+    string_setting_unique_ptr unit(
+        GetStringSettingPref(L"weather.temperatureUnit", L"temperatureUnit"));
     if (unit && _wcsicmp(unit.get(), L"fahrenheit") == 0) {
         s.temperatureUnit = L"fahrenheit";
     } else {
         s.temperatureUnit = L"celsius";
     }
 
-    s.refreshMinutes = ClampInt(Wh_GetIntSetting(L"refreshMinutes"), 15, 360);
-    s.hourlyCount = ClampInt(Wh_GetIntSetting(L"hourlyCount"), 3, 8);
-    s.dailyCount = ClampInt(Wh_GetIntSetting(L"dailyCount"), 3, 7);
-    s.cardHeight = ClampInt(Wh_GetIntSetting(L"cardHeight"), 300, 520);
-    s.showLocation = Wh_GetIntSetting(L"showLocation") != 0;
-    s.showCalendarDaylight = Wh_GetIntSetting(L"showCalendarDaylight") != 0;
+    // Booleans/ints: nested keys only. Falling back to legacy when nested ==
+    // schema default made toggles impossible to turn off (old flat values won).
+    s.refreshMinutes =
+        ClampInt(Wh_GetIntSetting(L"weather.refreshMinutes"), 15, 360);
+    s.hourlyCount = ClampInt(Wh_GetIntSetting(L"weather.hourlyCount"), 3, 8);
+    s.dailyCount = ClampInt(Wh_GetIntSetting(L"weather.dailyCount"), 3, 7);
+    s.cardHeight = ClampInt(Wh_GetIntSetting(L"weather.cardHeight"), 300, 520);
+    s.showLocation = Wh_GetIntSetting(L"weather.showLocation") != 0;
+    s.showCalendarDaylight =
+        Wh_GetIntSetting(L"daylight.showCalendarDaylight") != 0;
 
-    string_setting_unique_ptr daylightLeft(
-        Wh_GetStringSetting(L"daylightHoursLeft"));
+    string_setting_unique_ptr daylightLeft(GetStringSettingPref(
+        L"daylight.daylightHoursLeft", L"daylightHoursLeft"));
     if (daylightLeft &&
         (_wcsicmp(daylightLeft.get(), L"rightOf") == 0 ||
          _wcsicmp(daylightLeft.get(), L"below") == 0 ||
@@ -502,19 +660,61 @@ void LoadSettings() {
         s.daylightHoursLeft = L"off";
     }
 
+    s.showCalendarAppButton =
+        Wh_GetIntSetting(L"calendar.showCalendarAppButton") != 0;
+    string_setting_unique_ptr calendarAppPath(GetStringSettingPref(
+        L"calendar.calendarAppPath", L"calendarAppPath"));
+    if (calendarAppPath && calendarAppPath.get()[0]) {
+        s.calendarAppPath = calendarAppPath.get();
+        // Trim surrounding quotes from pasted paths.
+        if (s.calendarAppPath.size() >= 2 && s.calendarAppPath.front() == L'"' &&
+            s.calendarAppPath.back() == L'"') {
+            s.calendarAppPath =
+                s.calendarAppPath.substr(1, s.calendarAppPath.size() - 2);
+        }
+    }
+
+    s.roundedDayMarkers =
+        Wh_GetIntSetting(L"calendar.roundedDayMarkers") != 0;
+
+    {
+        string_setting_unique_ptr highlightColor(GetStringSettingPref(
+            L"calendar.calendarDayHighlightColor",
+            L"calendarDayHighlightColor"));
+        uint8_t r = 0x77, g = 0x77, b = 0x77;
+        if (highlightColor &&
+            ParseHexColorRgb(highlightColor.get(), r, g, b)) {
+            s.calendarDayHighlightR = r;
+            s.calendarDayHighlightG = g;
+            s.calendarDayHighlightB = b;
+        }
+    }
+
     {
         std::lock_guard lock(g_settingsMutex);
         g_settings = std::move(s);
     }
 
-    Wh_Log(L"Settings loaded: mode=%s location=%s coordsValid=%d unit=%s "
-           L"refresh=%d hourly=%d daily=%d height=%d daylight=%d left=%s",
-           g_settings.autoLocation ? L"auto" : L"manual",
-           g_settings.locationName.c_str(), g_settings.coordinatesValid ? 1 : 0,
-           g_settings.temperatureUnit.c_str(), g_settings.refreshMinutes,
-           g_settings.hourlyCount, g_settings.dailyCount, g_settings.cardHeight,
-           g_settings.showCalendarDaylight ? 1 : 0,
-           g_settings.daylightHoursLeft.c_str());
+    Wh_Log(
+        L"Settings loaded: mode=%s location=%s coordsValid=%d unit=%s "
+        L"refresh=%d hourly=%d daily=%d height=%d daylight=%d (raw=%d) left=%s "
+        L"calBtn=%d (raw=%d) calPath=%s roundedDays=%d (raw=%d) "
+        L"dayHighlight=#%02X%02X%02X",
+        g_settings.autoLocation ? L"auto" : L"manual",
+        g_settings.locationName.c_str(), g_settings.coordinatesValid ? 1 : 0,
+        g_settings.temperatureUnit.c_str(), g_settings.refreshMinutes,
+        g_settings.hourlyCount, g_settings.dailyCount, g_settings.cardHeight,
+        g_settings.showCalendarDaylight ? 1 : 0,
+        Wh_GetIntSetting(L"daylight.showCalendarDaylight"),
+        g_settings.daylightHoursLeft.c_str(),
+        g_settings.showCalendarAppButton ? 1 : 0,
+        Wh_GetIntSetting(L"calendar.showCalendarAppButton"),
+        g_settings.calendarAppPath.empty() ? L"(empty)"
+                                           : g_settings.calendarAppPath.c_str(),
+        g_settings.roundedDayMarkers ? 1 : 0,
+        Wh_GetIntSetting(L"calendar.roundedDayMarkers"),
+        g_settings.calendarDayHighlightR, g_settings.calendarDayHighlightG,
+        g_settings.calendarDayHighlightB);
 }
 
 ModSettings GetSettingsCopy() {
@@ -718,6 +918,46 @@ struct MountedDaylightInstance {
 };
 
 std::vector<MountedDaylightInstance> g_daylightMounted;
+
+struct MountedCalendarLaunchInstance {
+    InstanceHandle sectionHandle = 0;
+    DWORD uiThreadId = 0;
+    winrt::weak_ref<wuxc::Grid> calendarSection;
+    winrt::weak_ref<wuxc::Panel> parent;
+    winrt::weak_ref<wuxc::StackPanel> host;
+    winrt::weak_ref<wuxc::Button> launchButton;
+    winrt::weak_ref<wuxc::Button> expandButton;
+    winrt::weak_ref<wuxc::Border> hoverFill;
+    winrt::weak_ref<wuxc::Border> templateFill;
+    winrt::weak_ref<wuxc::Border> templateStroke;
+    winrt::weak_ref<wuxc::Border> templatePressed;
+    ws::DispatcherQueue dispatcherQueue{nullptr};
+    wuc::CoreDispatcher coreDispatcher{nullptr};
+    wuxc::Button::Click_revoker clickRevoker;
+    wux::UIElement::PointerEntered_revoker pointerEnteredRevoker;
+    wux::UIElement::PointerPressed_revoker pointerPressedRevoker;
+    wux::UIElement::PointerReleased_revoker pointerReleasedRevoker;
+    wux::UIElement::PointerExited_revoker pointerExitedRevoker;
+    wux::UIElement::Tapped_revoker tappedRevoker;
+    int gridRow = 0;
+    int gridColumn = 0;
+    int gridRowSpan = 1;
+    int gridColumnSpan = 1;
+    wux::HorizontalAlignment expandHAlign = wux::HorizontalAlignment::Right;
+    wux::VerticalAlignment expandVAlign = wux::VerticalAlignment::Top;
+    wux::Thickness expandMargin{};
+
+    MountedCalendarLaunchInstance() = default;
+    MountedCalendarLaunchInstance(const MountedCalendarLaunchInstance&) =
+        delete;
+    MountedCalendarLaunchInstance& operator=(
+        const MountedCalendarLaunchInstance&) = delete;
+    MountedCalendarLaunchInstance(MountedCalendarLaunchInstance&&) = default;
+    MountedCalendarLaunchInstance& operator=(MountedCalendarLaunchInstance&&) =
+        default;
+};
+
+std::vector<MountedCalendarLaunchInstance> g_calendarLaunchMounted;
 std::recursive_mutex g_mountMutex;
 std::vector<MountedWeatherInstance> g_mounted;
 
@@ -2712,11 +2952,17 @@ void EnsureRefreshTimer() {
     }
 
     auto settings = GetSettingsCopy();
+    if (g_shuttingDown.load()) {
+        return;
+    }
     const DWORD periodMs =
         static_cast<DWORD>(settings.refreshMinutes) * 60U * 1000U;
     FILETIME due = MakeRelativeDueTime(periodMs);
 
     std::lock_guard lock(g_timerMutex);
+    if (g_shuttingDown.load()) {
+        return;
+    }
     if (g_refreshTimer) {
         // Do not reset the countdown on every remount/init helper call —
         // that used to push the next hourly fetch out indefinitely.
@@ -2760,6 +3006,9 @@ void EnsureDaylightTickTimer() {
     FILETIME due = MakeRelativeDueTime(kPeriodMs);
 
     std::lock_guard lock(g_timerMutex);
+    if (g_shuttingDown.load()) {
+        return;
+    }
     if (g_daylightTickTimer) {
         // Do NOT reschedule — remount/flyout-open used to push due time out
         // forever so the tick never fired.
@@ -2829,25 +3078,35 @@ void StartDaylightDispatcherTick(MountedDaylightInstance& instance) {
 }
 
 void StopRefreshTimer() {
-    if (g_refreshTimer) {
-        SetThreadpoolTimer(g_refreshTimer, nullptr, 0, 0);
-        WaitForThreadpoolTimerCallbacks(g_refreshTimer, TRUE);
-        CloseThreadpoolTimer(g_refreshTimer);
+    // Take timer pointers under the lock, then wait/close OUTSIDE it.
+    // Timer callbacks (daylight tick → RequestWeatherRefresh → EnsureRefreshTimer)
+    // also take g_timerMutex; waiting while holding it deadlocks Uninit.
+    PTP_TIMER refresh = nullptr;
+    PTP_TIMER daylight = nullptr;
+    {
+        std::lock_guard lock(g_timerMutex);
+        refresh = g_refreshTimer;
+        daylight = g_daylightTickTimer;
         g_refreshTimer = nullptr;
+        g_daylightTickTimer = nullptr;
         g_refreshTimerPeriodMs = 0;
+    }
+    if (refresh) {
+        SetThreadpoolTimer(refresh, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(refresh, TRUE);
+        CloseThreadpoolTimer(refresh);
         Wh_Log(L"Refresh timer stopped");
     }
-    if (g_daylightTickTimer) {
-        SetThreadpoolTimer(g_daylightTickTimer, nullptr, 0, 0);
-        WaitForThreadpoolTimerCallbacks(g_daylightTickTimer, TRUE);
-        CloseThreadpoolTimer(g_daylightTickTimer);
-        g_daylightTickTimer = nullptr;
+    if (daylight) {
+        SetThreadpoolTimer(daylight, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(daylight, TRUE);
+        CloseThreadpoolTimer(daylight);
         Wh_Log(L"Daylight tick timer stopped");
     }
 }
 
 void StopRefreshTimerLocked() {
-    std::lock_guard lock(g_timerMutex);
+    // Name is historical — must not wait while uniquely holding g_timerMutex.
     StopRefreshTimer();
 }
 
@@ -3716,6 +3975,3019 @@ void UnmountDaylightInstance(MountedDaylightInstance& instance) {
     instance.insertedGridRow = -1;
     instance.insertedRowDefinition = false;
     instance.clocksLayoutSaved = false;
+}
+
+constexpr PCWSTR kCalendarLaunchHostName = L"WindhawkCalendarLaunchHost";
+constexpr PCWSTR kCalendarLaunchButtonName = L"WindhawkCalendarLaunchButton";
+
+// Default Win11 day chrome is circular (radius ≈ half the cell). Modest
+// radius → rounded rectangles.
+// NOTE: Do not replace CalendarViewDayItemStyle — a custom Style without
+// BasedOn breaks the shell calendar flyout. Do not override DayItemMargin
+// (theme uses a top-only offset; uniform values add an uneven bottom gap).
+// Shrink markers with RenderTransform scale (does not affect layout).
+// Day numbers share that transform — do not compensate via DayItemFontSize /
+// nested text scales (those approaches broke the flyout).
+constexpr double kCalendarDayItemCornerRadius = 6.0;
+// Theme default is typically 1; a small bump thickens the selected stroke.
+constexpr double kCalendarDaySelectedBorderThickness = 2;
+constexpr double kCalendarDayItemVisualScale = 0.98;
+
+struct CalendarDayShapePatch {
+    winrt::weak_ref<wuxc::CalendarView> calendar;
+    std::vector<SavedProperty> savedProperties;
+    wuxc::CalendarView::CalendarViewDayItemChanging_revoker
+        dayItemChangingRevoker{};
+};
+
+std::vector<CalendarDayShapePatch> g_calendarDayShapePatches;
+
+wux::DependencyProperty ResolveCalendarViewProperty(PCWSTR propertyName,
+                                                    bool brushProperty) {
+    try {
+        std::wstring xaml =
+            L"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
+            L"presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/"
+            L"xaml' TargetType='CalendarView'><Setter Property='";
+        xaml += propertyName;
+        if (brushProperty) {
+            // xmlns:x is required for {x:Null}; without it brush DPs never
+            // resolve and highlight colors silently fail to apply.
+            xaml += L"' Value='{x:Null}'/></Style>";
+        } else {
+            xaml += L"' Value='0'/></Style>";
+        }
+        auto style = wux::Markup::XamlReader::Load(xaml).as<wux::Style>();
+        return style.Setters().GetAt(0).as<wux::Setter>().Property();
+    } catch (...) {
+        Wh_Log(L"ResolveCalendarViewProperty(%s) failed %08X", propertyName,
+               winrt::to_hresult());
+    }
+    return nullptr;
+}
+
+wuxc::CalendarView FindCalendarViewInSubtree(wux::DependencyObject const& root,
+                                             int maxDepth) {
+    if (!root || maxDepth < 0) {
+        return nullptr;
+    }
+    try {
+        if (auto calendar = root.try_as<wuxc::CalendarView>()) {
+            return calendar;
+        }
+        try {
+            auto className = winrt::get_class_name(root);
+            if (className == L"Windows.UI.Xaml.Controls.CalendarView") {
+                return root.try_as<wuxc::CalendarView>();
+            }
+        } catch (...) {
+        }
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            if (auto found = FindCalendarViewInSubtree(
+                    wuxm::VisualTreeHelper::GetChild(root, i), maxDepth - 1)) {
+                return found;
+            }
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+bool SetCalendarItemCornerRadius(wuxc::CalendarView const& calendar,
+                                 wux::CornerRadius const& radius,
+                                 std::vector<SavedProperty>* saveInto) {
+    if (!calendar) {
+        return false;
+    }
+    // Prefer DependencyProperty resolve so we compile against older WinRT
+    // projections that omit CalendarItemCornerRadius accessors.
+    try {
+        if (auto prop = ResolveCalendarViewProperty(L"CalendarItemCornerRadius",
+                                                    false)) {
+            if (saveInto) {
+                SavePropertyOnce(calendar, prop, *saveInto);
+            }
+            calendar.SetValue(prop, winrt::box_value(radius));
+            return true;
+        }
+    } catch (...) {
+        Wh_Log(L"SetCalendarItemCornerRadius failed %08X",
+               winrt::to_hresult());
+    }
+    return false;
+}
+
+bool ApplyCalendarDaySelectedBorderThickness(
+    wuxc::CalendarView const& calendar,
+    std::vector<SavedProperty>* saveInto) {
+    if (!calendar) {
+        return false;
+    }
+    try {
+        if (auto prop = ResolveCalendarViewProperty(
+                L"CalendarItemBorderThickness", false)) {
+            if (saveInto) {
+                SavePropertyOnce(calendar, prop, *saveInto);
+            }
+            const double t = kCalendarDaySelectedBorderThickness;
+            calendar.SetValue(prop,
+                              winrt::box_value(wux::Thickness{t, t, t, t}));
+            return true;
+        }
+    } catch (...) {
+        Wh_Log(L"ApplyCalendarDaySelectedBorderThickness failed %08X",
+               winrt::to_hresult());
+    }
+    return false;
+}
+
+void ApplyDayItemVisualScale(wux::UIElement const& element) {
+    if (!element) {
+        return;
+    }
+    try {
+        element.RenderTransformOrigin(wf::Point{0.5f, 0.5f});
+        wuxm::ScaleTransform scale;
+        scale.ScaleX(kCalendarDayItemVisualScale);
+        scale.ScaleY(kCalendarDayItemVisualScale);
+        element.RenderTransform(scale);
+    } catch (...) {
+    }
+}
+
+void ClearDayItemVisualScale(wux::UIElement const& element) {
+    if (!element) {
+        return;
+    }
+    try {
+        element.ClearValue(wux::UIElement::RenderTransformProperty());
+        element.ClearValue(wux::UIElement::RenderTransformOriginProperty());
+    } catch (...) {
+    }
+}
+
+bool IsCalendarViewDayItem(wux::DependencyObject const& node) {
+    if (!node) {
+        return false;
+    }
+    try {
+        if (node.try_as<wuxc::CalendarViewDayItem>()) {
+            return true;
+        }
+    } catch (...) {
+    }
+    try {
+        auto className = winrt::get_class_name(node);
+        return className == L"Windows.UI.Xaml.Controls.CalendarViewDayItem";
+    } catch (...) {
+    }
+    return false;
+}
+
+void ForEachCalendarViewDayItem(
+    wux::DependencyObject const& root,
+    int maxDepth,
+    std::function<void(wux::UIElement const&)> const& fn) {
+    if (!root || maxDepth < 0 || !fn) {
+        return;
+    }
+    try {
+        if (IsCalendarViewDayItem(root)) {
+            if (auto el = root.try_as<wux::UIElement>()) {
+                fn(el);
+            }
+        }
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            ForEachCalendarViewDayItem(
+                wuxm::VisualTreeHelper::GetChild(root, i), maxDepth - 1, fn);
+        }
+    } catch (...) {
+    }
+}
+
+void ScaleExistingCalendarDayItems(wuxc::CalendarView const& calendar) {
+    ForEachCalendarViewDayItem(calendar, 16, [](wux::UIElement const& el) {
+        ApplyDayItemVisualScale(el);
+    });
+}
+
+void ClearScaledCalendarDayItems(wuxc::CalendarView const& calendar) {
+    ForEachCalendarViewDayItem(calendar, 16, [](wux::UIElement const& el) {
+        ClearDayItemVisualScale(el);
+    });
+}
+
+void EnsureCalendarDayItemVisualScaleHook(wuxc::CalendarView const& calendar,
+                                          CalendarDayShapePatch& patch) {
+    if (!calendar) {
+        return;
+    }
+    ScaleExistingCalendarDayItems(calendar);
+    if (patch.dayItemChangingRevoker) {
+        return;
+    }
+    try {
+        patch.dayItemChangingRevoker = calendar.CalendarViewDayItemChanging(
+            winrt::auto_revoke,
+            [](wuxc::CalendarView const&,
+               wuxc::CalendarViewDayItemChangingEventArgs const& args) {
+                if (g_shuttingDown.load()) {
+                    return;
+                }
+                try {
+                    if (args.InRecycleQueue()) {
+                        return;
+                    }
+                    if (auto item = args.Item()) {
+                        ApplyDayItemVisualScale(item);
+                    }
+                } catch (...) {
+                }
+            });
+    } catch (...) {
+        Wh_Log(L"CalendarViewDayItemChanging hook failed %08X",
+               winrt::to_hresult());
+    }
+}
+
+void ClearCalendarDayChromeOverrides(wuxc::CalendarView const& calendar) {
+    if (!calendar) {
+        return;
+    }
+    // Clear only properties this mod sets. Also clear DayItemMargin /
+    // CalendarViewDayItemStyle leftovers from older broken builds.
+    static constexpr struct {
+        PCWSTR name;
+        bool brush;
+    } kProps[] = {
+        {L"CalendarItemCornerRadius", false},
+        {L"CalendarItemBorderThickness", false},
+        {L"DayItemFontSize", false},  // clear leftovers from broken compensation
+        {L"DayItemMargin", false},
+        {L"CalendarViewDayItemStyle", true},
+        {L"TodayBackground", true},
+        {L"SelectedBorderBrush", true},
+        {L"SelectedHoverBorderBrush", true},
+        {L"SelectedPressedBorderBrush", true},
+    };
+    for (auto const& item : kProps) {
+        try {
+            if (auto prop =
+                    ResolveCalendarViewProperty(item.name, item.brush)) {
+                calendar.ClearValue(prop);
+            }
+        } catch (...) {
+        }
+    }
+}
+
+uint8_t BrushAlphaOrFallback(wuxm::Brush const& brush, uint8_t fallback) {
+    if (!brush) {
+        return fallback;
+    }
+    try {
+        if (auto solid = brush.try_as<wuxm::SolidColorBrush>()) {
+            auto color = solid.Color();
+            if (color.A > 0) {
+                return color.A;
+            }
+            // Transparent solid — opacity may live on the brush.
+            double opacity = solid.Opacity();
+            if (opacity > 0.0 && opacity < 1.0) {
+                return static_cast<uint8_t>(
+                    (std::max)(0.0, (std::min)(1.0, opacity)) * 255.0 + 0.5);
+            }
+            if (color.A == 0 && opacity >= 1.0) {
+                return fallback;
+            }
+            return color.A ? color.A : fallback;
+        }
+    } catch (...) {
+    }
+    try {
+        double opacity = brush.Opacity();
+        if (opacity > 0.0 && opacity <= 1.0) {
+            return static_cast<uint8_t>(opacity * 255.0 + 0.5);
+        }
+    } catch (...) {
+    }
+    return fallback;
+}
+
+wuxm::Brush MakeCalendarDayHighlightBrush(uint8_t alpha) {
+    auto settings = GetSettingsCopy();
+    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{
+        alpha, settings.calendarDayHighlightR, settings.calendarDayHighlightG,
+        settings.calendarDayHighlightB});
+}
+
+bool ApplyCalendarDayBrushProperty(wuxc::CalendarView const& calendar,
+                                   PCWSTR propertyName,
+                                   uint8_t fallbackAlpha,
+                                   std::vector<SavedProperty>* saveInto) {
+    if (!calendar) {
+        return false;
+    }
+    try {
+        auto prop = ResolveCalendarViewProperty(propertyName, true);
+        if (!prop) {
+            return false;
+        }
+        if (saveInto) {
+            SavePropertyOnce(calendar, prop, *saveInto);
+        }
+        uint8_t alpha = fallbackAlpha;
+        try {
+            if (auto current = calendar.GetValue(prop)) {
+                if (auto brush = current.try_as<wuxm::Brush>()) {
+                    alpha = BrushAlphaOrFallback(brush, fallbackAlpha);
+                }
+            }
+        } catch (...) {
+        }
+        // If we already overwrote with our solid brush, prefer the saved
+        // original alpha so settings changes don't stack.
+        if (saveInto) {
+            for (auto const& saved : *saveInto) {
+                if (saved.property == prop && saved.value) {
+                    if (auto brush = saved.value.try_as<wuxm::Brush>()) {
+                        alpha = BrushAlphaOrFallback(brush, fallbackAlpha);
+                    }
+                    break;
+                }
+            }
+        }
+        calendar.SetValue(prop, MakeCalendarDayHighlightBrush(alpha));
+        return true;
+    } catch (...) {
+        Wh_Log(L"ApplyCalendarDayBrushProperty(%s) failed %08X", propertyName,
+               winrt::to_hresult());
+    }
+    return false;
+}
+
+void ApplyCalendarDayHighlightColors(wuxc::CalendarView const& calendar,
+                                     std::vector<SavedProperty>* saveInto) {
+    // Today fill + selected chrome share one RGB; each keeps its own alpha.
+    static constexpr PCWSTR kBrushProps[] = {
+        L"TodayBackground",
+        L"SelectedBorderBrush",
+        L"SelectedHoverBorderBrush",
+        L"SelectedPressedBorderBrush",
+    };
+    for (auto propName : kBrushProps) {
+        ApplyCalendarDayBrushProperty(calendar, propName, 255, saveInto);
+    }
+}
+
+void ApplyCalendarDayRoundedRects(wuxc::CalendarView const& calendar) {
+    if (!calendar || g_shuttingDown.load()) {
+        return;
+    }
+    if (!GetSettingsCopy().roundedDayMarkers) {
+        return;
+    }
+
+    const wux::CornerRadius rounded{kCalendarDayItemCornerRadius,
+                                    kCalendarDayItemCornerRadius,
+                                    kCalendarDayItemCornerRadius,
+                                    kCalendarDayItemCornerRadius};
+
+    auto applyChrome = [&](CalendarDayShapePatch& patch) {
+        if (!SetCalendarItemCornerRadius(calendar, rounded,
+                                         &patch.savedProperties)) {
+            Wh_Log(L"Could not set CalendarItemCornerRadius");
+        }
+        if (!ApplyCalendarDaySelectedBorderThickness(calendar,
+                                                     &patch.savedProperties)) {
+            Wh_Log(L"Could not set CalendarItemBorderThickness");
+        }
+        // Clear leftovers from older builds that broke the flyout / layout.
+        try {
+            if (auto prop =
+                    ResolveCalendarViewProperty(L"DayItemMargin", false)) {
+                calendar.ClearValue(prop);
+            }
+        } catch (...) {
+        }
+        try {
+            if (auto prop = ResolveCalendarViewProperty(
+                    L"CalendarViewDayItemStyle", true)) {
+                calendar.ClearValue(prop);
+            }
+        } catch (...) {
+        }
+        try {
+            if (auto prop =
+                    ResolveCalendarViewProperty(L"DayItemFontSize", false)) {
+                calendar.ClearValue(prop);
+            }
+        } catch (...) {
+        }
+        ApplyCalendarDayHighlightColors(calendar, &patch.savedProperties);
+    };
+
+    {
+        std::lock_guard lock(g_mountMutex);
+        for (auto& patch : g_calendarDayShapePatches) {
+            if (auto existing = patch.calendar.get()) {
+                if (existing == calendar) {
+                    applyChrome(patch);
+                    EnsureCalendarDayItemVisualScaleHook(calendar, patch);
+                    return;
+                }
+            }
+        }
+    }
+
+    CalendarDayShapePatch patch;
+    patch.calendar = winrt::make_weak(calendar);
+    applyChrome(patch);
+    EnsureCalendarDayItemVisualScaleHook(calendar, patch);
+
+    {
+        std::lock_guard lock(g_mountMutex);
+        g_calendarDayShapePatches.push_back(std::move(patch));
+    }
+    Wh_Log(L"Calendar day chrome radius=%g border=%g scale=%g "
+           L"highlight=#%02X%02X%02X",
+           kCalendarDayItemCornerRadius, kCalendarDaySelectedBorderThickness,
+           kCalendarDayItemVisualScale,
+           GetSettingsCopy().calendarDayHighlightR,
+           GetSettingsCopy().calendarDayHighlightG,
+           GetSettingsCopy().calendarDayHighlightB);
+}
+
+void ScheduleCalendarDayShapeRetry(wuxc::Grid const& section, int attempt);
+
+void ApplyCalendarDayShapeForSection(wuxc::Grid const& section, int attempt) {
+    if (!section || g_shuttingDown.load()) {
+        return;
+    }
+    if (!GetSettingsCopy().roundedDayMarkers) {
+        return;
+    }
+    try {
+        if (auto calendar = FindCalendarViewInSubtree(section, 14)) {
+            ApplyCalendarDayRoundedRects(calendar);
+            return;
+        }
+        // CalendarView sometimes lives beside CalendarSection under the same
+        // CalendarCenterGrid parent.
+        if (auto parent = wuxm::VisualTreeHelper::GetParent(section)) {
+            if (auto calendar = FindCalendarViewInSubtree(parent, 10)) {
+                ApplyCalendarDayRoundedRects(calendar);
+                return;
+            }
+        }
+        if (attempt < 8) {
+            ScheduleCalendarDayShapeRetry(section, attempt + 1);
+        }
+    } catch (...) {
+        Wh_Log(L"ApplyCalendarDayShapeForSection error %08X",
+               winrt::to_hresult());
+    }
+}
+
+void ScheduleCalendarDayShapeRetry(wuxc::Grid const& section, int attempt) {
+    if (!section || g_shuttingDown.load()) {
+        return;
+    }
+    try {
+        if (auto dq = ws::DispatcherQueue::GetForCurrentThread()) {
+            auto timer = dq.CreateTimer();
+            timer.Interval(std::chrono::milliseconds{
+                (std::min)(40 * attempt, 300)});
+            timer.IsRepeating(false);
+            winrt::weak_ref<wuxc::Grid> weakSection = winrt::make_weak(section);
+            timer.Tick([weakSection, attempt,
+                        timer](wf::IInspectable const&,
+                               wf::IInspectable const&) {
+                try {
+                    timer.Stop();
+                } catch (...) {
+                }
+                if (g_shuttingDown.load()) {
+                    return;
+                }
+                if (auto section = weakSection.get()) {
+                    ApplyCalendarDayShapeForSection(section, attempt);
+                }
+            });
+            timer.Start();
+            return;
+        }
+    } catch (...) {
+    }
+}
+
+void RestoreAllCalendarDayShapes() {
+    std::vector<CalendarDayShapePatch> patches;
+    {
+        std::lock_guard lock(g_mountMutex);
+        patches.swap(g_calendarDayShapePatches);
+    }
+
+    size_t restored = 0;
+    for (auto& patch : patches) {
+        try {
+            patch.dayItemChangingRevoker = {};
+            if (auto calendar = patch.calendar.get()) {
+                ClearScaledCalendarDayItems(calendar);
+                RestoreLocalProperties(calendar, patch.savedProperties);
+                ClearCalendarDayChromeOverrides(calendar);
+                ++restored;
+            }
+        } catch (...) {
+            Wh_Log(L"RestoreAllCalendarDayShapes patch error %08X",
+                   winrt::to_hresult());
+        }
+    }
+    Wh_Log(L"Restored calendar day chrome on %zu view(s)", restored);
+}
+
+// Best-effort clear for calendars near known roots (no mount-list locking
+// during XAML walks — that path deadlocked / timed out into off-thread UI).
+void ClearCalendarDayChromeNearRoots(
+    std::vector<winrt::weak_ref<wuxc::Grid>> const& roots) {
+    for (auto const& weakRoot : roots) {
+        try {
+            auto root = weakRoot.get();
+            if (!root) {
+                continue;
+            }
+            if (auto calendar = FindCalendarViewInSubtree(root, 14)) {
+                ClearCalendarDayChromeOverrides(calendar);
+            }
+            if (auto center =
+                    FindNamedGridNearby(root, L"CalendarCenterGrid")) {
+                if (auto calendar = FindCalendarViewInSubtree(center, 14)) {
+                    ClearCalendarDayChromeOverrides(calendar);
+                }
+            }
+            if (auto parent = wuxm::VisualTreeHelper::GetParent(root)) {
+                if (auto calendar = FindCalendarViewInSubtree(parent, 10)) {
+                    ClearCalendarDayChromeOverrides(calendar);
+                }
+            }
+        } catch (...) {
+        }
+    }
+}
+
+wux::FrameworkElement FindNamedFrameworkElement(
+    wux::DependencyObject const& root,
+    PCWSTR name,
+    int maxDepth = 10) {
+    if (!root || maxDepth < 0 || !name || !*name) {
+        return nullptr;
+    }
+    try {
+        if (auto fe = root.try_as<wux::FrameworkElement>()) {
+            if (fe.Name() == name) {
+                return fe;
+            }
+        }
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            if (auto found = FindNamedFrameworkElement(
+                    wuxm::VisualTreeHelper::GetChild(root, i), name,
+                    maxDepth - 1)) {
+                return found;
+            }
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+void ApplyAllCalendarDayShapes() {
+    if (g_shuttingDown.load()) {
+        return;
+    }
+    if (!GetSettingsCopy().roundedDayMarkers) {
+        RestoreAllCalendarDayShapes();
+        return;
+    }
+    std::vector<wuxc::Grid> sections;
+    {
+        std::lock_guard lock(g_mountMutex);
+        for (auto const& weather : g_mounted) {
+            auto grid = weather.notificationGrid.get();
+            if (!grid) {
+                continue;
+            }
+            try {
+                if (auto calendar =
+                        FindNamedGridNearby(grid, L"CalendarCenterGrid")) {
+                    if (auto section = FindNamedFrameworkElement(
+                                           calendar, L"CalendarSection", 8)
+                                           .try_as<wuxc::Grid>()) {
+                        sections.push_back(section);
+                    }
+                }
+            } catch (...) {
+            }
+        }
+        for (auto const& daylight : g_daylightMounted) {
+            if (auto section = daylight.calendarSection.get()) {
+                sections.push_back(section);
+            }
+        }
+        for (auto const& launch : g_calendarLaunchMounted) {
+            if (auto section = launch.calendarSection.get()) {
+                sections.push_back(section);
+            }
+        }
+    }
+    for (auto const& section : sections) {
+        ApplyCalendarDayShapeForSection(section);
+    }
+}
+
+int32_t IndexOfPanelChild(wuxc::Panel const& panel,
+                          wux::UIElement const& child) {
+    if (!panel || !child) {
+        return -1;
+    }
+    try {
+        auto children = panel.Children();
+        const uint32_t size = children.Size();
+        for (uint32_t i = 0; i < size; ++i) {
+            if (children.GetAt(i) == child) {
+                return static_cast<int32_t>(i);
+            }
+        }
+    } catch (...) {
+    }
+    return -1;
+}
+
+std::wstring TrimCalendarAppPath(std::wstring path) {
+    while (!path.empty() &&
+           (path.front() == L' ' || path.front() == L'\t')) {
+        path.erase(path.begin());
+    }
+    while (!path.empty() && (path.back() == L' ' || path.back() == L'\t')) {
+        path.pop_back();
+    }
+    if (path.size() >= 2 && path.front() == L'"' && path.back() == L'"') {
+        path = path.substr(1, path.size() - 2);
+    }
+    return path;
+}
+
+bool LooksLikeLaunchUri(std::wstring const& path) {
+    if (path.empty()) {
+        return false;
+    }
+    // Protocols like outlookcal: / ms-calendar: — not a filesystem path.
+    if (path.find(L'\\') != std::wstring::npos ||
+        path.find(L'/') != std::wstring::npos) {
+        return path.find(L"://") != std::wstring::npos;
+    }
+    const auto colon = path.find(L':');
+    return colon != std::wstring::npos && colon > 1;
+}
+
+std::wstring ParentDirectory(std::wstring const& path) {
+    const auto pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos || pos == 0) {
+        return {};
+    }
+    return path.substr(0, pos);
+}
+
+bool LaunchViaCreateProcess(std::wstring const& path,
+                            std::wstring const& directory) {
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+
+    std::wstring cmd = L"\"";
+    cmd += path;
+    cmd += L"\"";
+    std::vector<wchar_t> mutableCmd(cmd.begin(), cmd.end());
+    mutableCmd.push_back(L'\0');
+
+    // BREAKAWAY helps when ShellExperienceHost is in a job that blocks children.
+    if (!CreateProcessW(path.c_str(), mutableCmd.data(), nullptr, nullptr,
+                        FALSE, CREATE_BREAKAWAY_FROM_JOB, nullptr,
+                        directory.empty() ? nullptr : directory.c_str(), &si,
+                        &pi)) {
+        if (!CreateProcessW(path.c_str(), mutableCmd.data(), nullptr, nullptr,
+                            FALSE, 0, nullptr,
+                            directory.empty() ? nullptr : directory.c_str(),
+                            &si, &pi)) {
+            Wh_Log(L"CreateProcessW failed (%lu) for %s", GetLastError(),
+                   path.c_str());
+            return false;
+        }
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    Wh_Log(L"CreateProcessW succeeded for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaShellExecute(std::wstring const& path,
+                           std::wstring const& directory) {
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_DDEWAIT;
+    sei.lpVerb = L"open";
+    sei.lpFile = path.c_str();
+    sei.lpDirectory = directory.empty() ? nullptr : directory.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&sei)) {
+        Wh_Log(L"ShellExecuteExW failed (%lu) for %s", GetLastError(),
+               path.c_str());
+        return false;
+    }
+    Wh_Log(L"ShellExecuteExW succeeded for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaRundll32(std::wstring const& path) {
+    // Brokers out of many AppContainer hosts via url.dll.
+    std::wstring params = L"url.dll,FileProtocolHandler ";
+    params += path;
+    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
+        nullptr, L"open", L"rundll32.exe", params.c_str(), nullptr,
+        SW_SHOWNORMAL));
+    if (result <= 32) {
+        Wh_Log(L"rundll32 FileProtocolHandler failed (%lld) for %s",
+               static_cast<long long>(result), path.c_str());
+        return false;
+    }
+    Wh_Log(L"rundll32 FileProtocolHandler requested for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaShellExecuteCmdStart(std::wstring const& path,
+                                   std::wstring const& directory) {
+    std::wstring params = L"/c start \"\" ";
+    if (!directory.empty()) {
+        params += L"/D \"";
+        params += directory;
+        params += L"\" ";
+    }
+    params += L"\"";
+    params += path;
+    params += L"\"";
+
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_DDEWAIT;
+    sei.lpVerb = L"open";
+    sei.lpFile = L"cmd.exe";
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_HIDE;
+    if (!ShellExecuteExW(&sei)) {
+        Wh_Log(L"ShellExecute cmd start failed (%lu) for %s", GetLastError(),
+               path.c_str());
+        return false;
+    }
+    Wh_Log(L"ShellExecute cmd start requested for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaExplorer(std::wstring const& path) {
+    // explorer.exe runs outside ShellExperienceHost's package restrictions and
+    // will open/launch the target on behalf of the user.
+    std::wstring params = L"\"";
+    params += path;
+    params += L"\"";
+    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
+        nullptr, L"open", L"explorer.exe", params.c_str(), nullptr,
+        SW_SHOWNORMAL));
+    if (result <= 32) {
+        Wh_Log(L"explorer.exe launch failed (%lld) for %s",
+               static_cast<long long>(result), path.c_str());
+        return false;
+    }
+    Wh_Log(L"explorer.exe launch requested for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaExplorerToken(std::wstring const& path,
+                            std::wstring const& directory) {
+    // ShellExperienceHost is packaged/job-restricted. Duplicate the desktop
+    // shell (explorer) token and create the process with that identity so the
+    // app starts in the normal user session.
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!tray) {
+        tray = FindWindowW(L"Shell_SecondaryTrayWnd", nullptr);
+    }
+    if (!tray) {
+        Wh_Log(L"Explorer token launch: tray window not found");
+        return false;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(tray, &pid);
+    if (!pid) {
+        return false;
+    }
+
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
+    }
+    if (!process) {
+        Wh_Log(L"Explorer token launch: OpenProcess failed (%lu)",
+               GetLastError());
+        return false;
+    }
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(process, TOKEN_DUPLICATE | TOKEN_QUERY, &token)) {
+        Wh_Log(L"Explorer token launch: OpenProcessToken failed (%lu)",
+               GetLastError());
+        CloseHandle(process);
+        return false;
+    }
+    CloseHandle(process);
+
+    HANDLE primary = nullptr;
+    if (!DuplicateTokenEx(token, MAXIMUM_ALLOWED, nullptr, SecurityIdentification,
+                          TokenPrimary, &primary)) {
+        Wh_Log(L"Explorer token launch: DuplicateTokenEx failed (%lu)",
+               GetLastError());
+        CloseHandle(token);
+        return false;
+    }
+    CloseHandle(token);
+
+    LPVOID environment = nullptr;
+    if (!CreateEnvironmentBlock(&environment, primary, FALSE)) {
+        Wh_Log(L"Explorer token launch: CreateEnvironmentBlock failed (%lu)",
+               GetLastError());
+        environment = nullptr;
+    }
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_SHOWNORMAL;
+    si.lpDesktop = const_cast<wchar_t*>(L"winsta0\\default");
+
+    PROCESS_INFORMATION pi{};
+    std::wstring cmd = L"\"";
+    cmd += path;
+    cmd += L"\"";
+    std::vector<wchar_t> mutableCmd(cmd.begin(), cmd.end());
+    mutableCmd.push_back(L'\0');
+
+    const DWORD flags =
+        NORMAL_PRIORITY_CLASS |
+        (environment ? CREATE_UNICODE_ENVIRONMENT : 0);
+
+    BOOL ok = CreateProcessWithTokenW(
+        primary, 0, path.c_str(), mutableCmd.data(), flags, environment,
+        directory.empty() ? nullptr : directory.c_str(), &si, &pi);
+    if (!ok) {
+        const DWORD withTokenErr = GetLastError();
+        // Fallback: ask cmd (same token) to start the app — more reliable when
+        // direct CreateProcessWithToken is blocked for the target binary.
+        wchar_t sysDir[MAX_PATH]{};
+        GetSystemDirectoryW(sysDir, MAX_PATH);
+        std::wstring cmdExe = sysDir;
+        cmdExe += L"\\cmd.exe";
+        std::wstring startCmd = L"/c start \"\" ";
+        if (!directory.empty()) {
+            startCmd += L"/D \"";
+            startCmd += directory;
+            startCmd += L"\" ";
+        }
+        startCmd += L"\"";
+        startCmd += path;
+        startCmd += L"\"";
+        std::wstring full = L"\"";
+        full += cmdExe;
+        full += L"\" ";
+        full += startCmd;
+        std::vector<wchar_t> mutableStart(full.begin(), full.end());
+        mutableStart.push_back(L'\0');
+        PROCESS_INFORMATION piCmd{};
+        ok = CreateProcessWithTokenW(
+            primary, 0, cmdExe.c_str(), mutableStart.data(),
+            flags | CREATE_NO_WINDOW, environment, nullptr, &si, &piCmd);
+        if (ok) {
+            CloseHandle(piCmd.hThread);
+            CloseHandle(piCmd.hProcess);
+            if (environment) {
+                DestroyEnvironmentBlock(environment);
+            }
+            CloseHandle(primary);
+            Wh_Log(L"Explorer token cmd-start succeeded for %s", path.c_str());
+            return true;
+        }
+        const DWORD cmdErr = GetLastError();
+        ok = CreateProcessAsUserW(
+            primary, path.c_str(), mutableCmd.data(), nullptr, nullptr, FALSE,
+            flags, environment,
+            directory.empty() ? nullptr : directory.c_str(), &si, &pi);
+        if (!ok) {
+            Wh_Log(L"Explorer token launch failed (WithToken=%lu cmd=%lu "
+                   L"AsUser=%lu)",
+                   withTokenErr, cmdErr, GetLastError());
+        }
+    }
+
+    if (environment) {
+        DestroyEnvironmentBlock(environment);
+    }
+    CloseHandle(primary);
+    if (!ok) {
+        return false;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    Wh_Log(L"Explorer token launch succeeded for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaDesktopShell(std::wstring const& path,
+                           std::wstring const& directory) {
+    // Run ShellExecute through the desktop shell view (explorer.exe). This is
+    // the reliable broker out of ShellExperienceHost's AppContainer.
+    try {
+        winrt::com_ptr<IShellWindows> shellWindows;
+        HRESULT hr =
+            CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                             IID_PPV_ARGS(shellWindows.put()));
+        if (FAILED(hr) || !shellWindows) {
+            Wh_Log(L"Desktop shell: ShellWindows failed %08X", hr);
+            return false;
+        }
+
+        VARIANT empty{};
+        VariantInit(&empty);
+        long hwnd = 0;
+        winrt::com_ptr<IDispatch> disp;
+        hr = shellWindows->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd,
+                                        SWFO_NEEDDISPATCH, disp.put());
+        if (FAILED(hr) || !disp) {
+            Wh_Log(L"Desktop shell: FindWindowSW failed %08X", hr);
+            return false;
+        }
+
+        auto sp = disp.try_as<IServiceProvider>();
+        if (!sp) {
+            Wh_Log(L"Desktop shell: IServiceProvider missing");
+            return false;
+        }
+
+        winrt::com_ptr<IShellBrowser> browser;
+        hr = sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(browser.put()));
+        if (FAILED(hr) || !browser) {
+            Wh_Log(L"Desktop shell: TopLevelBrowser failed %08X", hr);
+            return false;
+        }
+
+        winrt::com_ptr<IShellView> view;
+        hr = browser->QueryActiveShellView(view.put());
+        if (FAILED(hr) || !view) {
+            Wh_Log(L"Desktop shell: ShellView failed %08X", hr);
+            return false;
+        }
+
+        winrt::com_ptr<IDispatch> folderViewDisp;
+        hr = view->GetItemObject(SVGIO_BACKGROUND,
+                                 IID_PPV_ARGS(folderViewDisp.put()));
+        if (FAILED(hr) || !folderViewDisp) {
+            Wh_Log(L"Desktop shell: background view failed %08X", hr);
+            return false;
+        }
+
+        auto folderView = folderViewDisp.try_as<IShellFolderViewDual>();
+        if (!folderView) {
+            Wh_Log(L"Desktop shell: IShellFolderViewDual missing");
+            return false;
+        }
+
+        winrt::com_ptr<IDispatch> appDisp;
+        hr = folderView->get_Application(appDisp.put());
+        if (FAILED(hr) || !appDisp) {
+            Wh_Log(L"Desktop shell: Application failed %08X", hr);
+            return false;
+        }
+
+        auto shell = appDisp.try_as<IShellDispatch2>();
+        if (!shell) {
+            Wh_Log(L"Desktop shell: IShellDispatch2 missing");
+            return false;
+        }
+
+        // ShellExecute(BSTR File, Args, Dir, Operation, Show)
+        BSTR file = SysAllocString(path.c_str());
+        VARIANT vArgs{};
+        VARIANT vDir{};
+        VARIANT vOp{};
+        VARIANT vShow{};
+        VariantInit(&vArgs);
+        VariantInit(&vDir);
+        VariantInit(&vOp);
+        VariantInit(&vShow);
+        vArgs.vt = VT_BSTR;
+        vArgs.bstrVal = SysAllocString(L"");
+        vDir.vt = VT_BSTR;
+        vDir.bstrVal = SysAllocString(directory.c_str());
+        vOp.vt = VT_BSTR;
+        vOp.bstrVal = SysAllocString(L"open");
+        vShow.vt = VT_I4;
+        vShow.lVal = SW_SHOWNORMAL;
+
+        hr = shell->ShellExecute(file, vArgs, vDir, vOp, vShow);
+
+        if (file) {
+            SysFreeString(file);
+        }
+        VariantClear(&vArgs);
+        VariantClear(&vDir);
+        VariantClear(&vOp);
+        VariantClear(&vShow);
+
+        if (FAILED(hr)) {
+            Wh_Log(L"Desktop shell: ShellExecute failed %08X", hr);
+            return false;
+        }
+        Wh_Log(L"Desktop shell: ShellExecute succeeded for %s", path.c_str());
+        return true;
+    } catch (...) {
+        Wh_Log(L"Desktop shell: exception %08X", winrt::to_hresult());
+        return false;
+    }
+}
+
+bool LaunchViaCmdStart(std::wstring const& path,
+                       std::wstring const& directory) {
+    wchar_t sysDir[MAX_PATH]{};
+    if (!GetSystemDirectoryW(sysDir, MAX_PATH)) {
+        return false;
+    }
+    std::wstring cmdExe = sysDir;
+    cmdExe += L"\\cmd.exe";
+
+    std::wstring args = L"/c start \"\" ";
+    if (!directory.empty()) {
+        args += L"/D \"";
+        args += directory;
+        args += L"\" ";
+    }
+    args += L"\"";
+    args += path;
+    args += L"\"";
+
+    std::wstring commandLine = L"\"";
+    commandLine += cmdExe;
+    commandLine += L"\" ";
+    commandLine += args;
+    std::vector<wchar_t> mutableCmd(commandLine.begin(), commandLine.end());
+    mutableCmd.push_back(L'\0');
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    const DWORD flags = CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW;
+    if (!CreateProcessW(cmdExe.c_str(), mutableCmd.data(), nullptr, nullptr,
+                        FALSE, flags, nullptr, nullptr, &si, &pi) &&
+        !CreateProcessW(cmdExe.c_str(), mutableCmd.data(), nullptr, nullptr,
+                        FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"cmd.exe start failed (%lu) for %s", GetLastError(),
+               path.c_str());
+        return false;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    Wh_Log(L"cmd.exe start requested for %s", path.c_str());
+    return true;
+}
+
+bool LaunchViaUriBroker(std::wstring const& uriText) {
+    try {
+        wf::Uri uri(uriText);
+        auto op = ws::Launcher::LaunchUriAsync(uri);
+        op.Completed([](wf::IAsyncOperation<bool> const& asyncOp,
+                        wf::AsyncStatus status) {
+            try {
+                if (status != wf::AsyncStatus::Completed || !asyncOp.GetResults()) {
+                    Wh_Log(L"Launcher.LaunchUriAsync did not succeed");
+                } else {
+                    Wh_Log(L"Launcher.LaunchUriAsync succeeded");
+                }
+            } catch (...) {
+                Wh_Log(L"Launcher.LaunchUriAsync completion error %08X",
+                       winrt::to_hresult());
+            }
+        });
+        return true;
+    } catch (...) {
+        Wh_Log(L"Launcher.LaunchUriAsync threw %08X", winrt::to_hresult());
+        return false;
+    }
+}
+
+std::wstring ResolveCalendarAppPath() {
+    std::wstring path;
+    try {
+        string_setting_unique_ptr raw(GetStringSettingPref(
+            L"calendar.calendarAppPath", L"calendarAppPath"));
+        if (raw && raw.get()[0]) {
+            path = TrimCalendarAppPath(raw.get());
+        }
+    } catch (...) {
+    }
+    if (path.empty()) {
+        path = TrimCalendarAppPath(GetSettingsCopy().calendarAppPath);
+    }
+    return path;
+}
+
+void ExplorerBrokerLaunchPath(std::wstring const& path) {
+    if (path.empty() || g_shuttingDown.load()) {
+        return;
+    }
+    Wh_Log(L"Explorer broker launching: %s", path.c_str());
+    AllowSetForegroundWindow(ASFW_ANY);
+
+    const std::wstring directory = ParentDirectory(path);
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_FLAG_DDEWAIT;
+    sei.lpVerb = L"open";
+    sei.lpFile = path.c_str();
+    sei.lpDirectory = directory.empty() ? nullptr : directory.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&sei)) {
+        const DWORD err = GetLastError();
+        const INT_PTR fallback = reinterpret_cast<INT_PTR>(ShellExecuteW(
+            nullptr, L"open", path.c_str(), nullptr,
+            directory.empty() ? nullptr : directory.c_str(), SW_SHOWNORMAL));
+        Wh_Log(L"Explorer broker ShellExecuteEx failed (%lu), ShellExecute=%lld",
+               err, static_cast<long long>(fallback));
+        return;
+    }
+    Wh_Log(L"Explorer broker ShellExecuteEx succeeded");
+}
+
+LRESULT CALLBACK CalendarLaunchWndProc(HWND hwnd,
+                                       UINT msg,
+                                       WPARAM wParam,
+                                       LPARAM lParam) {
+    if (msg == WM_COPYDATA) {
+        auto* cds = reinterpret_cast<COPYDATASTRUCT*>(lParam);
+        if (!cds || cds->dwData != kCalLaunchCopyDataId || !cds->lpData ||
+            cds->cbData < sizeof(wchar_t)) {
+            return FALSE;
+        }
+        const size_t chars = cds->cbData / sizeof(wchar_t);
+        auto* text = static_cast<const wchar_t*>(cds->lpData);
+        std::wstring path;
+        if (chars > 0) {
+            // Prefer null-terminated payload; otherwise take raw chars.
+            size_t len = chars;
+            if (text[chars - 1] == L'\0') {
+                len = chars - 1;
+            }
+            path.assign(text, len);
+        }
+        path = TrimCalendarAppPath(path);
+        ExplorerBrokerLaunchPath(path);
+        return TRUE;
+    }
+    if (msg == WM_DESTROY) {
+        if (g_calLaunchHwnd == hwnd) {
+            g_calLaunchHwnd = nullptr;
+        }
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+void BrokerLaunchFromSharedMapping() {
+    if (!g_calLaunchMapping) {
+        return;
+    }
+    void* view = MapViewOfFile(g_calLaunchMapping, FILE_MAP_READ, 0, 0,
+                               kCalLaunchMappingBytes);
+    if (!view) {
+        return;
+    }
+    auto* bytes = static_cast<const uint8_t*>(view);
+    uint32_t charCount = 0;
+    memcpy(&charCount, bytes, sizeof(charCount));
+    std::wstring path;
+    if (charCount > 0 &&
+        charCount < (kCalLaunchMappingBytes / sizeof(wchar_t)) - 4) {
+        path.assign(
+            reinterpret_cast<const wchar_t*>(bytes + sizeof(uint32_t)),
+            charCount);
+    }
+    UnmapViewOfFile(view);
+    path = TrimCalendarAppPath(path);
+    ExplorerBrokerLaunchPath(path);
+}
+
+// SECURITY_ATTRIBUTES that AppContainer (ShellExperienceHost) can open.
+bool MakeAppContainerAllowSa(SECURITY_ATTRIBUTES& sa, PSECURITY_DESCRIPTOR& sd) {
+    sa = {};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = FALSE;
+    sd = nullptr;
+    // WD = Everyone, AC = ALL APPLICATION PACKAGES (AppContainer).
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;WD)(A;;GA;;;AC)", SDDL_REVISION_1, &sd, nullptr) ||
+        !sd) {
+        Wh_Log(L"Calendar launch SDDL failed (%lu)", GetLastError());
+        return false;
+    }
+    sa.lpSecurityDescriptor = sd;
+    return true;
+}
+
+DWORD WINAPI CalendarLaunchBrokerThread(LPVOID) {
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = CalendarLaunchWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kCalLaunchWindowClass;
+    RegisterClassExW(&wc);
+
+    // Hidden top-level window (not HWND_MESSAGE) so FindWindow works from SEH.
+    g_calLaunchHwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW, kCalLaunchWindowClass, kCalLaunchWindowTitle, WS_POPUP,
+        0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
+    if (!g_calLaunchHwnd) {
+        Wh_Log(L"Calendar launch broker window failed (%lu)", GetLastError());
+    } else {
+        Wh_Log(L"Calendar launch broker window ready");
+    }
+
+    HANDLE waits[2] = {g_calLaunchEvent, g_calLaunchStopEvent};
+    while (waits[0] && waits[1] && !g_shuttingDown.load()) {
+        const DWORD waited =
+            MsgWaitForMultipleObjects(2, waits, FALSE, 500, QS_ALLINPUT);
+        if (waited == WAIT_FAILED) {
+            break;
+        }
+        if (waited == WAIT_OBJECT_0 + 1) {
+            break;  // stop event
+        }
+        if (waited == WAIT_OBJECT_0) {
+            BrokerLaunchFromSharedMapping();
+        }
+
+        MSG msg{};
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                g_shuttingDown.store(true);
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if (g_calLaunchHwnd) {
+        DestroyWindow(g_calLaunchHwnd);
+        g_calLaunchHwnd = nullptr;
+    }
+    UnregisterClassW(kCalLaunchWindowClass, GetModuleHandleW(nullptr));
+    return 0;
+}
+
+bool StartCalendarLaunchBroker() {
+    if (g_calLaunchThread) {
+        return true;
+    }
+
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    SECURITY_ATTRIBUTES sa{};
+    SECURITY_ATTRIBUTES* saPtr = nullptr;
+    if (MakeAppContainerAllowSa(sa, sd)) {
+        saPtr = &sa;
+    }
+
+    g_calLaunchMapping =
+        CreateFileMappingW(INVALID_HANDLE_VALUE, saPtr, PAGE_READWRITE, 0,
+                           kCalLaunchMappingBytes, kCalLaunchMappingName);
+    if (!g_calLaunchMapping) {
+        Wh_Log(L"CreateFileMapping for calendar launch failed (%lu)",
+               GetLastError());
+        if (sd) {
+            LocalFree(sd);
+        }
+        return false;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        Wh_Log(L"Calendar launch mapping already existed (ok)");
+    }
+
+    g_calLaunchEvent =
+        CreateEventW(saPtr, FALSE, FALSE, kCalLaunchEventName);
+    if (!g_calLaunchEvent) {
+        Wh_Log(L"CreateEvent for calendar launch failed (%lu)", GetLastError());
+        CloseHandle(g_calLaunchMapping);
+        g_calLaunchMapping = nullptr;
+        if (sd) {
+            LocalFree(sd);
+        }
+        return false;
+    }
+    if (sd) {
+        LocalFree(sd);
+        sd = nullptr;
+    }
+
+    g_calLaunchStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_calLaunchStopEvent) {
+        CloseHandle(g_calLaunchEvent);
+        CloseHandle(g_calLaunchMapping);
+        g_calLaunchEvent = nullptr;
+        g_calLaunchMapping = nullptr;
+        return false;
+    }
+    g_calLaunchThread =
+        CreateThread(nullptr, 0, CalendarLaunchBrokerThread, nullptr, 0, nullptr);
+    if (!g_calLaunchThread) {
+        Wh_Log(L"Calendar launch broker thread failed (%lu)", GetLastError());
+        StopCalendarLaunchBroker();
+        return false;
+    }
+    Wh_Log(L"Calendar launch explorer broker started");
+    return true;
+}
+
+void StopCalendarLaunchBroker() {
+    if (g_calLaunchStopEvent) {
+        SetEvent(g_calLaunchStopEvent);
+    }
+    if (g_calLaunchHwnd && IsWindow(g_calLaunchHwnd)) {
+        PostMessageW(g_calLaunchHwnd, WM_CLOSE, 0, 0);
+    }
+    if (g_calLaunchThread) {
+        // Never block uninit for long — ShellExecute can stall this thread.
+        if (WaitForSingleObject(g_calLaunchThread, 400) != WAIT_OBJECT_0) {
+            Wh_Log(L"Calendar launch broker thread still running — skipping wait");
+        }
+        CloseHandle(g_calLaunchThread);
+        g_calLaunchThread = nullptr;
+    }
+    g_calLaunchHwnd = nullptr;
+    if (g_calLaunchStopEvent) {
+        CloseHandle(g_calLaunchStopEvent);
+        g_calLaunchStopEvent = nullptr;
+    }
+    if (g_calLaunchEvent) {
+        CloseHandle(g_calLaunchEvent);
+        g_calLaunchEvent = nullptr;
+    }
+    if (g_calLaunchMapping) {
+        CloseHandle(g_calLaunchMapping);
+        g_calLaunchMapping = nullptr;
+    }
+}
+
+bool RequestLaunchViaExplorerWindow(std::wstring const& path) {
+    HWND hwnd = FindWindowW(kCalLaunchWindowClass, kCalLaunchWindowTitle);
+    if (!hwnd) {
+        Wh_Log(L"Explorer broker window not found — is the mod loaded in "
+               L"explorer.exe?");
+        return false;
+    }
+
+    std::wstring payload = path;
+    COPYDATASTRUCT cds{};
+    cds.dwData = kCalLaunchCopyDataId;
+    cds.cbData = static_cast<DWORD>((payload.size() + 1) * sizeof(wchar_t));
+    cds.lpData = payload.data();
+
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cds),
+                             SMTO_ABORTIFHUNG | SMTO_NORMAL, 4000, &result)) {
+        Wh_Log(L"Explorer broker WM_COPYDATA failed (%lu)", GetLastError());
+        return false;
+    }
+    Wh_Log(L"Explorer broker WM_COPYDATA delivered for %s", path.c_str());
+    return true;
+}
+
+bool RequestLaunchViaExplorerMapping(std::wstring const& path) {
+    HANDLE mapping =
+        OpenFileMappingW(FILE_MAP_WRITE, FALSE, kCalLaunchMappingName);
+    if (!mapping) {
+        Wh_Log(L"Explorer broker mapping unavailable (%lu)", GetLastError());
+        return false;
+    }
+    void* view = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0,
+                               kCalLaunchMappingBytes);
+    if (!view) {
+        Wh_Log(L"Explorer broker MapViewOfFile write failed (%lu)",
+               GetLastError());
+        CloseHandle(mapping);
+        return false;
+    }
+
+    const uint32_t charCount =
+        static_cast<uint32_t>((std::min)(path.size(), static_cast<size_t>(
+            (kCalLaunchMappingBytes - sizeof(uint32_t)) / sizeof(wchar_t) - 1)));
+    auto* bytes = static_cast<uint8_t*>(view);
+    memcpy(bytes, &charCount, sizeof(charCount));
+    if (charCount > 0) {
+        memcpy(bytes + sizeof(uint32_t), path.data(),
+               charCount * sizeof(wchar_t));
+        reinterpret_cast<wchar_t*>(bytes + sizeof(uint32_t))[charCount] = 0;
+    }
+    UnmapViewOfFile(view);
+    CloseHandle(mapping);
+
+    HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, kCalLaunchEventName);
+    if (!event) {
+        Wh_Log(L"Explorer broker event unavailable (%lu)", GetLastError());
+        return false;
+    }
+    const BOOL signaled = SetEvent(event);
+    CloseHandle(event);
+    if (!signaled) {
+        Wh_Log(L"Explorer broker SetEvent failed (%lu)", GetLastError());
+        return false;
+    }
+    Wh_Log(L"Explorer broker mapping signaled for %s", path.c_str());
+    return true;
+}
+
+bool RequestLaunchViaExplorerBroker(std::wstring const& path) {
+    // Prefer WM_COPYDATA — FindWindow works from AppContainer (same as tray).
+    if (RequestLaunchViaExplorerWindow(path)) {
+        return true;
+    }
+    return RequestLaunchViaExplorerMapping(path);
+}
+
+bool LaunchViaTempCmdFile(std::wstring const& path,
+                          std::wstring const& directory) {
+    wchar_t tempDir[MAX_PATH]{};
+    if (!GetTempPathW(MAX_PATH, tempDir)) {
+        return false;
+    }
+    std::wstring cmdPath = tempDir;
+    cmdPath += L"wh-calweather-launch.cmd";
+
+    std::wstring body = L"@echo off\r\nstart \"\" ";
+    if (!directory.empty()) {
+        body += L"/D \"";
+        body += directory;
+        body += L"\" ";
+    }
+    body += L"\"";
+    body += path;
+    body += L"\"\r\n";
+
+    HANDLE file = CreateFileW(cmdPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Temp cmd create failed (%lu)", GetLastError());
+        return false;
+    }
+    // cmd.exe reads ANSI/system ACP for .cmd — write UTF-16 LE with BOM via
+    // WideChar only for ASCII-safe paths; fall back to UTF-8 bytes of path.
+    std::string narrow;
+    narrow.reserve(body.size());
+    for (wchar_t ch : body) {
+        narrow.push_back(ch < 128 ? static_cast<char>(ch) : '?');
+    }
+    DWORD written = 0;
+    const BOOL ok = WriteFile(file, narrow.data(),
+                              static_cast<DWORD>(narrow.size()), &written,
+                              nullptr);
+    CloseHandle(file);
+    if (!ok) {
+        return false;
+    }
+
+    const INT_PTR result = reinterpret_cast<INT_PTR>(ShellExecuteW(
+        nullptr, L"open", cmdPath.c_str(), nullptr, nullptr, SW_HIDE));
+    if (result <= 32) {
+        Wh_Log(L"Temp cmd ShellExecute failed (%lld)",
+               static_cast<long long>(result));
+        return false;
+    }
+    Wh_Log(L"Temp cmd launch requested");
+    return true;
+}
+
+void LaunchCalendarAppWithPath(std::wstring path) {
+    if (g_shuttingDown.load() || path.empty()) {
+        return;
+    }
+
+    Wh_Log(L"Launching calendar app: %s", path.c_str());
+    AllowSetForegroundWindow(ASFW_ANY);
+
+    if (LooksLikeLaunchUri(path)) {
+        LaunchViaUriBroker(path);
+        return;
+    }
+
+    const std::wstring directory = ParentDirectory(path);
+
+    // Trusted out-of-sandbox brokers first. In-process ShellExecute/CreateProcess
+    // from ShellExperienceHost often return success without actually starting a
+    // visible Win32 app — do not let those short-circuit the real brokers.
+    if (RequestLaunchViaExplorerBroker(path)) {
+        return;
+    }
+    if (LaunchViaDesktopShell(path, directory) ||
+        LaunchViaExplorerToken(path, directory) || LaunchViaExplorer(path)) {
+        return;
+    }
+
+    Wh_Log(L"Primary brokers failed — trying in-process fallbacks for %s",
+           path.c_str());
+    if (LaunchViaTempCmdFile(path, directory) ||
+        LaunchViaShellExecuteCmdStart(path, directory) ||
+        LaunchViaRundll32(path) || LaunchViaCmdStart(path, directory) ||
+        LaunchViaShellExecute(path, directory) ||
+        LaunchViaCreateProcess(path, directory)) {
+        Wh_Log(L"In-process fallback reported success (may still be sandboxed)");
+        return;
+    }
+    Wh_Log(L"All calendar app launch methods failed for %s", path.c_str());
+}
+
+std::atomic<ULONGLONG> g_lastCalendarLaunchTick{0};
+
+void RequestCalendarAppLaunch() {
+    if (g_shuttingDown.load()) {
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG prev = g_lastCalendarLaunchTick.load();
+    if (prev != 0 && now - prev < 500) {
+        return;
+    }
+    g_lastCalendarLaunchTick.store(now);
+
+    const std::wstring path = ResolveCalendarAppPath();
+    if (path.empty()) {
+        Wh_Log(L"Calendar app launch skipped — path empty");
+        return;
+    }
+
+    Wh_Log(L"Calendar launch requested: %s", path.c_str());
+    LaunchCalendarAppWithPath(path);
+}
+
+void LaunchCalendarApp() { RequestCalendarAppLaunch(); }
+
+wuxc::Viewbox MakeCalendarAppIcon(double size, wuxm::Brush const& brush) {
+    // Simple calendar page outline — reads cleanly at ~12px control size.
+    wuxc::Canvas canvas;
+    canvas.Width(16);
+    canvas.Height(16);
+    canvas.IsHitTestVisible(false);
+
+    auto appendPath = [&](PCWSTR data, bool strokeOnly, double thickness) {
+        try {
+            std::wstring xaml =
+                L"<Path xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
+                L"presentation' Data='";
+            xaml += data;
+            xaml += L"'/>";
+            auto path =
+                wux::Markup::XamlReader::Load(xaml).as<wuxs::Path>();
+            if (strokeOnly) {
+                path.Fill(nullptr);
+                path.Stroke(brush);
+                path.StrokeThickness(thickness);
+                path.StrokeLineJoin(wuxm::PenLineJoin::Round);
+            } else {
+                path.Fill(brush);
+            }
+            canvas.Children().Append(path);
+        } catch (...) {
+        }
+    };
+
+    appendPath(L"M3,2.5 h10 a1.5,1.5 0 0 1 1.5,1.5 v10 a1.5,1.5 0 0 1 -1.5,"
+               L"1.5 h-10 a1.5,1.5 0 0 1 -1.5,-1.5 v-10 a1.5,1.5 0 0 1 1.5,"
+               L"-1.5 Z",
+               true, 1.25);
+    appendPath(L"M2,5.5 h12", true, 1.2);
+    appendPath(L"M5.5,1.2 v2.2 M10.5,1.2 v2.2", true, 1.3);
+
+    wuxc::Viewbox box;
+    box.Width(size);
+    box.Height(size);
+    box.Stretch(wuxm::Stretch::Uniform);
+    box.Child(canvas);
+    box.IsHitTestVisible(false);
+    return box;
+}
+
+constexpr double kCalendarLaunchGap = 13.0;
+constexpr double kCalendarLaunchSizeFallback = 28.0;
+constexpr double kCalendarLaunchStrokeThickness = 0.5;
+constexpr double kCalendarLaunchStrokeOpacity = 0.06;     // idle
+constexpr double kCalendarLaunchStrokeOpacityHover = 0.12;  // hover
+constexpr double kCalendarLaunchStrokeOpacityPressed = 0.13;
+constexpr uint8_t kCalendarLaunchFillHover = 0x15;
+// Dark overlay shown on top of fill while pressed.
+constexpr uint8_t kCalendarLaunchFillPressedDark = 0x3C;
+
+double ResolveExpandButtonSide(wuxc::Button const& expand) {
+    auto usable = [](double v) {
+        return !std::isnan(v) && v >= 8.0 && v < 80.0;
+    };
+    try {
+        const double aw = expand.ActualWidth();
+        const double ah = expand.ActualHeight();
+        if (usable(aw) && usable(ah)) {
+            return (std::min)(aw, ah);
+        }
+        if (usable(ah)) {
+            return ah;
+        }
+        if (usable(aw)) {
+            return aw;
+        }
+    } catch (...) {
+    }
+    try {
+        if (usable(expand.Height())) {
+            return expand.Height();
+        }
+        if (usable(expand.Width())) {
+            return expand.Width();
+        }
+        if (usable(expand.MinHeight())) {
+            return expand.MinHeight();
+        }
+        if (usable(expand.MinWidth())) {
+            return expand.MinWidth();
+        }
+    } catch (...) {
+    }
+    return kCalendarLaunchSizeFallback;
+}
+
+wuxm::Brush MakeCalendarLaunchStrokeBrush(double opacity) {
+    // Bake alpha into the color — Opacity on the brush can look harsh/wrong
+    // on shell acrylic surfaces.
+    const uint8_t a = static_cast<uint8_t>(
+        (std::max)(0.0, (std::min)(1.0, opacity)) * 255.0 + 0.5);
+    return wuxm::SolidColorBrush(
+        winrt::Windows::UI::Color{a, 255, 255, 255});
+}
+
+wuxm::Brush MakeCalendarLaunchFillBrush(uint8_t alpha) {
+    return wuxm::SolidColorBrush(
+        winrt::Windows::UI::Color{alpha, 255, 255, 255});
+}
+
+wuxm::Brush MakeCalendarLaunchDarkFillBrush(uint8_t alpha) {
+    return wuxm::SolidColorBrush(
+        winrt::Windows::UI::Color{alpha, 0, 0, 0});
+}
+
+wuxm::Brush MakeTransparentHitBrush() {
+    // Real Transparent brush (not null) so the element still receives hits.
+    return wuxm::SolidColorBrush(
+        winrt::Windows::UI::Color{0, 255, 255, 255});
+}
+
+// Strip default Button chrome — our Content grid owns fill + stroke + icon.
+wux::Style GetCalendarLaunchButtonStyle() {
+    constexpr int kStyleVersion = 7;
+    static wux::Style style{nullptr};
+    static int loadedVersion = 0;
+    if (loadedVersion == kStyleVersion && style) {
+        return style;
+    }
+    loadedVersion = kStyleVersion;
+    try {
+        // Background=Transparent on the presenter is required for hit-testing;
+        // a presenter with null background lets clicks fall through.
+        style =
+            wux::Markup::XamlReader::Load(
+                L"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/"
+                L"presentation' TargetType='Button'>"
+                L"<Setter Property='Background' Value='Transparent'/>"
+                L"<Setter Property='BorderThickness' Value='0'/>"
+                L"<Setter Property='Padding' Value='0'/>"
+                L"<Setter Property='Template'>"
+                L"<Setter.Value>"
+                L"<ControlTemplate TargetType='Button'>"
+                L"<ContentPresenter Background='Transparent' "
+                L"HorizontalAlignment='Stretch' "
+                L"VerticalAlignment='Stretch' "
+                L"Content='{TemplateBinding Content}' "
+                L"IsHitTestVisible='True'/>"
+                L"</ControlTemplate>"
+                L"</Setter.Value>"
+                L"</Setter>"
+                L"</Style>")
+                .as<wux::Style>();
+        Wh_Log(L"Calendar launch button style loaded (v%d)", kStyleVersion);
+    } catch (...) {
+        style = nullptr;
+        loadedVersion = 0;
+        Wh_Log(L"Calendar launch style load failed %08X", winrt::to_hresult());
+    }
+    return style;
+}
+
+wuxc::Border FindNamedBorderInSubtree(wux::DependencyObject const& root,
+                                       PCWSTR name,
+                                       int maxDepth) {
+    if (!root || maxDepth < 0 || !name || !*name) {
+        return nullptr;
+    }
+    try {
+        if (auto border = root.try_as<wuxc::Border>()) {
+            if (auto fe = border.try_as<wux::FrameworkElement>()) {
+                if (fe.Name() == name) {
+                    return border;
+                }
+            }
+        }
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            if (auto found = FindNamedBorderInSubtree(
+                    wuxm::VisualTreeHelper::GetChild(root, i), name,
+                    maxDepth - 1)) {
+                return found;
+            }
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+bool ResolveCalendarLaunchChromeParts(wuxc::Button const& button,
+                                      wuxc::Border& fill,
+                                      wuxc::Border& stroke,
+                                      wuxc::Border& pressed) {
+    fill = nullptr;
+    stroke = nullptr;
+    pressed = nullptr;
+    if (!button) {
+        return false;
+    }
+    try {
+        // Chrome lives in Content (not the ControlTemplate).
+        if (auto content = button.Content().try_as<wux::DependencyObject>()) {
+            fill = FindNamedBorderInSubtree(content, L"WindhawkCalLaunchFill",
+                                              4);
+            stroke = FindNamedBorderInSubtree(
+                content, L"WindhawkCalLaunchStroke", 4);
+            pressed = FindNamedBorderInSubtree(
+                content, L"WindhawkCalLaunchPressed", 4);
+        }
+    } catch (...) {
+    }
+    return fill != nullptr && stroke != nullptr && pressed != nullptr;
+}
+
+bool ResolveCalendarLaunchChromeParts(wuxc::Button const& button,
+                                      wuxc::Border& fill,
+                                      wuxc::Border& stroke) {
+    wuxc::Border pressed{nullptr};
+    return ResolveCalendarLaunchChromeParts(button, fill, stroke, pressed);
+}
+
+// Back-compat name used by older call sites.
+bool ResolveCalendarLaunchTemplateParts(wuxc::Button const& button,
+                                        wuxc::Border& fill,
+                                        wuxc::Border& stroke) {
+    return ResolveCalendarLaunchChromeParts(button, fill, stroke);
+}
+
+enum class CalendarLaunchVisualState { Normal, Hover, Pressed };
+
+void ApplyCalendarLaunchVisualState(wuxc::Button const& button,
+                                    wuxc::Border const& fill,
+                                    wuxc::Border const& stroke,
+                                    wuxc::Border const& pressed,
+                                    CalendarLaunchVisualState state,
+                                    wuxm::Brush const& idleBackground) {
+    if (!fill || !stroke) {
+        return;
+    }
+    try {
+        switch (state) {
+            case CalendarLaunchVisualState::Hover:
+                fill.Background(
+                    MakeCalendarLaunchFillBrush(kCalendarLaunchFillHover));
+                stroke.BorderBrush(MakeCalendarLaunchStrokeBrush(
+                    kCalendarLaunchStrokeOpacityHover));
+                if (pressed) {
+                    pressed.Visibility(wux::Visibility::Collapsed);
+                }
+                break;
+            case CalendarLaunchVisualState::Pressed:
+                // Keep hover/idle fill underneath; show dark overlay on top.
+                fill.Background(
+                    MakeCalendarLaunchFillBrush(kCalendarLaunchFillHover));
+                stroke.BorderBrush(MakeCalendarLaunchStrokeBrush(
+                    kCalendarLaunchStrokeOpacityPressed));
+                if (pressed) {
+                    pressed.Background(MakeCalendarLaunchDarkFillBrush(
+                        kCalendarLaunchFillPressedDark));
+                    pressed.Visibility(wux::Visibility::Visible);
+                }
+                break;
+            case CalendarLaunchVisualState::Normal:
+            default:
+                fill.Background(idleBackground ? idleBackground
+                                               : MakeCalendarLaunchFillBrush(0x10));
+                stroke.BorderBrush(MakeCalendarLaunchStrokeBrush(
+                    kCalendarLaunchStrokeOpacity));
+                if (pressed) {
+                    pressed.Visibility(wux::Visibility::Collapsed);
+                }
+                break;
+        }
+        stroke.BorderThickness(wux::Thickness{
+            kCalendarLaunchStrokeThickness, kCalendarLaunchStrokeThickness,
+            kCalendarLaunchStrokeThickness, kCalendarLaunchStrokeThickness});
+        stroke.Visibility(wux::Visibility::Visible);
+        wuxc::Canvas::SetZIndex(fill, 0);
+        if (pressed) {
+            wuxc::Canvas::SetZIndex(pressed, 1);
+        }
+        wuxc::Canvas::SetZIndex(stroke, 2);
+    } catch (...) {
+    }
+    (void)button;
+}
+
+void BuildCalendarLaunchContentChrome(wuxc::Button const& expandButton,
+                                      double side,
+                                      wuxm::Brush const& idleBackground,
+                                      wux::CornerRadius cornerRadius,
+                                      wuxc::Border& outFill,
+                                      wuxc::Border& outStroke,
+                                      wuxc::Border& outPressed,
+                                      wuxc::Grid& outRoot) {
+    outFill = nullptr;
+    outStroke = nullptr;
+    outPressed = nullptr;
+    outRoot = nullptr;
+
+    wuxc::Grid root;
+    root.Name(L"WindhawkCalLaunchChrome");
+    root.Width(side);
+    root.Height(side);
+    // Transparent brush (not null) so the control receives pointer input.
+    root.Background(MakeTransparentHitBrush());
+    root.IsHitTestVisible(true);
+
+    wuxc::Border fill;
+    fill.Name(L"WindhawkCalLaunchFill");
+    fill.Background(idleBackground ? idleBackground
+                                   : MakeCalendarLaunchFillBrush(0x10));
+    fill.CornerRadius(cornerRadius);
+    fill.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    fill.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    // Fill is the hit target; overlays/icon sit above and ignore hits.
+    fill.IsHitTestVisible(true);
+
+    wuxc::Border pressed;
+    pressed.Name(L"WindhawkCalLaunchPressed");
+    pressed.Background(
+        MakeCalendarLaunchDarkFillBrush(kCalendarLaunchFillPressedDark));
+    pressed.CornerRadius(cornerRadius);
+    pressed.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    pressed.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    pressed.Visibility(wux::Visibility::Collapsed);
+    pressed.IsHitTestVisible(false);
+
+    wuxc::Border stroke;
+    stroke.Name(L"WindhawkCalLaunchStroke");
+    stroke.Background(MakeTransparentHitBrush());
+    stroke.BorderBrush(MakeCalendarLaunchStrokeBrush(kCalendarLaunchStrokeOpacity));
+    stroke.BorderThickness(wux::Thickness{
+        kCalendarLaunchStrokeThickness, kCalendarLaunchStrokeThickness,
+        kCalendarLaunchStrokeThickness, kCalendarLaunchStrokeThickness});
+    stroke.CornerRadius(cornerRadius);
+    stroke.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    stroke.VerticalAlignment(wux::VerticalAlignment::Stretch);
+    stroke.IsHitTestVisible(false);
+
+    auto iconBrush = BrushOrFallback(
+        expandButton, L"TextFillColorPrimaryBrush",
+        winrt::Windows::UI::Color{255, 240, 240, 240}, 1.0);
+    auto icon = MakeCalendarAppIcon((std::max)(10.0, side * 0.45), iconBrush);
+    icon.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    icon.VerticalAlignment(wux::VerticalAlignment::Center);
+    icon.IsHitTestVisible(false);
+
+    wuxc::Canvas::SetZIndex(fill, 0);
+    wuxc::Canvas::SetZIndex(pressed, 1);
+    wuxc::Canvas::SetZIndex(stroke, 2);
+    wuxc::Canvas::SetZIndex(icon, 3);
+
+    root.Children().Append(fill);
+    root.Children().Append(pressed);
+    root.Children().Append(stroke);
+    root.Children().Append(icon);
+
+    outFill = fill;
+    outStroke = stroke;
+    outPressed = pressed;
+    outRoot = root;
+}
+
+void ApplyCalendarLaunchButtonChrome(wuxc::Button const& button,
+                                     wuxc::Button const& expandButton,
+                                     wuxc::Border& outFill,
+                                     wuxc::Border& outStroke,
+                                     wuxc::Border& outPressed) {
+    outFill = nullptr;
+    outStroke = nullptr;
+    outPressed = nullptr;
+    if (!button || !expandButton) {
+        return;
+    }
+
+    const double side = ResolveExpandButtonSide(expandButton);
+    try {
+        button.RequestedTheme(expandButton.RequestedTheme());
+    } catch (...) {
+    }
+
+    button.Width(side);
+    button.Height(side);
+    button.MinWidth(side);
+    button.MinHeight(side);
+    button.MaxWidth(side);
+    button.MaxHeight(side);
+    button.Padding(wux::Thickness{0, 0, 0, 0});
+    button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
+    button.VerticalContentAlignment(wux::VerticalAlignment::Stretch);
+    button.IsHitTestVisible(true);
+    button.IsTabStop(true);
+    button.IsEnabled(true);
+    try {
+        button.ClickMode(wuxc::ClickMode::Release);
+    } catch (...) {
+    }
+
+    wuxm::Brush background{nullptr};
+    try {
+        background = expandButton.Background();
+    } catch (...) {
+    }
+    if (!background) {
+        background = BrushOrFallback(
+            expandButton, L"SubtleFillColorSecondaryBrush",
+            winrt::Windows::UI::Color{255, 255, 255, 255}, 0.06);
+    }
+    if (!background) {
+        background = MakeCalendarLaunchFillBrush(0x10);
+    }
+
+    if (auto style = GetCalendarLaunchButtonStyle()) {
+        button.Style(style);
+    }
+    // Button itself stays transparent — chrome is entirely in Content.
+    button.Background(MakeTransparentHitBrush());
+    button.BorderThickness(wux::Thickness{0, 0, 0, 0});
+    button.BorderBrush(nullptr);
+
+    wux::CornerRadius corner{4, 4, 4, 4};
+    try {
+        corner = expandButton.CornerRadius();
+    } catch (...) {
+    }
+
+    wuxc::Grid chromeRoot{nullptr};
+    BuildCalendarLaunchContentChrome(expandButton, side, background, corner,
+                                     outFill, outStroke, outPressed, chromeRoot);
+    button.Content(chromeRoot);
+
+    ApplyCalendarLaunchVisualState(button, outFill, outStroke, outPressed,
+                                   CalendarLaunchVisualState::Normal,
+                                   background);
+    Wh_Log(L"Calendar launch content chrome applied (fill=%d stroke=%d "
+           L"pressed=%d)",
+           outFill ? 1 : 0, outStroke ? 1 : 0, outPressed ? 1 : 0);
+}
+
+void ApplyCalendarLaunchButtonChrome(wuxc::Button const& button,
+                                     wuxc::Button const& expandButton,
+                                     wuxc::Border& outFill,
+                                     wuxc::Border& outStroke) {
+    wuxc::Border pressed{nullptr};
+    ApplyCalendarLaunchButtonChrome(button, expandButton, outFill, outStroke,
+                                    pressed);
+}
+
+void ApplyCalendarLaunchButtonChrome(wuxc::Button const& button,
+                                     wuxc::Button const& expandButton) {
+    wuxc::Border fill{nullptr};
+    wuxc::Border stroke{nullptr};
+    ApplyCalendarLaunchButtonChrome(button, expandButton, fill, stroke);
+}
+
+wuxc::Button BuildCalendarLaunchButton(wuxc::Button const& expandButton,
+                                       wuxc::Border& outHoverFill) {
+    outHoverFill = nullptr;
+    wuxc::Button button;
+    button.Name(kCalendarLaunchButtonName);
+    try {
+        wuxa::AutomationProperties::SetName(button, L"Open calendar app");
+    } catch (...) {
+    }
+    wuxc::Border fill{nullptr};
+    wuxc::Border stroke{nullptr};
+    ApplyCalendarLaunchButtonChrome(button, expandButton, fill, stroke);
+    outHoverFill = fill;
+    return button;
+}
+
+void WireCalendarLaunchClick(
+    wuxc::Button const& button,
+    wuxc::Border const& templateFill,
+    wuxc::Border const& templateStroke,
+    wuxc::Border const& templatePressed,
+    wuxm::Brush const& idleBackground,
+    wuxc::Button::Click_revoker& clickRevoker,
+    wux::UIElement::PointerEntered_revoker& pointerEnteredRevoker,
+    wux::UIElement::PointerPressed_revoker& pointerPressedRevoker,
+    wux::UIElement::PointerReleased_revoker& pointerReleasedRevoker,
+    wux::UIElement::PointerExited_revoker& pointerExitedRevoker,
+    wux::UIElement::Tapped_revoker& tappedRevoker) {
+    clickRevoker = {};
+    pointerEnteredRevoker = {};
+    pointerPressedRevoker = {};
+    pointerReleasedRevoker = {};
+    pointerExitedRevoker = {};
+    tappedRevoker = {};
+    if (!button) {
+        return;
+    }
+
+    wuxc::Border fill = templateFill;
+    wuxc::Border stroke = templateStroke;
+    wuxc::Border pressed = templatePressed;
+    if (!fill || !stroke || !pressed) {
+        ResolveCalendarLaunchChromeParts(button, fill, stroke, pressed);
+    }
+
+    auto activate = [](PCWSTR via) {
+        try {
+            Wh_Log(L"Calendar launch button activated (%s)", via);
+            RequestCalendarAppLaunch();
+        } catch (...) {
+            Wh_Log(L"RequestCalendarAppLaunch exception %08X",
+                   winrt::to_hresult());
+        }
+    };
+
+    winrt::weak_ref<wuxc::Button> weakButton = winrt::make_weak(button);
+    winrt::weak_ref<wuxc::Border> weakFill = winrt::make_weak(fill);
+    winrt::weak_ref<wuxc::Border> weakStroke = winrt::make_weak(stroke);
+    winrt::weak_ref<wuxc::Border> weakPressed = winrt::make_weak(pressed);
+    wuxm::Brush idle = idleBackground;
+    if (!idle && fill) {
+        try {
+            idle = fill.Background();
+        } catch (...) {
+        }
+    }
+    // Prevent CapturePointer leave/enter from overwriting Pressed with Hover.
+    auto pointerDown = std::make_shared<bool>(false);
+
+    auto applyState = [weakButton, weakFill, weakStroke, weakPressed, idle](
+                          CalendarLaunchVisualState state) {
+        try {
+            auto btn = weakButton.get();
+            auto f = weakFill.get();
+            auto s = weakStroke.get();
+            auto p = weakPressed.get();
+            if (!btn) {
+                return;
+            }
+            if (!f || !s || !p) {
+                ResolveCalendarLaunchChromeParts(btn, f, s, p);
+            }
+            if (!f || !s) {
+                return;
+            }
+            ApplyCalendarLaunchVisualState(btn, f, s, p, state, idle);
+        } catch (...) {
+        }
+    };
+
+    auto endPress = [weakButton, applyState, pointerDown](bool assumeHover) {
+        *pointerDown = false;
+        try {
+            if (auto btn = weakButton.get()) {
+                btn.ReleasePointerCaptures();
+            }
+        } catch (...) {
+        }
+        applyState(assumeHover ? CalendarLaunchVisualState::Hover
+                               : CalendarLaunchVisualState::Normal);
+    };
+
+    clickRevoker = button.Click(
+        winrt::auto_revoke,
+        [activate, endPress](wf::IInspectable const&,
+                             wux::RoutedEventArgs const&) {
+            endPress(true);
+            activate(L"Click");
+        });
+
+    // Press on fill (hit target). Release/capture-lost must be on the button
+    // because CapturePointer routes those events to the capture owner — wiring
+    // release only on fill left the pressed overlay stuck after click.
+    wux::UIElement pressTarget =
+        fill ? fill.as<wux::UIElement>() : button.as<wux::UIElement>();
+
+    pointerEnteredRevoker = button.PointerEntered(
+        winrt::auto_revoke,
+        [applyState, pointerDown](wf::IInspectable const&,
+                                  wux::Input::PointerRoutedEventArgs const&) {
+            if (*pointerDown) {
+                return;
+            }
+            applyState(CalendarLaunchVisualState::Hover);
+        });
+
+    pointerExitedRevoker = button.PointerExited(
+        winrt::auto_revoke,
+        [applyState, pointerDown](wf::IInspectable const&,
+                                  wux::Input::PointerRoutedEventArgs const&) {
+            if (*pointerDown) {
+                // Capture can synthesize Exited — keep pressed look until
+                // release / capture lost.
+                return;
+            }
+            applyState(CalendarLaunchVisualState::Normal);
+        });
+
+    pointerPressedRevoker = pressTarget.PointerPressed(
+        winrt::auto_revoke,
+        [weakButton, applyState, pointerDown](
+            wf::IInspectable const&,
+            wux::Input::PointerRoutedEventArgs const& args) {
+            *pointerDown = true;
+            applyState(CalendarLaunchVisualState::Pressed);
+            try {
+                if (auto btn = weakButton.get()) {
+                    btn.CapturePointer(args.Pointer());
+                }
+            } catch (...) {
+            }
+        });
+
+    pointerReleasedRevoker = button.PointerReleased(
+        winrt::auto_revoke,
+        [endPress](wf::IInspectable const&,
+                   wux::Input::PointerRoutedEventArgs const&) {
+            endPress(true);
+        });
+
+    tappedRevoker = button.Tapped(
+        winrt::auto_revoke,
+        [activate, endPress](wf::IInspectable const&,
+                             wux::Input::TappedRoutedEventArgs const& args) {
+            try {
+                args.Handled(true);
+            } catch (...) {
+            }
+            endPress(true);
+            activate(L"Tapped");
+        });
+}
+
+void RemoveUiElementFromParent(wux::UIElement const& element) {
+    if (!element) {
+        return;
+    }
+    try {
+        auto parent =
+            wuxm::VisualTreeHelper::GetParent(element).try_as<wuxc::Panel>();
+        if (!parent) {
+            return;
+        }
+        const int32_t index = IndexOfPanelChild(parent, element);
+        if (index >= 0) {
+            parent.Children().RemoveAt(static_cast<uint32_t>(index));
+        }
+    } catch (...) {
+    }
+}
+
+void CollectNamedFrameworkElements(wux::DependencyObject const& root,
+                                   PCWSTR name,
+                                   std::vector<wux::FrameworkElement>& out,
+                                   int maxDepth) {
+    if (!root || maxDepth < 0 || !name || !*name) {
+        return;
+    }
+    try {
+        if (auto fe = root.try_as<wux::FrameworkElement>()) {
+            if (fe.Name() == name) {
+                out.push_back(fe);
+            }
+        }
+        const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int32_t i = 0; i < count; ++i) {
+            CollectNamedFrameworkElements(
+                wuxm::VisualTreeHelper::GetChild(root, i), name, out,
+                maxDepth - 1);
+        }
+    } catch (...) {
+    }
+}
+
+// Remount/retry paths used to leave multiple launch buttons in the same cell
+// (looks like a thick/ghosted control). Always purge extras.
+void RemoveCalendarLaunchButtons(wux::DependencyObject const& root,
+                                 wux::UIElement const& keep = nullptr) {
+    std::vector<wux::FrameworkElement> found;
+    CollectNamedFrameworkElements(root, kCalendarLaunchButtonName, found, 12);
+    for (auto const& fe : found) {
+        try {
+            if (keep && fe == keep) {
+                continue;
+            }
+            RemoveUiElementFromParent(fe);
+        } catch (...) {
+        }
+    }
+}
+
+// Unwrap WindhawkCalendarLaunchHost and restore ExpandCollapseButton to its
+// original parent. ONLY call when disabling the feature, unloading, or when a
+// host is broken. Remount must never unwrap a healthy host — that is what
+// made both buttons vanish previously.
+void UnwrapCalendarLaunchHost(wuxc::Grid const& section) {
+    try {
+        auto hostFe =
+            FindNamedFrameworkElement(section, kCalendarLaunchHostName, 10);
+        if (!hostFe) {
+            return;
+        }
+        auto host = hostFe.try_as<wuxc::Panel>();
+        auto parent =
+            wuxm::VisualTreeHelper::GetParent(hostFe).try_as<wuxc::Panel>();
+        if (!host || !parent) {
+            return;
+        }
+
+        wuxc::Button expand{nullptr};
+        auto children = host.Children();
+        for (uint32_t i = 0; i < children.Size(); ++i) {
+            if (auto btn = children.GetAt(i).try_as<wuxc::Button>()) {
+                if (btn.Name() == L"ExpandCollapseButton") {
+                    expand = btn;
+                    children.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+
+        const int32_t hostIndex = IndexOfPanelChild(parent, hostFe);
+        wux::Thickness hostMargin{};
+        wux::HorizontalAlignment hostHAlign = wux::HorizontalAlignment::Right;
+        wux::VerticalAlignment hostVAlign = wux::VerticalAlignment::Top;
+        int row = 0, col = 0, rowSpan = 1, colSpan = 1;
+        try {
+            hostMargin = hostFe.Margin();
+            hostHAlign = hostFe.HorizontalAlignment();
+            hostVAlign = hostFe.VerticalAlignment();
+            row = wuxc::Grid::GetRow(hostFe);
+            col = wuxc::Grid::GetColumn(hostFe);
+            rowSpan = wuxc::Grid::GetRowSpan(hostFe);
+            colSpan = wuxc::Grid::GetColumnSpan(hostFe);
+        } catch (...) {
+        }
+
+        if (hostIndex >= 0) {
+            parent.Children().RemoveAt(static_cast<uint32_t>(hostIndex));
+        }
+        if (expand) {
+            try {
+                expand.RenderTransform(nullptr);
+            } catch (...) {
+            }
+            expand.Margin(hostMargin);
+            expand.HorizontalAlignment(hostHAlign);
+            expand.VerticalAlignment(hostVAlign);
+            wuxc::Grid::SetRow(expand, row);
+            wuxc::Grid::SetColumn(expand, col);
+            wuxc::Grid::SetRowSpan(expand, rowSpan);
+            wuxc::Grid::SetColumnSpan(expand, colSpan);
+            uint32_t insertAt = parent.Children().Size();
+            if (hostIndex >= 0) {
+                insertAt = static_cast<uint32_t>(hostIndex);
+            }
+            parent.Children().InsertAt(insertAt, expand);
+            Wh_Log(L"Restored ExpandCollapseButton from launch host");
+        }
+    } catch (...) {
+        Wh_Log(L"UnwrapCalendarLaunchHost error %08X", winrt::to_hresult());
+    }
+}
+
+// Back-compat name used by older call sites / mental model.
+void RepairLegacyCalendarLaunchHost(wuxc::Grid const& section) {
+    UnwrapCalendarLaunchHost(section);
+}
+
+void ClearExpandLaunchTransform(wuxc::Button const& expand) {
+    if (!expand) {
+        return;
+    }
+    try {
+        expand.RenderTransform(nullptr);
+    } catch (...) {
+    }
+}
+
+// Never clear ExpandCollapseButton.RenderTransform here — the shell uses it
+// during minimize/expand animation. Clearing mid-animation causes jitter.
+void ConfigureLaunchInHost(wuxc::Button const& launch,
+                           wuxc::Button const& expand,
+                           wuxc::Border& outFill,
+                           wuxc::Border& outStroke,
+                           wuxc::Border& outPressed) {
+    outFill = nullptr;
+    outStroke = nullptr;
+    outPressed = nullptr;
+    if (!launch || !expand) {
+        return;
+    }
+    try {
+        launch.RenderTransform(nullptr);
+        ApplyCalendarLaunchButtonChrome(launch, expand, outFill, outStroke,
+                                        outPressed);
+        launch.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        launch.VerticalAlignment(wux::VerticalAlignment::Center);
+        expand.VerticalAlignment(wux::VerticalAlignment::Center);
+        // Gap between [launch][chevron] inside the horizontal StackPanel.
+        launch.Margin(wux::Thickness{0, 0, kCalendarLaunchGap, 0});
+    } catch (...) {
+    }
+}
+
+void ConfigureLaunchInHost(wuxc::Button const& launch,
+                           wuxc::Button const& expand,
+                           wuxc::Border& outFill,
+                           wuxc::Border& outStroke) {
+    wuxc::Border pressed{nullptr};
+    ConfigureLaunchInHost(launch, expand, outFill, outStroke, pressed);
+}
+
+void ConfigureLaunchInHost(wuxc::Button const& launch,
+                           wuxc::Button const& expand) {
+    wuxc::Border fill{nullptr};
+    wuxc::Border stroke{nullptr};
+    wuxc::Border pressed{nullptr};
+    ConfigureLaunchInHost(launch, expand, fill, stroke, pressed);
+}
+
+void WireCalendarLaunchForInstance(wuxc::Button const& launch,
+                                   MountedCalendarLaunchInstance& instance,
+                                   wuxc::Border fill = nullptr,
+                                   wuxc::Border stroke = nullptr,
+                                   wuxc::Border pressed = nullptr) {
+    if (!launch) {
+        return;
+    }
+    if (!fill || !stroke || !pressed) {
+        ResolveCalendarLaunchChromeParts(launch, fill, stroke, pressed);
+    }
+    instance.templateFill = winrt::make_weak(fill);
+    instance.templateStroke = winrt::make_weak(stroke);
+    instance.templatePressed = winrt::make_weak(pressed);
+    instance.hoverFill = winrt::make_weak(fill);
+    wuxm::Brush idle{nullptr};
+    try {
+        if (fill) {
+            idle = fill.Background();
+        }
+    } catch (...) {
+    }
+    if (!idle) {
+        idle = MakeCalendarLaunchFillBrush(0x10);
+    }
+    if (!fill || !stroke || !pressed) {
+        Wh_Log(L"Calendar launch wire: missing chrome parts (fill=%d stroke=%d "
+               L"pressed=%d)",
+               fill ? 1 : 0, stroke ? 1 : 0, pressed ? 1 : 0);
+    }
+    WireCalendarLaunchClick(
+        launch, fill, stroke, pressed, idle, instance.clickRevoker,
+        instance.pointerEnteredRevoker, instance.pointerPressedRevoker,
+        instance.pointerReleasedRevoker, instance.pointerExitedRevoker,
+        instance.tappedRevoker);
+}
+
+bool TryGetHealthyLaunchHost(wuxc::Grid const& section,
+                             wuxc::StackPanel& outHost,
+                             wuxc::Button& outLaunch,
+                             wuxc::Button& outExpand) {
+    outHost = nullptr;
+    outLaunch = nullptr;
+    outExpand = nullptr;
+    try {
+        auto hostFe =
+            FindNamedFrameworkElement(section, kCalendarLaunchHostName, 10);
+        if (!hostFe) {
+            return false;
+        }
+        auto host = hostFe.try_as<wuxc::StackPanel>();
+        if (!host || host.Orientation() != wuxc::Orientation::Horizontal) {
+            return false;
+        }
+        wuxc::Button launch{nullptr};
+        wuxc::Button expand{nullptr};
+        auto children = host.Children();
+        for (uint32_t i = 0; i < children.Size(); ++i) {
+            if (auto btn = children.GetAt(i).try_as<wuxc::Button>()) {
+                if (btn.Name() == kCalendarLaunchButtonName) {
+                    launch = btn;
+                } else if (btn.Name() == L"ExpandCollapseButton") {
+                    expand = btn;
+                }
+            }
+        }
+        if (!launch || !expand) {
+            return false;
+        }
+        outHost = host;
+        outLaunch = launch;
+        outExpand = expand;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void UnmountCalendarLaunchInstance(MountedCalendarLaunchInstance& instance) {
+    try {
+        instance.clickRevoker = {};
+        instance.pointerEnteredRevoker = {};
+        instance.pointerPressedRevoker = {};
+        instance.pointerReleasedRevoker = {};
+        instance.pointerExitedRevoker = {};
+        instance.tappedRevoker = {};
+
+        if (auto expand = instance.expandButton.get()) {
+            ClearExpandLaunchTransform(expand);
+        }
+        if (auto section = instance.calendarSection.get()) {
+            // Unwrap restores the chevron; host (and launch) are removed.
+            UnwrapCalendarLaunchHost(section);
+            RemoveCalendarLaunchButtons(section);
+        } else if (auto launch = instance.launchButton.get()) {
+            RemoveUiElementFromParent(launch);
+        }
+    } catch (...) {
+        Wh_Log(L"UnmountCalendarLaunchInstance error %08X",
+               winrt::to_hresult());
+    }
+    instance.host = nullptr;
+    instance.parent = nullptr;
+    instance.launchButton = nullptr;
+    instance.expandButton = nullptr;
+    instance.hoverFill = nullptr;
+    instance.templateFill = nullptr;
+    instance.templateStroke = nullptr;
+    instance.templatePressed = nullptr;
+    instance.calendarSection = nullptr;
+    instance.dispatcherQueue = nullptr;
+    instance.coreDispatcher = nullptr;
+}
+
+// Reentrancy guard: wrapping ExpandCollapseButton emits Add/Remove that must
+// not re-enter mount (that feedback loop stutters the minimize animation).
+thread_local int g_insideCalendarLaunchMount = 0;
+
+struct CalendarLaunchMountGuard {
+    CalendarLaunchMountGuard() { ++g_insideCalendarLaunchMount; }
+    ~CalendarLaunchMountGuard() { --g_insideCalendarLaunchMount; }
+};
+
+bool IsLaunchHostAlreadyTracked(wuxc::Grid const& section,
+                                wuxc::Button const& launch,
+                                wuxc::Button const& expand) {
+    if (!section || !launch || !expand) {
+        return false;
+    }
+    std::lock_guard lock(g_mountMutex);
+    for (auto const& existing : g_calendarLaunchMounted) {
+        auto mountedSection = existing.calendarSection.get();
+        if (!(mountedSection && mountedSection == section)) {
+            continue;
+        }
+        auto mountedLaunch = existing.launchButton.get();
+        auto mountedExpand = existing.expandButton.get();
+        if (mountedLaunch && mountedExpand && mountedLaunch == launch &&
+            mountedExpand == expand) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MountCalendarLaunchButton(InstanceHandle handle,
+                               wuxc::Grid const& section) {
+    if (g_shuttingDown.load() || !section) {
+        return false;
+    }
+    if (g_insideCalendarLaunchMount > 0) {
+        // Nested visual-tree callback during wrap — treat existing host as done.
+        return FindNamedFrameworkElement(section, kCalendarLaunchHostName, 10) !=
+               nullptr;
+    }
+    CalendarLaunchMountGuard mountGuard;
+
+    auto settings = GetSettingsCopy();
+    const bool wantButton =
+        settings.showCalendarAppButton &&
+        !TrimCalendarAppPath(settings.calendarAppPath).empty();
+
+    if (!wantButton) {
+        MountedCalendarLaunchInstance staleToUnmount;
+        bool hasStale = false;
+        {
+            std::lock_guard lock(g_mountMutex);
+            for (auto it = g_calendarLaunchMounted.begin();
+                 it != g_calendarLaunchMounted.end(); ++it) {
+                auto mountedSection = it->calendarSection.get();
+                if (mountedSection && mountedSection == section) {
+                    staleToUnmount = std::move(*it);
+                    g_calendarLaunchMounted.erase(it);
+                    hasStale = true;
+                    break;
+                }
+            }
+        }
+        if (hasStale) {
+            UnmountCalendarLaunchInstance(staleToUnmount);
+        } else {
+            UnwrapCalendarLaunchHost(section);
+            RemoveCalendarLaunchButtons(section);
+        }
+        return false;
+    }
+
+    // Healthy wrap already in the tree: never unwrap / reconfigure. Rebuilds
+    // and RenderTransform clears here made chevron minimize animation jitter.
+    {
+        wuxc::StackPanel host{nullptr};
+        wuxc::Button launch{nullptr};
+        wuxc::Button expand{nullptr};
+        if (TryGetHealthyLaunchHost(section, host, launch, expand)) {
+            if (IsLaunchHostAlreadyTracked(section, launch, expand)) {
+                return true;
+            }
+
+            // Stale tracking (expired weak refs) — drop revokers only; keep host.
+            {
+                MountedCalendarLaunchInstance stale;
+                bool hasStale = false;
+                {
+                    std::lock_guard lock(g_mountMutex);
+                    for (auto it = g_calendarLaunchMounted.begin();
+                         it != g_calendarLaunchMounted.end(); ++it) {
+                        auto mountedSection = it->calendarSection.get();
+                        if (mountedSection && mountedSection == section) {
+                            stale = std::move(*it);
+                            g_calendarLaunchMounted.erase(it);
+                            hasStale = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasStale) {
+                    stale.clickRevoker = {};
+                    stale.pointerEnteredRevoker = {};
+                    stale.pointerPressedRevoker = {};
+                    stale.pointerReleasedRevoker = {};
+                    stale.pointerExitedRevoker = {};
+                    stale.tappedRevoker = {};
+                }
+            }
+
+            // Adopt an orphan host left in the visual tree (one-time wire).
+            wuxc::Border fill{nullptr};
+            wuxc::Border stroke{nullptr};
+            wuxc::Border pressed{nullptr};
+            ConfigureLaunchInHost(launch, expand, fill, stroke, pressed);
+            RemoveCalendarLaunchButtons(section, launch);
+
+            MountedCalendarLaunchInstance instance;
+            instance.sectionHandle = handle;
+            instance.uiThreadId = GetCurrentThreadId();
+            instance.calendarSection = winrt::make_weak(section);
+            instance.host = winrt::make_weak(host);
+            instance.launchButton = winrt::make_weak(launch);
+            instance.expandButton = winrt::make_weak(expand);
+            try {
+                if (auto parent =
+                        wuxm::VisualTreeHelper::GetParent(host)
+                            .try_as<wuxc::Panel>()) {
+                    instance.parent = winrt::make_weak(parent);
+                }
+                instance.dispatcherQueue =
+                    ws::DispatcherQueue::GetForCurrentThread();
+            } catch (...) {
+            }
+            try {
+                if (auto coreWindow = wuc::CoreWindow::GetForCurrentThread()) {
+                    instance.coreDispatcher = coreWindow.Dispatcher();
+                }
+            } catch (...) {
+            }
+            WireCalendarLaunchForInstance(launch, instance, fill, stroke,
+                                          pressed);
+            {
+                std::lock_guard lock(g_mountMutex);
+                g_calendarLaunchMounted.push_back(std::move(instance));
+            }
+            Wh_Log(L"Adopted existing calendar launch host");
+            return true;
+        }
+    }
+
+    // Broken / leftover host: unwrap once, then wrap fresh.
+    if (FindNamedFrameworkElement(section, kCalendarLaunchHostName, 10)) {
+        Wh_Log(L"Broken calendar launch host — unwrapping before remount");
+        UnwrapCalendarLaunchHost(section);
+    }
+
+    // Drop sibling leftovers from the old margin-offset approach.
+    RemoveCalendarLaunchButtons(section);
+
+    MountedCalendarLaunchInstance staleToUnmount;
+    bool hasStaleToUnmount = false;
+    {
+        std::lock_guard lock(g_mountMutex);
+        for (auto it = g_calendarLaunchMounted.begin();
+             it != g_calendarLaunchMounted.end(); ++it) {
+            auto mountedSection = it->calendarSection.get();
+            if (mountedSection && mountedSection == section) {
+                staleToUnmount = std::move(*it);
+                g_calendarLaunchMounted.erase(it);
+                hasStaleToUnmount = true;
+                break;
+            }
+        }
+    }
+    if (hasStaleToUnmount) {
+        // Tree already cleaned above; just drop revokers/weak refs.
+        staleToUnmount.clickRevoker = {};
+        staleToUnmount.pointerEnteredRevoker = {};
+        staleToUnmount.pointerPressedRevoker = {};
+        staleToUnmount.pointerReleasedRevoker = {};
+        staleToUnmount.pointerExitedRevoker = {};
+        staleToUnmount.tappedRevoker = {};
+        staleToUnmount.host = nullptr;
+        staleToUnmount.parent = nullptr;
+        staleToUnmount.launchButton = nullptr;
+        staleToUnmount.expandButton = nullptr;
+        staleToUnmount.hoverFill = nullptr;
+        staleToUnmount.templateFill = nullptr;
+        staleToUnmount.templateStroke = nullptr;
+        staleToUnmount.templatePressed = nullptr;
+        staleToUnmount.calendarSection = nullptr;
+    }
+
+    auto expandFe =
+        FindNamedFrameworkElement(section, L"ExpandCollapseButton", 10);
+    if (!expandFe) {
+        Wh_Log(L"ExpandCollapseButton not found yet for calendar launch");
+        return false;
+    }
+    auto expandButton = expandFe.try_as<wuxc::Button>();
+    if (!expandButton) {
+        return false;
+    }
+
+    auto parent = wuxm::VisualTreeHelper::GetParent(expandButton)
+                      .try_as<wuxc::Panel>();
+    if (!parent) {
+        return false;
+    }
+    // Expand must not already be inside our host (broken path handled above).
+    try {
+        if (auto pfe = parent.try_as<wux::FrameworkElement>()) {
+            if (pfe.Name() == kCalendarLaunchHostName) {
+                UnwrapCalendarLaunchHost(section);
+                expandFe = FindNamedFrameworkElement(
+                    section, L"ExpandCollapseButton", 10);
+                expandButton =
+                    expandFe ? expandFe.try_as<wuxc::Button>() : nullptr;
+                parent = expandButton
+                             ? wuxm::VisualTreeHelper::GetParent(expandButton)
+                                   .try_as<wuxc::Panel>()
+                             : nullptr;
+            }
+        }
+    } catch (...) {
+    }
+    if (!expandButton || !parent) {
+        return false;
+    }
+
+    const int32_t expandIndex = IndexOfPanelChild(parent, expandButton);
+    if (expandIndex < 0) {
+        return false;
+    }
+
+    // Capture expand slot props — host inherits them so the cell can grow
+    // leftward for both controls (narrow Grid cells cannot do this with margin).
+    wux::Thickness expandMargin{};
+    wux::HorizontalAlignment expandHAlign = wux::HorizontalAlignment::Right;
+    wux::VerticalAlignment expandVAlign = wux::VerticalAlignment::Top;
+    int row = 0, col = 0, rowSpan = 1, colSpan = 1;
+    try {
+        expandMargin = expandButton.Margin();
+        expandHAlign = expandButton.HorizontalAlignment();
+        expandVAlign = expandButton.VerticalAlignment();
+        row = wuxc::Grid::GetRow(expandButton);
+        col = wuxc::Grid::GetColumn(expandButton);
+        rowSpan = wuxc::Grid::GetRowSpan(expandButton);
+        colSpan = wuxc::Grid::GetColumnSpan(expandButton);
+    } catch (...) {
+    }
+
+    wuxc::Border hoverFill{nullptr};
+    wuxc::Border templateFill{nullptr};
+    wuxc::Border templateStroke{nullptr};
+    wuxc::Border templatePressed{nullptr};
+    auto launchButton = BuildCalendarLaunchButton(expandButton, hoverFill);
+    ConfigureLaunchInHost(launchButton, expandButton, templateFill,
+                          templateStroke, templatePressed);
+    if (!templateFill) {
+        templateFill = hoverFill;
+    }
+
+    wuxc::StackPanel host;
+    host.Name(kCalendarLaunchHostName);
+    host.Orientation(wuxc::Orientation::Horizontal);
+    host.HorizontalAlignment(expandHAlign);
+    host.VerticalAlignment(expandVAlign);
+    host.Margin(expandMargin);
+    host.IsHitTestVisible(true);
+    try {
+        wuxc::Grid::SetRow(host, row);
+        wuxc::Grid::SetColumn(host, col);
+        wuxc::Grid::SetRowSpan(host, rowSpan);
+        wuxc::Grid::SetColumnSpan(host, colSpan);
+    } catch (...) {
+    }
+
+    // Expand lives inside the host; host owns the outer margin/alignment.
+    // Do not clear ExpandCollapseButton.RenderTransform — shell collapse
+    // animation depends on it.
+    expandButton.Margin(wux::Thickness{0, 0, 0, 0});
+    expandButton.HorizontalAlignment(wux::HorizontalAlignment::Center);
+
+    MountedCalendarLaunchInstance instance;
+    instance.sectionHandle = handle;
+    instance.uiThreadId = GetCurrentThreadId();
+    instance.calendarSection = winrt::make_weak(section);
+    instance.parent = winrt::make_weak(parent);
+    instance.host = winrt::make_weak(host);
+    instance.expandButton = winrt::make_weak(expandButton);
+    instance.launchButton = winrt::make_weak(launchButton);
+    instance.hoverFill = winrt::make_weak(hoverFill);
+    instance.templateFill = winrt::make_weak(templateFill);
+    instance.templateStroke = winrt::make_weak(templateStroke);
+    instance.templatePressed = winrt::make_weak(templatePressed);
+    instance.gridRow = row;
+    instance.gridColumn = col;
+    instance.gridRowSpan = rowSpan;
+    instance.gridColumnSpan = colSpan;
+    instance.expandHAlign = expandHAlign;
+    instance.expandVAlign = expandVAlign;
+    instance.expandMargin = expandMargin;
+    try {
+        instance.dispatcherQueue = ws::DispatcherQueue::GetForCurrentThread();
+    } catch (...) {
+    }
+    try {
+        if (auto coreWindow = wuc::CoreWindow::GetForCurrentThread()) {
+            instance.coreDispatcher = coreWindow.Dispatcher();
+        }
+    } catch (...) {
+    }
+
+    try {
+        parent.Children().RemoveAt(static_cast<uint32_t>(expandIndex));
+        host.Children().Append(launchButton);
+        host.Children().Append(expandButton);
+        parent.Children().InsertAt(static_cast<uint32_t>(expandIndex), host);
+    } catch (...) {
+        Wh_Log(L"Failed wrapping calendar launch host %08X",
+               winrt::to_hresult());
+        // Best-effort restore if we already removed expand.
+        try {
+            if (IndexOfPanelChild(parent, expandButton) < 0 &&
+                IndexOfPanelChild(parent, host) < 0) {
+                expandButton.Margin(expandMargin);
+                expandButton.HorizontalAlignment(expandHAlign);
+                expandButton.VerticalAlignment(expandVAlign);
+                parent.Children().InsertAt(static_cast<uint32_t>(expandIndex),
+                                           expandButton);
+            }
+        } catch (...) {
+        }
+        return false;
+    }
+
+    // Template parts resolve reliably only after the button is in the tree.
+    ResolveCalendarLaunchChromeParts(launchButton, templateFill, templateStroke,
+                                     templatePressed);
+    instance.templateFill = winrt::make_weak(templateFill);
+    instance.templateStroke = winrt::make_weak(templateStroke);
+    instance.templatePressed = winrt::make_weak(templatePressed);
+    instance.hoverFill = winrt::make_weak(templateFill);
+    WireCalendarLaunchForInstance(launchButton, instance, templateFill,
+                                  templateStroke, templatePressed);
+
+    winrt::weak_ref<wuxc::Button> weakLaunch = instance.launchButton;
+    winrt::weak_ref<wuxc::Button> weakExpand = instance.expandButton;
+    try {
+        if (auto dq = instance.dispatcherQueue
+                          ? instance.dispatcherQueue
+                          : ws::DispatcherQueue::GetForCurrentThread()) {
+            dq.TryEnqueue(
+                ws::DispatcherQueueHandler([weakLaunch, weakExpand]() {
+                    try {
+                        auto launch = weakLaunch.get();
+                        auto expand = weakExpand.get();
+                        if (!launch || !expand) {
+                            return;
+                        }
+                        wuxc::Border fill{nullptr};
+                        wuxc::Border stroke{nullptr};
+                        wuxc::Border pressed{nullptr};
+                        ConfigureLaunchInHost(launch, expand, fill, stroke,
+                                              pressed);
+                        std::lock_guard lock(g_mountMutex);
+                        for (auto& mounted : g_calendarLaunchMounted) {
+                            if (auto btn = mounted.launchButton.get()) {
+                                if (btn == launch) {
+                                    WireCalendarLaunchForInstance(
+                                        launch, mounted, fill, stroke, pressed);
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (...) {
+                    }
+                }));
+        }
+    } catch (...) {
+    }
+
+    {
+        std::lock_guard lock(g_mountMutex);
+        g_calendarLaunchMounted.push_back(std::move(instance));
+    }
+    Wh_Log(L"Mounted calendar launch host (durable StackPanel wrap)");
+    return true;
+}
+
+
+void ScheduleCalendarLaunchMountRetry(InstanceHandle handle,
+                                      wuxc::Grid const& section,
+                                      int attempt) {
+    constexpr int kMaxAttempts = 12;
+    if (g_shuttingDown.load() || attempt > kMaxAttempts) {
+        return;
+    }
+    try {
+        if (auto dq = ws::DispatcherQueue::GetForCurrentThread()) {
+            auto timer = dq.CreateTimer();
+            timer.Interval(std::chrono::milliseconds{
+                (std::min)(50 * (attempt + 1), 400)});
+            timer.IsRepeating(false);
+            winrt::weak_ref<wuxc::Grid> weakSection = winrt::make_weak(section);
+            timer.Tick([handle, weakSection, attempt,
+                        timer](wf::IInspectable const&,
+                               wf::IInspectable const&) {
+                try {
+                    timer.Stop();
+                } catch (...) {
+                }
+                if (g_shuttingDown.load()) {
+                    return;
+                }
+                auto section = weakSection.get();
+                if (!section) {
+                    return;
+                }
+                try {
+                    if (!MountCalendarLaunchButton(handle, section)) {
+                        auto settings = GetSettingsCopy();
+                        if (settings.showCalendarAppButton &&
+                            !TrimCalendarAppPath(settings.calendarAppPath)
+                                 .empty()) {
+                            ScheduleCalendarLaunchMountRetry(handle, section,
+                                                             attempt + 1);
+                        }
+                    }
+                } catch (...) {
+                }
+            });
+            timer.Start();
+            return;
+        }
+    } catch (...) {
+    }
+}
+
+void ApplyOrRestoreAllCalendarLaunch() {
+    auto settings = GetSettingsCopy();
+    const bool wantButton =
+        settings.showCalendarAppButton &&
+        !TrimCalendarAppPath(settings.calendarAppPath).empty();
+
+    std::vector<MountedCalendarLaunchInstance> toUnmount;
+    {
+        std::lock_guard lock(g_mountMutex);
+        if (!wantButton) {
+            toUnmount.swap(g_calendarLaunchMounted);
+        }
+    }
+    for (auto& instance : toUnmount) {
+        UnmountCalendarLaunchInstance(instance);
+    }
+
+    // Discover CalendarSection from weather mounts / existing daylight mounts.
+    std::vector<std::pair<InstanceHandle, wuxc::Grid>> sections;
+    {
+        std::lock_guard lock(g_mountMutex);
+        for (auto const& weather : g_mounted) {
+            auto grid = weather.notificationGrid.get();
+            if (!grid) {
+                continue;
+            }
+            try {
+                if (auto calendar =
+                        FindNamedGridNearby(grid, L"CalendarCenterGrid")) {
+                    if (auto section = FindNamedFrameworkElement(
+                                           calendar, L"CalendarSection", 8)
+                                           .try_as<wuxc::Grid>()) {
+                        sections.emplace_back(weather.gridHandle, section);
+                    }
+                }
+            } catch (...) {
+            }
+        }
+        for (auto const& daylight : g_daylightMounted) {
+            if (auto section = daylight.calendarSection.get()) {
+                sections.emplace_back(daylight.sectionHandle, section);
+            }
+        }
+    }
+
+    // Only unwrap when the feature is off. Remount must keep a healthy host.
+    if (!wantButton) {
+        for (auto const& [handle, section] : sections) {
+            (void)handle;
+            UnwrapCalendarLaunchHost(section);
+            RemoveCalendarLaunchButtons(section);
+            try {
+                if (auto expand = FindNamedFrameworkElement(
+                        section, L"ExpandCollapseButton", 10)) {
+                    if (auto btn = expand.try_as<wuxc::Button>()) {
+                        ClearExpandLaunchTransform(btn);
+                    }
+                }
+            } catch (...) {
+            }
+        }
+        return;
+    }
+
+    for (auto const& [handle, section] : sections) {
+        try {
+            if (!MountCalendarLaunchButton(handle, section)) {
+                ScheduleCalendarLaunchMountRetry(handle, section, 0);
+            }
+        } catch (...) {
+            Wh_Log(L"ApplyOrRestoreAllCalendarLaunch error %08X",
+                   winrt::to_hresult());
+        }
+    }
 }
 
 bool IsCalendarSection(wux::FrameworkElement const& element, PCWSTR typeName) {
@@ -5410,6 +8682,14 @@ bool MountWeatherIntoGrid(InstanceHandle handle, wuxc::Grid const& grid) {
                     RefreshDaylightOnFlyoutShown();
                 } catch (...) {
                 }
+                try {
+                    ApplyOrRestoreAllCalendarLaunch();
+                } catch (...) {
+                }
+                try {
+                    ApplyAllCalendarDayShapes();
+                } catch (...) {
+                }
                 return true;
             }
         }
@@ -5473,6 +8753,14 @@ bool MountWeatherIntoGrid(InstanceHandle handle, wuxc::Grid const& grid) {
     }
     RequestWeatherRefresh(false);
     EnsureRefreshTimer();
+    try {
+        ApplyOrRestoreAllCalendarLaunch();
+    } catch (...) {
+    }
+    try {
+        ApplyAllCalendarDayShapes();
+    } catch (...) {
+    }
     return true;
 }
 
@@ -5533,6 +8821,7 @@ void CleanupMountedOnCurrentThread() {
     const DWORD threadId = GetCurrentThreadId();
     std::vector<MountedWeatherInstance> local;
     std::vector<MountedDaylightInstance> localDaylight;
+    std::vector<MountedCalendarLaunchInstance> localLaunch;
     {
         std::lock_guard lock(g_mountMutex);
         for (auto it = g_mounted.begin(); it != g_mounted.end();) {
@@ -5552,12 +8841,24 @@ void CleanupMountedOnCurrentThread() {
                 ++it;
             }
         }
+        for (auto it = g_calendarLaunchMounted.begin();
+             it != g_calendarLaunchMounted.end();) {
+            if (it->uiThreadId == threadId || it->uiThreadId == 0) {
+                localLaunch.push_back(std::move(*it));
+                it = g_calendarLaunchMounted.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
     for (auto& instance : local) {
         UnmountInstance(instance);
     }
     for (auto& instance : localDaylight) {
         UnmountDaylightInstance(instance);
+    }
+    for (auto& instance : localLaunch) {
+        UnmountCalendarLaunchInstance(instance);
     }
 }
 
@@ -5622,7 +8923,8 @@ bool RunOnMountDispatcher(ws::DispatcherQueue const& dispatcherQueue,
     }
 
     if (queued) {
-        const DWORD wait = WaitForSingleObject(done, 2000);
+        // Keep uninit snappy — 2s waits stacked across mounts felt "stuck".
+        const DWORD wait = WaitForSingleObject(done, 750);
         if (wait != WAIT_OBJECT_0 && !state->ran.load()) {
             Wh_Log(L"Dispatcher unmount timed out — trying inline");
             invoke();
@@ -5637,26 +8939,135 @@ bool RunOnMountDispatcher(ws::DispatcherQueue const& dispatcherQueue,
 void UnmountAllMountedSynchronously() {
     std::vector<MountedWeatherInstance> weather;
     std::vector<MountedDaylightInstance> daylight;
+    std::vector<MountedCalendarLaunchInstance> launch;
     {
         std::lock_guard lock(g_mountMutex);
         weather.swap(g_mounted);
         daylight.swap(g_daylightMounted);
+        launch.swap(g_calendarLaunchMounted);
+    }
+
+    std::vector<winrt::weak_ref<wuxc::Grid>> dayChromeRoots;
+    ws::DispatcherQueue dq{nullptr};
+    wuc::CoreDispatcher cd{nullptr};
+    DWORD tid = 0;
+    for (auto const& w : weather) {
+        if (w.notificationGrid) {
+            dayChromeRoots.push_back(w.notificationGrid);
+        }
+        if (!dq && !cd && (w.dispatcherQueue || w.coreDispatcher)) {
+            dq = w.dispatcherQueue;
+            cd = w.coreDispatcher;
+            tid = w.uiThreadId;
+        }
+    }
+    for (auto const& d : daylight) {
+        if (d.calendarSection) {
+            dayChromeRoots.push_back(d.calendarSection);
+        }
+        if (!dq && !cd && (d.dispatcherQueue || d.coreDispatcher)) {
+            dq = d.dispatcherQueue;
+            cd = d.coreDispatcher;
+            tid = d.uiThreadId;
+        }
+    }
+
+    // Restore day chrome on the UI thread only. Never fall back to inline
+    // off-thread XAML (that hung/broke the clock flyout after timeouts).
+    if (tid != 0 && tid == GetCurrentThreadId()) {
+        try {
+            RestoreAllCalendarDayShapes();
+            ClearCalendarDayChromeNearRoots(dayChromeRoots);
+        } catch (...) {
+        }
+    } else if (dq || cd) {
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        auto ran = std::make_shared<std::atomic<bool>>(false);
+        auto work = [ran, dayChromeRoots]() {
+            if (ran->exchange(true)) {
+                return;
+            }
+            try {
+                RestoreAllCalendarDayShapes();
+                ClearCalendarDayChromeNearRoots(dayChromeRoots);
+            } catch (...) {
+            }
+        };
+        bool queued = false;
+        try {
+            if (dq) {
+                queued = dq.TryEnqueue(ws::DispatcherQueueHandler([work, done]() {
+                    work();
+                    if (done) {
+                        SetEvent(done);
+                    }
+                }));
+            }
+        } catch (...) {
+            queued = false;
+        }
+        if (!queued) {
+            try {
+                if (cd) {
+                    cd.RunAsync(wuc::CoreDispatcherPriority::High,
+                                wuc::DispatchedHandler([work, done]() {
+                                    work();
+                                    if (done) {
+                                        SetEvent(done);
+                                    }
+                                }));
+                    queued = true;
+                }
+            } catch (...) {
+                queued = false;
+            }
+        }
+        if (queued && done) {
+            WaitForSingleObject(done, 750);
+        }
+        if (done) {
+            CloseHandle(done);
+        }
+        // If the dispatcher never ran, drop patches without touching XAML
+        // off-thread — safer than corrupting the shell calendar.
+        if (!ran->load()) {
+            std::lock_guard lock(g_mountMutex);
+            g_calendarDayShapePatches.clear();
+            Wh_Log(L"Skipped day-chrome restore (dispatcher did not run)");
+        }
+    } else {
+        std::lock_guard lock(g_mountMutex);
+        g_calendarDayShapePatches.clear();
     }
 
     for (auto& instance : weather) {
-        auto dq = instance.dispatcherQueue;
-        auto cd = instance.coreDispatcher;
-        auto tid = instance.uiThreadId;
-        RunOnMountDispatcher(dq, cd, tid, [&instance]() {
-            UnmountInstance(instance);
-        });
+        auto instanceDq = instance.dispatcherQueue;
+        auto instanceCd = instance.coreDispatcher;
+        auto instanceTid = instance.uiThreadId;
+        RunOnMountDispatcher(instanceDq, instanceCd, instanceTid,
+                             [&instance]() { UnmountInstance(instance); });
     }
     for (auto& instance : daylight) {
-        auto dq = instance.dispatcherQueue;
-        auto cd = instance.coreDispatcher;
-        auto tid = instance.uiThreadId;
-        RunOnMountDispatcher(dq, cd, tid, [&instance]() {
+        auto instanceDq = instance.dispatcherQueue;
+        auto instanceCd = instance.coreDispatcher;
+        auto instanceTid = instance.uiThreadId;
+        RunOnMountDispatcher(instanceDq, instanceCd, instanceTid, [&instance]() {
             UnmountDaylightInstance(instance);
+        });
+    }
+    for (auto& instance : launch) {
+        auto launchDq = instance.dispatcherQueue;
+        auto launchCd = instance.coreDispatcher;
+        auto launchTid = instance.uiThreadId;
+        if (!launchDq && !launchCd) {
+            launchDq = dq;
+            launchCd = cd;
+            if (!launchTid) {
+                launchTid = tid;
+            }
+        }
+        RunOnMountDispatcher(launchDq, launchCd, launchTid, [&instance]() {
+            UnmountCalendarLaunchInstance(instance);
         });
     }
 }
@@ -5717,7 +9128,8 @@ void HandleVisualTreeAdd(InstanceHandle handle,
 
         if (IsCalendarSection(element, typeName)) {
             if (auto section = element.try_as<wuxc::Grid>()) {
-                Wh_Log(L"CalendarSection added — scheduling daylight mount");
+                Wh_Log(L"CalendarSection added — scheduling daylight / "
+                       L"calendar-launch / day-shape");
                 bool scheduled = false;
                 try {
                     if (auto dq = ws::DispatcherQueue::GetForCurrentThread()) {
@@ -5733,6 +9145,24 @@ void HandleVisualTreeAdd(InstanceHandle handle,
                                     Wh_Log(L"Deferred daylight mount error %08X",
                                            winrt::to_hresult());
                                 }
+                                try {
+                                    if (!MountCalendarLaunchButton(handle,
+                                                                   section)) {
+                                        ScheduleCalendarLaunchMountRetry(
+                                            handle, section, 0);
+                                    }
+                                } catch (...) {
+                                    Wh_Log(L"Deferred calendar-launch mount "
+                                           L"error %08X",
+                                           winrt::to_hresult());
+                                }
+                                try {
+                                    ApplyCalendarDayShapeForSection(section);
+                                } catch (...) {
+                                    Wh_Log(L"Deferred calendar day shape "
+                                           L"error %08X",
+                                           winrt::to_hresult());
+                                }
                             }));
                     }
                 } catch (...) {
@@ -5742,9 +9172,94 @@ void HandleVisualTreeAdd(InstanceHandle handle,
                         MountDaylightIntoCalendarSection(handle, section);
                     } catch (...) {
                     }
+                    try {
+                        if (!MountCalendarLaunchButton(handle, section)) {
+                            ScheduleCalendarLaunchMountRetry(handle, section,
+                                                             0);
+                        }
+                    } catch (...) {
+                    }
+                    try {
+                        ApplyCalendarDayShapeForSection(section);
+                    } catch (...) {
+                    }
                 }
             }
             return;
+        }
+
+        // Expand/collapse often materializes after CalendarSection — mount then.
+        // Skip when the chevron already lives in our host (Add notifications
+        // during minimize would otherwise remount and stutter the animation).
+        try {
+            if (element.Name() == L"ExpandCollapseButton") {
+                bool alreadyHosted = false;
+                try {
+                    if (auto parentFe =
+                            wuxm::VisualTreeHelper::GetParent(element)
+                                .try_as<wux::FrameworkElement>()) {
+                        alreadyHosted =
+                            parentFe.Name() == kCalendarLaunchHostName;
+                    }
+                } catch (...) {
+                }
+                if (!alreadyHosted) {
+                    wux::DependencyObject walk = element;
+                    for (int depth = 0; depth < 10 && walk; ++depth) {
+                        auto fe = walk.try_as<wux::FrameworkElement>();
+                        if (fe && fe.Name() == L"CalendarSection") {
+                            if (auto section = fe.try_as<wuxc::Grid>()) {
+                                wuxc::StackPanel host{nullptr};
+                                wuxc::Button launch{nullptr};
+                                wuxc::Button expand{nullptr};
+                                if (TryGetHealthyLaunchHost(section, host,
+                                                            launch, expand)) {
+                                    break;
+                                }
+                                // Defer — never mutate the tree inside the
+                                // visual-tree Add callback.
+                                bool scheduled = false;
+                                try {
+                                    if (auto dq =
+                                            ws::DispatcherQueue::
+                                                GetForCurrentThread()) {
+                                        scheduled = dq.TryEnqueue(
+                                            ws::DispatcherQueueHandler(
+                                                [section]() {
+                                                    if (g_shuttingDown
+                                                            .load()) {
+                                                        return;
+                                                    }
+                                                    try {
+                                                        if (!MountCalendarLaunchButton(
+                                                                0, section)) {
+                                                            ScheduleCalendarLaunchMountRetry(
+                                                                0, section, 0);
+                                                        }
+                                                    } catch (...) {
+                                                    }
+                                                }));
+                                    }
+                                } catch (...) {
+                                }
+                                if (!scheduled) {
+                                    try {
+                                        if (!MountCalendarLaunchButton(
+                                                0, section)) {
+                                            ScheduleCalendarLaunchMountRetry(
+                                                0, section, 0);
+                                        }
+                                    } catch (...) {
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                        walk = wuxm::VisualTreeHelper::GetParent(walk);
+                    }
+                }
+            }
+        } catch (...) {
         }
 
         // If a native child is re-added under a mounted notification grid,
@@ -5829,6 +9344,39 @@ void HandleVisualTreeRemove(InstanceHandle handle) {
                     break;
                 }
                 // Continue pruning other dead entries; don't advance twice.
+                continue;
+            }
+            ++it;
+        }
+        for (auto it = g_calendarLaunchMounted.begin();
+             it != g_calendarLaunchMounted.end();) {
+            bool drop = it->sectionHandle == handle;
+            if (!drop) {
+                try {
+                    drop = !it->calendarSection.get() &&
+                           !it->launchButton.get();
+                } catch (...) {
+                    drop = true;
+                }
+            }
+            if (drop) {
+                Wh_Log(L"Dropping calendar launch instance");
+                it->clickRevoker = {};
+                it->pointerEnteredRevoker = {};
+                it->pointerPressedRevoker = {};
+                it->pointerReleasedRevoker = {};
+                it->pointerExitedRevoker = {};
+                it->tappedRevoker = {};
+                it->parent = nullptr;
+                it->host = nullptr;
+                it->launchButton = nullptr;
+                it->expandButton = nullptr;
+                it->hoverFill = nullptr;
+                it->templateFill = nullptr;
+                it->templateStroke = nullptr;
+                it->templatePressed = nullptr;
+                it->calendarSection = nullptr;
+                it = g_calendarLaunchMounted.erase(it);
                 continue;
             }
             ++it;
@@ -5965,6 +9513,8 @@ std::vector<HWND> GetCoreWnds() {
             }
 
             switch (g_target) {
+                case Target::Explorer:
+                    break;
                 case Target::ShellExperienceHost:
                     if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") ==
                         0) {
@@ -6023,6 +9573,8 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
         ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
     switch (g_target) {
+        case Target::Explorer:
+            break;
         case Target::ShellExperienceHost:
             if (bTextualClassName &&
                 _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
@@ -6142,14 +9694,25 @@ BOOL Wh_ModInit() {
         default:
             if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
                 moduleFileName++;
-                if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
+                if (_wcsicmp(moduleFileName, L"explorer.exe") == 0) {
+                    g_target = Target::Explorer;
+                } else if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
                     g_target = Target::ShellHost;
+                } else if (_wcsicmp(moduleFileName,
+                                   L"ShellExperienceHost.exe") != 0) {
+                    Wh_Log(L"Unsupported module %s", moduleFileName);
+                    return FALSE;
                 }
             } else {
                 Wh_Log(L"Unsupported module path");
                 return FALSE;
             }
             break;
+    }
+
+    // explorer.exe only brokers calendar-app launches out of the flyout host.
+    if (g_target == Target::Explorer) {
+        return StartCalendarLaunchBroker() ? TRUE : FALSE;
     }
 
     LoadSettings();
@@ -6178,6 +9741,9 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"> Wh_ModAfterInit");
+    if (g_target == Target::Explorer) {
+        return;
+    }
     bool initialize = false;
     for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
@@ -6198,7 +9764,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"> Wh_ModSettingsChanged");
-    if (g_shuttingDown.load()) {
+    if (g_shuttingDown.load() || g_target == Target::Explorer) {
         return;
     }
 
@@ -6239,14 +9805,23 @@ void Wh_ModSettingsChanged() {
 
     ++g_uiGeneration;
     EnsureRefreshTimer();
+    EnsureDaylightTickTimer();
 
-    for (auto hCoreWnd : GetCoreWnds()) {
+    auto coreWnds = GetCoreWnds();
+    Wh_Log(L"Settings apply: daylight=%d roundedDays=%d calBtn=%d coreWnds=%zu",
+           current.showCalendarDaylight ? 1 : 0,
+           current.roundedDayMarkers ? 1 : 0,
+           current.showCalendarAppButton ? 1 : 0, coreWnds.size());
+
+    for (auto hCoreWnd : coreWnds) {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
                 try {
                     ApplyOrRestoreAllMounted();
                     ApplyOrRestoreAllDaylight();
+                    ApplyOrRestoreAllCalendarLaunch();
+                    ApplyAllCalendarDayShapes();
                     ForecastData forecast;
                     {
                         std::lock_guard lock(g_forecastMutex);
@@ -6282,31 +9857,22 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L"> Wh_ModUninit");
     g_shuttingDown = true;
+
+    if (g_target == Target::Explorer) {
+        StopCalendarLaunchBroker();
+        Wh_Log(L"Explorer calendar-launch broker stopped");
+        return;
+    }
+
     ++g_fetchGeneration;
     g_forceRefreshPending.store(false);
 
     UnregisterSuspendResumeRefresh();
 
-    // Cancel timer; do not hang forever if a callback is stuck.
-    {
-        std::lock_guard lock(g_timerMutex);
-        if (g_refreshTimer) {
-            SetThreadpoolTimer(g_refreshTimer, nullptr, 0, 0);
-            // Best-effort wait — callbacks check g_shuttingDown and return.
-            WaitForThreadpoolTimerCallbacks(g_refreshTimer, TRUE);
-            CloseThreadpoolTimer(g_refreshTimer);
-            g_refreshTimer = nullptr;
-            g_refreshTimerPeriodMs = 0;
-            Wh_Log(L"Refresh timer stopped");
-        }
-        if (g_daylightTickTimer) {
-            SetThreadpoolTimer(g_daylightTickTimer, nullptr, 0, 0);
-            WaitForThreadpoolTimerCallbacks(g_daylightTickTimer, TRUE);
-            CloseThreadpoolTimer(g_daylightTickTimer);
-            g_daylightTickTimer = nullptr;
-            Wh_Log(L"Daylight tick timer stopped");
-        }
-    }
+    // Stops timers without holding g_timerMutex across the wait (see
+    // StopRefreshTimer). Holding the mutex here used to deadlock Uninit when a
+    // daylight/weather tick was already inside EnsureRefreshTimer.
+    StopRefreshTimer();
 
     UninitializeSettingsAndTap();
 
@@ -6355,6 +9921,19 @@ void Wh_ModUninit() {
             for (auto& instance : leftover) {
                 try {
                     UnmountDaylightInstance(instance);
+                } catch (...) {
+                }
+            }
+        }
+        if (!g_calendarLaunchMounted.empty()) {
+            Wh_Log(L"WARNING: force-unmounting %zu remaining calendar-launch "
+                   L"mount(s)",
+                   g_calendarLaunchMounted.size());
+            std::vector<MountedCalendarLaunchInstance> leftover;
+            leftover.swap(g_calendarLaunchMounted);
+            for (auto& instance : leftover) {
+                try {
+                    UnmountCalendarLaunchInstance(instance);
                 } catch (...) {
                 }
             }
