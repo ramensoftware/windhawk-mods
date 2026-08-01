@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luxtheme
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
