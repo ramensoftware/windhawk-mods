@@ -566,7 +566,7 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
 void ScheduleBgRestore(std::shared_ptr<BlobEntry> const& entry) {
     if (!entry->restoreTimer) {
         auto timer = winrt::Windows::UI::Xaml::DispatcherTimer();
-        timer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(400)));
+        timer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(100)));
         std::weak_ptr<BlobEntry> weakEntry = entry;
         timer.Tick([weakEntry](auto const&, auto const&) {
             auto e = weakEntry.lock();
