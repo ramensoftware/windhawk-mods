@@ -162,18 +162,6 @@ static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
            IsEqualPropertyKey(key, PKEY_AppUserModel_PreventPinning);
 }
 
-static bool IsControlPanelAppId(REFPROPVARIANT value) {
-    const wchar_t* appId = nullptr;
-    if (value.vt == VT_LPWSTR) {
-        appId = value.pwszVal;
-    } else if (value.vt == VT_BSTR) {
-        appId = value.bstrVal;
-    }
-
-    return appId &&
-           _wcsicmp(appId, L"Microsoft.Windows.ControlPanel") == 0;
-}
-
 static bool __cdecl UseSeparateProcess_Hook(IShellItem* item) {
     if (!item) {
         return UseSeparateProcess_Original(item);
@@ -194,7 +182,8 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     const bool isControlPanel = item && IsControlPanel_Original(item);
 
     // The direct AppUserModel.ID write follows these copies synchronously on
-    // the same thread and uses the same IPropertyStore interface pointer.
+    // the same thread and uses the same IPropertyStore interface pointer. This
+    // raw pointer is only a comparison token and is replaced by the next copy.
     g_controlPanelPropertyStore = isControlPanel ? propertyStore : nullptr;
 
     if (isControlPanel && IsCopiedAppIdentityProperty(key)) {
@@ -212,8 +201,22 @@ static HRESULT STDMETHODCALLTYPE WindowPropertyStore_SetValue_Hook(
         propertyStore == g_controlPanelPropertyStore &&
         IsEqualPropertyKey(key, PKEY_AppUserModel_ID)) {
         g_controlPanelPropertyStore = nullptr;
-        if (IsControlPanelAppId(value)) {
+
+        if (value.vt == VT_LPWSTR && value.pwszVal &&
+            CompareStringOrdinal(value.pwszVal, -1,
+                                 L"Microsoft.Windows.ControlPanel", -1,
+                                 TRUE) == CSTR_EQUAL) {
+            // Omitting the value makes the window inherit Explorer's taskbar
+            // identity; a later read-back is intentionally empty.
             return S_OK;
+        }
+
+        if (value.vt == VT_LPWSTR && value.pwszVal) {
+            Wh_Log(L"Unexpected Control Panel AppUserModel.ID: %s",
+                   value.pwszVal);
+        } else {
+            Wh_Log(L"Unexpected Control Panel AppUserModel.ID type: %u",
+                   value.vt);
         }
     }
 
@@ -304,19 +307,15 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
         return false;
     }
 
-    if (!HookWindowPropertyStoreSetValue() ||
-        !WindowPropertyStore_SetValue_Original) {
-        Wh_Log(L"Failed to hook IPropertyStore::SetValue; Control Panel "
-               L"windows will keep their own taskbar identity");
-    }
-
     return true;
 }
 
-static bool PinExplorerFrameModule() {
+static void PinExplorerFrameModule() {
     HMODULE pinnedModule = nullptr;
-    return GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN,
-                              L"ExplorerFrame.dll", &pinnedModule);
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN,
+                            L"ExplorerFrame.dll", &pinnedModule)) {
+        Wh_Log(L"Failed to pin ExplorerFrame.dll");
+    }
 }
 
 static bool IsExplorerFrameModuleName(LPCWSTR fileName) {
@@ -332,7 +331,9 @@ static bool IsExplorerFrameModuleName(LPCWSTR fileName) {
     }
 
     return CompareStringOrdinal(name, -1, L"ExplorerFrame.dll", -1, TRUE) ==
-           CSTR_EQUAL;
+               CSTR_EQUAL ||
+           CompareStringOrdinal(name, -1, L"ExplorerFrame", -1, TRUE) ==
+               CSTR_EQUAL;
 }
 
 static void InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule) {
@@ -341,8 +342,8 @@ static void InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule) {
         return;
     }
 
-    if (!PinExplorerFrameModule() ||
-        !InitializeExplorerFrameHooks(explorerFrameModule)) {
+    PinExplorerFrameModule();
+    if (!InitializeExplorerFrameHooks(explorerFrameModule)) {
         Wh_Log(L"Failed to install ExplorerFrame.dll hooks after late load");
         return;
     }
@@ -354,7 +355,10 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
                                           HANDLE file,
                                           DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
-    if (module &&
+    constexpr DWORD kDataOnlyFlags =
+        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+        LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (module && !(flags & kDataOnlyFlags) &&
         !g_explorerFrameInitializationStarted.load(std::memory_order_acquire) &&
         IsExplorerFrameModuleName(fileName)) {
         InitializeExplorerFrameHooksAfterLoad(module);
@@ -364,12 +368,14 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 }
 
 BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
     HMODULE explorerFrameModule = GetModuleHandleW(L"ExplorerFrame.dll");
     if (explorerFrameModule) {
         g_explorerFrameInitializationStarted.store(true,
                                                    std::memory_order_release);
-        if (!PinExplorerFrameModule() ||
-            !InitializeExplorerFrameHooks(explorerFrameModule)) {
+        PinExplorerFrameModule();
+        if (!InitializeExplorerFrameHooks(explorerFrameModule)) {
             Wh_Log(L"Failed to install ExplorerFrame.dll hooks");
             return FALSE;
         }
@@ -392,4 +398,22 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    if (HMODULE explorerFrameModule =
+            GetModuleHandleW(L"ExplorerFrame.dll")) {
+        InitializeExplorerFrameHooksAfterLoad(explorerFrameModule);
+    }
+
+    if (!HookWindowPropertyStoreSetValue() ||
+        !WindowPropertyStore_SetValue_Original) {
+        Wh_Log(L"Failed to hook IPropertyStore::SetValue; Control Panel "
+               L"windows will keep their own taskbar identity");
+        return;
+    }
+
+    Wh_ApplyHookOperations();
 }
