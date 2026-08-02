@@ -127,7 +127,7 @@ static BOOL CALLBACK OnWindow(HWND hWnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
 
-    WCHAR cls[128];
+    WCHAR cls;
     if (!GetClassName(hWnd, cls, ARRAYSIZE(cls))) return TRUE;
 
     if (pid == ctx->quickSettingsPid && wcscmp(cls, L"ControlCenterWindow") == 0) {
