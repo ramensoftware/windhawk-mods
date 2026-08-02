@@ -133,13 +133,13 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
   $description: Add the selected terminal name to script actions. Disable for shorter labels.
 - scriptExtensions: ".ps1;.bat;.cmd;.vbs;.js"
   $name: Script extensions
-  $description: Semicolon-separated extensions treated as scripts.
+  $description: Semicolon-separated filter for supported script extensions: .ps1, .bat, .cmd, .vbs, and .js.
 - keepOpenAfterScript: true
   $name: Keep terminal open after script
   $description: Terminal stays open after script finishes.
-- scriptExecutionPolicyBypass: true
+- scriptExecutionPolicyBypass: false
   $name: Bypass execution policy for .ps1
-  $description: Adds -ExecutionPolicy Bypass for PowerShell scripts.
+  $description: Adds -ExecutionPolicy Bypass for PowerShell scripts. Disabled by default.
 */
 // ==/WindhawkModSettings==
 
@@ -572,6 +572,26 @@ static bool IsTargetEnabled(const Settings& s, TargetKind kind) {
     return false;
 }
 
+static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut) {
+    pathOut.clear();
+
+    WCHAR systemDirectory[MAX_PATH] = {};
+    UINT length = GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
+    if (!length || length >= ARRAYSIZE(systemDirectory)) {
+        return false;
+    }
+
+    pathOut.assign(systemDirectory, length);
+    pathOut += L'\\';
+    pathOut += exe;
+    if (!IsFilePath(pathOut)) {
+        pathOut.clear();
+        return false;
+    }
+
+    return true;
+}
+
 static PCWSTR TargetKindName(TargetKind kind) {
     if (kind == TargetKind::FolderBackground) {
         return L"folder-background";
@@ -822,7 +842,7 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
             s.terminalEffectiveChoice == L"powershell") {
             spec.executable = s.terminalDisplayCommand;
         } else if (!ResolveTerminalChoiceExecutable(L"pwsh", spec.executable)) {
-            spec.executable = L"powershell.exe";
+            ResolveTerminalChoiceExecutable(L"powershell", spec.executable);
         }
         std::vector<std::wstring> args;
         if (s.keepOpenAfterScript) {
@@ -837,19 +857,24 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
         spec.parameters = JoinCommandLineArguments(args);
     } else if (_wcsicmp(ext, L".bat") == 0 ||
                _wcsicmp(ext, L".cmd") == 0) {
-        spec.executable = L"cmd.exe";
+        ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
         spec.parameters =
             std::wstring(s.keepOpenAfterScript ? L"/k " : L"/c ") +
             QuoteCommandLineArgument(scriptPath);
     } else if (_wcsicmp(ext, L".vbs") == 0 ||
                _wcsicmp(ext, L".js") == 0) {
-        std::wstring scriptCommand =
-            L"cscript.exe //nologo " + QuoteCommandLineArgument(scriptPath);
+        std::wstring cscriptPath;
+        if (!ResolveSystemExecutablePath(L"cscript.exe", cscriptPath)) {
+            return spec;
+        }
         if (s.keepOpenAfterScript) {
-            spec.executable = L"cmd.exe";
-            spec.parameters = L"/k " + scriptCommand;
+            if (!ResolveSystemExecutablePath(L"cmd.exe", spec.executable)) {
+                return {};
+            }
+            spec.parameters = L"/k " + QuoteCommandLineArgument(cscriptPath) +
+                              L" //nologo " + QuoteCommandLineArgument(scriptPath);
         } else {
-            spec.executable = L"cscript.exe";
+            spec.executable = std::move(cscriptPath);
             spec.parameters = L"//nologo " + QuoteCommandLineArgument(scriptPath);
         }
     }
@@ -1169,28 +1194,6 @@ static bool GetFilesystemPathFromShellItem(IShellItem* item,
     return ok;
 }
 
-static bool GetSingleFilesystemPathFromShellItemArray(IShellItemArray* items,
-                                                       std::wstring& pathOut) {
-    pathOut.clear();
-    if (!items) {
-        return false;
-    }
-
-    DWORD count = 0;
-    if (FAILED(items->GetCount(&count)) || count != 1) {
-        return false;
-    }
-
-    IShellItem* item = nullptr;
-    if (FAILED(items->GetItemAt(0, &item)) || !item) {
-        return false;
-    }
-
-    bool ok = GetFilesystemPathFromShellItem(item, pathOut);
-    item->Release();
-    return ok;
-}
-
 static bool IsNavigationPaneWindow(HWND hwnd) {
     bool sawNavigationTreeClass = false;
     HWND w = hwnd;
@@ -1216,28 +1219,14 @@ static bool IsNavigationPaneWindow(HWND hwnd) {
     return false;
 }
 
-static bool IsNavigationPaneContextWindow(HWND hwnd) {
-    if (IsNavigationPaneWindow(hwnd)) {
-        return true;
-    }
-
-    HWND focus = GetFocus();
-    if (focus && IsNavigationPaneWindow(focus)) {
-        return true;
-    }
-
-    POINT cursorPos;
-    if (GetCursorPos(&cursorPos)) {
-        HWND underCursor = WindowFromPoint(cursorPos);
-        if (underCursor && IsNavigationPaneWindow(underCursor)) {
-            return true;
-        }
-    }
-
-    return false;
+static bool IsNavigationPaneContextWindow(const POINT& invocationPoint) {
+    HWND invocationWindow = WindowFromPoint(invocationPoint);
+    return invocationWindow && IsNavigationPaneWindow(invocationWindow);
 }
 
-static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
+static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
+                                            const POINT& invocationPoint,
+                                            MenuTarget& targetOut) {
     targetOut = {};
 
     HWND root = GetAncestor(hwnd, GA_ROOT);
@@ -1266,11 +1255,10 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
             shellBrowser->Release();
         }
 
-        POINT cursorPos;
-        if (treeWindow && GetCursorPos(&cursorPos) &&
-            ScreenToClient(treeWindow, &cursorPos)) {
+        POINT clientPoint = invocationPoint;
+        if (treeWindow && ScreenToClient(treeWindow, &clientPoint)) {
             IShellItem* hitItem = nullptr;
-            if (SUCCEEDED(navigationPane->HitTest(&cursorPos, &hitItem)) &&
+            if (SUCCEEDED(navigationPane->HitTest(&clientPoint, &hitItem)) &&
                 hitItem) {
                 std::wstring path;
                 if (GetFilesystemPathFromShellItem(hitItem, path) &&
@@ -1285,23 +1273,6 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
             }
         }
 
-        if (!ok && IsNavigationPaneContextWindow(hwnd)) {
-            IShellItemArray* selectedItems = nullptr;
-            if (SUCCEEDED(navigationPane->GetSelectedItems(&selectedItems)) &&
-                selectedItems) {
-                std::wstring path;
-                if (GetSingleFilesystemPathFromShellItemArray(selectedItems,
-                                                               path) &&
-                    IsDirectoryPath(path)) {
-                    targetOut.path = std::move(path);
-                    targetOut.kind = IsDriveRootPath(targetOut.path)
-                                         ? TargetKind::DriveItem
-                                         : TargetKind::FolderItem;
-                    ok = true;
-                }
-                selectedItems->Release();
-            }
-        }
         navigationPane->Release();
     }
 
@@ -1310,21 +1281,17 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd, MenuTarget& targetOut) {
 }
 
 static bool ResolveMenuTarget(HWND hwnd,
-                              bool allowNavigationPane,
+                              const Settings& settings,
+                              const POINT& invocationPoint,
                               MenuTarget& targetOut) {
     targetOut = {};
 
-    bool isNavigationPane = IsNavigationPaneContextWindow(hwnd);
+    bool isNavigationPane = IsNavigationPaneContextWindow(invocationPoint);
     if (isNavigationPane) {
-        if (!allowNavigationPane) {
+        if (!settings.showOnNavigationPane) {
             return false;
         }
-        return ResolveNavigationPaneMenuTarget(hwnd, targetOut);
-    }
-
-    if (allowNavigationPane &&
-        ResolveNavigationPaneMenuTarget(hwnd, targetOut)) {
-        return true;
+        return ResolveNavigationPaneMenuTarget(hwnd, invocationPoint, targetOut);
     }
 
     if (!IsShellViewWindow(hwnd)) {
@@ -1388,9 +1355,8 @@ static bool ResolveMenuTarget(HWND hwnd,
                 ok = true;
             } else if (selectedPaths.size() == 1 &&
                        IsFilePath(selectedPaths[0])) {
-                Settings snap = GetSettingsSnapshot();
-                if (snap.showOnScriptFiles &&
-                    IsScriptExtension(selectedPaths[0], snap)) {
+                if (settings.showOnScriptFiles &&
+                    IsScriptExtension(selectedPaths[0], settings)) {
                     targetOut.path = selectedPaths[0];
                     targetOut.kind = TargetKind::ScriptItem;
                     ok = true;
@@ -1735,17 +1701,20 @@ static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
         return GetTerminalDisplayName(settings);
     }
 
-    LaunchSpec interpreter = BuildScriptInterpreterSpec(settings, scriptPath);
-    if (StrStrIW(interpreter.executable.c_str(), L"pwsh")) {
-        return L"PowerShell 7";
-    }
-    if (StrStrIW(interpreter.executable.c_str(), L"powershell")) {
-        return L"Windows PowerShell";
-    }
-    if (StrStrIW(interpreter.executable.c_str(), L"cmd")) {
+    PCWSTR extension = PathFindExtensionW(scriptPath.c_str());
+    if (_wcsicmp(extension, L".bat") == 0 ||
+        _wcsicmp(extension, L".cmd") == 0) {
         return L"Command Prompt";
     }
-    return L"Windows Script Host";
+    if (_wcsicmp(extension, L".vbs") == 0 ||
+        _wcsicmp(extension, L".js") == 0) {
+        return L"Windows Script Host";
+    }
+
+    LaunchSpec interpreter = BuildScriptInterpreterSpec(settings, scriptPath);
+    PCWSTR executableName = PathFindFileNameW(interpreter.executable.c_str());
+    return _wcsicmp(executableName, L"pwsh.exe") == 0 ? L"PowerShell 7"
+                                                       : L"Windows PowerShell";
 }
 
 static Settings GetScriptIconSettings(const Settings& settings,
@@ -1888,6 +1857,11 @@ static void LaunchAdminTerminal(const MenuTarget& target) {
     LaunchSpec launch = (target.kind == TargetKind::ScriptItem)
                             ? BuildScriptLaunchSpec(settings, target.path)
                             : BuildLaunchSpec(settings, target.path);
+    if (launch.executable.empty()) {
+        Wh_Log(L"Launch failed: no executable resolved target=%ls",
+               target.path.c_str());
+        return;
+    }
 
     SHELLEXECUTEINFOW executeInfo = {};
     executeInfo.cbSize = sizeof(executeInfo);
@@ -1925,6 +1899,11 @@ static void LaunchTerminalNonElevated(const MenuTarget& target) {
     LaunchSpec launch = (target.kind == TargetKind::ScriptItem)
                             ? BuildScriptLaunchSpec(settings, target.path)
                             : BuildLaunchSpec(settings, target.path);
+    if (launch.executable.empty()) {
+        Wh_Log(L"Launch failed: no executable resolved target=%ls",
+               target.path.c_str());
+        return;
+    }
 
     SHELLEXECUTEINFOW executeInfo = {};
     executeInfo.cbSize = sizeof(executeInfo);
@@ -1966,10 +1945,21 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
     bool injected = false;
     ClearCurrentMenuState();
 
-    if (menu && hwnd) {
+    HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+    WCHAR rootClass[64] = {};
+    if (root) {
+        GetClassNameW(root, rootClass, ARRAYSIZE(rootClass));
+    }
+    bool eligibleWindow = hwnd &&
+                          (IsShellViewWindow(hwnd) ||
+                           _wcsicmp(rootClass, L"CabinetWClass") == 0 ||
+                           _wcsicmp(rootClass, L"ExploreWClass") == 0);
+
+    if (menu && eligibleWindow) {
         MenuTarget target;
         Settings settings = GetSettingsSnapshot();
-        if (!ResolveMenuTarget(hwnd, settings.showOnNavigationPane, target)) {
+        POINT invocationPoint = {x, y};
+        if (!ResolveMenuTarget(hwnd, settings, invocationPoint, target)) {
             Wh_Log(L"Injection skipped: no eligible filesystem directory target");
         } else if (!IsTargetEnabled(settings, target.kind)) {
             Wh_Log(L"Injection skipped: target kind disabled kind=%ls path=%ls",
@@ -2011,6 +2001,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
         return 0;
     }
 
+    ClearCurrentMenuState();
     return result;
 }
 
