@@ -818,6 +818,15 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     if (boundTop    < boundMon.top)    boundTop    = boundMon.top;
     if (boundBottom > boundMon.bottom) boundBottom = boundMon.bottom;
 
+    // The monitor clamp is only there to stop the box growing beyond the screens
+    // involved - it must never clip the window itself or the dock target away.
+    if (boundLeft  > data->targetRect.left)   boundLeft  = data->targetRect.left;
+    if (boundRight < data->targetRect.right)  boundRight = data->targetRect.right;
+    if (boundTop   > data->targetRect.top)    boundTop   = data->targetRect.top;
+    if (boundBottom < data->targetRect.bottom) boundBottom = data->targetRect.bottom;
+    if (boundLeft  > dockXB - 16)             boundLeft  = dockXB - 16;   // iGeom is dockX ± 11
+    if (boundRight < dockXB + 16)             boundRight = dockXB + 16;
+
     int vLeft = boundLeft;
     int vTop = boundTop;
     int vWidth = boundRight - boundLeft;
