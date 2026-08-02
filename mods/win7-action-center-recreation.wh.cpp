@@ -2,7 +2,7 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        1.8.0
+// @version        2.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -18,7 +18,7 @@ This mod recreates the classic Windows 7/8.1 Action Center tray icon and flyout 
 ## Screenshots
 Windows 7 theme
 
-![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7act.png)
+![Image](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/action.png)
 
 Windows 8.1 theme
 
@@ -31,6 +31,7 @@ Windows 8.1 theme
 - **Rounded Corners**: Rounded corners are supported for a more similar look to the original Windows 7 flyout.
 - **Classic Theme support**: Disable the "Rounded Corners" theme to make the flyout use a classic theme.
 - **Light/Dark Theme**: Flyout and notification popup support light and dark themes. "Auto" follows the Windows light/dark mode setting and updates live when it changes; you can also force Light or Dark from the mod settings.
+- **High Contrast support**: The flyout and the notification popup automatically switch to system colors when a High Contrast theme is active.
 - **Balloon Notifications**: The mod displays balloon notifications when potential problems are detected, with detailed descriptions of issues found.
 - **SmartScreen Check**: Monitors Windows Defender SmartScreen status and reports if it is disabled.
 - **Privacy Mode**: The user can enable this mod to hide the eventual problems shown by the flyout.
@@ -38,7 +39,7 @@ Windows 8.1 theme
   - The disk health check is **best-effort**: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside `explorer.exe`, some drives may not answer — in that case the check is simply skipped and never reports a false problem.
   - The battery check fires only on laptops running on battery power and warns when the charge drops to 20 % or below.
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
-- **Startup Notification**: On every Windows session start, if problems are detected at the first check, a balloon notification is shown immediately regardless of cooldown, so you are never left unaware of existing issues after a reboot.
+- **Startup Notification**: On every Windows session start, the mod waits a short while (about 12 seconds, so the notification area is ready) and then, if problems are detected, shows a balloon notification regardless of cooldown, so you are never left unaware of existing issues after a reboot.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
 - **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German are currently supported.
 - **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. 
@@ -67,10 +68,11 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 
 - The mod runs inside Explorer and works on Windows 10 and 11.
 - If the icon doesn't appear, try restarting Explorer or the mod.
-- The Control Panel hub links activate when you open *Security and Maintenance* (`control /name Microsoft.ActionCenter`). No system files are modified on disk.
+- The Control Panel hub links activate when you open *Security and Maintenance* (`control /name Microsoft.ActionCenter`) and system files are not modified on the disk.
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - TheWolf - Testing on Windows 11 23H2
+- ✮⋆˙ Holly B!!──★ ˙🍓 ̟ ˙✧˖°🪼⋆.ೃ [NURO] - Screenshot of the mod under a Windows 7 theme
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -229,6 +231,14 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define TRAY_RETRY_TIMER_ID        1002
 #define TRAY_HEALTH_TIMER_ID       1003
 #define PROBLEM_BALLOON_TIMER_ID   2003
+#define STARTUP_NOTIFY_TIMER_ID    1004
+// Ritardo dopo l'avvio (tray icon aggiunta) prima di controllare ed
+// eventualmente inviare la notifica "problemi presenti all'avvio".
+// Disaccoppiato da refreshInterval: con un intervallo molto corto il primo
+// controllo potrebbe scattare prima che l'area notifiche di Windows sia
+// pronta subito dopo il boot/riavvio di Explorer, con il rischio che il
+// balloon venga perso. Un ritardo fisso garantisce l'invio "dopo un po'".
+#define STARTUP_NOTIFY_DELAY_MS    12000
 #define PROBLEM_BALLOON_FALLBACK_MS 30000
 #define PROBLEM_BALLOON_COOLDOWN_MS 30000
 #define WM_TRAY_SHUTDOWN           (WM_USER + 602)
@@ -307,6 +317,29 @@ static const GUID TRAY_ICON_GUID =
 #define COLOR_DARK_NOTIFY_TITLE_BG  RGB(50, 50, 50)
 #define COLOR_DARK_HEADER_BG        RGB(38, 38, 38)
 #define COLOR_DARK_OK_TEXT          RGB(100, 200, 100)
+
+// ----------------------------------------------------------------------------
+// High Contrast support
+// When a High Contrast theme is active, the flyout and the notification
+// popup abandon their custom palettes and follow the system colors, like
+// the original Windows 7 UI did. The state is cached with a short TTL so
+// the paint path does not pay a SystemParametersInfo call on every redraw;
+// the TTL also makes switching into/out of High Contrast take effect on
+// its own, without a dedicated WM_SETTINGCHANGE handler.
+// ----------------------------------------------------------------------------
+static bool IsHighContrastActive() {
+    static bool s_cachedHighContrast = false;
+    static DWORD s_lastCheckTick = 0;
+    DWORD now = GetTickCount();
+    if (now - s_lastCheckTick > 2000) {
+        HIGHCONTRASTW hc = { sizeof(hc) };
+        s_cachedHighContrast =
+            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+        s_lastCheckTick = now;
+    }
+    return s_cachedHighContrast;
+}
 
 // Base64 decoder table
 static const WCHAR kBase64Tbl[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -528,6 +561,31 @@ public:
     explicit DcStateGuard(HDC hdc) : m_hdc(hdc), m_saved(SaveDC(hdc)) {}
     ~DcStateGuard() { if (m_hdc && m_saved) RestoreDC(m_hdc, m_saved); }
     DcStateGuard(const DcStateGuard&) = delete; DcStateGuard& operator=(const DcStateGuard&) = delete;
+};
+
+class MemDcGuard {
+    HDC m_hdc;
+    HBITMAP m_hbm;
+    HGDIOBJ m_old;
+public:
+    MemDcGuard(HDC hdc, int width, int height) {
+        m_hdc = CreateCompatibleDC(hdc);
+        m_hbm = m_hdc ? CreateCompatibleBitmap(hdc, width, height) : NULL;
+        m_old = (m_hdc && m_hbm) ? SelectObject(m_hdc, m_hbm) : NULL;
+    }
+    ~MemDcGuard() {
+        if (m_hdc) {
+            if (m_old) SelectObject(m_hdc, m_old);
+            if (m_hbm) DeleteObject(m_hbm);
+            DeleteDC(m_hdc);
+        }
+    }
+    bool valid() const { return m_hdc != NULL && m_hbm != NULL && m_old != NULL; }
+    HDC get() const { return m_hdc; }
+    operator HDC() const { return m_hdc; }
+    HBITMAP getBitmap() const { return m_hbm; }
+    MemDcGuard(const MemDcGuard&) = delete;
+    MemDcGuard& operator=(const MemDcGuard&) = delete;
 };
 
 // ============================================================================
@@ -1355,6 +1413,7 @@ static BOOL g_FlyoutClosing = FALSE;
 static BOOL g_NotifyShowing = FALSE;
 static int g_SimulatedNotificationType = 0; // protected by srwLock
 static int g_ActiveProblems = 0;             // protected by srwLock
+static int g_CriticalProblems = 0;           // protected by srwLock - subset of g_ActiveProblems that is "important"
 // Stato del backoff del refresh periodico (vedi REFRESH_TIMER_ID in TrayMsgHandlerProc).
 // Solo scrittura/lettura dal tray thread (proprietario del timer), niente lock necessario.
 static DWORD g_RefreshNoChangeCount = 0;
@@ -1434,7 +1493,7 @@ static const WCHAR icon_id4_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzen
 static const WCHAR icon_id5_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAQMSURBVFhHvZdtTFNXGMdNZjDTZhLsC7O4pWZlvqAze/GL21wWGhRBtymJug+YfUGyxESyBJeFpEMZyeL4YpQQPqxLlgg4dcsSjCykDhS0WBgqatfIpsDYSjvubW9b2gLPnuf0nNqgzpZe+Se/9N7ec/7P/5x7zz3tIpQe+QSxcuiYvlswJRdPhU+Rfcj7SAHyApKRmDFwifM02Y+sQuYlZsLrQ15eXj0/fKzGx8c9AwMDd9va2rpqamrOGI3GeuGBlCJpK60As7OzMD09DZFIBEKhEExMTEw1NjZ2ZGVlfcm9NpNpOsooQCAQAFmWobOz8xb3omcqLakSYHJyEnQ63VfcbwkZpyrVAggvZBmSsp5FgM+QXCQlqRqgqqqqRXgitCpWInOlRRbHD1UOgKtitqGhoV34PoWdSPyE+2ccwOfzsePh4WEPLs8LRUVFJ0UNQWFh4QmNRnOUnz+bAIqisDYzMzO850N5vV4fr3sIWfgAzc3NF3jdD5CFDSBJkt9gMIj3BXtAFzRAXV3dWV5zD8L02ADhcHiqo6PjWnV19emysrKm0tLSU6JtSUnJqYqKiu9sNlsnPmzeVAMMDg7e5R5HkOUI0yMB7Hb7dfoU1/4Ps9n8dXl5+be4Q96ncxFgYqQL+s/lQ//5fAh4HeByuYaTnvwtSELMiNdno0iC9nn60UH3yoAI0bEJsVoslpPt7e39tbW1P9JeIAL89vNbMHTRBPd6CsB5flMsaUBs7SfrSQFeQ56mA4g1Ozv7GL18hoaGxinAmPsncLRoQR6zQNC7A/padbCv+Pnvse1u1muOnhQgVdFSEn2sBevXfmO3rZRu//IKxIIfMWgWLtlWjGKo56jDXGUagEQbTzFysHLv0rOOVi0E/t6WCBDyxWcBA9AtfURqBGDCAllXT2vdLns+xEIfkxcjPgsbKICL2rDGSVIzQCWNVPFsh5jyYSJA1L8LQp5tYhYqWeMkqRIAjTU0QnfXWogFdkFU3vkwwGQx44+e9WIWNKwTl1oBjvS16XGkRRCVdkDk3+2JABGPhREcew+oDbVlnbgyDoCGOTQyGuHUX1shPPouhEfegcMH8xjhB1vijLwNf/auE7OQw7urEqDe+YMBFPebEHRtguCdDaDcLmAE72yMf0e4X4fA72+IWaAXE9MXiDUajcbmEwCNjDSi0R585Q7mg99pAn/fy+B3vJS4BQHnanZNufEqKDfXwMgVs5gFI3l8jlhp85lngKaBc7lYeDXIV40gX8kF+bIepG59IoDc8yK7RqEI+boJnGfYLDSRB70cRFFByn8uaCT/XDOzIlKXDqRfV4B0KSf+mUAbv9ZN6DGgAUa7TWwWyIO2RQrBZgJJ6+85mvS2Hl8O88HRou39D0aewSDtJRCqAAAAAElFTkSuQmCC";  // Tray: Bianca + Triangolo
 static const WCHAR icon_id6_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARLSURBVFhHvZd/SJx1HMcf2fxRuttynid3mjk7XWLLVcoG7o/ixAVa/pFBgzCKMPr1hxQWJl00GxQIJZuEf2QQFEYkBbOkS7AoEtO2GW1e2rEs5+6cZ5qPP+/d+/Pc97HLtna3c77hxfN9Hp/7vN/P9/n+eNSoTPIYcSukLde2TJHm0fA0eZjcS4qJhcQlozCUzPMYOUJyyDXJKKL8kZ2dfUw1L6vJycmLw8PDZ7u6uvqbm5s/cjgcx8wapJrErJgChEIhrK6uYmlpCQsLC/D7/Yvt7e29SUlJr6paZVI0FsUVYG5uDrOzs/B4PCOqloypmLQpAWZmZmC1Wl9X9ZKlcLTatABmLZJKotb1CPA8ySJRaVMDNDQ0fGjWJDIr7GSjMsj2cHOTA3BWhFpbW0+ada/C/SR8ourHHWB6etpoj4+PX+T07KmsrDxuepi4XK62tLS019T59QkwPz9v3LO2tqZ++Y8CgcC08n2ObH2Ajo6OHuVbQ7Y2QDAY/NNms5nrhTFAtzRAS0vLx8rzQWLosgF0XV/s7e39vrGx8YPa2tp3qqurT5j3VlVVnaivr3+vs7PTw8EWiAxwaeQM9BY3psoPQC9wYDYnAxMHS7B49ChGPvt0TNV4kewkhv4ToK+vb1CO5t/+D6fT+UZdXd27P3Z/8sebO5K7cXchUOwADh8CDu4D7iwASouAjETMp6fgZU3rfiIz/RH+dl1GIeVvPEUEss/LR4e8KxsxJe084q6oqDj+VdtbZydvsYaQvxu4zQ7kWICiHKCQ7fwsII/XUzUDXdMwtl1b+Wm/c33XvFKAO8jV9Chxv23P6IF9J3A7n3xfLlCyRwoBWamA7YZw+y4ncE8pkKAhwPNRTXsqXOLKAaLSrUmJR1CSD6TRZD+NTZXtNZ52Xswfuk9dBFZKC+FPS8F4OITxORdXAF++owm5fPr0bcCBYmBpUVWiXngWeObxcFtd/4LmZxQ/52Y2SY24Alwo4lPnZwJ21dU5u/4dQqTOOarxLY2HyAj5ja9IasQVYMpC04xkYHcijynwW3dgRoJsCMHvNXSTczQ+TaQHThGpEVeACTGjeYjmQZr7yFzlIeiqnhlErzkc7nbiJWObFcCXx+633YhLNJ5y3AT9gQpVidr4Kp6sw680nSDnGdxr2RZ/gFEOJB8L/sIA+l5OQ5EyfoUm70sPRQapqUCQ9w/z+imnI/5BKFNpkMV+YNEphjDNuOJhgNeGePRFhOD9YgJ5dUMJ4WkoKdzLy8srcoO0FVHrNBcVGd1fEwnSxuJyLgNOutw0NY/cEPBdxEL0EnHL5nOtAc4VOMoGE7QVbnP4RgzZEzLVZMCdJxeUsfA7GUhPWRl1la8vxbLem6YmMf9z4S28ufhLLs39NOinqRzl1YjhX8RL+BkED+/xusplf1mXbIsSwugJEte/533cpBikyZuejM9pyDZ8WRbp8qaB8AYWIU37G1xt2pFGvWvBAAAAAElFTkSuQmCC";  // Tray: Bianca + X Rossa
 
-static const WCHAR icon_shield_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAEmUlEQVR4nLWVW4iVVRTHf3t/l/Ody5y5OeOMSjg4XcSmSDOKppuUEBrhQ4KpMfVig4UQSg9CQw+BYBJpQQ5EL/miQT5Elwlk1KAwb1jqIF7Gca7OnMucc75zvvvuQUfEZhot+sOGxdprrR9r7Q0L7kEHDx6s2rnzp+S95Ii7Cfpu377aeGNTVyDMV0ytEhRKcv+FvuEd27a9Yf9nQM/3PU+aicTnk6ph6dVsiY5ne8nlGzl/ad7R0dHSOx0dr575V4D+vr6WolvZXHZFZ0WvS5wdKlOwc2xZ0UNcy5GZbOHcwKL8eC7+6cXBse733319eFZAdjT7iDTDZ+yy+1yuUH4xkIladItsxePKcJGCXWRT+yHiagLCAM+PM1y8n/6x+rFc0ejxnPBILjf+Q2dnx9BUTX3KUErJsbHMV8MT2tLhnMJ2DapSUB0P8fyQIFSEkUJhgbIg9DGjMgsTJ1mwMDW3rBo3Zr2Wjb+cSHwCvPc3QH9/r1lxW9Jnhg0ypSIpQ6CImCy6FCs+o/kyjuegQnGzcQkYEEl0r0Q6HEcpmzBqbbx9KrcAmUxRBqokHS9JwXbwdUmu6FJ2fWzXZ6LooEkPFQQgfHBK4JTBD8H1oVyCRANCSm1aAIDv+3h+hF3xmAwCCmWPouPh+hEjBQ9dOISDpyEaAs+HQECkQwh4Dsp0kHd8m1sA67ITlJpDLwgjHD/AcT0mig5D+QoD2QoTxYDm6hBVmoCYC1KCJkBqN48g0gyUkP7tADllPLx2raeiIKeUoOKD7SkujDucGCgxng9QoQSho5saxCQkDUjFIGnetE0iMwWIzIwjUqE/WJ+yqUvYlGwbS+RprancuEPSVKW4nLNIxRRCj6FrMYTQEUiECinojfheNDgjwPU59fLi46+te/BPosoc8LNQ7oegjBIR43nJyq9XUKSWdEInHTdJxWLoQkMqjQ1P1WAEZ8/OCMgV1KGxsVTU2BhIdAc0E0IdZAD4WELiKhNPWoS6iTItAs3A9hXNqQRp07t+uO/0yWnfAKD35/Mnx/M1xz3VAFEJlAFaGkQCVAwlTAxDIx43SCZN4nEDJQWVEB5bmMDA/nHXri+uzwjo7t7kZwrG7sHCIpAeRC7IJGhVoFkgJIZpYFkmVsxESI1KEFFjmSybH/ojV6/s5Q7JOx1He//45uJI3TFHuw9EBYQBWgI0EyElpqkTixlIXcMNIxxPsKqtlipZ+PatzVt+nRWwZ88Wd2Q83HZudLGn4nNuRAgTlEAIQSxmoBs6kQLbVSxpqqK9RWV+P328C1CzAgA6Nqw+cumasWPAXgrpuWBWgV6LtGpJpxPELQPQmJdM8fbzDZSy17Zv3bq9b7pa+nROgAP7f/vIij3dZra1rWmuHwQnhybKLGiqJ+/XkAgF6x9PklQjn72wek33THVmBhz40Fu2bO+but5qeg+0rpo/N4+pTbKkZT7Kj/NodQGjcuXLJ15auXW60Uxp1pXZ1dWVWL68/YOGeqOzvk5LD0zWosqTE5mR/l1r163/GAj+Kf+ulj7A7t17H0qnq9ujoBSdOnbs8J7u7kt3m/u/6i8VOR/oDCBHYgAAAABJRU5ErkJggg==";
+static const WCHAR icon_shield_b64[] = L"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";
 
 static HICON Base64ToIcon(const WCHAR* b64) {
     if (!b64 || !*b64) return NULL;
@@ -1969,11 +2028,14 @@ static BOOL IsProblemTypeAlreadyDetected(int type) {
     }
     return FALSE;
 }
+static BOOL IsProblemTypeCritical(int type) {
+    return (type == PROB_FIREWALL || type == PROB_AUTOUPDATE || type == PROB_ANTIVIRUS);
+}
 static BOOL AddProblem(int type, int* idx, int* criticalCount) {
     if (*idx >= MAX_PROBLEMS) return FALSE;
     if (IsProblemTypeAlreadyDetected(type)) return FALSE;
     g_ProblemTypes[(*idx)++] = type;
-    if (type == PROB_FIREWALL || type == PROB_AUTOUPDATE || type == PROB_ANTIVIRUS) (*criticalCount)++;
+    if (IsProblemTypeCritical(type)) (*criticalCount)++;
     return TRUE;
 }
 static void CheckWscProvider(DWORD provider, int problemType, int* idx, int* criticalCount) {
@@ -2451,6 +2513,7 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
 void CheckSecurityProviders() {
     SRWGuard guard(g_Ctx.srwLock, true); // exclusive write
     g_ActiveProblems = 0;
+    g_CriticalProblems = 0;
     ZeroMemory(g_ProblemTypes, sizeof(g_ProblemTypes));
     if (g_SimulatedNotificationType > 0) {
         g_SecurityState = STATE_ALERT;
@@ -2462,6 +2525,11 @@ void CheckSecurityProviders() {
             case 4: g_ProblemTypes[0] = PROB_DEFENDER_RT; g_ProblemTypes[1] = PROB_AUTOUPDATE; idx = 2; break;
         }
         g_ActiveProblems = idx;
+        int simCritical = 0;
+        for (int i = 0; i < idx; i++) {
+            if (IsProblemTypeCritical(g_ProblemTypes[i])) simCritical++;
+        }
+        g_CriticalProblems = simCritical;
         return;
     }
     if (g_Settings.privacyMode) { g_SecurityState = STATE_GOOD; return; }
@@ -2574,6 +2642,7 @@ void CheckSecurityProviders() {
         }
     }
     g_ActiveProblems = idx;
+    g_CriticalProblems = criticalCount;
     g_SecurityState = (criticalCount > 0) ? STATE_ALERT : ((idx > 0) ? STATE_WARNING : STATE_GOOD);
 }
 
@@ -2638,17 +2707,34 @@ void RefreshSecurityState() {
         }
     }
 
-    // Startup notification: on the very first check after mod load, show a
-    // balloon unconditionally if problems exist, regardless of cooldown.
-    // This guarantees the user is always notified at every Windows session start.
-    if (g_isStartupCheck && !g_Ctx.isUninitializing) {
-        g_isStartupCheck = FALSE;
-        if (newState > STATE_GOOD && newProblems > 0) {
-            // Clear cooldown so ShowProblemBalloon doesn't suppress the startup alert.
-            g_LastProblemBalloonSignature = 0;
-            g_LastProblemBalloonTick = 0;
-            ShowProblemBalloon();
-        }
+    // La notifica "di avvio" non parte piu' qui al primo check: e' gestita da
+    // CheckStartupNotification(), invocata da un timer dedicato con un
+    // ritardo fisso dopo l'avvio (vedi STARTUP_NOTIFY_TIMER_ID), cosi' non
+    // dipende dal refreshInterval configurato e arriva sempre "dopo un po'"
+    // invece che potenzialmente troppo presto o troppo tardi.
+}
+
+// Controllo eseguito una sola volta, STARTUP_NOTIFY_DELAY_MS dopo l'avvio del
+// thread tray: se a quel punto risultano problemi attivi, mostra il balloon
+// bypassando il cooldown, cosi' l'utente non manca mai la notifica dopo un
+// riavvio/accesso, anche se nel frattempo il balloon normale e' gia' stato
+// soppresso dal cooldown o non e' ancora scattato nessun refresh.
+void CheckStartupNotification() {
+    if (!g_isStartupCheck || g_Ctx.isUninitializing) return;
+    g_isStartupCheck = FALSE;
+
+    // Aggiorna lo stato prima di decidere, cosi' riflette la situazione reale
+    // al momento del controllo e non un valore potenzialmente ancora a zero.
+    RefreshSecurityState();
+
+    int state, problems;
+    { SRWGuard g(g_Ctx.srwLock, false); state = g_SecurityState; problems = g_ActiveProblems; }
+
+    if (state > STATE_GOOD && problems > 0) {
+        // Azzera il cooldown cosi' ShowProblemBalloon non sopprime l'alert di avvio.
+        g_LastProblemBalloonSignature = 0;
+        g_LastProblemBalloonTick = 0;
+        ShowProblemBalloon();
     }
 }
 
@@ -3504,7 +3590,13 @@ void ToggleFlyout() {
         // Was auto-hidden: re-show without recreating.
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
-        ShowWindow(g_Ctx.hWndFlyout, SW_SHOWNOACTIVATE);
+        // Actually activate the flyout, like the network flyout recreation's
+        // ToggleFlyoutWindow() does (ShowWindow(SW_SHOW) + SetForegroundWindow()),
+        // instead of SW_SHOWNOACTIVATE. Without this the window never becomes
+        // the active/foreground window, so DWM/OpenGlass keeps it painted with
+        // the inactive glass color and skips the shadow/highlight.
+        ShowWindow(g_Ctx.hWndFlyout, SW_SHOW);
+        SetForegroundWindow(g_Ctx.hWndFlyout);
         UpdateWindow(g_Ctx.hWndFlyout);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
@@ -3518,7 +3610,8 @@ void ToggleFlyout() {
     if (g_Ctx.hWndFlyout) {
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
-        ShowWindow(g_Ctx.hWndFlyout, SW_SHOWNOACTIVATE);
+        ShowWindow(g_Ctx.hWndFlyout, SW_SHOW);
+        SetForegroundWindow(g_Ctx.hWndFlyout);
         UpdateWindow(g_Ctx.hWndFlyout);
         AnimateWindow(g_Ctx.hWndFlyout, 180, AW_SLIDE | AW_VER_NEGATIVE);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
@@ -3531,6 +3624,7 @@ void ToggleFlyout() {
         InstallClickOutsideHook();
         InstallKeyboardHook();
     }
+
 }
 
 // ============================================================================
@@ -3697,7 +3791,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     case WM_ERASEBKGND: return 1;
-    case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+    case WM_MOUSEACTIVATE:
+        // Let the flyout actually become the active window, same as the
+        // Windows 7 network flyout recreation mod's FlyoutWndProc. This is
+        // required for DWM/OpenGlass to draw the *active* glass frame
+        // (shadow + tint + caption highlighting); with MA_NOACTIVATE the
+        // window is permanently treated as inactive by the compositor.
+        return MA_ACTIVATE;
     case WM_SAFE_CLOSE: CloseFlyout(hwnd); return 0;
     case WM_CLOSE: 
         // Come network flyout: nascondi invece di distruggere
@@ -3812,12 +3912,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         if (!hdc) { EndPaint(hwnd, &ps); break; }
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        if (!hdcMem) { EndPaint(hwnd, &ps); break; }
-        HBITMAP hbmMem = CreateCompatibleBitmap(hdc, g_ScaledWidth, g_ScaledHeight);
-        if (!hbmMem) { DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
-        HBITMAP hOldBm = (HBITMAP)SelectObject(hdcMem, hbmMem);
-        if (!hOldBm) { DeleteObject(hbmMem); DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
+        MemDcGuard dcMem(hdc, g_ScaledWidth, g_ScaledHeight);
+        if (!dcMem.valid()) { EndPaint(hwnd, &ps); break; }
+        HDC hdcMem = dcMem.get();
         int borderW = g_BorderPenWidth;
         BOOL dark = g_Ctx.darkMode;
         COLORREF clrBg = dark ? COLOR_DARK_BG : COLOR_BG;
@@ -3828,7 +3925,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         COLORREF clrLink = dark ? COLOR_DARK_LINK : COLOR_LINK;
         COLORREF clrLinkHover = dark ? COLOR_DARK_LINK_HOVER : COLOR_LINK_HOVER;
 
-        int padL = ScaleDpi(10), padR = ScaleDpi(10);
+        // High Contrast themes override the custom palette with system colors.
+        const bool highContrast = IsHighContrastActive();
+        if (highContrast) {
+            clrBg = clrHeaderBg = GetSysColor(COLOR_WINDOW);
+            clrFooterBg = GetSysColor(COLOR_BTNFACE);
+            clrBorderLine1 = GetSysColor(COLOR_GRAYTEXT);
+            clrTitle = GetSysColor(COLOR_WINDOWTEXT);
+            clrLink = clrLinkHover = GetSysColor(COLOR_HOTLIGHT);
+        }
+
+        int padL = ScaleDpi(12), padR = ScaleDpi(12);
         int hdrH = g_ScaledHeaderHeight, ftrH = g_ScaledFooterHeight;
         
         // Sfondo
@@ -3848,9 +3955,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         SetBkMode(hdcMem, TRANSPARENT);
         
         // Leggi problemi e stato in un unico snapshot coerente.
-        int activeProblems, secState, problemTypesCopy[MAX_PROBLEMS];
+        int activeProblems, criticalProblems, secState, problemTypesCopy[MAX_PROBLEMS];
         { SRWGuard guard(g_Ctx.srwLock, false);
           activeProblems = g_ActiveProblems;
+          criticalProblems = g_CriticalProblems;
           secState = g_SecurityState;
           memcpy(problemTypesCopy, g_ProblemTypes, sizeof(g_ProblemTypes)); }
         
@@ -3866,12 +3974,12 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             flagFallback = g_hFlyoutIconWarning;
         }
 
-        // Tutti e tre i PNG sono 32x32 e usano la stessa pipeline GDI+ HQ.
+                // Tutti e tre i PNG sono 32x32 e usano la stessa pipeline GDI+ HQ.
         int flagSize = ScaleDpi(32);
         int flagY = (hdrH - flagSize) / 2;
         if (!DrawGdipBitmapHighQuality(hdcMem, flagBitmap,
                                        padL, flagY, flagSize, flagSize)) {
-            // Fallback HICON dello stesso stato se GDI+ non e' disponibile.
+            // Fallback HICON dello stesso stato se GDI+ non è disponibile.
             DrawIconEx(hdcMem, padL, flagY, flagFallback,
                        flagSize, flagSize, 0, NULL, DI_NORMAL);
         }
@@ -3879,28 +3987,40 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         int txL = padL + flagSize + ScaleDpi(8);
 
 if (activeProblems > 0) {
+    // Come nell'originale Windows 7/8.1: la prima riga conta solo i problemi
+    // "importanti" (critici), non il totale. La riga "N total messages" va
+    // mostrata SOLO se il totale differisce dagli importanti (es. ci sono
+    // anche avvisi non critici) - altrimenti l'originale mostra una riga sola.
+    int importantCount = (criticalProblems > 0) ? criticalProblems : activeProblems;
+    BOOL showTotalLine = (importantCount != activeProblems);
+
     // "N important messages" in blu e bold (prima riga)
     WCHAR headerBuf[64] = {0};
     const WCHAR* singular = LOC(STR_SUBTITLE_ALERT1);
     const WCHAR* wordPart = wcschr(singular, L' ');
     if (wordPart) {
-        const WCHAR* base = (activeProblems == 1) ? singular : LOC(STR_SUBTITLE_ALERT2);
+        const WCHAR* base = (importantCount == 1) ? singular : LOC(STR_SUBTITLE_ALERT2);
         const WCHAR* wp = wcschr(base, L' ');
         if (wp) {
-            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d%s", activeProblems, wp);
+            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d%s", importantCount, wp);
         } else {
-            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", activeProblems, base);
+            StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", importantCount, base);
         }
     } else {
-        StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", activeProblems, singular);
+        StringCchPrintfW(headerBuf, ARRAYSIZE(headerBuf), L"%d %s", importantCount, singular);
     }
     
-    // Prima riga: "N important messages" in blu e bold
+    // Prima riga: "N important messages" in blu e bold.
+    // Se non c'e' una seconda riga, va centrata sull'intera altezza header
+    // (come "Action Center" nello stato senza problemi), non ancorata in alto.
     SelectGuard sg(hdcMem, g_hFontBold);
     SetTextColor(hdcMem, clrLink);  // BLU
-    RECT rcT = {txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(25)};
+    RECT rcT = showTotalLine
+        ? RECT{txL, ScaleDpi(5), g_ScaledWidth - padR, ScaleDpi(25)}
+        : RECT{txL, 0, g_ScaledWidth - padR, hdrH};
     DrawTextW(hdcMem, headerBuf, -1, &rcT, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     
+    if (showTotalLine) {
     // Seconda riga: "N total messages" in blu (non bold)
     SelectGuard sg2(hdcMem, g_hFontNormal);
     SetTextColor(hdcMem, clrLink);  // BLU (stesso colore dei link)
@@ -3939,6 +4059,7 @@ if (activeProblems > 0) {
     // Riduci lo spazio tra le righe del 5% (da ScaleDpi(22) a ScaleDpi(21))
     RECT rcTotal = {txL, ScaleDpi(24), g_ScaledWidth - padR, ScaleDpi(44)};
     DrawTextW(hdcMem, totalBuf, -1, &rcTotal, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
 } else {
         // "Action Center" in blu e bold
         SelectGuard sg(hdcMem, g_hFontBold);
@@ -3967,8 +4088,13 @@ if (activeProblems > 0) {
         // MESSAGGI / PROBLEMI CON WRAPPING E ALTEZZA DINAMICA
         // ============================================================
         int msgY = hdrH + ScaleDpi(12);
-        int msgL = padL + ScaleDpi(4);
+        int shieldX = padL + ScaleDpi(4);
+        int shieldW = ScaleDpi(16);
+        int msgL = shieldX + shieldW + ScaleDpi(8);
         int msgR = g_ScaledWidth - padR;
+        // Testo dei messaggi: un po' di respiro extra rispetto al bordo destro,
+        // cosi' l'ultima riga del wrap non tocca mai il frame del flyout.
+        int msgTextR = msgR - ScaleDpi(6);
         g_DisplayProblemCount = 0;
         
         if (activeProblems == 0) {
@@ -3978,17 +4104,20 @@ if (activeProblems > 0) {
             if (newline) {
                 const WCHAR* line2 = newline + 1;
                 SelectObject(hdcMem, g_hFontNormal);
-                SetTextColor(hdcMem, dark ? clrTitle : RGB(80, 80, 80));
-                RECT rcLine2 = {msgL, msgY, msgR, g_ScaledHeight - g_ScaledFooterHeight - ScaleDpi(4)};
+                SetTextColor(hdcMem, highContrast ? GetSysColor(COLOR_GRAYTEXT)
+                                                  : (dark ? clrTitle : RGB(80, 80, 80)));
+                RECT rcLine2 = {padL, msgY, msgR, g_ScaledHeight - g_ScaledFooterHeight - ScaleDpi(4)};
                 DrawTextW(hdcMem, line2, -1, &rcLine2, DT_LEFT | DT_WORDBREAK);
             }
         } else {
             int displayCount = (activeProblems < MAX_DISPLAY_PROBLEMS) ? activeProblems : MAX_DISPLAY_PROBLEMS;
             int lineH = ScaleDpi(22);
-            int maxWidth = msgR - msgL - ScaleDpi(22) - ScaleDpi(4);
+            int maxWidth = msgTextR - msgL;
             int rowHeights[MAX_DISPLAY_PROBLEMS] = {0};
+            int rowContentW[MAX_DISPLAY_PROBLEMS] = {0};
             
             // Prima passata: calcola quante righe servono per ogni problema
+            // e la larghezza effettiva del testo (per il box di hover).
             for (int i = 0; i < displayCount; i++) {
                 const wchar_t* msgText = GetProblemText(problemTypesCopy[i]);
                 if (!msgText || !msgText[0]) continue;
@@ -4003,6 +4132,9 @@ if (activeProblems > 0) {
                     if (neededRows > 3) neededRows = 3;
                 }
                 rowHeights[i] = neededRows * lineH + ScaleDpi(4);
+                // Se va a capo, la riga piu' lunga occupa comunque ~tutta
+                // maxWidth; altrimenti usa la larghezza reale del testo.
+                rowContentW[i] = (neededRows > 1) ? maxWidth : (textSize.cx < maxWidth ? textSize.cx : maxWidth);
             }
             
             // Spaziatura 8% tra un problema e l'altro (in aggiunta al padding interno di ScaleDpi(4))
@@ -4018,7 +4150,7 @@ if (activeProblems > 0) {
                 int rowBottom = rowTop + rowHeight;
                 
                 RECT rcRowFull = {0, rowTop, g_ScaledWidth, rowBottom};
-                RECT rcLink = {msgL + ScaleDpi(22), rowTop, msgR, rowBottom};
+                RECT rcLink = {msgL, rowTop, msgTextR, rowBottom};
                 
                 g_ProblemLinkRects[i] = rcRowFull;
                 g_ProblemTypesDisplay[i] = problemTypesCopy[i];
@@ -4028,36 +4160,25 @@ if (activeProblems > 0) {
                     COLORREF hoverBg     = dark ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                     COLORREF hoverBorder = dark ? RGB(60, 80, 120)   : RGB(174, 212, 243);
                     
-                    RECT rcHover = rcRowFull;
-                    rcHover.left += ScaleDpi(2);
-                    rcHover.right -= ScaleDpi(2);
+                    // Hover a larghezza intera e 1.5% piu' alto per coprire
+                    // meglio tutta l'area cliccabile della riga.
+                    int hovH = rowBottom - rowTop;
+                    int extraV = MulDiv(hovH, 15, 1000); // +1.5%
+                    RECT rcHover = { 0, rowTop - extraV, g_ScaledWidth, rowBottom + extraV };
                     
-                    HBRUSH hBrHov = CreateSolidBrush(hoverBg);
-                    HPEN   hPenHov = CreatePen(PS_SOLID, 1, hoverBorder);
-                    HPEN   hOldPenH  = (HPEN)SelectObject(hdcMem, hPenHov);
-                    HBRUSH hOldBrH   = (HBRUSH)SelectObject(hdcMem, hBrHov);
+                    GdiObj hBrHov(CreateSolidBrush(hoverBg));
+                    GdiObj hPenHov(CreatePen(PS_SOLID, 1, hoverBorder));
+                    SelectGuard sgPen(hdcMem, hPenHov);
+                    SelectGuard sgBr(hdcMem, hBrHov);
                     RoundRect(hdcMem, rcHover.left, rcHover.top, rcHover.right, rcHover.bottom, 3, 3);
-                    SelectObject(hdcMem, hOldPenH); 
-                    SelectObject(hdcMem, hOldBrH);
-                    DeleteObject(hBrHov); 
-                    DeleteObject(hPenHov);
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                 }
                 if (g_hShieldIcon) {
-    // Calcola l'altezza effettiva del testo per allineare lo scudo
-    // Usa l'altezza della riga di testo singola (lineH) come riferimento
     int iconSize = ScaleDpi(16);
-    int textHeight = lineH;  // Altezza di una riga di testo
-    int shieldY = rowTop + (rowHeight - iconSize) / 2;
-    
-    // Se la riga è più alta di una singola riga di testo, centra lo scudo
-    // sulla PRIMA riga di testo, non su tutta l'altezza della riga
-    if (rowHeight > textHeight + ScaleDpi(4)) {
-        // Centra sulla prima riga di testo (le righe successive sono wrapping)
-        shieldY = rowTop + (textHeight - iconSize) / 2;
-    }
-    
-    DrawIconEx(hdcMem, msgL, shieldY,
+    // Allinea lo scudo alla prima riga di testo: il bordo superiore dello
+    // scudo coincide con quello del testo (g_hFontNormal = -ScaleDpi(12))
+    int shieldY = rowTop;
+    DrawIconEx(hdcMem, shieldX, shieldY,
               g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
 }
                 SelectObject(hdcMem, g_hFontNormal);
@@ -4071,8 +4192,8 @@ if (activeProblems > 0) {
             if (activeProblems > MAX_DISPLAY_PROBLEMS) {
                 SelectGuard sg(hdcMem, g_hFontSmall); 
                 SetTextColor(hdcMem, clrLink);
-                RECT rcMore = {msgL + ScaleDpi(22), currentY, 
-                               msgR, currentY + ScaleDpi(16)};
+                RECT rcMore = {msgL, currentY, 
+                               msgTextR, currentY + ScaleDpi(16)};
                 DrawTextW(hdcMem, LOC(STR_AND_MORE), -1, &rcMore, DT_LEFT | DT_SINGLELINE);
             }
         }
@@ -4105,7 +4226,6 @@ if (activeProblems > 0) {
         // Il bordo è ora gestito interamente da DWM (DropShadow + Round Corners)
         
         BitBlt(hdc,0,0,g_ScaledWidth,g_ScaledHeight,hdcMem,0,0,SRCCOPY);
-        SelectObject(hdcMem, hOldBm); DeleteObject(hbmMem); DeleteDC(hdcMem);
         EndPaint(hwnd, &ps);
         break;
     }
@@ -4146,7 +4266,19 @@ void CreateFlyoutWindow() {
     int flyoutHeight = g_ScaledHeight;
     int flyoutWidth = g_ScaledWidth;
     
-    DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    // NOTE: unlike the notify/toast popup below, the flyout is a window the
+    // user explicitly opens by clicking the tray icon, exactly like the
+    // Windows 7 network flyout recreation. That mod does NOT use
+    // WS_EX_NOACTIVATE on its flyout and instead lets it become the
+    // foreground/active window (see its ToggleFlyoutWindow(), which calls
+    // ShowWindow(..., SW_SHOW) followed by SetForegroundWindow()). Keeping
+    // WS_EX_NOACTIVATE here is what causes DWM to always treat this flyout
+    // as an unfocused/inactive window, so with OpenGlass it never gets a
+    // drop shadow or the active glass tint/highlight and instead is stuck
+    // showing the inactive glass color. Dropping WS_EX_NOACTIVATE (and
+    // activating it for real in CreateFlyoutWindow/ToggleFlyout below)
+    // fixes that inconsistency with the rest of the Aero tray flyouts.
+    DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
     DWORD dwStyle = g_Settings.useRoundedCorners ? (WS_POPUP | WS_THICKFRAME) : WS_POPUP;
     
     if (g_Settings.useRoundedCorners) {
@@ -4211,12 +4343,9 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps);
         if (!hdc) { EndPaint(hwnd, &ps); break; }
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        if (!hdcMem) { EndPaint(hwnd, &ps); break; }
-        HBITMAP hbmMem = CreateCompatibleBitmap(hdc, g_ScaledNotifyWidth, g_ScaledNotifyHeight);
-        if (!hbmMem) { DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
-        HBITMAP hOldBm = (HBITMAP)SelectObject(hdcMem, hbmMem);
-        if (!hOldBm) { DeleteObject(hbmMem); DeleteDC(hdcMem); EndPaint(hwnd, &ps); break; }
+        MemDcGuard dcMem(hdc, g_ScaledNotifyWidth, g_ScaledNotifyHeight);
+        if (!dcMem.valid()) { EndPaint(hwnd, &ps); break; }
+        HDC hdcMem = dcMem.get();
         int iconSize = g_ScaledIconSize, borderW = g_BorderPenWidth;
         BOOL dark = g_Ctx.darkMode;
         COLORREF clrNotifyBg = dark ? COLOR_DARK_NOTIFY_BG : COLOR_NOTIFY_BG;
@@ -4225,6 +4354,16 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         COLORREF clrTitle = dark ? COLOR_DARK_TITLE : COLOR_TITLE;
         COLORREF clrText = dark ? COLOR_DARK_TEXT : COLOR_TEXT_DARK;
         COLORREF clrLink = dark ? COLOR_DARK_LINK : COLOR_LINK;
+
+        // High Contrast themes override the custom palette with system colors.
+        if (IsHighContrastActive()) {
+            clrNotifyBg = GetSysColor(COLOR_WINDOW);
+            clrNotifyBorder = GetSysColor(COLOR_WINDOWFRAME);
+            clrNotifyTitleBg = GetSysColor(COLOR_BTNFACE);
+            clrTitle = GetSysColor(COLOR_WINDOWTEXT);
+            clrText = GetSysColor(COLOR_WINDOWTEXT);
+            clrLink = GetSysColor(COLOR_HOTLIGHT);
+        }
         RECT rc = {0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight};
         GdiObj hBrBg(CreateSolidBrush(clrNotifyBg)); FillRect(hdcMem, &rc, (HBRUSH)hBrBg.get());
         { GdiObj hPen(CreatePen(PS_SOLID,borderW,clrNotifyBorder)); SelectGuard sgPen(hdcMem,hPen);
@@ -4259,7 +4398,6 @@ LRESULT CALLBACK NotifyWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
           RECT rcL = {txL,ScaleDpi(44),g_ScaledNotifyWidth-ScaleDpi(8),ScaleDpi(58)};
           DrawTextW(hdcMem, LOC(STR_LINK_OPEN_AC), -1, &rcL, DT_LEFT|DT_SINGLELINE); }
         BitBlt(hdc,0,0,g_ScaledNotifyWidth,g_ScaledNotifyHeight,hdcMem,0,0,SRCCOPY);
-        SelectObject(hdcMem, hOldBm); DeleteObject(hbmMem); DeleteDC(hdcMem);
         EndPaint(hwnd, &ps);
         break;
     }
@@ -4367,6 +4505,11 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             }
             return 0;
         }
+        if (wParam == STARTUP_NOTIFY_TIMER_ID) {
+            KillTimer(hwnd, STARTUP_NOTIFY_TIMER_ID);
+            if (!g_Ctx.isUninitializing) CheckStartupNotification();
+            return 0;
+        }
         if (wParam == TRAY_RETRY_TIMER_ID) {
             RunTrayIconRecoveryAttempt();
             return 0;
@@ -4387,6 +4530,7 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         KillTimer(hwnd, REFRESH_TIMER_ID);
         KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
         KillTimer(hwnd, TRAY_HEALTH_TIMER_ID);
+        KillTimer(hwnd, STARTUP_NOTIFY_TIMER_ID);
         RemoveProblemBalloon();
 
         HWND hFly = g_Ctx.hWndFlyout;
@@ -4638,6 +4782,13 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
         }
 
         SetTimer(g_Ctx.hWndMsgHandler, TRAY_HEALTH_TIMER_ID, 15000, NULL);
+
+        // Notifica di avvio: controlla "dopo un po'" (non subito) se ci sono
+        // problemi, cosi' l'area notifiche di Windows e' gia' pronta e il
+        // balloon non viene perso appena dopo il boot/riavvio di Explorer.
+        if (g_isStartupCheck) {
+            SetTimer(g_Ctx.hWndMsgHandler, STARTUP_NOTIFY_TIMER_ID, STARTUP_NOTIFY_DELAY_MS, NULL);
+        }
 
         if (g_Settings.enableHotkey) {
             RegisterHotKey(g_Ctx.hWndMsgHandler, HOTKEY_ID_SIMULATE, MOD_CONTROL, 'N');
