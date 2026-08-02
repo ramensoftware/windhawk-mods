@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.2
+// @version         3.1.3
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -98,7 +98,12 @@ style is the mod's original renderer.
 - **Actually smooth.** Progress is driven by real elapsed time, and frames are
   paced at twice the display's refresh rate (via a high-resolution timer), so the
   compositor always has a fresh frame ready at each vsync. No system animation
-  competes with it, so it stays smooth at any duration you set.
+  competes with it, so it stays smooth at any duration you set. In v3.1.3 the
+  modern genie's render canvas shrank from the full virtual desktop to a tight
+  bounding box around the window and dock target, which removed a large per-frame
+  `UpdateLayeredWindow` cost that made the modern style stutter on AMD GPUs
+  (reported on a 6900 XT and a Vega 8 iGPU; the classic style was already using
+  the tight canvas).
 - **Smoothstep easing** instead of a linear ramp, so it eases in and out.
 - **Accurate targeting.** The mod locates the app's actual taskbar button via UI
   Automation and aims the genie at it (with a per-process fallback cache), instead
@@ -765,15 +770,60 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     // machines; the pacer below keeps the frame rate up without that.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    // Full virtual-screen canvas: HIS's genie mesh is written in screen-space
-    // coordinates (it can spill outside the window rect), so the ghost and its
-    // render surface span every monitor. This is the one place we adopt HIS's
-    // full-screen ghost over MINE's tight bounding box, because the mesh geometry
-    // structurally requires a screen-space canvas.
-    int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    // Tight bounding-box canvas: the genie mesh is written in screen-space
+    // coordinates but only ever occupies the region between the window rect and
+    // the dock target (plus the ~W/2 horizontal sway from the mesh's effect
+    // term). Rendering over the full virtual desktop wasted CPU on every frame -
+    // UpdateLayeredWindow of a whole-screen layered window is slow, most visibly
+    // on AMD drivers - so we use the same window-union-dock bounding box the
+    // Classic engine already uses, clamped to the monitor(s) actually involved.
+    RECT winMonRect;
+    {
+        HMONITOR hWinMon = MonitorFromRect(&data->targetRect, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO wmi = {0};
+        wmi.cbSize = sizeof(wmi);
+        if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
+            winMonRect = wmi.rcMonitor;
+        } else {
+            winMonRect = data->targetRect;
+        }
+    }
+    RECT dockMonRect;
+    {
+        MONITORINFO dmi = {0};
+        dmi.cbSize = sizeof(dmi);
+        if (data->hMon && GetMonitorInfoW(data->hMon, &dmi)) {
+            dockMonRect = dmi.rcMonitor;
+        } else {
+            dockMonRect = winMonRect;
+        }
+    }
+    RECT boundMon;
+    boundMon.left   = (winMonRect.left   < dockMonRect.left)   ? winMonRect.left   : dockMonRect.left;
+    boundMon.top    = (winMonRect.top    < dockMonRect.top)    ? winMonRect.top    : dockMonRect.top;
+    boundMon.right  = (winMonRect.right  > dockMonRect.right)  ? winMonRect.right  : dockMonRect.right;
+    boundMon.bottom = (winMonRect.bottom > dockMonRect.bottom) ? winMonRect.bottom : dockMonRect.bottom;
+
+    const int origLeftB = data->targetRect.left;
+    const int origTopB  = data->targetRect.top;
+    const int wB = data->width;
+    const int dockXB = data->targetDockX;
+
+    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - wB / 2;
+    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + wB / 2;
+    int boundTop    = origTopB;
+    int boundBottom = boundMon.bottom;
+    if (boundLeft   < boundMon.left)   boundLeft   = boundMon.left;
+    if (boundRight  > boundMon.right)  boundRight  = boundMon.right;
+    if (boundTop    < boundMon.top)    boundTop    = boundMon.top;
+    if (boundBottom > boundMon.bottom) boundBottom = boundMon.bottom;
+
+    int vLeft = boundLeft;
+    int vTop = boundTop;
+    int vWidth = boundRight - boundLeft;
+    int vHeight = (boundBottom - boundTop) - 1;
+    if (vWidth < 1) vWidth = 1;
+    if (vHeight < 1) vHeight = 1;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -936,7 +986,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     // (virtual-desktop) coordinates - wGeom / iGeom are both
                     // screen-space (targetRect, targetDockX, taskbar-top Y are all
                     // virtual-screen). The ONLY conversion to the ghost's
-                    // full-virtual-screen canvas is the (px - vLeft, py - vTop)
+                    // bounding-box canvas is the (px - vLeft, py - vTop)
                     // subtraction below - vLeft/vTop are negative on monitors left of
                     // / above the primary. Every mesh coordinate passes through here
                     // exactly once; nothing downstream re-offsets.
