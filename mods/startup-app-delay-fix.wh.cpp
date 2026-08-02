@@ -19,17 +19,26 @@ values, so disabling the mod restores Windows' normal behavior immediately.
 
 Only `WaitforIdleState` is overridden. The related `StartupDelayInMSec` value
 is left unchanged.
+
+The setting is read when Explorer starts. Enabling or disabling the mod during
+a session takes effect after the next sign-in or Explorer restart.
 */
 // ==/WindhawkModReadme==
 
 #include <ntdef.h>
 #include <ntstatus.h>
+#include <windhawk_utils.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
+#include <unordered_set>
 
 constexpr wchar_t kKeyPathSuffix[] =
     L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
+constexpr wchar_t kExplorerPathSuffix[] =
+    L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer";
+constexpr wchar_t kUserHivePrefix[] = L"\\REGISTRY\\USER\\";
 constexpr wchar_t kValueName[] = L"WaitforIdleState";
 
 typedef enum _KEY_INFORMATION_CLASS {
@@ -49,7 +58,6 @@ typedef enum _KEY_VALUE_INFORMATION_CLASS {
     KeyValueFullInformation,
     KeyValuePartialInformation,
     KeyValueFullInformationAlign64,
-    KeyValuePartialInformationAlign64,
 } KEY_VALUE_INFORMATION_CLASS;
 
 struct KEY_VALUE_BASIC_INFORMATION_LOCAL {
@@ -85,6 +93,30 @@ using NtQueryValueKey_t = NTSTATUS(NTAPI*)(
     PVOID keyValueInformation, ULONG length, PULONG resultLength);
 NtQueryValueKey_t NtQueryValueKey_orig;
 
+using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
+                                     ACCESS_MASK desiredAccess,
+                                     POBJECT_ATTRIBUTES objectAttributes);
+NtOpenKey_t NtOpenKey_orig;
+
+using NtOpenKeyEx_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
+                                       ACCESS_MASK desiredAccess,
+                                       POBJECT_ATTRIBUTES objectAttributes,
+                                       ULONG openOptions);
+NtOpenKeyEx_t NtOpenKeyEx_orig;
+
+using NtClose_t = NTSTATUS(NTAPI*)(HANDLE handle);
+NtClose_t NtClose_orig;
+
+SRWLOCK g_virtualKeyHandlesLock = SRWLOCK_INIT;
+std::unordered_set<HANDLE> g_virtualKeyHandles;
+
+bool IsVirtualKey(HANDLE key) {
+    AcquireSRWLockShared(&g_virtualKeyHandlesLock);
+    bool found = g_virtualKeyHandles.find(key) != g_virtualKeyHandles.end();
+    ReleaseSRWLockShared(&g_virtualKeyHandlesLock);
+    return found;
+}
+
 bool GetKeyPath(HANDLE key, std::wstring* path) {
     ULONG size = 0;
     NTSTATUS status = NtQueryKey(key, KeyNameInformation, nullptr, 0, &size);
@@ -112,15 +144,143 @@ bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
         return false;
     }
 
+    if (IsVirtualKey(key)) {
+        return true;
+    }
+
     std::wstring path;
     if (!GetKeyPath(key, &path)) {
         return false;
     }
-
     size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
-    return path.length() >= suffixLength &&
+    constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
+    return path.length() >= userHivePrefixLength + suffixLength &&
+           _wcsnicmp(path.c_str(), kUserHivePrefix, userHivePrefixLength) == 0 &&
            _wcsnicmp(path.c_str() + path.length() - suffixLength,
                       kKeyPathSuffix, suffixLength) == 0;
+}
+
+bool IsTargetOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
+    if (!objectAttributes || !objectAttributes->ObjectName ||
+        !objectAttributes->ObjectName->Buffer) {
+        return false;
+    }
+
+    const UNICODE_STRING* objectName = objectAttributes->ObjectName;
+    std::wstring path(objectName->Buffer,
+                      objectName->Length / sizeof(wchar_t));
+    if (objectAttributes->RootDirectory &&
+        (path.empty() || path.front() != L'\\')) {
+        std::wstring rootPath;
+        if (!GetKeyPath(objectAttributes->RootDirectory, &rootPath)) {
+            return false;
+        }
+        if (!path.empty()) {
+            rootPath += L'\\';
+            rootPath += path;
+        }
+        path = rootPath;
+    }
+
+    constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
+    constexpr size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
+    return path.length() >= userHivePrefixLength + suffixLength &&
+           _wcsnicmp(path.c_str(), kUserHivePrefix, userHivePrefixLength) == 0 &&
+           _wcsnicmp(path.c_str() + path.length() - suffixLength,
+                      kKeyPathSuffix, suffixLength) == 0;
+}
+
+void RememberVirtualKey(HANDLE key) {
+    AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
+    g_virtualKeyHandles.insert(key);
+    ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
+}
+
+NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                                POBJECT_ATTRIBUTES objectAttributes,
+                                ULONG openOptions, bool useNtOpenKeyEx) {
+    const UNICODE_STRING* objectName = objectAttributes->ObjectName;
+    std::wstring parentName(objectName->Buffer,
+                            objectName->Length / sizeof(wchar_t));
+    constexpr wchar_t serializeComponent[] = L"\\Serialize";
+    constexpr size_t serializeComponentLength =
+        ARRAYSIZE(serializeComponent) - 1;
+
+    if (parentName.length() >= serializeComponentLength &&
+        _wcsicmp(parentName.c_str() + parentName.length() -
+                     serializeComponentLength,
+                 serializeComponent) == 0) {
+        parentName.resize(parentName.length() - serializeComponentLength);
+    } else if (objectAttributes->RootDirectory &&
+               _wcsicmp(parentName.c_str(), L"Serialize") == 0) {
+        HANDLE duplicate = nullptr;
+        DWORD options = desiredAccess & MAXIMUM_ALLOWED ? DUPLICATE_SAME_ACCESS
+                                                       : 0;
+        if (!DuplicateHandle(GetCurrentProcess(), objectAttributes->RootDirectory,
+                             GetCurrentProcess(), &duplicate, desiredAccess,
+                             FALSE, options)) {
+            return STATUS_UNSUCCESSFUL;
+        }
+        *keyHandle = duplicate;
+        RememberVirtualKey(duplicate);
+        return STATUS_SUCCESS;
+    } else {
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    UNICODE_STRING parentObjectName{
+        .Length = static_cast<USHORT>(parentName.length() * sizeof(wchar_t)),
+        .MaximumLength =
+            static_cast<USHORT>(parentName.length() * sizeof(wchar_t)),
+        .Buffer = parentName.data(),
+    };
+    OBJECT_ATTRIBUTES parentAttributes = *objectAttributes;
+    parentAttributes.ObjectName = &parentObjectName;
+
+    NTSTATUS status = useNtOpenKeyEx
+                          ? NtOpenKeyEx_orig(keyHandle, desiredAccess,
+                                             &parentAttributes, openOptions)
+                          : NtOpenKey_orig(keyHandle, desiredAccess,
+                                           &parentAttributes);
+    if (status == STATUS_SUCCESS) {
+        RememberVirtualKey(*keyHandle);
+    }
+    return status;
+}
+
+bool IsMissingStatus(NTSTATUS status) {
+    return status == STATUS_OBJECT_NAME_NOT_FOUND ||
+           status == STATUS_OBJECT_PATH_NOT_FOUND;
+}
+
+NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                              POBJECT_ATTRIBUTES objectAttributes) {
+    NTSTATUS status =
+        NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
+    if (IsMissingStatus(status) && IsTargetOpen(objectAttributes)) {
+        return OpenParentAsVirtualKey(keyHandle, desiredAccess, objectAttributes,
+                                      0, false);
+    }
+    return status;
+}
+
+NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                                POBJECT_ATTRIBUTES objectAttributes,
+                                ULONG openOptions) {
+    NTSTATUS status = NtOpenKeyEx_orig(keyHandle, desiredAccess,
+                                       objectAttributes, openOptions);
+    if (IsMissingStatus(status) && IsTargetOpen(objectAttributes)) {
+        return OpenParentAsVirtualKey(keyHandle, desiredAccess, objectAttributes,
+                                      openOptions, true);
+    }
+    return status;
+}
+
+NTSTATUS NTAPI NtClose_hook(HANDLE handle) {
+    AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
+    g_virtualKeyHandles.erase(handle);
+    ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
+    return NtClose_orig(handle);
 }
 
 ULONG AlignUp(ULONG value, ULONG alignment) {
@@ -150,7 +310,7 @@ NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
             info->Type = REG_DWORD;
             info->NameLength = valueName->Length;
             ULONG copiedNameLength =
-                min(valueName->Length, bufferLength - nameOffset);
+                std::min<ULONG>(valueName->Length, bufferLength - nameOffset);
             std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
             return bufferLength < requiredLength ? STATUS_BUFFER_OVERFLOW
                                                  : STATUS_SUCCESS;
@@ -178,7 +338,7 @@ NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
             info->DataLength = sizeof(DWORD);
             info->NameLength = valueName->Length;
             ULONG copiedNameLength =
-                min(valueName->Length, bufferLength - nameOffset);
+                std::min<ULONG>(valueName->Length, bufferLength - nameOffset);
             std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
             if (bufferLength < requiredLength) {
                 return STATUS_BUFFER_OVERFLOW;
@@ -188,12 +348,9 @@ NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
             return STATUS_SUCCESS;
         }
 
-        case KeyValuePartialInformation:
-        case KeyValuePartialInformationAlign64: {
-            dataOffset = informationClass == KeyValuePartialInformationAlign64
-                             ? 16
-                             : FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL,
-                                            Data);
+        case KeyValuePartialInformation: {
+            dataOffset = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL,
+                                      Data);
             requiredLength = dataOffset + sizeof(DWORD);
             if (resultLength) {
                 *resultLength = requiredLength;
@@ -228,25 +385,59 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
         keyHandle, valueName, keyValueInformationClass, keyValueInformation,
         length, resultLength);
 
+    if (IsVirtualKey(keyHandle) && !IsTargetQuery(keyHandle, valueName)) {
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
     if (!IsTargetQuery(keyHandle, valueName)) {
         return status;
     }
 
-    return FillValueInformation(valueName, keyValueInformationClass,
-                                keyValueInformation, length, resultLength);
+    if (status != STATUS_SUCCESS && status != STATUS_OBJECT_NAME_NOT_FOUND &&
+        status != STATUS_OBJECT_PATH_NOT_FOUND &&
+        status != STATUS_BUFFER_TOO_SMALL &&
+        status != STATUS_BUFFER_OVERFLOW) {
+        return status;
+    }
+
+    switch (keyValueInformationClass) {
+        case KeyValueBasicInformation:
+        case KeyValueFullInformation:
+        case KeyValuePartialInformation:
+        case KeyValueFullInformationAlign64:
+            break;
+        default:
+            return status;
+    }
+
+    status = FillValueInformation(valueName, keyValueInformationClass,
+                                  keyValueInformation, length, resultLength);
+    if (status == STATUS_SUCCESS) {
+        Wh_Log(L"Reporting WaitforIdleState=0");
+    }
+    return status;
 }
 
 BOOL Wh_ModInit() {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    void* ntQueryValueKey =
-        reinterpret_cast<void*>(GetProcAddress(ntdll, "NtQueryValueKey"));
-    if (!ntQueryValueKey) {
-        Wh_Log(L"Failed to find NtQueryValueKey");
+    auto ntQueryValueKey = reinterpret_cast<NtQueryValueKey_t>(
+        GetProcAddress(ntdll, "NtQueryValueKey"));
+    auto ntOpenKey = reinterpret_cast<NtOpenKey_t>(
+        GetProcAddress(ntdll, "NtOpenKey"));
+    auto ntOpenKeyEx = reinterpret_cast<NtOpenKeyEx_t>(
+        GetProcAddress(ntdll, "NtOpenKeyEx"));
+    auto ntClose =
+        reinterpret_cast<NtClose_t>(GetProcAddress(ntdll, "NtClose"));
+    if (!ntQueryValueKey || !ntOpenKey || !ntOpenKeyEx || !ntClose) {
+        Wh_Log(L"Failed to find required ntdll registry functions");
         return FALSE;
     }
 
-    Wh_SetFunctionHook(ntQueryValueKey,
-                       reinterpret_cast<void*>(NtQueryValueKey_hook),
-                       reinterpret_cast<void**>(&NtQueryValueKey_orig));
+    WindhawkUtils::SetFunctionHook(ntQueryValueKey, NtQueryValueKey_hook,
+                                   &NtQueryValueKey_orig);
+    WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_hook, &NtOpenKey_orig);
+    WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_hook,
+                                   &NtOpenKeyEx_orig);
+    WindhawkUtils::SetFunctionHook(ntClose, NtClose_hook, &NtClose_orig);
     return TRUE;
 }
