@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-01T17:35:18.000Z</updated>
+    <updated>2026-08-02T22:20:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-customizer#63c3f981eab16876679fce1c90a5bb7efd5751d6</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
+        <updated>2026-08-02T22:20:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added ability to change the corner radius (thanks @sid-skippy!) (closes #4598)</li>
+<li>Added percentage label overlay (disabled by default) (thanks @sid-skippy!)</li>
+<li>Added intermediate state with customizable threshold</li>
+<li>Added Romanian translation and simplified settings</li>
+</ul>]]></content>
+        <author>
+            <name>Valer100</name>
+            <uri>https://github.com/Valer100</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
         <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
@@ -705,24 +721,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 3.4.0]]></title>
-        <id>https://windhawk.net/mods/win7-network-flyout-recreation#1bf38435c2609b83742e4484f3f571466a7826ed</id>
-        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
-        <updated>2026-07-23T19:25:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added network location icons (Home/Public/Work based on the type of the network) to make it more similar to the original Windows 7 flyout</li>
-<li>Added option to disable network location icons</li>
-<li>Enhanced the interface</li>
-<li>Enhanced the image loading logic</li>
-<li>Fixed the refresh button position</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
