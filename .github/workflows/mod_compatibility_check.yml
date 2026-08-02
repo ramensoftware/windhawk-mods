@@ -94,9 +94,17 @@ jobs:
               # mod whose targets are all common system processes.
               cli="$windhawk_path\windhawk-cli.exe"
               result="${{ runner.temp }}/compile_result.json"
-              MSYS_NO_PATHCONV=1 "$cli" --json \
+              if ! MSYS_NO_PATHCONV=1 "$cli" --json \
                 mod install --disabled --arch all --file "$ALL_CHANGED_AND_MODIFIED_FILES" \
-                > "$result"
+                > "$result"; then
+                # Compiler diagnostics are streamed to stderr, but the failure
+                # summary goes to stdout in JSON mode, and a failure that produced
+                # no diagnostics (bad metadata, for example) has no stderr output
+                # at all.
+                jq -r '"::error::\(.error.code): \(.error.message)"' "$result" \
+                  || cat "$result"
+                exit 1
+              fi
 
               # The CLI exits with 0 for a compile that only produced warnings, and
               # omits the "warnings" key when there were none. The warning text
