@@ -752,6 +752,58 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
     *outY = w.y + y + offsetY;
 }
 
+// Shared by both engines: union of the monitors involved (the window's own
+// monitor and the monitor the genie funnels to). With Multi-monitor support off
+// (the default) data->hMon is the primary monitor, so a window sitting on a
+// secondary display still needs its own monitor in the union or the canvas would
+// collapse onto the primary and clip the first half of the animation.
+static RECT GetGenieMonitorUnion(const RECT& winRect, HMONITOR hDockMon) {
+    RECT winMon;
+    HMONITOR hWinMon = MonitorFromRect(&winRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO wmi = {0};
+    wmi.cbSize = sizeof(wmi);
+    if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
+        winMon = wmi.rcMonitor;
+    } else {
+        winMon = winRect;
+    }
+
+    RECT dockMon;
+    MONITORINFO dmi = {0};
+    dmi.cbSize = sizeof(dmi);
+    if (hDockMon && GetMonitorInfoW(hDockMon, &dmi)) {
+        dockMon = dmi.rcMonitor;
+    } else {
+        dockMon = winMon;
+    }
+
+    RECT u;
+    u.left   = (winMon.left   < dockMon.left)   ? winMon.left   : dockMon.left;
+    u.top    = (winMon.top    < dockMon.top)    ? winMon.top    : dockMon.top;
+    u.right  = (winMon.right  > dockMon.right)  ? winMon.right  : dockMon.right;
+    u.bottom = (winMon.bottom > dockMon.bottom) ? winMon.bottom : dockMon.bottom;
+    return u;
+}
+
+// Shared by both engines: clamp a proposed canvas rect to the union of the
+// monitors involved, then re-expand it so it can never clip the window rect or
+// the dock target column away. The monitor clamp only trims the box to the
+// screens actually used; it must never cut geometry the animation draws.
+static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
+                             const RECT& winRect, int dockX, const RECT& monUnion) {
+    if (left   < monUnion.left)   left   = monUnion.left;
+    if (right  > monUnion.right)  right  = monUnion.right;
+    if (top    < monUnion.top)    top    = monUnion.top;
+    if (bottom > monUnion.bottom) bottom = monUnion.bottom;
+
+    if (left  > winRect.left)  left  = winRect.left;
+    if (right < winRect.right) right = winRect.right;
+    if (top   > winRect.top)   top   = winRect.top;
+    if (bottom < winRect.bottom) bottom = winRect.bottom;
+    if (left  > dockX - 16)    left  = dockX - 16;   // iGeom is dockX ± 11
+    if (right < dockX + 16)    right = dockX + 16;
+}
+
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
@@ -770,62 +822,86 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     // machines; the pacer below keeps the frame rate up without that.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    // Tight bounding-box canvas: the genie mesh is written in screen-space
-    // coordinates but only ever occupies the region between the window rect and
-    // the dock target (plus the ~W/2 horizontal sway from the mesh's effect
-    // term). Rendering over the full virtual desktop wasted CPU on every frame -
-    // UpdateLayeredWindow of a whole-screen layered window is slow, most visibly
-    // on AMD drivers - so we use the same window-union-dock bounding box the
-    // Classic engine already uses, clamped to the monitor(s) actually involved.
-    RECT winMonRect;
-    {
-        HMONITOR hWinMon = MonitorFromRect(&data->targetRect, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO wmi = {0};
-        wmi.cbSize = sizeof(wmi);
-        if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
-            winMonRect = wmi.rcMonitor;
-        } else {
-            winMonRect = data->targetRect;
-        }
-    }
-    RECT dockMonRect;
-    {
-        MONITORINFO dmi = {0};
-        dmi.cbSize = sizeof(dmi);
-        if (data->hMon && GetMonitorInfoW(data->hMon, &dmi)) {
-            dockMonRect = dmi.rcMonitor;
-        } else {
-            dockMonRect = winMonRect;
-        }
-    }
-    RECT boundMon;
-    boundMon.left   = (winMonRect.left   < dockMonRect.left)   ? winMonRect.left   : dockMonRect.left;
-    boundMon.top    = (winMonRect.top    < dockMonRect.top)    ? winMonRect.top    : dockMonRect.top;
-    boundMon.right  = (winMonRect.right  > dockMonRect.right)  ? winMonRect.right  : dockMonRect.right;
-    boundMon.bottom = (winMonRect.bottom > dockMonRect.bottom) ? winMonRect.bottom : dockMonRect.bottom;
+    // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
+    // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
+    // behavior and "on" targets the window's monitor taskbar edge. ---
+    Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
 
+    MONITORINFO mi = {0};
+    mi.cbSize = sizeof(MONITORINFO);
+    HMONITOR hMon = data->hMon;
+    GetMonitorInfoW(hMon, &mi);
+
+    UINT dpiX = 96, dpiY = 96;
+    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
+    // this code runs inside every process - a bare-name LoadLibrary would search
+    // the host .exe's own directory first, letting a planted Shcore.dll next to
+    // any portable app execute in that process (windhawk-mods #2063 pattern).
+    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hShcore) {
+        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+        auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pGetDpiForMonitor) pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
+        FreeLibrary(hShcore);
+    }
+    float dpiScale = dpiY / 96.0f;
+    float scaledTaskbarHeight = COMPAT_TASKBAR_HEIGHT * dpiScale;
+    float scaledIconSize = COMPAT_ICON_SIZE * dpiScale;
+
+    float iGeomTaskbarTop = (float)mi.rcMonitor.bottom - scaledTaskbarHeight;
+
+    HWND hTrayGeom = FindTaskbarForMonitor(hMon);
+    if (hTrayGeom) {
+        RECT tr;
+        if (GetWindowRect(hTrayGeom, &tr)) {
+            int th = tr.bottom - tr.top;
+            if (th > 0) iGeomTaskbarTop = (float)tr.top;
+        }
+    }
+
+    Geometry iGeom = {
+        (float)data->targetDockX - 11.0f,
+        iGeomTaskbarTop,
+        22.0f,
+        scaledIconSize
+    };
+
+    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
+    int xTiles = g_tileCount.load(std::memory_order_relaxed);
+    int yTiles = xTiles;
+
+    // Tight bounding-box canvas: the genie mesh is written in screen-space
+    // coordinates and only ever occupies the region between the window rect and
+    // the dock target. Rendering over the full virtual desktop wasted CPU on
+    // every frame - UpdateLayeredWindow of a whole-screen layered window is slow,
+    // most visibly on AMD drivers. A ~W/2 pad alone can't bound the mesh's sway
+    // term in CalculateLampVertexMacOS (its amplitude scales with the
+    // window-to-dock distance, not the window width), so the horizontal pad is
+    // the exact sway bound: max(|w.x-i.x|, |w.right-i.right|)/7.
     const int origLeftB = data->targetRect.left;
     const int origTopB  = data->targetRect.top;
     const int wB = data->width;
     const int dockXB = data->targetDockX;
 
-    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - wB / 2;
-    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + wB / 2;
-    int boundTop    = origTopB;
-    int boundBottom = boundMon.bottom;
-    if (boundLeft   < boundMon.left)   boundLeft   = boundMon.left;
-    if (boundRight  > boundMon.right)  boundRight  = boundMon.right;
-    if (boundTop    < boundMon.top)    boundTop    = boundMon.top;
-    if (boundBottom > boundMon.bottom) boundBottom = boundMon.bottom;
+    const float iLeftF = iGeom.x;
+    const float iWidthF = iGeom.width;
+    const float sway = fmaxf(fabsf((float)origLeftB - iLeftF),
+                             fabsf((float)origLeftB + wB - iLeftF - iWidthF)) / 7.0f;
+    int padX = (int)((wB / 2 > sway ? wB / 2 : sway) + 1);
 
-    // The monitor clamp is only there to stop the box growing beyond the screens
-    // involved - it must never clip the window itself or the dock target away.
-    if (boundLeft  > data->targetRect.left)   boundLeft  = data->targetRect.left;
-    if (boundRight < data->targetRect.right)  boundRight = data->targetRect.right;
-    if (boundTop   > data->targetRect.top)    boundTop   = data->targetRect.top;
-    if (boundBottom < data->targetRect.bottom) boundBottom = data->targetRect.bottom;
-    if (boundLeft  > dockXB - 16)             boundLeft  = dockXB - 16;   // iGeom is dockX ± 11
-    if (boundRight < dockXB + 16)             boundRight = dockXB + 16;
+    // iGeom is known here, so a top/side taskbar (iGeom.y above/beside the
+    // window) is covered: the box spans min..max of the window and the icon rect,
+    // with no band below the taskbar top ever wasted.
+    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - padX;
+    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + padX;
+    int boundTop    = (int)fminf(wGeom.y, iGeom.y);
+    int boundBottom = (int)fmaxf(wGeom.y + wGeom.height, iGeom.y + iGeom.height);
+
+    // Trim the box to the union of the monitors actually involved, but never
+    // clip the window rect or the dock target column away.
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockXB, monUnion);
 
     int vLeft = boundLeft;
     int vTop = boundTop;
@@ -889,58 +965,11 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     }
     bool d2dOk = (rt && bmpBrush);
 
-    // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
-    // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
-    // behavior and "on" targets the window's monitor taskbar edge. ---
-    Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
-
-    MONITORINFO mi = {0};
-    mi.cbSize = sizeof(MONITORINFO);
-    HMONITOR hMon = data->hMon;
-    GetMonitorInfoW(hMon, &mi);
-
-    UINT dpiX = 96, dpiY = 96;
-    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
-    // this code runs inside every process - a bare-name LoadLibrary would search
-    // the host .exe's own directory first, letting a planted Shcore.dll next to
-    // any portable app execute in that process (windhawk-mods #2063 pattern).
-    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hShcore) {
-        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
-        auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
-        if (pGetDpiForMonitor) pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
-        FreeLibrary(hShcore);
-    }
-    float dpiScale = dpiY / 96.0f;
-    float scaledTaskbarHeight = COMPAT_TASKBAR_HEIGHT * dpiScale;
-    float scaledIconSize = COMPAT_ICON_SIZE * dpiScale;
-
-    float iGeomTaskbarTop = (float)mi.rcMonitor.bottom - scaledTaskbarHeight;
-
-    HWND hTrayGeom = FindTaskbarForMonitor(hMon);
-    if (hTrayGeom) {
-        RECT tr;
-        if (GetWindowRect(hTrayGeom, &tr)) {
-            int th = tr.bottom - tr.top;
-            if (th > 0) iGeomTaskbarTop = (float)tr.top;
-        }
-    }
-
-    Geometry iGeom = {
-        (float)data->targetDockX - 11.0f,
-        iGeomTaskbarTop,
-        22.0f,
-        scaledIconSize
-    };
-
     const double animDur = (double)data->durationMs;
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
-    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
-    int xTiles = g_tileCount.load(std::memory_order_relaxed);
-    int yTiles = xTiles;
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
 
     ID2D1PathGeometry* cachedOutlineGeo = nullptr;
@@ -1329,14 +1358,18 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
 
-    // Bounding box the funnel can occupy.
+    // Bounding box the funnel can occupy. Both the window's own monitor and the
+    // monitor it funnels to are unioned; the box is trimmed to them but never
+    // allowed to clip the window rect or the dock column away (shared helper -
+    // the same clipping bug the modern engine had, when multi-monitor support is
+    // off and the window sits on a secondary display).
     int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
     int boundTop    = origTop;
     int boundBottom = mon.bottom;
-    if (boundLeft < mon.left) boundLeft = mon.left;
-    if (boundRight > mon.right) boundRight = mon.right;
-    if (boundTop < mon.top) boundTop = mon.top;
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockX, monUnion);
     int boundW = boundRight - boundLeft;
     int boundH = boundBottom - boundTop;
     if (boundW < 1) boundW = 1;
