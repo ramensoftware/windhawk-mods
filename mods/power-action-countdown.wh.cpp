@@ -38,6 +38,9 @@ consumed and isn't forwarded to the application underneath the overlay.
 The countdown is displayed on the primary monitor. Keyboard and mouse-button
 input on other monitors still cancels it.
 
+## Screenshot
+![Copy dialog](https://i.imgur.com/GpcwW3m.png)
+
 ## Scope and limitations
 
 The mod targets power actions initiated through the Windows shell. It is loaded
