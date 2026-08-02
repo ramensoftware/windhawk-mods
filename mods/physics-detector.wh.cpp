@@ -4,6 +4,7 @@
 // @description     Part 1 of 2: Detects taskbar auto-hide states and overlays it like a search menu when hovered.
 // @version         1.0.0
 // @author          Zicronium
+// @github          https://github.com
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lkernel32 -lshell32
