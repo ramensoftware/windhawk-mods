@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.5.1
+// @version         0.6.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -27,8 +27,16 @@ notification.
 
 * **Image** copies the picture so it stays pasteable even after the file is deleted.
 * **File** copies the file for pasting into File Explorer. Deletion is disabled.
-* **Path** copies the full path as text. Deletion is disabled.
+* **Path** copies the full path as text. You can pick plain text, a quoted path, a
+  file link, or a Markdown image link, which is handy for pasting a screenshot
+  straight into notes or a bug report. Deletion is disabled.
 * **None** leaves the clipboard unchanged.
+
+## Naming
+
+You can have SnapSentry rename each new screenshot from the window that was in
+front when it was taken, together with a timestamp, so a file ends up named for
+what it shows instead of Screenshot (1). The file stays in the same folder.
 
 ## The notification
 
@@ -38,9 +46,10 @@ If notifications are unavailable, SnapSentry shows a standard dialog instead.
 
 ## Privacy
 
-SnapSentry only handles files created after it starts. Deleting a screenshot does
-not remove copies already stored in clipboard history, cloud sync, backups, or
-other programs, and it is not secure erasure on an SSD.
+SnapSentry only handles files created after it starts. By default a deleted
+screenshot goes to the Recycle Bin so it can be restored; if you turn that off,
+deletion is permanent. Deleting a screenshot does not remove copies already
+stored in clipboard history, cloud sync, backups, or other programs.
 */
 // ==/WindhawkModReadme==
 
@@ -50,10 +59,16 @@ other programs, and it is not secure erasure on an SSD.
   $name: Enable processing
 - delaySeconds: 5
   $name: Seconds before deletion
-  $description: 0 deletes as soon as clipboard copying finishes. Also used as the action popup countdown.
+  $description: With the popup on, this is the countdown before the automatic action, and 0 waits for you to choose. With the popup off, 0 deletes as soon as clipboard copying finishes.
 - deleteFile: true
   $name: Delete the saved screenshot
   $description: Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
+- recycle: true
+  $name: Send deletions to the Recycle Bin
+  $description: Deleted screenshots go to the Recycle Bin so they can be restored. Turn off to delete permanently.
+- renameFromWindow: false
+  $name: Rename new screenshots by active window
+  $description: Renames each new screenshot using the title of the window that is in front, plus a timestamp, so files are easier to find later. The file stays in the same folder.
 - showActionPopup: true
   $name: Show companion action popup
   $description: A notification offering Delete now, Copy image and delete, or Keep (falls back to a dialog if notifications are unavailable). The configured automatic action runs when the countdown expires.
@@ -64,9 +79,17 @@ other programs, and it is not secure erasure on an SSD.
   - file: File object (deletion suppressed)
   - path: Full path text (deletion suppressed)
   - none: Don't change clipboard
+- pathFormat: plain
+  $name: Path text format
+  $description: Only used when Clipboard content is set to Full path text.
+  $options:
+  - plain: Plain path
+  - quoted: Quoted path
+  - uri: File link
+  - markdown: Markdown image link
 - folder: ""
   $name: Folder override
-  $description: Leave empty to watch Pictures\\Screenshots.
+  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located.
 - logDetails: false
   $name: Verbose logging (may include file paths)
   $description: When off, log lines omit file paths. Turn on only while debugging.
@@ -126,7 +149,10 @@ struct Settings {
     bool deleteFile;
     bool popup;
     std::wstring mode;
+    std::wstring pathFormat;
     std::wstring folder;
+    bool recycle;
+    bool renameFromWindow;
     bool logDetails;
 };
 
@@ -154,6 +180,16 @@ static std::set<std::wstring> g_preexisting;
 static std::deque<std::pair<std::wstring, ULONGLONG>> g_recent;
 static constexpr ULONGLONG kDuplicateEventWindowMs = 60000;  // Measured from when handling finished.
 
+// Pre-seed the recent-name set so a file event we cause ourselves (the rename
+// below) is swallowed by the watcher instead of being handled as a brand-new
+// screenshot, which would rename it again in a loop.
+static void MarkNameRecent(const std::wstring& name) {
+    ULONGLONG now = GetTickCount64();
+    EnterCriticalSection(&g_lock);
+    g_recent.push_back({name, now + kDuplicateEventWindowMs});
+    LeaveCriticalSection(&g_lock);
+}
+
 static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
@@ -178,8 +214,22 @@ static std::atomic<bool> g_toastRegistered{false};  // AUMID+CLSID registration 
 // Settings
 // ============================================================================
 
+// FOLDERID_Screenshots ({B7BEDE81-DF94-4682-A7D8-57A52620B86F}). Some SDK headers
+// gate the constant behind NTDDI_VERSION, so define it locally. Resolving it
+// directly follows the folder if the user has relocated it (Properties ->
+// Location, some OneDrive setups), which Pictures + "\Screenshots" would miss.
+static const GUID kFolderIdScreenshots = {
+    0xb7bede81, 0xdf94, 0x4682, {0xa7, 0xd8, 0x57, 0xa5, 0x26, 0x20, 0xb8, 0x6f}};
+
 static std::wstring DefaultScreenshotsFolder() {
     std::wstring result;
+    PWSTR path = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(kFolderIdScreenshots, 0, nullptr, &path))) {
+        result.assign(path);
+        CoTaskMemFree(path);
+        return result;
+    }
+    // Fallback for systems without the Screenshots known folder.
     PWSTR pictures = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, 0, nullptr, &pictures))) {
         result.assign(pictures);
@@ -196,13 +246,22 @@ static void LoadSettings() {
     if (s.delaySeconds < 0) {
         s.delaySeconds = 0;
     }
+    if (s.delaySeconds > 3600) {
+        s.delaySeconds = 3600;  // Cap so delaySeconds * 1000 can't overflow a DWORD.
+    }
     s.deleteFile = Wh_GetIntSetting(L"deleteFile") != 0;
     s.popup = Wh_GetIntSetting(L"showActionPopup") != 0;
+    s.recycle = Wh_GetIntSetting(L"recycle") != 0;
+    s.renameFromWindow = Wh_GetIntSetting(L"renameFromWindow") != 0;
     s.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
 
     PCWSTR mode = Wh_GetStringSetting(L"clipboardMode");
     s.mode = mode;
     Wh_FreeStringSetting(mode);
+
+    PCWSTR pathFormat = Wh_GetStringSetting(L"pathFormat");
+    s.pathFormat = pathFormat;
+    Wh_FreeStringSetting(pathFormat);
 
     PCWSTR folder = Wh_GetStringSetting(L"folder");
     s.folder = folder;
@@ -251,6 +310,115 @@ static bool IsSafeChildName(const std::wstring& name) {
         return false;
     }
     return name.find_first_of(L"\\/") == std::wstring::npos;
+}
+
+// ============================================================================
+// Renaming (optional): name a new screenshot from the active window
+// ============================================================================
+
+// Strips characters Windows disallows in a file name and trims to a sane length
+// so a window title can be reused as a name safely.
+static std::wstring SanitizeForFilename(const std::wstring& in) {
+    std::wstring out;
+    bool prevSpace = false;
+    for (wchar_t c : in) {
+        if (c < 0x20) continue;                   // control characters
+        if (wcschr(L"\\/:*?\"<>|", c)) continue;  // reserved on Windows
+        bool sp = (c == L' ');
+        if (sp && prevSpace) continue;            // collapse runs of spaces
+        out += c;
+        prevSpace = sp;
+    }
+    size_t b = out.find_first_not_of(L' ');
+    if (b == std::wstring::npos) return L"";
+    size_t e = out.find_last_not_of(L" .");       // no trailing space or dot
+    out = out.substr(b, e - b + 1);
+    if (out.size() > 80) out.resize(80);
+    e = out.find_last_not_of(L" .");
+    if (e == std::wstring::npos) return L"";
+    out.resize(e + 1);
+    return out;
+}
+
+// Title of the window currently in front, sanitized for use in a file name.
+static std::wstring ActiveWindowLabel() {
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd) return L"";
+    int len = GetWindowTextLengthW(hwnd);
+    if (len <= 0) return L"";
+    std::wstring title((size_t)len + 1, L'\0');
+    int got = GetWindowTextW(hwnd, title.data(), len + 1);
+    title.resize(got < 0 ? 0 : (size_t)got);
+    return SanitizeForFilename(title);
+}
+
+// Renames a just-created screenshot to "<timestamp> <window>.<ext>" in the same
+// folder. Returns the new full path, or L"" if it didn't rename (no usable title,
+// or the move failed) so the caller keeps using the original. The result stays a
+// plain file directly inside the watched folder, preserving the safety invariant.
+static std::wstring RenameByActiveWindow(const std::wstring& path) {
+    std::wstring label = ActiveWindowLabel();
+    if (label.empty()) return L"";
+
+    size_t slash = path.find_last_of(L"\\/");
+    if (slash == std::wstring::npos) return L"";
+    std::wstring dir = path.substr(0, slash + 1);
+    std::wstring name = path.substr(slash + 1);
+    size_t dot = name.find_last_of(L'.');
+    std::wstring ext = (dot == std::wstring::npos) ? L"" : name.substr(dot);
+
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wchar_t stamp[32];
+    swprintf_s(stamp, L"%04u-%02u-%02u %02u-%02u-%02u", st.wYear, st.wMonth,
+               st.wDay, st.wHour, st.wMinute, st.wSecond);
+    std::wstring base = std::wstring(stamp) + L" " + label;
+
+    for (int n = 1; n <= 50; n++) {
+        std::wstring suffix =
+            (n == 1) ? std::wstring() : (L" (" + std::to_wstring(n) + L")");
+        std::wstring childName = base + suffix + ext;
+        std::wstring candidate = dir + childName;
+        if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            continue;  // name already taken
+        }
+        // Register the target before moving so the watcher ignores the event our
+        // own rename fires, instead of re-processing (and re-renaming) the file.
+        MarkNameRecent(childName);
+        if (MoveFileW(path.c_str(), candidate.c_str())) {
+            return candidate;
+        }
+        return L"";  // move failed; keep the original name
+    }
+    return L"";
+}
+
+// ============================================================================
+// Path text formatting (Path clipboard mode)
+// ============================================================================
+
+// Minimal file URI: forward slashes and %20 for spaces, enough for a link or a
+// Markdown image to paste cleanly.
+static std::wstring PathToFileUri(const std::wstring& path) {
+    std::wstring uri = L"file:///";
+    for (wchar_t c : path) {
+        if (c == L'\\') {
+            uri += L'/';
+        } else if (c == L' ') {
+            uri += L"%20";
+        } else {
+            uri += c;
+        }
+    }
+    return uri;
+}
+
+static std::wstring FormatPathText(const std::wstring& path,
+                                   const std::wstring& fmt) {
+    if (fmt == L"quoted") return L"\"" + path + L"\"";
+    if (fmt == L"uri") return PathToFileUri(path);
+    if (fmt == L"markdown") return L"![](" + PathToFileUri(path) + L")";
+    return path;  // "plain"
 }
 
 // ============================================================================
@@ -618,7 +786,9 @@ static bool EnsureAumidRegistered() {
 // is already running, CoRegisterClassObject (below) intercepts activation before
 // Windows would ever need to launch a process via this key; a cold launch (the
 // mod's process not already running when a toast button is clicked) is not
-// specially handled and is a known limitation -- see ARCHITECTURE.md.
+// specially handled and is a known limitation. It is rare in practice because the
+// watcher runs continuously while the mod is enabled, and the key is removed on
+// unload so nothing is left to launch once the mod is gone.
 static bool EnsureClsidRegistered() {
     WCHAR exePath[MAX_PATH];
     if (!GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
@@ -655,6 +825,39 @@ static bool EnsureClsidRegistered() {
         }
     }
     return ok;
+}
+
+// Removes the Start Menu shortcut we created, but only if it's still ours (same
+// AUMID and activator CLSID). A same-named file we didn't write is left alone so
+// unload never deletes an unrelated shortcut.
+static void RemoveAumidRegistration() {
+    PWSTR programs = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs))) {
+        return;
+    }
+    std::wstring path = std::wstring(programs) + L"\\" + kShortcutName;
+    CoTaskMemFree(programs);
+    if (ShortcutExistsAndValid(path)) {
+        DeleteFileW(path.c_str());
+    }
+}
+
+// Removes the CLSID key we wrote under both registry views. Deletes the whole
+// {clsid} subtree since the mod owns that GUID; a missing key is not an error.
+static void RemoveClsidRegistration() {
+    WCHAR clsidStr[64];
+    StringFromGUID2(CLSID_SnapSentryToastActivator, clsidStr, ARRAYSIZE(clsidStr));
+    const REGSAM views[] = {KEY_WOW64_64KEY, KEY_WOW64_32KEY};
+    for (REGSAM view : views) {
+        HKEY parent = nullptr;
+        LSTATUS status = RegOpenKeyExW(
+            HKEY_CURRENT_USER, L"Software\\Classes\\CLSID", 0,
+            DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | view, &parent);
+        if (status == ERROR_SUCCESS) {
+            RegDeleteTreeW(parent, clsidStr);
+            RegCloseKey(parent);
+        }
+    }
 }
 
 // ============================================================================
@@ -829,6 +1032,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     g_activeToastId = toastId;
     LeaveCriticalSection(&g_toastLock);
     if (FAILED(notifier->Show(toast.Get()))) {
+        EnterCriticalSection(&g_toastLock);
+        g_activeToastId = 0;  // Don't accept a late Activate for a toast that never showed.
+        LeaveCriticalSection(&g_toastLock);
         return false;
     }
 
@@ -849,6 +1055,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
         if (result == WAIT_TIMEOUT) {
             action = ACTION_AUTO;
+            removeToast = true;
             break;
         }
         if (result == WAIT_OBJECT_0) {  // Stop requested: never delete on shutdown.
@@ -923,6 +1130,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
     switch (msg) {
         case TDN_CREATED:
             g_dialog.store(hwnd);
+            // If stop was signaled before the handle was stored, close now as Keep.
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             break;
@@ -930,6 +1142,13 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             g_dialog.store(nullptr);
             break;
         case TDN_TIMER:
+            // Backstop for unload: if the stop event fired in the window before
+            // TDN_CREATED stored our handle, WhTool_ModUninit couldn't dismiss us,
+            // so close ourselves as Keep here rather than let the join hang.
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
             if (state->timeoutMs != INFINITE) {
                 DWORD elapsed = GetTickCount() - state->started;
                 if (elapsed >= state->timeoutMs) {
@@ -948,6 +1167,9 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
 }
 
 static int AskAction(const std::wstring& path, const Settings& s) {
+    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+        return ACTION_KEEP;  // Don't put up UI during teardown.
+    }
     std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
     DialogState state;
     state.started = GetTickCount();
@@ -1006,8 +1228,35 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
 // Processing
 // ============================================================================
 
+// Sends a file to the Recycle Bin via IFileOperation so a deletion is
+// recoverable. Runs on the worker's STA COM thread. Returns false if the
+// operation could not be carried out.
+static bool RecycleFile(const std::wstring& path) {
+    IFileOperation* op = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&op)))) {
+        return false;
+    }
+    bool ok = false;
+    if (SUCCEEDED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NO_UI))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                                  IID_PPV_ARGS(&item)))) {
+            if (SUCCEEDED(op->DeleteItem(item, nullptr)) &&
+                SUCCEEDED(op->PerformOperations())) {
+                ok = true;
+            }
+            item->Release();
+        }
+    }
+    op->Release();
+    return ok;
+}
+
 // Deletes a watched-folder file, refusing to follow a reparse point so we never
-// act on something that redirects outside the folder.
+// act on something that redirects outside the folder. In Recycle Bin mode a file
+// that can't be recycled is kept rather than permanently deleted, so choosing
+// "recoverable" never silently turns into a permanent delete.
 static void DeleteWatched(const std::wstring& path, const Settings& s) {
     DWORD attrs = GetFileAttributesW(path.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES) {
@@ -1016,6 +1265,13 @@ static void DeleteWatched(const std::wstring& path, const Settings& s) {
     if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) {
         Wh_Log(L"Refusing to delete reparse point%s",
                s.logDetails ? (L": " + path).c_str() : L"");
+        return;
+    }
+    if (s.recycle) {
+        if (!RecycleFile(path)) {
+            Wh_Log(L"Recycle failed, keeping file%s",
+                   s.logDetails ? (L": " + path).c_str() : L"");
+        }
         return;
     }
     if (!DeleteFileW(path.c_str())) {
@@ -1062,7 +1318,7 @@ static bool WaitForStableFile(const std::wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
-static void ProcessOne(const std::wstring& path) {
+static void ProcessOne(std::wstring path) {
     Settings s = SnapshotSettings();
 
     DWORD t0 = GetTickCount();
@@ -1071,6 +1327,18 @@ static void ProcessOne(const std::wstring& path) {
     }
     if (s.logDetails) {
         Wh_Log(L"stable in %lu ms: %s", GetTickCount() - t0, path.c_str());
+    }
+
+    // Optional: rename to match the window in front, before anything downstream
+    // (clipboard payloads and deletion) uses the path.
+    if (s.renameFromWindow) {
+        std::wstring renamed = RenameByActiveWindow(path);
+        if (!renamed.empty()) {
+            path = std::move(renamed);
+            if (s.logDetails) {
+                Wh_Log(L"renamed to %s", path.c_str());
+            }
+        }
     }
 
     DWORD t1 = GetTickCount();
@@ -1096,7 +1364,7 @@ static void ProcessOne(const std::wstring& path) {
     } else if (s.mode == L"file") {
         copied = ClipboardFile(path);
     } else if (s.mode == L"path") {
-        copied = ClipboardText(path);
+        copied = ClipboardText(FormatPathText(path, s.pathFormat));
     } else {  // "none"
         copied = true;
     }
@@ -1204,6 +1472,13 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     if (g_toastRegistered.exchange(false)) {
         CoRevokeClassObject(g_toastActivatorCookie);
     }
+
+    // Leave nothing behind. Done here, while this thread's COM apartment is still
+    // live, because removing the shortcut has to read its properties through COM;
+    // the uninit thread has no apartment. Both are recreated on the next load.
+    RemoveAumidRegistration();
+    RemoveClsidRegistration();
+
     RoUninitialize();
     CoUninitialize();
     return 0;
@@ -1307,7 +1582,9 @@ static DWORD WINAPI WatchThread(LPVOID) {
         // sync churn on pre-existing files never look like new screenshots.
         SnapshotExistingNames(s.folder);
 
-        BYTE buffer[16384];
+        // ReadDirectoryChangesW writes FILE_NOTIFY_INFORMATION records that must
+        // be DWORD aligned; alignas guarantees it (a plain BYTE array need not be).
+        alignas(DWORD) BYTE buffer[16384];
         bool reopen = false;
         while (!reopen) {
             ResetEvent(ov.hEvent);
@@ -1447,33 +1724,10 @@ void WhTool_ModUninit() {
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
-static HANDLE g_singleInstanceReady;       // Set once the mutex is held.
-static HANDLE g_singleInstanceLockThread;  // Owns the mutex for the process life.
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
     ExitThread(0);
-}
-
-// Owns the single-instance mutex on a thread that lives for the whole tool-mod
-// process, so ownership tracks the process rather than Windhawk's transient load
-// thread. CreateMutex's initial-owner ownership is bound to the calling thread;
-// owning it on the load thread (which exits after Wh_ModInit returns) abandoned
-// the mutex while the process kept running, so a reload's new process acquired it
-// via WAIT_ABANDONED and ran as a second live instance -> duplicate handling and
-// duplicate notifications. Holding it here keeps a running instance's mutex held
-// on a live thread, so a second instance's wait times out and it exits. On a real
-// reload the old process exits (Wh_ModUninit -> ExitProcess), releasing the mutex
-// so the new instance acquires within the timeout.
-static DWORD WINAPI SingleInstanceLockThread(LPVOID) {
-    DWORD waited = WaitForSingleObject(g_toolModProcessMutex, 5000);
-    if (waited != WAIT_OBJECT_0 && waited != WAIT_ABANDONED) {
-        Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-        ExitProcess(1);
-    }
-    SetEvent(g_singleInstanceReady);
-    Sleep(INFINITE);  // Hold the mutex until the process exits (OS then releases).
-    return 0;
 }
 
 BOOL Wh_ModInit() {
@@ -1519,33 +1773,17 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        // Create the single-instance mutex unowned, then take ownership on a
-        // dedicated lifetime thread (SingleInstanceLockThread) instead of on this
-        // transient load thread. That is what stops a second instance from running
-        // alongside a live one and producing duplicate notifications.
         g_toolModProcessMutex =
-            CreateMutex(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        g_singleInstanceReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!g_singleInstanceReady) {
-            Wh_Log(L"CreateEvent failed");
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
-
-        g_singleInstanceLockThread = CreateThread(
-            nullptr, 0, SingleInstanceLockThread, nullptr, 0, nullptr);
-        if (!g_singleInstanceLockThread) {
-            Wh_Log(L"CreateThread (single-instance) failed");
-            ExitProcess(1);
-        }
-
-        // The lock thread ExitProcess()es on contention; continue only once it
-        // signals that this process holds the single-instance mutex.
-        WaitForSingleObject(g_singleInstanceReady, INFINITE);
 
         if (!WhTool_ModInit()) {
             ExitProcess(1);
