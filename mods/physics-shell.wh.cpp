@@ -4,7 +4,7 @@
 // @description     Part 2 of 2: Handles Quick Settings and Notification Center when the taskbar auto-hides. Requires physics-detector.
 // @version         1.0.0
 // @author          Zicronium
-// @github          https://github.com
+// @github          https://github.com/Prashant-modder
 // @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -ldwmapi
@@ -127,7 +127,7 @@ static BOOL CALLBACK OnWindow(HWND hWnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
 
-    WCHAR cls;
+    WCHAR cls[128];
     if (!GetClassName(hWnd, cls, ARRAYSIZE(cls))) return TRUE;
 
     if (pid == ctx->quickSettingsPid && wcscmp(cls, L"ControlCenterWindow") == 0) {
