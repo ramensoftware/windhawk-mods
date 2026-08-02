@@ -455,6 +455,18 @@ If you encounter any issues or have a feature suggestion, please open a report o
       - "black": "Чёрный"
       - "white": "Белый"
       - "off":   "Выключить эффект наведения"
+    - enableHoverAnimation: true
+      $name: Smooth hover animation
+      $name:ru-RU: Плавная анимация наведения
+      $description: >-
+        Fades the hover/press background and border in and out. Disable this if you
+        want an instant, non-animated hover effect, or if you're styling the player
+        background with the Windows 11 Taskbar Styler mod and want it to react
+        immediately.
+      $description:ru-RU: >-
+        Плавно проявляет/скрывает фон и рамку при наведении/нажатии. Выключите, если
+        нужен мгновенный эффект наведения без анимации, или если вы стилизуете фон
+        плеера модом Windows 11 Taskbar Styler и хотите, чтобы он реагировал мгновенно.
     $name: Background Style
     $name:ru-RU: Стиль фона
 
@@ -1291,6 +1303,7 @@ struct ModSettings {
     bool         hideWhenNoMedia      = true;
     std::wstring playerHoverEffectMode = L"auto";
     std::wstring mediaButtonsHoverEffectMode = L"auto";
+    bool         enableHoverAnimation = true;
     bool         enableSmoothPositionAnimation = true;
     int          playerMarginLeft     = 4;
     int          playerMarginRight    = 4;
@@ -1760,6 +1773,7 @@ static void LoadSettings() {
     g_settings.idleHideSeconds      = std::max(Wh_GetIntSetting(L"BehaviorSettings.idleHideSeconds"), 0);
     g_settings.playerHoverEffectMode = HoverMode(L"AppearanceSettings.BackgroundStyleSettings.enablePlayerHoverEffect");
     g_settings.mediaButtonsHoverEffectMode = HoverMode(L"AppearanceSettings.BackgroundStyleSettings.enableMediaButtonsHoverEffect");
+    g_settings.enableHoverAnimation = Wh_GetIntSetting(L"AppearanceSettings.BackgroundStyleSettings.enableHoverAnimation") != 0;
     g_settings.enableSmoothPositionAnimation = Wh_GetIntSetting(L"AnimationSettings.enableSmoothPositionAnimation") != 0;
     g_settings.showSuccessNotification = Wh_GetIntSetting(L"NotificationSettings.showSuccessNotification") != 0;
     g_settings.hideUnsupportedButtons  = Wh_GetIntSetting(L"MainSettings.MediaButtonsSettings.hideUnsupportedButtons") != 0;
@@ -2195,10 +2209,30 @@ static Style GetFluentMediaButtonStyle() {
         </Border.BackgroundTransition>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="CommonStates">
-            <VisualState x:Name="Normal"/>
-            <VisualState x:Name="PointerOver"/>
-            <VisualState x:Name="Pressed"/>
-            <VisualState x:Name="Disabled"/>
+            <VisualState x:Name="Normal">
+                <VisualState.Setters>
+                    <Setter Target="Root.Background" Value="Transparent"/>
+                    <Setter Target="Root.BorderBrush" Value="Transparent"/>
+                </VisualState.Setters>
+            </VisualState>
+            <VisualState x:Name="PointerOver">
+                <VisualState.Setters>
+                    <Setter Target="Root.Background" Value="Transparent"/>
+                    <Setter Target="Root.BorderBrush" Value="Transparent"/>
+                </VisualState.Setters>
+            </VisualState>
+            <VisualState x:Name="Pressed">
+                <VisualState.Setters>
+                    <Setter Target="Root.Background" Value="Transparent"/>
+                    <Setter Target="Root.BorderBrush" Value="Transparent"/>
+                </VisualState.Setters>
+            </VisualState>
+            <VisualState x:Name="Disabled">
+                <VisualState.Setters>
+                    <Setter Target="Root.Background" Value="Transparent"/>
+                    <Setter Target="Root.BorderBrush" Value="Transparent"/>
+                </VisualState.Setters>
+            </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
         <ContentPresenter Content="{TemplateBinding Content}"
@@ -2223,6 +2257,46 @@ static void ApplyFluentMediaButtonStyle(Button const& btn) {
         btn.Style(style);
     }
 }
+
+static VisualState FindCommonState(Border const& root, std::wstring const& stateName) {
+    if (!root) return nullptr;
+    try {
+        auto groups = VisualStateManager::GetVisualStateGroups(root);
+        for (auto const& g : groups) {
+            if (g.Name() == L"CommonStates") {
+                for (auto const& s : g.States()) {
+                    if (s.Name() == stateName) return s;
+                }
+            }
+        }
+    } catch (...) {}
+    return nullptr;
+}
+
+static void SetStateBrush(Border const& root, std::wstring const& stateName, uint32_t setterIndex, Brush const& value) {
+    if (!root) return;
+    try {
+        auto state = FindCommonState(root, stateName);
+        if (!state) return;
+        auto setters = state.Setters();
+        if (setterIndex >= setters.Size()) return;
+        if (auto setter = setters.GetAt(setterIndex).try_as<Setter>()) {
+            setter.Value(value);
+        }
+    } catch (...) {}
+}
+static void ApplyHoverTransitionSetting(Border const& root) {
+    if (!root) return;
+    try {
+        if (g_settings.enableHoverAnimation) {
+            BrushTransition bt;
+            bt.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(83)));
+            root.BackgroundTransition(bt);
+        } else {
+            root.BackgroundTransition(nullptr);
+        }
+    } catch (...) {}
+}
 static void SetupCommonStates(
     Button const& btn,
     Brush const& normalBackground,
@@ -2234,61 +2308,40 @@ static void SetupCommonStates(
     Brush const& pressedBorderBrush,
     Brush const& disabledBorderBrush)
 {
+    auto root = GetButtonTemplateRoot(btn);
+    if (!root) return;
+    ApplyHoverTransitionSetting(root);
+    SetStateBrush(root, L"Normal",      0, normalBackground);
+    SetStateBrush(root, L"Normal",      1, normalBorderBrush);
+    SetStateBrush(root, L"PointerOver", 0, pointerOverBackground);
+    SetStateBrush(root, L"PointerOver", 1, pointerOverBorderBrush);
+    SetStateBrush(root, L"Pressed",     0, pressedBackground);
+    SetStateBrush(root, L"Pressed",     1, pressedBorderBrush);
+    SetStateBrush(root, L"Disabled",    0, disabledBackground);
+    SetStateBrush(root, L"Disabled",    1, disabledBorderBrush);
     try {
-        auto tag = winrt::Windows::UI::Xaml::Controls::Grid();
-        auto res = tag.Resources();
-        res.Insert(winrt::box_value(L"NormalBg"),      winrt::box_value(normalBackground));
-        res.Insert(winrt::box_value(L"HoverBg"),       winrt::box_value(pointerOverBackground));
-        res.Insert(winrt::box_value(L"PressedBg"),     winrt::box_value(pressedBackground));
-        res.Insert(winrt::box_value(L"DisabledBg"),    winrt::box_value(disabledBackground));
-        res.Insert(winrt::box_value(L"NormalBr"),      winrt::box_value(normalBorderBrush));
-        res.Insert(winrt::box_value(L"HoverBr"),       winrt::box_value(pointerOverBorderBrush));
-        res.Insert(winrt::box_value(L"PressedBr"),     winrt::box_value(pressedBorderBrush));
-        res.Insert(winrt::box_value(L"DisabledBr"),    winrt::box_value(disabledBorderBrush));
-        btn.Tag(winrt::box_value(tag));
+        root.Background(normalBackground);
+        root.BorderBrush(normalBorderBrush);
     } catch (...) {}
-    try {
-        if (auto root = GetButtonTemplateRoot(btn)) {
-            root.Background(normalBackground);
-            root.BorderBrush(normalBorderBrush);
-        }
-    } catch (...) {}
-}
-static Brush GetStateBrush(Button const& btn, const wchar_t* key) {
-    try {
-        auto tagBox = btn.Tag();
-        if (!tagBox) return nullptr;
-        auto tag = tagBox.try_as<winrt::Windows::UI::Xaml::Controls::Grid>();
-        if (!tag) return nullptr;
-        auto val = tag.Resources().Lookup(winrt::box_value(winrt::hstring(key)));
-        if (!val) return nullptr;
-        return val.try_as<Brush>();
-    } catch (...) { return nullptr; }
 }
 static void GoToCommonState(Button const& btn, bool effectEnabled, bool pressed, bool hovered) {
     if (!btn) return;
     try {
-        auto root = GetButtonTemplateRoot(btn);
-        if (!root) return;
-        const wchar_t* bgKey = L"NormalBg";
-        const wchar_t* brKey = L"NormalBr";
+        winrt::hstring stateName = L"Normal";
         if (effectEnabled) {
-            if (pressed)      { bgKey = L"PressedBg"; brKey = L"PressedBr"; }
-            else if (hovered) { bgKey = L"HoverBg";   brKey = L"HoverBr";   }
+            if (pressed)      stateName = L"Pressed";
+            else if (hovered) stateName = L"PointerOver";
         }
-        auto bg = GetStateBrush(btn, bgKey);
-        auto br = GetStateBrush(btn, brKey);
-
-        if (pressed) {
-            auto savedTransition = root.BackgroundTransition();
-            root.BackgroundTransition(nullptr);
-            if (bg) root.Background(bg);
-            if (br) root.BorderBrush(br);
-            root.BackgroundTransition(savedTransition);
-        } else {
-            if (bg) root.Background(bg);
-            if (br) root.BorderBrush(br);
+        if (pressed && g_settings.enableHoverAnimation) {
+            if (auto root = GetButtonTemplateRoot(btn)) {
+                auto saved = root.BackgroundTransition();
+                root.BackgroundTransition(nullptr);
+                VisualStateManager::GoToState(btn, stateName, true);
+                root.BackgroundTransition(saved);
+                return;
+            }
         }
+        VisualStateManager::GoToState(btn, stateName, true);
     } catch (...) {}
 }
 static void RunWhenButtonReady(Button const& btn, std::function<void()> const& action) {
