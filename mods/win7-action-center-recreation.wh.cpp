@@ -41,8 +41,8 @@ Windows 8.1 theme
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
 - **Startup Notification**: On every Windows session start, the mod waits a short while (about 12 seconds, so the notification area is ready) and then, if problems are detected, shows a balloon notification regardless of cooldown, so you are never left unaware of existing issues after a reboot.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
-- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German are currently supported.
-- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet. 
+- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian are currently supported.
+- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
 ## Hotkeys
 These are the hotkeys that can be configured in the mod.
@@ -104,6 +104,9 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
     - ru: Русский
     - pt: Português
     - de: Deutsch
+    - nl: Nederlands
+    - pl: Polski
+    - ro: Română
 - restoreCplHubLinks: true
   $name: Control Panel links
   $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
@@ -606,6 +609,7 @@ static void RemoveKeyboardHook(void);
 LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CreateFlyoutWindow(void);
 static void CloseFlyout(HWND hwnd);
+static void HideFlyout(HWND hwnd);
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CleanupModResources(void);
 static void EnsureTrayTooltip(void);
@@ -674,6 +678,9 @@ void LoadSettings() {
         else if (_wcsicmp(lang, L"ru") == 0) g_Settings.language = 5;
         else if (_wcsicmp(lang, L"pt") == 0) g_Settings.language = 6;
         else if (_wcsicmp(lang, L"de") == 0) g_Settings.language = 7;
+        else if (_wcsicmp(lang, L"nl") == 0) g_Settings.language = 8;
+        else if (_wcsicmp(lang, L"pl") == 0) g_Settings.language = 9;
+        else if (_wcsicmp(lang, L"ro") == 0) g_Settings.language = 10;
         else g_Settings.language = 0;
     } else {
         g_Settings.language = 0; // auto-detect
@@ -1132,6 +1139,132 @@ static const LocalePack g_Locales[] = {
         L"Neues kritisches Problem erkannt. Klicken Sie, um es jetzt zu \u00FCberpr\u00FCfen.",
         L"Kritisches Problem besteht weiterhin. Klicken Sie, um es zu beheben."
     }},
+    // Olandese (0x0413) - COMPLETO
+    { 0x0413, {
+        L"Actiecentrum",
+        L"Actiecentrum openen",
+        L"Actiecentrum",
+        L"Probleemoplossing",
+        L"Windows Update",
+        L"2 belangrijke berichten",
+        L"1 belangrijk bericht",
+        L"Geen huidige problemen gedetecteerd.\nU kunt het Actiecentrum gebruiken om recente berichten over de status van uw computer te bekijken en oplossingen voor problemen te vinden.",
+        L"Actiecentrum",
+        L"Actiecentrum",
+        L"Actiecentrum",
+        L"Windows Firewall is uitgeschakeld.",
+        L"Virusbeveiliging is uitgeschakeld.",
+        L"Windows Update is niet geconfigureerd.",
+        L"Gebruikersaccountbeheer is uitgeschakeld.",
+        L"Klik om het Actiecentrum te openen.",
+        L"Het Actiecentrum heeft nieuwe problemen gedetecteerd.",
+        L"Windows Update is niet ingesteld op automatisch bijwerken.",
+        L"Anti-spywarebeveiliging is uitgeschakeld.",
+        L"De internetbeveiligingsinstellingen vragen uw aandacht.",
+        L"De service Beveiligingscentrum wordt niet uitgevoerd.",
+        L"De real-timebeveiliging van Windows Defender is uitgeschakeld.",
+        L"...en meer",
+        L"Geen huidige problemen gedetecteerd",
+        L"%d problemen gedetecteerd.",
+        L"Er is een probleem gedetecteerd. Controleer de beveiligingsstatus van uw systeem.",
+        L"SmartScreen is uitgeschakeld. Apps van internet worden niet gecontroleerd.",
+        L"Systeemback-up is niet geconfigureerd of wordt niet uitgevoerd.",
+        L"De service Windows Foutrapportage is uitgeschakeld.",
+        L"Controle van de schijfstatus aanbevolen.",
+        L"Open het Actiecentrum om problemen te bekijken en op te lossen.",
+        L"Controleer de systeemstatus",
+        L"De batterij is bijna leeg. Sluit het apparaat aan op een voedingsbron.",
+        L"Windows-updates wachten. Start de computer opnieuw op om ze toe te passen.",
+        L"Extern bureaublad is ingeschakeld zonder verificatie op netwerkniveau.",
+        L"Het systeemstation is niet beveiligd met BitLocker.",
+        L"Klik om te zien wat er nieuw is.",
+        L"Nieuw kritiek probleem gedetecteerd. Klik om het nu te bekijken.",
+        L"Kritiek probleem nog steeds aanwezig. Klik om het op te lossen."
+    }},
+    // Polacco (0x0415) - COMPLETO
+    { 0x0415, {
+        L"Centrum akcji",
+        L"Otw\u00F3rz Centrum akcji",
+        L"Centrum akcji",
+        L"Rozwi\u0105zywanie problem\u00F3w",
+        L"Aktualizacje Windows",
+        L"2 wa\u017Cne komunikaty",
+        L"1 wa\u017Cny komunikat",
+        L"Nie wykryto bie\u017C\u0105cych problem\u00F3w.\nMo\u017Cesz u\u017Cy\u0107 Centrum akcji do przegl\u0105dania ostatnich komunikat\u00F3w o stanie komputera i znajdowania rozwi\u0105za\u0144 problem\u00F3w.",
+        L"Centrum akcji",
+        L"Centrum akcji",
+        L"Centrum akcji",
+        L"Zapora systemu Windows jest wy\u0142\u0105czona.",
+        L"Ochrona antywirusowa jest wy\u0142\u0105czona.",
+        L"Aktualizacje Windows nie s\u0105 skonfigurowane.",
+        L"Kontrola konta u\u017Cytkownika jest wy\u0142\u0105czona.",
+        L"Kliknij, aby otworzy\u0107 Centrum akcji.",
+        L"Centrum akcji wykry\u0142o nowe problemy.",
+        L"Aktualizacje Windows nie s\u0105 ustawione na automatyczne aktualizowanie.",
+        L"Ochrona antyspyware jest wy\u0142\u0105czona.",
+        L"Ustawienia zabezpiecze\u0144 internetowych wymagaj\u0105 uwagi.",
+        L"Us\u0142uga Centrum zabezpiecze\u0144 nie jest uruchomiona.",
+        L"Ochrona w czasie rzeczywistym w programie Windows Defender jest wy\u0142\u0105czona.",
+        L"...i wi\u0119cej",
+        L"Nie wykryto bie\u017C\u0105cych problem\u00F3w",
+        L"Wykryto %d problem\u00F3w.",
+        L"Wykryto problem. Sprawd\u017A stan zabezpiecze\u0144 systemu.",
+        L"Funkcja SmartScreen jest wy\u0142\u0105czona. Aplikacje z sieci nie b\u0119d\u0105 sprawdzane.",
+        L"Kopia zapasowa systemu nie jest skonfigurowana lub nie jest uruchomiona.",
+        L"Us\u0142uga Raportowanie b\u0142\u0119d\u00F3w systemu Windows jest wy\u0142\u0105czona.",
+        L"Zalecane sprawdzenie stanu dysku.",
+        L"Otw\u00F3rz Centrum akcji, aby przejrze\u017C i rozwi\u0105za\u0107 problemy.",
+        L"Sprawd\u017A stan systemu",
+        L"Poziom baterii jest niski. Pod\u0142\u0105cz urz\u0105dzenie do \u017Ar\u00F3d\u0142a zasilania.",
+        L"Aktualizacje systemu Windows oczekuj\u0105. Uruchom ponownie komputer, aby je zastosowa\u0107.",
+        L"Pod pulpit zdalny jest w\u0142\u0105czony bez uwierzytelniania na poziomie sieci.",
+        L"Dysk systemowy nie jest chroniony przez funkcj\u0119 BitLocker.",
+        L"Kliknij, aby zobaczy\u0107 nowo\u015Bci.",
+        L"Wykryto nowy problem krytyczny. Kliknij, aby sprawdzi\u0107 teraz.",
+        L"Krytyczny problem nadal wyst\u0119puje. Kliknij, aby go naprawi\u0107."
+    }},
+    // Rumeno (0x0418) - COMPLETO
+    { 0x0418, {
+        L"Centru de ac\u021B\u021Biune",
+        L"Deschide\u021Bi Centrul de ac\u021B\u021Biune",
+        L"Centru de ac\u021B\u021Biune",
+        L"Depanare",
+        L"Windows Update",
+        L"2 mesaje importante",
+        L"1 mesaj important",
+        L"Nu au fost detectate probleme curente.\nPute\u021Bi utiliza Centrul de ac\u021B\u021Biune pentru a examina mesajele recente despre starea computerului dvs. \u0219i pentru a g\u0103si solu\u021Bii la probleme.",
+        L"Centru de ac\u021B\u021Biune",
+        L"Centru de ac\u021B\u021Biune",
+        L"Centru de ac\u021B\u021Biune",
+        L"Paravanul de protec\u021Bie Windows este dezactivat.",
+        L"Protec\u021Bia antivirus este dezactivat\u0103.",
+        L"Windows Update nu este configurat.",
+        L"Controlul conturilor de utilizator este dezactivat.",
+        L"Face\u021Bi clic pentru a deschide Centrul de ac\u021B\u021Biune.",
+        L"Centrul de ac\u021B\u021Biune a detectat probleme noi.",
+        L"Windows Update nu este setat s\u0103 se actualizeze automat.",
+        L"Protec\u021Bia anti-spyware este dezactivat\u0103.",
+        L"Set\u0103rile de securitate pentru internet necesit\u0103 aten\u021Bie.",
+        L"Serviciul Centru de securitate nu ruleaz\u0103.",
+        L"Protec\u021Bia \u00EEn timp real din Windows Defender este dezactivat\u0103.",
+        L"...\u0219i altele",
+        L"Nu au fost detectate probleme curente",
+        L"S-au detectat %d probleme.",
+        L"A fost detectat\u0103 o problem\u0103. Verifica\u021Bi starea de securitate a sistemului.",
+        L"SmartScreen este dezactivat. Aplica\u021Biile de pe internet nu vor fi verificate.",
+        L"Copierea de rezerv\u0103 a sistemului nu este configurat\u0103 sau nu ruleaz\u0103.",
+        L"Serviciul Raportare erori Windows este dezactivat.",
+        L"Se recomand\u0103 verificarea st\u0103rii discului.",
+        L"Deschide\u021Bi Centrul de ac\u021B\u021Biune pentru a verifica \u0219i remedia problemele.",
+        L"Verifica\u021Bi starea sistemului",
+        L"Bateria este sc\u0103zut\u0103. Conecta\u021Bi dispozitivul la o surs\u0103 de alimentare.",
+        L"A actualiz\u0103rilor Windows \u00EEn a\u0219teptare. Reporni\u021Bi computerul pentru a le aplica.",
+        L"Desktopul la distan\u021B\u0103 este activat f\u0103r\u0103 autentificare la nivel de re\u021Bea.",
+        L"Unitatea de sistem nu este protejat\u0103 de BitLocker.",
+        L"Face\u021Bi clic pentru a vedea nout\u0103\u021Bile.",
+        L"A fost detectat\u0103 o nou\u0103 problem\u0103 critic\u0103. Face\u021Bi clic pentru a o examina acum.",
+        L"Problema critic\u0103 este \u00EEnc\u0103 prezent\u0103. Face\u021Bi clic pentru a o remedia."
+    }},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
 #define LOC(id) (g_CurrentLocalePack->strings[id])
@@ -1305,6 +1438,9 @@ void DetermineLocale() {
         case 5: g_CurrentLocalePack = FindLocalePack(0x0419); g_LastDetectedUILang = 0x0419; break;
         case 6: g_CurrentLocalePack = FindLocalePack(0x0816); g_LastDetectedUILang = 0x0816; break;
         case 7: g_CurrentLocalePack = FindLocalePack(0x0407); g_LastDetectedUILang = 0x0407; break;
+        case 8: g_CurrentLocalePack = FindLocalePack(0x0413); g_LastDetectedUILang = 0x0413; break;
+        case 9: g_CurrentLocalePack = FindLocalePack(0x0415); g_LastDetectedUILang = 0x0415; break;
+        case 10: g_CurrentLocalePack = FindLocalePack(0x0418); g_LastDetectedUILang = 0x0418; break;
         default: {
             LANGID ui = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(ui);
@@ -1443,6 +1579,9 @@ static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
 static HHOOK g_hKeyboardHook = NULL;
+// Window that owned the foreground before the flyout stole activation; restored
+// on hide so focus doesn't get lost (issue #4 in the code review).
+static HWND g_hWndPrevForeground = NULL;
 static BOOL g_Initialized = FALSE;
 // TRUE for the very first RefreshSecurityState() call after mod startup.
 // Forces a balloon notification even if the cooldown has not elapsed yet,
@@ -2065,6 +2204,32 @@ static void CheckUACRegistry(int* idx, int* criticalCount) {
 static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     // TRUE only when start type is SERVICE_DISABLED.
     // Any failure (no rights / missing service) returns FALSE so other checks continue.
+    //
+    // Service start type rarely changes (review issue #6). Cache the answer
+    // for a few minutes per service so the periodic refresh tick doesn't
+    // open the SCM + service + issue two QueryServiceConfigW calls per
+    // service on every cycle. Three SCM calls + three QueryServiceConfigW
+    // pairs add up to noticeable CPU use over time, for no benefit.
+    static const DWORD kCacheMs = 3 * 60 * 1000; // 3 minutes
+    struct CacheEntry {
+        const WCHAR* name;
+        DWORD tick;
+        BOOL  result;
+        BOOL  valid;
+    };
+    static CacheEntry s_cache[8] = {};
+
+    DWORD now = GetTickCount();
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (s_cache[i].valid && s_cache[i].name == serviceName) {
+            if ((now - s_cache[i].tick) < kCacheMs) {
+                return s_cache[i].result;
+            }
+            s_cache[i].valid = FALSE; // expire
+            break;
+        }
+    }
+
     SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (!hSCM) {
         Wh_Log(L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
@@ -2090,6 +2255,23 @@ static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     }
     CloseServiceHandle(hSvc);
     CloseServiceHandle(hSCM);
+
+    // Store the result in the first free (or matching) cache slot.
+    int slot = -1;
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (!s_cache[i].valid) { slot = (int)i; break; }
+    }
+    if (slot < 0) {
+        // Cache full: evict the oldest entry.
+        slot = 0;
+        for (size_t i = 1; i < ARRAYSIZE(s_cache); ++i) {
+            if (s_cache[i].tick < s_cache[slot].tick) slot = (int)i;
+        }
+    }
+    s_cache[slot].name   = serviceName;
+    s_cache[slot].tick   = now;
+    s_cache[slot].result = disabled;
+    s_cache[slot].valid  = TRUE;
     return disabled;
 }
 
@@ -2474,7 +2656,23 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
 // we simply skip the drive and report nothing. This never produces a false
 // positive - it only flags a disk when Windows itself reports a predicted
 // failure. See the README ("best-effort") note.
+//
+// The result is cached for a few minutes (review issue #6): probing
+// \\.\PhysicalDrive0..7 every refresh tick burns CPU and produces the same
+// value 99% of the time. The cache TTL is 5 minutes, and the first probe
+// always runs so the very first refresh reports the real state.
 static void CheckDiskHealth(int* idx, int* criticalCount) {
+    static DWORD s_lastTick = 0;
+    static BOOL s_cached = FALSE;
+    static BOOL s_diskIssue = FALSE;
+
+    const DWORD kCacheMs = 5 * 60 * 1000; // 5 minutes
+    DWORD now = GetTickCount();
+    if (s_cached && (now - s_lastTick) < kCacheMs) {
+        if (s_diskIssue) AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
+        return;
+    }
+
     BOOL diskIssue = FALSE;
 
     // Probe a handful of physical drives (\\.\PhysicalDrive0..7).
@@ -2504,6 +2702,10 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
         }
         CloseHandle(hDisk);
     }
+
+    s_diskIssue = diskIssue;
+    s_cached = TRUE;
+    s_lastTick = now;
 
     if (diskIssue) {
         AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
@@ -2719,8 +2921,37 @@ void RefreshSecurityState() {
 // bypassando il cooldown, cosi' l'utente non manca mai la notifica dopo un
 // riavvio/accesso, anche se nel frattempo il balloon normale e' gia' stato
 // soppresso dal cooldown o non e' ancora scattato nessun refresh.
+// ComputeProblemBalloonSignature is defined further down (after this point) so
+// we need a forward declaration to use it from CheckStartupNotification().
+static DWORD ComputeProblemBalloonSignature(
+    int secState, int activeProblems, const int* problemTypes);
 void CheckStartupNotification() {
     if (!g_isStartupCheck || g_Ctx.isUninitializing) return;
+
+    // Issue #2: the periodic REFRESH_TIMER_ID can fire a balloon a few seconds
+    // before the STARTUP_NOTIFY_TIMER_ID does. The first refresh after the
+    // tray icon is added usually shows a balloon (prevState = STATE_GOOD,
+    // prevProblems = 0, so newState > prevState is TRUE), and a few seconds
+    // later this function would clear the cooldown and show the same balloon
+    // again. Bail out if a balloon has already been shown this session.
+    if (g_LastProblemBalloonTick != 0) {
+        g_isStartupCheck = FALSE;
+        return;
+    }
+
+    // Issue #3: the tray icon is added asynchronously after WaitForTaskbarReady
+    // returns, and the notification area can take an additional few hundred
+    // ms to settle. If AddTrayIcon() failed (still in ScheduleTrayIconRecovery)
+    // and the icon is not yet present, ShowProblemBalloon() returns without
+    // doing anything and the user never sees the startup notification.
+    // Re-arm the timer for 3 s and try again instead of burning the flag.
+    if (!g_Ctx.trayIconAdded) {
+        if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler)) {
+            SetTimer(g_Ctx.hWndMsgHandler, STARTUP_NOTIFY_TIMER_ID, 3000, NULL);
+        }
+        return;
+    }
+
     g_isStartupCheck = FALSE;
 
     // Aggiorna lo stato prima di decidere, cosi' riflette la situazione reale
@@ -2728,12 +2959,22 @@ void CheckStartupNotification() {
     RefreshSecurityState();
 
     int state, problems;
-    { SRWGuard g(g_Ctx.srwLock, false); state = g_SecurityState; problems = g_ActiveProblems; }
+    int problemSnapshot[MAX_PROBLEMS] = {0};
+    { SRWGuard g(g_Ctx.srwLock, false);
+      state = g_SecurityState;
+      problems = g_ActiveProblems;
+      memcpy(problemSnapshot, g_ProblemTypes, sizeof(problemSnapshot)); }
 
     if (state > STATE_GOOD && problems > 0) {
-        // Azzera il cooldown cosi' ShowProblemBalloon non sopprime l'alert di avvio.
-        g_LastProblemBalloonSignature = 0;
-        g_LastProblemBalloonTick = 0;
+        // Azzera il cooldown cosi' ShowProblemBalloon non sopprime l'alert
+        // di avvio, ma SOLO se il set corrente di problemi e' davvero
+        // diverso da quello che il refresh periodico ha gia' notificato.
+        DWORD curSig = ComputeProblemBalloonSignature(
+            state, problems, problemSnapshot);
+        if (curSig != g_LastProblemBalloonSignature) {
+            g_LastProblemBalloonSignature = 0;
+            g_LastProblemBalloonTick = 0;
+        }
         ShowProblemBalloon();
     }
 }
@@ -3568,19 +3809,19 @@ void PositionWindowNearTray(HWND hwnd) {
 }
 void ToggleFlyout() {
     if (g_Ctx.isUninitializing) return;
-    
+
     // Dismiss notification popup if showing (Win7 behavior)
     if (g_NotifyShowing && g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) {
         ShowWindow(g_Ctx.hWndNotify, SW_HIDE);
         KillTimer(g_Ctx.hWndNotify, NOTIFY_TIMER_ID);
         g_NotifyShowing = FALSE;
     }
-    
+
     // Ricalcola altezza in base ai problemi correnti
     int activeProblems;
     { SRWGuard guard(g_Ctx.srwLock, false); activeProblems = g_ActiveProblems; }
     RecalcDpiMetrics(g_dpi, activeProblems);
-    
+
     // Toggle: if visible -> close; if hidden (autohide) -> re-show; else create.
     if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
         if (IsWindowVisible(g_Ctx.hWndFlyout)) {
@@ -3588,6 +3829,9 @@ void ToggleFlyout() {
             return;
         }
         // Was auto-hidden: re-show without recreating.
+        // Capture the previous foreground window BEFORE we activate the flyout
+        // (review issue #4). HideFlyout() will restore it on close.
+        g_hWndPrevForeground = GetForegroundWindow();
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
         // Actually activate the flyout, like the network flyout recreation's
@@ -3606,6 +3850,8 @@ void ToggleFlyout() {
         InstallKeyboardHook();
         return;
     }
+    // Capture previous foreground before the new flyout steals activation.
+    g_hWndPrevForeground = GetForegroundWindow();
     CreateFlyoutWindow();
     if (g_Ctx.hWndFlyout) {
         CheckSecurityProviders();
@@ -3615,11 +3861,11 @@ void ToggleFlyout() {
         UpdateWindow(g_Ctx.hWndFlyout);
         AnimateWindow(g_Ctx.hWndFlyout, 180, AW_SLIDE | AW_VER_NEGATIVE);
         InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
-        
+
         // Reset inactivity autohide timer every time the flyout is shown.
         KillTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID);
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
-        
+
         UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
         InstallKeyboardHook();
@@ -3723,6 +3969,33 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
 // ============================================================================
 // Flyout Window
 // ============================================================================
+// HideFlyout: every code path that hides the flyout (click-outside, Escape,
+// Return/Space, footer/problem-link click, autohide timer, WM_CLOSE) must go
+// through this function. It performs the two operations the original code
+// silently skipped: tear down both low-level hooks and restore the previous
+// foreground window so the user doesn't end up with the taskbar focused.
+// All "ShowWindow(SW_HIDE)" sites have been replaced by HideFlyout() calls
+// (review issue #1 / #4).
+void HideFlyout(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    RemoveClickOutsideHook();
+    RemoveKeyboardHook();
+    ShowWindow(hwnd, SW_HIDE);
+
+    // Restore the foreground window the user had before opening the flyout
+    // (review issue #4). The previous window may have been closed in the
+    // meantime, so re-validate it. Only call SetForegroundWindow when the
+    // shell still has no foreground of its own to avoid stealing focus from
+    // a window that became active after we showed.
+    HWND prev = g_hWndPrevForeground;
+    g_hWndPrevForeground = NULL;
+    if (prev && IsWindow(prev)) {
+        // Give the shell a moment to settle; without this the restore can
+        // race with the activation of the window that just stole focus.
+        SetForegroundWindow(prev);
+    }
+}
+
 void CloseFlyout(HWND hwnd) {
     if (g_FlyoutClosing || !hwnd || !IsWindow(hwnd)) return;
     g_FlyoutClosing = TRUE;
@@ -3731,6 +4004,19 @@ void CloseFlyout(HWND hwnd) {
     AnimateWindow(hwnd, 150, AW_HIDE);
     // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
+
+    // Restore the foreground window the user had before opening the flyout
+    // (review issue #4). The previous window may have been closed in the
+    // meantime, so re-validate it. Only restore if no other window has since
+    // become the foreground (otherwise we'd steal focus).
+    HWND prev = g_hWndPrevForeground;
+    g_hWndPrevForeground = NULL;
+    if (prev && IsWindow(prev)) {
+        HWND cur = GetForegroundWindow();
+        if (cur == hwnd || cur == NULL) {
+            SetForegroundWindow(prev);
+        }
+    }
 }
 
 LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -3784,9 +4070,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == AUTOHIDE_TIMER_ID) {
             // Inactivity timeout: hide instead of destroy (keeps window ready).
-            RemoveClickOutsideHook();
-            RemoveKeyboardHook();
-            ShowWindow(hwnd, SW_HIDE);
+            // Route through HideFlyout so both hooks are torn down and the
+            // previous foreground window is restored (review issue #1 / #4).
+            HideFlyout(hwnd);
             return 0;
         }
         break;
@@ -3799,9 +4085,11 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // window is permanently treated as inactive by the compositor.
         return MA_ACTIVATE;
     case WM_SAFE_CLOSE: CloseFlyout(hwnd); return 0;
-    case WM_CLOSE: 
-        // Come network flyout: nascondi invece di distruggere
-        ShowWindow(hwnd, SW_HIDE); 
+    case WM_CLOSE:
+        // Come network flyout: nascondi invece di distruggere.
+        // Funnel through HideFlyout so hooks are released and the previous
+        // foreground window is restored (review issue #1 / #4).
+        HideFlyout(hwnd);
         return 0;
     case WM_ACTIVATE:
         // Do NOT hide the flyout on deactivation.
@@ -3821,13 +4109,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         break;
     case WM_KEYDOWN:
-        if (wParam == VK_ESCAPE) { 
-            ShowWindow(hwnd, SW_HIDE); 
-            return 0; 
+        if (wParam == VK_ESCAPE) {
+            HideFlyout(hwnd);
+            return 0;
         }
         if (wParam == VK_RETURN || wParam == VK_SPACE) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
-            ShowWindow(hwnd, SW_HIDE);
+            HideFlyout(hwnd);
             return 0;
         }
         break;
@@ -3836,26 +4124,27 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         return TRUE;
     case WM_LBUTTONDOWN: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        
+
         // Check click on problem links
         for (int i = 0; i < g_DisplayProblemCount; i++) {
             if (PtInRect(&g_ProblemLinkRects[i], pt)) {
-                
+
                 // Open appropriate action
                 OpenProblemAction(g_ProblemTypesDisplay[i]);
-                
-                // Close flyout
-                ShowWindow(hwnd, SW_HIDE);
+
+                // Close flyout (funnel through HideFlyout to also drop
+                // the low-level hooks and restore the previous foreground).
+                HideFlyout(hwnd);
                 return 0;
             }
         }
-        
+
         // "You can use Action Center..." text is intentionally non-clickable.
 
         // Check click on footer link (existing)
         if (PtInRect(&g_rcFooterLink, pt)) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
-            ShowWindow(hwnd, SW_HIDE);
+            HideFlyout(hwnd);
             return 0;
         }
         break;
@@ -4050,6 +4339,17 @@ if (activeProblems > 0) {
         case 0x0407: // German
             totalText = (activeProblems == 1) ? L"gesamte Meldung" : L"gesamte Meldungen";
             break;
+        case 0x0413: // Nederlands
+            totalText = (activeProblems == 1) ? L"totaalbericht" : L"totaalberichten";
+            break;
+        case 0x0415: // Polski
+            // Flessione polacca: 1 = "wiadomość", 2-4 (escl. 12-14) = "wiadomości", resto = "wiadomości"
+            if (activeProblems == 1) totalText = L"\u0142\u0105cznie wiadomo\u015B\u0107";
+            else totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
+            break;
+        case 0x0418: // Română
+            totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
+            break;
         default:     // English
             totalText = (activeProblems == 1) ? L"total message" : L"total messages";
             break;
@@ -4104,7 +4404,11 @@ if (activeProblems > 0) {
             if (newline) {
                 const WCHAR* line2 = newline + 1;
                 SelectObject(hdcMem, g_hFontNormal);
-                SetTextColor(hdcMem, highContrast ? GetSysColor(COLOR_GRAYTEXT)
+                // In High Contrast, body text must be COLOR_WINDOWTEXT so the
+                // user can actually read it; COLOR_GRAYTEXT (the previous
+                // choice) is reserved for disabled labels and gets dropped to
+                // a near-invisible gray on most HC schemes.
+                SetTextColor(hdcMem, highContrast ? GetSysColor(COLOR_WINDOWTEXT)
                                                   : (dark ? clrTitle : RGB(80, 80, 80)));
                 RECT rcLine2 = {padL, msgY, msgR, g_ScaledHeight - g_ScaledFooterHeight - ScaleDpi(4)};
                 DrawTextW(hdcMem, line2, -1, &rcLine2, DT_LEFT | DT_WORDBREAK);
@@ -4156,16 +4460,28 @@ if (activeProblems > 0) {
                 g_ProblemTypesDisplay[i] = problemTypesCopy[i];
                 g_DisplayProblemCount = i + 1;
                 BOOL isHovering = (g_HoveredProblemIndex == i);
+                COLORREF rowTextColor = clrLink;
                 if (isHovering) {
-                    COLORREF hoverBg     = dark ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                    COLORREF hoverBorder = dark ? RGB(60, 80, 120)   : RGB(174, 212, 243);
-                    
+                    // In High Contrast the pastel "selected" colors are
+                    // unreadable on most schemes; use the system
+                    // selection colors so the hovered row actually stands out.
+                    COLORREF hoverBg;
+                    COLORREF hoverBorder;
+                    if (highContrast) {
+                        hoverBg     = GetSysColor(COLOR_HIGHLIGHT);
+                        hoverBorder = GetSysColor(COLOR_WINDOWFRAME);
+                        rowTextColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                    } else {
+                        hoverBg     = dark ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                        hoverBorder = dark ? RGB(60, 80, 120)   : RGB(174, 212, 243);
+                    }
+
                     // Hover a larghezza intera e 1.5% piu' alto per coprire
                     // meglio tutta l'area cliccabile della riga.
                     int hovH = rowBottom - rowTop;
                     int extraV = MulDiv(hovH, 15, 1000); // +1.5%
                     RECT rcHover = { 0, rowTop - extraV, g_ScaledWidth, rowBottom + extraV };
-                    
+
                     GdiObj hBrHov(CreateSolidBrush(hoverBg));
                     GdiObj hPenHov(CreatePen(PS_SOLID, 1, hoverBorder));
                     SelectGuard sgPen(hdcMem, hPenHov);
@@ -4182,10 +4498,10 @@ if (activeProblems > 0) {
               g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
 }
                 SelectObject(hdcMem, g_hFontNormal);
-                SetTextColor(hdcMem, clrLink);
+                SetTextColor(hdcMem, rowTextColor);
                 DrawTextW(hdcMem, msgText, -1, &rcLink,
                          DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX | DT_END_ELLIPSIS);
-                
+
                 currentY += rowHeight + gapBetweenProblems;
             }
             
@@ -4230,8 +4546,13 @@ if (activeProblems > 0) {
         break;
     }
     case WM_DESTROY:
+        // Both hooks must be removed here, not just the click-outside mouse
+        // hook. CloseFlyout() / HideFlyout() already call them, but a stray
+        // DestroyWindow from the cleanup path (e.g. WM_TRAY_SHUTDOWN) used
+        // to leak the keyboard hook.
         RemoveClickOutsideHook();
-        g_FlyoutClosing = FALSE; 
+        RemoveKeyboardHook();
+        g_FlyoutClosing = FALSE;
         g_IsHoveringLink = FALSE;
         if (g_Ctx.hWndFlyout == hwnd)
             g_Ctx.hWndFlyout = NULL;
@@ -4962,7 +5283,13 @@ static const LangPack g_langPacks[] = {
     {0x0a, L"Si el problema no est\u00e1 en la lista, pruebe uno de estos m\u00e9todos:", L"Soluci\u00f3n de problemas", L"Buscar y solucionar problemas del equipo.", L"Recuperaci\u00f3n", L"Actualiza el PC sin afectar a los archivos o restabl\u00e9celo y empieza de nuevo."},
     {0x19, L"\u0415\u0441\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0434\u0438\u043d \u0438\u0437 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u0441\u043f\u043e\u0441\u043e\u0431\u043e\u0432:", L"\u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043e\u043a", L"\u041f\u043e\u0438\u0441\u043a \u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c \u0441 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c.", L"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435", L"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u041f\u041a, \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0432 \u0444\u0430\u0439\u043b\u044b, \u0438\u043b\u0438 \u0441\u0431\u0440\u043e\u0441\u044c\u0442\u0435 \u0435\u0433\u043e \u0438 \u043d\u0430\u0447\u043d\u0438\u0442\u0435 \u0441\u043d\u0430\u0447\u0430\u043b\u0430."},
     {0x16, L"Se o problema n\u00E3o estiver na lista, experimente um destes m\u00E9todos:", L"Resolu\u00E7\u00E3o de Problemas", L"Encontrar e corrigir problemas do computador.", L"Recupera\u00E7\u00E3o", L"Atualize o PC sem afetar os ficheiros ou restaure-o e recomece do in\u00EDcio."},
-    {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."}
+    {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."},
+    // Dutch (primary lang 0x13)
+    {0x13, L"Als het probleem niet in de lijst staat, probeer dan een van deze methoden:", L"Probleemoplossing", L"Zoek naar en los problemen met uw computer op.", L"Herstel", L"Werk uw pc bij zonder uw bestanden te verliezen, of stel deze opnieuw in en begin opnieuw."},
+    // Polish (primary lang 0x15)
+    {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017Cu problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
+    // Romanian (primary lang 0x18)
+    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."}
 };
 
 static const LangPack* GetLangPack() {
