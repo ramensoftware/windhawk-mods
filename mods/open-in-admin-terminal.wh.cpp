@@ -685,6 +685,10 @@ static std::wstring QuoteCommandLineArgument(const std::wstring& arg) {
     return result;
 }
 
+static std::wstring QuoteCmdPath(const std::wstring& path) {
+    return L'"' + path + L'"';
+}
+
 static std::wstring JoinCommandLineArguments(
     const std::vector<std::wstring>& args) {
     std::wstring result;
@@ -800,7 +804,7 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
         return spec;
     }
     if (choice == L"cmd") {
-        spec.parameters = L"/k cd /d " + QuoteCommandLineArgument(target);
+        spec.parameters = L"/k cd /d " + QuoteCmdPath(target);
         return spec;
     }
     if (choice == L"wsl") {
@@ -860,7 +864,7 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
         ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
         spec.parameters =
             std::wstring(s.keepOpenAfterScript ? L"/k " : L"/c ") +
-            QuoteCommandLineArgument(scriptPath);
+            QuoteCmdPath(scriptPath);
     } else if (_wcsicmp(ext, L".vbs") == 0 ||
                _wcsicmp(ext, L".js") == 0) {
         std::wstring cscriptPath;
@@ -871,8 +875,8 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
             if (!ResolveSystemExecutablePath(L"cmd.exe", spec.executable)) {
                 return {};
             }
-            spec.parameters = L"/k " + QuoteCommandLineArgument(cscriptPath) +
-                              L" //nologo " + QuoteCommandLineArgument(scriptPath);
+            spec.parameters = L"/k " + QuoteCmdPath(cscriptPath) +
+                              L" //nologo " + QuoteCmdPath(scriptPath);
         } else {
             spec.executable = std::move(cscriptPath);
             spec.parameters = L"//nologo " + QuoteCommandLineArgument(scriptPath);
@@ -1219,7 +1223,16 @@ static bool IsNavigationPaneWindow(HWND hwnd) {
     return false;
 }
 
+static bool IsKeyboardContextMenuPoint(const POINT& invocationPoint) {
+    return invocationPoint.x == -1 && invocationPoint.y == -1;
+}
+
 static bool IsNavigationPaneContextWindow(const POINT& invocationPoint) {
+    if (IsKeyboardContextMenuPoint(invocationPoint)) {
+        HWND focusedWindow = GetFocus();
+        return focusedWindow && IsNavigationPaneWindow(focusedWindow);
+    }
+
     HWND invocationWindow = WindowFromPoint(invocationPoint);
     return invocationWindow && IsNavigationPaneWindow(invocationWindow);
 }
@@ -1256,7 +1269,8 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
         }
 
         POINT clientPoint = invocationPoint;
-        if (treeWindow && ScreenToClient(treeWindow, &clientPoint)) {
+        if (!IsKeyboardContextMenuPoint(invocationPoint) && treeWindow &&
+            ScreenToClient(treeWindow, &clientPoint)) {
             IShellItem* hitItem = nullptr;
             if (SUCCEEDED(navigationPane->HitTest(&clientPoint, &hitItem)) &&
                 hitItem) {
@@ -1270,6 +1284,29 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
                     ok = true;
                 }
                 hitItem->Release();
+            }
+        }
+
+        if (!ok && IsKeyboardContextMenuPoint(invocationPoint)) {
+            IShellItemArray* selectedItems = nullptr;
+            if (SUCCEEDED(navigationPane->GetSelectedItems(&selectedItems)) &&
+                selectedItems) {
+                DWORD count = 0;
+                IShellItem* item = nullptr;
+                if (SUCCEEDED(selectedItems->GetCount(&count)) && count == 1 &&
+                    SUCCEEDED(selectedItems->GetItemAt(0, &item)) && item) {
+                    std::wstring path;
+                    if (GetFilesystemPathFromShellItem(item, path) &&
+                        IsDirectoryPath(path)) {
+                        targetOut.path = std::move(path);
+                        targetOut.kind = IsDriveRootPath(targetOut.path)
+                                             ? TargetKind::DriveItem
+                                             : TargetKind::FolderItem;
+                        ok = true;
+                    }
+                    item->Release();
+                }
+                selectedItems->Release();
             }
         }
 
@@ -1695,6 +1732,10 @@ static void ClearCurrentMenuState() {
     g_currentMenuHwnd = nullptr;
 }
 
+static bool ShouldClearMenuStateAfterTracking(UINT flags, BOOL result) {
+    return (flags & TPM_RETURNCMD) || !result;
+}
+
 static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
                                                  const std::wstring& scriptPath) {
     if (IsScriptHostChoice(settings.terminalEffectiveChoice)) {
@@ -2001,7 +2042,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
         return 0;
     }
 
-    ClearCurrentMenuState();
+    if (ShouldClearMenuStateAfterTracking(flags, result)) {
+        ClearCurrentMenuState();
+    }
     return result;
 }
 
