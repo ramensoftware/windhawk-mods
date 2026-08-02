@@ -206,6 +206,7 @@ namespace AnimConstants {
     constexpr int WaitSlackMs = 500;
     constexpr int AltTabPollMs = 16;
     constexpr int AltTabSessionMs = 500;
+    constexpr int UiaLookupWaitMs = 120;
 }
 static constexpr std::wstring_view kGdiExcludedClasses[] = {
     L"CoreWindow",
@@ -382,7 +383,8 @@ static void CleanupWindowData(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     auto it = g_WndSnapshots.find(hWnd);
     if (it != g_WndSnapshots.end()) { DeleteObject(it->second.hBmp); g_WndSnapshots.erase(it); }
-    g_TaskbarDockXs.erase(hWnd);
+    g_TaskbarDockXs.clear();
+    g_ProcessDockXs.clear();
     g_ProcessNameCache.erase(hWnd);
     g_LaunchSeen.erase(hWnd);
 }
@@ -584,21 +586,42 @@ HWND FindTaskbarForMonitor(HMONITOR hMon) {
     return hMainTray;
 }
 
-struct UiaTask { 
-    HWND hWndApp; 
-    std::wstring titleLower; 
-    std::wstring procNameLower; 
-    std::wstring processKey; 
-    HMONITOR hMon; 
-    int fallbackX; 
+struct UiaPending {
+    volatile LONG refs = 2;
+    HANDLE done = nullptr;
+    int targetX = 0;
+    bool found = false;
+    void Release() {
+        if (InterlockedDecrement(&refs) == 0) {
+            if (done) CloseHandle(done);
+            delete this;
+        }
+    }
+};
+struct UiaTask {
+    HWND hWndApp;
+    std::wstring titleLower;
+    std::wstring procNameLower;
+    std::wstring processKey;
+    HMONITOR hMon;
+    int fallbackX;
+    UiaPending* pending = nullptr;
 };
 
 DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     UiaTask* t = (UiaTask*)lpParam;
+    UiaPending* pending = t->pending;
     struct UiaCleanupGuard {
         UiaTask* task;
-        ~UiaCleanupGuard() { delete task; }
-    } guard{ t };
+        UiaPending* pending;
+        ~UiaCleanupGuard() {
+            if (pending) {
+                SetEvent(pending->done);
+                pending->Release();
+            }
+            delete task;
+        }
+    } guard{ t, pending };
     if (g_unloading.load(std::memory_order_relaxed)) {
         return 0;
     }
@@ -687,6 +710,10 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         if (coInit) CoUninitialize();
     }
     if (uiaFound && !g_unloading.load(std::memory_order_relaxed)) {
+        if (pending) {
+            pending->targetX = targetX;
+            pending->found = true;
+        }
         std::lock_guard<std::mutex> lock(g_StateMutex);
         g_TaskbarDockXs[t->hWndApp] = targetX;
         if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
@@ -700,17 +727,47 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     if (!processKey.empty() && hMon) {
         processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
     }
+    int cachedX = 0;
+    bool haveCache = false;
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
-        if (g_TaskbarDockXs.count(hWndApp)) return g_TaskbarDockXs[hWndApp];
-        if (!processKey.empty() && g_ProcessDockXs.count(processKey)) return g_ProcessDockXs[processKey];
+        auto it = g_TaskbarDockXs.find(hWndApp);
+        if (it != g_TaskbarDockXs.end()) {
+            cachedX = it->second;
+            haveCache = true;
+        } else if (!processKey.empty()) {
+            auto pit = g_ProcessDockXs.find(processKey);
+            if (pit != g_ProcessDockXs.end()) {
+                cachedX = pit->second;
+                haveCache = true;
+            }
+        }
     }
     std::wstring titleLower = windowTitle ? windowTitle : L"";
     std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
-    
-    UiaTask* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX};
-    if (!StartWorkerThread(UiaWorkerThread, task)) delete task;
-    return fallbackX;
+
+    auto* pending = new UiaPending{};
+    pending->done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    pending->targetX = haveCache ? cachedX : fallbackX;
+    if (!pending->done) {
+        pending->Release();
+        pending->Release();
+        return haveCache ? cachedX : fallbackX;
+    }
+
+    auto* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX, pending};
+    if (!StartWorkerThread(UiaWorkerThread, task)) {
+        delete task;
+        pending->Release();
+        pending->Release();
+        return haveCache ? cachedX : fallbackX;
+    }
+
+    const DWORD wait = WaitForSingleObject(pending->done, AnimConstants::UiaLookupWaitMs);
+    int result = haveCache ? cachedX : fallbackX;
+    if (wait == WAIT_OBJECT_0 && pending->found) result = pending->targetX;
+    pending->Release();
+    return result;
 }
 DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
     bool altTabSession = false;
