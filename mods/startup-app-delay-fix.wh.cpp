@@ -1,375 +1,252 @@
 // ==WindhawkMod==
 // @id              startup-app-delay-fix
 // @name            Startup App Delay Fix
-// @description     Restores WaitforIdleState=0 whenever Windhawk starts
-// @version         1.0
+// @description     Removes the delay Windows applies to startup applications after sign-in
+// @version         1.1
 // @author          meteoni
 // @github          https://github.com/Meteony
-// @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lshell32
+// @include         explorer.exe
+// @compilerOptions -lntdll
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-Windows intentionally delays startup applications after sign-in to reduce system load, which can cause many apps to open minutes after system startup. 
+Windows intentionally delays startup applications after sign-in to reduce
+system load, which can cause apps to open minutes after startup.
 
-![Key](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
+This mod makes Explorer see `WaitforIdleState` as zero when it reads the
+startup-item serialization settings. It doesn't create or modify registry
+values, so disabling the mod restores Windows' normal behavior immediately.
 
-This can be disabled by setting the following registry value:
-
-`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize
-WaitforIdleState    REG_DWORD    0`
-
-However, some Windows updates reset this value. This mod automates 
-the process of checking and setting that key as a more persistent fix.   
+Only `WaitforIdleState` is overridden. The related `StartupDelayInMSec` value
+is left unchanged.
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
-#include <shellapi.h>
-#include <strsafe.h>
+#include <ntdef.h>
+#include <ntstatus.h>
 
-// Registry repair logic
+#include <cstring>
+#include <string>
 
-constexpr wchar_t kRegistryPath[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
-
+constexpr wchar_t kKeyPathSuffix[] =
+    L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
 constexpr wchar_t kValueName[] = L"WaitforIdleState";
-constexpr DWORD kDesiredValue = 0;
 
-bool EnsureStartupDelayFix() {
-    HKEY key = nullptr;
-    DWORD disposition = 0;
+typedef enum _KEY_INFORMATION_CLASS {
+    KeyBasicInformation,
+    KeyNodeInformation,
+    KeyFullInformation,
+    KeyNameInformation,
+} KEY_INFORMATION_CLASS;
 
-    LSTATUS status = RegCreateKeyExW(
-        HKEY_CURRENT_USER,
-        kRegistryPath,
-        0,
-        nullptr,
-        REG_OPTION_NON_VOLATILE,
-        KEY_QUERY_VALUE | KEY_SET_VALUE | KEY_WOW64_64KEY,
-        nullptr,
-        &key,
-        &disposition
-    );
+typedef struct _KEY_NAME_INFORMATION {
+    ULONG NameLength;
+    WCHAR Name[1];
+} KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
 
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(
-            L"Failed to open or create HKCU\\%s: error %ld",
-            kRegistryPath,
-            status
-        );
+typedef enum _KEY_VALUE_INFORMATION_CLASS {
+    KeyValueBasicInformation,
+    KeyValueFullInformation,
+    KeyValuePartialInformation,
+    KeyValueFullInformationAlign64,
+    KeyValuePartialInformationAlign64,
+} KEY_VALUE_INFORMATION_CLASS;
+
+struct KEY_VALUE_BASIC_INFORMATION_LOCAL {
+    ULONG TitleIndex;
+    ULONG Type;
+    ULONG NameLength;
+    WCHAR Name[1];
+};
+
+struct KEY_VALUE_FULL_INFORMATION_LOCAL {
+    ULONG TitleIndex;
+    ULONG Type;
+    ULONG DataOffset;
+    ULONG DataLength;
+    ULONG NameLength;
+    WCHAR Name[1];
+};
+
+struct KEY_VALUE_PARTIAL_INFORMATION_LOCAL {
+    ULONG TitleIndex;
+    ULONG Type;
+    ULONG DataLength;
+    UCHAR Data[1];
+};
+
+EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryKey(
+    HANDLE keyHandle, KEY_INFORMATION_CLASS keyInformationClass,
+    PVOID keyInformation, ULONG length, PULONG resultLength);
+
+using NtQueryValueKey_t = NTSTATUS(NTAPI*)(
+    HANDLE keyHandle, PUNICODE_STRING valueName,
+    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
+    PVOID keyValueInformation, ULONG length, PULONG resultLength);
+NtQueryValueKey_t NtQueryValueKey_orig;
+
+bool GetKeyPath(HANDLE key, std::wstring* path) {
+    ULONG size = 0;
+    NTSTATUS status = NtQueryKey(key, KeyNameInformation, nullptr, 0, &size);
+    if (status != STATUS_BUFFER_TOO_SMALL &&
+        status != STATUS_BUFFER_OVERFLOW) {
         return false;
     }
 
-    DWORD existingValue = 0;
-    DWORD existingType = 0;
-    DWORD existingSize = sizeof(existingValue);
-
-    status = RegQueryValueExW(
-        key,
-        kValueName,
-        nullptr,
-        &existingType,
-        reinterpret_cast<BYTE*>(&existingValue),
-        &existingSize
-    );
-
-    if (status == ERROR_SUCCESS &&
-        existingType == REG_DWORD &&
-        existingSize == sizeof(DWORD) &&
-        existingValue == kDesiredValue) {
-        Wh_Log(
-            L"%s is already correctly set to %lu",
-            kValueName,
-            kDesiredValue
-        );
-
-        RegCloseKey(key);
-        return true;
-    }
-
-    bool valueWasMissing = status == ERROR_FILE_NOT_FOUND;
-
-    status = RegSetValueExW(
-        key,
-        kValueName,
-        0,
-        REG_DWORD,
-        reinterpret_cast<const BYTE*>(&kDesiredValue),
-        sizeof(kDesiredValue)
-    );
-
-    RegCloseKey(key);
-
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(
-            L"Failed to set %s: error %ld",
-            kValueName,
-            status
-        );
+    std::wstring buffer((size + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
+    auto info = reinterpret_cast<KEY_NAME_INFORMATION*>(buffer.data());
+    status = NtQueryKey(key, KeyNameInformation, info, size, &size);
+    if (status < 0) {
         return false;
     }
 
-    if (disposition == REG_CREATED_NEW_KEY) {
-        Wh_Log(
-            L"Created Serialize registry key and set %s to %lu",
-            kValueName,
-            kDesiredValue
-        );
-    } else if (valueWasMissing) {
-        Wh_Log(
-            L"Created missing %s value and set it to %lu",
-            kValueName,
-            kDesiredValue
-        );
-    } else {
-        Wh_Log(
-            L"Repaired %s and set it to %lu",
-            kValueName,
-            kDesiredValue
-        );
-    }
-
+    path->assign(info->Name, info->NameLength / sizeof(wchar_t));
     return true;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// One-shot tool callbacks
+bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
+    constexpr size_t valueNameLength = ARRAYSIZE(kValueName) - 1;
+    if (!valueName || !valueName->Buffer ||
+        valueName->Length != valueNameLength * sizeof(wchar_t) ||
+        _wcsnicmp(valueName->Buffer, kValueName, valueNameLength) != 0) {
+        return false;
+    }
 
-BOOL WhTool_ModInit() {
-    const bool success = EnsureStartupDelayFix();
+    std::wstring path;
+    if (!GetKeyPath(key, &path)) {
+        return false;
+    }
 
-    // This is a one-shot tool. The dedicated process is no longer needed after
-    // the registry value has been checked and repaired.
-    ExitProcess(success ? 0 : 1);
-
-    return FALSE;
+    size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
+    return path.length() >= suffixLength &&
+           _wcsnicmp(path.c_str() + path.length() - suffixLength,
+                      kKeyPathSuffix, suffixLength) == 0;
 }
 
-void WhTool_ModSettingsChanged() {
+ULONG AlignUp(ULONG value, ULONG alignment) {
+    return (value + alignment - 1) & ~(alignment - 1);
 }
 
-void WhTool_ModUninit() {
+NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
+                              KEY_VALUE_INFORMATION_CLASS informationClass,
+                              void* buffer, ULONG bufferLength,
+                              ULONG* resultLength) {
+    ULONG dataOffset;
+    ULONG requiredLength;
+
+    switch (informationClass) {
+        case KeyValueBasicInformation: {
+            ULONG nameOffset = FIELD_OFFSET(KEY_VALUE_BASIC_INFORMATION_LOCAL,
+                                            Name);
+            requiredLength = nameOffset + valueName->Length;
+            if (resultLength) {
+                *resultLength = requiredLength;
+            }
+            if (!buffer || bufferLength < nameOffset) {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            auto info = static_cast<KEY_VALUE_BASIC_INFORMATION_LOCAL*>(buffer);
+            info->TitleIndex = 0;
+            info->Type = REG_DWORD;
+            info->NameLength = valueName->Length;
+            ULONG copiedNameLength =
+                min(valueName->Length, bufferLength - nameOffset);
+            std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
+            return bufferLength < requiredLength ? STATUS_BUFFER_OVERFLOW
+                                                 : STATUS_SUCCESS;
+        }
+
+        case KeyValueFullInformation:
+        case KeyValueFullInformationAlign64: {
+            ULONG nameOffset = FIELD_OFFSET(KEY_VALUE_FULL_INFORMATION_LOCAL,
+                                            Name);
+            ULONG alignment = informationClass == KeyValueFullInformationAlign64
+                                  ? 8
+                                  : 4;
+            dataOffset = AlignUp(nameOffset + valueName->Length, alignment);
+            requiredLength = dataOffset + sizeof(DWORD);
+            if (resultLength) {
+                *resultLength = requiredLength;
+            }
+            if (!buffer || bufferLength < nameOffset) {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            auto info = static_cast<KEY_VALUE_FULL_INFORMATION_LOCAL*>(buffer);
+            info->TitleIndex = 0;
+            info->Type = REG_DWORD;
+            info->DataOffset = dataOffset;
+            info->DataLength = sizeof(DWORD);
+            info->NameLength = valueName->Length;
+            ULONG copiedNameLength =
+                min(valueName->Length, bufferLength - nameOffset);
+            std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
+            if (bufferLength < requiredLength) {
+                return STATUS_BUFFER_OVERFLOW;
+            }
+            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(buffer) + dataOffset) =
+                0;
+            return STATUS_SUCCESS;
+        }
+
+        case KeyValuePartialInformation:
+        case KeyValuePartialInformationAlign64: {
+            dataOffset = informationClass == KeyValuePartialInformationAlign64
+                             ? 16
+                             : FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL,
+                                            Data);
+            requiredLength = dataOffset + sizeof(DWORD);
+            if (resultLength) {
+                *resultLength = requiredLength;
+            }
+            constexpr ULONG headerLength =
+                FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL, Data);
+            if (!buffer || bufferLength < headerLength) {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            auto info =
+                static_cast<KEY_VALUE_PARTIAL_INFORMATION_LOCAL*>(buffer);
+            info->TitleIndex = 0;
+            info->Type = REG_DWORD;
+            info->DataLength = sizeof(DWORD);
+            if (bufferLength < requiredLength) {
+                return STATUS_BUFFER_OVERFLOW;
+            }
+            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(buffer) + dataOffset) =
+                0;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_INVALID_INFO_CLASS;
 }
 
-/*
-Windhawk tool-mod implementation
+NTSTATUS NTAPI NtQueryValueKey_hook(
+    HANDLE keyHandle, PUNICODE_STRING valueName,
+    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
+    PVOID keyValueInformation, ULONG length, PULONG resultLength) {
+    NTSTATUS status = NtQueryValueKey_orig(
+        keyHandle, valueName, keyValueInformationClass, keyValueInformation,
+        length, resultLength);
 
-https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+    if (!IsTargetQuery(keyHandle, valueName)) {
+        return status;
+    }
 
-This launches the mod in a separate windhawk.exe process.
-*/
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-
-void WINAPI EntryPoint_Hook() {
-    ExitThread(0);
+    return FillValueInformation(valueName, keyValueInformationClass,
+                                keyValueInformation, length, resultLength);
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
-
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    void* ntQueryValueKey =
+        reinterpret_cast<void*>(GetProcAddress(ntdll, "NtQueryValueKey"));
+    if (!ntQueryValueKey) {
+        Wh_Log(L"Failed to find NtQueryValueKey");
         return FALSE;
     }
 
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed: error %lu", GetLastError());
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod is already running: %s", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-
-        IMAGE_NT_HEADERS* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew
-            );
-
-        DWORD entryPointRVA =
-            ntHeaders->OptionalHeader.AddressOfEntryPoint;
-
-        void* entryPoint =
-            reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
-
-        Wh_SetFunctionHook(
-            entryPoint,
-            reinterpret_cast<void*>(EntryPoint_Hook),
-            nullptr
-        );
-
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
+    Wh_SetFunctionHook(ntQueryValueKey,
+                       reinterpret_cast<void*>(NtQueryValueKey_hook),
+                       reinterpret_cast<void**>(&NtQueryValueKey_orig));
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    wchar_t currentProcessPath[MAX_PATH];
-
-    DWORD pathLength = GetModuleFileNameW(
-        nullptr,
-        currentProcessPath,
-        ARRAYSIZE(currentProcessPath)
-    );
-
-    if (pathLength == 0 || pathLength == ARRAYSIZE(currentProcessPath)) {
-        Wh_Log(L"GetModuleFileNameW failed: error %lu", GetLastError());
-        return;
-    }
-
-    wchar_t commandLine[MAX_PATH + 2 +
-                        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
-                         sizeof(wchar_t))];
-
-    HRESULT formatResult = StringCchPrintfW(commandLine, ARRAYSIZE(commandLine),
-                                            L"\"%s\" -tool-mod \"%s\"",
-                                            currentProcessPath, WH_MOD_ID);
-
-    if (FAILED(formatResult)) {
-        Wh_Log(L"Failed to construct tool-mod command line: HRESULT 0x%08X",
-               static_cast<unsigned int>(formatResult));
-        return;
-    }
-
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-
-    if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-
-        if (!kernelModule) {
-            Wh_Log(L"Could not find kernelbase.dll or kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        BOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken
-    );
-
-    auto createProcessInternalW =
-        reinterpret_cast<CreateProcessInternalW_t>(
-            GetProcAddress(kernelModule, "CreateProcessInternalW")
-        );
-
-    if (!createProcessInternalW) {
-        Wh_Log(L"CreateProcessInternalW was not found");
-        return;
-    }
-
-    STARTUPINFOW startupInfo{};
-    startupInfo.cb = sizeof(startupInfo);
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-
-    PROCESS_INFORMATION processInformation{};
-
-    if (!createProcessInternalW(
-            nullptr,
-            currentProcessPath,
-            commandLine,
-            nullptr,
-            nullptr,
-            FALSE,
-            NORMAL_PRIORITY_CLASS,
-            nullptr,
-            nullptr,
-            &startupInfo,
-            &processInformation,
-            nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed: error %lu", GetLastError());
-        return;
-    }
-
-    CloseHandle(processInformation.hProcess);
-    CloseHandle(processInformation.hThread);
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
-}
-
-void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
 }
