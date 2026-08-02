@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              physics-detector
+// @id              panels-physics-detector
 // @name            Physics for Panels - Detector
 // @description     Part 1 of 2: Detects taskbar auto-hide states and overlays it like a search menu when hovered.
 // @version         1.0.0
