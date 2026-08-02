@@ -102,11 +102,12 @@ Anixx's mod is detected and log a warning.
 The original author (Anixx) was contacted about merging these changes but did 
 not reply. As a precaution, automatic detection ensures only one mod runs at a time.
 
-Testing has been limited to Windows 10 1809 x64, where the Personalization
-sort hook is required and works correctly. The hook remains intentionally enabled
-on x64 to preserve that behavior. If a specific Windows build is reported to
-misbehave, that build will be added to the explicit sort-hook denylist, leaving
-the rest of the mod active without custom applet ordering.
+Testing has been limited to Windows 10 1809 x64 (build 17763), where the
+Personalization sort hook is required and works correctly. The hook is gated
+by an explicit allowlist of that single verified build; on any other build or
+architecture it stays disabled and the rest of the mod runs without custom
+applet ordering. Widening the allowlist to a new build requires verifying the
+shell32 offsets on that build first.
 */
 #include <string>
 #include <algorithm>
@@ -116,6 +117,7 @@ the rest of the mod active without custom applet ordering.
 #include <atomic>
 #include <fstream>
 #include <cstring>
+#include <cstdint>
 #include <memory>
 #include <new>
 #include <shellapi.h>
@@ -845,6 +847,19 @@ bool IsSuppressedNamespaceEntry(LPCWSTR name) {
     return name && IsSuppressedGuid(ToLower(name));
 }
 
+// Real subkey count reported by the registry itself, via the (unhooked)
+// RegQueryInfoKeyW. Used so injected virtual CLSIDs can be appended after
+// the real entries instead of shifted in front of them, which would
+// otherwise desync callers that size an enumeration loop from this count.
+DWORD GetRealSubKeyCount(HKEY hKey) {
+    DWORD count = 0;
+    if (RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, &count, nullptr, nullptr,
+                          nullptr, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+        return 0;
+    }
+    return count;
+}
+
 ClassifyResult ClassifyPersonalizationVirtual(const std::wstring& lower) {
     if (EndsWith(lower, g_personalizationClsidSuffix))       return { VNode::ClsidRoot,     ItemKind::Personalization, 0 };
     if (EndsWith(lower, g_personalizationDefaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::Personalization, 0 };
@@ -911,6 +926,13 @@ bool IsNameSpaceParentKey(const std::wstring& path) {
 }
 
 LSTATUS ProvideStringValue(LPBYTE lpData, LPDWORD lpcbData, const std::wstring& str) {
+    // Sanity cap: every string this mod provides is a short, fixed constant
+    // (a path, a display name, a shell::: command). A value this long can
+    // only mean something upstream is wrong; refuse rather than propagate
+    // an oversized buffer requirement to the caller.
+    constexpr size_t kMaxReasonableChars = 4096;
+    if (str.length() > kMaxReasonableChars) return ERROR_FILE_NOT_FOUND;
+
     DWORD requiredSize = (DWORD)((str.length() + 1) * sizeof(wchar_t));
     if (!lpcbData) return ERROR_INVALID_PARAMETER;
     if (!lpData) {
@@ -1175,8 +1197,6 @@ RegGetValueW_t RegGetValueWOriginal;
 LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
     try {
-        if (g_keyTracker.IsFake(hkey)) return ERROR_FILE_NOT_FOUND;
-
         std::wstring path = g_keyTracker.GetPath(hkey);
         if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
         if (!path.empty()) {
@@ -1184,6 +1204,11 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
             LSTATUS outStatus;
             if (TryProvideValue(path, valueName, pdwType, (LPBYTE)pvData, pcbData, outStatus)) return outStatus;
         }
+
+        // Only bail out with FILE_NOT_FOUND after TryProvideValue has had a
+        // chance to serve a virtual value on this fake handle.
+        if (g_keyTracker.IsFake(hkey)) return ERROR_FILE_NOT_FOUND;
+
         return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     } catch (...) {
         Wh_Log(L"Exception caught, falling back to real API");
@@ -1219,12 +1244,18 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
                                          lpClass, lpcchClass, lpftLastWriteTime);
         }
 
-        // Return virtual CLSIDs before real namespace entries. This is the
-        // portable ordering mechanism; no private shell32 layout is involved.
+        // Real entries are enumerated first; the injected virtual CLSIDs are
+        // appended only once the real entries are exhausted, so callers that
+        // size a loop from RegQueryInfoKeyW's real subkey count (which we do
+        // not hook) still see every real entry. Ordering of the virtual
+        // items on screen comes from SortOrderIndex / the sort hook, not
+        // from enumeration order.
         const std::vector<std::wstring> clsids = GetNamespaceClsids();
-        if (dwIndex < clsids.size()) {
+
+        auto ReturnVirtual = [&](DWORD virtualIndex) -> LSTATUS {
+            if (virtualIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
             if (!lpcchName || !lpName) return ERROR_INVALID_PARAMETER;
-            const std::wstring& clsid = clsids[dwIndex];
+            const std::wstring& clsid = clsids[virtualIndex];
             if (*lpcchName < clsid.size() + 1) {
                 *lpcchName = (DWORD)(clsid.size() + 1);
                 return ERROR_MORE_DATA;
@@ -1233,17 +1264,20 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
             *lpcchName = (DWORD)clsid.size();
             if (lpftLastWriteTime) GetSystemTimeAsFileTime(lpftLastWriteTime);
             return ERROR_SUCCESS;
+        };
+
+        if (!HasActiveSuppression()) {
+            const LSTATUS status = RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName, lpReserved,
+                                                          lpClass, lpcchClass, lpftLastWriteTime);
+            if (status != ERROR_NO_MORE_ITEMS) return status;
+            const DWORD realCount = GetRealSubKeyCount(hKey);
+            return ReturnVirtual(dwIndex >= realCount ? dwIndex - realCount : 0);
         }
 
-        const DWORD requestedRealIndex = dwIndex - (DWORD)clsids.size();
-        if (!g_settings.suppressCompanySync.load()) {
-            return RegEnumKeyExWOriginal(hKey, requestedRealIndex, lpName, lpcchName, lpReserved,
-                                         lpClass, lpcchClass, lpftLastWriteTime);
-        }
-
-        // Map the virtual index to a real one without using the caller's buffer
-        // while scanning. ControlPanel\NameSpace entries are CLSIDs, so 256
-        // wchar_t characters is more than sufficient.
+        // Suppression active: scan real entries, skipping suppressed ones,
+        // to map dwIndex onto the filtered real sequence. ControlPanel\
+        // NameSpace entries are CLSIDs, so 256 wchar_t characters is more
+        // than sufficient for the scan buffer.
         wchar_t scannedName[256];
         DWORD realIndex = 0;
         DWORD visibleRealIndex = 0;
@@ -1252,10 +1286,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
             const LSTATUS status = RegEnumKeyExWOriginal(
                 hKey, realIndex, scannedName, &scannedCch,
                 nullptr, nullptr, nullptr, nullptr);
-            if (status != ERROR_SUCCESS) return status;
+            if (status != ERROR_SUCCESS) break; // real entries exhausted
 
             if (!IsSuppressedNamespaceEntry(scannedName)) {
-                if (visibleRealIndex == requestedRealIndex) {
+                if (visibleRealIndex == dwIndex) {
                     // Repeat only the selected entry with caller-provided
                     // output buffers, preserving class and timestamp output.
                     return RegEnumKeyExWOriginal(hKey, realIndex, lpName, lpcchName, lpReserved,
@@ -1265,6 +1299,8 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
             }
             ++realIndex;
         }
+
+        return ReturnVirtual(dwIndex >= visibleRealIndex ? dwIndex - visibleRealIndex : 0);
     } catch (...) {
         Wh_Log(L"Exception caught, falling back to real API");
         return RegEnumKeyExWOriginal(hKey, dwIndex, lpName, lpcchName,
@@ -1291,18 +1327,26 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
         if (!IsNameSpaceParentKey(path))
             return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
 
+        // See RegEnumKeyExWHook above: real entries first, virtual CLSIDs
+        // appended after they're exhausted, so RegQueryInfoKeyW-based real
+        // subkey counts stay accurate.
         const std::vector<std::wstring> clsids = GetNamespaceClsids();
-        if (dwIndex < clsids.size()) {
+
+        auto ReturnVirtual = [&](DWORD virtualIndex) -> LSTATUS {
+            if (virtualIndex >= clsids.size()) return ERROR_NO_MORE_ITEMS;
             if (!lpName) return ERROR_INVALID_PARAMETER;
-            const std::wstring& clsid = clsids[dwIndex];
+            const std::wstring& clsid = clsids[virtualIndex];
             if (cchName <= clsid.size()) return ERROR_MORE_DATA;
             wcscpy_s(lpName, cchName, clsid.c_str());
             return ERROR_SUCCESS;
-        }
+        };
 
-        const DWORD requestedRealIndex = dwIndex - (DWORD)clsids.size();
-        if (!g_settings.suppressCompanySync.load())
-            return RegEnumKeyWOriginal(hKey, requestedRealIndex, lpName, cchName);
+        if (!HasActiveSuppression()) {
+            const LSTATUS status = RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
+            if (status != ERROR_NO_MORE_ITEMS) return status;
+            const DWORD realCount = GetRealSubKeyCount(hKey);
+            return ReturnVirtual(dwIndex >= realCount ? dwIndex - realCount : 0);
+        }
 
         wchar_t scannedName[256];
         DWORD realIndex = 0;
@@ -1310,30 +1354,33 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
         for (;;) {
             const LSTATUS status = RegEnumKeyWOriginal(hKey, realIndex, scannedName,
                                                         ARRAYSIZE(scannedName));
-            if (status != ERROR_SUCCESS) return status;
+            if (status != ERROR_SUCCESS) break; // real entries exhausted
             if (!IsSuppressedNamespaceEntry(scannedName)) {
-                if (visibleRealIndex == requestedRealIndex)
+                if (visibleRealIndex == dwIndex)
                     return RegEnumKeyWOriginal(hKey, realIndex, lpName, cchName);
                 ++visibleRealIndex;
             }
             ++realIndex;
         }
+
+        return ReturnVirtual(dwIndex >= visibleRealIndex ? dwIndex - visibleRealIndex : 0);
     } catch (...) {
         Wh_Log(L"Exception caught, falling back to real API");
         return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
     }
 }
 
-// Review note: this hook rewrites any explorer.exe launch whose parameters
-// start with "shell:::", which is also the pattern used by other mods that
-// inject into the same process (e.g. settings-to-control-panel). In testing
-// on this system the hook works correctly for this mod's own \pageWallpaper
-// and \pageColorization links. Rather than removing it, the mitigation is
-// operational: this mod and any other mod relying on the same shell::: /
-// explorer.exe pattern are tested one at a time, never enabled together, and
-// if one causes a launch to misbehave the other is used instead. The hook
-// itself is already wrapped in try/catch below, falling back to the
-// original ShellExecuteExW call on any exception.
+// This hook only rewrites the two specific shell::: sub-page commands this
+// mod itself writes into the task-links XML (\pageWallpaper and
+// \pageColorization). Everything else — including shell::: commands from
+// other mods or from Explorer itself — is passed straight through to the
+// original API, since ShellExecuteExW is hooked process-wide and must not
+// change behaviour for callers other than this mod's own links.
+static const wchar_t* kOwnRedirectedCommands[] = {
+    L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagewallpaper",
+    L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagecolorization",
+};
+
 using ShellExecuteExW_t = BOOL(WINAPI*)(LPSHELLEXECUTEINFOW);
 ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 
@@ -1347,11 +1394,19 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
         if (file == L"explorer.exe" || file == L"explorer") {
             if (psei->lpParameters) {
                 std::wstring params = psei->lpParameters;
-                // Only match if parameters START with shell::: (after trimming)
+                // Only match if parameters START with one of this mod's own
+                // shell::: sub-page commands (after trimming) — never a
+                // generic "shell:::" prefix, since that would also catch
+                // commands issued by other mods or by Explorer itself.
                 size_t firstNonSpace = params.find_first_not_of(L" \t");
                 if (firstNonSpace != std::wstring::npos) {
                     std::wstring trimmed = params.substr(firstNonSpace);
-                    if (ToLower(trimmed).find(L"shell:::") == 0) {
+                    std::wstring trimmedLower = ToLower(trimmed);
+                    bool isOwnCommand = false;
+                    for (const wchar_t* ownCmd : kOwnRedirectedCommands) {
+                        if (trimmedLower.find(ownCmd) == 0) { isOwnCommand = true; break; }
+                    }
+                    if (isOwnCommand) {
                         std::wstring shellCommand = trimmed;
                         
                         std::wstring newFile;
@@ -1438,6 +1493,7 @@ LPCWSTR g_szAppletOrder[8][20] = {
 };
 
 int FindApplet(LPCWSTR lpszApplet, int category) {
+    if (!lpszApplet || category < 0 || category >= 8) return -1;
     for (UINT i = 0; i < 20; i++) {
         if (NULL == g_szAppletOrder[category][i]) {
             break;
@@ -1454,17 +1510,75 @@ int FindApplet(LPCWSTR lpszApplet, int category) {
 int (WINAPI *CControlPanelAppletList_s_SortAppletsInCategory_orig)(void *, void *, LPARAM);
 
 // The offsets used below (HDPA pointer, category DWORD, applet moniker string)
-// come from reverse-engineering one specific shell32.dll build. They are NOT
-// guaranteed to be correct on every Windows build/architecture, so every
-// pointer is validated with VirtualQuery before it's ever dereferenced, and
-// the resulting "applet name" is validated to actually look like a CLSID
-// moniker (e.g. "::{580722ff-...}") before it's used for anything. If any
-// check fails, we transparently fall back to the original comparison —
-// worst case our custom sort is skipped, it can never crash explorer.exe.
+// come from reverse-engineering one specific shell32.dll build (Windows 10
+// 1809 x64, build 17763). They are NOT guaranteed to be correct on any other
+// build or architecture. On top of the g_sortHookSafe build gate, every
+// pointer derived from these offsets is validated with VirtualQuery before
+// being dereferenced (see IsSafeToRead/IsLikelyClsidMoniker below), and the
+// resulting "applet name" is checked to actually look like a CLSID moniker
+// before it is used for anything. If any check fails, the hook transparently
+// falls back to the original comparison. Note that this does not make the
+// hook bulletproof: a region can be readable-but-wrong (e.g. reused/freed
+// and reallocated memory that happens to pass VirtualQuery), so the build
+// allowlist in ValidateSortHookOffsets remains the primary safety mechanism.
 static bool g_sortHookSafe = false;
 
 // Returns true only if [ptr, ptr+size) is entirely within a single committed,
-// readable memory region (i.e. safe to dereference without crashing).
+// readable memory region — i.e. safe to dereference without an access
+// violation. This is a best-effort check (see caveat above), not a proof of
+// correctness of the data at that address.
+static bool IsSafeToRead(const void* ptr, size_t size) {
+    if (!ptr || size == 0) return false;
+    // Guard against pointer-arithmetic overflow before ever touching memory.
+    uintptr_t start = (uintptr_t)ptr;
+    if (start + size < start) return false;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(ptr, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+    const DWORD kReadableMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                                 PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    if (!(mbi.Protect & kReadableMask)) return false;
+
+    const uint8_t* regionEnd = (const uint8_t*)mbi.BaseAddress + mbi.RegionSize;
+    const uint8_t* rangeEnd = (const uint8_t*)ptr + size;
+    return rangeEnd <= regionEnd;
+}
+
+// Bounded, VirtualQuery-validated wide-string length check. Never reads past
+// maxChars and never touches memory that hasn't just been validated as safe.
+// Returns -1 if no NUL terminator is found within maxChars, or if memory
+// becomes unreadable partway through (e.g. the string runs off the end of
+// its region).
+static int SafeWcsnlen(LPCWSTR s, size_t maxChars) {
+    if (!s) return -1;
+    for (size_t i = 0; i < maxChars; ++i) {
+        if (!IsSafeToRead(s + i, sizeof(wchar_t))) return -1;
+        if (s[i] == L'\0') return (int)i;
+    }
+    return -1;
+}
+
+// Verifies the string is safely readable AND matches the shape of a CLSID
+// moniker ("::{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"), so the hook never
+// hands an arbitrary/garbage pointer to wcsicmp.
+static bool IsLikelyClsidMoniker(LPCWSTR s) {
+    const size_t kMonikerLen = 40; // "::{" + 36-char GUID + "}"
+    int len = SafeWcsnlen(s, kMonikerLen + 8);
+    if (len < 0 || (size_t)len < kMonikerLen) return false;
+    if (s[0] != L':' || s[1] != L':' || s[2] != L'{') return false;
+    if (s[(size_t)len - 1] != L'}') return false;
+    // Loose check on hyphen positions is enough here; wcsicmp against the
+    // known-good allowlist in g_szAppletOrder does the real comparison.
+    return s[11] == L'-' && s[16] == L'-' && s[21] == L'-' && s[26] == L'-';
+}
+
+// Sets g_sortHookSafe = true only when running on the single Windows build
+// (10.0.17763, x64) whose shell32 struct offsets were manually verified.
+// This build allowlist is the primary safety mechanism; the hook itself
+// additionally validates every pointer at runtime via IsSafeToRead /
+// IsLikelyClsidMoniker before dereferencing it (see below).
 void ValidateSortHookOffsets() {
     g_sortHookSafe = false;
 #ifdef _WIN64
@@ -1484,7 +1598,17 @@ void ValidateSortHookOffsets() {
 int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
     void *p1, void *p2, LPARAM lParam
 ) {
+  try {
     if (!g_sortHookSafe || !p1 || !p2 || !lParam)
+        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
+
+    // Validate p1/p2 (each read as an int index) and lParam (read at the
+    // HDPA-pointer offset and the category-DWORD offset) before touching
+    // any of them. 640 bytes is a generous margin past the highest known
+    // offset (the DWORD at index 32, i.e. byte 128) to tolerate minor struct
+    // layout drift without under-covering the real read.
+    if (!IsSafeToRead(p1, sizeof(int)) || !IsSafeToRead(p2, sizeof(int)) ||
+        !IsSafeToRead((const void*)lParam, 640))
         return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
 
     HDPA hDpa = (HDPA)CControlPanelAppletList_HDPA(lParam);
@@ -1498,10 +1622,26 @@ int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
     if (!pThing1 || !pThing2)
         return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
 
+    // Validate the region the moniker string offset falls in before forming
+    // the pointer, and again (via IsLikelyClsidMoniker/SafeWcsnlen) before
+    // reading through it.
+    const size_t kAppletStructMargin = 520 + sizeof(wchar_t) * 48;
+    if (!IsSafeToRead(pThing1, kAppletStructMargin) || !IsSafeToRead(pThing2, kAppletStructMargin))
+        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
+
     LPCWSTR pszApplet1 = (LPCWSTR)((char *)pThing1 + 520);
     LPCWSTR pszApplet2 = (LPCWSTR)((char *)pThing2 + 520);
-    int iApplet1 = FindApplet(pszApplet1, category);
-    int iApplet2 = FindApplet(pszApplet2, category);
+
+    // If either string doesn't look like a real CLSID moniker, the offsets
+    // have drifted (wrong build/layout) — bail out to the original rather
+    // than risk comparing garbage or running off unmapped memory.
+    bool applet1IsMoniker = IsLikelyClsidMoniker(pszApplet1);
+    bool applet2IsMoniker = IsLikelyClsidMoniker(pszApplet2);
+    if (!applet1IsMoniker && !applet2IsMoniker)
+        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
+
+    int iApplet1 = applet1IsMoniker ? FindApplet(pszApplet1, category) : -1;
+    int iApplet2 = applet2IsMoniker ? FindApplet(pszApplet2, category) : -1;
 
     if (iApplet1 >= 0 && iApplet2 >= 0) {
         return iApplet1 - iApplet2;
@@ -1511,7 +1651,17 @@ int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
         return 1;
     }
     return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
+  } catch (...) {
+      // Note: on this Clang/mingw toolchain, catch (...) only catches C++
+      // exceptions, NOT SEH access violations — this is a defense-in-depth
+      // measure for exceptions thrown by std:: calls above, not a crash
+      // guard by itself. The IsSafeToRead validation above is what actually
+      // prevents access violations in this hook.
+      Wh_Log(L"Exception in sort hook, falling back to real comparison");
+      return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
+  }
 }
+
 
 void* GetRegFunc(const char* name) {
     HMODULE hKb = GetModuleHandleW(L"kernelbase.dll");
