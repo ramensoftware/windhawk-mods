@@ -12,7 +12,7 @@
 // @exclude         SearchHost.exe
 // @exclude         dwm.exe
 // @license         MIT
-// @compilerOptions -ldwmapi -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -luser32
+// @compilerOptions -ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -51,7 +51,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
   * **After:**
     
     ![Alt Tab Switch After](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif)
-* **🛡️ Rock-Solid Stability:** Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency.
+* **🛡️ Rock-Solid Stability:** Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency. Tray apps only *hide* their window instead of closing it, so animating them is opt-in via the **Treat hiding a window as closing it** setting.
 
 ## ⚙️ Customization & Settings
 
@@ -63,6 +63,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Switch animation duration (ms):** Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)
 * **Shatter block size (px):** Determines the size of the dust/shatter particles. 
   * *Performance Tip:* Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).
+* **Treat hiding a window as closing it:** Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.
 * **Toggles:** Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
 */
 // ==/WindhawkModReadme==
@@ -91,6 +92,25 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 - close_duration_ms: 900
   $name: Close animation duration (ms)
   $description: How long the shatter/disintegration close animation lasts. Clamped to 50-5000.
+- hide_as_close: false
+  $name: Treat hiding a window as closing it
+  $description: >-
+    Plays the close animation when an app hides its window instead of really destroying it.
+
+    Many apps that live in the system tray - Discord, Steam and Telegram, for example - do not
+    actually close when you press the X. They only hide the window and keep running in the
+    background, so by default those apps disappear with no animation at all. Turn this on to
+    animate them too.
+
+    The catch is that Windows gives no way to tell "the user closed this window" apart from
+    "the app hid this window for its own reasons", so enabling this also animates things you
+    did not close: splash screens that vanish once an app has finished loading, windows an app
+    hides while rearranging its own UI, and explicit "minimise to tray" commands. If you start
+    seeing the shatter or disintegration effect at moments when you did not close anything,
+    turn this back off.
+
+    Windows that are genuinely closed and destroyed are animated either way - this setting only
+    affects the hide-based cases. It has no effect unless "Animate window close" is also on.
 - shatter_block_size: 12
   $name: Dust/Shatter block size (px)
   $description: >- 
@@ -125,6 +145,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #include <cwctype>
 #include <uiautomation.h>
 #include <shellapi.h>
+#include <sddl.h>
 #include <string_view>
 #include <exception>
 #ifndef DWMWA_EXTENDED_FRAME_BOUNDS
@@ -182,6 +203,9 @@ namespace AnimConstants {
     constexpr float ShatterTravelBase = 200.0f;
     constexpr float ShatterTravelMult = 1000.0f;
     constexpr int WaitTimeoutMs = 2500;
+    constexpr int WaitSlackMs = 500;
+    constexpr int AltTabPollMs = 16;
+    constexpr int AltTabSessionMs = 500;
 }
 static constexpr std::wstring_view kGdiExcludedClasses[] = {
     L"CoreWindow",
@@ -214,17 +238,17 @@ HANDLE g_hAltTabThread = NULL;
 HANDLE g_hWinEventThread = NULL;
 std::atomic<bool> g_winEventThreadStarted{false};
 DWORD WINAPI WinEventHookThread(LPVOID lpParam);
-
 struct alignas(8) SharedAnimState {
-    volatile LONG64 lastAltTabTime;
-    volatile LONG64 altTabSourceWindow;
+    volatile LONG lastAltTabTick;
+    volatile LONG altTabSourceWindow;
     volatile LONG altTabStartTick;
     volatile LONG altTabGeneration;
-    volatile LONG consumedGeneration;
-    LONG reserved;
 };
+static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_V4";
 HANDLE g_hMapFile = NULL;
 SharedAnimState* g_pSharedState = nullptr;
+bool g_sharedStateWritable = false;
+std::atomic<LONG> g_consumedGeneration{0};
 std::atomic<int> g_durationMs{360};
 std::atomic<int> g_closeDurationMs{900};
 std::atomic<int> g_closeEffectStyle{1};
@@ -232,6 +256,7 @@ std::atomic<int> g_shatterBlockSize{12};
 std::atomic<bool> g_minimizeAnimation{true};
 std::atomic<bool> g_restoreAnimation{true};
 std::atomic<bool> g_closeAnimation{true};
+std::atomic<bool> g_hideAsClose{false};
 std::atomic<bool> g_launchAnimation{false};
 std::atomic<bool> g_switchAnimation{true};
 std::atomic<int> g_switchDurationMs{200};
@@ -241,63 +266,57 @@ std::atomic<int>  g_workerCount{0};
 template <typename T> static T Clamp(T value, T min, T max) {
     return value < min ? min : (value > max ? max : value);
 }
-static LONG64 ReadShared64(volatile LONG64* value) {
-    return InterlockedCompareExchange64(value, 0, 0);
+static LONG HwndToShared(HWND hWnd) {
+    return (LONG)(LONG_PTR)hWnd;
 }
-static LONG ReadShared32(volatile LONG* value) {
-    return InterlockedCompareExchange(value, 0, 0);
-}
-static LONG64 HwndToShared(HWND hWnd) {
-    return (LONG64)(ULONG_PTR)hWnd;
-}
-static HWND SharedToHwnd(LONG64 value) {
-    return (HWND)(ULONG_PTR)value;
+static LONG NonZeroTick() {
+    const LONG tick = (LONG)GetTickCount();
+    return tick ? tick : 1;
 }
 static void ResetAltTabState() {
-    if (!g_pSharedState) return;
-    InterlockedExchange64(&g_pSharedState->lastAltTabTime, 0);
-    InterlockedExchange64(&g_pSharedState->altTabSourceWindow, 0);
+    if (!g_pSharedState || !g_sharedStateWritable) return;
+    InterlockedExchange(&g_pSharedState->lastAltTabTick, 0);
+    InterlockedExchange(&g_pSharedState->altTabSourceWindow, 0);
     InterlockedExchange(&g_pSharedState->altTabStartTick, 0);
     InterlockedExchange(&g_pSharedState->altTabGeneration, 0);
-    InterlockedExchange(&g_pSharedState->consumedGeneration, 0);
 }
 static void BeginAltTabSession(HWND source) {
-    if (!g_pSharedState) return;
-    InterlockedExchange64(&g_pSharedState->lastAltTabTime, 0);
-    InterlockedExchange64(&g_pSharedState->altTabSourceWindow, HwndToShared(source));
+    if (!g_pSharedState || !g_sharedStateWritable) return;
+    InterlockedExchange(&g_pSharedState->lastAltTabTick, 0);
+    InterlockedExchange(&g_pSharedState->altTabSourceWindow, HwndToShared(source));
     InterlockedExchange(&g_pSharedState->altTabStartTick, (LONG)GetTickCount());
     LONG generation = InterlockedIncrement(&g_pSharedState->altTabGeneration);
     if (generation == 0) InterlockedIncrement(&g_pSharedState->altTabGeneration);
-    InterlockedExchange64(&g_pSharedState->lastAltTabTime, (LONG64)GetTickCount64());
+    InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
 }
 static void TouchAltTabSession() {
-    if (g_pSharedState) {
-        InterlockedExchange64(&g_pSharedState->lastAltTabTime, (LONG64)GetTickCount64());
+    if (g_pSharedState && g_sharedStateWritable) {
+        InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
     }
 }
 static bool ConsumeAltTabIntent(HWND target, DWORD eventTime) {
     if (!g_pSharedState) return false;
 
-    const ULONGLONG stamp = (ULONGLONG)ReadShared64(&g_pSharedState->lastAltTabTime);
-    if (!stamp || GetTickCount64() - stamp > 500) return false;
+    const LONG stamp = g_pSharedState->lastAltTabTick;
+    if (!stamp || (LONG)(GetTickCount() - (DWORD)stamp) > AnimConstants::AltTabSessionMs) return false;
 
-    const LONG generation = ReadShared32(&g_pSharedState->altTabGeneration);
-    if (!generation || ReadShared32(&g_pSharedState->consumedGeneration) == generation) return false;
-
-    const DWORD startTick = (DWORD)ReadShared32(&g_pSharedState->altTabStartTick);
-    if (eventTime && startTick && (LONG)(eventTime - startTick) < -40) return false;
-
-    const LONG64 sourceValue = ReadShared64(&g_pSharedState->altTabSourceWindow);
-    if (generation != ReadShared32(&g_pSharedState->altTabGeneration)) return false;
-
-    LONG consumed = ReadShared32(&g_pSharedState->consumedGeneration);
-    if (consumed == generation ||
-        InterlockedCompareExchange(&g_pSharedState->consumedGeneration, generation, consumed) != consumed) {
+    const LONG generation = g_pSharedState->altTabGeneration;
+    if (!generation) return false;
+    const DWORD startTick = (DWORD)g_pSharedState->altTabStartTick;
+    if (eventTime && startTick &&
+        (LONG)(eventTime - startTick) < -(40 + AnimConstants::AltTabPollMs)) {
         return false;
     }
 
-    const HWND source = SharedToHwnd(sourceValue);
-    return !source || source != target;
+    const LONG source = g_pSharedState->altTabSourceWindow;
+    if (generation != g_pSharedState->altTabGeneration) return false;
+    LONG consumed = g_consumedGeneration.load(std::memory_order_relaxed);
+    if (consumed == generation ||
+        !g_consumedGeneration.compare_exchange_strong(consumed, generation, std::memory_order_relaxed)) {
+        return false;
+    }
+
+    return !source || source != HwndToShared(target);
 }
 static bool IsExplorerProcess() {
     WCHAR path[MAX_PATH]{};
@@ -366,20 +385,46 @@ static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
     const auto cls = GetClassNameStr(hWnd);
     return cls.find(L"CASCADIA") != std::wstring::npos || cls.find(L"ConsoleWindowClass") != std::wstring::npos;
 }
-void InitSharedMemory() {
-    SECURITY_DESCRIPTOR sd;
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
-    SECURITY_ATTRIBUTES sa;
-    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
-    g_hMapFile = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, sizeof(SharedAnimState), L"Local\\Windhawk_Anim_State_V3");
-    if (g_hMapFile == NULL && GetLastError() == ERROR_ACCESS_DENIED) {
-        g_hMapFile = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, L"Local\\Windhawk_Anim_State_V3");
+static PSECURITY_DESCRIPTOR BuildSharedStateSd() {
+    HANDLE hToken = NULL;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return nullptr;
+    DWORD len = 0;
+    GetTokenInformation(hToken, TokenUser, NULL, 0, &len);
+    std::vector<BYTE> buffer(len);
+    LPWSTR userSid = NULL;
+    const bool haveSid =
+        len && GetTokenInformation(hToken, TokenUser, buffer.data(), len, &len) &&
+        ConvertSidToStringSidW(((TOKEN_USER*)buffer.data())->User.Sid, &userSid) && userSid;
+    CloseHandle(hToken);
+    if (!haveSid) return nullptr;
+
+    std::wstring sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;";
+    sddl += userSid;
+    sddl += L")(A;;GR;;;WD)(A;;GR;;;AC)S:(ML;;NW;;;LW)";
+    LocalFree(userSid);
+
+    PSECURITY_DESCRIPTOR pSd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &pSd, NULL)) {
+        return nullptr;
     }
-    if (g_hMapFile != NULL) {
-        g_pSharedState = (SharedAnimState*)MapViewOfFile(g_hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedAnimState));
+    return pSd;
+}
+void InitSharedMemory() {
+    PSECURITY_DESCRIPTOR pSd = BuildSharedStateSd();
+    SECURITY_ATTRIBUTES sa{sizeof(sa), pSd, FALSE};
+    g_hMapFile = CreateFileMappingW(INVALID_HANDLE_VALUE, pSd ? &sa : NULL, PAGE_READWRITE, 0,
+                                    sizeof(SharedAnimState), kSharedStateName);
+    if (pSd) LocalFree(pSd);
+    if (!g_hMapFile) g_hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, kSharedStateName);
+    if (!g_hMapFile) return;
+    g_sharedStateWritable = IsExplorerProcess();
+    g_pSharedState = (SharedAnimState*)MapViewOfFile(
+        g_hMapFile, g_sharedStateWritable ? (FILE_MAP_READ | FILE_MAP_WRITE) : FILE_MAP_READ, 0, 0,
+        sizeof(SharedAnimState));
+    if (!g_pSharedState && g_sharedStateWritable) {
+        g_sharedStateWritable = false;
+        g_pSharedState = (SharedAnimState*)MapViewOfFile(g_hMapFile, FILE_MAP_READ, 0, 0,
+                                                         sizeof(SharedAnimState));
     }
 }
 void LoadAnimSettings() {
@@ -394,6 +439,7 @@ void LoadAnimSettings() {
     g_minimizeAnimation.store(Wh_GetIntSetting(L"minimize_animation") != 0, std::memory_order_relaxed);
     g_restoreAnimation.store(Wh_GetIntSetting(L"restore_animation") != 0, std::memory_order_relaxed);
     g_closeAnimation.store(Wh_GetIntSetting(L"close_animation") != 0, std::memory_order_relaxed);
+    g_hideAsClose.store(Wh_GetIntSetting(L"hide_as_close") != 0, std::memory_order_relaxed);
     g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
     g_switchAnimation.store(Wh_GetIntSetting(L"switch_animation") != 0, std::memory_order_relaxed);
     g_switchDurationMs.store(Clamp(Wh_GetIntSetting(L"switch_duration_ms"), 50, 1000), std::memory_order_relaxed);
@@ -449,14 +495,17 @@ std::wstring GetProcessNameCached(HWND hWnd) {
     return procNameLower;
 }
 void EnsureWinEventThreadStarted() {
+    if (g_winEventThreadStarted.load(std::memory_order_relaxed)) return;
     if (g_unloading.load(std::memory_order_relaxed)) return;
     if (!g_switchAnimation.load(std::memory_order_relaxed)) return;
-    bool expected = false;
-    if (g_winEventThreadStarted.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
-        std::lock_guard<std::mutex> lock(g_StateMutex);
-        if (g_unloading.load(std::memory_order_relaxed)) return;
-        g_hWinEventThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
-    }
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    if (g_unloading.load(std::memory_order_relaxed)) return;
+    if (!g_switchAnimation.load(std::memory_order_relaxed)) return;
+    if (g_hWinEventThread || g_winEventThreadStarted.load(std::memory_order_relaxed)) return;
+    HANDLE hThread = CreateThread(NULL, 0, WinEventHookThread, NULL, 0, NULL);
+    if (!hThread) return;
+    g_hWinEventThread = hThread;
+    g_winEventThreadStarted.store(true, std::memory_order_relaxed);
 }
 static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd) || GetAncestor(hWnd, GA_ROOT) != hWnd) return false;
@@ -470,6 +519,10 @@ static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     return isMain;
 }
 static bool UseSafeClose(HWND hWnd) { return ContainsClass(GetClassNameStr(hWnd), kSafeCloseClasses); }
+static bool ShouldTreatHideAsClose(HWND hWnd) {
+    return g_hideAsClose.load(std::memory_order_relaxed) &&
+           g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd);
+}
 static bool ShouldAnimateWindow(HWND hWnd) {
     if (!hWnd || (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD)) return false;
     RECT r{};
@@ -532,6 +585,14 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
             hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
         }
         if (SUCCEEDED(hrUia) && pAutomation) {
+#ifdef __IUIAutomation2_INTERFACE_DEFINED__
+            IUIAutomation2* pAutomation2 = nullptr;
+            if (SUCCEEDED(pAutomation->QueryInterface(__uuidof(IUIAutomation2), (void**)&pAutomation2)) && pAutomation2) {
+                pAutomation2->put_ConnectionTimeout(1000);
+                pAutomation2->put_TransactionTimeout(2000);
+                pAutomation2->Release();
+            }
+#endif
             HWND hTray = FindTaskbarForMonitor(t->hMon);
             if (hTray) {
                 IUIAutomationElement* pTrayElement = nullptr;
@@ -648,10 +709,8 @@ DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
     HWND stableForeground = GetForegroundWindow();
 
     while (g_altTabThreadRunning.load(std::memory_order_relaxed) && !g_unloading.load(std::memory_order_relaxed)) {
-        const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) ||
-                             (GetAsyncKeyState(VK_LMENU) & 0x8000) ||
-                             (GetAsyncKeyState(VK_RMENU) & 0x8000);
-        const bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000);
+        const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;  // covers both Alt keys
+        const bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
 
         if (!altTabSession) {
             if (!altDown) {
@@ -667,7 +726,7 @@ DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
             if (!altDown) altTabSession = false;
         }
 
-        Sleep(10);
+        Sleep(AnimConstants::AltTabPollMs);
     }
     return 0;
 }
@@ -692,8 +751,6 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     } guard{ hWnd };
 
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-    Sleep(30);
-    
     RECT winRect;
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || !IsAppMainWindow(hWnd, true) || !GetWindowRect(hWnd, &winRect)) {
         return 0; 
@@ -709,6 +766,11 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         return 0; 
     }
     
+    // Deliberately NOT WS_EX_TRANSPARENT, unlike the close/minimize ghost: that ghost floats
+    // over a live window, but this one covers a *cloaked* window, and a cloaked window is not
+    // hit-testable. Click-through here would skip the target and activate the window behind
+    // it, so the ghost absorbs clicks for the duration instead - the target stays focused at
+    // the cost of losing a click aimed at it, which is the better trade of the two.
     HWND hGhost = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
         L"STATIC", NULL, WS_POPUP,
@@ -847,6 +909,7 @@ private:
     int blockSizeSetting = 1;
     int closeEffect = 1;
     double totalMs = 0.0;
+    bool blocksInput = false;
     std::vector<ShatterBlock> shatterBlocks;
     std::vector<float> yb;
     inline float MorphAt(float v, float tt) {
@@ -1019,11 +1082,13 @@ public:
         if (boundW < 1) boundW = 1;
         if (boundH < 1) boundH = 1;
         totalMs = (double)data->durationMs;
+        blocksInput = !data->isClosing && data->isRising && data->hiddenByCloak;
     }
     
     bool Initialize() {
         hGhost = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE |
+                (blocksInput ? 0 : WS_EX_TRANSPARENT),
             L"STATIC", NULL, WS_POPUP,
             boundLeft, boundTop, boundW, boundH,
             NULL, NULL, NULL, NULL);
@@ -1355,6 +1420,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         g_workerCount.fetch_sub(1, std::memory_order_release);
         return false;
     }
+    const bool forceOpaque = ShouldUseBitBlt(hWnd, isClosing);
     auto CopySnapshot = [&](void* sourceBits) {
         auto* src = (DWORD*)sourceBits;
         auto* dst = (DWORD*)data->pBits;
@@ -1362,9 +1428,30 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         const int startY = std::max(0, -offsetY), endY = std::min(h, rawH - offsetY);
         const int startX = std::max(0, -offsetX), endX = std::min(w, rawW - offsetX);
         if (startY >= endY || startX >= endX) return;
-        const size_t rowBytes = (size_t)(endX - startX) * 4;
-        for (int y = startY; y < endY; ++y)
-            memcpy(dst + (size_t)y * w + startX, src + (size_t)(y + offsetY) * rawW + startX + offsetX, rowBytes);
+        const int rowPixels = endX - startX;
+        const size_t rowBytes = (size_t)rowPixels * 4;
+        size_t zeroAlpha = 0;
+        for (int y = startY; y < endY; ++y) {
+            DWORD* dstRow = dst + (size_t)y * w + startX;
+            memcpy(dstRow, src + (size_t)(y + offsetY) * rawW + startX + offsetX, rowBytes);
+            if (forceOpaque) {
+                for (int x = 0; x < rowPixels; ++x) dstRow[x] |= 0xFF000000u;
+            } else {
+                for (int x = 0; x < rowPixels; ++x) {
+                    if ((dstRow[x] >> 24) == 0) { dstRow[x] = 0; ++zeroAlpha; }
+                }
+            }
+        }
+        const size_t inBounds = (size_t)(endY - startY) * (size_t)rowPixels;
+        if (zeroAlpha * 2 > inBounds) {
+            for (int y = startY; y < endY; ++y) {
+                DWORD* dstRow = dst + (size_t)y * w + startX;
+                const DWORD* srcRow = src + (size_t)(y + offsetY) * rawW + startX + offsetX;
+                for (int x = 0; x < rowPixels; ++x) {
+                    if (dstRow[x] == 0) dstRow[x] = 0xFF000000u | (srcRow[x] & 0x00FFFFFFu);
+                }
+            }
+        }
     };
     auto CaptureNow = [&]() -> bool {
         HDC tempDC = CreateCompatibleDC(hScreenDC);
@@ -1376,7 +1463,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
             return false;
         }
         HBITMAP oldBmp = (HBITMAP)SelectObject(tempDC, tempBmp);
-        if (ShouldUseBitBlt(hWnd, isClosing))
+        if (forceOpaque)
             BitBlt(tempDC, 0, 0, rawW, rawH, hScreenDC, winRect.left, winRect.top, SRCCOPY);
         else PrintWindow(hWnd, tempDC, PW_RENDERFULLCONTENT);
         GdiFlush();
@@ -1442,6 +1529,21 @@ static bool IsMinimizeCommand(int cmd) {
 static bool IsLaunchCommand(int cmd) {
     return cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMAXIMIZED;
 }
+static void WaitForCloseAnimation(HANDLE wait) {
+    const DWORD timeoutMs = (DWORD)std::max(AnimConstants::WaitTimeoutMs,
+                                            g_closeDurationMs.load(std::memory_order_relaxed) +
+                                                AnimConstants::WaitSlackMs);
+    const DWORD deadline = GetTickCount() + timeoutMs;
+    for (;;) {
+        const DWORD now = GetTickCount();
+        if ((LONG)(now - deadline) >= 0) break;
+        const DWORD r = MsgWaitForMultipleObjectsEx(1, &wait, deadline - now, QS_SENDMESSAGE,
+                                                    MWMO_INPUTAVAILABLE);
+        if (r != WAIT_OBJECT_0 + 1) break;
+        MSG msg;
+        PeekMessageW(&msg, NULL, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+    }
+}
 static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
     UpdateDwmTransitions(hWnd, FALSE);
     HANDLE wait = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1455,7 +1557,7 @@ static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
     const bool started = StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, TRUE, closeMsg, workerWait);
     
     if (started) {
-        if (wait) WaitForSingleObject(wait, AnimConstants::WaitTimeoutMs);
+        if (wait) WaitForCloseAnimation(wait);
     } else {
         if (workerWait) CloseHandle(workerWait);
     }
@@ -1512,7 +1614,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     }
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindow_Original(hWnd, cmd);
-        if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+        if (ShouldTreatHideAsClose(hWnd)) {
             BOOL wasVisible = IsWindowVisible(hWnd);
             if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return wasVisible;
         }
@@ -1551,8 +1653,7 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     }
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, L"AnimCloseBypass")) return ShowWindowAsync_Original(hWnd, cmd);
-        if (g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd) &&
-            RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        if (ShouldTreatHideAsClose(hWnd) && RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
     }
     if (IsMinimizeCommand(cmd)) TryMinimizeAnim(hWnd);
     else {
@@ -1573,8 +1674,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
     if (flags & SWP_SHOWWINDOW) {
         EnsureWinEventThreadStarted();
     }
-    if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") &&
-        g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+    if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, L"AnimCloseBypass") && ShouldTreatHideAsClose(hWnd)) {
         
         BOOL applied = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags & ~SWP_HIDEWINDOW);
         if (!applied) return FALSE;
@@ -1659,7 +1759,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
     if (placement) {
         if (IsMinimizeCommand(placement->showCmd)) TryMinimizeAnim(hWnd);
         else if (placement->showCmd == SW_HIDE && !GetPropW(hWnd, L"AnimCloseBypass") &&
-                 g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd)) {
+                 ShouldTreatHideAsClose(hWnd)) {
             
             WINDOWPLACEMENT modified = *placement;
             modified.showCmd = SW_SHOWNA;
@@ -1723,7 +1823,7 @@ void StartSwitchThreads() {
 void StopSwitchThreads() {
     if (g_hAltTabThread) {
         g_altTabThreadRunning.store(false, std::memory_order_relaxed);
-        WaitForSingleObject(g_hAltTabThread, 2000);
+        WaitForSingleObject(g_hAltTabThread, INFINITE);
         CloseHandle(g_hAltTabThread);
         g_hAltTabThread = NULL;
     }
@@ -1737,12 +1837,10 @@ void StopSwitchThreads() {
     
     if (hWinEvent) {
         DWORD tid = GetThreadId(hWinEvent);
-        if (tid) {
-            while (!PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
-                if (WaitForSingleObject(hWinEvent, 10) != WAIT_TIMEOUT) break;
-            }
+        while (tid && !PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
+            if (WaitForSingleObject(hWinEvent, 10) != WAIT_TIMEOUT) break;
         }
-        WaitForSingleObject(hWinEvent, 2000);
+        WaitForSingleObject(hWinEvent, INFINITE);
         CloseHandle(hWinEvent);
         g_winEventThreadStarted.store(false, std::memory_order_relaxed);
     }
@@ -1781,19 +1879,27 @@ void Wh_ModSettingsChanged() {
 }
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
-    
-    if (HWINEVENTHOOK hook = g_hForegroundHook.exchange(NULL, std::memory_order_acquire)) {
-        UnhookWinEvent(hook);
-    }
-    
     StopSwitchThreads();
-    int timeoutRetries = 500;
-    while (g_workerCount.load(std::memory_order_acquire) > 0 && timeoutRetries > 0) {
+    while (g_workerCount.load(std::memory_order_acquire) > 0) {
         Sleep(10);
-        timeoutRetries--;
     }
 }
 void Wh_ModUninit() {
+    std::vector<HWND> stuck;
+    {
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        stuck.assign(g_AnimActive.begin(), g_AnimActive.end());
+        g_AnimActive.clear();
+    }
+    for (HWND hWnd : stuck) {
+        if (!IsWindow(hWnd)) continue;
+        SetWindowCloak(hWnd, FALSE);
+        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        UpdateDwmTransitions(hWnd, TRUE);
+        RemovePropW(hWnd, L"AnimCloseBypass");
+        RemovePropW(hWnd, L"AnimClosed");
+    }
+
     std::lock_guard<std::mutex> lock(g_StateMutex);
     for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
     g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear(); g_ProcessNameCache.clear(); g_LaunchSeen.clear();
