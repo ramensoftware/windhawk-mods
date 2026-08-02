@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              physics-shell
+// @id              panels-physics-shell
 // @name            Physics for Panels - Shell
 // @description     Part 2 of 2: Handles Quick Settings and Notification Center when the taskbar auto-hides. Requires physics-detector.
 // @version         1.0.0
