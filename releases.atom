@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-01T17:35:18.000Z</updated>
+    <updated>2026-08-02T22:24:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[macOS magnifying cursor 1.4.7]]></title>
+        <id>https://windhawk.net/mods/mac-magnifying-cursor#e0d29aa93e04e8b7c093c05c7c3d4956878cf40c</id>
+        <link href="https://windhawk.net/mods/mac-magnifying-cursor"/>
+        <updated>2026-08-02T22:24:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.</p>
+<p><img src="https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif" alt="Preview" /></p>]]></content>
+        <author>
+            <name>Jaali</name>
+            <uri>https://github.com/alivca</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
         <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
@@ -1090,35 +1102,6 @@ If you are using this mod together with Classic Explorer toolbar (Open Shell), e
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PivotLink: Browser Router 1.0]]></title>
-        <id>https://windhawk.net/mods/pivotlink-browser-router#111292111761fd2ba68b8c850b9b916424eb97e7</id>
-        <link href="https://windhawk.net/mods/pivotlink-browser-router"/>
-        <updated>2026-07-14T15:29:50.000Z</updated>
-        <content type="html"><![CDATA[<p>Ever had a browser open already and Windows opened a Discord/Slack link in your default browser by launching it from scratch? Now it won't.</p>
-<h2 id="whatitdoes">What It Does</h2>
-<p>PivotLink intercepts outgoing URL launches system-wide and redirects them to whichever browser you already have running, based on a 5-tier priority list you configure. Instead of Windows blindly spawning your default browser, PivotLink checks what's actually open and sends the link there.</p>
-<h2 id="howitworks">How It Works</h2>
-<ul>
-<li>Hooks <code>ShellExecuteW</code>, <code>ShellExecuteExW</code>, <code>ShellExecuteA</code>, <code>ShellExecuteExA</code>, and <code>CreateProcessW</code> to catch URL opens before they reach the OS default handler.</li>
-<li>Scans the running process list using a single-pass converging search to find the highest-priority browser that's already active.</li>
-<li>If a match is found, the link is silently rerouted to that browser. If none of your ranked browsers are running, the call falls through to normal Windows behavior.</li>
-<li>Circular routing is prevented — if you're already inside the target browser, the hook steps aside.</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<ul>
-<li><strong>Priority 1–5 Browsers</strong>: Rank up to five browsers by executable name (e.g. <code>brave.exe</code>, <code>firefox.exe</code>). The first one found running wins.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod skips Session 0 processes (system services) automatically.</li>
-<li>A thread-local guard prevents recursive hook calls during redirection.</li>
-</ul>]]></content>
-        <author>
-            <name>gauthumj</name>
-            <uri>https://github.com/gauthumj</uri>
         </author>
     </entry>
 </feed>

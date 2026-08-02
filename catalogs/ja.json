@@ -7784,6 +7784,34 @@
         "version": "1.0.0"
       }
     },
+    "mac-magnifying-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785709497000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785709497000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Jaali",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32",
+        "description": "Recreates the macOS \"Shake to Find\" feature by enlarging the cursor when rapidly moved.",
+        "github": "https://github.com/alivca",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "macOS magnifying cursor",
+        "version": "1.4.7"
+      }
+    },
     "macos-minimize-animation": {
       "details": {
         "defaultSorting": 198963,
@@ -12058,19 +12086,19 @@
           239
         ],
         "ratingUsers": 258,
-        "updated": 1783162848000,
+        "updated": 1785709462000,
         "users": 7663
       },
       "metadata": {
         "author": "Salyts",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lgdi32 -lshlwapi -lwindowscodecs -ldwmapi -lshcore -lksuser",
         "description": "Taskbar Fluent Media Player — is a Windhawk mod that integrates a modern media player with Fluent Design directly into the Windows 11 taskbar. It allows you to control music and view track information seamlessly without interrupting your workflow.",
         "github": "https://github.com/Salyts",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Fluent Media Player",
-        "version": "1.5.0"
+        "version": "1.6.0"
       }
     },
     "taskbar-folder-menus": {

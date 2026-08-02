@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-02T22:20:00.000Z</updated>
+    <updated>2026-08-02T22:24:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[macOS magnifying cursor 1.4.7]]></title>
+        <id>https://windhawk.net/mods/mac-magnifying-cursor#e0d29aa93e04e8b7c093c05c7c3d4956878cf40c</id>
+        <link href="https://windhawk.net/mods/mac-magnifying-cursor"/>
+        <updated>2026-08-02T22:24:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.</p>
+<p><img src="https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif" alt="Preview" /></p>]]></content>
+        <author>
+            <name>Jaali</name>
+            <uri>https://github.com/alivca</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.6.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-fluent-media-player#92c7152155eea8079f5a6d52dfd8013b06b27752</id>
+        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
+        <updated>2026-08-02T22:24:22.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li><p><strong>Mini Player Flyout Menu</strong> — new compact popup menu that appears above the taskbar when clicking the media player.</p></li>
+<li><p>Large centered album art</p></li>
+<li><p>Current track title and artist displayed below album art</p></li>
+<li><p>Large control buttons for Previous/Play-Pause/Next/Shuffle/Repeat</p></li>
+<li><p>Session list showing all active media sessions with thumbnails, titles, and artists</p></li>
+<li><p>Current session highlighting with animated pill indicator</p></li>
+<li><p>Click session rows to switch between apps</p></li>
+<li><p>Smooth slide-up animation from taskbar</p></li>
+<li><p>Bottom settings bar with Windhawk button</p></li>
+<li><p>Theme-aware styling with acrylic background</p></li>
+<li><p><strong>Flexible placement</strong> — menu can be positioned anywhere on the screen via Player Menu Settings: choose any corner or edge with configurable distance offsets.</p></li>
+<li><p><strong>Show session list</strong> — option to hide the media session list in the mini player menu, showing only the large controls and current track info.</p></li>
+<li><p><strong>"Auto-switch to active media session"</strong> — when enabled, the player switches to a different session that is actively Playing when the current session pauses or stops. If no other session is playing, the player stays on the current session — so pressing Pause no longer causes an unwanted session change.</p></li>
+<li><p><strong>Full-height invisible hit area</strong> for the taskbar media player — the entire taskbar height now responds to hover and click events even if the player itself is shorter than the taskbar, making it easier to interact with.</p></li>
+<li><p><strong>Monitor setting</strong> in Main Settings → Media player — choose which monitor's taskbar the player is injected into (1, 2, 3…). Defaults to 1.</p></li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><strong>Smooth hover animation</strong> — player button and all media control buttons now fade in/out on hover and press using a native <code>BrushTransition</code>. Background changes are applied directly to the template border so WinRT can interpolate them, replacing the previous instantaneous <code>DiscreteObjectAnimation</code>.</li>
+<li><strong>"Switch tracks (inverted)"</strong> option in Mouse Wheel Actions — scrolling up goes to the next track and scrolling down goes to the previous one, the inverse of the default behavior. Available for both the player area and the album art area.</li>
+<li><strong>Album art color contrast correction for the visualizer</strong> — album colors that lack sufficient contrast against the taskbar are now tinted with the theme's base color (brightened on dark theme, darkened on light theme) so the visualizer bars remain visible when using Dynamic Album or Dynamic Gradient color modes.</li>
+<li><strong>Improved hover tooltip</strong> — previously the track title and artist name each had their own separate tooltip; now a single tooltip appears over the entire player showing the track title and artist together.</li>
+<li><strong>Visualizer color caching</strong> — palette and color-string values are now cached and only recomputed when the album art or system theme changes, eliminating ~180–240 registry reads per second while the visualizer is visible.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Visualizer idle bar height 0</strong> now fully hides bars at rest — previously setting the second value of "Bar size" to 0 still showed bars at the bar-width height; bars now grow from zero when idle height is 0. <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/14">#14</a></li>
+<li><strong>Play/Pause button unreliable on some browsers</strong> (e.g. Zen/Firefox) — replaced <code>TryTogglePlayPauseAsync</code> with an explicit <code>TryPauseAsync</code> / <code>TryPlayAsync</code> based on the current playback status, eliminating the race condition that caused ~50% miss rate. <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/26">#26</a></li>
+<li><strong>Widget flickers to another player during track changes</strong> — when the active session briefly leaves the Playing state while switching tracks (e.g. Spotify), the player no longer jumps to a paused secondary session. <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/34">#34</a> <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/22">#22</a></li>
+<li><strong>Visualizer capture thread no longer blocks the taskbar UI thread</strong> on show/hide transitions — <code>StopVizCaptureThread</code> is now called from a background worker, preventing potential freezes when the audio service takes time to release the endpoint.</li>
+<li><strong>Right double-click and middle double-click actions not firing</strong> — <code>right_double_click</code> and <code>middle_double_click</code> bindings were configurable in settings but silently did nothing. All six click types (left/right/middle × single/double) for both the player area and album art now work correctly.</li>
+<li><strong>Stale album art shown after switching to a track with no artwork in Chromium-based browsers</strong> — Chrome/Edge/Brave/Opera/Vivaldi do not clear the SMTC thumbnail when the new track has no artwork, causing the previous track's cover to persist indefinitely. The player now detects this case: on every title/artist change from a browser session the previous thumbnail is marked as suspect, and if the next poll returns the same image it is discarded and the placeholder is shown instead. <a href="https://github.com/Salyts/Taskbar-Fluent-Media-Player/issues/33">#33</a></li>
+<li><strong>Removed non-functional <code>mouse_wheel_up</code> and <code>mouse_wheel_down</code> options</strong> from Mouse Wheel Actions — these options appeared in the settings UI but never triggered any action. Scroll direction is already handled per-action (e.g. <code>switch_tracks</code> scrolls forward on wheel-up and backward on wheel-down).</li>
+</ul>]]></content>
+        <author>
+            <name>Salyts</name>
+            <uri>https://github.com/Salyts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar Customizer 1.1.0]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-customizer#63c3f981eab16876679fce1c90a5bb7efd5751d6</id>
@@ -531,196 +589,6 @@ as well as the ability to configure mouse actions that close them.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Utility Customizer 1.1]]></title>
-        <id>https://windhawk.net/mods/tray-utility-customizer#c0d2cdf90c41060ac6f8f932491d0fba012ed2cb</id>
-        <link href="https://windhawk.net/mods/tray-utility-customizer"/>
-        <updated>2026-07-23T19:31:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayutilitycustomizer">Tray Utility Customizer</h1>
-<p>Granular, predictable control over the low-frequency Windows 11 system-tray
-utility icons:</p>
-<ul>
-<li><strong>Show hidden icons</strong> (the overflow chevron) — token <code>overflow</code></li>
-<li><strong>Emoji and more</strong> — token <code>emoji</code></li>
-<li><strong>Touch keyboard</strong> — token <code>touchKeyboard</code></li>
-<li><strong>Pen menu</strong> — token <code>penMenu</code></li>
-<li><strong>Virtual touchpad</strong> — token <code>virtualTouchpad</code></li>
-<li><strong>Input/language indicator</strong> — token <code>inputIndicator</code></li>
-</ul>
-<p>The native controls stay alive and Windows-owned — clicks, flyouts, and
-tooltips are untouched. The mod gathers their hosts into one owned group and
-positions each icon individually, at its native size by default.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/disabled.png" alt="Native tray before the mod" />
-<em>Mod disabled: the chevron, Emoji, and touch keyboard sit in their native positions.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/inline-overflow-emoji-touchkeyboard.png" alt="One row at the hidden-icons position" />
-<em>The default <code>overflow | emoji | touchKeyboard</code>: one row, native sizes.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/overflow-over-utility-row.png" alt="Chevron centered above a row of utilities" />
-<em><code>overflow, (emoji | touchKeyboard)</code>: the chevron centered on its own row above the pair.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/overflow-utility-stack.png" alt="Chevron above the utility stack" />
-<em>The chevron leading a stacked pair.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/utility-stack-overflow.png" alt="Utility stack above the chevron" />
-<em>The same stack with the chevron last instead.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/neat-stack.png" alt="A neat column" />
-<em>A full single column of utilities on a single-height taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/dedicated-tray-column.png" alt="A dedicated column elsewhere in the tray" />
-<em>The group leased into its own tray column at the right end of the taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/busy-tray.png" alt="On a busy double-height taskbar" />
-<em>Coexisting with a heavily modded double-height tray.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/unnecessary-but-possible.png" alt="Beside Start" />
-<em>The experimental Right of Start position — unnecessary, but possible.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/right-of-start-2x-taskmanager-height.png" alt="Right of Start, stacked on a double-height taskbar" />
-<em>Right of Start on a double-height taskbar, stacked as a column beside Start.</em></p>
-<h2 id="layoutexpression">Layout expression</h2>
-<p>One string describes the whole arrangement:</p>
-<ul>
-<li><code>|</code> places groups side by side along the <strong>primary axis</strong></li>
-<li><code>,</code> stacks items along the crossed axis</li>
-<li>parentheses nest, alternating axes</li>
-<li>every group is centered (or start/end-aligned) against its siblings</li>
-</ul>
-<p>Examples with the primary axis set to Row:</p>
-<ul>
-<li><code>overflow | emoji | touchKeyboard</code> — one row of three icons</li>
-<li><code>overflow | emoji, touchKeyboard</code> — chevron centered beside a stacked pair</li>
-<li><code>overflow | emoji, touchKeyboard | penMenu</code> — the diamond: two centered
-icons flanking a stacked middle column</li>
-</ul>
-<p>Set the primary axis to Column and the same strings arrange top-to-bottom
-instead. Icons omitted from the expression, and icons Windows currently
-hides, simply don't participate; anything visible that you didn't place is
-appended after the group so nothing is ever lost. The group re-adapts
-automatically as icons appear and disappear (for example the transient touch
-keyboard).</p>
-<p>Tokens accept forgiving aliases: <code>chevron</code>/<code>hidden</code> for <code>overflow</code>,
-<code>keyboard</code> for <code>touchKeyboard</code>, <code>pen</code> for <code>penMenu</code>, <code>touchpad</code> for
-<code>virtualTouchpad</code>, and <code>input</code>/<code>language</code> for <code>inputIndicator</code>.</p>
-<p>Icons render at their native size unless you set explicit button sizes, and
-each icon has fine X/Y nudge settings. A tall column of native-size icons can
-overhang a single-height taskbar; set the icon width/height to about 16 px if
-you want it to fit.</p>
-<h2 id="position">Position</h2>
-<p>The group can sit in the hidden-icons or Emoji column, or lease a dedicated
-tray column before the notification icons, before Wi-Fi/volume/battery,
-before or after the clock, or after the Show Desktop strip. The lease is
-marker-tracked and fully reversible on unload.</p>
-<p>Two <strong>experimental</strong> positions relocate the group out of the tray entirely:
-<strong>Left of Start</strong> and <strong>Right of Start</strong> place it beside the Start button and
-push the task list right to reserve room. The group follows Start as the
-taskbar re-centers. Primary taskbar only.</p>
-<h2 id="detection">Detection</h2>
-<p>Icons are identified by Windows' language-neutral runtime data-model classes,
-XAML names and content types, Automation IDs, and stable Segoe Fluent glyphs.
-Detection doesn't depend on translated accessibility labels. <strong>Force
-MainStack</strong> allows the complete native <code>MainStack</code> to participate as the
-<code>emoji</code> item when Windows doesn't expose a distinct identity.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The utility flyouts (the Emoji panel, the hidden-icons overflow) are
-positioned by Windows itself from the icon's location; at extreme
-screen-edge positions they can open partially off-screen. Prefer the
-tray positions if this bothers you.</li>
-<li>Left/Right of Start are experimental. The centered taskbar re-flows with
-an animation, and the group can briefly sit at a stale position until
-the taskbar's next layout pass settles it.</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Folder Menus 0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-folder-menus#70800f8cdf50ac6f5a85ec0655f03db98eaa2bf5</id>
-        <link href="https://windhawk.net/mods/taskbar-folder-menus"/>
-        <updated>2026-07-23T19:27:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarfoldermenus">Taskbar Folder Menus</h1>
-<p>A Windows 11-only mod that adds compact taskbar buttons which open Shell targets
-as native popup menus, recreating the most useful part of the classic taskbar
-toolbar workflow. Windows 10 is not supported.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/desktop-controlpanel.png" alt="Two folder buttons in the system tray" />
-<em>A minimal two-button setup for Desktop and Control Panel.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/tooltip-shows-destination.png" alt="Folder button destination tooltip" />
-<em>Hovering a compact button shows its configured Shell target.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel.png" alt="Four folder buttons on a standard taskbar" />
-<em>Drive, GitHub, Desktop, and Control Panel shortcuts arranged in a grid.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel-v.png" alt="Four folder buttons on a taller taskbar" />
-<em>The same four shortcuts arranged vertically by the grid layout on a taller taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/controlpanel-menu-open.png" alt="Control Panel opened as a native Shell menu" />
-<em>The Control Panel namespace opens directly as a native Shell menu with full icons.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/whole-drive-on-taskbar.png" alt="Whole drive opened from a taskbar folder button" />
-<em>A drive-root button opens the whole drive as a native cascading Shell menu.</em></p>
-<p>Click a small button to browse a folder, drive, Desktop, or Control Panel
-directly from the taskbar — no minimizing required. Subfolders expand on
-hover. Right-click any item for the full classic Windows Shell context menu.
-Every folder popup includes an "Open in Explorer" shortcut at the top,
-including the configured root folder.</p>
-<h2 id="examplefolderentries">Example folder entries</h2>
-<pre><code class="text language-text">Label: 🖥    Target: shell:Desktop
-Label: ⚙     Target: shell:ControlPanelFolder
-Label: 📥    Target: %USERPROFILE%\Downloads
-Label: C:    Target: C:  
-</code></pre>
-<p>Add one record per button in the Folders setting. Each record has a short button
-label and a target. Targets can be normal paths or Shell namespace roots like
-<code>shell:Desktop</code> and <code>shell:ControlPanelFolder</code>. Environment variables such as
-<code>%USERPROFILE%</code> are expanded automatically. The full label and target appear in
-the tooltip.</p>
-<p>Emoji labels are a natural fit for narrow buttons. Label ideas: 📁 folder,
-🖥 desktop, 💻 laptop, 🪟 windows, 📥 downloads, 🌐 network, 🗄 drive,
-📄 documents, 🔧 tools, ⚙ settings, ⭐ favorites.</p>
-<h2 id="reorderingfolderbuttons">Reordering folder buttons</h2>
-<p>For several existing records, open the mod's Settings page and switch to
-<strong>Textual mode</strong>, then move each complete <code>label</code> + <code>target</code> record as a block.
-The regular form currently provides add/remove controls but no direct
-drag-to-reorder control.</p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Position | Before notification icons | Where to inject the button group in the tray |
-| Folders | Desktop and Control Panel | Add/remove records in the form; reorder complete records in Textual mode |
-| Grid mode | Smart automatic | Smart automatic, single row/column, fixed rows/columns, or fixed grid |
-| Smart layout | Balanced | Balanced, pack vertical, or pack horizontal in smart mode |
-| Grid columns | 0 (auto) | Exact columns in fixed-column modes; maximum columns in smart mode (0 = automatic) |
-| Grid rows | 0 (auto) | Exact rows in fixed-row modes; maximum rows in smart mode (0 = tray height) |
-| Fill order | Row-first | Row-first or column-first |
-| Short row/column position | Last | Put an incomplete row or column first or last |
-| Short row/column alignment | Start | Align an incomplete final row or column |
-| Button width | 24 px | Width of each folder button |
-| Button height | 22 px | Height of each folder button |
-| Button spacing | 4 px | Gap between buttons |
-| Default button text | 📁 | Fallback icon for entries with long labels |
-| Text/icon size | 10 pt | Button label font size |
-| Text color | <em>(system)</em> | Button label color; empty keeps the system default |
-| Background color | <em>(system)</em> | Button background; empty keeps the system default |
-| Hover background color | <code>accent</code> | Hover background; empty keeps the native hover color |
-| Click background color | <em>(system)</em> | Pressed background; empty keeps the native pressed color |
-| Border color | <em>(system)</em> | Button border; empty keeps the system default |
-| Border thickness | -1 (system) | -1 = system default, 0 = no border |
-| Corner rounding | -1 (system) | -1 = system default, 0 = square |
-| Opacity | 100% | Button transparency |
-| Shine effect | Off | Gradient highlight; activates when a custom background color is set |
-| Group padding left | 0 px | Extra space to the left of the button group |
-| Group padding right | 0 px | Extra space to the right of the button group |
-| Group X offset | 0 px | Shift the entire group left or right |
-| Group Y offset | 0 px | Shift the entire group up or down |
-| Max menu items | 0 (unlimited) | Limit items shown per folder |
-| Subfolder depth | 0 (unlimited) | How many subfolder levels to include |
-| Show hidden/system items | Off | Include hidden and system Shell items |</p>
-<p>All color settings accept <code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is
-honored), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
-Windows accent shades, or <code>transparent</code> for a fully transparent surface —
-nothing drawn, button still present and clickable, useful for borderless
-background-free buttons. Leaving a color empty keeps the system default for
-that state.</p>
-<h2 id="noteonshelldesktop">Note on shell:Desktop</h2>
-<p><code>shell:Desktop</code> shows the full Desktop Shell namespace — user shortcuts, public
-shortcuts, and virtual items like Recycle Bin — not just the physical Desktop
-folder. Duplicates from the user+public Desktop merge are suppressed automatically.</p>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>
