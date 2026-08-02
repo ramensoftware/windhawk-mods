@@ -244,7 +244,7 @@ struct alignas(8) SharedAnimState {
     volatile LONG altTabStartTick;
     volatile LONG altTabGeneration;
 };
-static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_V4";
+static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_V5";
 HANDLE g_hMapFile = NULL;
 SharedAnimState* g_pSharedState = nullptr;
 bool g_sharedStateWritable = false;
@@ -262,9 +262,41 @@ std::atomic<bool> g_switchAnimation{true};
 std::atomic<int> g_switchDurationMs{200};
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_altTabThreadRunning{false};
-std::atomic<int>  g_workerCount{0};
+std::mutex g_WorkerThreadsMutex;
+std::vector<HANDLE> g_WorkerThreads;
 template <typename T> static T Clamp(T value, T min, T max) {
     return value < min ? min : (value > max ? max : value);
+}
+static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, void* param) {
+    std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
+    if (g_unloading.load(std::memory_order_relaxed)) return false;
+    for (size_t i = g_WorkerThreads.size(); i-- > 0;) {
+        if (WaitForSingleObject(g_WorkerThreads[i], 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_WorkerThreads[i]);
+            g_WorkerThreads.erase(g_WorkerThreads.begin() + i);
+        }
+    }
+    try {
+        g_WorkerThreads.reserve(g_WorkerThreads.size() + 1);
+    } catch (const std::exception&) {
+        return false;
+    }
+    HANDLE hThread = CreateThread(NULL, 0, proc, param, 0, NULL);
+    if (!hThread) return false;
+    g_WorkerThreads.push_back(hThread);
+    return true;
+}
+static void JoinWorkerThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
+        threads.swap(g_WorkerThreads);
+    }
+    for (size_t i = 0; i < threads.size(); i += MAXIMUM_WAIT_OBJECTS) {
+        const DWORD count = (DWORD)std::min<size_t>(MAXIMUM_WAIT_OBJECTS, threads.size() - i);
+        WaitForMultipleObjects(count, threads.data() + i, TRUE, INFINITE);
+    }
+    for (HANDLE h : threads) CloseHandle(h);
 }
 static LONG HwndToShared(HWND hWnd) {
     return (LONG)(LONG_PTR)hWnd;
@@ -565,10 +597,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     UiaTask* t = (UiaTask*)lpParam;
     struct UiaCleanupGuard {
         UiaTask* task;
-        ~UiaCleanupGuard() {
-            delete task;
-            g_workerCount.fetch_sub(1, std::memory_order_release);
-        }
+        ~UiaCleanupGuard() { delete task; }
     } guard{ t };
     if (g_unloading.load(std::memory_order_relaxed)) {
         return 0;
@@ -579,20 +608,12 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     bool coInit = (hr == S_OK || hr == S_FALSE);
     if (hr == S_OK || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
-        IUIAutomation* pAutomation = nullptr;
-        HRESULT hrUia = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
-        if (FAILED(hrUia)) {
-            hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
-        }
+        IUIAutomation2* pAutomation = nullptr;
+        HRESULT hrUia = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER,
+                                         __uuidof(IUIAutomation2), (void**)&pAutomation);
         if (SUCCEEDED(hrUia) && pAutomation) {
-#ifdef __IUIAutomation2_INTERFACE_DEFINED__
-            IUIAutomation2* pAutomation2 = nullptr;
-            if (SUCCEEDED(pAutomation->QueryInterface(__uuidof(IUIAutomation2), (void**)&pAutomation2)) && pAutomation2) {
-                pAutomation2->put_ConnectionTimeout(1000);
-                pAutomation2->put_TransactionTimeout(2000);
-                pAutomation2->Release();
-            }
-#endif
+            pAutomation->put_ConnectionTimeout(1000);
+            pAutomation->put_TransactionTimeout(2000);
             HWND hTray = FindTaskbarForMonitor(t->hMon);
             if (hTray) {
                 IUIAutomationElement* pTrayElement = nullptr;
@@ -688,20 +709,7 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
     
     UiaTask* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX};
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    if (g_unloading.load(std::memory_order_relaxed)) {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
-        delete task;
-        return fallbackX;
-    }
-    
-    HANDLE hThread = CreateThread(NULL, 0, UiaWorkerThread, task, 0, NULL);
-    if (hThread) {
-        CloseHandle(hThread);
-    } else {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
-        delete task;
-    }
+    if (!StartWorkerThread(UiaWorkerThread, task)) delete task;
     return fallbackX;
 }
 DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
@@ -709,7 +717,7 @@ DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
     HWND stableForeground = GetForegroundWindow();
 
     while (g_altTabThreadRunning.load(std::memory_order_relaxed) && !g_unloading.load(std::memory_order_relaxed)) {
-        const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;  // covers both Alt keys
+        const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
         const bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
 
         if (!altTabSession) {
@@ -746,7 +754,6 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
             }
             std::lock_guard<std::mutex> lock(g_StateMutex);
             g_AnimActive.erase(h);
-            g_workerCount.fetch_sub(1, std::memory_order_release);
         }
     } guard{ hWnd };
 
@@ -850,21 +857,8 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND
 
     SetWindowCloak(hWnd, TRUE);
     auto* data = new SwitchAnimData{hWnd, g_switchDurationMs.load(std::memory_order_relaxed)};
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    if (g_unloading.load(std::memory_order_relaxed)) {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
+    if (!StartWorkerThread(SwitchingAnimThread, data)) {
         SetWindowCloak(hWnd, FALSE);
-        delete data;
-        std::lock_guard<std::mutex> lock(g_StateMutex);
-        g_AnimActive.erase(hWnd);
-        return;
-    }
-    HANDLE hThread = CreateThread(NULL, 0, SwitchingAnimThread, data, 0, NULL);
-    if (hThread) {
-        CloseHandle(hThread);
-    } else {
-        SetWindowCloak(hWnd, FALSE);
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         delete data;
         std::lock_guard<std::mutex> lock(g_StateMutex);
         g_AnimActive.erase(hWnd);
@@ -1308,7 +1302,6 @@ public:
         
         { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(data->hRealWnd); }
         delete data;
-        g_workerCount.fetch_sub(1, std::memory_order_release);
     }
 };
 
@@ -1368,9 +1361,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         return false;
     }
     
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     if (g_unloading.load(std::memory_order_relaxed)) {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
         else {
             bool owned;
@@ -1417,7 +1408,6 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden); else UpdateDwmTransitions(hWnd, TRUE);
         if (data->hBitmap) DeleteObject(data->hBitmap); delete data;
         { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd); }
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         return false;
     }
     const bool forceOpaque = ShouldUseBitBlt(hWnd, isClosing);
@@ -1508,14 +1498,11 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         }
     }
     bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
-    HANDLE hThread = CreateThread(NULL, 0, MainAnimThread, data, 0, NULL);
-    if (hThread) {
-        CloseHandle(hThread);
+    if (StartWorkerThread(MainAnimThread, data)) {
         if (hFirstShown) { if (waitForFirstFrame) WaitForSingleObject(hFirstShown, 200); CloseHandle(hFirstShown); }
         if (isClosing) SetWindowCloak(hWnd, TRUE);
         return true;
     }
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     if (rising) UndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak); else UpdateDwmTransitions(hWnd, TRUE);
     if (hFirstShown) CloseHandle(hFirstShown); if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
     DeleteObject(data->hBitmap); delete data;
@@ -1589,10 +1576,8 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
 }
 static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle) {
     auto* ld = new LaunchAnimData{hWnd, originalExStyle};
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    HANDLE h = CreateThread(NULL, 0, LaunchAnimThread, ld, 0, NULL);
-    if (h) CloseHandle(h); else {
-        g_workerCount.fetch_sub(1, std::memory_order_release); delete ld;
+    if (!StartWorkerThread(LaunchAnimThread, ld)) {
+        delete ld;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         if (!(originalExStyle & WS_EX_LAYERED)) {
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
@@ -1795,10 +1780,10 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
             }
             UpdateDwmTransitions(hWnd, TRUE);
         }
-        g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
+        return 0;
     }
     StartAnimation(hWnd, TRUE, originalExStyle);
-    g_workerCount.fetch_sub(1, std::memory_order_release); return 0;
+    return 0;
 }
 
 static BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM lParam) {
@@ -1880,9 +1865,7 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
     StopSwitchThreads();
-    while (g_workerCount.load(std::memory_order_acquire) > 0) {
-        Sleep(10);
-    }
+    JoinWorkerThreads();
 }
 void Wh_ModUninit() {
     std::vector<HWND> stuck;
