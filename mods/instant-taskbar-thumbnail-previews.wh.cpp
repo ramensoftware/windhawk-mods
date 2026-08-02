@@ -2,7 +2,7 @@
 // @id              instant-taskbar-thumbnail-previews
 // @name            Instant Taskbar Thumbnail Previews
 // @description     Controls taskbar thumbnail preview show and close behavior.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
@@ -18,7 +18,11 @@
 Adds the ability to configure or remove the delays before Windows 11 shows and closes taskbar thumbnail previews,
 as well as the ability to configure mouse actions that close them.
 
-Both delay settings replace the corresponding Windows value, so they can make the transitions either shorter or longer than the stock delays.
+The hover and close delay settings replace the corresponding Windows value, so they can make the transitions either shorter or longer than the stock delays.
+
+Version 1.1 changes the default "Thumbnail close delay" from 1 to 200 milliseconds. Set it to 1 to retain effectively immediate closing when the pointer leaves the thumbnail area.
+
+"Delay after thumbnail removal" keeps the remaining thumbnail previews open after a thumbnail is removed, whether it was closed from the preview or externally, giving the pointer time to reach another preview before the flyout closes.
 
 The optional outside-click behavior arms the taskbar's native light-dismiss action while a thumbnail flyout is open.
 
@@ -34,9 +38,12 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 - delayMs: 1
   $name: Thumbnail hover delay
   $description: Exact delay in milliseconds. The minimum value is 1, which is effectively immediate.
-- closeDelayMs: 1
+- closeDelayMs: 200
   $name: Thumbnail close delay
   $description: Exact delay after the pointer leaves the thumbnail area. The minimum value is 1, which is effectively immediate.
+- thumbnailRemovalDelayMs: 500
+  $name: Delay after thumbnail removal
+  $description: Exact delay before the remaining thumbnail previews close after a thumbnail is removed, including when its window closes outside the preview. The minimum value is 1, which is effectively immediate.
 - closeOnOutsideClick: false
   $name: Close on outside click
   $description: Immediately close open thumbnail previews when clicking outside the taskbar and thumbnail surface.
@@ -55,17 +62,23 @@ This mod targets the new Windows 11 taskbar used by Windows 11 24H2 and later.
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.h>
 
-#define MINIMUM_DELAY_MS 1
-#define TIME_SPAN_TICKS_PER_MILLISECOND 10000LL
-
 namespace {
+
+constexpr int MINIMUM_DELAY_MS = 1;
+constexpr UINT32 MINIMUM_THUMBNAIL_COUNT_BEFORE_RETAINING_FLYOUT = 2;
+constexpr LONGLONG TIME_SPAN_TICKS_PER_MILLISECOND = 10000LL;
+
+// Allow deferred layout and pointer events while rejecting later pointer exits
+constexpr ULONGLONG THUMBNAIL_REMOVAL_CORRELATION_WINDOW_MS = 150;
 
 std::atomic<LONGLONG> g_hoverDelayTimeSpan{
     MINIMUM_DELAY_MS * TIME_SPAN_TICKS_PER_MILLISECOND};
 std::atomic<UINT> g_closeDelayMilliseconds{MINIMUM_DELAY_MS};
+std::atomic<UINT> g_thumbnailRemovalDelayMilliseconds{MINIMUM_DELAY_MS};
 std::atomic<bool> g_closeOnOutsideClick{false};
 std::atomic<bool> g_closeOnStartButtonHover{false};
 std::atomic<bool> g_taskbarHooksQueued{false};
@@ -74,7 +87,22 @@ std::atomic<bool> g_initialized{false};
 std::atomic<bool> g_windowsLightDismissTrackingReliable{true};
 SRWLOCK g_windowsLightDismissTaskbarHostsLock = SRWLOCK_INIT;
 std::unordered_set<void*> g_windowsLightDismissTaskbarHosts;
-thread_local bool g_inDismissTransition = false;
+enum class DismissDelaySource {
+    none,
+    pointerExit,
+    thumbnailRemoval,
+};
+
+struct ThumbnailRemovalTrackingState {
+    void* activeFlyoutModel;
+    void* activeThumbnailItemsCollection;
+    void* removalFlyoutModel;
+    ULONGLONG removalTick;
+};
+
+thread_local DismissDelaySource g_dismissDelaySource =
+    DismissDelaySource::none;
+thread_local ThumbnailRemovalTrackingState g_thumbnailRemovalTrackingState = {};
 thread_local HWND g_activeTaskbarWindow = nullptr;
 thread_local bool g_previewLightDismissArmed = false;
 thread_local HWND g_previewLightDismissTaskbarWindow = nullptr;
@@ -82,6 +110,11 @@ thread_local UINT_PTR g_previewLightDismissRearmTimer = 0;
 thread_local void* g_activeHoverFlyoutController = nullptr;
 thread_local void* g_pointerOverFlyoutFrameModel = nullptr;
 thread_local void* g_lastUnregisteredTaskbarHost = nullptr;
+
+void ClearThumbnailRemovalTag() {
+    g_thumbnailRemovalTrackingState.removalFlyoutModel = nullptr;
+    g_thumbnailRemovalTrackingState.removalTick = 0;
+}
 
 void* CTaskBand_ITaskListWndSite_Vftable;
 void* CSecondaryTaskBand_ITaskListWndSite_Vftable;
@@ -415,6 +448,16 @@ void WINAPI SetIsPointerOverFlyoutFrame_Hook(
 }
 
 void WINAPI HoverFlyoutModelDestructor_Hook(void* object) {
+    if (g_thumbnailRemovalTrackingState.removalFlyoutModel == object) {
+        ClearThumbnailRemovalTag();
+    }
+
+    if (g_thumbnailRemovalTrackingState.activeFlyoutModel == object) {
+        g_thumbnailRemovalTrackingState.activeFlyoutModel = nullptr;
+        g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection =
+            nullptr;
+    }
+
     if (g_pointerOverFlyoutFrameModel == object) {
         g_pointerOverFlyoutFrameModel = nullptr;
     }
@@ -545,11 +588,7 @@ void CommitActiveHoverFlyoutImmediately() {
         return;
     }
 
-    CancelPreviewLightDismissRearm();
-    DisarmPreviewLightDismiss();
-    g_activeHoverFlyoutController = nullptr;
-    g_activeTaskbarWindow = nullptr;
-    g_pointerOverFlyoutFrameModel = nullptr;
+    ClearActiveHoverFlyoutController(hoverFlyoutController);
     CommitDismissFlyout_Original(hoverFlyoutController);
 }
 
@@ -700,6 +739,103 @@ void WINAPI ExperienceToggleButtonOnPointerEntered_Hook(
     }
 }
 
+using HoverUIItemsCollectionSetTargetItem_t =
+    void(WINAPI*)(void* object, const void* targetItem);
+HoverUIItemsCollectionSetTargetItem_t
+    HoverUIItemsCollectionSetTargetItem_Original;
+
+using HoverUIItemsCollectionDestructor_t = void(WINAPI*)(void* object);
+HoverUIItemsCollectionDestructor_t HoverUIItemsCollectionDestructor_Original;
+
+void TrackActiveThumbnailItemsCollection(void* object) {
+    if (!g_thumbnailRemovalTrackingState.activeFlyoutModel) {
+        return;
+    }
+
+    // SetTargetItem runs for the collection owned by the visible flyout
+    g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection = object;
+}
+
+void WINAPI HoverUIItemsCollectionSetTargetItem_Hook(
+    void* object,
+    const void* targetItem) {
+    TrackActiveThumbnailItemsCollection(object);
+    HoverUIItemsCollectionSetTargetItem_Original(object, targetItem);
+}
+
+void WINAPI HoverUIItemsCollectionDestructor_Hook(void* object) {
+    if (g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection ==
+        object) {
+        if (g_thumbnailRemovalTrackingState.removalFlyoutModel ==
+            g_thumbnailRemovalTrackingState.activeFlyoutModel) {
+            ClearThumbnailRemovalTag();
+        }
+
+        g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection =
+            nullptr;
+    }
+
+    HoverUIItemsCollectionDestructor_Original(object);
+}
+
+bool ThumbnailRemovalLeavesPreviewItems(void* object) noexcept {
+    try {
+        winrt::Windows::Foundation::IUnknown unknown{nullptr};
+        winrt::copy_from_abi(unknown, object);
+
+        winrt::Windows::Foundation::Collections::IVector<
+            winrt::Windows::Foundation::IInspectable>
+            items = unknown.try_as<
+                winrt::Windows::Foundation::Collections::IVector<
+                    winrt::Windows::Foundation::IInspectable>>();
+        return !items ||
+               items.Size() >=
+                   MINIMUM_THUMBNAIL_COUNT_BEFORE_RETAINING_FLYOUT;
+    } catch (...) {
+        return true;
+    }
+}
+
+using HoverUIItemsCollectionOnSourceArrayChanged_t =
+    void(WINAPI*)(void* object,
+                  const void* sender,
+                  const winrt::Windows::Foundation::Collections::
+                      IVectorChangedEventArgs& eventArguments);
+HoverUIItemsCollectionOnSourceArrayChanged_t
+    HoverUIItemsCollectionOnSourceArrayChanged_Original;
+
+void WINAPI HoverUIItemsCollectionOnSourceArrayChanged_Hook(
+    void* object,
+    const void* sender,
+    const winrt::Windows::Foundation::Collections::
+        IVectorChangedEventArgs& eventArguments) {
+    try {
+        winrt::Windows::Foundation::Collections::CollectionChange
+            collectionChange = eventArguments.CollectionChange();
+        if (collectionChange ==
+                winrt::Windows::Foundation::Collections::
+                    CollectionChange::ItemRemoved &&
+            object ==
+                g_thumbnailRemovalTrackingState
+                    .activeThumbnailItemsCollection &&
+            g_thumbnailRemovalTrackingState.activeFlyoutModel) {
+            ClearThumbnailRemovalTag();
+
+            if (ThumbnailRemovalLeavesPreviewItems(object)) {
+                g_thumbnailRemovalTrackingState.removalFlyoutModel =
+                    g_thumbnailRemovalTrackingState.activeFlyoutModel;
+                g_thumbnailRemovalTrackingState.removalTick =
+                    GetTickCount64();
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Failed to inspect a thumbnail collection change");
+    }
+
+    HoverUIItemsCollectionOnSourceArrayChanged_Original(
+        object, sender, eventArguments);
+}
+
 // This is std::chrono::duration<__int64, std::ratio<1, 10000000>> by value.
 using TransitionToFlyoutVisiblePendingState_t =
     void(WINAPI*)(void* object, void* targetItemKey, LONGLONG delayTimeSpan);
@@ -710,6 +846,15 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
     void* object,
     void* targetItemKey,
     LONGLONG delayTimeSpan) {
+    // A new hover target supersedes an unconsumed removal transition
+    ClearThumbnailRemovalTag();
+
+    if (g_thumbnailRemovalTrackingState.activeFlyoutModel != object) {
+        g_thumbnailRemovalTrackingState.activeThumbnailItemsCollection =
+            nullptr;
+    }
+    g_thumbnailRemovalTrackingState.activeFlyoutModel = object;
+
     LONGLONG configuredDelayTimeSpan =
         g_hoverDelayTimeSpan.load(std::memory_order_relaxed);
     LONGLONG appliedDelayTimeSpan =
@@ -722,23 +867,23 @@ void WINAPI TransitionToFlyoutVisiblePendingState_Hook(
         object, targetItemKey, appliedDelayTimeSpan);
 }
 
-// Limits the MouseHoverTime override to the preview dismissal transition
+// Limits the MouseHoverTime override to the active preview dismissal source
 class DismissTransitionScope {
    public:
-    DismissTransitionScope() noexcept
-        : previousState_(g_inDismissTransition) {
-        g_inDismissTransition = true;
+    explicit DismissTransitionScope(DismissDelaySource source) noexcept
+        : previousSource_(g_dismissDelaySource) {
+        g_dismissDelaySource = source;
     }
 
     DismissTransitionScope(const DismissTransitionScope&) = delete;
     DismissTransitionScope& operator=(const DismissTransitionScope&) = delete;
 
     ~DismissTransitionScope() noexcept {
-        g_inDismissTransition = previousState_;
+        g_dismissDelaySource = previousSource_;
     }
 
    private:
-    bool previousState_;
+    DismissDelaySource previousSource_;
 };
 
 using TransitionToFlyoutDismissPendingState_t = void(WINAPI*)(void* object);
@@ -746,7 +891,24 @@ TransitionToFlyoutDismissPendingState_t
     TransitionToFlyoutDismissPendingState_Original;
 
 void WINAPI TransitionToFlyoutDismissPendingState_Hook(void* object) {
-    DismissTransitionScope dismissTransitionScope;
+    ULONGLONG thumbnailRemovalTick = 0;
+    if (g_thumbnailRemovalTrackingState.removalFlyoutModel == object) {
+        thumbnailRemovalTick =
+            g_thumbnailRemovalTrackingState.removalTick;
+        ClearThumbnailRemovalTag();
+    }
+
+    DismissDelaySource source = DismissDelaySource::pointerExit;
+    if (thumbnailRemovalTick) {
+        ULONGLONG elapsedMilliseconds =
+            GetTickCount64() - thumbnailRemovalTick;
+        if (elapsedMilliseconds <=
+            THUMBNAIL_REMOVAL_CORRELATION_WINDOW_MS) {
+            source = DismissDelaySource::thumbnailRemoval;
+        }
+    }
+
+    DismissTransitionScope dismissTransitionScope(source);
     TransitionToFlyoutDismissPendingState_Original(object);
 }
 
@@ -755,15 +917,30 @@ MouseHoverTime_t MouseHoverTime_Original;
 
 UINT WINAPI MouseHoverTime_Hook(void* object) {
     UINT systemDelayMilliseconds = MouseHoverTime_Original(object);
-    if (!g_inDismissTransition) {
-        return systemDelayMilliseconds;
+    UINT configuredDelayMilliseconds = 0;
+    const WCHAR* transitionName = nullptr;
+    switch (g_dismissDelaySource) {
+        case DismissDelaySource::none:
+            return systemDelayMilliseconds;
+
+        case DismissDelaySource::pointerExit:
+            configuredDelayMilliseconds =
+                g_closeDelayMilliseconds.load(std::memory_order_relaxed);
+            transitionName = L"Pointer-exit close";
+            break;
+
+        case DismissDelaySource::thumbnailRemoval:
+            configuredDelayMilliseconds =
+                g_thumbnailRemovalDelayMilliseconds.load(
+                    std::memory_order_relaxed);
+            transitionName = L"Thumbnail-removal close";
+            break;
     }
 
-    UINT configuredDelayMilliseconds =
-        g_closeDelayMilliseconds.load(std::memory_order_relaxed);
-
-    Wh_Log(L"Close transition: %u -> %u ms",
-           systemDelayMilliseconds, configuredDelayMilliseconds);
+    Wh_Log(L"%s transition: %u -> %u ms",
+           transitionName,
+           systemDelayMilliseconds,
+           configuredDelayMilliseconds);
 
     return configuredDelayMilliseconds;
 }
@@ -779,12 +956,21 @@ void LoadSettings() {
         closeDelayMilliseconds = MINIMUM_DELAY_MS;
     }
 
+    int thumbnailRemovalDelayMilliseconds =
+        Wh_GetIntSetting(L"thumbnailRemovalDelayMs");
+    if (thumbnailRemovalDelayMilliseconds < MINIMUM_DELAY_MS) {
+        thumbnailRemovalDelayMilliseconds = MINIMUM_DELAY_MS;
+    }
+
     LONGLONG delayTimeSpan =
         static_cast<LONGLONG>(delayMilliseconds) *
         TIME_SPAN_TICKS_PER_MILLISECOND;
     g_hoverDelayTimeSpan.store(delayTimeSpan, std::memory_order_relaxed);
     g_closeDelayMilliseconds.store(
         static_cast<UINT>(closeDelayMilliseconds),
+        std::memory_order_relaxed);
+    g_thumbnailRemovalDelayMilliseconds.store(
+        static_cast<UINT>(thumbnailRemovalDelayMilliseconds),
         std::memory_order_relaxed);
     g_closeOnOutsideClick.store(
         Wh_GetIntSetting(L"closeOnOutsideClick") != 0,
@@ -794,9 +980,11 @@ void LoadSettings() {
         std::memory_order_relaxed);
 
     Wh_Log(L"Settings: delayMs=%d closeDelayMs=%d "
+           L"thumbnailRemovalDelayMs=%d "
            L"closeOnOutsideClick=%d closeOnStartButtonHover=%d",
            delayMilliseconds,
            closeDelayMilliseconds,
+           thumbnailRemovalDelayMilliseconds,
            g_closeOnOutsideClick.load(std::memory_order_relaxed),
            g_closeOnStartButtonHover.load(std::memory_order_relaxed));
 }
@@ -948,6 +1136,30 @@ bool HookTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: void __cdecl winrt::Taskbar::implementation::HoverUIItemsCollection::SetTargetItem(struct winrt::WindowsUdk::UI::Shell::TaskItem const &))",
+            },
+            &HoverUIItemsCollectionSetTargetItem_Original,
+            HoverUIItemsCollectionSetTargetItem_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual __cdecl winrt::Taskbar::implementation::HoverUIItemsCollection::~HoverUIItemsCollection(void))",
+            },
+            &HoverUIItemsCollectionDestructor_Original,
+            HoverUIItemsCollectionDestructor_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: void __cdecl winrt::Taskbar::implementation::HoverUIItemsCollection::OnSourceArrayChanged(struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail> const &,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const &))",
+            },
+            &HoverUIItemsCollectionOnSourceArrayChanged_Original,
+            HoverUIItemsCollectionOnSourceArrayChanged_Hook,
+            true,
+        },
+        {
+            {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::CommitDismissFlyout(void))",
             },
             &CommitDismissFlyout_Original,
@@ -1024,6 +1236,11 @@ bool HookTaskbarViewSymbols(HMODULE module) {
         !MouseHoverTime_Original) {
         Wh_Log(L"Thumbnail close-delay symbols aren't available; instant "
                L"close is disabled on this build");
+    }
+
+    if (!HoverUIItemsCollectionSetTargetItem_Original ||
+        !HoverUIItemsCollectionOnSourceArrayChanged_Original) {
+        Wh_Log(L"Thumbnail-removal delay isn't available on this build");
     }
 
     if (closeOnOutsideClick &&
@@ -1204,6 +1421,7 @@ void WINAPI DisableOutsideClickTaskbarThreadState(void*) {
 
 void WINAPI CleanupTaskbarThreadState(void*) {
     DisableOutsideClickTaskbarThreadState(nullptr);
+    g_thumbnailRemovalTrackingState = {};
     g_activeHoverFlyoutController = nullptr;
     g_activeTaskbarWindow = nullptr;
 }
