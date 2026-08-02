@@ -447,14 +447,17 @@ BOOL Wh_ModInit()
             return FALSE;
         }
 
-        WindhawkUtils::SYMBOL_HOOK hook = {
-            { L"private: void __cdecl CDimmedWindow::OnPaint(struct HDC__ *)" },
-            &g_originalOnPaint,
-            CDimmedWindow_OnPaintHook,
-            false
+        // themeui.dll
+        WindhawkUtils::SYMBOL_HOOK themeUiDllHooks[] = {
+            {
+                { L"private: void __cdecl CDimmedWindow::OnPaint(struct HDC__ *)" },
+                &g_originalOnPaint,
+                CDimmedWindow_OnPaintHook,
+                false
+            }
         };
 
-        if (!WindhawkUtils::HookSymbols(themeUi.get(), &hook, 1)) {
+        if (!WindhawkUtils::HookSymbols(themeUi.get(), themeUiDllHooks, ARRAYSIZE(themeUiDllHooks))) {
             Wh_Log(L"CDimmedWindow::OnPaint was not resolved on this Windows build; disabling the mod safely");
             return FALSE;
         }
