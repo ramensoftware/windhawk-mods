@@ -6,7 +6,7 @@
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
-// @compilerOptions -lntdll -lshell32
+// @compilerOptions -lntdll
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -27,8 +27,6 @@ a session takes effect after the next sign-in or Explorer restart.
 
 #include <ntdef.h>
 #include <ntstatus.h>
-#include <shlobj.h>
-#include <strsafe.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -111,46 +109,6 @@ NtClose_t NtClose_orig;
 
 SRWLOCK g_virtualKeyHandlesLock = SRWLOCK_INIT;
 std::unordered_set<HANDLE> g_virtualKeyHandles;
-wchar_t g_debugLogPath[MAX_PATH];
-
-// Temporary diagnostics. Revert the dedicated debug commit before submission.
-void InitializeDebugLog() {
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr,
-                                SHGFP_TYPE_CURRENT, g_debugLogPath)) ||
-        FAILED(StringCchCatW(g_debugLogPath, ARRAYSIZE(g_debugLogPath),
-                             L"\\startup-app-delay-fix-hook.log"))) {
-        g_debugLogPath[0] = L'\0';
-    }
-}
-
-void LogDebugEvent(const char* eventName, NTSTATUS status = STATUS_SUCCESS,
-                   LONG detail = 0) {
-    if (!g_debugLogPath[0]) {
-        return;
-    }
-
-    HANDLE file = CreateFileW(g_debugLogPath, FILE_APPEND_DATA,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return;
-    }
-
-    SYSTEMTIME time;
-    GetLocalTime(&time);
-    char line[192];
-    int length = sprintf_s(
-        line, sizeof(line),
-        "%04u-%02u-%02u %02u:%02u:%02u.%03u  %s  status=0x%08lX detail=%ld\r\n",
-        time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
-        time.wSecond, time.wMilliseconds, eventName,
-        static_cast<unsigned long>(status), detail);
-    if (length > 0) {
-        DWORD written;
-        WriteFile(file, line, static_cast<DWORD>(length), &written, nullptr);
-    }
-    CloseHandle(file);
-}
 
 bool IsVirtualKey(HANDLE key) {
     AcquireSRWLockShared(&g_virtualKeyHandlesLock);
@@ -265,8 +223,6 @@ NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
         }
         *keyHandle = duplicate;
         RememberVirtualKey(duplicate);
-        LogDebugEvent("Substituted missing Serialize key", STATUS_SUCCESS,
-                      useNtOpenKeyEx);
         return STATUS_SUCCESS;
     } else {
         return STATUS_OBJECT_NAME_NOT_FOUND;
@@ -288,8 +244,6 @@ NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                                            &parentAttributes);
     if (status == STATUS_SUCCESS) {
         RememberVirtualKey(*keyHandle);
-        LogDebugEvent("Substituted missing Serialize key", status,
-                      useNtOpenKeyEx);
     }
     return status;
 }
@@ -460,15 +414,11 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
                                   keyValueInformation, length, resultLength);
     if (status == STATUS_SUCCESS) {
         Wh_Log(L"Reporting WaitforIdleState=0");
-        LogDebugEvent("Reported WaitforIdleState=0", status,
-                      keyValueInformationClass);
     }
     return status;
 }
 
 BOOL Wh_ModInit() {
-    InitializeDebugLog();
-    LogDebugEvent("Wh_ModInit");
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto ntQueryValueKey = reinterpret_cast<NtQueryValueKey_t>(
         GetProcAddress(ntdll, "NtQueryValueKey"));
