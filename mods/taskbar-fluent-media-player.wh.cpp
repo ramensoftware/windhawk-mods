@@ -1903,11 +1903,14 @@ static void SpawnTrackedWorker(F&& fn) {
 }
 
 static void WaitForTrackedWorkers() {
+    static constexpr DWORD kTimeoutMs = 2000;
+    DWORD deadline = GetTickCount() + kTimeoutMs;
     HWND hTaskbar = g_taskbarWnd;
     DWORD tid = GetCurrentThreadId();
     bool isUiThread = hTaskbar && (GetWindowThreadProcessId(hTaskbar, nullptr) == tid);
     if (isUiThread) {
-        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0) {
+        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0 &&
+               GetTickCount() < deadline) {
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE | PM_QS_SENDMESSAGE)) {
                 TranslateMessage(&msg);
@@ -1916,7 +1919,8 @@ static void WaitForTrackedWorkers() {
             Sleep(10);
         }
     } else {
-        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0) {
+        while (g_activeWorkerThreads.load(std::memory_order_relaxed) > 0 &&
+               GetTickCount() < deadline) {
             Sleep(10);
         }
     }
@@ -1942,14 +1946,14 @@ static void ShowSuccessNotification() {
     if (!g_settings.showSuccessNotification) {
         return;
     }
-    SpawnTrackedWorker([]() {
+    std::thread([]() {
         MessageBoxW(
             nullptr,
             L"Media player successfully loaded and ready to use",
             L"Taskbar Fluent Media Player",
             MB_ICONINFORMATION | MB_OK | MB_TOPMOST | MB_SETFOREGROUND
         );
-    });
+    }).detach();
 }
 
 [[clang::no_destroy]] static FrameworkElement g_trackedElement = nullptr;
@@ -3174,10 +3178,14 @@ static void ExecuteMediaAction(const std::wstring& action, FrameworkElement cons
                 title = g_media.title;
             }
             {
-                std::lock_guard<std::mutex> lk(g_sessionMtx);
-                if (g_currentSession) {
+                GlobalSystemMediaTransportControlsSession sessionCopy{nullptr};
+                {
+                    std::lock_guard<std::mutex> lk(g_sessionMtx);
+                    sessionCopy = g_currentSession;
+                }
+                if (sessionCopy) {
                     try {
-                        appAumid = std::wstring(g_currentSession.SourceAppUserModelId());
+                        appAumid = std::wstring(sessionCopy.SourceAppUserModelId());
                     } catch (...) {}
                 }
             }
@@ -3636,16 +3644,14 @@ static void FetchMediaPropertiesAsync() {
             {
                 std::lock_guard<std::mutex> lk(g_sessionMtx);
                 session = g_currentSession;
-                if (session) {
-                    try {
-                        aumid = std::wstring(session.SourceAppUserModelId());
-                    } catch (...) {
-                        winrt::uninit_apartment();
-                        return;
-                    }
-                }
             }
             if (!session) {
+                winrt::uninit_apartment();
+                return;
+            }
+            try {
+                aumid = std::wstring(session.SourceAppUserModelId());
+            } catch (...) {
                 winrt::uninit_apartment();
                 return;
             }
@@ -4131,7 +4137,12 @@ static void ScrollTimerTick(winrt::Windows::Foundation::IInspectable const&,
                             winrt::Windows::Foundation::IInspectable const&) {
     if (g_unloading || g_applyingSettings) return;
     bool needsScroll = (g_titleScroll.active || g_artistScroll.active);
-    if (!needsScroll) return;
+    if (!needsScroll) {
+        if (g_scrollDispatcherTimer) {
+            try { g_scrollDispatcherTimer.Stop(); } catch (...) {}
+        }
+        return;
+    }
     int stepPx = std::max(1, g_settings.scrollSpeed);
     int pauseMs = g_settings.scrollPauseDuration;
     TickScrollState(g_titleScroll, stepPx, pauseMs, g_settings.scrollMode);
@@ -4388,6 +4399,7 @@ static std::atomic<bool> g_vizCurrentlyVisible{false};
 [[clang::no_destroy]] static std::optional<std::thread> g_CaptureThread;
 static HANDLE g_hCaptureEvent = nullptr;
 static std::atomic<bool> g_VizDeviceChanged{false};
+static std::mutex g_captureThreadMtx;
 class VizEndpointNotificationClient : public IMMNotificationClient {
 public:
     virtual ~VizEndpointNotificationClient() = default;
@@ -4704,6 +4716,7 @@ static void VizCaptureThreadProc() {
     CoUninitialize();
 }
 static void StartVizCaptureThread() {
+    std::lock_guard<std::mutex> lk(g_captureThreadMtx);
     if (g_CaptureRunning.load())
         return;
     if (g_CaptureThread && g_CaptureThread->joinable())
@@ -4718,6 +4731,7 @@ static void StopVizCaptureThread() {
     g_CaptureRunning.store(false);
     if (g_hCaptureEvent)
         SetEvent(g_hCaptureEvent);
+    std::lock_guard<std::mutex> lk(g_captureThreadMtx);
     if (g_CaptureThread) {
         if (g_CaptureThread->joinable())
             g_CaptureThread->join();
@@ -4870,7 +4884,6 @@ static void VizApplyFrame() {
     } else {
         if (g_vizBaseColorDirty) {
             g_cachedVizBaseColor = ParseColorWithThemeSupport(g_settings.vizColor, 255);
-            g_vizBaseColorDirty = false;
         }
         baseCol = g_cachedVizBaseColor;
     }
@@ -4881,8 +4894,7 @@ static void VizApplyFrame() {
         g_cachedVizCg1    = ParseColorWithSpecialValues(g_settings.vizColor2, 255);
         g_cachedVizAcrCol = ParseColorWithThemeSupport(g_settings.vizColor, 255);
         g_vizPaletteColorsDirty = false;
-        if (g_settings.vizColorMode != VizColorMode::DynamicAlbum)
-            g_vizBaseColorDirty = false;
+        g_vizBaseColorDirty = false;
     }
     const auto& pal0   = g_cachedVizPal0;
     const auto& pal1   = g_cachedVizPal1;
@@ -5918,9 +5930,13 @@ static void RefreshMiniPlayerFlyoutUI() {
     }
     std::wstring currentId;
     {
-        std::lock_guard<std::mutex> lk(g_sessionMtx);
-        if (g_currentSession) {
-            try { currentId = std::wstring(g_currentSession.SourceAppUserModelId()); } catch (...) {}
+        GlobalSystemMediaTransportControlsSession sessionCopy{nullptr};
+        {
+            std::lock_guard<std::mutex> lk(g_sessionMtx);
+            sessionCopy = g_currentSession;
+        }
+        if (sessionCopy) {
+            try { currentId = std::wstring(sessionCopy.SourceAppUserModelId()); } catch (...) {}
         }
     }
     
@@ -7826,16 +7842,20 @@ static Grid BuildPlayerGrid() {
                     } else if (action == L"switch_sessions") {
                         if (delta != 0) SwitchMediaSession();
                     } else if (action == L"system_sound") {
-                        ChangeSystemVolume(delta > 0);
+                        SpawnTrackedWorker([delta]() { ChangeSystemVolume(delta > 0); });
                     } else if (action == L"app_sound") {
                         SpawnTrackedWorker([delta]() {
                             winrt::init_apartment(winrt::apartment_type::multi_threaded);
                             std::wstring aumid;
                             {
-                                std::lock_guard<std::mutex> lk(g_sessionMtx);
-                                if (g_currentSession) {
+                                GlobalSystemMediaTransportControlsSession sessionCopy{nullptr};
+                                {
+                                    std::lock_guard<std::mutex> lk(g_sessionMtx);
+                                    sessionCopy = g_currentSession;
+                                }
+                                if (sessionCopy) {
                                     try {
-                                        aumid = std::wstring(g_currentSession.SourceAppUserModelId());
+                                        aumid = std::wstring(sessionCopy.SourceAppUserModelId());
                                     } catch (...) {}
                                 }
                             }
@@ -8369,16 +8389,20 @@ static Grid BuildPlayerGrid() {
             } else if (action == L"switch_sessions") {
                 if (delta != 0) SwitchMediaSession();
             } else if (action == L"system_sound") {
-                ChangeSystemVolume(delta > 0);
+                SpawnTrackedWorker([delta]() { ChangeSystemVolume(delta > 0); });
             } else if (action == L"app_sound") {
                 SpawnTrackedWorker([delta]() {
                     winrt::init_apartment(winrt::apartment_type::multi_threaded);
                     std::wstring aumid;
                     {
-                        std::lock_guard<std::mutex> lk(g_sessionMtx);
-                        if (g_currentSession) {
+                        GlobalSystemMediaTransportControlsSession sessionCopy{nullptr};
+                        {
+                            std::lock_guard<std::mutex> lk(g_sessionMtx);
+                            sessionCopy = g_currentSession;
+                        }
+                        if (sessionCopy) {
                             try {
-                                aumid = std::wstring(g_currentSession.SourceAppUserModelId());
+                                aumid = std::wstring(sessionCopy.SourceAppUserModelId());
                             } catch (...) {}
                         }
                     }
@@ -9316,6 +9340,12 @@ static void RefreshPlayerContents() {
                     }
                 }
             } catch (...) {}
+    if ((g_titleScroll.active || g_artistScroll.active) &&
+        (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling)) {
+        if (g_scrollDispatcherTimer && !g_scrollDispatcherTimer.IsEnabled()) {
+            try { g_scrollDispatcherTimer.Start(); } catch (...) {}
+        }
+    }
     try {
         if (auto stackFe = FindChildByName(g_playerGrid, kTextStackName)) {
             bool anyTextVisible = titleVisible || artistVisible;
@@ -9788,19 +9818,8 @@ static void RefreshPlayerContents() {
             if (auto img = fe.try_as<Controls::Image>()) {
                 bool sizeChanged = (g_cachedAppIconSize != g_settings.appIconSize);
                 if (sizeChanged && !appIconBytes.empty()) {
-                    std::wstring aumid;
-                    {
-                        std::lock_guard<std::mutex> lk(g_mediaMtx);
-                        aumid = g_media.appUserModelId;
-                    }
-                    if (!aumid.empty()) {
-                        appIconBytes = FetchAppIconBytes(aumid, g_settings.appIconSize);
-                        {
-                            std::lock_guard<std::mutex> lk(g_mediaMtx);
-                            g_media.appIconBytes = appIconBytes;
-                        }
-                    }
                     g_cachedAppIconSize = g_settings.appIconSize;
+                    FetchMediaPropertiesAsync();
                 }
                 if (!appIconBytes.empty()) {
                     try {
@@ -10007,6 +10026,11 @@ static void UpdateVisibility() {
                 StopVizTimer();
                 SpawnTrackedWorker([]() { StopVizCaptureThread(); });
             }
+        }
+        
+        if (g_settings.enableTitleScrolling || g_settings.enableArtistScrolling) {
+            if (hide) StopScrollTimer();
+            else      StartScrollTimer();
         }
     } catch (...) {}
 }
