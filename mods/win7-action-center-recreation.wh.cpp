@@ -8,7 +8,7 @@
 // @include        explorer.exe
 // @include        control.exe
 // @architecture   x86-64
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -loleaut32 -ladvapi32 -lshlwapi -lpropsys
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lwscapi -ldwmapi -lole32 -ladvapi32 -lshlwapi -lpropsys
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -39,7 +39,7 @@ Windows 8.1 theme
   - The disk health check is **best-effort**: it queries SMART predicted-failure status per drive and, because the mod runs unelevated inside `explorer.exe`, some drives may not answer — in that case the check is simply skipped and never reports a false problem.
   - The battery check fires only on laptops running on battery power and warns when the charge drops to 20 % or below.
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
-- **Startup Notification**: On every Windows session start, the mod waits a short while (about 12 seconds, so the notification area is ready) and then, if problems are detected, shows a balloon notification regardless of cooldown, so you are never left unaware of existing issues after a reboot.
+- **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
 - **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian are currently supported.
 - **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
@@ -139,7 +139,10 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 #include <strsafe.h>
 #include <shlwapi.h>
 #include <winioctl.h>
-#include <wbemidl.h>
+// Note: wbemidl.h was previously needed for the BitLocker WMI query, but the
+// implementation now uses SHCreateItemFromParsingName + IShellItem2::GetProperty
+// (no WMI symbols are referenced anywhere). The include was removed so the
+// build does not pull in IWbem* types that are never used.
 #include <string>
 #include <propsys.h>
 #include <propkey.h>
@@ -585,8 +588,6 @@ public:
     }
     bool valid() const { return m_hdc != NULL && m_hbm != NULL && m_old != NULL; }
     HDC get() const { return m_hdc; }
-    operator HDC() const { return m_hdc; }
-    HBITMAP getBitmap() const { return m_hbm; }
     MemDcGuard(const MemDcGuard&) = delete;
     MemDcGuard& operator=(const MemDcGuard&) = delete;
 };
@@ -1213,11 +1214,11 @@ static const LocalePack g_Locales[] = {
         L"Kopia zapasowa systemu nie jest skonfigurowana lub nie jest uruchomiona.",
         L"Us\u0142uga Raportowanie b\u0142\u0119d\u00F3w systemu Windows jest wy\u0142\u0105czona.",
         L"Zalecane sprawdzenie stanu dysku.",
-        L"Otw\u00F3rz Centrum akcji, aby przejrze\u017C i rozwi\u0105za\u0107 problemy.",
+        L"Otw\u00F3rz Centrum akcji, aby przejrze\u0107 i rozwi\u0105za\u0107 problemy.",
         L"Sprawd\u017A stan systemu",
         L"Poziom baterii jest niski. Pod\u0142\u0105cz urz\u0105dzenie do \u017Ar\u00F3d\u0142a zasilania.",
         L"Aktualizacje systemu Windows oczekuj\u0105. Uruchom ponownie komputer, aby je zastosowa\u0107.",
-        L"Pod pulpit zdalny jest w\u0142\u0105czony bez uwierzytelniania na poziomie sieci.",
+        L"Pulpit zdalny jest w\u0142\u0105czony bez uwierzytelniania na poziomie sieci.",
         L"Dysk systemowy nie jest chroniony przez funkcj\u0119 BitLocker.",
         L"Kliknij, aby zobaczy\u0107 nowo\u015Bci.",
         L"Wykryto nowy problem krytyczny. Kliknij, aby sprawdzi\u0107 teraz.",
@@ -1225,23 +1226,23 @@ static const LocalePack g_Locales[] = {
     }},
     // Rumeno (0x0418) - COMPLETO
     { 0x0418, {
-        L"Centru de ac\u021B\u021Biune",
-        L"Deschide\u021Bi Centrul de ac\u021B\u021Biune",
-        L"Centru de ac\u021B\u021Biune",
+        L"Centru de ac\u021Biune",
+        L"Deschide\u021Bi Centrul de ac\u021Biune",
+        L"Centru de ac\u021Biune",
         L"Depanare",
         L"Windows Update",
         L"2 mesaje importante",
         L"1 mesaj important",
-        L"Nu au fost detectate probleme curente.\nPute\u021Bi utiliza Centrul de ac\u021B\u021Biune pentru a examina mesajele recente despre starea computerului dvs. \u0219i pentru a g\u0103si solu\u021Bii la probleme.",
-        L"Centru de ac\u021B\u021Biune",
-        L"Centru de ac\u021B\u021Biune",
-        L"Centru de ac\u021B\u021Biune",
+        L"Nu au fost detectate probleme curente.\nPute\u021Bi utiliza Centrul de ac\u021Biune pentru a examina mesajele recente despre starea computerului dvs. \u0219i pentru a g\u0103si solu\u021Bii la probleme.",
+        L"Centru de ac\u021Biune",
+        L"Centru de ac\u021Biune",
+        L"Centru de ac\u021Biune",
         L"Paravanul de protec\u021Bie Windows este dezactivat.",
         L"Protec\u021Bia antivirus este dezactivat\u0103.",
         L"Windows Update nu este configurat.",
         L"Controlul conturilor de utilizator este dezactivat.",
-        L"Face\u021Bi clic pentru a deschide Centrul de ac\u021B\u021Biune.",
-        L"Centrul de ac\u021B\u021Biune a detectat probleme noi.",
+        L"Face\u021Bi clic pentru a deschide Centrul de ac\u021Biune.",
+        L"Centrul de ac\u021Biune a detectat probleme noi.",
         L"Windows Update nu este setat s\u0103 se actualizeze automat.",
         L"Protec\u021Bia anti-spyware este dezactivat\u0103.",
         L"Set\u0103rile de securitate pentru internet necesit\u0103 aten\u021Bie.",
@@ -1255,10 +1256,10 @@ static const LocalePack g_Locales[] = {
         L"Copierea de rezerv\u0103 a sistemului nu este configurat\u0103 sau nu ruleaz\u0103.",
         L"Serviciul Raportare erori Windows este dezactivat.",
         L"Se recomand\u0103 verificarea st\u0103rii discului.",
-        L"Deschide\u021Bi Centrul de ac\u021B\u021Biune pentru a verifica \u0219i remedia problemele.",
+        L"Deschide\u021Bi Centrul de ac\u021Biune pentru a verifica \u0219i remedia problemele.",
         L"Verifica\u021Bi starea sistemului",
         L"Bateria este sc\u0103zut\u0103. Conecta\u021Bi dispozitivul la o surs\u0103 de alimentare.",
-        L"A actualiz\u0103rilor Windows \u00EEn a\u0219teptare. Reporni\u021Bi computerul pentru a le aplica.",
+        L"Actualiz\u0103ri Windows \u00EEn a\u0219teptare. Reporni\u021Bi computerul pentru a le aplica.",
         L"Desktopul la distan\u021B\u0103 este activat f\u0103r\u0103 autentificare la nivel de re\u021Bea.",
         L"Unitatea de sistem nu este protejat\u0103 de BitLocker.",
         L"Face\u021Bi clic pentru a vedea nout\u0103\u021Bile.",
@@ -1579,9 +1580,6 @@ static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
 static HHOOK g_hKeyboardHook = NULL;
-// Window that owned the foreground before the flyout stole activation; restored
-// on hide so focus doesn't get lost (issue #4 in the code review).
-static HWND g_hWndPrevForeground = NULL;
 static BOOL g_Initialized = FALSE;
 // TRUE for the very first RefreshSecurityState() call after mod startup.
 // Forces a balloon notification even if the cooldown has not elapsed yet,
@@ -2168,7 +2166,11 @@ static BOOL IsProblemTypeAlreadyDetected(int type) {
     return FALSE;
 }
 static BOOL IsProblemTypeCritical(int type) {
-    return (type == PROB_FIREWALL || type == PROB_AUTOUPDATE || type == PROB_ANTIVIRUS);
+    // Single source of truth for "critical" problems. RDP-without-NLA is
+    // counted as critical too (it was previously the only check that bumped
+    // criticalCount manually, which could desync from this table).
+    return (type == PROB_FIREWALL || type == PROB_AUTOUPDATE ||
+            type == PROB_ANTIVIRUS || type == PROB_RDP_NLA);
 }
 static BOOL AddProblem(int type, int* idx, int* criticalCount) {
     if (*idx >= MAX_PROBLEMS) return FALSE;
@@ -2541,11 +2543,14 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
         dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKeyWinstations, L"UserAuthentication", NULL, NULL,
                              (LPBYTE)&dwNla, &dwSize) == ERROR_SUCCESS && dwNla == 0) {
+            // RDP without NLA is a direct network attack surface. Critical
+            // counting is handled by AddProblem() via IsProblemTypeCritical(),
+            // which now lists PROB_RDP_NLA alongside firewall/autoupdate/
+            // antivirus (review issue #4 round 2). Don't bump the counter
+            // manually: doing so used to desync from the rest of the
+            // "important" list when AddProblem returned FALSE because the
+            // array was full (*idx >= MAX_PROBLEMS).
             AddProblem(PROB_RDP_NLA, idx, criticalCount);
-            // RDP without NLA is a direct network attack surface: bump the
-            // critical count even though AddProblem already counts it once
-            // for the well-known types (firewall/autoupdate/antivirus).
-            (*criticalCount)++;
         }
     }
 }
@@ -2925,6 +2930,13 @@ void RefreshSecurityState() {
 // we need a forward declaration to use it from CheckStartupNotification().
 static DWORD ComputeProblemBalloonSignature(
     int secState, int activeProblems, const int* problemTypes);
+
+// Bound on the number of times we re-arm STARTUP_NOTIFY_TIMER_ID while
+// waiting for the tray icon to appear. RunTrayIconRecoveryAttempt() itself
+// gives up after 40 retries; 40 here would mean ~2 minutes of waiting, which
+// is already a worst case. Pick the same number so the two bounded loops
+// stay in sync and the startup notification can't outlive recovery.
+#define STARTUP_NOTIFY_MAX_ATTEMPTS  40
 void CheckStartupNotification() {
     if (!g_isStartupCheck || g_Ctx.isUninitializing) return;
 
@@ -2944,13 +2956,28 @@ void CheckStartupNotification() {
     // ms to settle. If AddTrayIcon() failed (still in ScheduleTrayIconRecovery)
     // and the icon is not yet present, ShowProblemBalloon() returns without
     // doing anything and the user never sees the startup notification.
-    // Re-arm the timer for 3 s and try again instead of burning the flag.
+    // Re-arm the timer for 3 s and try again, but only up to
+    // STARTUP_NOTIFY_MAX_ATTEMPTS times; after that, clear g_isStartupCheck
+    // so we stop spinning on a condition that the recovery loop has also
+    // given up on (review issue #3 round 2).
+    static int s_startupNotifyAttempts = 0;
     if (!g_Ctx.trayIconAdded) {
+        if (s_startupNotifyAttempts >= STARTUP_NOTIFY_MAX_ATTEMPTS) {
+            // Recovery has effectively given up; don't loop the timer on
+            // an icon that will never be added this session.
+            g_isStartupCheck = FALSE;
+            s_startupNotifyAttempts = 0;
+            return;
+        }
+        ++s_startupNotifyAttempts;
         if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler)) {
             SetTimer(g_Ctx.hWndMsgHandler, STARTUP_NOTIFY_TIMER_ID, 3000, NULL);
         }
         return;
     }
+    // Icon is up: the bound no longer applies; reset the counter so a
+    // future session (e.g. explorer restart) starts fresh.
+    s_startupNotifyAttempts = 0;
 
     g_isStartupCheck = FALSE;
 
@@ -2995,12 +3022,10 @@ static DWORD ComputeProblemBalloonSignature(
 }
 
 // A problem counts as "critical" for balloon-wording purposes if it's one of
-// the well-known high-impact categories (matches the weighting AddProblem/
-// CheckSecurityProviders already use for firewall/autoupdate/antivirus, plus
-// the new RDP-without-NLA check).
+// the well-known high-impact categories. Thin wrapper around IsProblemTypeCritical()
+// so the two definitions cannot drift apart (review issue #4 round 2).
 static BOOL IsCriticalProblemType(int problemType) {
-    return problemType == PROB_FIREWALL || problemType == PROB_AUTOUPDATE ||
-           problemType == PROB_ANTIVIRUS || problemType == PROB_RDP_NLA;
+    return IsProblemTypeCritical(problemType);
 }
 
 static void BuildProblemBalloonText(
@@ -3829,9 +3854,11 @@ void ToggleFlyout() {
             return;
         }
         // Was auto-hidden: re-show without recreating.
-        // Capture the previous foreground window BEFORE we activate the flyout
-        // (review issue #4). HideFlyout() will restore it on close.
-        g_hWndPrevForeground = GetForegroundWindow();
+        // (review issue #4): no longer captures the previous foreground
+        // window. The flyout dismisses on WA_INACTIVE (see WM_ACTIVATE handler)
+        // and lets Windows pick the next foreground window, instead of
+        // restoring a captured handle that almost always points at the
+        // taskbar (because clicking the notification area activates it).
         CheckSecurityProviders();
         PositionWindowNearTray(g_Ctx.hWndFlyout);
         // Actually activate the flyout, like the network flyout recreation's
@@ -3850,8 +3877,6 @@ void ToggleFlyout() {
         InstallKeyboardHook();
         return;
     }
-    // Capture previous foreground before the new flyout steals activation.
-    g_hWndPrevForeground = GetForegroundWindow();
     CreateFlyoutWindow();
     if (g_Ctx.hWndFlyout) {
         CheckSecurityProviders();
@@ -3970,30 +3995,21 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
 // Flyout Window
 // ============================================================================
 // HideFlyout: every code path that hides the flyout (click-outside, Escape,
-// Return/Space, footer/problem-link click, autohide timer, WM_CLOSE) must go
-// through this function. It performs the two operations the original code
-// silently skipped: tear down both low-level hooks and restore the previous
-// foreground window so the user doesn't end up with the taskbar focused.
-// All "ShowWindow(SW_HIDE)" sites have been replaced by HideFlyout() calls
-// (review issue #1 / #4).
+// Return/Space, footer/problem-link click, autohide timer, WM_ACTIVATE
+// WA_INACTIVE, WM_CLOSE) must go through this function. Its only job is to
+// tear down both low-level hooks so they don't survive the flyout and leak
+// into the next one. We deliberately do NOT restore any previous foreground
+// window: the captured HWND almost always points at Shell_TrayWnd (because
+// clicking the notification area activates it), so a manual restore would
+// steal focus from the app the user just switched to. The standard Aero
+// pattern (and the one used by the Windows 7 network flyout recreation mod)
+// is to dismiss on WA_INACTIVE and let Windows pick the next foreground
+// window (review issue #1).
 void HideFlyout(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     RemoveClickOutsideHook();
     RemoveKeyboardHook();
     ShowWindow(hwnd, SW_HIDE);
-
-    // Restore the foreground window the user had before opening the flyout
-    // (review issue #4). The previous window may have been closed in the
-    // meantime, so re-validate it. Only call SetForegroundWindow when the
-    // shell still has no foreground of its own to avoid stealing focus from
-    // a window that became active after we showed.
-    HWND prev = g_hWndPrevForeground;
-    g_hWndPrevForeground = NULL;
-    if (prev && IsWindow(prev)) {
-        // Give the shell a moment to settle; without this the restore can
-        // race with the activation of the window that just stole focus.
-        SetForegroundWindow(prev);
-    }
 }
 
 void CloseFlyout(HWND hwnd) {
@@ -4004,19 +4020,6 @@ void CloseFlyout(HWND hwnd) {
     AnimateWindow(hwnd, 150, AW_HIDE);
     // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
-
-    // Restore the foreground window the user had before opening the flyout
-    // (review issue #4). The previous window may have been closed in the
-    // meantime, so re-validate it. Only restore if no other window has since
-    // become the foreground (otherwise we'd steal focus).
-    HWND prev = g_hWndPrevForeground;
-    g_hWndPrevForeground = NULL;
-    if (prev && IsWindow(prev)) {
-        HWND cur = GetForegroundWindow();
-        if (cur == hwnd || cur == NULL) {
-            SetForegroundWindow(prev);
-        }
-    }
 }
 
 LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -4070,8 +4073,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == AUTOHIDE_TIMER_ID) {
             // Inactivity timeout: hide instead of destroy (keeps window ready).
-            // Route through HideFlyout so both hooks are torn down and the
-            // previous foreground window is restored (review issue #1 / #4).
+            // Route through HideFlyout so both hooks are torn down
+            // (review issue #1).
             HideFlyout(hwnd);
             return 0;
         }
@@ -4087,23 +4090,28 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_SAFE_CLOSE: CloseFlyout(hwnd); return 0;
     case WM_CLOSE:
         // Come network flyout: nascondi invece di distruggere.
-        // Funnel through HideFlyout so hooks are released and the previous
-        // foreground window is restored (review issue #1 / #4).
+        // Funnel through HideFlyout so hooks are released (review issue #1).
         HideFlyout(hwnd);
         return 0;
     case WM_ACTIVATE:
-        // Do NOT hide the flyout on deactivation.
-        // Hovering the tray icon / taskbar can steal activation and was
-        // causing rare spontaneous closes. Closing is handled by:
-        //  - click-outside mouse hook
-        //  - inactivity autohide timer (120s)
-        //  - Escape / explicit close
+        // Hide the flyout on deactivation. This is the standard Aero flyout
+        // pattern (matches the Windows 7 network flyout recreation mod): the
+        // user clicks the tray icon, the flyout activates, and as soon as
+        // focus moves to another window the flyout closes itself, leaving
+        // Windows to choose the next foreground window. We do NOT capture
+        // and restore the previous foreground window ourselves: the captured
+        // HWND almost always points at Shell_TrayWnd (because clicking the
+        // notification area activates it), so a manual restore would push
+        // focus back at the taskbar and steal it from the app the user
+        // actually switched to (review issue #1).
         if (LOWORD(wParam) == WA_INACTIVE) {
-            // Soft delay only as a safety net if the mouse hook fails; do not
-            // force-hide immediately (that was the hover-close bug).
-            KillTimer(hwnd, AUTOHIDE_TIMER_ID);
-            SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
+            HideFlyout(hwnd);
         } else {
+            // Re-arming the autohide timer here is harmless now that WA_INACTIVE
+            // closes the flyout directly, but it keeps the timer valid for the
+            // case where someone sets WA_ACTIVE again on the same window
+            // (e.g. tooltip-style behaviour) and matches the previous reset on
+            // mouse move.
             KillTimer(hwnd, AUTOHIDE_TIMER_ID);
             SetTimer(hwnd, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         }
@@ -4114,6 +4122,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         if (wParam == VK_RETURN || wParam == VK_SPACE) {
+            // Open Action Center; the ShellExecute call returns immediately
+            // (the new process keeps launching asynchronously), so the flyout
+            // is hidden right after to let the Control Panel page take focus.
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
             HideFlyout(hwnd);
             return 0;
@@ -4133,7 +4144,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 OpenProblemAction(g_ProblemTypesDisplay[i]);
 
                 // Close flyout (funnel through HideFlyout to also drop
-                // the low-level hooks and restore the previous foreground).
+                // the low-level hooks).
                 HideFlyout(hwnd);
                 return 0;
             }
@@ -4141,7 +4152,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 
         // "You can use Action Center..." text is intentionally non-clickable.
 
-        // Check click on footer link (existing)
+        // Check click on footer link (existing). Same note as WM_KEYDOWN
+        // above: ShellExecuteW is async, so we hide the flyout right after
+        // and let the Control Panel page own the focus.
         if (PtInRect(&g_rcFooterLink, pt)) {
             ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ActionCenter", NULL, SW_SHOWNORMAL);
             HideFlyout(hwnd);
@@ -4263,7 +4276,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             flagFallback = g_hFlyoutIconWarning;
         }
 
-                // Tutti e tre i PNG sono 32x32 e usano la stessa pipeline GDI+ HQ.
+        // Tutti e tre i PNG sono 32x32 e usano la stessa pipeline GDI+ HQ.
         int flagSize = ScaleDpi(32);
         int flagY = (hdrH - flagSize) / 2;
         if (!DrawGdipBitmapHighQuality(hdcMem, flagBitmap,
@@ -4343,9 +4356,19 @@ if (activeProblems > 0) {
             totalText = (activeProblems == 1) ? L"totaalbericht" : L"totaalberichten";
             break;
         case 0x0415: // Polski
-            // Flessione polacca: 1 = "wiadomość", 2-4 (escl. 12-14) = "wiadomości", resto = "wiadomości"
-            if (activeProblems == 1) totalText = L"\u0142\u0105cznie wiadomo\u015B\u0107";
-            else totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
+            // Flessione polacca: 1 -> "wiadomość" (singolare);
+            // 2-4 (escludendo 12-14) -> "wiadomości" (pochana formas);
+            // tutto il resto -> "wiadomości" (dopełniacz liczby mnogiej).
+            // Con MAX_PROBLEMS=8 il caso 12-14 non si applica mai, ma la
+            // struttura resta formalmente corretta se il limite dovesse
+            // salire in futuro.
+            if (activeProblems == 1) {
+                totalText = L"\u0142\u0105cznie wiadomo\u015B\u0107";
+            } else if (activeProblems >= 2 && activeProblems <= 4) {
+                totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
+            } else {
+                totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
+            }
             break;
         case 0x0418: // Română
             totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
@@ -4418,27 +4441,22 @@ if (activeProblems > 0) {
             int lineH = ScaleDpi(22);
             int maxWidth = msgTextR - msgL;
             int rowHeights[MAX_DISPLAY_PROBLEMS] = {0};
-            int rowContentW[MAX_DISPLAY_PROBLEMS] = {0};
-            
-            // Prima passata: calcola quante righe servono per ogni problema
-            // e la larghezza effettiva del testo (per il box di hover).
+
+            // Prima passata: calcola quante righe servono per ogni problema.
             for (int i = 0; i < displayCount; i++) {
                 const wchar_t* msgText = GetProblemText(problemTypesCopy[i]);
                 if (!msgText || !msgText[0]) continue;
-                
+
                 SIZE textSize;
                 SelectObject(hdcMem, g_hFontNormal);
                 GetTextExtentExPointW(hdcMem, msgText, lstrlenW(msgText), maxWidth, NULL, NULL, &textSize);
-                
+
                 int neededRows = 1;
                 if (textSize.cx > maxWidth && maxWidth > 0) {
                     neededRows = (textSize.cx + maxWidth - 1) / maxWidth;
                     if (neededRows > 3) neededRows = 3;
                 }
                 rowHeights[i] = neededRows * lineH + ScaleDpi(4);
-                // Se va a capo, la riga piu' lunga occupa comunque ~tutta
-                // maxWidth; altrimenti usa la larghezza reale del testo.
-                rowContentW[i] = (neededRows > 1) ? maxWidth : (textSize.cx < maxWidth ? textSize.cx : maxWidth);
             }
             
             // Spaziatura 8% tra un problema e l'altro (in aggiunta al padding interno di ScaleDpi(4))
@@ -5287,7 +5305,7 @@ static const LangPack g_langPacks[] = {
     // Dutch (primary lang 0x13)
     {0x13, L"Als het probleem niet in de lijst staat, probeer dan een van deze methoden:", L"Probleemoplossing", L"Zoek naar en los problemen met uw computer op.", L"Herstel", L"Werk uw pc bij zonder uw bestanden te verliezen, of stel deze opnieuw in en begin opnieuw."},
     // Polish (primary lang 0x15)
-    {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017Cu problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
+    {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017C problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
     // Romanian (primary lang 0x18)
     {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."}
 };
