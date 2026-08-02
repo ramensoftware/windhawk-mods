@@ -447,7 +447,6 @@ BOOL Wh_ModInit()
             return FALSE;
         }
 
-        // themeui.dll
         WindhawkUtils::SYMBOL_HOOK themeUiDllHooks[] = {
             {
                 { L"private: void __cdecl CDimmedWindow::OnPaint(struct HDC__ *)" },
