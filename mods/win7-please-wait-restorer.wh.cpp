@@ -1,13 +1,13 @@
 // ==WindhawkMod==
-// @id              win7-please-wait-restorer
-// @name            Windows 7/8.1 "Please Wait" Restorer
-// @description     This mod replaces the theme-switch overlay with the classic "Please wait" box from Windows 7/8.1
-// @version         1.0.0
-// @author          babamohammed
-// @github          https://github.com/babamohammed2022
-// @include         rundll32.exe
-// @include         explorer.exe
-// @include         SystemSettings.exe
+// @id           win7-please-wait-restorer
+// @name         Windows 7/8.1 "Please Wait" Restorer
+// @description  This mod replaces the theme-switch overlay with the classic "Please wait" box from Windows 7/8.1.
+// @version      1.0.0
+// @author       babamohammed 
+// @github       https://github.com/babamohammed2022
+// @include      rundll32.exe
+// @include      explorer.exe
+// @include      SystemSettings.exe
 // @compilerOptions -lgdi32 -lshcore
 // ==/WindhawkMod==
 
@@ -15,9 +15,7 @@
 /*
 # Windows 7/8.1 "Please Wait" Restorer
 
-
 ## About
-
 
 This mod shows the small classic "Please wait" box from Windows 7/8.1 while the
 system changes the theme, instead of the modern full-screen overlay. The
@@ -60,62 +58,63 @@ For specific setups (such as unsupported language), it is recommended to apply t
 */
 // ==/WindhawkModSettings==
 
-
 #include <windows.h>
 #include <shellscalingapi.h>
 #include <windhawk_utils.h>
 #include <algorithm>
 #include <atomic>
-
+#include <mutex>
 
 #ifdef _WIN64
 #define THISCALL _cdecl
-#define STHISCALL L"__cdecl"
+#define STHICALL L"__cdecl"
 #else
 #define THISCALL __thiscall
-#define STHISCALL L"__thiscall"
+#define STHICALL L"__thiscall"
 #endif
 
 class CDimmedWindow;
 using CDimmedWindow_OnPaint_t = void(THISCALL*)(CDimmedWindow*, HDC);
 static CDimmedWindow_OnPaint_t g_originalOnPaint = nullptr;
 
-// This plain flag has no destructor, so no code runs during DLL/process
-// teardown.
 static std::atomic<bool> g_themeUiHandled = false;
+static std::mutex g_settingsMutex;
 
 struct Settings {
-    int desaturationPercent;
-    int boxSizePercent;
-    int fontSizePercent;
+    std::atomic<int> desaturationPercent;
+    std::atomic<int> boxSizePercent;
+    std::atomic<int> fontSizePercent;
     wchar_t customText[256];
+    std::atomic<bool> customTextValid;
 };
 
-static Settings g_settings = { 20, 105, 115, L"" };
+static Settings g_settings = { 20, 105, 115, L"", false };
 
 static void LoadSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
     constexpr int kDefaultDesaturationPercent = 20;
-    const int desaturationPercent = Wh_GetIntSetting(L"desaturationPercent");
-    // A percentage outside its meaningful 0..100 range is invalid. Restore
-    // the documented default instead of silently turning it into 0 or 100.
-    g_settings.desaturationPercent =
+    int desaturationPercent = Wh_GetIntSetting(L"desaturationPercent");
+    g_settings.desaturationPercent.store(
         desaturationPercent >= 0 && desaturationPercent <= 100
             ? desaturationPercent
-            : kDefaultDesaturationPercent;
-    g_settings.boxSizePercent = std::clamp(Wh_GetIntSetting(L"boxSizePercent"), 50, 200);
-    g_settings.fontSizePercent = std::clamp(Wh_GetIntSetting(L"fontSizePercent"), 50, 200);
+            : kDefaultDesaturationPercent
+    );
+    g_settings.boxSizePercent.store(std::clamp(Wh_GetIntSetting(L"boxSizePercent"), 50, 200));
+    g_settings.fontSizePercent.store(std::clamp(Wh_GetIntSetting(L"fontSizePercent"), 50, 200));
 
     PCWSTR customText = Wh_GetStringSetting(L"customText");
     size_t customTextLength = 0;
     if (customText) {
-        // The caption must be shorter than 100 characters. This bounded scan
-        // also avoids accepting an excessively long setting value.
-        while (customTextLength < 100 && customText[customTextLength]) ++customTextLength;
+        while (customTextLength < 100 && customText[customTextLength])
+            ++customTextLength;
     }
-    if (customText && customTextLength < 100)
+    if (customText && customTextLength < 100) {
         lstrcpynW(g_settings.customText, customText, ARRAYSIZE(g_settings.customText));
-    else
-        g_settings.customText[0] = L'\0';  // fall back to localized text
+        g_settings.customTextValid.store(true);
+    } else {
+        g_settings.customText[0] = L'\0';
+        g_settings.customTextValid.store(false);
+    }
     if (customText) Wh_FreeStringSetting(customText);
 }
 
@@ -131,18 +130,21 @@ static const LocalizedText kPleaseWaitTexts[] = {
     { MAKELANGID(LANG_FRENCH, SUBLANG_DEFAULT), L"Veuillez patienter" },
     { MAKELANGID(LANG_SPANISH, SUBLANG_DEFAULT), L"Espere" },
     { MAKELANGID(LANG_PORTUGUESE, SUBLANG_DEFAULT), L"Aguarde" },
-    { MAKELANGID(LANG_DUTCH, SUBLANG_DEFAULT), L"Een ogenblik geduld" },
+    { MAKELANGID(LANG_DUTCH, SUBLANG_DEFAULT), L"Even ogenblik geduld" },
     { MAKELANGID(LANG_POLISH, SUBLANG_DEFAULT), L"Prosz\u0119 czeka\u0107" },
-    { MAKELANGID(LANG_RUSSIAN, SUBLANG_DEFAULT), L"\u041F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435" },
-    { MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT), L"\u3057\u3070\u3089\u304F\u304A\u5F85\u3061\u304F\u3060\u3055\u3044" },
-    { MAKELANGID(LANG_KOREAN, SUBLANG_DEFAULT), L"\uC7A0\uC2DC \uAE30\uB2E4\uB824 \uC8FC\uC2ED\uC2DC\uC624" },
-    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED), L"\u8BF7\u7A0D\u5019" },
-    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL), L"\u8ACB\u7A0D\u5019" },
-    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_HONGKONG), L"\u8ACB\u7A0D\u5019" },
+    { MAKELANGID(LANG_RUSSIAN, SUBLANG_DEFAULT), L"\u041f\u043e\u0434\u043e\u0436\u0434\u0430\u043d\u0438\u0442\u0435" },
+    { MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT), L"\u3057\u3070\u3089\u304a\u5f85\u3061\u304f\u3060\u3055\u3044" },
+    { MAKELANGID(LANG_KOREAN, SUBLANG_DEFAULT), L"\uc7a0\uc2dc \uae30\ub2e4\ub824 \uc8fc\uc2ed\uc2dc\uc624" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED), L"\u8bf7\u7a0d\u5019" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL), L"\u8acb\u7a0d\u5019" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_HONGKONG), L"\u8acb\u7a0d\u5019" },
 };
 
 static const wchar_t* GetPleaseWaitText() {
-    if (g_settings.customText[0]) return g_settings.customText;
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    if (g_settings.customTextValid.load() && g_settings.customText[0])
+        return g_settings.customText;
+    
     const LANGID uiLanguage = GetUserDefaultUILanguage();
     for (const auto& entry : kPleaseWaitTexts)
         if (entry.language == uiLanguage) return entry.text;
@@ -175,21 +177,20 @@ private:
 
 class ScopedSelection {
 public:
-    ScopedSelection(HDC dc, HGDIOBJ object) : dc_(dc), old_(dc && object ? SelectObject(dc, object) : HGDI_ERROR) {}
+    ScopedSelection(HDC dc, HGDIOBJ object) : dc_(dc), old_(dc && object ? SelectObject(dc, object) : HGDIOBJ(HGDI_ERROR)) {}
     ~ScopedSelection() { if (dc_ && old_ && old_ != HGDI_ERROR) SelectObject(dc_, old_); }
     bool selected() const { return old_ && old_ != HGDI_ERROR; }
 private:
-    HDC dc_; HGDIOBJ old_;
+    HDC dc_;
+    HGDIOBJ old_;
 };
 
 static int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, dpi ? dpi : 96, 96);
 }
 
-// In the supplied 96-DPI Windows 7 reference, the outer frame is about
-// 210 x 74 px. The configured box-size percentage is applied uniformly.
 static int ScaleBoxForDpi(int value, UINT dpi) {
-    return MulDiv(ScaleForDpi(value, dpi), g_settings.boxSizePercent, 100);
+    return MulDiv(ScaleForDpi(value, dpi), g_settings.boxSizePercent.load(), 100);
 }
 
 static UINT GetPrimaryMonitorDpi() {
@@ -202,11 +203,11 @@ static UINT GetPrimaryMonitorDpi() {
 
 // Uses only documented GDI APIs. A 32-bit DIB section gives direct access to
 // the captured pixels, so the desaturation is not dependent on GDI+ behavior.
-static void PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
-    if (!hdc) return;
+static bool PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
+    if (!hdc) return false;
     const int width = area.right - area.left;
     const int height = area.bottom - area.top;
-    if (width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) return false;
 
     BITMAPINFO bitmapInfo = {};
     bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo.bmiHeader);
@@ -218,28 +219,28 @@ static void PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
     void* pixels = nullptr;
     ScopedGdiObject bitmap(CreateDIBSection(nullptr, &bitmapInfo, DIB_RGB_COLORS,
                                              &pixels, nullptr, 0));
-    if (!bitmap || !pixels) return;
+    if (!bitmap || !pixels) return false;
 
     HDC screen = GetDC(nullptr);
-    if (!screen) return;
+    if (!screen) return false;
     ScopedDc memoryDc(CreateCompatibleDC(screen));
-    if (!memoryDc) { ReleaseDC(nullptr, screen); return; }
+    if (!memoryDc) { ReleaseDC(nullptr, screen); return false; }
     {
         ScopedSelection selection(memoryDc.get(), bitmap.get());
-        if (!selection.selected()) { ReleaseDC(nullptr, screen); return; }
+        if (!selection.selected()) { ReleaseDC(nullptr, screen); return false; }
         const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN) + area.left;
         const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + area.top;
         if (!BitBlt(memoryDc.get(), 0, 0, width, height, screen, screenX, screenY,
                     SRCCOPY | CAPTUREBLT)) {
             ReleaseDC(nullptr, screen);
-            return;
+            return false;
         }
         ReleaseDC(nullptr, screen);
 
         // BI_RGB 32-bit DIB pixels are B, G, R, unused/reserved. Blend every
         // channel toward its luminance while leaving the alpha/reserved byte.
         auto* pixel = static_cast<BYTE*>(pixels);
-        const float amount = g_settings.desaturationPercent / 100.0f;
+        const float amount = g_settings.desaturationPercent.load() / 100.0f;
         for (size_t i = 0, count = static_cast<size_t>(width) * height; i < count; ++i) {
             BYTE* color = pixel + i * 4;
             const float luminance = color[2] * 0.299f + color[1] * 0.587f + color[0] * 0.114f;
@@ -249,98 +250,124 @@ static void PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
         }
         BitBlt(hdc, area.left, area.top, width, height, memoryDc.get(), 0, 0, SRCCOPY);
     }
+    return true;
 }
 
-// The paint DC can represent a virtual-desktop-sized surface. Convert the
-// primary monitor rectangle to that surface only in that case.
 static RECT GetBoxSurfaceArea(const RECT& clientArea) {
     const int width = clientArea.right - clientArea.left;
     const int height = clientArea.bottom - clientArea.top;
     if (width != GetSystemMetrics(SM_CXVIRTUALSCREEN) ||
-        height != GetSystemMetrics(SM_CYVIRTUALSCREEN)) return clientArea;
+        height != GetSystemMetrics(SM_CYVIRTUALSCREEN))
+        return clientArea;
 
     MONITORINFO mi = { sizeof(mi) };
     const POINT origin = { 0, 0 };
     HMONITOR primary = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
-    if (!primary || !GetMonitorInfoW(primary, &mi)) return clientArea;
-    return { clientArea.left + mi.rcMonitor.left - GetSystemMetrics(SM_XVIRTUALSCREEN),
-             clientArea.top + mi.rcMonitor.top - GetSystemMetrics(SM_YVIRTUALSCREEN),
-             clientArea.left + mi.rcMonitor.right - GetSystemMetrics(SM_XVIRTUALSCREEN),
-             clientArea.top + mi.rcMonitor.bottom - GetSystemMetrics(SM_YVIRTUALSCREEN) };
+    if (!primary || !GetMonitorInfoW(primary, &mi))
+        return clientArea;
+    return {
+        clientArea.left + mi.rcMonitor.left - GetSystemMetrics(SM_XVIRTUALSCREEN),
+        clientArea.top + mi.rcMonitor.top - GetSystemMetrics(SM_YVIRTUALSCREEN),
+        clientArea.left + mi.rcMonitor.right - GetSystemMetrics(SM_XVIRTUALSCREEN),
+        clientArea.top + mi.rcMonitor.bottom - GetSystemMetrics(SM_YVIRTUALSCREEN)
+    };
 }
 
-static void DrawClassicPleaseWaitBox(HWND window, HDC hdc) {
+static bool DrawClassicPleaseWaitBox(HWND hwnd, HDC hdc) {
     RECT clientArea = {};
-    if (!window || !GetClientRect(window, &clientArea)) return;
-    if (clientArea.right <= clientArea.left || clientArea.bottom <= clientArea.top) return;
+    if (!hwnd || !GetClientRect(hwnd, &clientArea)) return false;
+    if (clientArea.right <= clientArea.left || clientArea.bottom <= clientArea.top) return false;
 
-    PaintSnapshotWithGentleDesaturation(hdc, clientArea);
+    if (!PaintSnapshotWithGentleDesaturation(hdc, clientArea)) return false;
+
     const RECT boxArea = GetBoxSurfaceArea(clientArea);
     const UINT dpi = GetPrimaryMonitorDpi();
-    const int boxWidth = ScaleBoxForDpi(210, dpi);   // 221 px at 96 DPI
-    const int boxHeight = ScaleBoxForDpi(74, dpi);   // 78 px at 96 DPI
+    const int boxWidth = ScaleBoxForDpi(210, dpi);
+    const int boxHeight = ScaleBoxForDpi(74, dpi);
     const int rim = std::max(1, ScaleBoxForDpi(5, dpi));
     const int border = std::max(1, ScaleBoxForDpi(1, dpi));
-    RECT outer = { boxArea.left + ((boxArea.right - boxArea.left) - boxWidth) / 2,
-                   boxArea.top + ((boxArea.bottom - boxArea.top) - boxHeight) / 2, 0, 0 };
-    outer.right = outer.left + boxWidth; outer.bottom = outer.top + boxHeight;
-    // Restore the previous Aero-like presentation while retaining the current
-    // 221 x 78 px (96-DPI) outer dimensions.
+
+    RECT outer = {
+        boxArea.left + ((boxArea.right - boxArea.left) - boxWidth) / 2,
+        boxArea.top + ((boxArea.bottom - boxArea.top) - boxHeight) / 2,
+        0, 0
+    };
+    outer.right = outer.left + boxWidth;
+    outer.bottom = outer.top + boxHeight;
+
     RECT darkBorder = outer;
     InflateRect(&darkBorder, -rim, -rim);
     RECT content = darkBorder;
     InflateRect(&content, -border, -border);
-    if (content.right <= content.left || content.bottom <= content.top) return;
+    if (content.right <= content.left || content.bottom <= content.top) return false;
 
     ScopedGdiObject outerBrush(CreateSolidBrush(RGB(197, 218, 231)));
     ScopedGdiObject borderBrush(CreateSolidBrush(RGB(118, 131, 139)));
     ScopedGdiObject contentBrush(CreateSolidBrush(RGB(255, 255, 255)));
     ScopedGdiObject topStreakBrush(CreateSolidBrush(RGB(231, 241, 247)));
     ScopedGdiObject bottomStreakBrush(CreateSolidBrush(RGB(177, 208, 225)));
-    if (!outerBrush || !borderBrush || !contentBrush) return;
+    if (!outerBrush || !borderBrush || !contentBrush) return false;
 
     FillRect(hdc, &outer, (HBRUSH)outerBrush.get());
+
     const int inset = std::max(1, ScaleBoxForDpi(1, dpi));
     const int streakHeight = std::max(1, ScaleBoxForDpi(1, dpi));
     if (topStreakBrush && bottomStreakBrush && rim > streakHeight) {
-        RECT topStreak = { outer.left + inset, outer.top + inset,
-                           outer.right - inset, outer.top + inset + streakHeight };
-        RECT bottomStreak = { outer.left + inset, outer.bottom - inset - streakHeight,
-                              outer.right - inset, outer.bottom - inset };
+        RECT topStreak = { outer.left + inset, outer.top + inset, outer.right - inset, outer.top + inset + streakHeight };
+        RECT bottomStreak = { outer.left + inset, outer.bottom - inset - streakHeight, outer.right - inset, outer.bottom - inset };
         FillRect(hdc, &topStreak, (HBRUSH)topStreakBrush.get());
         FillRect(hdc, &bottomStreak, (HBRUSH)bottomStreakBrush.get());
     }
+
     FillRect(hdc, &darkBorder, (HBRUSH)borderBrush.get());
     FillRect(hdc, &content, (HBRUSH)contentBrush.get());
 
     NONCLIENTMETRICSW metrics = { sizeof(metrics) };
     LOGFONTW fontDescription = {};
-    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) {
         fontDescription = metrics.lfMessageFont;
-    else
-        fontDescription.lfHeight = -ScaleForDpi(12, dpi);
+    } else {
+        fontDescription.lfHeight = -12;
+    }
 
-    // Keep the system message-font family/charset, but make the caption bold
-    // and 15% larger as requested.
-    fontDescription.lfHeight = MulDiv(fontDescription.lfHeight, g_settings.fontSizePercent, 100);
+    int baseHeight = fontDescription.lfHeight;
+    fontDescription.lfHeight = -ScaleForDpi(baseHeight < 0 ? -baseHeight : 12, dpi);
+    fontDescription.lfHeight = MulDiv(fontDescription.lfHeight, g_settings.fontSizePercent.load(), 100);
     fontDescription.lfWeight = FW_BOLD;
+
     ScopedGdiObject font(CreateFontIndirectW(&fontDescription));
-    if (!font) return;
+    if (!font) return false;
+
+    int savedDc = SaveDC(hdc);
     ScopedSelection selection(hdc, font.get());
-    if (!selection.selected()) return;
+    if (!selection.selected()) {
+        RestoreDC(hdc, savedDc);
+        return false;
+    }
+
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(0, 0, 0));
     DrawTextW(hdc, GetPleaseWaitText(), -1, &content,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+
+    RestoreDC(hdc, savedDc);
+    return true;
 }
 
-void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
-    if (hdc) DrawClassicPleaseWaitBox(WindowFromDC(hdc), hdc);
+static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
+    bool drawn = false;
+    if (hdc) {
+        HWND hwnd = WindowFromDC(hdc);
+        drawn = DrawClassicPleaseWaitBox(hwnd, hdc);
+    }
+    if (!drawn && g_originalOnPaint) {
+        g_originalOnPaint(window, hdc);
+    }
 }
 
 static bool HookThemeUiSymbols(HMODULE themeUi) {
     WindhawkUtils::SYMBOL_HOOK themeuiDllHook = {
-        { L"private: void " STHISCALL L" CDimmedWindow::OnPaint(struct HDC__ *)" },
+        { { L"private: void " STHICALL L" CDimmedWindow::OnPaint(struct HDC__ *)" } },
         &g_originalOnPaint, CDimmedWindow_OnPaintHook, false
     };
     if (!WindhawkUtils::HookSymbols(themeUi, &themeuiDllHook, 1)) {
@@ -355,8 +382,10 @@ static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
 static void HandleLoadedModule(HMODULE module) {
     if (GetModuleHandleW(L"themeui.dll") != module ||
-        g_themeUiHandled.exchange(true)) return;
-    if (HookThemeUiSymbols(module)) Wh_ApplyHookOperations();
+        g_themeUiHandled.exchange(true))
+        return;
+    if (HookThemeUiSymbols(module))
+        Wh_ApplyHookOperations();
 }
 
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
@@ -368,17 +397,34 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD f
 BOOL Wh_ModInit() {
     Wh_Log(L">");
     LoadSettings();
-    if (HMODULE themeUi = GetModuleHandleW(L"themeui.dll")) {
+    
+    HMODULE themeUi = GetModuleHandleW(L"themeui.dll");
+    if (themeUi) {
         g_themeUiHandled = true;
-        return HookThemeUiSymbols(themeUi) ? TRUE : FALSE;
+        if (!HookThemeUiSymbols(themeUi))
+            return FALSE;
     }
+
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    auto loadLibraryExW = kernelBase ? (decltype(&LoadLibraryExW))GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
-    if (!loadLibraryExW) { Wh_Log(L"kernelbase!LoadLibraryExW was not found"); return FALSE; }
-    if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
-                                        &LoadLibraryExW_Original)) {
+    auto loadLibraryExW = kernelBase ? (LoadLibraryExW_t)GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
+    if (!loadLibraryExW) {
+        Wh_Log(L"kernelbase!LoadLibraryExW was not found");
+        return FALSE;
+    }
+    if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original)) {
         Wh_Log(L"Failed to hook kernelbase!LoadLibraryExW");
         return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL Wh_ModAfterInit() {
+    Wh_Log(L">");
+    HMODULE themeUi = GetModuleHandleW(L"themeui.dll");
+    if (themeUi && !g_themeUiHandled.exchange(true)) {
+        if (!HookThemeUiSymbols(themeUi))
+            return FALSE;
+        Wh_ApplyHookOperations();
     }
     return TRUE;
 }
