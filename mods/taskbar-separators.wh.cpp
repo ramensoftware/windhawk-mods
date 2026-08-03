@@ -263,21 +263,6 @@ namespace
 
     std::atomic<bool> g_taskbarViewDllLoaded{false};
     std::atomic<bool> g_unloading{false};
-    std::atomic<bool> g_unloadSuppressionLogged{false};
-
-    bool SuppressEnabledWorkDuringUnload(PCWSTR path)
-    {
-        if (!g_unloading.load(std::memory_order_acquire))
-        {
-            return false;
-        }
-
-        if (!g_unloadSuppressionLogged.exchange(true))
-        {
-            Wh_Log(L"RECONCILE: suppressed during unload (%s)", path);
-        }
-        return true;
-    }
 
     struct AnimationDividerCache
     {
@@ -368,16 +353,6 @@ namespace
     thread_local size_t g_nextTrackedTaskbarId = 1;
     thread_local bool g_reconcilingTaskbars = false;
 
-    struct InitialReconcileTimerState
-    {
-        DispatcherTimer timer{nullptr};
-    };
-
-    thread_local InitialReconcileTimerState *g_initialReconcileTimer = nullptr;
-    thread_local winrt::event_token g_initialReconcileTimerToken{};
-    thread_local int g_initialReconcileAttempts = 0;
-
-    void CancelInitialReconcileRetry();
     Controls::Grid DiscoverPrimaryTaskbarRootGrid();
 
     TrackedTaskbarCollection &GetTrackedTaskbars()
@@ -395,11 +370,6 @@ namespace
         auto *trackedTaskbars = g_trackedTaskbars;
         g_trackedTaskbars = nullptr;
         delete trackedTaskbars;
-    }
-
-    int ClampSetting(PCWSTR, int value, int minimum, int maximum)
-    {
-        return std::clamp(value, minimum, maximum);
     }
 
     int HexDigitValue(wchar_t character)
@@ -437,7 +407,7 @@ namespace
 
     bool ParseColor(PCWSTR text, winrt::Windows::UI::Color *result)
     {
-        if (!text || text[0] != L'#')
+        if (text[0] != L'#')
         {
             return false;
         }
@@ -473,23 +443,23 @@ namespace
 
     DividerStyle ParseDividerStyle(PCWSTR text)
     {
-        if (text && wcscmp(text, L"solid") == 0)
+        if (wcscmp(text, L"solid") == 0)
         {
             return DividerStyle::solid;
         }
-        if (text && wcscmp(text, L"rounded") == 0)
+        if (wcscmp(text, L"rounded") == 0)
         {
             return DividerStyle::rounded;
         }
-        if (text && wcscmp(text, L"fade") == 0)
+        if (wcscmp(text, L"fade") == 0)
         {
             return DividerStyle::fade;
         }
-        if (text && wcscmp(text, L"glow") == 0)
+        if (wcscmp(text, L"glow") == 0)
         {
             return DividerStyle::glow;
         }
-        if (text && wcscmp(text, L"double") == 0)
+        if (wcscmp(text, L"double") == 0)
         {
             return DividerStyle::doubleLine;
         }
@@ -500,12 +470,10 @@ namespace
     {
         Settings settings;
 
-        settings.width =
-            ClampSetting(L"width", Wh_GetIntSetting(L"width"), 1, 8);
-        settings.height =
-            ClampSetting(L"height", Wh_GetIntSetting(L"height"), 4, 48);
+        settings.width = std::clamp(Wh_GetIntSetting(L"width"), 1, 8);
+        settings.height = std::clamp(Wh_GetIntSetting(L"height"), 4, 48);
         settings.opacityPercent =
-            ClampSetting(L"opacity", Wh_GetIntSetting(L"opacity"), 0, 100);
+            std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
 
         PCWSTR colorText = Wh_GetStringSetting(L"color");
         if (!ParseColor(colorText, &settings.color))
@@ -519,24 +487,23 @@ namespace
         PCWSTR styleText = Wh_GetStringSetting(L"style");
         settings.style = ParseDividerStyle(styleText);
         Wh_FreeStringSetting(styleText);
-        settings.cornerRadius = ClampSetting(
-            L"cornerRadius", Wh_GetIntSetting(L"cornerRadius"), 0, 12);
-        settings.fadeAmount = ClampSetting(
-            L"fadeAmount", Wh_GetIntSetting(L"fadeAmount"), 0, 100);
-        settings.glowSize = ClampSetting(
-            L"glowSize", Wh_GetIntSetting(L"glowSize"), 0, 16);
-        settings.glowOpacityPercent = ClampSetting(
-            L"glowOpacity", Wh_GetIntSetting(L"glowOpacity"), 0, 100);
-        settings.doubleGap = ClampSetting(
-            L"doubleGap", Wh_GetIntSetting(L"doubleGap"), 1, 12);
+        settings.cornerRadius =
+            std::clamp(Wh_GetIntSetting(L"cornerRadius"), 0, 12);
+        settings.fadeAmount =
+            std::clamp(Wh_GetIntSetting(L"fadeAmount"), 0, 100);
+        settings.glowSize =
+            std::clamp(Wh_GetIntSetting(L"glowSize"), 0, 16);
+        settings.glowOpacityPercent =
+            std::clamp(Wh_GetIntSetting(L"glowOpacity"), 0, 100);
+        settings.doubleGap =
+            std::clamp(Wh_GetIntSetting(L"doubleGap"), 1, 12);
 
         PCWSTR orientationText = Wh_GetStringSetting(L"orientation");
-        if (orientationText && wcscmp(orientationText, L"horizontal") == 0)
+        if (wcscmp(orientationText, L"horizontal") == 0)
         {
             settings.orientation = OrientationSetting::horizontal;
         }
-        else if (orientationText &&
-                 wcscmp(orientationText, L"vertical") == 0)
+        else if (wcscmp(orientationText, L"vertical") == 0)
         {
             settings.orientation = OrientationSetting::vertical;
         }
@@ -545,7 +512,6 @@ namespace
         PCWSTR animationCompatibilityText =
             Wh_GetStringSetting(L"animationCompatibility");
         settings.animationCompatibility =
-            animationCompatibilityText &&
             wcscmp(animationCompatibilityText, L"on") == 0;
         Wh_FreeStringSetting(animationCompatibilityText);
         settings.separatorBeforeFirstApp =
@@ -575,7 +541,6 @@ namespace
         }
 
         g_settingsGeneration.fetch_add(1, std::memory_order_release);
-        Wh_Log(L"SETTINGS: loaded %zu dividers", settings.separators.size());
     }
 
     Settings GetSettingsSnapshot()
@@ -638,17 +603,8 @@ namespace
 
     HWND FindCurrentProcessTaskbarWnd()
     {
-        for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows())
-        {
-            WCHAR className[32]{};
-            if (GetClassName(taskbarWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0)
-            {
-                return taskbarWnd;
-            }
-        }
-
-        return nullptr;
+        auto taskbarWindows = EnumerateCurrentProcessTaskbarWindows();
+        return taskbarWindows.empty() ? nullptr : taskbarWindows.front();
     }
 
     HWND GetTaskbarDispatchWindow(HWND taskbarWnd)
@@ -1366,8 +1322,7 @@ namespace
         taskbar.reconciledSeparators.clear();
     }
 
-    void UnsubscribeAnimationRendering(TrackedTaskbarState &taskbar,
-                                       bool logStopped)
+    void UnsubscribeAnimationRendering(TrackedTaskbarState &taskbar)
     {
         if (!taskbar.animationRenderingSubscribed)
         {
@@ -1389,10 +1344,6 @@ namespace
         }
         taskbar.animationStableFrames = 0;
         taskbar.nativeSettlingStableFrames = 0;
-        if (logStopped)
-        {
-            Wh_Log(L"GEOMETRY TRACKING: stopped");
-        }
     }
 
     void StopAnimationTracking(TrackedTaskbarState &taskbar)
@@ -1401,7 +1352,7 @@ namespace
         taskbar.animationStableFrames = 0;
         if (!taskbar.nativeSettlingActive)
         {
-            UnsubscribeAnimationRendering(taskbar, true);
+            UnsubscribeAnimationRendering(taskbar);
         }
     }
 
@@ -1412,7 +1363,7 @@ namespace
         taskbar.nativeSettlingStarted = {};
         if (taskbar.animationLastActivity == AnimationClock::time_point{})
         {
-            UnsubscribeAnimationRendering(taskbar, true);
+            UnsubscribeAnimationRendering(taskbar);
         }
     }
 
@@ -1423,7 +1374,7 @@ namespace
         taskbar.nativeSettlingActive = false;
         taskbar.nativeSettlingStableFrames = 0;
         taskbar.nativeSettlingStarted = {};
-        UnsubscribeAnimationRendering(taskbar, true);
+        UnsubscribeAnimationRendering(taskbar);
     }
 
     bool RefreshCachedDividerGeometry(TrackedTaskbarState &taskbar,
@@ -1614,7 +1565,6 @@ namespace
                     OnAnimationRendering(taskbarId, sender, args);
                 });
         taskbar.animationRenderingSubscribed = true;
-        Wh_Log(L"GEOMETRY TRACKING: started");
     }
 
     void StartNativeSettlingTracking(TrackedTaskbarState &taskbar)
@@ -1794,14 +1744,6 @@ namespace
 
     void ClearAnimationTrackingForUnload()
     {
-        try
-        {
-            CancelInitialReconcileRetry();
-        }
-        catch (...)
-        {
-        }
-
         if (!g_trackedTaskbars)
         {
             return;
@@ -1839,14 +1781,7 @@ namespace
                name.compare(0, prefix.size(), prefix) == 0;
     }
 
-    struct CleanupSweepResult
-    {
-        size_t overlaysRemoved = 0;
-        size_t dividersRemoved = 0;
-    };
-
     void SweepOwnedElementsFromPanel(Controls::Panel const &panel,
-                                     CleanupSweepResult &result,
                                      int depth = 0)
     {
         if (!panel || depth > 24)
@@ -1898,21 +1833,12 @@ namespace
                     {
                         // Release any owned divider hosts inside an overlay before
                         // detaching the overlay itself.
-                        SweepOwnedElementsFromPanel(childPanel, result,
-                                                    depth + 1);
+                        SweepOwnedElementsFromPanel(childPanel, depth + 1);
                     }
 
                     try
                     {
                         children.RemoveAt(childIndex);
-                        if (ownedOverlay)
-                        {
-                            result.overlaysRemoved++;
-                        }
-                        else
-                        {
-                            result.dividersRemoved++;
-                        }
                         continue;
                     }
                     catch (...)
@@ -1924,7 +1850,7 @@ namespace
 
                 if (auto childPanel = child.try_as<Controls::Panel>())
                 {
-                    SweepOwnedElementsFromPanel(childPanel, result, depth + 1);
+                    SweepOwnedElementsFromPanel(childPanel, depth + 1);
                 }
                 childIndex++;
             }
@@ -1976,8 +1902,7 @@ namespace
         return nullptr;
     }
 
-    void RemoveTrackedOverlayByExactName(TrackedTaskbarState &taskbar,
-                                         CleanupSweepResult &result)
+    void RemoveTrackedOverlayByExactName(TrackedTaskbarState &taskbar)
     {
         try
         {
@@ -1996,13 +1921,12 @@ namespace
                 return;
             }
 
-            SweepOwnedElementsFromPanel(overlayCanvas, result);
+            SweepOwnedElementsFromPanel(overlayCanvas);
             uint32_t overlayIndex = 0;
             auto parentChildren = overlayParent.Children();
             if (parentChildren.IndexOf(overlayCanvas, overlayIndex))
             {
                 parentChildren.RemoveAt(overlayIndex);
-                result.overlaysRemoved++;
             }
         }
         catch (...)
@@ -2023,12 +1947,11 @@ namespace
         }
         ClearAnimationElementCache(taskbar);
 
-        CleanupSweepResult result;
         if (auto rootGrid = ResolveTrackedTaskbarRoot(taskbar))
         {
-            SweepOwnedElementsFromPanel(rootGrid, result);
+            SweepOwnedElementsFromPanel(rootGrid);
         }
-        RemoveTrackedOverlayByExactName(taskbar, result);
+        RemoveTrackedOverlayByExactName(taskbar);
 
         taskbar.overlayCanvas = {};
         taskbar.rootGrid = {};
@@ -3518,17 +3441,6 @@ namespace
                         Wh_Log(L"RECONCILE: failed: active %zu of %zu dividers",
                                activeDividerCount, activeSeparators.size());
                     }
-                    else if (result == ReconcileResult::succeededPartial)
-                    {
-                        Wh_Log(L"RECONCILE: partial success: active %zu of %zu "
-                               L"dividers",
-                               activeDividerCount, activeSeparators.size());
-                    }
-                    else
-                    {
-                        Wh_Log(L"RECONCILE: succeeded with %zu active dividers",
-                               activeDividerCount);
-                    }
                     taskbar.lastActiveDividerCount = activeDividerCount;
                 }
 
@@ -3579,8 +3491,6 @@ namespace
 
     struct TaskbarDiscoveryResult
     {
-        size_t taskbarWindowCount = 0;
-        size_t resolvedRepeaterCount = 0;
         std::vector<FrameworkElement> repeaters;
     };
 
@@ -3604,7 +3514,6 @@ namespace
             },
             reinterpret_cast<LPARAM>(&taskbarWindows));
 
-        result.taskbarWindowCount = taskbarWindows.size();
         for (HWND taskbarWnd : taskbarWindows)
         {
             try
@@ -3615,7 +3524,6 @@ namespace
                     continue;
                 }
 
-                result.resolvedRepeaterCount++;
                 auto existing = std::find_if(
                     result.repeaters.begin(), result.repeaters.end(),
                     [&](FrameworkElement const &existingRepeater)
@@ -3667,10 +3575,6 @@ namespace
         // checks g_unloading.
         ClearAnimationTrackingForUnload();
 
-        size_t trackedCount =
-            g_trackedTaskbars ? g_trackedTaskbars->size() : 0;
-        Wh_Log(L"CLEANUP: tracked taskbars=%zu", trackedCount);
-
         std::vector<Controls::Grid> rootsToSweep;
         auto addUniqueRoot = [&](Controls::Grid const &rootGrid)
         {
@@ -3692,31 +3596,21 @@ namespace
             }
         };
 
-        Controls::Grid primaryRoot = nullptr;
         try
         {
-            primaryRoot = DiscoverPrimaryTaskbarRootGrid();
-            addUniqueRoot(primaryRoot);
+            addUniqueRoot(DiscoverPrimaryTaskbarRootGrid());
         }
         catch (...)
         {
         }
-        Wh_Log(L"CLEANUP: current primary root live=%d",
-               primaryRoot ? 1 : 0);
 
         if (g_trackedTaskbars)
         {
             for (auto &taskbar : *g_trackedTaskbars)
             {
-                bool trackedRootLive = false;
-                bool repeaterRootLive = false;
-                bool trackedOverlayLive = false;
-                bool trackedOverlayAttached = false;
-
                 try
                 {
                     auto rootGrid = taskbar.rootGrid.get();
-                    trackedRootLive = static_cast<bool>(rootGrid);
                     addUniqueRoot(rootGrid);
                 }
                 catch (...)
@@ -3728,7 +3622,6 @@ namespace
                     auto repeater = taskbar.repeater.get();
                     auto rootGrid =
                         repeater ? FindRootGridAncestor(repeater) : nullptr;
-                    repeaterRootLive = static_cast<bool>(rootGrid);
                     addUniqueRoot(rootGrid);
                 }
                 catch (...)
@@ -3738,45 +3631,30 @@ namespace
                 try
                 {
                     auto overlayCanvas = taskbar.overlayCanvas.get();
-                    trackedOverlayLive = static_cast<bool>(overlayCanvas);
                     if (overlayCanvas && overlayCanvas.Name() ==
                                              L"WindhawkTaskbarSeparatorOverlay")
                     {
                         auto overlayParent =
                             Media::VisualTreeHelper::GetParent(overlayCanvas)
                                 .try_as<Controls::Grid>();
-                        trackedOverlayAttached =
-                            static_cast<bool>(overlayParent);
                         addUniqueRoot(overlayParent);
                     }
                 }
                 catch (...)
                 {
                 }
-
-                Wh_Log(
-                    L"CLEANUP: taskbar %zu tracked root live=%d, repeater "
-                    L"root live=%d, tracked overlay live=%d, stale overlay=%d",
-                    taskbar.id, trackedRootLive ? 1 : 0,
-                    repeaterRootLive ? 1 : 0, trackedOverlayLive ? 1 : 0,
-                    trackedOverlayAttached ? 0 : 1);
             }
         }
 
         for (size_t rootIndex = 0; rootIndex < rootsToSweep.size(); rootIndex++)
         {
-            CleanupSweepResult result;
             try
             {
-                SweepOwnedElementsFromPanel(rootsToSweep[rootIndex], result);
+                SweepOwnedElementsFromPanel(rootsToSweep[rootIndex]);
             }
             catch (...)
             {
             }
-            Wh_Log(L"CLEANUP: root %zu live=1, overlays removed=%zu, "
-                   L"dividers removed=%zu",
-                   rootIndex + 1, result.overlaysRemoved,
-                   result.dividersRemoved);
         }
 
         // Normally the root sweeps removed these. This exact-name fallback also
@@ -3785,15 +3663,7 @@ namespace
         {
             for (auto &taskbar : *g_trackedTaskbars)
             {
-                CleanupSweepResult result;
-                RemoveTrackedOverlayByExactName(taskbar, result);
-                if (result.overlaysRemoved || result.dividersRemoved)
-                {
-                    Wh_Log(L"CLEANUP: taskbar %zu fallback overlays removed=%zu, "
-                           L"dividers removed=%zu",
-                           taskbar.id, result.overlaysRemoved,
-                           result.dividersRemoved);
-                }
+                RemoveTrackedOverlayByExactName(taskbar);
             }
 
             // Do not release any tracked weak references or delegates until all
@@ -3861,38 +3731,25 @@ namespace
         return ReconcileResult::temporarilyNotReady;
     }
 
-    ReconcileResult ReconcileDividers(bool forceStructuralReconcile)
+    void ReconcileDividers(bool forceStructuralReconcile)
     {
         if (g_reconcilingTaskbars)
         {
-            return ReconcileResult::temporarilyNotReady;
+            return;
         }
 
         g_reconcilingTaskbars = true;
         ReconcileGuard guard;
-        ReconcileResult result = ReconcileResult::noValidSeparators;
 
         try
         {
             PruneExpiredTrackedTaskbars();
             auto discovery = DiscoverCurrentThreadTaskbars();
-            bool discoveryComplete =
-                discovery.taskbarWindowCount > 0 &&
-                discovery.resolvedRepeaterCount ==
-                    discovery.taskbarWindowCount;
             for (auto const &repeater : discovery.repeaters)
             {
-                if (!TrackTaskbarRepeater(repeater))
-                {
-                    discoveryComplete = false;
-                }
+                TrackTaskbarRepeater(repeater);
             }
 
-            size_t reconciledTaskbarCount = 0;
-            size_t succeededTaskbarCount = 0;
-            size_t partiallySucceededTaskbarCount = 0;
-            size_t noValidSeparatorTaskbarCount = 0;
-            bool anyTemporarilyNotReady = !discoveryComplete;
             if (g_trackedTaskbars)
             {
                 for (auto &taskbar : *g_trackedTaskbars)
@@ -3902,176 +3759,32 @@ namespace
                         auto repeater = taskbar.repeater.get();
                         if (!repeater)
                         {
-                            anyTemporarilyNotReady = true;
                             continue;
                         }
 
-                        reconciledTaskbarCount++;
                         if (!repeater.Dispatcher().HasThreadAccess())
                         {
-                            anyTemporarilyNotReady = true;
                             continue;
                         }
 
-                        ReconcileResult taskbarResult =
-                            ReconcileTrackedTaskbar(
-                                taskbar, repeater, forceStructuralReconcile);
-                        if (taskbarResult == ReconcileResult::succeeded)
-                        {
-                            succeededTaskbarCount++;
-                        }
-                        else if (taskbarResult ==
-                                 ReconcileResult::succeededPartial)
-                        {
-                            partiallySucceededTaskbarCount++;
-                        }
-                        else if (taskbarResult ==
-                                 ReconcileResult::temporarilyNotReady)
-                        {
-                            anyTemporarilyNotReady = true;
-                        }
-                        else
-                        {
-                            noValidSeparatorTaskbarCount++;
-                        }
+                        ReconcileTrackedTaskbar(
+                            taskbar, repeater, forceStructuralReconcile);
                     }
                     catch (...)
                     {
-                        anyTemporarilyNotReady = true;
                     }
                 }
-            }
-
-            if (reconciledTaskbarCount == 0)
-            {
-                result = ReconcileResult::temporarilyNotReady;
-            }
-            else if (!discoveryComplete)
-            {
-                result = ReconcileResult::temporarilyNotReady;
-            }
-            else if (anyTemporarilyNotReady)
-            {
-                result = ReconcileResult::temporarilyNotReady;
-            }
-            else if (succeededTaskbarCount == reconciledTaskbarCount)
-            {
-                result = ReconcileResult::succeeded;
-            }
-            else if (noValidSeparatorTaskbarCount == reconciledTaskbarCount)
-            {
-                result = ReconcileResult::noValidSeparators;
-            }
-            else if (succeededTaskbarCount +
-                         partiallySucceededTaskbarCount +
-                         noValidSeparatorTaskbarCount ==
-                     reconciledTaskbarCount)
-            {
-                result = ReconcileResult::succeededPartial;
-            }
-            else
-            {
-                result = ReconcileResult::temporarilyNotReady;
             }
         }
         catch (winrt::hresult_error const &e)
         {
             Wh_Log(L"RECONCILE: failed: 0x%08X %s",
                    static_cast<unsigned int>(e.code().value), e.message().c_str());
-            result = ReconcileResult::temporarilyNotReady;
         }
         catch (...)
         {
             Wh_Log(L"RECONCILE: failed with an unknown exception");
-            result = ReconcileResult::temporarilyNotReady;
         }
-
-        return result;
-    }
-
-    void CancelInitialReconcileRetry()
-    {
-        DispatcherTimer timer = nullptr;
-        if (g_initialReconcileTimer)
-        {
-            timer = std::move(g_initialReconcileTimer->timer);
-            delete g_initialReconcileTimer;
-            g_initialReconcileTimer = nullptr;
-        }
-
-        auto timerToken = g_initialReconcileTimerToken;
-        g_initialReconcileTimerToken = {};
-        g_initialReconcileAttempts = 0;
-
-        if (timer)
-        {
-            timer.Stop();
-            timer.Tick(timerToken);
-        }
-    }
-
-    void OnInitialReconcileTimerTick(
-        winrt::Windows::Foundation::IInspectable const &,
-        winrt::Windows::Foundation::IInspectable const &)
-    {
-        if (SuppressEnabledWorkDuringUnload(L"initial reconcile timer"))
-        {
-            CancelInitialReconcileRetry();
-            return;
-        }
-
-        constexpr int kMaximumAttempts = 20;
-        g_initialReconcileAttempts++;
-        ReconcileResult result = ReconcileDividers(false);
-        if (result == ReconcileResult::succeeded ||
-            result == ReconcileResult::succeededPartial)
-        {
-            CancelInitialReconcileRetry();
-        }
-        else if (result == ReconcileResult::noValidSeparators)
-        {
-            CancelInitialReconcileRetry();
-        }
-        else if (g_initialReconcileAttempts >= kMaximumAttempts)
-        {
-            int attempts = g_initialReconcileAttempts;
-            CancelInitialReconcileRetry();
-            Wh_Log(L"RECONCILE: initialization failed after %d attempts",
-                   attempts);
-        }
-    }
-
-    void BeginInitialReconcileOnUiThread()
-    {
-        CancelInitialReconcileRetry();
-
-        if (SuppressEnabledWorkDuringUnload(L"initial reconcile start"))
-        {
-            return;
-        }
-
-        g_initialReconcileAttempts = 1;
-        ReconcileResult result = ReconcileDividers(true);
-        if (result == ReconcileResult::succeeded ||
-            result == ReconcileResult::succeededPartial)
-        {
-            g_initialReconcileAttempts = 0;
-            return;
-        }
-        if (result == ReconcileResult::noValidSeparators)
-        {
-            g_initialReconcileAttempts = 0;
-            return;
-        }
-
-        DispatcherTimer timer;
-        timer.Interval(std::chrono::milliseconds(100));
-        g_initialReconcileTimerToken = timer.Tick(
-            winrt::Windows::Foundation::EventHandler<
-                winrt::Windows::Foundation::IInspectable>{
-                OnInitialReconcileTimerTick});
-        g_initialReconcileTimer = new InitialReconcileTimerState{timer};
-        timer.Start();
     }
 
     using TaskListButton_UpdateVisualStates_t = void(WINAPI *)(void *pThis);
@@ -4081,8 +3794,7 @@ namespace
     {
         TaskListButton_UpdateVisualStates_Original(pThis);
 
-        if (SuppressEnabledWorkDuringUnload(
-                L"TaskListButton_UpdateVisualStates_Hook"))
+        if (g_unloading.load(std::memory_order_acquire))
         {
             return;
         }
@@ -4108,11 +3820,10 @@ namespace
         }
     }
 
-    bool RunReconcileOnTaskbarThread(bool enabled,
-                                     bool beginBoundedRetry = false)
+    bool RunReconcileOnTaskbarThread(bool enabled)
     {
         if (enabled &&
-            SuppressEnabledWorkDuringUnload(L"window-thread dispatch"))
+            g_unloading.load(std::memory_order_acquire))
         {
             return true;
         }
@@ -4120,7 +3831,6 @@ namespace
         struct RECONCILE_REQUEST
         {
             bool enabled;
-            bool beginBoundedRetry;
             bool completed;
         };
 
@@ -4164,8 +3874,8 @@ namespace
             {
                 auto *request =
                     static_cast<RECONCILE_REQUEST *>(parameter);
-                if (request->enabled && SuppressEnabledWorkDuringUnload(
-                                            L"queued window callback"))
+                if (request->enabled &&
+                    g_unloading.load(std::memory_order_acquire))
                 {
                     request->completed = true;
                     return;
@@ -4173,10 +3883,6 @@ namespace
                 if (!request->enabled)
                 {
                     CleanupAllTaskbarsForUnload();
-                }
-                else if (request->beginBoundedRetry)
-                {
-                    BeginInitialReconcileOnUiThread();
                 }
                 else
                 {
@@ -4191,7 +3897,7 @@ namespace
 
         for (HWND taskbarUiWnd : taskbarUiWindows)
         {
-            RECONCILE_REQUEST request{enabled, beginBoundedRetry, false};
+            RECONCILE_REQUEST request{enabled, false};
             bool callbackRan = RunFromWindowThread(
                 taskbarUiWnd, reconcileProc, &request);
             if (callbackRan && request.completed)
@@ -4290,7 +3996,7 @@ namespace
         return HookTaskbarViewDllSymbols(taskbarViewModule) ? TRUE : FALSE;
     }
 
-    void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR fileName)
+    void HandleLoadedModuleIfTaskbarView(HMODULE module)
     {
         if (g_unloading.load(std::memory_order_acquire))
         {
@@ -4317,7 +4023,7 @@ namespace
         HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
         if (module)
         {
-            HandleLoadedModuleIfTaskbarView(module, fileName);
+            HandleLoadedModuleIfTaskbarView(module);
         }
         return module;
     }
@@ -4382,14 +4088,12 @@ void Wh_ModAfterInit()
 
     if (g_taskbarViewDllLoaded)
     {
-        RunReconcileOnTaskbarThread(true, true);
+        RunReconcileOnTaskbarThread(true);
     }
 }
 
 void Wh_ModBeforeUninit()
 {
-    Wh_Log(L"Taskbar Separators cleanup starting");
-
     g_unloading.store(true, std::memory_order_release);
 
     if (g_taskbarViewDllLoaded)
@@ -4406,7 +4110,6 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    Wh_Log(L"Taskbar Separators cleanup complete");
 }
 
 void Wh_ModSettingsChanged()
@@ -4415,6 +4118,6 @@ void Wh_ModSettingsChanged()
 
     if (g_taskbarViewDllLoaded && !g_unloading)
     {
-        RunReconcileOnTaskbarThread(true, true);
+        RunReconcileOnTaskbarThread(true);
     }
 }
