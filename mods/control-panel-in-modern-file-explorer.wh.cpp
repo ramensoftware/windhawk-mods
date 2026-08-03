@@ -153,13 +153,17 @@ static LoadLibraryExW_t LoadLibraryExW_Original;
 
 static thread_local IPropertyStore* g_controlPanelPropertyStore;
 static std::atomic<bool> g_explorerFrameInitializationStarted;
+static std::atomic<bool> g_propertyStoreMismatchLogged;
+static std::atomic<bool> g_unloading;
+static WindowPropertyStore_SetValue_t g_hookedSetValue;
 
 static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
     return IsEqualPropertyKey(key, PKEY_AppUserModel_RelaunchCommand) ||
            IsEqualPropertyKey(key, PKEY_AppUserModel_RelaunchIconResource) ||
            IsEqualPropertyKey(
                key, PKEY_AppUserModel_RelaunchDisplayNameResource) ||
-           IsEqualPropertyKey(key, PKEY_AppUserModel_PreventPinning);
+           IsEqualPropertyKey(key, PKEY_AppUserModel_PreventPinning) ||
+           IsEqualPropertyKey(key, PKEY_AppUserModel_ID);
 }
 
 static bool __cdecl UseSeparateProcess_Hook(IShellItem* item) {
@@ -185,6 +189,16 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     // the same thread and uses the same IPropertyStore interface pointer. This
     // raw pointer is only a comparison token and is replaced by the next copy.
     g_controlPanelPropertyStore = isControlPanel ? propertyStore : nullptr;
+
+    if (isControlPanel && propertyStore && g_hookedSetValue &&
+        (*reinterpret_cast<void***>(propertyStore))[6] !=
+            reinterpret_cast<void*>(g_hookedSetValue) &&
+        !g_propertyStoreMismatchLogged.exchange(true,
+                                                std::memory_order_relaxed)) {
+        Wh_Log(L"Window property store uses a different SetValue "
+               L"implementation; the Control Panel taskbar identity won't "
+               L"be suppressed");
+    }
 
     if (isControlPanel && IsCopiedAppIdentityProperty(key)) {
         return;
@@ -233,7 +247,8 @@ static bool HookWindowPropertyStoreSetValue() {
 
     WindowPropertyStore_SetValue_t setValue = nullptr;
     HWND probeWindow = CreateWindowExW(0, L"Static", nullptr, WS_POPUP, 0, 0,
-                                       0, 0, nullptr, nullptr, nullptr, nullptr);
+                                       0, 0, HWND_MESSAGE, nullptr, nullptr,
+                                       nullptr);
     if (probeWindow) {
         Microsoft::WRL::ComPtr<IPropertyStore> propertyStore;
         const HRESULT propertyStoreResult = SHGetPropertyStoreForWindow(
@@ -260,9 +275,14 @@ static bool HookWindowPropertyStoreSetValue() {
         return false;
     }
 
-    return WindhawkUtils::SetFunctionHook(
+    const bool hookInstalled = WindhawkUtils::SetFunctionHook(
         setValue, WindowPropertyStore_SetValue_Hook,
         &WindowPropertyStore_SetValue_Original);
+    if (hookInstalled) {
+        g_hookedSetValue = setValue;
+    }
+
+    return hookInstalled;
 }
 
 static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
@@ -310,10 +330,12 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
     return true;
 }
 
-static void PinExplorerFrameModule() {
+static void PinExplorerFrameModule(HMODULE explorerFrameModule) {
     HMODULE pinnedModule = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN,
-                            L"ExplorerFrame.dll", &pinnedModule)) {
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
+                                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(explorerFrameModule),
+                            &pinnedModule)) {
         Wh_Log(L"Failed to pin ExplorerFrame.dll");
     }
 }
@@ -336,19 +358,26 @@ static bool IsExplorerFrameModuleName(LPCWSTR fileName) {
                CSTR_EQUAL;
 }
 
-static void InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule) {
+static void InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule,
+                                                  bool applyHooks) {
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
     if (g_explorerFrameInitializationStarted.exchange(
             true, std::memory_order_acq_rel)) {
         return;
     }
 
-    PinExplorerFrameModule();
+    PinExplorerFrameModule(explorerFrameModule);
     if (!InitializeExplorerFrameHooks(explorerFrameModule)) {
         Wh_Log(L"Failed to install ExplorerFrame.dll hooks after late load");
         return;
     }
 
-    Wh_ApplyHookOperations();
+    if (applyHooks) {
+        Wh_ApplyHookOperations();
+    }
 }
 
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
@@ -358,10 +387,11 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
     constexpr DWORD kDataOnlyFlags =
         LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
         LOAD_LIBRARY_AS_IMAGE_RESOURCE;
-    if (module && !(flags & kDataOnlyFlags) &&
+    if (module && !g_unloading.load(std::memory_order_acquire) &&
+        !(flags & kDataOnlyFlags) &&
         !g_explorerFrameInitializationStarted.load(std::memory_order_acquire) &&
         IsExplorerFrameModuleName(fileName)) {
-        InitializeExplorerFrameHooksAfterLoad(module);
+        InitializeExplorerFrameHooksAfterLoad(module, true);
     }
 
     return module;
@@ -374,7 +404,7 @@ BOOL Wh_ModInit() {
     if (explorerFrameModule) {
         g_explorerFrameInitializationStarted.store(true,
                                                    std::memory_order_release);
-        PinExplorerFrameModule();
+        PinExplorerFrameModule(explorerFrameModule);
         if (!InitializeExplorerFrameHooks(explorerFrameModule)) {
             Wh_Log(L"Failed to install ExplorerFrame.dll hooks");
             return FALSE;
@@ -389,10 +419,13 @@ BOOL Wh_ModInit() {
                                     GetProcAddress(kernelBaseModule,
                                                    "LoadLibraryExW"))
                               : nullptr;
-    if (!loadLibraryExW ||
-        !WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
-                                        &LoadLibraryExW_Original) ||
-        !LoadLibraryExW_Original) {
+    if (!loadLibraryExW) {
+        Wh_Log(L"Failed to resolve LoadLibraryExW");
+        return FALSE;
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                        &LoadLibraryExW_Original)) {
         Wh_Log(L"Failed to hook LoadLibraryExW");
         return FALSE;
     }
@@ -405,15 +438,18 @@ void Wh_ModAfterInit() {
 
     if (HMODULE explorerFrameModule =
             GetModuleHandleW(L"ExplorerFrame.dll")) {
-        InitializeExplorerFrameHooksAfterLoad(explorerFrameModule);
+        InitializeExplorerFrameHooksAfterLoad(explorerFrameModule, false);
     }
 
-    if (!HookWindowPropertyStoreSetValue() ||
-        !WindowPropertyStore_SetValue_Original) {
+    if (!HookWindowPropertyStoreSetValue()) {
         Wh_Log(L"Failed to hook IPropertyStore::SetValue; Control Panel "
                L"windows will keep their own taskbar identity");
-        return;
     }
 
     Wh_ApplyHookOperations();
+}
+
+void Wh_ModBeforeUninit() {
+    Wh_Log(L">");
+    g_unloading.store(true, std::memory_order_release);
 }
