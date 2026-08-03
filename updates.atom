@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-03T22:08:58.000Z</updated>
+    <updated>2026-08-03T22:11:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#d2e3a41d70427e4dca9113bfde4492008442a2ba</id>
+        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
+        <updated>2026-08-03T22:11:59.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="about">About</h2>
+<p>This mod restores classic Control Panel applets and classic task links in Category View, including:</p>
+<ul>
+<li>Personalization, with localized classic Windows 7 task links</li>
+<li>Notification area icons (intended for the Windows 10 taskbar)</li>
+<li>Network Connections</li>
+<li>Printers and Faxes</li>
+<li>HomeGroup (legacy, partially functional)</li>
+</ul>
+<p>Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
+The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.</p>
+<h2 id="screenshotoftherestoredapplets">Screenshot of the Restored Applets</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/RestoredApplets.png" alt="screenshot" /></p>
+<h2 id="screenshotforthehomegroupandnetworkconnectionsappletswiththecorrespondingtasklinks">Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png" alt="screenshot" /></p>
+<h2 id="notes">Notes</h2>
+<p>The mod has been tested on Windows 10 1809.</p>
+<p><strong>⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.</strong> Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.</p>
+<p>The mod does not commit to restoring task links that open the Settings app instead of the classic Control Panel UI, because restoring such links would defeat the mod's purpose (contributing to the Control Panel restoration).</p>
+<h2 id="credits">Credits</h2>
+<p>This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
+Credits to m417z for the code review and enhancing the mod.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.0.0]]></title>
         <id>https://windhawk.net/mods/win7-action-center-recreation#4f710981ae49bf9530bf615bfc85012888d2a95f</id>
@@ -558,31 +590,6 @@ as well as the ability to configure mouse actions that close them.</p>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.2]]></title>
-        <id>https://windhawk.net/mods/win32-ui-modernizer#ba5ce914896f8bec55bb51db2e9d0822e6a4afa7</id>
-        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
-        <updated>2026-07-30T21:09:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed some WinUI apps failing to open like Photos and OneDrive</li>
-<li>Fixed headers missing it's dividers on dark mode</li>
-<li>Fixed the placeholder text on the rebar search bar not appearing on dark mode</li>
-<li>Fixed more DPI unaware controls</li>
-<li>Fixed the File Explorer navigation pane glyphs not rendering correctly when the translucent compatibility option is on</li>
-<li>Fixed the Recycle Bin glyph not displaying the full and empty variants accordingly</li>
-<li>Excluded the .msi installers from the mod as requested</li>
-<li>NEW: Added an option for hover/hot fade animation on the navigation pane</li>
-<li>NEW: Added a hover/hot state to the Registry Editor tree view</li>
-<li>NEW: All tree views now get a hover/hot state</li>
-<li>NEW: The selected state for tree views and list views now display a fade animation</li>
-<li>NEW: Added an option to switch the Registry Editor tree view icons with glyphs</li>
-<li>NEW: Revamped the Property Sheets windows design to match the new WinUI look that's currently being tested by Microsoft</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

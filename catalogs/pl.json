@@ -15231,6 +15231,38 @@
         "version": "1.0"
       }
     },
+    "win7-legacy-applet-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785795119000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785795119000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lcomctl32",
+        "description": "This mod restores some classic Control Panel applets and localized Windows 7 task links using native components",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "name": "Windows 7 Legacy Applet Restorer",
+        "version": "1.0.0"
+      }
+    },
     "win7-login-fade": {
       "details": {
         "defaultSorting": 7488,
