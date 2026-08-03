@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-02T22:24:57.000Z</updated>
+    <updated>2026-08-03T20:11:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Blob Shape 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-blob-shape#e5d8d9d8d4380fd4f18e08737e3925bc0c48665d</id>
+        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
+        <updated>2026-08-03T20:11:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarblobshape">Taskbar Blob Shape</h1>
+<p>Adds a blob shape behind active taskbar buttons.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo.gif" alt="Taskbar Blob Shape" /></p>
+<p>Based on <strong>Taskbar Elastic WinUI Pill</strong> and the unreleased <strong>Taskbar Elastic
+Border</strong> by <strong>Lockframe</strong>.</p>
+<p>Every taskbar button gets its own blob shape, shown or hidden as the
+button's running indicator state changes. The shapes are hosted in the
+taskbar's RootGrid (above the task list's clipping region, so the flares
+render fully) and each one is glued to its button with a composition
+expression, so it follows the button through reordering, reflow, and
+animations on the render thread.</p>
+<p>The blob shape is a rounded rectangle whose top extends upward and flares
+outward with concave (outside) corner radii, ending in a flat top edge:</p>
+<ul>
+<li><strong>Width / Height</strong>: the main area of the blob shape ('auto' matches the
+button's background element). Horizontally the shape is centered on the
+button; vertically its flat top edge is anchored to the top of the
+taskbar, with the body hanging downward.</li>
+<li><strong>Top corner radius</strong>: the radius of the concave top flares. The flares
+are circular quarter arcs, so this also sets how far the blob shape
+extends upward and outward. Total size is
+(Width + 2*TopRadius) x (Height + TopRadius).</li>
+<li><strong>Bottom corner radius</strong>: the convex bottom corners of the blob shape.</li>
+</ul>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[macOS magnifying cursor 1.4.7]]></title>
         <id>https://windhawk.net/mods/mac-magnifying-cursor#e0d29aa93e04e8b7c093c05c7c3d4956878cf40c</id>
@@ -1065,43 +1099,6 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flexible Explorer Toolbars Deluxe 1.0]]></title>
-        <id>https://windhawk.net/mods/flexible-explorer-toolbars-deluxe#27e75a5c62a599cf56cb401dc1354c6d0d96ede6</id>
-        <link href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe"/>
-        <updated>2026-07-14T20:58:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="flexibleexplorertoolbarsdeluxe">Flexible Explorer Toolbars Deluxe</h1>
-<p><strong>!Important!</strong> This mod curently only supports Windows 10 or Windows 11 versions up to 23H2 and 24H2/25H2 builds up to 8037. 
-On 24H2 and 25H2 you may have to use vivetool to enable toolbars in Explorer: <code>vivetool /disable /id:55063786</code>.
-On later, unsuported builds you may need to replace the Explorerframe.dll from an earlier version.</p>
-<p><strong>!Important!</strong> To use this mod, you shoud disable any other mods that hide the classic Navigation bar, such as the <code>Disable Navigation Bar</code> mod by ItsProfessional.
-This mod hides the Navigation Bar by itself. </p>
-<p>For this mod to work you should enable a mod that restores the Navigation bar, it is recommended to install the <code>Windows 7 Comand Bar</code> mod, altough, <code>Classic Explorer navigation bar</code>
-also would work if you want to retain elements of Windows 11 fluent interface, as well or any modification that restores ribbon.</p>
-<p>This mod hides the Navigation Bar and instead creates the following optional toolbars, which could be freely moved and ordered together with the Menu Bar, if it is enabled:</p>
-<ul>
-<li><p>The Search bar</p></li>
-<li><p>The Breadcrumbs Bar</p></li>
-<li><p>The Up Buton</p></li>
-</ul>
-<p>The toolbars can be locked and unlocked.
-If you are using this mod together with Classic Explorer toolbar (Open Shell), enable that toolbar before enabling this mod, otherwise its enabled state will not be remembered.</p>
-<h1 id="furtheradjustments">Further adjustments</h1>
-<ul>
-<li><p>It is recommended to install mod <a href="https://windhawk.net/mods/explorer-no-toolbars-bottom-gripper">Explorer Unlocked Toolbars Fix (WINAPI)</a> to make the unlocked toolbars to appear better.</p></li>
-<li><p>To make the toolbars to have the 3D borders, install this mod: <a href="https://windhawk.net/mods/explorer-toolbars-separators">Separators around File Explorer toolbars</a>.</p></li>
-<li><p>To fix the appearance of the default text in the search bar under dark Classic theme, install this mod: <a href="https://windhawk.net/mods/classic-theme-explorer-search-fix">Classic Theme Explorer Search Fix</a>.</p></li>
-</ul>
-<p><img src="https://i.imgur.com/1YbTzZt.png" alt="screnshot" /></p>
-<p><img src="https://i.imgur.com/OV8NRKJ.png" alt="screnshot" /></p>
-<p><img src="https://i.imgur.com/OEthKme.png" alt="screnshot" /></p>
-<p><img src="https://i.imgur.com/JXKEXL1.png" alt="screnshot" /></p>
-<p><img src="https://i.imgur.com/QFFmczo.png" alt="screnshot" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

@@ -11676,6 +11676,37 @@
         "version": "1.2"
       }
     },
+    "taskbar-blob-shape": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785787900000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785787900000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Deen-0x",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Injects a customizable blob shape behind active taskbar items.",
+        "github": "https://github.com/Deen-0x",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Blob Shape",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-button-click": {
       "details": {
         "defaultSorting": 503080,
