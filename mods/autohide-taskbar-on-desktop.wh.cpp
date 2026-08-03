@@ -2,7 +2,7 @@
 // @id              auto-hide-taskbar-desktop-only
 // @name            Hide Taskbar on Desktop Only
 // @version         1.0
-// @author          User
+// @author          qwertyuiop00-art
 // @description     Hides taskbar on desktop, shows when an app is active.
 // @architecture    x86-64
 // @include         explorer.exe
