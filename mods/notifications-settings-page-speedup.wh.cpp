@@ -99,20 +99,30 @@ static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LP
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
+// Note this says nothing about whether the callback ran: the window can go away
+// between the caller finding it and the message being sent, which is exactly what
+// happens while the page is closing. The callback reports that itself.
+//
+// SendMessageTimeoutW rather than SendMessageW because SystemSettings.exe is a
+// packaged app: once its window is closed the process lingers and its UI thread
+// can be suspended, and an unbounded send there would hang the mod unload.
+// UnhookWindowsHookEx runs before we return, so a message that arrives after the
+// timeout can no longer call back into the mod.
+static void RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
     DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (threadId == 0) return false;
+    if (threadId == 0) return;
     if (threadId == GetCurrentThreadId()) {
         proc(procParam);
-        return true;
+        return;
     }
     HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHookProc,
                                    nullptr, threadId);
-    if (!hook) return false;
+    if (!hook) return;
     RUN_FROM_WINDOW_THREAD_PARAM param = {proc, procParam};
-    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0, reinterpret_cast<LPARAM>(&param));
+    SendMessageTimeoutW(hWnd, g_runFromWindowThreadMsg, 0,
+                        reinterpret_cast<LPARAM>(&param),
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, nullptr);
     UnhookWindowsHookEx(hook);
-    return true;
 }
 
 static BOOL CALLBACK FirstThreadWindowProc(HWND hWnd, LPARAM lParam) {
@@ -140,9 +150,15 @@ static HWND GetWindowOnThread(DWORD threadId) {
 // (the thread that runs _AddEntry / the controller call). They must be released
 // on that thread, so a flush hands them to g_pendingRelease and the next
 // _AddEntry drains it on the UI thread; at unload we release them by hopping onto
-// the UI thread with RunFromWindowThread. The cache is also keyed and guarded by
-// that thread id, so a visit on a different apartment never gets a proxy it
-// can't legally call.
+// the UI thread with RunFromWindowThread. The owning thread is latched by the
+// first enumeration and never re-latched while it lives, so an enumeration on a
+// different apartment skips the cache (slower, but it never gets a proxy it can't
+// legally call). If that thread has exited, the proxies are unreachable and get
+// dropped rather than released.
+//
+// The same goes for the handler DLL unloading: it serves all of these objects, so
+// once it goes they are dropped without a Release, since calling through them
+// would mean calling into an unmapped module.
 // ---------------------------------------------------------------------------
 static const size_t CTRL_PTR_OFFSET       = 0x108;  // helper -> controller ComPtr
 static const size_t GETSETTINGS_VTBL_SLOT = 14;     // 0x70 / sizeof(void*)
@@ -154,6 +170,23 @@ static void** g_vtblSlot = nullptr;
 static IUnknown* g_controller = nullptr;  // pinned while the patch is installed
 static std::atomic<bool> g_vtblHooked{false};
 
+// Set when the handler DLL unloads. Everything we hold (the controller and every
+// cached proxy) is served by that DLL, so once it goes the pointers are dead and
+// calling Release through them would be calling into an unmapped module. The flag
+// says "drop these, do not release them"; it is checked wherever the cache is read
+// or freed, and cleared on the UI thread at the next enumeration, since the
+// containers can't be touched from the loader callback.
+static std::atomic<bool> g_cacheDead{false};
+
+// Drop the cached pointers without releasing them, after the DLL that served them
+// has gone. Must run on the UI thread (it takes the cache lock).
+static void AbandonCache() {
+    std::unique_lock lock(g_cacheMutex);
+    g_cache.clear();
+    g_pendingRelease.clear();
+    Wh_Log(L"handler dll unloaded; cached objects dropped without release");
+}
+
 // Release proxies queued by a flush. Called from _AddEntry, i.e. the UI thread
 // that owns the objects, so the release stays inside their apartment.
 static void DrainPendingReleases() {
@@ -163,6 +196,7 @@ static void DrainPendingReleases() {
         if (g_pendingRelease.empty()) return;
         toRelease.swap(g_pendingRelease);
     }
+    if (g_cacheDead.load()) return;  // Their server is gone; dropping is all we can do.
     for (IUnknown* p : toRelease)
         if (p) p->Release();
 }
@@ -184,7 +218,7 @@ static GetSettings_t GetSettings_Orig = nullptr;
 HRESULT STDMETHODCALLTYPE GetSettings_Hook(void* self, PCWSTR aumid, void** out) {
     // Only use the cache on the thread that created the proxies; a proxy handed to
     // another apartment would fail its reads with RPC_E_WRONG_THREAD.
-    if (g_cacheSettings.load() && aumid && out &&
+    if (g_cacheSettings.load() && aumid && out && !g_cacheDead.load() &&
         GetCurrentThreadId() == g_uiThreadId.load()) {
         {
             std::shared_lock lk(g_cacheMutex);
@@ -247,6 +281,20 @@ static IUnknown* FindController(void* helper) {
     return nullptr;
 }
 
+// Put the original pointer back in the patched vtable slot. VirtualProtect plus a
+// single store, no COM and no loader re-entry, so it is safe to call from the DLL
+// unload notification as well as at teardown. The compare means a slot somebody
+// else has since taken over is left alone.
+static void RestoreVtableSlot() {
+    if (!g_vtblHooked.load() || !g_vtblSlot || !GetSettings_Orig) return;
+    DWORD oldProtect;
+    if (VirtualProtect(g_vtblSlot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+        if (*g_vtblSlot == reinterpret_cast<void*>(GetSettings_Hook))
+            *g_vtblSlot = reinterpret_cast<void*>(GetSettings_Orig);
+        VirtualProtect(g_vtblSlot, sizeof(void*), oldProtect, &oldProtect);
+    }
+}
+
 // Bound how many entries we probe before giving up, so a build where the
 // controller never resolves can't turn into a QueryInterface on every app.
 static std::atomic<int> g_hookAttempts{0};
@@ -291,10 +339,45 @@ static void HookControllerVtable(void* helper) {
 // this is their owning apartment.
 using AddEntry_t = HRESULT (__cdecl*)(void* helper, PCWSTR aumid, unsigned long long opt);
 static AddEntry_t AddEntry_Orig = nullptr;
+// True while a thread id still refers to a running thread.
+static bool ThreadAlive(DWORD threadId) {
+    HANDLE h = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!h) return false;
+    bool alive = WaitForSingleObject(h, 0) == WAIT_TIMEOUT;
+    CloseHandle(h);
+    return alive;
+}
+
 HRESULT __cdecl AddEntry_Hook(void* helper, PCWSTR aumid, unsigned long long opt) {
-    g_uiThreadId.store(GetCurrentThreadId());
-    DrainPendingReleases();
-    HookControllerVtable(helper);  // no-op after the vtable is patched
+    DWORD self = GetCurrentThreadId();
+    DWORD owner = g_uiThreadId.load();
+
+    // The owner is latched by the first enumeration and then left alone. Storing it
+    // on every call made the apartment check meaningless, because a second thread
+    // would overwrite it and then match itself, which is the wrong-apartment case
+    // the check exists for.
+    if (owner == 0) {
+        DWORD expected = 0;
+        g_uiThreadId.compare_exchange_strong(expected, self);
+        owner = g_uiThreadId.load();
+    } else if (owner != self && !ThreadAlive(owner)) {
+        // The apartment that made the cached proxies has exited, so nothing can
+        // legally release them anymore. Drop them and let this thread take over,
+        // otherwise the cache would be bypassed for the rest of the session.
+        g_cacheDead = true;
+        g_uiThreadId.store(self);
+        owner = self;
+    }
+
+    // Anything that isn't the owning apartment falls through to the original path:
+    // slower, but correct, instead of being handed a proxy it can't call.
+    if (owner == self) {
+        if (g_cacheDead.exchange(false)) {
+            AbandonCache();
+        }
+        DrainPendingReleases();
+        HookControllerVtable(helper);  // no-op after the vtable is patched
+    }
     return AddEntry_Orig(helper, aumid, opt);
 }
 
@@ -383,14 +466,21 @@ static VOID CALLBACK DllNotification(ULONG reason,
     if (reason == WH_LDR_DLL_NOTIFICATION_REASON_LOADED) {
         if (g_dllLoadedEvent) SetEvent(g_dllLoadedEvent);
     } else if (reason == WH_LDR_DLL_NOTIFICATION_REASON_UNLOADED) {
-        // The DLL, its helper, and the patched vtable are going away. Drop our
-        // latches so the next load re-hooks, and null the dangling vtable pointer
-        // so teardown never writes into freed/recycled memory. No COM here: we
-        // can't safely release the proxy under the loader lock, and it dies with
-        // the DLL anyway.
+        // The DLL, its helper, and everything it served are going away, and this
+        // is the last moment the patched slot can be reached: g_vtblSlot is the
+        // only handle on it, so dropping the pointer without restoring first would
+        // leave a live slot aimed at mod code that is about to unmap. The restore
+        // is only VirtualProtect plus a store, which is fine under the loader lock.
+        RestoreVtableSlot();
         g_vtblHooked  = false;
         g_vtblSlot    = nullptr;
-        g_controller  = nullptr;  // ref leaks; the proxy is being torn down
+        // GetSettings_Orig deliberately keeps its value: a thread that is already
+        // inside the hook still has to have something to call through.
+        // No COM here. The controller and every cached proxy are served by the DLL
+        // that is unloading, so releasing them would call into an unmapping module;
+        // they get dropped instead, on the UI thread, at the next enumeration.
+        g_controller  = nullptr;
+        g_cacheDead   = true;
         g_hookAttempts = 0;
         g_symHooked   = false;
     }
@@ -415,18 +505,22 @@ static void LoadSettings() {
     g_cacheSettings = Wh_GetIntSetting(L"cacheSettings") != 0;
 }
 
+// Reports back, because a caller can't tell from RunFromWindowThread whether the
+// message was ever delivered.
+struct RELEASE_PARAM {
+    bool ran = false;
+};
+
 // Runs on the UI thread (via RunFromWindowThread) at unload: pull the vtable
 // hook and release everything in the apartment that owns it.
-static void WINAPI ReleaseComStateOnUiThread(PVOID) {
-    if (g_vtblHooked.load() && g_vtblSlot && GetSettings_Orig) {
-        DWORD oldProtect;
-        if (VirtualProtect(g_vtblSlot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-            if (*g_vtblSlot == reinterpret_cast<void*>(GetSettings_Hook))
-                *g_vtblSlot = reinterpret_cast<void*>(GetSettings_Orig);
-            VirtualProtect(g_vtblSlot, sizeof(void*), oldProtect, &oldProtect);
-        }
+static void WINAPI ReleaseComStateOnUiThread(PVOID p) {
+    RestoreVtableSlot();
+
+    bool dead = g_cacheDead.load();  // Server gone: drop the pointers, don't call them.
+    if (g_controller) {
+        if (!dead) g_controller->Release();
+        g_controller = nullptr;
     }
-    if (g_controller) { g_controller->Release(); g_controller = nullptr; }
 
     std::vector<IUnknown*> toRelease;
     {
@@ -436,8 +530,12 @@ static void WINAPI ReleaseComStateOnUiThread(PVOID) {
             if (kv.second) toRelease.push_back(kv.second);
         g_cache.clear();
     }
-    for (IUnknown* p : toRelease)
-        if (p) p->Release();
+    if (!dead) {
+        for (IUnknown* q : toRelease)
+            if (q) q->Release();
+    }
+
+    if (p) static_cast<RELEASE_PARAM*>(p)->ran = true;
 }
 
 BOOL Wh_ModInit() {
@@ -448,16 +546,18 @@ BOOL Wh_ModInit() {
     g_stopEvent      = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // manual reset
     g_dllLoadedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto reset
 
-    HookHandlerDll(false);  // in case the DLL is already loaded (Windhawk applies
-                            // the hooks after Wh_ModInit returns)
-
-    // Catch future loads (and unloads) of the handler DLL through any path.
+    // Registered before the already-loaded check, not after, so a load that lands
+    // in between is caught rather than missed for the rest of the session. The
+    // g_symHooked latch makes the duplicate attempt a no-op.
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto reg = ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
                            ntdll, "LdrRegisterDllNotification")
                      : nullptr;
     if (!reg || reg(0, DllNotification, nullptr, &g_ldrCookie) != 0)
         Wh_Log(L"LdrRegisterDllNotification unavailable");
+
+    HookHandlerDll(false);  // in case the DLL is already loaded (Windhawk applies
+                            // the hooks after Wh_ModInit returns)
     return TRUE;
 }
 
@@ -501,23 +601,18 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     // Restore the vtable slot and release the proxies on their owning UI thread.
-    bool ran = false;
+    RELEASE_PARAM param;
     if (DWORD tid = g_uiThreadId.load()) {
         if (HWND hWnd = GetWindowOnThread(tid))
-            ran = RunFromWindowThread(hWnd, ReleaseComStateOnUiThread, nullptr);
+            RunFromWindowThread(hWnd, ReleaseComStateOnUiThread, &param);
     }
-    if (!ran) {
-        // Couldn't reach the UI thread. Still pull the hook so SystemSettings
-        // doesn't call into unmapped code, but leave the proxies alone since a
-        // cross-apartment release is worse than a leak at process teardown.
-        if (g_vtblHooked.load() && g_vtblSlot && GetSettings_Orig) {
-            DWORD oldProtect;
-            if (VirtualProtect(g_vtblSlot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-                if (*g_vtblSlot == reinterpret_cast<void*>(GetSettings_Hook))
-                    *g_vtblSlot = reinterpret_cast<void*>(GetSettings_Orig);
-                VirtualProtect(g_vtblSlot, sizeof(void*), oldProtect, &oldProtect);
-            }
-        }
+    if (!param.ran) {
+        // The callback never got to run: no window, the window died while we were
+        // reaching for it, or the send timed out against a suspended thread. Pull
+        // the hook from here anyway so SystemSettings can't call into unmapped
+        // code, and leave the proxies alone, since a cross-apartment release is
+        // worse than a leak at process teardown.
+        RestoreVtableSlot();
     }
 
     if (g_dllLoadedEvent) { CloseHandle(g_dllLoadedEvent); g_dllLoadedEvent = nullptr; }
