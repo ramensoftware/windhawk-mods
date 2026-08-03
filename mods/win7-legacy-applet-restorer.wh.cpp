@@ -367,27 +367,6 @@ bool IsHomeGroupAvailable() {
     return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
 }
 
-// Returns the source-file path when Anixx's overlapping mod is installed.
-// Windhawk stores authored sources under %ProgramData%\Windhawk\ModsSource.
-std::wstring FindAnixxModSourcePath() {
-    wchar_t programData[MAX_PATH] = {};
-    DWORD length = GetEnvironmentVariableW(L"ProgramData", programData, ARRAYSIZE(programData));
-    if (!length || length >= ARRAYSIZE(programData)) return L"";
-
-    const std::wstring root = std::wstring(programData) + L"\\Windhawk\\";
-    const wchar_t* locations[] = {
-        L"ModsSource\\restore-classic-cpls.wh.cpp",
-        L"Engine\\Mods\\restore-classic-cpls.wh.cpp",
-    };
-    for (const wchar_t* relative : locations) {
-        const std::wstring candidate = root + relative;
-        DWORD attributes = GetFileAttributesW(candidate.c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
-            return candidate;
-    }
-    return L"";
-}
-
 // Allocation-free case-insensitive check for the registry-hook hot path.
 // Most keys opened by Explorer are unrelated, so avoid creating a lowercase
 // std::wstring until a path is actually relevant to this mod. Both needles
@@ -1759,15 +1738,6 @@ void Wh_ModSettingsChanged() {
 BOOL Wh_ModInit() {
   try {
     LoadSettings();
-    // The overlapping Anixx mod is detected by its actual Windhawk source file,
-    // rather than by a non-existent module/window name.
-    const std::wstring anixxSourcePath = FindAnixxModSourcePath();
-    if (!anixxSourcePath.empty()) {
-        // A source file can exist while its mod is disabled, so it is not proof
-        // of an active conflict. Keep this as a diagnostic only; otherwise a
-        // disabled copy of the source would prevent all virtual applets here.
-        Wh_Log(L"NOTICE: restore-classic-cpls source found at %s. Do not enable both mods at the same time.", anixxSourcePath.c_str());
-    }
 
     DetectWindowsVersion();
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
@@ -1824,9 +1794,8 @@ BOOL Wh_ModInit() {
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
                 {L"private: static int __cdecl CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,__int64)"},
-                (void**)&CControlPanelAppletList_s_SortAppletsInCategory_orig,
-                (void*)CControlPanelAppletList_s_SortAppletsInCategory_hook,
-                false
+                &pSortAppletsInCategory,
+                nullptr,  // Hooked manually below, we need the symbol address.
             },
             {
                 {L"private: static int __cdecl CControlPanelAppletList::s_FindAppletInSortArray(unsigned short const *,unsigned short const * const *,int)"},
@@ -1834,24 +1803,27 @@ BOOL Wh_ModInit() {
                 (void*)CControlPanelAppletList_s_FindAppletInSortArray_hook,
                 true
             },
-            // For offsets:
-            {
-                {L"private: static int __cdecl CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,__int64)"},
-                &pSortAppletsInCategory
-            }
         };
 
-        if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
+        if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks)) ||
+            !pSortAppletsInCategory) {
             Wh_Log(L"Failed to hook the applet sorting functions; using stock applet ordering");
-        } else if (CControlPanelAppletList_s_FindAppletInSortArray_orig) {
-            Wh_Log(L"Applet ranking hooked OK");
-        } else if (pSortAppletsInCategory && ResolveAppletOffsets(pSortAppletsInCategory)) {
-            // Hooks are only applied once Wh_ModInit returns, so the
-            // comparator's code is still unpatched at this point.
-            Wh_Log(L"Applet ranking is inlined; DPA offset 0x%zX, moniker offset 0x%zX",
-                g_appletListDpaOffset, g_appletMonikerOffset);
         } else {
-            Wh_Log(L"Applet ranking is inlined and its offsets could not be read; using stock applet ordering");
+            WindhawkUtils::SetFunctionHook(
+                (decltype(CControlPanelAppletList_s_SortAppletsInCategory_orig))pSortAppletsInCategory,
+                CControlPanelAppletList_s_SortAppletsInCategory_hook,
+                &CControlPanelAppletList_s_SortAppletsInCategory_orig);
+
+            if (CControlPanelAppletList_s_FindAppletInSortArray_orig) {
+                Wh_Log(L"Applet ranking hooked OK");
+            } else if (ResolveAppletOffsets(pSortAppletsInCategory)) {
+                // Hooks are only applied once Wh_ModInit returns, so the
+                // comparator's code is still unpatched at this point.
+                Wh_Log(L"Applet ranking is inlined; DPA offset 0x%zX, moniker offset 0x%zX",
+                    g_appletListDpaOffset, g_appletMonikerOffset);
+            } else {
+                Wh_Log(L"Applet ranking is inlined and its offsets could not be read; using stock applet ordering");
+            }
         }
 
     }
