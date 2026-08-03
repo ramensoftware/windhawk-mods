@@ -24,17 +24,16 @@ The mod is just a simple fork of the [Theme Toggler Tray](https://github.com/ram
 
 All credits goes to James Lin and Husam Abdulraheem.
 
-
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - app_path: borderline.exe
-  $name: Path to borderline.exe
+  $name: Full path to borderline.exe
 - app_options: no options
   $name: Command line options
-- icon_file: shell32.dll
+- icon_file: C:\Windows\System32\shell32.dll
   $name: Icon File (DLL or EXE)
 - icon_index: 132
   $name: Icon Index
@@ -57,8 +56,8 @@ NOTIFYICONDATAW g_nid = {0};
 HANDLE g_hThread = NULL;
 UINT g_uMsgTaskbarCreated = 0;
 // allelimo
-PCWSTR appPath;
-PCWSTR appOptions;
+PCWSTR g_appPath;
+PCWSTR g_appOptions;
 
 // --- Functional Logic ---
 
@@ -67,38 +66,49 @@ void ApplySettingsToTray() {
     int iconIndex = Wh_GetIntSetting(L"icon_index");
     PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
     // allelimo
-    appPath = Wh_GetStringSetting(L"app_path");
-    appOptions = Wh_GetStringSetting(L"app_options");
-
-    int IsOptionsNull = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"no options", -1) ;
-    int IsOptionsNull2 = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"", -1) ;
-
-    if (IsOptionsNull2 == CSTR_EQUAL || IsOptionsNull == CSTR_EQUAL) {
-        appOptions = NULL;
+    g_appPath = Wh_GetStringSetting(L"app_path");
+    g_appOptions = Wh_GetStringSetting(L"app_options");
+    if (!*g_appOptions) {
+        g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
     }
+
+    // int IsOptionsNull = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"no options", -1) ;
+    // int IsOptionsNull2 = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"", -1) ;
+
+    // if (IsOptionsNull2 == CSTR_EQUAL || IsOptionsNull == CSTR_EQUAL) {
+    //     appOptions = NULL;
+    // }
 
     HICON hOldIcon = g_nid.hIcon;
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
     if (!g_nid.hIcon) g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
     if (!g_nid.hIcon) g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
 
-    wcscpy_s(g_nid.szTip, tooltipText);
+    // wcscpy_s(g_nid.szTip, tooltipText);
+    lstrcpynW(g_nid.szTip, tooltipText, ARRAYSIZE(g_nid.szTip));
     if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
     if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
     Wh_FreeStringSetting(iconFile);
     Wh_FreeStringSetting(tooltipText);
+    Wh_FreeStringSetting(g_appPath);
+    Wh_FreeStringSetting(g_appOptions);
 }
 
 // allelimo
 void OpenApp() {
-    // system("c:\\Windows\\notepad.exe");
-    // ShellExecute("c:\\Windows\\notepad.exe");
-    // ShellExecuteA(NULL, "c:\\Windows\\notepad.exe", NULL, NULL, 0);
-    // ShellExecuteA(NULL,"open","c:\\Windows\\notepad.exe",NULL,NULL,1);
-    // ShellExecuteA(NULL, "open", appPathOpen, NULL, NULL, -1); DA SISTEMARE
-    // ShellExecuteA(NULL, "open", "C:\\temp\\Borderline.exe",  "-s 2", NULL, -1);  L"-s 2"
-    ShellExecuteW(NULL, L"open", appPath, appOptions, NULL, 1);
+
+   // ShellExecuteW(NULL, L"open", appPath, appOptions, NULL, 1);
+    if (!g_appPath || !*g_appPath) {
+        Wh_Log(L"No app path configured");
+        return;
+    }
+
+    HINSTANCE result =
+        ShellExecuteW(nullptr, L"open", g_appPath, g_appOptions, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)result <= 32) {
+        Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
+    }
     
 }
 
